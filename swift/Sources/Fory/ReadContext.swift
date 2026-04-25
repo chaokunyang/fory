@@ -410,29 +410,29 @@ public final class ReadContext {
         case .int16:
             value = try Int16.foryRead(self, refMode: .none, readTypeInfo: false)
         case .int32:
-            value = try ForyInt32Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try Int32FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varint32:
             value = try Int32.foryRead(self, refMode: .none, readTypeInfo: false)
         case .int64:
-            value = try ForyInt64Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try Int64FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varint64:
             value = try Int64.foryRead(self, refMode: .none, readTypeInfo: false)
         case .taggedInt64:
-            value = try ForyInt64Tagged.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try Int64TaggedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .uint8:
             value = try UInt8.foryRead(self, refMode: .none, readTypeInfo: false)
         case .uint16:
             value = try UInt16.foryRead(self, refMode: .none, readTypeInfo: false)
         case .uint32:
-            value = try ForyUInt32Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try UInt32FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varUInt32:
             value = try UInt32.foryRead(self, refMode: .none, readTypeInfo: false)
         case .uint64:
-            value = try ForyUInt64Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try UInt64FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varUInt64:
             value = try UInt64.foryRead(self, refMode: .none, readTypeInfo: false)
         case .taggedUInt64:
-            value = try ForyUInt64Tagged.foryRead(self, refMode: .none, readTypeInfo: false)
+            value = try UInt64TaggedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .float16:
             value = try Float16.foryRead(self, refMode: .none, readTypeInfo: false)
         case .bfloat16:

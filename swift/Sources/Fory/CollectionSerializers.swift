@@ -17,23 +17,6 @@
 
 import Foundation
 
-private enum CollectionHeader {
-    static let trackingRef: UInt8 = 0b0000_0001
-    static let hasNull: UInt8 = 0b0000_0010
-    static let declaredElementType: UInt8 = 0b0000_0100
-    static let sameType: UInt8 = 0b0000_1000
-}
-
-private enum MapHeader {
-    static let trackingKeyRef: UInt8 = 0b0000_0001
-    static let keyNull: UInt8 = 0b0000_0010
-    static let declaredKeyType: UInt8 = 0b0000_0100
-
-    static let trackingValueRef: UInt8 = 0b0000_1000
-    static let valueNull: UInt8 = 0b0001_0000
-    static let declaredValueType: UInt8 = 0b0010_0000
-}
-
 private func primitiveArrayTypeID<Element: Serializer>(for _: Element.Type) -> TypeId? {
     if Element.self == UInt8.self { return .uint8Array }
     if Element.self == Bool.self { return .boolArray }

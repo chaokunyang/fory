@@ -130,29 +130,29 @@ public extension ReadContext {
         case .int16:
             return try Int16.foryRead(self, refMode: .none, readTypeInfo: false)
         case .int32:
-            return try ForyInt32Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            return try Int32FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varint32:
             return try Int32.foryRead(self, refMode: .none, readTypeInfo: false)
         case .int64:
-            return try ForyInt64Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            return try Int64FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varint64:
             return try Int64.foryRead(self, refMode: .none, readTypeInfo: false)
         case .taggedInt64:
-            return try ForyInt64Tagged.foryRead(self, refMode: .none, readTypeInfo: false)
+            return try Int64TaggedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .uint8:
             return try UInt8.foryRead(self, refMode: .none, readTypeInfo: false)
         case .uint16:
             return try UInt16.foryRead(self, refMode: .none, readTypeInfo: false)
         case .uint32:
-            return try ForyUInt32Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            return try UInt32FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varUInt32:
             return try UInt32.foryRead(self, refMode: .none, readTypeInfo: false)
         case .uint64:
-            return try ForyUInt64Fixed.foryRead(self, refMode: .none, readTypeInfo: false)
+            return try UInt64FixedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .varUInt64:
             return try UInt64.foryRead(self, refMode: .none, readTypeInfo: false)
         case .taggedUInt64:
-            return try ForyUInt64Tagged.foryRead(self, refMode: .none, readTypeInfo: false)
+            return try UInt64TaggedCodec.read(self, refMode: .none, readTypeInfo: false)
         case .float16:
             return try Float16.foryRead(self, refMode: .none, readTypeInfo: false)
         case .bfloat16:

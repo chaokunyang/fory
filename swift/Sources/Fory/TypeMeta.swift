@@ -68,6 +68,16 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
             self.generics = generics
         }
 
+        public func schemaFingerprintString() -> String {
+            let genericsSuffix: String
+            if generics.isEmpty {
+                genericsSuffix = ""
+            } else {
+                genericsSuffix = "<" + generics.map { $0.schemaFingerprintString() }.joined(separator: ",") + ">"
+            }
+            return "\(typeID):\(nullable ? 1 : 0):\(trackRef ? 1 : 0)\(genericsSuffix)"
+        }
+
         fileprivate func write(
             _ buffer: ByteBuffer,
             writeFlags: Bool,

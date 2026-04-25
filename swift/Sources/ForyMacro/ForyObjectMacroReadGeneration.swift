@@ -402,13 +402,7 @@ private func readFieldExpr(
             refModeExpr: refModeExpr
         )
     }
-    if let codecType = field.customCodecType {
-        if field.isOptional {
-            return "try \(codecType)?.foryRead(context, refMode: \(refModeExpr), readTypeInfo: false)?.rawValue"
-        }
-        return "try \(codecType).foryRead(context, refMode: \(refModeExpr), readTypeInfo: false).rawValue"
-    }
-    return "try \(field.typeText).foryRead(context, refMode: \(refModeExpr), readTypeInfo: \(readTypeInfoExpr))"
+    return "try \(field.codecAliasName).read(context, refMode: \(refModeExpr), readTypeInfo: \(readTypeInfoExpr))"
 }
 
 private func schemaReadFieldExpr(_ field: ParsedField) -> String {
@@ -419,10 +413,7 @@ private func schemaReadFieldExpr(_ field: ParsedField) -> String {
             readTypeInfoExpr: "false"
         )
     }
-    if let primitiveExpr = primitiveSchemaReadExpr(field) {
-        return primitiveExpr
-    }
-    return "try \(field.typeText).foryReadData(context)"
+    return "try \(field.codecAliasName).readData(context)"
 }
 
 private func compatibleSchemaReadFieldExpr(_ field: ParsedField) -> String {
@@ -430,47 +421,10 @@ private func compatibleSchemaReadFieldExpr(_ field: ParsedField) -> String {
         return readFieldExpr(
             field,
             refModeExpr: fieldRefModeExpression(field),
-            readTypeInfoExpr: "TypeId.needsTypeInfoForField(\(field.typeText).staticTypeId)"
+            readTypeInfoExpr: "TypeId.needsTypeInfoForField(\(field.codecAliasName).staticTypeId)"
         )
     }
-    if let primitiveExpr = primitiveSchemaReadExpr(field) {
-        return primitiveExpr
-    }
-    return "try \(field.typeText).foryReadData(context)"
-}
-
-private func primitiveSchemaReadExpr(_ field: ParsedField) -> String? {
-    let type = trimType(field.typeText)
-    switch type {
-    case "Bool":
-        return "try __buffer.readUInt8() != 0"
-    case "Int8":
-        return "try __buffer.readInt8()"
-    case "Int16":
-        return "try __buffer.readInt16()"
-    case "Int32":
-        return "try __buffer.readVarInt32()"
-    case "Int64":
-        return "try __buffer.readVarInt64()"
-    case "Int":
-        return "Int(try __buffer.readVarInt64())"
-    case "UInt8":
-        return "try __buffer.readUInt8()"
-    case "UInt16":
-        return "try __buffer.readUInt16()"
-    case "UInt32":
-        return "try __buffer.readVarUInt32()"
-    case "UInt64":
-        return "try __buffer.readVarUInt64()"
-    case "UInt":
-        return "UInt(try __buffer.readVarUInt64())"
-    case "Float":
-        return "try __buffer.readFloat32()"
-    case "Double":
-        return "try __buffer.readFloat64()"
-    default:
-        return nil
-    }
+    return "try \(field.codecAliasName).readData(context)"
 }
 
 private func dynamicAnyReadExpr(
@@ -492,10 +446,7 @@ private func compatibleDefaultDecl(_ field: ParsedField) -> String {
 }
 
 private func fieldNeedsGeneralSchemaRead(_ field: ParsedField) -> Bool {
-    field.dynamicAnyCodec != nil ||
-        field.customCodecType != nil ||
-        field.isOptional ||
-        field.typeID == 27
+    field.dynamicAnyCodec != nil || field.isOptional || field.typeID == 27 || field.isCollection || field.typeID != 0
 }
 
 private func fieldNeedsGeneralCompatibleRead(_ field: ParsedField) -> Bool {

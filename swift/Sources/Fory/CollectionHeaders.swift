@@ -15,27 +15,19 @@
 // specific language governing permissions and limitations
 // under the License.
 
-func leadingPrimitiveFastPathFields(_ fields: [ParsedField]) -> [ParsedField] {
-    _ = fields
-    return []
+enum CollectionHeader {
+    static let trackingRef: UInt8 = 0b0000_0001
+    static let hasNull: UInt8 = 0b0000_0010
+    static let declaredElementType: UInt8 = 0b0000_0100
+    static let sameType: UInt8 = 0b0000_1000
 }
 
-func buildPrimitiveFastWriteBlock(_ fields: [ParsedField]) -> String? {
-    _ = fields
-    return nil
-}
+enum MapHeader {
+    static let trackingKeyRef: UInt8 = 0b0000_0001
+    static let keyNull: UInt8 = 0b0000_0010
+    static let declaredKeyType: UInt8 = 0b0000_0100
 
-func buildPrimitiveFastClassReadBlock(_ fields: [ParsedField]) -> String? {
-    _ = fields
-    return nil
-}
-
-func buildPrimitiveFastStructReadDeclarations(_ fields: [ParsedField]) -> String? {
-    _ = fields
-    return nil
-}
-
-func buildPrimitiveFastStructReadBlock(_ fields: [ParsedField]) -> String? {
-    _ = fields
-    return nil
+    static let trackingValueRef: UInt8 = 0b0000_1000
+    static let valueNull: UInt8 = 0b0001_0000
+    static let declaredValueType: UInt8 = 0b0010_0000
 }

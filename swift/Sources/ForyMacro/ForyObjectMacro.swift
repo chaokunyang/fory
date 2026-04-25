@@ -55,6 +55,11 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
         \(raw: accessPrefix)static var isRefType: Bool { true }
         """ : nil
 
+        let codecAliasDecls: [DeclSyntax] = parsed.fields
+            .filter { $0.dynamicAnyCodec == nil }
+            .map { field in
+                DeclSyntax(stringLiteral: "private typealias \(field.codecAliasName) = \(field.codecType)")
+            }
         let schemaHashDecl: DeclSyntax = DeclSyntax(stringLiteral: buildSchemaHashDecl(fields: parsed.fields))
         let compatibleTypeMetaDecl: DeclSyntax = DeclSyntax(
             stringLiteral: buildCompatibleTypeMetaFieldsDecl(sortedFields: sortedFields, accessPrefix: accessPrefix)
@@ -85,7 +90,7 @@ public struct ForyObjectMacro: MemberMacro, ExtensionMacro {
                 accessPrefix: accessPrefix
             )
         )
-        return [
+        return codecAliasDecls + [
             staticTypeIDDecl,
             evolvingDecl,
             referenceTrackDecl,
@@ -167,12 +172,13 @@ struct ParsedField {
     let fieldID: Int?
     let schemaIdentifier: String
     let fieldIdentifier: String
+    let codecType: String
+    let codecAliasName: String
 
     let group: Int
     let typeID: UInt32
     let isCompressedNumeric: Bool
     let primitiveSize: Int
-    let customCodecType: String?
     let dynamicAnyCodec: DynamicAnyCodecKind?
 }
 
@@ -190,7 +196,8 @@ private struct ParsedEnumPayloadField {
     let label: String?
     let typeText: String
     let isOptional: Bool
-    let hasGenerics: Bool
+    let codecType: String
+    let codecAliasName: String
 }
 
 private struct ParsedEnumCase {
@@ -205,18 +212,455 @@ private struct ParsedEnumDecl {
     let cases: [ParsedEnumCase]
 }
 
-private struct FieldTypeResolution {
-    let classification: TypeClassification
-    let customCodecType: String?
-}
-
 private struct ParsedForyFieldConfiguration {
     let encoding: FieldEncoding?
     let id: Int?
+    let typeSpec: ParsedCodecSpec?
+    let deferredTypeExpr: ExprSyntax?
 }
 
 private struct ParsedForyObjectConfiguration {
     let evolving: Bool
+}
+
+private struct ParsedCodecLeaf {
+    let valueTypeText: String
+    let codecBaseType: String
+    let classification: TypeClassification
+}
+
+private indirect enum ParsedCodecNode {
+    case leaf(ParsedCodecLeaf)
+    case list(ParsedCodecSpec)
+    case set(ParsedCodecSpec)
+    case map(ParsedCodecSpec, ParsedCodecSpec)
+}
+
+private struct ParsedCodecSpec {
+    let nullable: Bool
+    let node: ParsedCodecNode
+}
+
+private extension ParsedCodecSpec {
+    var codecType: String {
+        let base: String
+        switch node {
+        case .leaf(let leaf):
+            base = leaf.codecBaseType
+        case .list(let element):
+            base = "ListCodec<\(element.codecType)>"
+        case .set(let element):
+            base = "SetCodec<\(element.codecType)>"
+        case .map(let key, let value):
+            base = "MapCodec<\(key.codecType), \(value.codecType)>"
+        }
+        if nullable {
+            return "OptionalCodec<\(base)>"
+        }
+        return base
+    }
+
+    var classification: TypeClassification {
+        switch node {
+        case .leaf(let leaf):
+            return leaf.classification
+        case .list:
+            return .init(
+                typeID: MacroTypeId.list,
+                isPrimitive: false,
+                isBuiltIn: true,
+                isCollection: true,
+                isMap: false,
+                isCompressedNumeric: false,
+                primitiveSize: 0
+            )
+        case .set:
+            return .init(
+                typeID: MacroTypeId.set,
+                isPrimitive: false,
+                isBuiltIn: true,
+                isCollection: true,
+                isMap: false,
+                isCompressedNumeric: false,
+                primitiveSize: 0
+            )
+        case .map:
+            return .init(
+                typeID: MacroTypeId.map,
+                isPrimitive: false,
+                isBuiltIn: true,
+                isCollection: false,
+                isMap: true,
+                isCompressedNumeric: false,
+                primitiveSize: 0
+            )
+        }
+    }
+}
+
+private func codecAliasName(forField name: String) -> String {
+    "__ForyCodec_\(name)"
+}
+
+private func codecAliasName(caseIndex: Int, payloadIndex: Int) -> String {
+    "__ForyCodec_case\(caseIndex)_payload\(payloadIndex)"
+}
+
+private func fieldAttributePayload(from typeSyntax: TypeSyntax) -> (AttributeListSyntax, String) {
+    if let attributed = typeSyntax.as(AttributedTypeSyntax.self) {
+        return (attributed.attributes, attributed.baseType.trimmedDescription)
+    }
+    return (AttributeListSyntax([]), typeSyntax.trimmedDescription)
+}
+
+private func parsedCodecLeaf(
+    valueTypeText: String,
+    codecBaseType: String,
+    typeID: UInt32,
+    isPrimitive: Bool,
+    isBuiltIn: Bool,
+    isCollection: Bool = false,
+    isMap: Bool = false,
+    isCompressedNumeric: Bool,
+    primitiveSize: Int
+) -> ParsedCodecLeaf {
+    .init(
+        valueTypeText: valueTypeText,
+        codecBaseType: codecBaseType,
+        classification: .init(
+            typeID: typeID,
+            isPrimitive: isPrimitive,
+            isBuiltIn: isBuiltIn,
+            isCollection: isCollection,
+            isMap: isMap,
+            isCompressedNumeric: isCompressedNumeric,
+            primitiveSize: primitiveSize
+        )
+    )
+}
+
+private func defaultCodecSpec(for typeText: String) throws -> ParsedCodecSpec {
+    let optional = unwrapOptional(typeText)
+    let concreteType = optional.type
+
+    if let elementType = parseArrayElement(concreteType) {
+        return .init(nullable: optional.isOptional, node: .list(try defaultCodecSpec(for: elementType)))
+    }
+    if let elementType = parseSetElement(concreteType) {
+        return .init(nullable: optional.isOptional, node: .set(try defaultCodecSpec(for: elementType)))
+    }
+    if let (keyType, valueType) = parseDictionary(concreteType) {
+        return .init(
+            nullable: optional.isOptional,
+            node: .map(try defaultCodecSpec(for: keyType), try defaultCodecSpec(for: valueType))
+        )
+    }
+
+    let normalized = trimKnownModulePrefix(trimType(concreteType))
+    let leaf: ParsedCodecLeaf
+    switch normalized {
+    case "Bool":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "BoolCodec", typeID: 1, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 1)
+    case "Int8":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "Int8Codec", typeID: 2, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 1)
+    case "Int16":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "Int16Codec", typeID: 3, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)
+    case "Int32":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "Int32VarintCodec", typeID: 5, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 4)
+    case "Int64":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "Int64VarintCodec", typeID: 7, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+    case "Int":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "IntVarintCodec", typeID: 7, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+    case "UInt8":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "UInt8Codec", typeID: 9, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 1)
+    case "UInt16":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "UInt16Codec", typeID: 10, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)
+    case "UInt32":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "UInt32VarintCodec", typeID: 12, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 4)
+    case "UInt64":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "UInt64VarintCodec", typeID: 14, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+    case "UInt":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "UIntVarintCodec", typeID: 14, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+    case "Float16":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "Float16Codec", typeID: 17, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)
+    case "BFloat16":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "BFloat16Codec", typeID: 18, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)
+    case "Float":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "Float32Codec", typeID: 19, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 4)
+    case "Double":
+        leaf = parsedCodecLeaf(valueTypeText: concreteType, codecBaseType: "Float64Codec", typeID: 20, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 8)
+    default:
+        let classification = classifyType(concreteType)
+        leaf = .init(
+            valueTypeText: concreteType,
+            codecBaseType: "SerializerCodec<\(concreteType)>",
+            classification: classification
+        )
+    }
+
+    return .init(nullable: optional.isOptional, node: .leaf(leaf))
+}
+
+private func explicitCodecSpec(
+    expr: ExprSyntax,
+    expectedTypeText: String
+) throws -> ParsedCodecSpec {
+    let parsed = try parseFieldTypeSpecExpression(expr)
+    let expected = try defaultCodecSpec(for: expectedTypeText)
+    guard codecSpecStructurallyMatches(parsed, expected) else {
+        throw MacroExpansionErrorMessage("`@ForyField(type:)` does not match declared property shape \(expectedTypeText)")
+    }
+    return parsed
+}
+
+private func codecSpecStructurallyMatches(_ lhs: ParsedCodecSpec, _ rhs: ParsedCodecSpec) -> Bool {
+    if lhs.nullable != rhs.nullable {
+        return false
+    }
+    switch (lhs.node, rhs.node) {
+    case let (.leaf(left), .leaf(right)):
+        return trimKnownModulePrefix(trimType(left.valueTypeText)) == trimKnownModulePrefix(trimType(right.valueTypeText))
+    case let (.list(left), .list(right)), let (.set(left), .set(right)):
+        return codecSpecStructurallyMatches(left, right)
+    case let (.map(leftKey, leftValue), .map(rightKey, rightValue)):
+        return codecSpecStructurallyMatches(leftKey, rightKey) && codecSpecStructurallyMatches(leftValue, rightValue)
+    default:
+        return false
+    }
+}
+
+private func parseFieldTypeSpecExpression(_ expr: ExprSyntax) throws -> ParsedCodecSpec {
+    if let memberAccess = expr.as(MemberAccessExprSyntax.self) {
+        let name = memberAccess.declName.baseName.text
+        switch name {
+        case "bool":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "Bool", codecBaseType: "BoolCodec", typeID: 1, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 1)))
+        case "int8":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "Int8", codecBaseType: "Int8Codec", typeID: 2, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 1)))
+        case "int16":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "Int16", codecBaseType: "Int16Codec", typeID: 3, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)))
+        case "uint8":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "UInt8", codecBaseType: "UInt8Codec", typeID: 9, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 1)))
+        case "uint16":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "UInt16", codecBaseType: "UInt16Codec", typeID: 10, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)))
+        case "float16":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "Float16", codecBaseType: "Float16Codec", typeID: 17, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)))
+        case "bfloat16":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "BFloat16", codecBaseType: "BFloat16Codec", typeID: 18, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 2)))
+        case "float":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "Float", codecBaseType: "Float32Codec", typeID: 19, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 4)))
+        case "double":
+            return .init(nullable: false, node: .leaf(parsedCodecLeaf(valueTypeText: "Double", codecBaseType: "Float64Codec", typeID: 20, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 8)))
+        case "string":
+            return try defaultCodecSpec(for: "String")
+        case "data":
+            return try defaultCodecSpec(for: "Data")
+        case "duration":
+            return try defaultCodecSpec(for: "Duration")
+        case "date":
+            return try defaultCodecSpec(for: "Date")
+        case "localDate":
+            return try defaultCodecSpec(for: "LocalDate")
+        case "decimal":
+            return try defaultCodecSpec(for: "Decimal")
+        default:
+            break
+        }
+    }
+
+    guard let call = expr.as(FunctionCallExprSyntax.self) else {
+        throw MacroExpansionErrorMessage("invalid `@ForyField(type:)` expression")
+    }
+    let callee = trimType(call.calledExpression.trimmedDescription).split(separator: ".").last.map(String.init) ?? ""
+    let args = call.arguments
+
+    switch callee {
+    case "int32":
+        return try integerFieldTypeSpec("Int32", args: args)
+    case "int64":
+        return try integerFieldTypeSpec("Int64", args: args)
+    case "int":
+        return try integerFieldTypeSpec("Int", args: args)
+    case "uint32":
+        return try integerFieldTypeSpec("UInt32", args: args)
+    case "uint64":
+        return try integerFieldTypeSpec("UInt64", args: args)
+    case "uint":
+        return try integerFieldTypeSpec("UInt", args: args)
+    case "list":
+        return try containerFieldTypeSpec(kind: "list", args: args)
+    case "set":
+        return try containerFieldTypeSpec(kind: "set", args: args)
+    case "map":
+        return try containerFieldTypeSpec(kind: "map", args: args)
+    case "value":
+        guard let first = args.first else {
+            throw MacroExpansionErrorMessage("`@ForyField(type: .value(...))` requires a metatype argument")
+        }
+        let rawType = trimType(first.expression.trimmedDescription)
+        guard rawType.hasSuffix(".self") else {
+            throw MacroExpansionErrorMessage("`@ForyField(type: .value(...))` requires a `.self` metatype")
+        }
+        let typeText = String(rawType.dropLast(".self".count))
+        let nullable = try nullableArg(args, defaultValue: false)
+        let leaf = ParsedCodecLeaf(
+            valueTypeText: typeText,
+            codecBaseType: "SerializerCodec<\(typeText)>",
+            classification: classifyType(typeText)
+        )
+        return .init(nullable: nullable, node: .leaf(leaf))
+    default:
+        throw MacroExpansionErrorMessage("unsupported `@ForyField(type:)` expression `\(callee)`")
+    }
+}
+
+private func integerFieldTypeSpec(_ typeText: String, args: LabeledExprListSyntax) throws -> ParsedCodecSpec {
+    let nullable = try nullableArg(args, defaultValue: false)
+    let encoding = try encodingArg(args, defaultValue: .varint)
+    return try integerFieldTypeSpec(typeText, nullable: nullable, encoding: encoding)
+}
+
+private func integerFieldTypeSpec(
+    _ typeText: String,
+    nullable: Bool,
+    encoding: FieldEncoding
+) throws -> ParsedCodecSpec {
+    let leaf: ParsedCodecLeaf
+    switch typeText {
+    case "Int32":
+        switch encoding {
+        case .varint:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "Int32VarintCodec", typeID: 5, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 4)
+        case .fixed:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "Int32FixedCodec", typeID: 4, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 4)
+        case .tagged:
+            throw MacroExpansionErrorMessage("`.tagged` is not supported for Int32")
+        }
+    case "UInt32":
+        switch encoding {
+        case .varint:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UInt32VarintCodec", typeID: 12, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 4)
+        case .fixed:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UInt32FixedCodec", typeID: 11, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 4)
+        case .tagged:
+            throw MacroExpansionErrorMessage("`.tagged` is not supported for UInt32")
+        }
+    case "Int64":
+        switch encoding {
+        case .varint:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "Int64VarintCodec", typeID: 7, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        case .fixed:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "Int64FixedCodec", typeID: 6, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 8)
+        case .tagged:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "Int64TaggedCodec", typeID: 8, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        }
+    case "UInt64":
+        switch encoding {
+        case .varint:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UInt64VarintCodec", typeID: 14, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        case .fixed:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UInt64FixedCodec", typeID: 13, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 8)
+        case .tagged:
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UInt64TaggedCodec", typeID: 15, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        }
+    case "Int", "UInt":
+        switch (typeText, encoding) {
+        case ("Int", .varint):
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "IntVarintCodec", typeID: 7, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        case ("Int", .fixed):
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "IntFixedCodec", typeID: 6, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 8)
+        case ("Int", .tagged):
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "IntTaggedCodec", typeID: 8, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        case ("UInt", .varint):
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UIntVarintCodec", typeID: 14, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        case ("UInt", .fixed):
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UIntFixedCodec", typeID: 13, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: false, primitiveSize: 8)
+        case ("UInt", .tagged):
+            leaf = parsedCodecLeaf(valueTypeText: typeText, codecBaseType: "UIntTaggedCodec", typeID: 15, isPrimitive: true, isBuiltIn: true, isCompressedNumeric: true, primitiveSize: 8)
+        default:
+            throw MacroExpansionErrorMessage("unsupported integer field type `\(typeText)`")
+        }
+    default:
+        throw MacroExpansionErrorMessage("unsupported integer field type `\(typeText)`")
+    }
+    return .init(nullable: nullable, node: .leaf(leaf))
+}
+
+private func containerFieldTypeSpec(kind: String, args: LabeledExprListSyntax) throws -> ParsedCodecSpec {
+    let nullable = try nullableArg(args, defaultValue: false)
+    switch kind {
+    case "list", "set":
+        let elementExpr = args.first(where: { arg in
+            let label = arg.label?.text
+            return label == nil || label == "element"
+        })?.expression
+        guard let elementExpr else {
+            throw MacroExpansionErrorMessage("`.\(kind)` requires an element type")
+        }
+        let element = try parseFieldTypeSpecExpression(elementExpr)
+        return .init(nullable: nullable, node: kind == "list" ? .list(element) : .set(element))
+    case "map":
+        guard let keyExpr = args.first(where: { $0.label?.text == "key" })?.expression,
+              let valueExpr = args.first(where: { $0.label?.text == "value" })?.expression else {
+            throw MacroExpansionErrorMessage("`.map` requires `key:` and `value:` arguments")
+        }
+        return .init(nullable: nullable, node: .map(try parseFieldTypeSpecExpression(keyExpr), try parseFieldTypeSpecExpression(valueExpr)))
+    default:
+        throw MacroExpansionErrorMessage("unsupported container kind `\(kind)`")
+    }
+}
+
+private func nullableArg(_ args: LabeledExprListSyntax, defaultValue: Bool) throws -> Bool {
+    guard let expr = args.first(where: { $0.label?.text == "nullable" })?.expression else {
+        return defaultValue
+    }
+    return try parseBoolLiteralExpression(expr, message: "`nullable` must be a boolean literal")
+}
+
+private func encodingArg(_ args: LabeledExprListSyntax, defaultValue: FieldEncoding) throws -> FieldEncoding {
+    guard let expr = args.first(where: { $0.label?.text == "encoding" })?.expression else {
+        return defaultValue
+    }
+    return try parseFieldEncodingExpression(expr)
+}
+
+private func resolveCodecSpec(
+    declaredTypeText: String,
+    fieldConfig: ParsedForyFieldConfiguration?
+) throws -> ParsedCodecSpec {
+    if let typeSpec = fieldConfig?.typeSpec {
+        return typeSpec
+    }
+    if let deferredTypeExpr = fieldConfig?.deferredTypeExpr {
+        return try explicitCodecSpec(expr: deferredTypeExpr, expectedTypeText: declaredTypeText)
+    }
+    if let encoding = fieldConfig?.encoding {
+        return try encodedScalarCodecSpec(declaredTypeText: declaredTypeText, encoding: encoding)
+    }
+    return try defaultCodecSpec(for: declaredTypeText)
+}
+
+private func encodedScalarCodecSpec(declaredTypeText: String, encoding: FieldEncoding) throws -> ParsedCodecSpec {
+    let optional = unwrapOptional(declaredTypeText)
+    let concreteType = trimKnownModulePrefix(trimType(optional.type))
+    switch concreteType {
+    case "Int32":
+        return try integerFieldTypeSpec("Int32", nullable: optional.isOptional, encoding: encoding)
+    case "UInt32":
+        return try integerFieldTypeSpec("UInt32", nullable: optional.isOptional, encoding: encoding)
+    case "Int64":
+        return try integerFieldTypeSpec("Int64", nullable: optional.isOptional, encoding: encoding)
+    case "UInt64":
+        return try integerFieldTypeSpec("UInt64", nullable: optional.isOptional, encoding: encoding)
+    case "Int":
+        return try integerFieldTypeSpec("Int", nullable: optional.isOptional, encoding: encoding)
+    case "UInt":
+        return try integerFieldTypeSpec("UInt", nullable: optional.isOptional, encoding: encoding)
+    default:
+        throw MacroExpansionErrorMessage(
+            "@ForyField(encoding:) is only supported for Int32/UInt32/Int64/UInt64/Int/UInt fields"
+        )
+    }
 }
 
 private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl {
@@ -230,13 +674,14 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
 
         let caseConfig = try parseForyFieldConfiguration(
             from: caseDecl.attributes,
-            supportsEncoding: false
+            supportsEncoding: true,
+            supportsType: true
         )
-        if caseConfig?.encoding != nil {
-            throw MacroExpansionErrorMessage("@ForyField(encoding:) is not supported on enum cases")
-        }
-        if caseConfig?.id != nil, caseDecl.elements.count != 1 {
-            throw MacroExpansionErrorMessage("@ForyField(id:) enum case declarations must contain exactly one case")
+        if (caseConfig?.id != nil || caseConfig?.encoding != nil || caseConfig?.typeSpec != nil),
+           caseDecl.elements.count != 1 {
+            throw MacroExpansionErrorMessage(
+                "@ForyField enum case declarations with id/type/encoding must contain exactly one case"
+            )
         }
 
         for element in caseDecl.elements {
@@ -245,19 +690,51 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
                 continue
             }
 
+            let currentCaseIndex = cases.count
             var payloadFields: [ParsedEnumPayloadField] = []
             if let parameterClause = element.parameterClause {
-                for parameter in parameterClause.parameters {
+                if (caseConfig?.encoding != nil || caseConfig?.typeSpec != nil), parameterClause.parameters.count != 1 {
+                    throw MacroExpansionErrorMessage(
+                        "@ForyField(type:/encoding:) on enum cases is only supported for single-payload cases"
+                    )
+                }
+                for (payloadIndex, parameter) in parameterClause.parameters.enumerated() {
                     if parameter.defaultValue != nil {
                         throw MacroExpansionErrorMessage(
                             "@ForyObject enum associated values cannot have default values"
                         )
                     }
 
-                    let payloadType = parameter.type.trimmedDescription
-                    let optional = unwrapOptional(payloadType)
-                    let classification = classifyType(optional.type)
-                    let hasGenerics = classification.isCollection || classification.isMap
+                    let (payloadAttributes, payloadType) = fieldAttributePayload(from: parameter.type)
+                    let parameterConfig = try parseForyFieldConfiguration(
+                        from: payloadAttributes,
+                        supportsEncoding: true,
+                        supportsType: true,
+                        expectedTypeText: payloadType
+                    )
+                    if parameterConfig != nil,
+                       (caseConfig?.encoding != nil || caseConfig?.typeSpec != nil) {
+                        throw MacroExpansionErrorMessage(
+                            "use either case-level or payload-level @ForyField(type:/encoding:), not both"
+                        )
+                    }
+                    let effectiveConfig: ParsedForyFieldConfiguration?
+                    if parameterConfig != nil {
+                        effectiveConfig = parameterConfig
+                    } else if payloadIndex == 0 && parameterClause.parameters.count == 1 {
+                        effectiveConfig = caseConfig
+                    } else {
+                        effectiveConfig = nil
+                    }
+                    let payloadDynamicAnyCodec = try resolveDynamicAnyCodec(rawType: payloadType)
+                    if payloadDynamicAnyCodec != nil,
+                       (effectiveConfig?.typeSpec != nil || effectiveConfig?.encoding != nil) {
+                        throw MacroExpansionErrorMessage("@ForyField(type:/encoding:) is not supported for dynamic Any union payloads")
+                    }
+                    let codecSpec = try resolveCodecSpec(
+                        declaredTypeText: payloadType,
+                        fieldConfig: effectiveConfig
+                    )
                     let label: String?
                     if let firstName = parameter.firstName, firstName.text != "_" {
                         label = firstName.text
@@ -269,8 +746,9 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
                         .init(
                             label: label,
                             typeText: payloadType,
-                            isOptional: optional.isOptional,
-                            hasGenerics: hasGenerics
+                            isOptional: codecSpec.nullable,
+                            codecType: codecSpec.codecType,
+                            codecAliasName: codecAliasName(caseIndex: currentCaseIndex, payloadIndex: payloadIndex)
                         )
                     )
                 }
@@ -417,9 +895,8 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         lines.append("    context.buffer.writeVarUInt32(\(caseID))")
         for (payloadIndex, payloadField) in enumCase.payload.enumerated() {
             let variableName = "__value\(payloadIndex)"
-            let hasGenerics = payloadField.hasGenerics ? "true" : "false"
             lines.append(
-                "    try \(variableName).foryWrite(context, refMode: .tracking, writeTypeInfo: true, hasGenerics: \(hasGenerics))"
+                "    try \(payloadField.codecAliasName).write(\(variableName), context, refMode: .tracking, writeTypeInfo: true)"
             )
         }
         return lines.joined(separator: "\n")
@@ -437,7 +914,7 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         var lines: [String] = ["case \(caseID):"]
         for (payloadIndex, payloadField) in enumCase.payload.enumerated() {
             lines.append(
-                "    let __value\(payloadIndex) = try \(payloadField.typeText).foryRead(context, refMode: .tracking, readTypeInfo: true)"
+                "    let __value\(payloadIndex) = try \(payloadField.codecAliasName).read(context, refMode: .tracking, readTypeInfo: true)"
             )
         }
         let ctorArgs = enumCase.payload.enumerated().map { payloadIndex, payloadField in
@@ -489,7 +966,12 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         """
     )
 
-    return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
+    let codecAliases = cases
+        .flatMap(\.payload)
+        .map { "private typealias \($0.codecAliasName) = \($0.codecType)" }
+    let aliasDecls = codecAliases.map { DeclSyntax(stringLiteral: $0) }
+
+    return aliasDecls + [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
 }
 
 private func enumCasePattern(_ enumCase: ParsedEnumCase) -> String {
@@ -505,7 +987,7 @@ private func enumCaseDefaultExpr(_ enumCase: ParsedEnumCase) -> String {
         return ".\(enumCase.name)"
     }
     let args = enumCase.payload.map { payloadField in
-        let defaultValue = "\(payloadField.typeText).foryDefault()"
+        let defaultValue = "\(payloadField.codecAliasName).defaultValue()"
         if let label = payloadField.label {
             return "\(label): \(defaultValue)"
         }
@@ -532,11 +1014,14 @@ private func parseFields(_ declaration: some DeclGroupSyntax) throws -> ParsedDe
             continue
         }
 
-        let fieldConfig = try parseForyFieldConfiguration(
-            from: varDecl.attributes,
-            supportsEncoding: true
-        )
-        if fieldConfig != nil, varDecl.bindings.count != 1 {
+        let hasFieldConfig = varDecl.attributes.contains { element in
+            guard let attr = element.as(AttributeSyntax.self) else {
+                return false
+            }
+            let attrName = trimType(attr.attributeName.trimmedDescription)
+            return attrName == "ForyField" || attrName.hasSuffix(".ForyField")
+        }
+        if hasFieldConfig, varDecl.bindings.count != 1 {
             throw MacroExpansionErrorMessage("@ForyField can only be used on a single stored property")
         }
 
@@ -553,23 +1038,27 @@ private func parseFields(_ declaration: some DeclGroupSyntax) throws -> ParsedDe
 
             let name = pattern.identifier.text
             let rawType = typeAnnotation.type.trimmedDescription
-            let optionalUnwrapped = unwrapOptional(rawType)
-            let isOptional = optionalUnwrapped.isOptional
-            let concreteType = optionalUnwrapped.type
-
-            let typeResolution = try resolveFieldType(
-                concreteType: concreteType,
-                fieldEncoding: fieldConfig?.encoding
+            let fieldConfig = try parseForyFieldConfiguration(
+                from: varDecl.attributes,
+                supportsEncoding: true,
+                supportsType: true,
+                expectedTypeText: rawType
             )
+
+            let codecSpec = try resolveCodecSpec(declaredTypeText: rawType, fieldConfig: fieldConfig)
             let dynamicAnyCodec = try resolveDynamicAnyCodec(rawType: rawType)
-            let classification = typeResolution.classification
+            if dynamicAnyCodec != nil,
+               (fieldConfig?.typeSpec != nil || fieldConfig?.encoding != nil) {
+                throw MacroExpansionErrorMessage("@ForyField(type:/encoding:) is not supported for dynamic Any fields")
+            }
+            let classification = codecSpec.classification
             let fieldID = fieldConfig?.id
             let baseIdentifier = toSnakeCase(name)
             let schemaIdentifier = fieldID.map(String.init) ?? baseIdentifier
             let fieldIdentifier = fieldID.map { "$tag\($0)" } ?? baseIdentifier
             let group: Int
             if classification.isPrimitive {
-                group = isOptional ? 2 : 1
+                group = codecSpec.nullable ? 2 : 1
             } else if classification.isMap {
                 group = 5
             } else if classification.isCollection {
@@ -585,16 +1074,17 @@ private func parseFields(_ declaration: some DeclGroupSyntax) throws -> ParsedDe
                     name: name,
                     typeText: rawType,
                     originalIndex: originalIndex,
-                    isOptional: isOptional,
+                    isOptional: codecSpec.nullable,
                     isCollection: classification.isCollection || classification.isMap,
                     fieldID: fieldID,
                     schemaIdentifier: schemaIdentifier,
                     fieldIdentifier: fieldIdentifier,
+                    codecType: codecSpec.codecType,
+                    codecAliasName: codecAliasName(forField: name),
                     group: group,
                     typeID: classification.typeID,
                     isCompressedNumeric: classification.isCompressedNumeric,
                     primitiveSize: classification.primitiveSize,
-                    customCodecType: typeResolution.customCodecType,
                     dynamicAnyCodec: dynamicAnyCodec
                 )
             )
@@ -620,10 +1110,14 @@ private func parseFields(_ declaration: some DeclGroupSyntax) throws -> ParsedDe
 
 private func parseForyFieldConfiguration(
     from attributes: AttributeListSyntax,
-    supportsEncoding: Bool
+    supportsEncoding: Bool,
+    supportsType: Bool,
+    expectedTypeText: String? = nil
 ) throws -> ParsedForyFieldConfiguration? {
     var parsedEncoding: FieldEncoding?
     var parsedID: Int?
+    var parsedTypeSpec: ParsedCodecSpec?
+    var parsedDeferredTypeExpr: ExprSyntax?
     for element in attributes {
         guard let attr = element.as(AttributeSyntax.self) else {
             continue
@@ -667,19 +1161,46 @@ private func parseForyFieldConfiguration(
                 continue
             }
 
+            if label == "type" {
+                guard supportsType else {
+                    throw MacroExpansionErrorMessage("@ForyField(type:) is not supported here")
+                }
+                if let expectedTypeText {
+                    let typeSpec = try explicitCodecSpec(expr: arg.expression, expectedTypeText: expectedTypeText)
+                    if let existing = parsedTypeSpec, existing.codecType != typeSpec.codecType {
+                        throw MacroExpansionErrorMessage("conflicting @ForyField type specifications on the same declaration")
+                    }
+                    parsedTypeSpec = typeSpec
+                } else {
+                    let deferredTypeExpr = ExprSyntax(arg.expression)
+                    if let existing = parsedDeferredTypeExpr,
+                       existing.trimmedDescription != deferredTypeExpr.trimmedDescription {
+                        throw MacroExpansionErrorMessage("conflicting @ForyField type specifications on the same declaration")
+                    }
+                    parsedDeferredTypeExpr = deferredTypeExpr
+                }
+                continue
+            }
+
             throw MacroExpansionErrorMessage(
-                "@ForyField supports only 'id' and 'encoding' arguments"
+                "@ForyField supports only 'id', 'encoding', and 'type' arguments"
             )
         }
     }
 
-    if parsedEncoding == nil, parsedID == nil {
+    if parsedEncoding != nil, (parsedTypeSpec != nil || parsedDeferredTypeExpr != nil) {
+        throw MacroExpansionErrorMessage("@ForyField cannot use both `encoding` and `type` on the same declaration")
+    }
+
+    if parsedEncoding == nil, parsedID == nil, parsedTypeSpec == nil, parsedDeferredTypeExpr == nil {
         return nil
     }
 
     return ParsedForyFieldConfiguration(
         encoding: parsedEncoding,
-        id: parsedID
+        id: parsedID,
+        typeSpec: parsedTypeSpec,
+        deferredTypeExpr: parsedDeferredTypeExpr
     )
 }
 
@@ -753,127 +1274,6 @@ private func parseFieldIDExpression(_ expr: ExprSyntax) throws -> Int {
         throw MacroExpansionErrorMessage("@ForyField id must be <= \(Int16.max)")
     }
     return value
-}
-
-private func resolveFieldType(
-    concreteType: String,
-    fieldEncoding: FieldEncoding?
-) throws -> FieldTypeResolution {
-    let normalized = trimType(concreteType)
-    let base = classifyType(normalized)
-
-    guard let fieldEncoding else {
-        return .init(classification: base, customCodecType: nil)
-    }
-
-    switch normalized {
-    case "Int32":
-        switch fieldEncoding {
-        case .varint:
-            return .init(classification: classifyType("Int32"), customCodecType: nil)
-        case .fixed:
-            return .init(
-                classification: .init(
-                    typeID: 4,
-                    isPrimitive: true,
-                    isBuiltIn: true,
-                    isCollection: false,
-                    isMap: false,
-                    isCompressedNumeric: false,
-                    primitiveSize: 4
-                ),
-                customCodecType: "ForyInt32Fixed"
-            )
-        case .tagged:
-            throw MacroExpansionErrorMessage("@ForyField(encoding: .tagged) is not supported for Int32")
-        }
-    case "UInt32":
-        switch fieldEncoding {
-        case .varint:
-            return .init(classification: classifyType("UInt32"), customCodecType: nil)
-        case .fixed:
-            return .init(
-                classification: .init(
-                    typeID: 11,
-                    isPrimitive: true,
-                    isBuiltIn: true,
-                    isCollection: false,
-                    isMap: false,
-                    isCompressedNumeric: false,
-                    primitiveSize: 4
-                ),
-                customCodecType: "ForyUInt32Fixed"
-            )
-        case .tagged:
-            throw MacroExpansionErrorMessage("@ForyField(encoding: .tagged) is not supported for UInt32")
-        }
-    case "Int64", "Int":
-        switch fieldEncoding {
-        case .varint:
-            return .init(classification: classifyType(normalized), customCodecType: nil)
-        case .fixed:
-            return .init(
-                classification: .init(
-                    typeID: 6,
-                    isPrimitive: true,
-                    isBuiltIn: true,
-                    isCollection: false,
-                    isMap: false,
-                    isCompressedNumeric: false,
-                    primitiveSize: 8
-                ),
-                customCodecType: "ForyInt64Fixed"
-            )
-        case .tagged:
-            return .init(
-                classification: .init(
-                    typeID: 8,
-                    isPrimitive: true,
-                    isBuiltIn: true,
-                    isCollection: false,
-                    isMap: false,
-                    isCompressedNumeric: true,
-                    primitiveSize: 8
-                ),
-                customCodecType: "ForyInt64Tagged"
-            )
-        }
-    case "UInt64", "UInt":
-        switch fieldEncoding {
-        case .varint:
-            return .init(classification: classifyType(normalized), customCodecType: nil)
-        case .fixed:
-            return .init(
-                classification: .init(
-                    typeID: 13,
-                    isPrimitive: true,
-                    isBuiltIn: true,
-                    isCollection: false,
-                    isMap: false,
-                    isCompressedNumeric: false,
-                    primitiveSize: 8
-                ),
-                customCodecType: "ForyUInt64Fixed"
-            )
-        case .tagged:
-            return .init(
-                classification: .init(
-                    typeID: 15,
-                    isPrimitive: true,
-                    isBuiltIn: true,
-                    isCollection: false,
-                    isMap: false,
-                    isCompressedNumeric: true,
-                    primitiveSize: 8
-                ),
-                customCodecType: "ForyUInt64Tagged"
-            )
-        }
-    default:
-        throw MacroExpansionErrorMessage(
-            "@ForyField(encoding:) is only supported for Int32/UInt32/Int64/UInt64/Int/UInt fields"
-        )
-    }
 }
 
 private func resolveDynamicAnyCodec(rawType: String) throws -> DynamicAnyCodecKind? {
@@ -1022,7 +1422,12 @@ private func compatibleTypeMetaFieldsExpr(
     trackRefExpression: String
 ) -> String {
     let fieldInfos = sortedFields.map { field in
-        let fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
+        let fieldTypeExpr: String
+        if field.dynamicAnyCodec != nil {
+            fieldTypeExpr = compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
+        } else {
+            fieldTypeExpr = "\(field.codecAliasName).compatibleFieldType(trackRef: \(trackRefExpression))"
+        }
         return "TypeMeta.FieldInfo(fieldID: \(compatibleFieldIDExpr(field)), fieldName: \"\(field.name)\", fieldType: \(fieldTypeExpr))"
     }
     guard !fieldInfos.isEmpty else {
@@ -1047,34 +1452,19 @@ private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: S
             return lhs.originalIndex < rhs.originalIndex
         }
         .map { field -> String in
-            let typeID = fingerprintTypeID(for: field)
-            let nullable = field.isOptional ? "1" : "0"
-            let trackRefExpr: String
-            if let dynamicAnyCodec = field.dynamicAnyCodec {
-                switch dynamicAnyCodec {
-                case .anyValue:
-                    trackRefExpr = "(\(trackRefExpression)) ? 1 : 0"
-                case .anyHashableValue, .anyList, .stringAnyMap, .int32AnyMap, .anyHashableAnyMap:
-                    trackRefExpr = "0"
-                }
-            } else {
-                trackRefExpr = "((\(trackRefExpression)) && \(field.typeText).isRefType) ? 1 : 0"
+            if field.dynamicAnyCodec != nil {
+                let fieldTypeExpr = singleLineExpression(
+                    compatibleTypeMetaFieldExpression(field, trackRefExpression: trackRefExpression)
+                )
+                return "\"\(field.schemaIdentifier),\\(\(fieldTypeExpr).schemaFingerprintString());\""
             }
-            return "\"\(field.schemaIdentifier),\(typeID),\\(\(trackRefExpr)),\(nullable);\""
+            let trackRefExpr = "\(field.codecAliasName).compatibleFieldType(trackRef: \(trackRefExpression)).schemaFingerprintString()"
+            return "\"\(field.schemaIdentifier),\\(\(trackRefExpr));\""
         }
     if entries.isEmpty {
         return "\"\""
     }
     return entries.joined(separator: " + ")
-}
-
-private func fingerprintTypeID(for field: ParsedField) -> UInt32 {
-    let optional = unwrapOptional(field.typeText)
-    let classification = classifyType(optional.type)
-    if classification.isPrimitive || classification.isBuiltIn {
-        return field.typeID
-    }
-    return 0
 }
 
 private func buildDefaultDecl(isClass: Bool, fields: [ParsedField], accessPrefix: String) -> String {
@@ -1110,6 +1500,10 @@ private func buildDefaultDecl(isClass: Bool, fields: [ParsedField], accessPrefix
     """
 }
 
+private func singleLineExpression(_ expression: String) -> String {
+    expression.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+}
+
 private func buildWriteWrapperDecl(accessPrefix: String) -> String {
     """
     \(accessPrefix)func foryWrite(
@@ -1142,35 +1536,18 @@ private func buildWriteDataDecl(sortedFields: [ParsedField], accessPrefix: Strin
     let allFieldLines = sortedFields.map { field in
         writeLine(for: field)
     }
-    let leadingPrimitiveFields = leadingPrimitiveFastPathFields(sortedFields)
-    let remainingFieldLines = sortedFields.dropFirst(leadingPrimitiveFields.count).map { field in
-        writeLine(for: field)
-    }
-    var schemaHeaderLines = [
+    let schemaHeaderLines = [
         "if context.checkClassVersion {",
         "    __buffer.writeInt32(Int32(bitPattern: Self.__forySchemaHash(context.trackRef)))",
         "}"
     ]
-    let primitiveReserveBytes = schemaPrimitiveReserveBytes(sortedFields)
-    if primitiveReserveBytes > 0 {
-        schemaHeaderLines.insert(
-            "__buffer.reserve(\(primitiveReserveBytes) + (context.checkClassVersion ? 4 : 0))",
-            at: 0
-        )
-    }
     let schemaHeader = schemaHeaderLines.joined(separator: "\n            ")
-    let primitiveFastWriteBlock = buildPrimitiveFastWriteBlock(leadingPrimitiveFields)
-    var fastFieldLines: [String] = []
-    if let primitiveFastWriteBlock {
-        fastFieldLines.append(primitiveFastWriteBlock)
-    }
-    fastFieldLines.append(contentsOf: remainingFieldLines)
 
     let fieldBody: String
     if allFieldLines.isEmpty {
         fieldBody = "_ = hasGenerics"
     } else {
-        fieldBody = fastFieldLines.joined(separator: "\n        ")
+        fieldBody = allFieldLines.joined(separator: "\n        ")
     }
 
     return """
@@ -1185,51 +1562,6 @@ private func buildWriteDataDecl(sortedFields: [ParsedField], accessPrefix: Strin
     """
 }
 
-private func schemaPrimitiveReserveBytes(_ fields: [ParsedField]) -> Int {
-    fields.reduce(0) { partial, field in
-        partial + schemaPrimitiveReserveBytes(for: field)
-    }
-}
-
-private func schemaPrimitiveReserveBytes(for field: ParsedField) -> Int {
-    guard !field.isOptional else {
-        return 0
-    }
-    guard field.dynamicAnyCodec == nil, field.typeID != 27 else {
-        return 0
-    }
-
-    if let customCodecType = field.customCodecType {
-        switch customCodecType {
-        case "ForyInt32Fixed", "ForyUInt32Fixed":
-            return 4
-        case "ForyInt64Fixed", "ForyUInt64Fixed":
-            return 8
-        case "ForyInt64Tagged", "ForyUInt64Tagged":
-            return 9
-        default:
-            return 0
-        }
-    }
-
-    switch trimType(field.typeText) {
-    case "Bool", "Int8", "UInt8":
-        return 1
-    case "Int16", "UInt16":
-        return 2
-    case "Float":
-        return 4
-    case "Double":
-        return 8
-    case "Int32", "UInt32":
-        return 5
-    case "Int64", "UInt64", "Int", "UInt":
-        return 10
-    default:
-        return 0
-    }
-}
-
 private func writeLine(for field: ParsedField) -> String {
     if let dynamicAnyCodec = field.dynamicAnyCodec {
         let refMode = fieldRefModeExpression(field)
@@ -1239,48 +1571,23 @@ private func writeLine(for field: ParsedField) -> String {
             refModeExpr: refMode
         )
     }
-    let hasGenerics = field.isCollection ? "true" : "false"
-    if let codecType = field.customCodecType {
-        let refMode = fieldRefModeExpression(field)
-        if field.isOptional {
-            return """
-            try (self.\(field.name).map { \(codecType)(rawValue: $0) }).foryWrite(
-                context,
-                refMode: \(refMode),
-                writeTypeInfo: false,
-                hasGenerics: false
-            )
-            """
-        }
-        return """
-        try \(codecType)(rawValue: self.\(field.name)).foryWrite(
-            context,
-            refMode: \(refMode),
-            writeTypeInfo: false,
-            hasGenerics: false
-        )
-        """
-    }
-    if !field.isOptional, !compatibleFieldNeedsTypeInfo(field) {
-        if let primitiveLine = primitiveSchemaWriteLine(field) {
-            return primitiveLine
-        }
-        return "try self.\(field.name).foryWriteData(context, hasGenerics: \(hasGenerics))"
-    }
     let refMode = fieldRefModeExpression(field)
-    let writeTypeInfoExpr = "context.compatible ? TypeId.needsTypeInfoForField(\(field.typeText).staticTypeId) : false"
+    let writeTypeInfoExpr = "context.compatible ? TypeId.needsTypeInfoForField(\(field.codecAliasName).staticTypeId) : false"
     return """
-    try self.\(field.name).foryWrite(
+    try \(field.codecAliasName).write(
+        self.\(field.name),
         context,
         refMode: \(refMode),
-        writeTypeInfo: \(writeTypeInfoExpr),
-        hasGenerics: \(hasGenerics)
+        writeTypeInfo: \(writeTypeInfoExpr)
     )
     """
 }
 
 private enum MacroTypeId {
     static let unknown: UInt32 = 0
+    static let list: UInt32 = 22
+    static let set: UInt32 = 23
+    static let map: UInt32 = 24
     static let compatibleStruct: UInt32 = 27
     static let namedStruct: UInt32 = 28
     static let namedCompatibleStruct: UInt32 = 29
@@ -1304,40 +1611,6 @@ func compatibleFieldNeedsTypeInfo(_ field: ParsedField) -> Bool {
     }
 }
 
-private func primitiveSchemaWriteLine(_ field: ParsedField) -> String? {
-    let type = trimType(field.typeText)
-    switch type {
-    case "Bool":
-        return "__buffer.writeUInt8(self.\(field.name) ? 1 : 0)"
-    case "Int8":
-        return "__buffer.writeInt8(self.\(field.name))"
-    case "Int16":
-        return "__buffer.writeInt16(self.\(field.name))"
-    case "Int32":
-        return "__buffer.writeVarInt32(self.\(field.name))"
-    case "Int64":
-        return "__buffer.writeVarInt64(self.\(field.name))"
-    case "Int":
-        return "__buffer.writeVarInt64(Int64(self.\(field.name)))"
-    case "UInt8":
-        return "__buffer.writeUInt8(self.\(field.name))"
-    case "UInt16":
-        return "__buffer.writeUInt16(self.\(field.name))"
-    case "UInt32":
-        return "__buffer.writeVarUInt32(self.\(field.name))"
-    case "UInt64":
-        return "__buffer.writeVarUInt64(self.\(field.name))"
-    case "UInt":
-        return "__buffer.writeVarUInt64(UInt64(self.\(field.name)))"
-    case "Float":
-        return "__buffer.writeFloat32(self.\(field.name))"
-    case "Double":
-        return "__buffer.writeFloat64(self.\(field.name))"
-    default:
-        return nil
-    }
-}
-
 private func dynamicAnyWriteLine(
     field: ParsedField,
     dynamicAnyCodec: DynamicAnyCodecKind,
@@ -1358,7 +1631,7 @@ func fieldRefModeExpression(_ field: ParsedField) -> String {
         let trackRefExpr = dynamicAnyUsesContextTrackRef(dynamicAnyCodec) ? "context.trackRef" : "false"
         return "RefMode.from(nullable: \(nullable), trackRef: \(trackRefExpr))"
     }
-    return "RefMode.from(nullable: \(nullable), trackRef: context.trackRef && \(field.typeText).isRefType)"
+    return "RefMode.from(nullable: \(nullable), trackRef: context.trackRef && \(field.codecAliasName).isRefType)"
 }
 
 private func compatibleTypeMetaFieldExpression(
@@ -1369,14 +1642,14 @@ private func compatibleTypeMetaFieldExpression(
     if let dynamicAnyCodec = field.dynamicAnyCodec {
         fieldTrackRefExpression = dynamicAnyUsesContextTrackRef(dynamicAnyCodec) ? trackRefExpression : "false"
     } else {
-        fieldTrackRefExpression = "\(trackRefExpression) && \(field.typeText).isRefType"
+        fieldTrackRefExpression = "\(trackRefExpression) && \(field.codecAliasName).isRefType"
     }
 
     return buildCompatibleFieldTypeExpression(
         typeText: field.typeText,
         nullableExpression: field.isOptional ? "true" : "false",
         trackRefExpression: fieldTrackRefExpression,
-        explicitTypeID: field.customCodecType != nil ? field.typeID : nil
+        explicitTypeID: nil
     )
 }
 
@@ -1437,7 +1710,7 @@ func fieldDefaultExpr(_ field: ParsedField) -> String {
     if field.dynamicAnyCodec != nil {
         return dynamicAnyDefaultExpr(typeText: field.typeText)
     }
-    return "\(field.typeText).foryDefault()"
+    return "\(field.codecAliasName).defaultValue()"
 }
 
 private func buildCompatibleFieldTypeExpression(

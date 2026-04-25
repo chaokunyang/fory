@@ -24,18 +24,18 @@ private struct UnsignedFieldBundle: Equatable {
     var u8: UInt8 = 0
     var u16: UInt16 = 0
     var u32Var: UInt32 = 0
-    var u32Fixed: ForyUInt32Fixed = .init()
+    @ForyField(encoding: .fixed) var u32Fixed: UInt32 = 0
     var u64Var: UInt64 = 0
-    var u64Fixed: ForyUInt64Fixed = .init()
-    var u64Tagged: ForyUInt64Tagged = .init()
+    @ForyField(type: .uint64(encoding: .fixed)) var u64Fixed: UInt64 = 0
+    @ForyField(type: .uint64(encoding: .tagged)) var u64Tagged: UInt64 = 0
 
     var u8Nullable: UInt8?
     var u16Nullable: UInt16?
     var u32VarNullable: UInt32?
-    var u32FixedNullable: ForyUInt32Fixed?
+    @ForyField(type: .uint32(nullable: true, encoding: .fixed)) var u32FixedNullable: UInt32?
     var u64VarNullable: UInt64?
-    var u64FixedNullable: ForyUInt64Fixed?
-    var u64TaggedNullable: ForyUInt64Tagged?
+    @ForyField(type: .uint64(nullable: true, encoding: .fixed)) var u64FixedNullable: UInt64?
+    @ForyField(type: .uint64(nullable: true, encoding: .tagged)) var u64TaggedNullable: UInt64?
 }
 
 @Test
@@ -66,110 +66,91 @@ func unsignedPrimitiveRoundTripsCoverZeroMidpointAndMax() throws {
 }
 
 @Test
-func unsignedEncodingWrappersPreserveExpectedWireWidths() throws {
-    let fixed32 = ForyUInt32Fixed(rawValue: UInt32.max)
+func unsignedCodecsPreserveExpectedWireWidths() throws {
     let fixed32Context = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try fixed32.foryWriteData(fixed32Context, hasGenerics: false)
+    try UInt32FixedCodec.writeData(UInt32.max, fixed32Context)
     #expect(fixed32Context.buffer.count == 4)
-    let fixed32Decoded = try ForyUInt32Fixed.foryReadData(
+    let fixed32Decoded = try UInt32FixedCodec.readData(
         ReadContext(buffer: fixed32Context.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
-    #expect(fixed32Decoded == fixed32)
+    #expect(fixed32Decoded == UInt32.max)
 
-    let fixed64 = ForyUInt64Fixed(rawValue: UInt64.max)
     let fixed64Context = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try fixed64.foryWriteData(fixed64Context, hasGenerics: false)
+    try UInt64FixedCodec.writeData(UInt64.max, fixed64Context)
     #expect(fixed64Context.buffer.count == 8)
-    let fixed64Decoded = try ForyUInt64Fixed.foryReadData(
+    let fixed64Decoded = try UInt64FixedCodec.readData(
         ReadContext(buffer: fixed64Context.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
-    #expect(fixed64Decoded == fixed64)
+    #expect(fixed64Decoded == UInt64.max)
 
-    let compactTagged = ForyUInt64Tagged(rawValue: UInt64(Int32.max))
-    let compactContext = WriteContext(
+    let compactTaggedContext = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try compactTagged.foryWriteData(compactContext, hasGenerics: false)
-    #expect(compactContext.buffer.count == 4)
-    let compactDecoded = try ForyUInt64Tagged.foryReadData(
-        ReadContext(buffer: compactContext.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
+    try UInt64TaggedCodec.writeData(UInt64(Int32.max), compactTaggedContext)
+    #expect(compactTaggedContext.buffer.count == 4)
+    let compactTaggedDecoded = try UInt64TaggedCodec.readData(
+        ReadContext(buffer: compactTaggedContext.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
-    #expect(compactDecoded == compactTagged)
+    #expect(compactTaggedDecoded == UInt64(Int32.max))
 
-    let wideTagged = ForyUInt64Tagged(rawValue: UInt64(Int32.max) + 1)
-    let wideContext = WriteContext(
+    let wideTaggedContext = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try wideTagged.foryWriteData(wideContext, hasGenerics: false)
-    #expect(wideContext.buffer.count == 9)
-    let wideDecoded = try ForyUInt64Tagged.foryReadData(
-        ReadContext(buffer: wideContext.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
+    try UInt64TaggedCodec.writeData(UInt64(Int32.max) + 1, wideTaggedContext)
+    #expect(wideTaggedContext.buffer.count == 9)
+    let wideTaggedDecoded = try UInt64TaggedCodec.readData(
+        ReadContext(buffer: wideTaggedContext.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
-    #expect(wideDecoded == wideTagged)
+    #expect(wideTaggedDecoded == UInt64(Int32.max) + 1)
 }
 
 @Test
 func unsignedMacroFieldsRoundTripAcrossSchemaModes() throws {
-    let cases = [
-        UnsignedFieldBundle(
-            u8: 0,
-            u16: 0,
-            u32Var: 0,
-            u32Fixed: .init(rawValue: 0),
-            u64Var: 0,
-            u64Fixed: .init(rawValue: 0),
-            u64Tagged: .init(rawValue: 0),
-            u8Nullable: nil,
-            u16Nullable: nil,
-            u32VarNullable: nil,
-            u32FixedNullable: nil,
-            u64VarNullable: nil,
-            u64FixedNullable: nil,
-            u64TaggedNullable: nil
-        ),
-        UnsignedFieldBundle(
+    let cases: [UnsignedFieldBundle] = [
+        .init(),
+        .init(
             u8: 128,
             u16: 32_768,
             u32Var: UInt32(Int32.max) + 1,
-            u32Fixed: .init(rawValue: UInt32(Int32.max) + 1),
+            u32Fixed: UInt32(Int32.max) + 1,
             u64Var: UInt64(Int64.max) + 1,
-            u64Fixed: .init(rawValue: UInt64(Int64.max) + 1),
-            u64Tagged: .init(rawValue: UInt64(Int32.max) + 1),
+            u64Fixed: UInt64(Int64.max) + 1,
+            u64Tagged: UInt64(Int32.max) + 1,
             u8Nullable: 128,
             u16Nullable: 32_768,
             u32VarNullable: UInt32(Int32.max) + 1,
-            u32FixedNullable: .init(rawValue: UInt32(Int32.max) + 1),
+            u32FixedNullable: UInt32(Int32.max) + 1,
             u64VarNullable: UInt64(Int64.max) + 1,
-            u64FixedNullable: .init(rawValue: UInt64(Int64.max) + 1),
-            u64TaggedNullable: .init(rawValue: UInt64(Int32.max) + 1)
+            u64FixedNullable: UInt64(Int64.max) + 1,
+            u64TaggedNullable: UInt64(Int32.max) + 1
         ),
-        UnsignedFieldBundle(
+        .init(
             u8: UInt8.max,
             u16: UInt16.max,
             u32Var: UInt32.max,
-            u32Fixed: .init(rawValue: UInt32.max),
+            u32Fixed: UInt32.max,
             u64Var: UInt64.max,
-            u64Fixed: .init(rawValue: UInt64.max),
-            u64Tagged: .init(rawValue: UInt64.max),
+            u64Fixed: UInt64.max,
+            u64Tagged: UInt64.max,
             u8Nullable: UInt8.max,
             u16Nullable: UInt16.max,
             u32VarNullable: UInt32.max,
-            u32FixedNullable: .init(rawValue: UInt32.max),
+            u32FixedNullable: UInt32.max,
             u64VarNullable: UInt64.max,
-            u64FixedNullable: .init(rawValue: UInt64.max),
-            u64TaggedNullable: .init(rawValue: UInt64.max)
+            u64FixedNullable: UInt64.max,
+            u64TaggedNullable: UInt64.max
         )
     ]
 
@@ -185,4 +166,18 @@ func unsignedMacroFieldsRoundTripAcrossSchemaModes() throws {
         #expect(decodedSchema == value)
         #expect(decodedCompatible == value)
     }
+}
+
+@Test
+func unsignedFieldMetadataReflectsWireEncodingChoices() {
+    let fields = UnsignedFieldBundle.foryFieldsInfo(trackRef: false)
+    let byName = Dictionary(uniqueKeysWithValues: fields.map { ($0.fieldName, $0.fieldType) })
+
+    #expect(byName["u32Var"]?.typeID == TypeId.varUInt32.rawValue)
+    #expect(byName["u32Fixed"]?.typeID == TypeId.uint32.rawValue)
+    #expect(byName["u64Var"]?.typeID == TypeId.varUInt64.rawValue)
+    #expect(byName["u64Fixed"]?.typeID == TypeId.uint64.rawValue)
+    #expect(byName["u64Tagged"]?.typeID == TypeId.taggedUInt64.rawValue)
+    #expect(byName["u32FixedNullable"]?.nullable == true)
+    #expect(byName["u64TaggedNullable"]?.nullable == true)
 }

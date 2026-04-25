@@ -907,13 +907,11 @@ func macroFieldEncodingOverridesCompatibleTypeMeta() throws {
 func macroReducedPrecisionFieldsUseXlangTypeIDs() {
     let fields = ReducedPrecisionMacroFields.foryFieldsInfo(trackRef: false)
     #expect(fields.count == 4)
-    #expect(fields.map(\.fieldName) == ["float16Value", "bfloat16Value", "float16Array", "bfloat16Array"])
-    #expect(fields.map(\.fieldType.typeID) == [
-        TypeId.float16.rawValue,
-        TypeId.bfloat16.rawValue,
-        TypeId.float16Array.rawValue,
-        TypeId.bfloat16Array.rawValue
-    ])
+    let byName = Dictionary(uniqueKeysWithValues: fields.map { ($0.fieldName, $0.fieldType.typeID) })
+    #expect(byName["float16Value"] == TypeId.float16.rawValue)
+    #expect(byName["bfloat16Value"] == TypeId.bfloat16.rawValue)
+    #expect(byName["float16Array"] == TypeId.float16Array.rawValue)
+    #expect(byName["bfloat16Array"] == TypeId.bfloat16Array.rawValue)
 }
 
 @Test

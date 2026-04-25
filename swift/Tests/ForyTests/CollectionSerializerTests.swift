@@ -20,7 +20,7 @@ import Testing
 @testable import Fory
 
 @ForyObject
-private final class RefKeyNode: Hashable {
+private final class RefKeyNode {
     var id: Int32 = 0
 
     required init() {}
@@ -28,7 +28,9 @@ private final class RefKeyNode: Hashable {
     init(id: Int32) {
         self.id = id
     }
+}
 
+extension RefKeyNode: Hashable {
     static func == (lhs: RefKeyNode, rhs: RefKeyNode) -> Bool {
         lhs === rhs
     }

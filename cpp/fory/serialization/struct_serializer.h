@@ -568,8 +568,9 @@ template <typename T> struct CompileTimeFieldHelpers {
       else if constexpr (::fory::detail::has_field_config_v<T>) {
         if constexpr (::fory::detail::GetFieldConfigEntry<T,
                                                           Index>::has_entry &&
-                      ::fory::detail::GetFieldConfigEntry<T, Index>::nullable) {
-          return true;
+                      ::fory::detail::GetFieldConfigEntry<T, Index>::nullable !=
+                          -1) {
+          return ::fory::detail::GetFieldConfigEntry<T, Index>::nullable == 1;
         }
         return field_is_nullable_v<RawFieldType>;
       }
@@ -645,8 +646,9 @@ template <typename T> struct CompileTimeFieldHelpers {
       else if constexpr (::fory::detail::has_field_config_v<T>) {
         if constexpr (::fory::detail::GetFieldConfigEntry<T,
                                                           Index>::has_entry &&
-                      ::fory::detail::GetFieldConfigEntry<T, Index>::ref) {
-          return true;
+                      ::fory::detail::GetFieldConfigEntry<T, Index>::ref !=
+                          -1) {
+          return ::fory::detail::GetFieldConfigEntry<T, Index>::ref == 1;
         }
         return field_track_ref_v<RawFieldType>;
       }
@@ -1788,6 +1790,800 @@ write_primitive_fields_fast(const T &obj, Buffer &buffer,
   }
 }
 
+template <typename Spec>
+constexpr auto configured_inner_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind ==
+                ::fory::detail::TypeSpecKind::Inner) {
+    return spec.first_;
+  } else {
+    return spec;
+  }
+}
+
+template <typename Spec> constexpr auto configured_list_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind ==
+                ::fory::detail::TypeSpecKind::List) {
+    return spec.first_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename Spec> constexpr auto configured_set_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind == ::fory::detail::TypeSpecKind::Set) {
+    return spec.first_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename Spec>
+constexpr auto configured_map_key_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind == ::fory::detail::TypeSpecKind::Map) {
+    return spec.first_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename Spec>
+constexpr auto configured_map_value_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind == ::fory::detail::TypeSpecKind::Map) {
+    return spec.second_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename T>
+constexpr bool configured_root_nullable_v = is_nullable_v<std::decay_t<T>>;
+
+template <typename T> inline bool configured_has_outer_value(const T &value) {
+  if constexpr (is_optional_v<T>) {
+    return value.has_value();
+  } else if constexpr (is_shared_ptr_v<T>) {
+    return value != nullptr;
+  } else if constexpr (::fory::detail::is_shared_weak_v<T>) {
+    return value.upgrade() != nullptr;
+  } else if constexpr (is_unique_ptr_v<T>) {
+    return value != nullptr;
+  } else {
+    return true;
+  }
+}
+
+template <typename T> T configured_null_value() { return T{}; }
+
+template <typename T>
+struct contains_configured_ref_carrier : std::false_type {};
+template <typename T>
+struct contains_configured_ref_carrier<std::shared_ptr<T>> : std::true_type {};
+template <typename T>
+struct contains_configured_ref_carrier<::fory::serialization::SharedWeak<T>>
+    : std::true_type {};
+template <typename T, typename D>
+struct contains_configured_ref_carrier<std::unique_ptr<T, D>>
+    : contains_configured_ref_carrier<T> {};
+template <typename T>
+struct contains_configured_ref_carrier<std::optional<T>>
+    : contains_configured_ref_carrier<T> {};
+
+template <typename T>
+struct contains_unsupported_configured_ref : std::false_type {};
+template <typename T, typename D>
+struct contains_unsupported_configured_ref<std::unique_ptr<T, D>>
+    : contains_unsupported_configured_ref<T> {};
+template <typename T>
+struct contains_unsupported_configured_ref<std::optional<T>>
+    : contains_unsupported_configured_ref<T> {};
+template <typename T>
+struct contains_unsupported_configured_ref<std::shared_ptr<T>>
+    : std::bool_constant<std::is_polymorphic_v<T> ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename T>
+struct contains_unsupported_configured_ref<::fory::serialization::SharedWeak<T>>
+    : std::bool_constant<std::is_polymorphic_v<T> ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename T, typename Alloc>
+struct contains_unsupported_configured_ref<std::vector<T, Alloc>>
+    : std::bool_constant<contains_configured_ref_carrier<T>::value ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename T, typename Alloc>
+struct contains_unsupported_configured_ref<std::list<T, Alloc>>
+    : std::bool_constant<contains_configured_ref_carrier<T>::value ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename T, typename Alloc>
+struct contains_unsupported_configured_ref<std::deque<T, Alloc>>
+    : std::bool_constant<contains_configured_ref_carrier<T>::value ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename T, typename Alloc>
+struct contains_unsupported_configured_ref<std::forward_list<T, Alloc>>
+    : std::bool_constant<contains_configured_ref_carrier<T>::value ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename T, typename... Args>
+struct contains_unsupported_configured_ref<std::set<T, Args...>>
+    : std::bool_constant<contains_configured_ref_carrier<T>::value ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename T, typename... Args>
+struct contains_unsupported_configured_ref<std::unordered_set<T, Args...>>
+    : std::bool_constant<contains_configured_ref_carrier<T>::value ||
+                         contains_unsupported_configured_ref<T>::value> {};
+template <typename K, typename V, typename... Args>
+struct contains_unsupported_configured_ref<std::map<K, V, Args...>>
+    : std::bool_constant<contains_configured_ref_carrier<K>::value ||
+                         contains_configured_ref_carrier<V>::value ||
+                         contains_unsupported_configured_ref<K>::value ||
+                         contains_unsupported_configured_ref<V>::value> {};
+template <typename K, typename V, typename... Args>
+struct contains_unsupported_configured_ref<std::unordered_map<K, V, Args...>>
+    : std::bool_constant<contains_configured_ref_carrier<K>::value ||
+                         contains_configured_ref_carrier<V>::value ||
+                         contains_unsupported_configured_ref<K>::value ||
+                         contains_unsupported_configured_ref<V>::value> {};
+template <typename T>
+inline constexpr bool contains_unsupported_configured_ref_v =
+    contains_unsupported_configured_ref<std::decay_t<T>>::value;
+
+template <typename TargetType>
+FORY_ALWAYS_INLINE TargetType read_primitive_by_type_id(ReadContext &ctx,
+                                                        uint32_t type_id,
+                                                        Error &error);
+
+template <typename T>
+inline constexpr bool configured_direct_primitive_v =
+    std::is_same_v<std::decay_t<T>, bool> ||
+    std::is_same_v<std::decay_t<T>, int8_t> ||
+    std::is_same_v<std::decay_t<T>, uint8_t> ||
+    std::is_same_v<std::decay_t<T>, int16_t> ||
+    std::is_same_v<std::decay_t<T>, uint16_t> ||
+    std::is_same_v<std::decay_t<T>, int32_t> ||
+    std::is_same_v<std::decay_t<T>, uint32_t> ||
+    std::is_same_v<std::decay_t<T>, int64_t> ||
+    std::is_same_v<std::decay_t<T>, uint64_t> ||
+    std::is_same_v<std::decay_t<T>, int> ||
+    std::is_same_v<std::decay_t<T>, unsigned int> ||
+    std::is_same_v<std::decay_t<T>, long long> ||
+    std::is_same_v<std::decay_t<T>, unsigned long long> ||
+    std::is_same_v<std::decay_t<T>, float16_t> ||
+    std::is_same_v<std::decay_t<T>, bfloat16_t> ||
+    std::is_same_v<std::decay_t<T>, float> ||
+    std::is_same_v<std::decay_t<T>, double>;
+
+template <typename T, typename Spec>
+uint32_t configured_leaf_type_id(const Spec &spec) {
+  if (spec.type_id_override_ >= 0) {
+    return static_cast<uint32_t>(spec.type_id_override_);
+  }
+  using Decayed = std::decay_t<T>;
+  if constexpr (std::is_same_v<Decayed, uint32_t>) {
+    return spec.encoding_ == Encoding::Varint
+               ? static_cast<uint32_t>(TypeId::VAR_UINT32)
+               : static_cast<uint32_t>(TypeId::UINT32);
+  } else if constexpr (std::is_same_v<Decayed, uint64_t>) {
+    if (spec.encoding_ == Encoding::Varint) {
+      return static_cast<uint32_t>(TypeId::VAR_UINT64);
+    }
+    if (spec.encoding_ == Encoding::Tagged) {
+      return static_cast<uint32_t>(TypeId::TAGGED_UINT64);
+    }
+    return static_cast<uint32_t>(TypeId::UINT64);
+  } else if constexpr (std::is_same_v<Decayed, int32_t> ||
+                       std::is_same_v<Decayed, int>) {
+    return spec.encoding_ == Encoding::Fixed
+               ? static_cast<uint32_t>(TypeId::INT32)
+               : static_cast<uint32_t>(TypeId::VARINT32);
+  } else if constexpr (std::is_same_v<Decayed, int64_t> ||
+                       std::is_same_v<Decayed, long long>) {
+    if (spec.encoding_ == Encoding::Fixed) {
+      return static_cast<uint32_t>(TypeId::INT64);
+    }
+    if (spec.encoding_ == Encoding::Tagged) {
+      return static_cast<uint32_t>(TypeId::TAGGED_INT64);
+    }
+    return static_cast<uint32_t>(TypeId::VARINT64);
+  } else {
+    return static_cast<uint32_t>(Serializer<Decayed>::type_id);
+  }
+}
+
+template <typename T, typename Spec>
+bool configured_node_nullable(const Spec &spec) {
+  return spec_nullable(spec, is_nullable_v<std::decay_t<T>>);
+}
+
+template <typename T, typename Spec>
+bool configured_node_track_ref(const Spec &spec) {
+  return spec_track_ref(spec,
+                        is_shared_ptr_v<std::decay_t<T>> ||
+                            ::fory::detail::is_shared_weak_v<std::decay_t<T>>);
+}
+
+template <typename T, typename Spec>
+RefMode configured_node_ref_mode(const Spec &spec) {
+  return make_ref_mode(configured_node_nullable<T>(spec),
+                       configured_node_track_ref<T>(spec));
+}
+
+template <typename T, typename Spec>
+void write_configured_leaf_data(const T &value, WriteContext &ctx,
+                                const Spec &spec) {
+  using Decayed = std::decay_t<T>;
+  if constexpr (is_signed_configurable_int_v<Decayed> ||
+                is_unsigned_configurable_int_v<Decayed>) {
+    const uint32_t type_id = configured_leaf_type_id<Decayed>(spec);
+    switch (static_cast<TypeId>(type_id)) {
+    case TypeId::INT32:
+      ctx.buffer().write_int32(static_cast<int32_t>(value));
+      return;
+    case TypeId::VARINT32:
+      ctx.write_var_int32(static_cast<int32_t>(value));
+      return;
+    case TypeId::INT64:
+      ctx.buffer().write_int64(static_cast<int64_t>(value));
+      return;
+    case TypeId::VARINT64:
+      ctx.write_var_int64(static_cast<int64_t>(value));
+      return;
+    case TypeId::TAGGED_INT64:
+      ctx.write_tagged_int64(static_cast<int64_t>(value));
+      return;
+    case TypeId::UINT32:
+      ctx.buffer().write_int32(
+          static_cast<int32_t>(static_cast<uint32_t>(value)));
+      return;
+    case TypeId::VAR_UINT32:
+      ctx.write_var_uint32(static_cast<uint32_t>(value));
+      return;
+    case TypeId::UINT64:
+      ctx.buffer().write_int64(
+          static_cast<int64_t>(static_cast<uint64_t>(value)));
+      return;
+    case TypeId::VAR_UINT64:
+      ctx.write_var_uint64(static_cast<uint64_t>(value));
+      return;
+    case TypeId::TAGGED_UINT64:
+      ctx.write_tagged_uint64(static_cast<uint64_t>(value));
+      return;
+    default:
+      break;
+    }
+  }
+  Serializer<Decayed>::write_data(value, ctx);
+}
+
+template <typename T, typename Spec>
+T read_configured_leaf_data(ReadContext &ctx, const Spec &spec,
+                            const FieldType *remote_field_type) {
+  using Decayed = std::decay_t<T>;
+  uint32_t type_id = remote_field_type != nullptr
+                         ? remote_field_type->type_id
+                         : configured_leaf_type_id<Decayed>(spec);
+  if constexpr (configured_direct_primitive_v<Decayed> ||
+                is_signed_configurable_int_v<Decayed> ||
+                is_unsigned_configurable_int_v<Decayed>) {
+    return read_primitive_by_type_id<Decayed>(ctx, type_id, ctx.error());
+  } else {
+    return Serializer<Decayed>::read_data(ctx);
+  }
+}
+
+template <typename T, typename Spec>
+void write_configured_value(const T &value, WriteContext &ctx, const Spec &spec,
+                            bool outer_null_consumed);
+
+template <typename T, typename Spec>
+T read_configured_value(ReadContext &ctx, const Spec &spec,
+                        const FieldType *remote_field_type,
+                        bool outer_null_consumed);
+
+template <typename T, typename Spec>
+void write_configured_collection_value(const T &value, WriteContext &ctx,
+                                       const Spec &spec) {
+  using Decayed = std::decay_t<T>;
+  using Element = element_type_t<Decayed>;
+  if constexpr (is_forward_list_v<Decayed>) {
+    ctx.set_error(Error::unsupported(
+        "Configured nested codec does not support std::forward_list fields"));
+    return;
+  } else {
+    ctx.write_var_uint32(static_cast<uint32_t>(value.size()));
+    if (value.empty()) {
+      return;
+    }
+    const auto child_spec = [&]() constexpr {
+      if constexpr (is_set_like_v<Decayed>) {
+        return configured_set_spec(spec);
+      } else {
+        return configured_list_spec(spec);
+      }
+    }();
+    bool has_null = false;
+    if constexpr (configured_root_nullable_v<Element>) {
+      for (const auto &elem : value) {
+        if (!configured_has_outer_value(elem)) {
+          has_null = true;
+          break;
+        }
+      }
+    }
+    uint8_t bitmap = COLL_IS_SAME_TYPE | COLL_DECL_ELEMENT_TYPE;
+    if (has_null) {
+      bitmap |= COLL_HAS_NULL;
+    }
+    ctx.write_uint8(bitmap);
+    for (const auto &elem : value) {
+      if (has_null) {
+        if (!configured_has_outer_value(elem)) {
+          ctx.write_int8(NULL_FLAG);
+          continue;
+        }
+        ctx.write_int8(NOT_NULL_VALUE_FLAG);
+        write_configured_value<Element>(elem, ctx, child_spec, true);
+      } else {
+        write_configured_value<Element>(elem, ctx, child_spec, false);
+      }
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return;
+      }
+    }
+  }
+}
+
+template <typename T, typename Spec>
+T read_configured_collection_value(ReadContext &ctx, const Spec &spec,
+                                   const FieldType *remote_field_type) {
+  using Decayed = std::decay_t<T>;
+  using Element = element_type_t<Decayed>;
+  if constexpr (is_forward_list_v<Decayed>) {
+    ctx.set_error(Error::unsupported(
+        "Configured nested codec does not support std::forward_list fields"));
+    return T{};
+  } else {
+    uint32_t length = ctx.read_var_uint32(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return T{};
+    }
+    if (length == 0) {
+      return T{};
+    }
+    uint8_t bitmap = ctx.read_uint8(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return T{};
+    }
+    if (bitmap & COLL_TRACKING_REF) {
+      ctx.set_error(
+          Error::unsupported("Configured nested codec does not support "
+                             "tracked-ref collection elements"));
+      return T{};
+    }
+    const bool has_null = (bitmap & COLL_HAS_NULL) != 0;
+    T result;
+    if constexpr (has_reserve_v<T>) {
+      result.reserve(length);
+    }
+    const auto child_spec = [&]() constexpr {
+      if constexpr (is_set_like_v<Decayed>) {
+        return configured_set_spec(spec);
+      } else {
+        return configured_list_spec(spec);
+      }
+    }();
+    const FieldType *remote_child =
+        remote_field_type != nullptr && !remote_field_type->generics.empty()
+            ? &remote_field_type->generics[0]
+            : nullptr;
+    for (uint32_t i = 0; i < length; ++i) {
+      if (has_null) {
+        int8_t flag = ctx.read_int8(ctx.error());
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return result;
+        }
+        if (flag == NULL_FLAG) {
+          collection_insert(result, configured_null_value<Element>());
+          continue;
+        }
+      }
+      auto elem = read_configured_value<Element>(
+          ctx, child_spec, remote_child,
+          has_null && configured_root_nullable_v<Element>);
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      collection_insert(result, std::move(elem));
+    }
+    return result;
+  }
+}
+
+template <typename T, typename Spec>
+void write_configured_map_value(const T &value, WriteContext &ctx,
+                                const Spec &spec) {
+  using Decayed = std::decay_t<T>;
+  using Key = key_type_t<Decayed>;
+  using Value = mapped_type_t<Decayed>;
+  auto key_spec = configured_map_key_spec(spec);
+  auto value_spec = configured_map_value_spec(spec);
+  ctx.write_var_uint32(static_cast<uint32_t>(value.size()));
+  for (const auto &[key, mapped] : value) {
+    const bool key_null =
+        configured_root_nullable_v<Key> && !configured_has_outer_value(key);
+    const bool value_null = configured_root_nullable_v<Value> &&
+                            !configured_has_outer_value(mapped);
+    uint8_t header = DECL_KEY_TYPE | DECL_VALUE_TYPE;
+    if (key_null) {
+      header |= KEY_NULL;
+    }
+    if (value_null) {
+      header |= VALUE_NULL;
+    }
+    ctx.write_uint8(header);
+    if (!key_null && !value_null) {
+      ctx.write_uint8(1);
+    }
+    if (!key_null) {
+      write_configured_value<Key>(key, ctx, key_spec,
+                                  configured_root_nullable_v<Key>);
+    }
+    if (!value_null) {
+      write_configured_value<Value>(mapped, ctx, value_spec,
+                                    configured_root_nullable_v<Value>);
+    }
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return;
+    }
+  }
+}
+
+template <typename T, typename Spec>
+T read_configured_map_value(ReadContext &ctx, const Spec &spec,
+                            const FieldType *remote_field_type) {
+  using Decayed = std::decay_t<T>;
+  using Key = key_type_t<Decayed>;
+  using Value = mapped_type_t<Decayed>;
+  uint32_t length = ctx.read_var_uint32(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return T{};
+  }
+  T result;
+  MapReserver<T>::reserve(result, length);
+  auto key_spec = configured_map_key_spec(spec);
+  auto value_spec = configured_map_value_spec(spec);
+  const FieldType *remote_key =
+      remote_field_type != nullptr && remote_field_type->generics.size() > 0
+          ? &remote_field_type->generics[0]
+          : nullptr;
+  const FieldType *remote_value =
+      remote_field_type != nullptr && remote_field_type->generics.size() > 1
+          ? &remote_field_type->generics[1]
+          : nullptr;
+  uint32_t count = 0;
+  while (count < length) {
+    uint8_t header = ctx.read_uint8(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return result;
+    }
+    if ((header & TRACKING_KEY_REF) || (header & TRACKING_VALUE_REF)) {
+      ctx.set_error(Error::unsupported(
+          "Configured nested codec does not support tracked-ref map entries"));
+      return result;
+    }
+    const bool key_null = (header & KEY_NULL) != 0;
+    const bool value_null = (header & VALUE_NULL) != 0;
+    if (key_null && value_null) {
+      result.emplace(Key{}, Value{});
+      ++count;
+      continue;
+    }
+    if (!key_null && !value_null) {
+      uint8_t chunk_size = ctx.read_uint8(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      for (uint8_t i = 0; i < chunk_size; ++i) {
+        auto key = read_configured_value<Key>(ctx, key_spec, remote_key,
+                                              configured_root_nullable_v<Key>);
+        auto mapped = read_configured_value<Value>(
+            ctx, value_spec, remote_value, configured_root_nullable_v<Value>);
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return result;
+        }
+        result.emplace(std::move(key), std::move(mapped));
+      }
+      count += chunk_size;
+      continue;
+    }
+    Key key = key_null
+                  ? Key{}
+                  : read_configured_value<Key>(ctx, key_spec, remote_key,
+                                               configured_root_nullable_v<Key>);
+    Value mapped =
+        value_null
+            ? Value{}
+            : read_configured_value<Value>(ctx, value_spec, remote_value,
+                                           configured_root_nullable_v<Value>);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return result;
+    }
+    result.emplace(std::move(key), std::move(mapped));
+    ++count;
+  }
+  return result;
+}
+
+template <typename T, typename Spec>
+void write_configured_value(const T &value, WriteContext &ctx, const Spec &spec,
+                            bool outer_null_consumed) {
+  using Decayed = std::decay_t<T>;
+  if constexpr (is_optional_v<Decayed>) {
+    if (!outer_null_consumed) {
+      if (!value.has_value()) {
+        ctx.write_int8(NULL_FLAG);
+        return;
+      }
+      ctx.write_int8(NOT_NULL_VALUE_FLAG);
+    }
+    auto inner_spec = configured_inner_spec(spec);
+    write_configured_value<typename Decayed::value_type>(*value, ctx,
+                                                         inner_spec, false);
+  } else if constexpr (is_shared_ptr_v<Decayed>) {
+    auto inner_spec = configured_inner_spec(spec);
+    const RefMode ref_mode = configured_node_ref_mode<Decayed>(spec);
+    if (outer_null_consumed && tracks_refs(ref_mode)) {
+      ctx.set_error(Error::unsupported(
+          "Configured nested codec does not support tracked shared_ptr values "
+          "inside collection or map entries"));
+      return;
+    }
+    if (!outer_null_consumed) {
+      if (ref_mode == RefMode::None) {
+        if (!value) {
+          ctx.set_error(Error::invalid("Configured shared_ptr field with "
+                                       "ref_mode=None cannot serialize null"));
+          return;
+        }
+      } else {
+        if (!value) {
+          ctx.write_int8(NULL_FLAG);
+          return;
+        }
+        if (tracks_refs(ref_mode) && ctx.track_ref()) {
+          if (ctx.ref_writer().try_write_shared_ref(ctx, value)) {
+            return;
+          }
+        } else {
+          ctx.write_int8(NOT_NULL_VALUE_FLAG);
+        }
+      }
+    }
+    write_configured_value<typename Decayed::element_type>(*value, ctx,
+                                                           inner_spec, false);
+  } else if constexpr (::fory::detail::is_shared_weak_v<Decayed>) {
+    auto inner_spec = configured_inner_spec(spec);
+    const RefMode ref_mode = configured_node_ref_mode<Decayed>(spec);
+    if (outer_null_consumed || ref_mode == RefMode::None ||
+        !tracks_refs(ref_mode) || !ctx.track_ref()) {
+      ctx.set_error(Error::invalid_ref(
+          "Configured SharedWeak fields require top-level tracking ref mode"));
+      return;
+    }
+    std::shared_ptr<typename nullable_element_type<Decayed>::type> strong =
+        value.upgrade();
+    if (!strong) {
+      ctx.write_int8(NULL_FLAG);
+      return;
+    }
+    if (ctx.ref_writer().try_write_shared_ref(ctx, strong)) {
+      return;
+    }
+    write_configured_value<typename nullable_element_type<Decayed>::type>(
+        *strong, ctx, inner_spec, false);
+  } else if constexpr (is_unique_ptr_v<Decayed>) {
+    if (!outer_null_consumed) {
+      if (!value) {
+        ctx.write_int8(NULL_FLAG);
+        return;
+      }
+      ctx.write_int8(NOT_NULL_VALUE_FLAG);
+    }
+    auto inner_spec = configured_inner_spec(spec);
+    write_configured_value<typename Decayed::element_type>(*value, ctx,
+                                                           inner_spec, false);
+  } else if constexpr (is_vector_v<Decayed> || is_list_v<Decayed> ||
+                       is_deque_v<Decayed> || is_set_like_v<Decayed> ||
+                       is_forward_list_v<Decayed>) {
+    write_configured_collection_value(value, ctx, spec);
+  } else if constexpr (is_map_like_v<Decayed>) {
+    write_configured_map_value(value, ctx, spec);
+  } else {
+    write_configured_leaf_data(value, ctx, spec);
+  }
+}
+
+template <typename T, typename Spec>
+T read_configured_value(ReadContext &ctx, const Spec &spec,
+                        const FieldType *remote_field_type,
+                        bool outer_null_consumed) {
+  using Decayed = std::decay_t<T>;
+  if constexpr (is_optional_v<Decayed>) {
+    if (!outer_null_consumed) {
+      int8_t flag = ctx.read_int8(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return std::nullopt;
+      }
+      if (flag == NULL_FLAG) {
+        return std::nullopt;
+      }
+    }
+    auto inner_spec = configured_inner_spec(spec);
+    using Inner = typename Decayed::value_type;
+    return Decayed(read_configured_value<Inner>(ctx, inner_spec,
+                                                remote_field_type, false));
+  } else if constexpr (is_shared_ptr_v<Decayed>) {
+    auto inner_spec = configured_inner_spec(spec);
+    const RefMode ref_mode = remote_field_type != nullptr
+                                 ? remote_field_type->ref_mode
+                                 : configured_node_ref_mode<Decayed>(spec);
+    if (outer_null_consumed && tracks_refs(ref_mode)) {
+      ctx.set_error(Error::unsupported(
+          "Configured nested codec does not support tracked shared_ptr values "
+          "inside collection or map entries"));
+      return nullptr;
+    }
+    int8_t flag = NOT_NULL_VALUE_FLAG;
+    bool first_occurrence = false;
+    uint32_t reserved_ref_id = 0;
+    if (!outer_null_consumed && ref_mode != RefMode::None) {
+      flag = ctx.read_int8(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return nullptr;
+      }
+      if (flag == NULL_FLAG) {
+        return nullptr;
+      }
+      if (flag == REF_FLAG) {
+        if (!ctx.track_ref()) {
+          ctx.set_error(Error::invalid_ref(
+              "Reference flag encountered when reference tracking disabled"));
+          return nullptr;
+        }
+        uint32_t ref_id = ctx.read_var_uint32(ctx.error());
+        if (FORY_PREDICT_FALSE(ctx.has_error())) {
+          return nullptr;
+        }
+        auto res = ctx.ref_reader()
+                       .template get_shared_ref<typename Decayed::element_type>(
+                           ref_id);
+        if (!res.ok()) {
+          ctx.set_error(std::move(res).error());
+          return nullptr;
+        }
+        return res.value();
+      }
+      if (flag != NOT_NULL_VALUE_FLAG && flag != REF_VALUE_FLAG) {
+        ctx.set_error(
+            Error::invalid_ref("Unexpected reference flag value: " +
+                               std::to_string(static_cast<int>(flag))));
+        return nullptr;
+      }
+      first_occurrence = flag == REF_VALUE_FLAG;
+      if (first_occurrence) {
+        if (!ctx.track_ref()) {
+          ctx.set_error(Error::invalid_ref(
+              "REF_VALUE flag encountered when reference tracking disabled"));
+          return nullptr;
+        }
+        reserved_ref_id = ctx.ref_reader().reserve_ref_id();
+      }
+    }
+    using Inner = typename Decayed::element_type;
+    if (first_occurrence) {
+      auto result = std::make_shared<Inner>();
+      ctx.ref_reader().store_shared_ref_at(reserved_ref_id, result);
+      *result = read_configured_value<Inner>(ctx, inner_spec, remote_field_type,
+                                             false);
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return nullptr;
+      }
+      return result;
+    }
+    auto value =
+        read_configured_value<Inner>(ctx, inner_spec, remote_field_type, false);
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return nullptr;
+    }
+    return std::make_shared<Inner>(std::move(value));
+  } else if constexpr (::fory::detail::is_shared_weak_v<Decayed>) {
+    auto inner_spec = configured_inner_spec(spec);
+    const RefMode ref_mode = remote_field_type != nullptr
+                                 ? remote_field_type->ref_mode
+                                 : configured_node_ref_mode<Decayed>(spec);
+    if (outer_null_consumed || ref_mode == RefMode::None ||
+        !tracks_refs(ref_mode) || !ctx.track_ref()) {
+      ctx.set_error(Error::invalid_ref(
+          "Configured SharedWeak fields require top-level tracking ref mode"));
+      return Decayed{};
+    }
+    int8_t flag = ctx.read_int8(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return Decayed{};
+    }
+    using Inner = typename nullable_element_type<Decayed>::type;
+    switch (flag) {
+    case NULL_FLAG:
+      return Decayed{};
+    case REF_VALUE_FLAG: {
+      uint32_t reserved_ref_id = ctx.ref_reader().reserve_ref_id();
+      auto strong = std::make_shared<Inner>();
+      ctx.ref_reader().store_shared_ref_at(reserved_ref_id, strong);
+      *strong = read_configured_value<Inner>(ctx, inner_spec, remote_field_type,
+                                             false);
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return Decayed{};
+      }
+      return Decayed::from(strong);
+    }
+    case REF_FLAG: {
+      uint32_t ref_id = ctx.read_var_uint32(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return Decayed{};
+      }
+      auto ref_result = ctx.ref_reader().template get_shared_ref<Inner>(ref_id);
+      if (ref_result.ok()) {
+        return Decayed::from(ref_result.value());
+      }
+      Decayed result;
+      Decayed weak_copy = result;
+      ctx.ref_reader().add_update_callback(
+          ref_id, [weak_copy, ref_id](const RefReader &reader) mutable {
+            auto shared_ref = reader.template get_shared_ref<Inner>(ref_id);
+            if (shared_ref.ok()) {
+              weak_copy.update(std::weak_ptr<Inner>(shared_ref.value()));
+            }
+          });
+      return result;
+    }
+    case NOT_NULL_VALUE_FLAG:
+      ctx.set_error(
+          Error::invalid_ref("SharedWeak cannot hold a NOT_NULL_VALUE ref"));
+      return Decayed{};
+    default:
+      ctx.set_error(Error::invalid_ref("Unexpected reference flag value: " +
+                                       std::to_string(static_cast<int>(flag))));
+      return Decayed{};
+    }
+  } else if constexpr (is_unique_ptr_v<Decayed>) {
+    if (!outer_null_consumed) {
+      int8_t flag = ctx.read_int8(ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return nullptr;
+      }
+      if (flag == NULL_FLAG) {
+        return nullptr;
+      }
+    }
+    auto inner_spec = configured_inner_spec(spec);
+    using Inner = typename Decayed::element_type;
+    return std::make_unique<Inner>(read_configured_value<Inner>(
+        ctx, inner_spec, remote_field_type, false));
+  } else if constexpr (is_vector_v<Decayed> || is_list_v<Decayed> ||
+                       is_deque_v<Decayed> || is_set_like_v<Decayed> ||
+                       is_forward_list_v<Decayed>) {
+    return read_configured_collection_value<Decayed>(ctx, spec,
+                                                     remote_field_type);
+  } else if constexpr (is_map_like_v<Decayed>) {
+    return read_configured_map_value<Decayed>(ctx, spec, remote_field_type);
+  } else {
+    return read_configured_leaf_data<Decayed>(ctx, spec, remote_field_type);
+  }
+}
+
+template <typename StructT, size_t Index>
+inline constexpr bool has_configured_nested_codec_v =
+    ::fory::detail::has_field_config_v<StructT> &&
+    ::fory::detail::GetFieldConfigEntry<StructT, Index>::has_entry &&
+    ::fory::detail::GetFieldConfigEntry<StructT, Index>::Spec::kind !=
+        ::fory::detail::TypeSpecKind::Leaf;
+
 template <typename T, size_t Index, typename FieldPtrs>
 void write_single_field(const T &obj, WriteContext &ctx,
                         const FieldPtrs &field_ptrs);
@@ -1824,6 +2620,9 @@ void write_single_field(const T &obj, WriteContext &ctx,
   constexpr bool track_ref = Helpers::template field_track_ref<Index>();
   // Some wrapper types always require ref/null flags in the wire format.
   constexpr bool field_type_is_nullable = is_nullable_v<FieldType>;
+  constexpr bool can_use_configured_nested_codec =
+      has_configured_nested_codec_v<T, Index> &&
+      !contains_unsupported_configured_ref_v<FieldType>;
 
   // Special handling for std::optional<uint32_t/uint64_t> with encoding config
   // This must come BEFORE the general primitive check because optional requires
@@ -1838,6 +2637,33 @@ void write_single_field(const T &obj, WriteContext &ctx,
        std::is_same_v<FieldType, std::optional<int64_t>> ||
        std::is_same_v<FieldType, std::optional<int>> ||
        std::is_same_v<FieldType, std::optional<long long>>);
+
+  constexpr RefMode configured_field_ref_mode =
+      make_ref_mode(is_nullable || field_type_is_nullable, track_ref);
+  constexpr bool configured_root_nullable =
+      configured_root_nullable_v<FieldType>;
+  if constexpr (can_use_configured_nested_codec &&
+                (configured_field_ref_mode == RefMode::None ||
+                 configured_root_nullable)) {
+    constexpr TypeId configured_type_id = Serializer<FieldType>::type_id;
+    constexpr bool configured_is_struct = is_struct_type(configured_type_id);
+    constexpr bool configured_is_ext = is_ext_type(configured_type_id);
+    constexpr bool configured_is_polymorphic =
+        configured_type_id == TypeId::UNKNOWN;
+    constexpr int dynamic_val = Helpers::template field_dynamic_value<Index>();
+    constexpr bool polymorphic_write_type =
+        (dynamic_val == 1) || (dynamic_val == -1 && configured_is_polymorphic);
+    bool write_type =
+        polymorphic_write_type ||
+        ((configured_is_struct || configured_is_ext) && ctx.is_compatible());
+    if (write_type) {
+      Serializer<FieldType>::write_type_info(ctx);
+    }
+    write_configured_value<FieldType>(
+        field_value, ctx, ::fory::detail::GetFieldConfigEntry<T, Index>::spec,
+        false);
+    return;
+  }
 
   if constexpr (is_encoded_optional_uint) {
     constexpr auto enc =
@@ -2271,9 +3097,27 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
   // Per xlang protocol: non-nullable fields skip ref flag entirely
   constexpr RefMode field_ref_mode =
       make_ref_mode(is_nullable || field_type_is_nullable, track_ref);
+  constexpr bool can_use_configured_nested_codec =
+      has_configured_nested_codec_v<T, Index> &&
+      !contains_unsupported_configured_ref_v<FieldType>;
+  constexpr bool configured_root_nullable =
+      configured_root_nullable_v<FieldType>;
   // OPTIMIZATION: For raw primitive fields (not wrappers like optional,
   // shared_ptr) that don't need ref metadata, bypass Serializer<T>::read
   // and use direct buffer reads with Error&.
+  if constexpr (can_use_configured_nested_codec &&
+                (field_ref_mode == RefMode::None || configured_root_nullable)) {
+    auto value = read_configured_value<FieldType>(
+        ctx, ::fory::detail::GetFieldConfigEntry<T, Index>::spec, nullptr,
+        false);
+    if constexpr (is_fory_field_v<RawFieldType>) {
+      (obj.*field_ptr).value = std::move(value);
+    } else {
+      obj.*field_ptr = std::move(value);
+    }
+    return;
+  }
+
   constexpr bool is_raw_prim = is_raw_primitive_v<FieldType>;
   if constexpr (is_raw_prim && is_primitive_field && !field_type_is_nullable &&
                 !is_nullable) {

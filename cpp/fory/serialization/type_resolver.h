@@ -660,6 +660,525 @@ Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
   }
 }
 
+template <typename Spec>
+constexpr bool spec_nullable(const Spec &spec, bool default_value) {
+  return spec.nullable_override_ == -1 ? default_value
+                                       : spec.nullable_override_ == 1;
+}
+
+template <typename Spec>
+constexpr bool spec_track_ref(const Spec &spec, bool default_value) {
+  return spec.ref_override_ == -1 ? default_value : spec.ref_override_ == 1;
+}
+
+template <typename Spec> constexpr auto inner_child_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind ==
+                ::fory::detail::TypeSpecKind::Inner) {
+    return spec.first_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename Spec> constexpr auto list_child_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind ==
+                ::fory::detail::TypeSpecKind::List) {
+    return spec.first_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename Spec> constexpr auto set_child_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind == ::fory::detail::TypeSpecKind::Set) {
+    return spec.first_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename Spec> constexpr auto map_key_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind == ::fory::detail::TypeSpecKind::Map) {
+    return spec.first_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename Spec> constexpr auto map_value_spec(const Spec &spec) {
+  if constexpr (std::decay_t<Spec>::kind == ::fory::detail::TypeSpecKind::Map) {
+    return spec.second_;
+  } else {
+    return ::fory::detail::LeafTypeSpec{};
+  }
+}
+
+template <typename LeafT, typename Spec>
+inline void apply_leaf_type_id_override(FieldType &field_type,
+                                        const Spec &spec) {
+  if (spec.type_id_override_ >= 0) {
+    field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    return;
+  }
+
+  using Decayed = decay_t<LeafT>;
+  if constexpr (std::is_same_v<Decayed, uint32_t>) {
+    if (spec.encoding_ == Encoding::Varint) {
+      field_type.type_id = static_cast<uint32_t>(TypeId::VAR_UINT32);
+    } else {
+      field_type.type_id = static_cast<uint32_t>(TypeId::UINT32);
+    }
+  } else if constexpr (std::is_same_v<Decayed, uint64_t>) {
+    if (spec.encoding_ == Encoding::Varint) {
+      field_type.type_id = static_cast<uint32_t>(TypeId::VAR_UINT64);
+    } else if (spec.encoding_ == Encoding::Tagged) {
+      field_type.type_id = static_cast<uint32_t>(TypeId::TAGGED_UINT64);
+    } else {
+      field_type.type_id = static_cast<uint32_t>(TypeId::UINT64);
+    }
+  } else if constexpr (std::is_same_v<Decayed, int32_t> ||
+                       std::is_same_v<Decayed, int>) {
+    if (spec.encoding_ == Encoding::Fixed) {
+      field_type.type_id = static_cast<uint32_t>(TypeId::INT32);
+    } else {
+      field_type.type_id = static_cast<uint32_t>(TypeId::VARINT32);
+    }
+  } else if constexpr (std::is_same_v<Decayed, int64_t> ||
+                       std::is_same_v<Decayed, long long>) {
+    if (spec.encoding_ == Encoding::Fixed) {
+      field_type.type_id = static_cast<uint32_t>(TypeId::INT64);
+    } else if (spec.encoding_ == Encoding::Tagged) {
+      field_type.type_id = static_cast<uint32_t>(TypeId::TAGGED_INT64);
+    } else {
+      field_type.type_id = static_cast<uint32_t>(TypeId::VARINT64);
+    }
+  }
+}
+
+template <typename LeafT, typename Spec>
+inline void apply_node_spec(FieldType &field_type, const Spec &spec,
+                            bool default_nullable = false,
+                            bool default_track_ref = false) {
+  field_type.nullable = spec_nullable(spec, default_nullable);
+  field_type.track_ref = spec_track_ref(spec, default_track_ref);
+  field_type.ref_mode =
+      make_ref_mode(field_type.nullable, field_type.track_ref);
+  apply_leaf_type_id_override<LeafT>(field_type, spec);
+}
+
+template <typename LeafT, typename Spec>
+Result<FieldType, Error> build_leaf_field_type_with_spec(TypeResolver &resolver,
+                                                         const Spec &spec) {
+  using Decayed = decay_t<LeafT>;
+  FieldType field_type = FieldTypeBuilder<Decayed>::build(false);
+  if (is_user_type(static_cast<TypeId>(field_type.type_id))) {
+    if constexpr (std::is_enum_v<Decayed>) {
+      auto info_result = get_type_info_with_resolver<Decayed>(resolver);
+      if (info_result.ok()) {
+        uint32_t resolved_type_id = info_result.value()->type_id;
+        if (resolved_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
+          resolved_type_id = static_cast<uint32_t>(TypeId::ENUM);
+        }
+        field_type.type_id = resolved_type_id;
+      }
+    } else {
+      FORY_TRY(info, get_type_info_with_resolver<Decayed>(resolver));
+      uint32_t resolved_type_id = info->type_id;
+      switch (static_cast<TypeId>(resolved_type_id)) {
+      case TypeId::NAMED_ENUM:
+        resolved_type_id = static_cast<uint32_t>(TypeId::ENUM);
+        break;
+      case TypeId::TYPED_UNION:
+      case TypeId::NAMED_UNION:
+        resolved_type_id = static_cast<uint32_t>(TypeId::UNION);
+        break;
+      default:
+        break;
+      }
+      field_type.type_id = resolved_type_id;
+    }
+  }
+  apply_node_spec<Decayed>(field_type, spec);
+  return field_type;
+}
+
+template <typename T, typename Spec>
+Result<FieldType, Error> build_field_type_with_spec(TypeResolver &resolver,
+                                                    const Spec &spec) {
+  using Decayed = decay_t<T>;
+  if constexpr (is_optional_v<Decayed>) {
+    using Inner = typename Decayed::value_type;
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, child_spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (is_shared_ptr_v<Decayed>) {
+    using Inner = typename Decayed::element_type;
+    if constexpr (std::is_polymorphic_v<Inner>) {
+      FieldType field_type(to_type_id(TypeId::UNKNOWN), true, true);
+      if (spec.type_id_override_ >= 0) {
+        field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+      }
+      if (spec.nullable_override_ != -1) {
+        field_type.nullable = spec.nullable_override_ == 1;
+      }
+      if (spec.ref_override_ != -1) {
+        field_type.track_ref = spec.ref_override_ == 1;
+      }
+      field_type.ref_mode =
+          make_ref_mode(field_type.nullable, field_type.track_ref);
+      return field_type;
+    }
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, child_spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (::fory::detail::is_shared_weak_v<Decayed>) {
+    using Inner = nullable_element_t<Decayed>;
+    if constexpr (std::is_polymorphic_v<Inner>) {
+      FieldType field_type(to_type_id(TypeId::UNKNOWN), true, true);
+      if (spec.type_id_override_ >= 0) {
+        field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+      }
+      if (spec.nullable_override_ != -1) {
+        field_type.nullable = spec.nullable_override_ == 1;
+      }
+      if (spec.ref_override_ != -1) {
+        field_type.track_ref = spec.ref_override_ == 1;
+      }
+      field_type.ref_mode =
+          make_ref_mode(field_type.nullable, field_type.track_ref);
+      return field_type;
+    }
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, child_spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (is_unique_ptr_v<Decayed>) {
+    using Inner = typename Decayed::element_type;
+    if constexpr (std::is_polymorphic_v<Inner>) {
+      FieldType field_type(to_type_id(TypeId::UNKNOWN), true, false);
+      if (spec.type_id_override_ >= 0) {
+        field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+      }
+      if (spec.nullable_override_ != -1) {
+        field_type.nullable = spec.nullable_override_ == 1;
+      }
+      if (spec.ref_override_ != -1) {
+        field_type.track_ref = spec.ref_override_ == 1;
+      }
+      field_type.ref_mode =
+          make_ref_mode(field_type.nullable, field_type.track_ref);
+      return field_type;
+    }
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, child_spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      FORY_TRY(inner, build_field_type_with_spec<Inner>(resolver, spec));
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (is_vector_v<Decayed>) {
+    using Element = element_type_t<Decayed>;
+    constexpr TypeId vec_type_id = Serializer<Decayed>::type_id;
+    FieldType field_type(to_type_id(vec_type_id), spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    if constexpr (vec_type_id == TypeId::LIST) {
+      auto elem_spec = list_child_spec(spec);
+      FORY_TRY(elem, build_field_type_with_spec<Element>(resolver, elem_spec));
+      field_type.generics.push_back(std::move(elem));
+    }
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else if constexpr (is_list_v<Decayed> || is_deque_v<Decayed> ||
+                       is_forward_list_v<Decayed>) {
+    using Element = typename Decayed::value_type;
+    auto elem_spec = list_child_spec(spec);
+    FORY_TRY(elem, build_field_type_with_spec<Element>(resolver, elem_spec));
+    FieldType field_type(to_type_id(TypeId::LIST), spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    field_type.generics.push_back(std::move(elem));
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else if constexpr (is_set_like_v<Decayed>) {
+    using Element = element_type_t<Decayed>;
+    auto elem_spec = set_child_spec(spec);
+    FORY_TRY(elem, build_field_type_with_spec<Element>(resolver, elem_spec));
+    FieldType field_type(to_type_id(Serializer<Decayed>::type_id),
+                         spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    field_type.generics.push_back(std::move(elem));
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else if constexpr (is_map_like_v<Decayed>) {
+    using Key = key_type_t<Decayed>;
+    using Value = mapped_type_t<Decayed>;
+    auto key_spec = map_key_spec(spec);
+    auto value_spec = map_value_spec(spec);
+    FORY_TRY(key_field_type,
+             build_field_type_with_spec<Key>(resolver, key_spec));
+    FORY_TRY(value_field_type,
+             build_field_type_with_spec<Value>(resolver, value_spec));
+    FieldType field_type(to_type_id(Serializer<Decayed>::type_id),
+                         spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    field_type.generics.push_back(std::move(key_field_type));
+    field_type.generics.push_back(std::move(value_field_type));
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else {
+    return build_leaf_field_type_with_spec<Decayed>(resolver, spec);
+  }
+}
+
+template <typename LeafT, typename Spec>
+FieldType build_leaf_field_type_with_spec_no_resolver(const Spec &spec) {
+  using Decayed = decay_t<LeafT>;
+  FieldType field_type = FieldTypeBuilder<Decayed>::build(false);
+  apply_node_spec<Decayed>(field_type, spec);
+  return field_type;
+}
+
+template <typename T, typename Spec>
+FieldType build_field_type_with_spec_no_resolver(const Spec &spec) {
+  using Decayed = decay_t<T>;
+  if constexpr (is_optional_v<Decayed>) {
+    using Inner = typename Decayed::value_type;
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(child_spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (is_shared_ptr_v<Decayed>) {
+    using Inner = typename Decayed::element_type;
+    if constexpr (std::is_polymorphic_v<Inner>) {
+      FieldType field_type(to_type_id(TypeId::UNKNOWN), true, true);
+      if (spec.type_id_override_ >= 0) {
+        field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+      }
+      if (spec.nullable_override_ != -1) {
+        field_type.nullable = spec.nullable_override_ == 1;
+      }
+      if (spec.ref_override_ != -1) {
+        field_type.track_ref = spec.ref_override_ == 1;
+      }
+      field_type.ref_mode =
+          make_ref_mode(field_type.nullable, field_type.track_ref);
+      return field_type;
+    }
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(child_spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (::fory::detail::is_shared_weak_v<Decayed>) {
+    using Inner = nullable_element_t<Decayed>;
+    if constexpr (std::is_polymorphic_v<Inner>) {
+      FieldType field_type(to_type_id(TypeId::UNKNOWN), true, true);
+      if (spec.type_id_override_ >= 0) {
+        field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+      }
+      if (spec.nullable_override_ != -1) {
+        field_type.nullable = spec.nullable_override_ == 1;
+      }
+      if (spec.ref_override_ != -1) {
+        field_type.track_ref = spec.ref_override_ == 1;
+      }
+      field_type.ref_mode =
+          make_ref_mode(field_type.nullable, field_type.track_ref);
+      return field_type;
+    }
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(child_spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, true);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (is_unique_ptr_v<Decayed>) {
+    using Inner = typename Decayed::element_type;
+    if constexpr (std::is_polymorphic_v<Inner>) {
+      FieldType field_type(to_type_id(TypeId::UNKNOWN), true, false);
+      if (spec.type_id_override_ >= 0) {
+        field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+      }
+      if (spec.nullable_override_ != -1) {
+        field_type.nullable = spec.nullable_override_ == 1;
+      }
+      if (spec.ref_override_ != -1) {
+        field_type.track_ref = spec.ref_override_ == 1;
+      }
+      field_type.ref_mode =
+          make_ref_mode(field_type.nullable, field_type.track_ref);
+      return field_type;
+    }
+    if constexpr (std::decay_t<Spec>::kind ==
+                  ::fory::detail::TypeSpecKind::Inner) {
+      auto child_spec = inner_child_spec(spec);
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(child_spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    } else {
+      auto inner = build_field_type_with_spec_no_resolver<Inner>(spec);
+      inner.nullable = inner.nullable || spec_nullable(spec, true);
+      inner.track_ref = inner.track_ref || spec_track_ref(spec, false);
+      inner.ref_mode = make_ref_mode(inner.nullable, inner.track_ref);
+      return inner;
+    }
+  } else if constexpr (is_vector_v<Decayed>) {
+    using Element = element_type_t<Decayed>;
+    constexpr TypeId vec_type_id = Serializer<Decayed>::type_id;
+    FieldType field_type(to_type_id(vec_type_id), spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    if constexpr (vec_type_id == TypeId::LIST) {
+      auto elem_spec = list_child_spec(spec);
+      field_type.generics.push_back(
+          build_field_type_with_spec_no_resolver<Element>(elem_spec));
+    }
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else if constexpr (is_list_v<Decayed> || is_deque_v<Decayed> ||
+                       is_forward_list_v<Decayed>) {
+    using Element = typename Decayed::value_type;
+    auto elem_spec = list_child_spec(spec);
+    FieldType field_type(to_type_id(TypeId::LIST), spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    field_type.generics.push_back(
+        build_field_type_with_spec_no_resolver<Element>(elem_spec));
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else if constexpr (is_set_like_v<Decayed>) {
+    using Element = element_type_t<Decayed>;
+    auto elem_spec = set_child_spec(spec);
+    FieldType field_type(to_type_id(Serializer<Decayed>::type_id),
+                         spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    field_type.generics.push_back(
+        build_field_type_with_spec_no_resolver<Element>(elem_spec));
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else if constexpr (is_map_like_v<Decayed>) {
+    using Key = key_type_t<Decayed>;
+    using Value = mapped_type_t<Decayed>;
+    auto key_spec = map_key_spec(spec);
+    auto value_spec = map_value_spec(spec);
+    FieldType field_type(to_type_id(Serializer<Decayed>::type_id),
+                         spec_nullable(spec, false),
+                         spec_track_ref(spec, false));
+    field_type.generics.push_back(
+        build_field_type_with_spec_no_resolver<Key>(key_spec));
+    field_type.generics.push_back(
+        build_field_type_with_spec_no_resolver<Value>(value_spec));
+    if (spec.type_id_override_ >= 0) {
+      field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);
+    }
+    field_type.ref_mode =
+        make_ref_mode(field_type.nullable, field_type.track_ref);
+    return field_type;
+  } else {
+    return build_leaf_field_type_with_spec_no_resolver<Decayed>(spec);
+  }
+}
+
 // Helper template functions to compute is_nullable and track_ref at compile
 // time. These replace constexpr lambdas which have issues on MSVC.
 template <typename ActualFieldType, typename T, size_t Index,
@@ -673,8 +1192,9 @@ constexpr bool compute_is_nullable() {
                        ::fory::detail::GetFieldConfigEntry<T,
                                                            Index>::has_entry &&
                        ::fory::detail::GetFieldConfigEntry<T,
-                                                           Index>::nullable) {
-    return true;
+                                                           Index>::nullable !=
+                           -1) {
+    return ::fory::detail::GetFieldConfigEntry<T, Index>::nullable == 1;
   } else {
     // Default: nullable if std::optional or smart pointers.
     return is_optional_v<UnwrappedFieldType> ||
@@ -692,8 +1212,9 @@ constexpr bool compute_track_ref() {
   } else if constexpr (::fory::detail::has_field_config_v<T> &&
                        ::fory::detail::GetFieldConfigEntry<T,
                                                            Index>::has_entry &&
-                       ::fory::detail::GetFieldConfigEntry<T, Index>::ref) {
-    return true;
+                       ::fory::detail::GetFieldConfigEntry<T, Index>::ref !=
+                           -1) {
+    return ::fory::detail::GetFieldConfigEntry<T, Index>::ref == 1;
   } else {
     using UnwrappedFieldType = fory::unwrap_field_t<ActualFieldType>;
     return ::fory::detail::is_shared_ptr_v<UnwrappedFieldType> ||
@@ -829,29 +1350,34 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr int16_t field_id = compute_field_id<ActualFieldType, T, Index>();
 
     FieldType field_type = FieldTypeBuilder<UnwrappedFieldType>::build(false);
+    if constexpr (::fory::detail::has_field_config_v<T> &&
+                  ::fory::detail::GetFieldConfigEntry<T, Index>::has_entry) {
+      field_type = build_field_type_with_spec_no_resolver<UnwrappedFieldType>(
+          ::fory::detail::GetFieldConfigEntry<T, Index>::spec);
+    } else {
+      // Override type_id for unsigned types based on encoding from
+      // FORY_FIELD_CONFIG
+      using InnerType = unwrap_optional_inner_t<UnwrappedFieldType>;
+      constexpr uint32_t unsigned_tid =
+          compute_unsigned_type_id<UnwrappedFieldType, T, Index>();
+      if constexpr (unsigned_tid != 0 && is_unsigned_integer_v<InnerType>) {
+        field_type.type_id = unsigned_tid;
+      }
 
-    // Override type_id for unsigned types based on encoding from
-    // FORY_FIELD_CONFIG
-    using InnerType = unwrap_optional_inner_t<UnwrappedFieldType>;
-    constexpr uint32_t unsigned_tid =
-        compute_unsigned_type_id<UnwrappedFieldType, T, Index>();
-    if constexpr (unsigned_tid != 0 && is_unsigned_integer_v<InnerType>) {
-      field_type.type_id = unsigned_tid;
-    }
+      // Override type_id for signed types based on encoding from
+      // FORY_FIELD_CONFIG
+      constexpr uint32_t signed_tid =
+          compute_signed_type_id<UnwrappedFieldType, T, Index>();
+      if constexpr (signed_tid != 0) {
+        field_type.type_id = signed_tid;
+      }
 
-    // Override type_id for signed types based on encoding from
-    // FORY_FIELD_CONFIG
-    constexpr uint32_t signed_tid =
-        compute_signed_type_id<UnwrappedFieldType, T, Index>();
-    if constexpr (signed_tid != 0) {
-      field_type.type_id = signed_tid;
-    }
-
-    if constexpr (::fory::detail::has_field_config_v<T>) {
-      constexpr int16_t override_id =
-          ::fory::detail::GetFieldConfigEntry<T, Index>::type_id_override;
-      if constexpr (override_id >= 0) {
-        field_type.type_id = static_cast<uint32_t>(override_id);
+      if constexpr (::fory::detail::has_field_config_v<T>) {
+        constexpr int16_t override_id =
+            ::fory::detail::GetFieldConfigEntry<T, Index>::type_id_override;
+        if constexpr (override_id >= 0) {
+          field_type.type_id = static_cast<uint32_t>(override_id);
+        }
       }
     }
 
@@ -900,31 +1426,43 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     constexpr bool track_ref = compute_track_ref<ActualFieldType, T, Index>();
     constexpr int16_t field_id = compute_field_id<ActualFieldType, T, Index>();
 
-    FORY_TRY(field_type, build_field_type_with_resolver<UnwrappedFieldType>(
-                             resolver, false));
+    FieldType field_type;
+    if constexpr (::fory::detail::has_field_config_v<T> &&
+                  ::fory::detail::GetFieldConfigEntry<T, Index>::has_entry) {
+      FORY_TRY(
+          resolved_field_type,
+          build_field_type_with_spec<UnwrappedFieldType>(
+              resolver, ::fory::detail::GetFieldConfigEntry<T, Index>::spec));
+      field_type = std::move(resolved_field_type);
+    } else {
+      FORY_TRY(
+          resolved_field_type,
+          build_field_type_with_resolver<UnwrappedFieldType>(resolver, false));
+      field_type = std::move(resolved_field_type);
 
-    // Override type_id for unsigned types based on encoding from
-    // FORY_FIELD_CONFIG
-    using InnerType = unwrap_optional_inner_t<UnwrappedFieldType>;
-    constexpr uint32_t unsigned_tid =
-        compute_unsigned_type_id<UnwrappedFieldType, T, Index>();
-    if constexpr (unsigned_tid != 0 && is_unsigned_integer_v<InnerType>) {
-      field_type.type_id = unsigned_tid;
-    }
+      // Override type_id for unsigned types based on encoding from
+      // FORY_FIELD_CONFIG
+      using InnerType = unwrap_optional_inner_t<UnwrappedFieldType>;
+      constexpr uint32_t unsigned_tid =
+          compute_unsigned_type_id<UnwrappedFieldType, T, Index>();
+      if constexpr (unsigned_tid != 0 && is_unsigned_integer_v<InnerType>) {
+        field_type.type_id = unsigned_tid;
+      }
 
-    // Override type_id for signed types based on encoding from
-    // FORY_FIELD_CONFIG
-    constexpr uint32_t signed_tid =
-        compute_signed_type_id<UnwrappedFieldType, T, Index>();
-    if constexpr (signed_tid != 0) {
-      field_type.type_id = signed_tid;
-    }
+      // Override type_id for signed types based on encoding from
+      // FORY_FIELD_CONFIG
+      constexpr uint32_t signed_tid =
+          compute_signed_type_id<UnwrappedFieldType, T, Index>();
+      if constexpr (signed_tid != 0) {
+        field_type.type_id = signed_tid;
+      }
 
-    if constexpr (::fory::detail::has_field_config_v<T>) {
-      constexpr int16_t override_id =
-          ::fory::detail::GetFieldConfigEntry<T, Index>::type_id_override;
-      if constexpr (override_id >= 0) {
-        field_type.type_id = static_cast<uint32_t>(override_id);
+      if constexpr (::fory::detail::has_field_config_v<T>) {
+        constexpr int16_t override_id =
+            ::fory::detail::GetFieldConfigEntry<T, Index>::type_id_override;
+        if constexpr (override_id >= 0) {
+          field_type.type_id = static_cast<uint32_t>(override_id);
+        }
       }
     }
 

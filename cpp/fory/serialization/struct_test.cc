@@ -274,6 +274,40 @@ struct NestedContainerStruct {
   FORY_STRUCT(NestedContainerStruct, matrix, grouped_numbers);
 };
 
+struct NestedConfiguredCollections {
+  std::vector<int64_t> fixed_values;
+  std::map<std::string, int64_t> tagged_map;
+  std::optional<std::vector<int32_t>> maybe_fixed;
+
+  bool operator==(const NestedConfiguredCollections &other) const {
+    return fixed_values == other.fixed_values &&
+           tagged_map == other.tagged_map && maybe_fixed == other.maybe_fixed;
+  }
+  FORY_STRUCT(NestedConfiguredCollections, fixed_values, tagged_map,
+              maybe_fixed);
+};
+
+FORY_FIELD_CONFIG(NestedConfiguredCollections,
+                  (fixed_values, fory::F().id(31).list(fory::T().fixed())),
+                  (tagged_map,
+                   fory::F().id(32).map(fory::T(), fory::T().tagged())),
+                  (maybe_fixed,
+                   fory::F().id(33).inner(fory::T().list(fory::T().fixed()))));
+
+struct NestedConfiguredSharedOwners {
+  std::shared_ptr<std::vector<int32_t>> primary;
+  std::shared_ptr<std::vector<int32_t>> alias;
+  fory::serialization::SharedWeak<std::vector<int32_t>> weak_alias;
+
+  FORY_STRUCT(NestedConfiguredSharedOwners, primary, alias, weak_alias);
+};
+
+FORY_FIELD_CONFIG(
+    NestedConfiguredSharedOwners,
+    (primary, fory::F().id(34).inner(fory::T().list(fory::T().fixed()))),
+    (alias, fory::F().id(35).inner(fory::T().list(fory::T().fixed()))),
+    (weak_alias, fory::F().id(36).inner(fory::T().list(fory::T().fixed()))));
+
 // Optional fields
 struct OptionalFieldsStruct {
   std::string name;
@@ -441,6 +475,8 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<VectorStruct>(type_id++);
   fory.register_struct<MapStruct>(type_id++);
   fory.register_struct<NestedContainerStruct>(type_id++);
+  fory.register_struct<NestedConfiguredCollections>(type_id++);
+  fory.register_struct<NestedConfiguredSharedOwners>(type_id++);
   fory.register_struct<OptionalFieldsStruct>(type_id++);
   fory.register_struct<EnumStruct>(type_id++);
   fory.register_struct<UserProfile>(type_id++);
@@ -613,6 +649,44 @@ TEST(StructComprehensiveTest, MapStructMultiple) {
 
 TEST(StructComprehensiveTest, NestedContainers) {
   test_roundtrip(NestedContainerStruct{{{1, 2}, {3, 4}}, {{"a", {10, 20}}}});
+}
+
+TEST(StructComprehensiveTest, NestedConfiguredCollections) {
+  NestedConfiguredCollections value{
+      {0x0102030405060708LL, -7LL, 42LL},
+      {{"small", 5LL}, {"medium", 123456789LL}, {"large", 1LL << 40}},
+      std::vector<int32_t>{1, 2, 3, 4}};
+  test_roundtrip(value);
+}
+
+TEST(StructComprehensiveTest, NestedConfiguredSharedOwners) {
+  auto shared = std::make_shared<std::vector<int32_t>>(
+      std::initializer_list<int32_t>{7, 8, 9});
+  NestedConfiguredSharedOwners value{
+      shared, shared,
+      fory::serialization::SharedWeak<std::vector<int32_t>>::from(shared)};
+
+  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  register_all_test_types(fory);
+
+  auto ser_result = fory.serialize(value);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  auto deser_result =
+      fory.deserialize<NestedConfiguredSharedOwners>(ser_result.value());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  auto roundtrip = std::move(deser_result).value();
+  ASSERT_TRUE(roundtrip.primary);
+  ASSERT_TRUE(roundtrip.alias);
+  EXPECT_EQ(*roundtrip.primary, *shared);
+  EXPECT_EQ(*roundtrip.alias, *shared);
+  EXPECT_EQ(roundtrip.primary.get(), roundtrip.alias.get());
+
+  auto upgraded = roundtrip.weak_alias.upgrade();
+  ASSERT_TRUE(upgraded);
+  EXPECT_EQ(upgraded.get(), roundtrip.primary.get());
+  EXPECT_EQ(*upgraded, *shared);
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {

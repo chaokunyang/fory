@@ -695,8 +695,11 @@ func ReadByteSlice(buf *ByteBuffer, err *Error) []byte {
 	if size == 0 {
 		return make([]byte, 0)
 	}
-	result := make([]byte, size)
 	raw := buf.ReadBinary(size, err)
+	if err.HasError() {
+		return nil
+	}
+	result := make([]byte, size)
 	copy(result, raw)
 	return result
 }
@@ -716,8 +719,11 @@ func ReadBoolSlice(buf *ByteBuffer, err *Error) []bool {
 	if size == 0 {
 		return make([]bool, 0)
 	}
-	result := make([]bool, size)
 	raw := buf.ReadBinary(size, err)
+	if err.HasError() {
+		return nil
+	}
+	result := make([]bool, size)
 	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
 	return result
 }
@@ -737,8 +743,11 @@ func ReadInt8Slice(buf *ByteBuffer, err *Error) []int8 {
 	if size == 0 {
 		return make([]int8, 0)
 	}
-	result := make([]int8, size)
 	raw := buf.ReadBinary(size, err)
+	if err.HasError() {
+		return nil
+	}
+	result := make([]int8, size)
 	copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
 	return result
 }
@@ -765,16 +774,21 @@ func ReadInt16Slice(buf *ByteBuffer, err *Error) []int16 {
 	if length == 0 {
 		return make([]int16, 0)
 	}
-	result := make([]int16, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]int16, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]int16, length)
 		for i := 0; i < length; i++ {
 			result[i] = buf.ReadInt16(err)
 		}
+		return result
 	}
-	return result
 }
 
 // WriteInt32Slice writes []int32 to buffer using ARRAY protocol
@@ -799,16 +813,21 @@ func ReadInt32Slice(buf *ByteBuffer, err *Error) []int32 {
 	if length == 0 {
 		return make([]int32, 0)
 	}
-	result := make([]int32, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]int32, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]int32, length)
 		for i := 0; i < length; i++ {
 			result[i] = buf.ReadInt32(err)
 		}
+		return result
 	}
-	return result
 }
 
 // WriteInt64Slice writes []int64 to buffer using ARRAY protocol
@@ -833,16 +852,21 @@ func ReadInt64Slice(buf *ByteBuffer, err *Error) []int64 {
 	if length == 0 {
 		return make([]int64, 0)
 	}
-	result := make([]int64, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]int64, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]int64, length)
 		for i := 0; i < length; i++ {
 			result[i] = buf.ReadInt64(err)
 		}
+		return result
 	}
-	return result
 }
 
 // WriteUint16Slice writes []uint16 to buffer using ARRAY protocol
@@ -867,16 +891,21 @@ func ReadUint16Slice(buf *ByteBuffer, err *Error) []uint16 {
 	if length == 0 {
 		return make([]uint16, 0)
 	}
-	result := make([]uint16, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]uint16, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]uint16, length)
 		for i := 0; i < length; i++ {
 			result[i] = uint16(buf.ReadInt16(err))
 		}
+		return result
 	}
-	return result
 }
 
 // WriteUint32Slice writes []uint32 to buffer using ARRAY protocol
@@ -901,16 +930,21 @@ func ReadUint32Slice(buf *ByteBuffer, err *Error) []uint32 {
 	if length == 0 {
 		return make([]uint32, 0)
 	}
-	result := make([]uint32, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]uint32, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]uint32, length)
 		for i := 0; i < length; i++ {
 			result[i] = uint32(buf.ReadInt32(err))
 		}
+		return result
 	}
-	return result
 }
 
 // WriteUint64Slice writes []uint64 to buffer using ARRAY protocol
@@ -935,16 +969,21 @@ func ReadUint64Slice(buf *ByteBuffer, err *Error) []uint64 {
 	if length == 0 {
 		return make([]uint64, 0)
 	}
-	result := make([]uint64, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]uint64, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]uint64, length)
 		for i := 0; i < length; i++ {
 			result[i] = uint64(buf.ReadInt64(err))
 		}
+		return result
 	}
-	return result
 }
 
 // WriteFloat32Slice writes []float32 to buffer using ARRAY protocol
@@ -969,16 +1008,21 @@ func ReadFloat32Slice(buf *ByteBuffer, err *Error) []float32 {
 	if length == 0 {
 		return make([]float32, 0)
 	}
-	result := make([]float32, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]float32, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]float32, length)
 		for i := 0; i < length; i++ {
 			result[i] = buf.ReadFloat32(err)
 		}
+		return result
 	}
-	return result
 }
 
 // WriteFloat64Slice writes []float64 to buffer using ARRAY protocol
@@ -1003,16 +1047,21 @@ func ReadFloat64Slice(buf *ByteBuffer, err *Error) []float64 {
 	if length == 0 {
 		return make([]float64, 0)
 	}
-	result := make([]float64, length)
 	if isLittleEndian {
 		raw := buf.ReadBinary(size, err)
+		if err.HasError() {
+			return nil
+		}
+		result := make([]float64, length)
 		copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+		return result
 	} else {
+		result := make([]float64, length)
 		for i := 0; i < length; i++ {
 			result[i] = buf.ReadFloat64(err)
 		}
+		return result
 	}
-	return result
 }
 
 // ============================================================================
@@ -1137,31 +1186,41 @@ func ReadIntSlice(buf *ByteBuffer, err *Error) []int {
 		if length == 0 {
 			return make([]int, 0)
 		}
-		result := make([]int, length)
 		if isLittleEndian {
 			raw := buf.ReadBinary(size, err)
+			if err.HasError() {
+				return nil
+			}
+			result := make([]int, length)
 			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			return result
 		} else {
+			result := make([]int, length)
 			for i := 0; i < length; i++ {
 				result[i] = int(buf.ReadInt64(err))
 			}
+			return result
 		}
-		return result
 	} else {
 		length := size / 4
 		if length == 0 {
 			return make([]int, 0)
 		}
-		result := make([]int, length)
 		if isLittleEndian {
 			raw := buf.ReadBinary(size, err)
+			if err.HasError() {
+				return nil
+			}
+			result := make([]int, length)
 			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			return result
 		} else {
+			result := make([]int, length)
 			for i := 0; i < length; i++ {
 				result[i] = int(buf.ReadInt32(err))
 			}
+			return result
 		}
-		return result
 	}
 }
 
@@ -1202,31 +1261,41 @@ func ReadUintSlice(buf *ByteBuffer, err *Error) []uint {
 		if length == 0 {
 			return make([]uint, 0)
 		}
-		result := make([]uint, length)
 		if isLittleEndian {
 			raw := buf.ReadBinary(size, err)
+			if err.HasError() {
+				return nil
+			}
+			result := make([]uint, length)
 			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			return result
 		} else {
+			result := make([]uint, length)
 			for i := 0; i < length; i++ {
 				result[i] = uint(buf.ReadInt64(err))
 			}
+			return result
 		}
-		return result
 	} else {
 		length := size / 4
 		if length == 0 {
 			return make([]uint, 0)
 		}
-		result := make([]uint, length)
 		if isLittleEndian {
 			raw := buf.ReadBinary(size, err)
+			if err.HasError() {
+				return nil
+			}
+			result := make([]uint, length)
 			copy(unsafe.Slice((*byte)(unsafe.Pointer(&result[0])), size), raw)
+			return result
 		} else {
+			result := make([]uint, length)
 			for i := 0; i < length; i++ {
 				result[i] = uint(buf.ReadInt32(err))
 			}
+			return result
 		}
-		return result
 	}
 }
 

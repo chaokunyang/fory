@@ -2445,13 +2445,13 @@ func (s *structSerializer) skipField(ctx *ReadContext, field *FieldInfo) {
 		if DebugOutputEnabled {
 			fmt.Printf("[Go][fory-debug] skipField name=%s typeId=%d fieldType=%s\n",
 				field.Meta.FieldDef.name,
-				field.Meta.FieldDef.fieldType.TypeId(),
-				fieldTypeToString(field.Meta.FieldDef.fieldType))
+				field.Meta.FieldDef.typeSpec.TypeId(),
+				typeSpecToString(field.Meta.FieldDef.typeSpec))
 		}
-		fieldDefIsStructType := isStructFieldType(field.Meta.FieldDef.fieldType)
-		// Use FieldDef's trackingRef and nullable to determine if ref flag was written by Java
+		fieldDefIsStructType := isStructTypeSpec(field.Meta.FieldDef.typeSpec)
+		// Use FieldDef's ref and nullable to determine if ref flag was written by Java
 		// Java writes ref flag based on its FieldDef, not Go's field type
-		readRefFlag := field.Meta.FieldDef.trackingRef || field.Meta.FieldDef.nullable
+		readRefFlag := field.Meta.FieldDef.ref || field.Meta.FieldDef.nullable
 		SkipFieldValueWithTypeFlag(ctx, field.Meta.FieldDef, readRefFlag, ctx.Compatible() && fieldDefIsStructType)
 		return
 	}
@@ -2592,9 +2592,9 @@ func (s *skipStructSerializer) Write(ctx *WriteContext, refMode RefMode, writeTy
 func (s *skipStructSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Skip all fields based on fieldDefs from remote TypeDef
 	for _, fieldDef := range s.fieldDefs {
-		isStructType := isStructFieldType(fieldDef.fieldType)
-		// Use trackingRef from FieldDef for ref flag decision
-		SkipFieldValueWithTypeFlag(ctx, fieldDef, fieldDef.trackingRef, ctx.Compatible() && isStructType)
+		isStructType := isStructTypeSpec(fieldDef.typeSpec)
+		// Use ref from FieldDef for ref flag decision
+		SkipFieldValueWithTypeFlag(ctx, fieldDef, fieldDef.ref, ctx.Compatible() && isStructType)
 		if ctx.HasError() {
 			return
 		}

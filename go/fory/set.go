@@ -73,6 +73,8 @@ func (s Set[T]) Clear() {
 var emptyStructVal = reflect.ValueOf(struct{}{})
 
 type setSerializer struct {
+	elementSerializer Serializer
+	referencable      bool
 }
 
 func (s setSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
@@ -183,8 +185,12 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 		collectFlag |= CollectionIsDeclElementType
 	}
 
-	// Enable reference tracking if configured
-	if ctx.TrackRef() {
+	// Enable reference tracking if configured and the declared element can actually track refs.
+	canTrackRef := ctx.TrackRef()
+	if s.elementSerializer != nil {
+		canTrackRef = canTrackRef && s.referencable
+	}
+	if canTrackRef {
 		collectFlag |= CollectionTrackingRef
 	}
 
@@ -204,10 +210,16 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 
 // writeSameType efficiently serializes a collection where all elements share the same type
 func (s setSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, keys []reflect.Value, typeInfo *TypeInfo, flag byte) {
-	if typeInfo == nil {
+	serializer := s.elementSerializer
+	if serializer == nil {
+		if typeInfo == nil {
+			return
+		}
+		serializer = typeInfo.Serializer
+	}
+	if serializer == nil {
 		return
 	}
-	serializer := typeInfo.Serializer
 	trackRefs := (flag & CollectionTrackingRef) != 0 // Check if reference tracking is enabled
 
 	for _, key := range keys {
@@ -309,9 +321,13 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// If all elements are same type, get element type info
 	if (collectFlag & CollectionIsSameType) != 0 {
 		if (collectFlag & CollectionIsDeclElementType) != 0 {
-			// Element type is declared in schema, derive from Go type's key type
-			keyType := type_.Key()
-			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(reflect.New(keyType).Elem(), true)
+			if s.elementSerializer != nil {
+				elemTypeInfo = &TypeInfo{Type: type_.Key(), Serializer: s.elementSerializer}
+			} else {
+				// Element type is declared in schema, derive from Go type's key type
+				keyType := type_.Key()
+				elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(reflect.New(keyType).Elem(), true)
+			}
 		} else {
 			// Element type is not declared, read from buffer
 			elemTypeInfo = ctx.TypeResolver().ReadTypeInfo(buf, err)

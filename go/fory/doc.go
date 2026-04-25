@@ -148,8 +148,9 @@ Fory supports struct tags for field-level configuration:
 		Title    string `fory:"id=1"`                  // Field IDs must be unique
 		Author   *User  `fory:"id=2,ref"`              // Enable reference tracking
 		Password string `fory:"-"`                     // Exclude from serialization
-		Count    int64  `fory:"encoding=fixed"`        // Fixed-length encoding
+		Count    int64  `fory:"encoding=fixed"`        // Top-level numeric encoding
 		Data     *Data  `fory:"nullable"`              // Allow nil values
+		Values   []*int32 `fory:"type=list(element=int32(nullable=true,encoding=fixed))"`
 	}
 
 Available tags:
@@ -157,7 +158,8 @@ Available tags:
   - "-": Exclude field from serialization
   - ref: Enable reference tracking for pointer/slice/map fields
   - nullable: Write null flag for pointer fields
-  - encoding=varint|fixed|tagged: Control numeric encoding
+  - encoding=varint|fixed|tagged: Control top-level numeric scalar encoding
+  - type=...: Override nested list/set/map element, key, or value wire behavior
 
 # Reference Tracking
 

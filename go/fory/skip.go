@@ -242,10 +242,11 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 			nullable:  hasNull,
 		}
 	} else if isDeclared {
-		// Use declared element type from the collection's field type
-		if collType, ok := fieldDef.fieldType.(*CollectionFieldType); ok && collType.elementType != nil {
+		// Use declared element type from the collection's type spec
+		if fieldDef.typeSpec != nil && fieldDef.typeSpec.element != nil {
 			elemDef = FieldDef{
-				fieldType: collType.elementType,
+				typeSpec:  fieldDef.typeSpec.element,
+				fieldType: legacyFieldTypeFromTypeSpec(fieldDef.typeSpec.element),
 				nullable:  hasNull,
 			}
 		} else {
@@ -292,13 +293,15 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 	// When KEY_DECL_TYPE/VALUE_DECL_TYPE flags are set, the type info is NOT written
 	// to the buffer, so we must use the declared types from the FieldDef
 	var declaredKeyDef, declaredValueDef FieldDef
-	if mapFieldType, ok := fieldDef.fieldType.(*MapFieldType); ok {
+	if fieldDef.typeSpec != nil && fieldDef.typeSpec.key != nil && fieldDef.typeSpec.value != nil {
 		declaredKeyDef = FieldDef{
-			fieldType: mapFieldType.keyType,
+			typeSpec:  fieldDef.typeSpec.key,
+			fieldType: legacyFieldTypeFromTypeSpec(fieldDef.typeSpec.key),
 			nullable:  true,
 		}
 		declaredValueDef = FieldDef{
-			fieldType: mapFieldType.valueType,
+			typeSpec:  fieldDef.typeSpec.value,
+			fieldType: legacyFieldTypeFromTypeSpec(fieldDef.typeSpec.value),
 			nullable:  true,
 		}
 	} else {
@@ -490,11 +493,11 @@ func skipStruct(ctx *ReadContext, info *TypeInfo) {
 	defer ctx.decDepth()
 
 	for _, fieldDef := range fieldDefs {
-		// Use FieldDef's trackingRef and nullable to determine if ref flag was written by Java
+		// Use FieldDef's ref and nullable to determine if ref flag was written by Java
 		// Java writes ref flag based on its FieldDef, not based on type rules
-		readRefFlag := fieldDef.trackingRef || fieldDef.nullable
+		readRefFlag := fieldDef.ref || fieldDef.nullable
 		// For struct-like fields (struct, ext), type info is written in the buffer
-		readTypeInfo := isStructFieldType(fieldDef.fieldType)
+		readTypeInfo := isStructTypeSpec(fieldDef.typeSpec)
 		SkipFieldValueWithTypeFlag(ctx, fieldDef, readRefFlag, readTypeInfo)
 		if ctx.HasError() {
 			return
@@ -522,7 +525,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		// RefValueFlag (0) or NotNullValueFlag (-1) means we need to read the actual object
 	}
 
-	typeIDNum := uint32(fieldDef.fieldType.TypeId())
+	typeIDNum := uint32(fieldDef.typeSpec.TypeId())
 
 	internalID := TypeId(typeIDNum)
 	// Handle struct-like types

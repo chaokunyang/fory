@@ -63,6 +63,7 @@ type FieldMeta struct {
 	WriteType      bool // whether to write type info (true for struct fields in compatible mode)
 	CachedTypeInfo *TypeInfo
 	HasGenerics    bool // whether element types are known from TypeDef (for container fields)
+	TypeSpec       *TypeSpec
 
 	// Tag-based configuration (from fory struct tags)
 	TagID          int  // -1 = use field name, >=0 = use tag ID

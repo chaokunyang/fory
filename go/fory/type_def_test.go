@@ -144,43 +144,21 @@ func checkFieldDef(t *testing.T, original, decoded FieldDef) {
 	assert.Equal(t, original.name, decoded.name, "Field name mismatch")
 	assert.Equal(t, original.nameEncoding, decoded.nameEncoding, "Field name encoding mismatch")
 	assert.Equal(t, original.nullable, decoded.nullable, "Field nullable mismatch")
-	assert.Equal(t, original.trackingRef, decoded.trackingRef, "Field trackingRef mismatch")
-	checkFieldTypeRecursively(t, original.fieldType, decoded.fieldType, original.name)
+	assert.Equal(t, original.ref, decoded.ref, "Field ref mismatch")
+	checkTypeSpecRecursively(t, original.typeSpec, decoded.typeSpec, original.name)
 }
 
-func checkFieldTypeRecursively(t *testing.T, original, decoded FieldType, path string) {
-	// Check TypeId
-	assert.Equal(t, original.TypeId(), decoded.TypeId(), "FieldType TypeId mismatch at path: %s", path)
-	if isUserTypeRegisteredById(original.TypeId()) || isUserTypeRegisteredById(decoded.TypeId()) {
-		assert.Equal(t, original.UserTypeId(), decoded.UserTypeId(), "FieldType UserTypeId mismatch at path: %s", path)
+func checkTypeSpecRecursively(t *testing.T, original, decoded *TypeSpec, path string) {
+	if original == nil || decoded == nil {
+		assert.Equal(t, original == nil, decoded == nil, "TypeSpec nil mismatch at path: %s", path)
+		return
 	}
-
-	// Check type consistency based on the actual type
-	switch originalType := original.(type) {
-	case *SimpleFieldType:
-		_, ok := decoded.(*SimpleFieldType)
-		assert.True(t, ok, "Type mismatch at path %s: original is SimpleFieldType but decoded is not", path)
-
-	case *CollectionFieldType:
-		decodedCollection, ok := decoded.(*CollectionFieldType)
-		assert.True(t, ok, "Type mismatch at path %s: original is CollectionFieldType but decoded is not", path)
-		if ok {
-			// Recursively check element type
-			checkFieldTypeRecursively(t, originalType.elementType, decodedCollection.elementType, path+"[]")
-		}
-
-	case *MapFieldType:
-		decodedMap, ok := decoded.(*MapFieldType)
-		assert.True(t, ok, "Type mismatch at path %s: original is MapFieldType but decoded is not", path)
-		if ok {
-			// Recursively check key and value types
-			checkFieldTypeRecursively(t, originalType.keyType, decodedMap.keyType, path+"[key]")
-			checkFieldTypeRecursively(t, originalType.valueType, decodedMap.valueType, path+"[value]")
-		}
-
-	default:
-		t.Errorf("Unknown FieldType at path %s: %T", path, original)
-	}
+	assert.Equal(t, original.TypeId(), decoded.TypeId(), "TypeSpec TypeId mismatch at path: %s", path)
+	assert.Equal(t, original.Nullable(), decoded.Nullable(), "TypeSpec nullable mismatch at path: %s", path)
+	assert.Equal(t, original.Ref(), decoded.Ref(), "TypeSpec ref mismatch at path: %s", path)
+	checkTypeSpecRecursively(t, original.Element(), decoded.Element(), path+"[]")
+	checkTypeSpecRecursively(t, original.Key(), decoded.Key(), path+"[key]")
+	checkTypeSpecRecursively(t, original.Value(), decoded.Value(), path+"[value]")
 }
 
 // Item1 struct with mixed nullable (pointer) and non-nullable (primitive) fields

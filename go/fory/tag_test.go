@@ -614,8 +614,8 @@ func TestNestedStructWithTags(t *testing.T) {
 
 func TestParseTypeIDTag(t *testing.T) {
 	type TestStruct struct {
-		U32Var    uint32 `fory:"compress=true"`
-		U32Fixed  uint32 `fory:"compress=false"`
+		U32Var    uint32 `fory:"encoding=varint"`
+		U32Fixed  uint32 `fory:"encoding=fixed"`
 		U64Var    uint64 `fory:"encoding=varint"`
 		U64Fixed  uint64 `fory:"encoding=fixed"`
 		U64Tagged uint64 `fory:"encoding=tagged"`
@@ -626,21 +626,21 @@ func TestParseTypeIDTag(t *testing.T) {
 	// Test U32Var
 	field := typ.Field(0)
 	tag := parseForyTag(field)
-	if !tag.CompressSet {
-		t.Errorf("U32Var: CompressSet should be true")
+	if !tag.EncodingSet {
+		t.Errorf("U32Var: EncodingSet should be true")
 	}
-	if !tag.Compress {
-		t.Errorf("U32Var: Compress should be true")
+	if tag.Encoding != "varint" {
+		t.Errorf("U32Var: expected encoding 'varint', got %s", tag.Encoding)
 	}
 
 	// Test U32Fixed
 	field = typ.Field(1)
 	tag = parseForyTag(field)
-	if !tag.CompressSet {
-		t.Errorf("U32Fixed: CompressSet should be true")
+	if !tag.EncodingSet {
+		t.Errorf("U32Fixed: EncodingSet should be true")
 	}
-	if tag.Compress {
-		t.Errorf("U32Fixed: Compress should be false")
+	if tag.Encoding != "fixed" {
+		t.Errorf("U32Fixed: expected encoding 'fixed', got %s", tag.Encoding)
 	}
 
 	// Test U64Var

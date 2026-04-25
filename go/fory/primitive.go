@@ -716,3 +716,237 @@ func (s bfloat16Serializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 func (s bfloat16Serializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
 }
+
+type fixedInt32ValueSerializer struct{}
+
+func (s fixedInt32ValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteInt32(int32(value.Int()))
+}
+
+func (s fixedInt32ValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteUint8(uint8(INT32))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s fixedInt32ValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	value.SetInt(int64(ctx.buffer.ReadInt32(ctx.Err())))
+}
+
+func (s fixedInt32ValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone && ctx.buffer.ReadInt8(ctx.Err()) == NullFlag {
+		return
+	}
+	if readType {
+		_ = ctx.buffer.ReadUint8(ctx.Err())
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s fixedInt32ValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
+type fixedUint32ValueSerializer struct{}
+
+func (s fixedUint32ValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteUint32(uint32(value.Uint()))
+}
+
+func (s fixedUint32ValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteUint8(uint8(UINT32))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s fixedUint32ValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	value.SetUint(uint64(ctx.buffer.ReadUint32(ctx.Err())))
+}
+
+func (s fixedUint32ValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone && ctx.buffer.ReadInt8(ctx.Err()) == NullFlag {
+		return
+	}
+	if readType {
+		_ = ctx.buffer.ReadUint8(ctx.Err())
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s fixedUint32ValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
+type fixedInt64ValueSerializer struct{}
+
+func (s fixedInt64ValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteInt64(value.Int())
+}
+
+func (s fixedInt64ValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteUint8(uint8(INT64))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s fixedInt64ValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	value.SetInt(ctx.buffer.ReadInt64(ctx.Err()))
+}
+
+func (s fixedInt64ValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone && ctx.buffer.ReadInt8(ctx.Err()) == NullFlag {
+		return
+	}
+	if readType {
+		_ = ctx.buffer.ReadUint8(ctx.Err())
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s fixedInt64ValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
+type fixedUint64ValueSerializer struct{}
+
+func (s fixedUint64ValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteUint64(value.Uint())
+}
+
+func (s fixedUint64ValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteUint8(uint8(UINT64))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s fixedUint64ValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	value.SetUint(ctx.buffer.ReadUint64(ctx.Err()))
+}
+
+func (s fixedUint64ValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone && ctx.buffer.ReadInt8(ctx.Err()) == NullFlag {
+		return
+	}
+	if readType {
+		_ = ctx.buffer.ReadUint8(ctx.Err())
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s fixedUint64ValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
+type taggedInt64ValueSerializer struct{}
+
+func (s taggedInt64ValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteTaggedInt64(value.Int())
+}
+
+func (s taggedInt64ValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteUint8(uint8(TAGGED_INT64))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s taggedInt64ValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	value.SetInt(ctx.buffer.ReadTaggedInt64(ctx.Err()))
+}
+
+func (s taggedInt64ValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone && ctx.buffer.ReadInt8(ctx.Err()) == NullFlag {
+		return
+	}
+	if readType {
+		_ = ctx.buffer.ReadUint8(ctx.Err())
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s taggedInt64ValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
+type taggedUint64ValueSerializer struct{}
+
+func (s taggedUint64ValueSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.buffer.WriteTaggedUint64(value.Uint())
+}
+
+func (s taggedUint64ValueSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone {
+		ctx.buffer.WriteInt8(NotNullValueFlag)
+	}
+	if writeType {
+		ctx.buffer.WriteUint8(uint8(TAGGED_UINT64))
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s taggedUint64ValueSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	value.SetUint(ctx.buffer.ReadTaggedUint64(ctx.Err()))
+}
+
+func (s taggedUint64ValueSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	if refMode != RefModeNone && ctx.buffer.ReadInt8(ctx.Err()) == NullFlag {
+		return
+	}
+	if readType {
+		_ = ctx.buffer.ReadUint8(ctx.Err())
+	}
+	if ctx.HasError() {
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s taggedUint64ValueSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}

@@ -124,7 +124,7 @@ func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
 	for fieldKey, fd := range remoteFields {
 		if _, exists := localFields[fieldKey]; !exists {
 			diff.WriteString(fmt.Sprintf("  field '%s': only in remote, type=%s, nullable=%v\n",
-				fieldLabel(fd), fieldTypeToString(fd.fieldType), fd.nullable))
+				fieldLabel(fd), typeSpecToString(fd.typeSpec), fd.nullable))
 		}
 	}
 
@@ -132,7 +132,7 @@ func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
 	for fieldKey, fd := range localFields {
 		if _, exists := remoteFields[fieldKey]; !exists {
 			diff.WriteString(fmt.Sprintf("  field '%s': only in local, type=%s, nullable=%v\n",
-				fieldLabel(fd), fieldTypeToString(fd.fieldType), fd.nullable))
+				fieldLabel(fd), typeSpecToString(fd.typeSpec), fd.nullable))
 		}
 	}
 
@@ -140,8 +140,8 @@ func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
 	for fieldKey, remoteField := range remoteFields {
 		if localField, exists := localFields[fieldKey]; exists {
 			// Compare field types
-			remoteTypeStr := fieldTypeToString(remoteField.fieldType)
-			localTypeStr := fieldTypeToString(localField.fieldType)
+			remoteTypeStr := typeSpecToString(remoteField.typeSpec)
+			localTypeStr := typeSpecToString(localField.typeSpec)
 			if remoteTypeStr != localTypeStr {
 				diff.WriteString(fmt.Sprintf("  field '%s': type mismatch, remote=%s, local=%s\n",
 					fieldLabel(remoteField), remoteTypeStr, localTypeStr))
@@ -399,7 +399,8 @@ type FieldDef struct {
 	name         string
 	nameEncoding meta.Encoding
 	nullable     bool
-	trackingRef  bool
+	ref          bool
+	typeSpec     *TypeSpec
 	fieldType    FieldType
 	tagID        int // -1 = use field name, >=0 = use tag ID
 }
@@ -409,15 +410,24 @@ func (fd FieldDef) String() string {
 	var fieldTypeStr string
 	if fd.fieldType != nil {
 		fieldTypeStr = fd.fieldType.String()
+	} else if fd.typeSpec != nil {
+		fieldTypeStr = fd.typeSpec.String()
 	} else {
 		fieldTypeStr = "nil"
 	}
 	if fd.tagID >= 0 {
-		return fmt.Sprintf("FieldDef{tagID=%d, nullable=%v, trackingRef=%v, fieldType=%s}",
-			fd.tagID, fd.nullable, fd.trackingRef, fieldTypeStr)
+		return fmt.Sprintf("FieldDef{tagID=%d, nullable=%v, ref=%v, typeSpec=%s}",
+			fd.tagID, fd.nullable, fd.ref, fieldTypeStr)
 	}
-	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, trackingRef=%v, fieldType=%s}",
-		fd.name, fd.nullable, fd.trackingRef, fieldTypeStr)
+	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, ref=%v, typeSpec=%s}",
+		fd.name, fd.nullable, fd.ref, fieldTypeStr)
+}
+
+func typeSpecToString(spec *TypeSpec) string {
+	if spec == nil {
+		return "nil"
+	}
+	return spec.String()
 }
 
 // fieldTypeToString returns a detailed string representation of a FieldType
@@ -439,6 +449,39 @@ func fieldTypeToString(ft FieldType) string {
 	}
 }
 
+func legacyFieldTypeFromTypeSpec(spec *TypeSpec) FieldType {
+	if spec == nil {
+		return nil
+	}
+	switch spec.typeId {
+	case LIST, SET:
+		return NewCollectionFieldType(spec.typeId, legacyFieldTypeFromTypeSpec(spec.element))
+	case MAP:
+		return NewMapFieldType(spec.typeId, legacyFieldTypeFromTypeSpec(spec.key), legacyFieldTypeFromTypeSpec(spec.value))
+	case UNKNOWN, EXT, STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT:
+		return NewDynamicFieldType(spec.typeId)
+	default:
+		return NewSimpleFieldType(spec.typeId)
+	}
+}
+
+func typeSpecFromLegacyFieldType(ft FieldType, nullable bool, ref bool) *TypeSpec {
+	if ft == nil {
+		return nil
+	}
+	spec := NewTypeSpec(ft.TypeId())
+	spec.nullable = nullable
+	spec.ref = ref
+	switch t := ft.(type) {
+	case *CollectionFieldType:
+		spec.element = typeSpecFromLegacyFieldType(t.elementType, true, false)
+	case *MapFieldType:
+		spec.key = typeSpecFromLegacyFieldType(t.keyType, true, false)
+		spec.value = typeSpecFromLegacyFieldType(t.valueType, true, false)
+	}
+	return spec
+}
+
 // buildFieldDefs extracts field definitions from a struct value
 func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 	var fieldDefs []FieldDef
@@ -458,84 +501,16 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 			continue // skip ignored fields
 		}
 
-		fieldValue := value.Field(i)
 		fieldName := SnakeCase(field.Name)
 
 		nameEncoding := fory.typeResolver.typeNameEncoder.ComputeEncodingWith(fieldName, fieldNameEncodings)
 
 		fieldType := field.Type
-		optionalInfo, isOptional := getOptionalInfo(fieldType)
-		baseType := fieldType
-		if isOptional {
-			baseType = optionalInfo.valueType
-		}
+		_, isOptional := getOptionalInfo(fieldType)
 
-		ft, err := buildFieldType(fory, fieldValue)
+		typeSpec, err := buildTypeSpecForField(fory.typeResolver, fieldType, foryTag)
 		if err != nil {
-			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
-		}
-
-		// Apply encoding override from struct tags if set
-		// This works for both direct types and pointer-wrapped types
-		baseKind := baseType.Kind()
-		// Handle pointer types - get the element kind
-		if baseKind == reflect.Ptr {
-			baseKind = baseType.Elem().Kind()
-		}
-
-		// Check if we need to override the TypeID based on compress/encoding tags
-		var overrideTypeId TypeId = 0
-		switch baseKind {
-		case reflect.Uint32:
-			if foryTag.CompressSet {
-				if foryTag.Compress {
-					overrideTypeId = VAR_UINT32
-				} else {
-					overrideTypeId = UINT32
-				}
-			}
-		case reflect.Int32:
-			if foryTag.CompressSet {
-				if foryTag.Compress {
-					overrideTypeId = VARINT32
-				} else {
-					overrideTypeId = INT32
-				}
-			}
-		case reflect.Uint64:
-			if foryTag.EncodingSet {
-				switch foryTag.Encoding {
-				case "fixed":
-					overrideTypeId = UINT64
-				case "varint":
-					overrideTypeId = VAR_UINT64
-				case "tagged":
-					overrideTypeId = TAGGED_UINT64
-				default:
-					return nil, fmt.Errorf("field %s: invalid encoding value %q for uint64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
-				}
-			}
-		case reflect.Int64:
-			if foryTag.EncodingSet {
-				switch foryTag.Encoding {
-				case "fixed":
-					overrideTypeId = INT64
-				case "varint":
-					overrideTypeId = VARINT64
-				case "tagged":
-					overrideTypeId = TAGGED_INT64
-				default:
-					return nil, fmt.Errorf("field %s: invalid encoding value %q for int64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
-				}
-			}
-		}
-
-		// Apply the override if one was determined
-		if overrideTypeId != 0 {
-			ft = NewSimpleFieldType(overrideTypeId)
-		}
-		if foryTag.TypeIDSet && foryTag.TypeIDValid {
-			ft = NewSimpleFieldType(foryTag.TypeID)
+			return nil, fmt.Errorf("failed to build type spec for field %s: %w", fieldName, err)
 		}
 
 		// Determine nullable based on mode:
@@ -544,7 +519,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		// - In native mode: Go's natural semantics apply - slice/map/interface can be nil,
 		//   so they are nullable by default.
 		// Can be overridden by explicit fory tag `fory:"nullable"`
-		typeId := ft.TypeId()
+		typeId := typeSpec.TypeId()
 		isEnumField := typeId == ENUM
 		// Determine nullable based on mode
 		// In xlang mode: only pointer types are nullable by default (per xlang spec)
@@ -574,25 +549,28 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		// Calculate ref tracking - use tag override if explicitly set
 		// In xlang mode, registered types (primitives, strings) don't use ref tracking
 		// because they are value types, not reference types.
-		trackingRef := fory.config.TrackRef
+		trackRef := fory.config.TrackRef
 		if foryTag.RefSet {
-			trackingRef = foryTag.Ref
+			trackRef = foryTag.Ref
 		}
-		if trackingRef && !NeedWriteRef(ft.TypeId()) {
-			trackingRef = false
+		if trackRef && !NeedWriteRef(typeSpec.TypeId()) {
+			trackRef = false
 		}
 		// Disable ref tracking for simple types (primitives, strings) in xlang mode.
 		// Collection fields only write ref flags when explicitly tagged.
-		if fory.config.IsXlang && trackingRef && isCollectionType(ft.TypeId()) && !foryTag.RefSet {
-			trackingRef = false
+		if fory.config.IsXlang && trackRef && isCollectionType(typeSpec.TypeId()) && !foryTag.RefSet {
+			trackRef = false
 		}
+		typeSpec.nullable = nullableFlag
+		typeSpec.ref = trackRef
 
 		fieldInfo := FieldDef{
 			name:         fieldName,
 			nameEncoding: nameEncoding,
 			nullable:     nullableFlag,
-			trackingRef:  trackingRef,
-			fieldType:    ft,
+			ref:          trackRef,
+			typeSpec:     typeSpec,
+			fieldType:    legacyFieldTypeFromTypeSpec(typeSpec),
 			tagID:        foryTag.ID,
 		}
 		fieldDefs = append(fieldDefs, fieldInfo)
@@ -615,7 +593,7 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 				serializers[i] = serializer
 			}
 			fieldNames[i] = fieldDef.name
-			typeIds[i] = fieldDef.fieldType.TypeId()
+			typeIds[i] = fieldDef.typeSpec.TypeId()
 			nullables[i] = fieldDef.nullable
 			tagIDs[i] = fieldDef.tagID
 		}
@@ -827,10 +805,14 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	if err != nil {
 		return TypeInfo{}, err
 	}
+	elemType := elemInfo.Type
+	if elemType == nil {
+		elemType = interfaceType
+	}
 
 	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
+		setType := reflect.MapOf(elemType, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := f.GetTypeResolver().GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -839,7 +821,10 @@ func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	}
 
 	// For LIST type, use slice
-	collectionType := reflect.SliceOf(elemInfo.Type)
+	collectionType := reflect.SliceOf(elemType)
+	if elemType == interfaceType {
+		return TypeInfo{Type: collectionType, Serializer: mustNewSliceDynSerializer(elemType)}, nil
+	}
 	// Use TypeResolver helper to get the appropriate slice serializer
 	sliceSerializer, serErr := f.GetTypeResolver().GetSliceSerializer(collectionType)
 	if serErr != nil {
@@ -853,10 +838,14 @@ func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (T
 	if err != nil {
 		return TypeInfo{}, err
 	}
+	elemType := elemInfo.Type
+	if elemType == nil {
+		elemType = interfaceType
+	}
 
 	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
 	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
+		setType := reflect.MapOf(elemType, reflect.TypeOf(struct{}{}))
 		setSerializer, serErr := resolver.GetSetSerializer(setType)
 		if serErr != nil {
 			return TypeInfo{}, serErr
@@ -865,7 +854,10 @@ func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (T
 	}
 
 	// For LIST type, use slice
-	collectionType := reflect.SliceOf(elemInfo.Type)
+	collectionType := reflect.SliceOf(elemType)
+	if elemType == interfaceType {
+		return TypeInfo{Type: collectionType, Serializer: mustNewSliceDynSerializer(elemType)}, nil
+	}
 	// Use TypeResolver helper to get the appropriate slice serializer
 	sliceSerializer, serErr := resolver.GetSliceSerializer(collectionType)
 	if serErr != nil {
@@ -917,19 +909,26 @@ func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
 	if err != nil {
 		return TypeInfo{}, err
 	}
-	var mapType reflect.Type
-	if keyInfo.Type != nil && valueInfo.Type != nil {
-		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
+	keyType := keyInfo.Type
+	if keyType == nil {
+		keyType = interfaceType
 	}
+	valueType := valueInfo.Type
+	if valueType == nil {
+		valueType = interfaceType
+	}
+	var mapType reflect.Type
+	mapType = reflect.MapOf(keyType, valueType)
 	keyReferencable := true
-	if keyInfo.Type != nil {
-		keyReferencable = isRefType(keyInfo.Type, f.config.IsXlang)
+	if keyType != interfaceType {
+		keyReferencable = isRefType(keyType, f.config.IsXlang)
 	}
 	valueReferencable := true
-	if valueInfo.Type != nil {
-		valueReferencable = isRefType(valueInfo.Type, f.config.IsXlang)
+	if valueType != interfaceType {
+		valueReferencable = isRefType(valueType, f.config.IsXlang)
 	}
 	mapSerializer := &mapSerializer{
+		type_:             mapType,
 		keySerializer:     keyInfo.Serializer,
 		valueSerializer:   valueInfo.Serializer,
 		keyReferencable:   keyReferencable,
@@ -948,19 +947,26 @@ func (m *MapFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo
 	if err != nil {
 		return TypeInfo{}, err
 	}
-	var mapType reflect.Type
-	if keyInfo.Type != nil && valueInfo.Type != nil {
-		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
+	keyType := keyInfo.Type
+	if keyType == nil {
+		keyType = interfaceType
 	}
+	valueType := valueInfo.Type
+	if valueType == nil {
+		valueType = interfaceType
+	}
+	var mapType reflect.Type
+	mapType = reflect.MapOf(keyType, valueType)
 	keyReferencable := true
-	if keyInfo.Type != nil {
-		keyReferencable = isRefType(keyInfo.Type, resolver.isXlang)
+	if keyType != interfaceType {
+		keyReferencable = isRefType(keyType, resolver.isXlang)
 	}
 	valueReferencable := true
-	if valueInfo.Type != nil {
-		valueReferencable = isRefType(valueInfo.Type, resolver.isXlang)
+	if valueType != interfaceType {
+		valueReferencable = isRefType(valueType, resolver.isXlang)
 	}
 	mapSerializer := &mapSerializer{
+		type_:             mapType,
 		keySerializer:     keyInfo.Serializer,
 		valueSerializer:   valueInfo.Serializer,
 		keyReferencable:   keyReferencable,
@@ -1059,6 +1065,12 @@ func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
 		case reflect.Int16:
 			return NewSimpleFieldType(INT16_ARRAY), nil
 		case reflect.Uint16:
+			if elemType == float16Type {
+				return NewSimpleFieldType(FLOAT16_ARRAY), nil
+			}
+			if elemType == bfloat16Type {
+				return NewSimpleFieldType(BFLOAT16_ARRAY), nil
+			}
 			return NewSimpleFieldType(UINT16_ARRAY), nil
 		case reflect.Int32:
 			return NewSimpleFieldType(INT32_ARRAY), nil
@@ -1386,7 +1398,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 		return err
 	}
 	var header uint8
-	if field.trackingRef {
+	if field.ref {
 		header |= 0b1
 	}
 	if field.nullable {
@@ -1411,7 +1423,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 		}
 
 		// Write field type
-		field.fieldType.write(buffer)
+		field.typeSpec.write(buffer)
 	} else {
 		// Use field name encoding
 		encodingFlag := byte(getFieldNameEncodingIndex(field.nameEncoding))
@@ -1430,7 +1442,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 		buffer.PutUint8(offset, header)
 
 		// Write field type
-		field.fieldType.write(buffer)
+		field.typeSpec.write(buffer)
 
 		// Write field name
 		if _, err := buffer.Write(metaString.GetEncodedBytes()); err != nil {
@@ -1700,17 +1712,20 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 		}
 
 		// Read field type
-		ft, err := readFieldType(buffer, &bufErr)
+		typeSpec, err := readTypeSpec(buffer, &bufErr)
 		if err != nil {
 			return FieldDef{}, err
 		}
 
+		typeSpec.nullable = isNullable
+		typeSpec.ref = refTracking
 		return FieldDef{
 			name:         "", // No field name when using tag ID
 			nameEncoding: meta.UTF_8,
-			fieldType:    ft,
+			typeSpec:     typeSpec,
+			fieldType:    legacyFieldTypeFromTypeSpec(typeSpec),
 			nullable:     isNullable,
-			trackingRef:  refTracking,
+			ref:          refTracking,
 			tagID:        tagID,
 		}, nil
 	}
@@ -1725,7 +1740,7 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 	}
 
 	// Read field type
-	ft, err := readFieldType(buffer, &bufErr)
+	typeSpec, err := readTypeSpec(buffer, &bufErr)
 	if err != nil {
 		return FieldDef{}, err
 	}
@@ -1737,12 +1752,15 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 		return FieldDef{}, fmt.Errorf("failed to decode field name: %w", err)
 	}
 
+	typeSpec.nullable = isNullable
+	typeSpec.ref = refTracking
 	return FieldDef{
 		name:         fieldName,
 		nameEncoding: nameEncoding,
-		fieldType:    ft,
+		typeSpec:     typeSpec,
+		fieldType:    legacyFieldTypeFromTypeSpec(typeSpec),
 		nullable:     isNullable,
-		trackingRef:  refTracking,
+		ref:          refTracking,
 		tagID:        TagIDUseFieldName, // -1 indicates using field name
 	}, nil
 }

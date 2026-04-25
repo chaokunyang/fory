@@ -18,9 +18,11 @@
 package fory
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 const (
@@ -28,85 +30,42 @@ const (
 	TagIDUseFieldName = -1
 )
 
-// ForyTag represents parsed fory struct tag options.
-//
-// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value,type=name,nested_ref=[[],[]]"` or `fory:"-"`
-//
-// Options:
-//   - id: Field tag ID. -1 (default) uses field name, >=0 uses numeric tag ID for compact encoding
-//   - nullable: Whether to write null flag. Default false (skip null flag for non-nullable fields)
-//   - ref: Whether to enable reference tracking. Default false (skip ref tracking overhead)
-//   - ignore: Whether to skip this field during serialization. Default false
-//   - compress: For int32/uint32 fields: true=varint encoding (default), false=fixed encoding
-//   - encoding: For numeric fields:
-//   - int32/uint32: "varint" (default) or "fixed"
-//   - int64/uint64: "varint" (default), "fixed", or "tagged"
-//   - type: Explicit field type override for array types (e.g. "uint8_array", "int8_array")
-//   - nested_ref: Nested ref tracking overrides for collection elements (e.g. "[[]]" or "[[],[]]")
-//
-// Note: For int32/uint32, use either `compress` or `encoding`, not both.
-//
-// Examples:
-//
-//	type Example struct {
-//	    Name       string  `fory:"id=0"`                           // Use tag ID 0
-//	    Age        int     `fory:"id=1,nullable=false"`            // Explicit nullable=false
-//	    Email      *string `fory:"id=2,nullable=true,ref=false"`   // Nullable pointer, no ref tracking
-//	    Parent     *Node   `fory:"id=3,ref=true,nullable=true"`    // With reference tracking
-//	    FixedI32   int32   `fory:"compress=false"`                 // Use fixed 4-byte INT32
-//	    VarI32     int32   `fory:"encoding=varint"`                // Use VARINT32 (default)
-//	    FixedU32   uint32  `fory:"encoding=fixed"`                 // Use fixed 4-byte UINT32
-//	    TaggedI64  int64   `fory:"encoding=tagged"`                // Use TAGGED_INT64
-//	    VarU64     uint64  `fory:"encoding=varint"`                // Use VAR_UINT64 (default)
-//	    Secret     string  `fory:"ignore"`                         // Skip this field
-//	    Hidden     string  `fory:"-"`                              // Skip this field (shorthand)
-//	}
 type ForyTag struct {
-	ID       int    // Field tag ID (-1 = use field name, >=0 = use tag ID)
-	Nullable bool   // Whether to write null flag (default: false)
-	Ref      bool   // Whether to enable reference tracking (default: false)
-	Ignore   bool   // Whether to ignore this field during serialization (default: false)
-	HasTag   bool   // Whether field has fory tag at all
-	Compress bool   // For int32/uint32: true=varint, false=fixed (default: true)
-	Encoding string // For int64/uint64: "fixed", "varint", "tagged" (default: "varint")
-	TypeID   TypeId // Explicit type override for array types
+	ID       int
+	Nullable bool
+	Ref      bool
+	Ignore   bool
+	HasTag   bool
+	Encoding string
 
-	// Track which options were explicitly set (for override logic)
-	NullableSet bool
-	RefSet      bool
-	IgnoreSet   bool
-	CompressSet bool
-	EncodingSet bool
-	TypeIDSet   bool
-	TypeIDValid bool
-
-	NestedRefSet   bool
-	NestedRefValid bool
-	NestedRef      []bool
+	NullableSet  bool
+	RefSet       bool
+	IgnoreSet    bool
+	EncodingSet  bool
+	TypeSet      bool
+	TypeValid    bool
+	TypeOverride *typeOverrideNode
+	ParseError   string
 }
 
-// parseForyTag parses a fory struct tag from reflect.StructField.Tag.
-//
-// Tag format: `fory:"id=N,nullable=bool,ref=bool,ignore=bool,compress=bool,encoding=value,type=name"` or `fory:"-"`
-//
-// Supported syntaxes:
-//   - Key-value: `nullable=true`, `ref=false`, `ignore=true`, `id=0`
-//   - For int32/uint32: `compress=true` (varint) or `compress=false` (fixed), default is true
-//   - For int64/uint64: `encoding=fixed`, `encoding=varint`, `encoding=tagged`, default is varint
-//   - Standalone flags: `nullable`, `ref`, `ignore` (equivalent to =true)
-//   - Shorthand: `-` (equivalent to `ignore=true`)
+type typeOverrideNode struct {
+	name         string
+	explicitName bool
+	encoding     string
+	encodingSet  bool
+	nullable     *bool
+	ref          *bool
+	element      *typeOverrideNode
+	key          *typeOverrideNode
+	value        *typeOverrideNode
+}
+
 func parseForyTag(field reflect.StructField) ForyTag {
 	tag := ForyTag{
-		ID:          TagIDUseFieldName,
-		Nullable:    false,
-		Ref:         false,
-		Ignore:      false,
-		HasTag:      false,
-		Compress:    true,     // default: varint encoding
-		Encoding:    "varint", // default: varint encoding
-		TypeID:      UNKNOWN,
-		TypeIDSet:   false,
-		TypeIDValid: true,
+		ID:        TagIDUseFieldName,
+		HasTag:    false,
+		Encoding:  "varint",
+		TypeValid: true,
 	}
 
 	tagValue, ok := field.Tag.Lookup("fory")
@@ -123,7 +82,7 @@ func parseForyTag(field reflect.StructField) ForyTag {
 		return tag
 	}
 
-	// Parse comma-separated options (ignore commas inside brackets)
+	// Parse comma-separated options while respecting nested type DSL.
 	parts := splitTagParts(tagValue)
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
@@ -150,24 +109,22 @@ func parseForyTag(field reflect.StructField) ForyTag {
 			case "ignore":
 				tag.Ignore = parseBool(value)
 				tag.IgnoreSet = true
-			case "compress":
-				tag.Compress = parseBool(value)
-				tag.CompressSet = true
 			case "encoding":
 				tag.Encoding = strings.ToLower(strings.TrimSpace(value))
 				tag.EncodingSet = true
 			case "type":
-				typeID, ok := parseTypeIdTag(value)
-				tag.TypeIDSet = true
-				tag.TypeIDValid = ok
-				tag.TypeID = typeID
-			case "nested_ref":
-				tag.NestedRefSet = true
-				refs, ok := parseNestedRef(value)
-				tag.NestedRefValid = ok
-				if ok {
-					tag.NestedRef = refs
+				tag.TypeSet = true
+				override, err := parseTypeOverride(value)
+				if err != nil {
+					tag.TypeValid = false
+					tag.ParseError = err.Error()
+				} else {
+					tag.TypeOverride = override
 				}
+			case "compress", "nested_ref":
+				tag.ParseError = fmt.Sprintf("legacy fory tag key %q is not supported; use encoding=... or type=...", key)
+			default:
+				tag.ParseError = fmt.Sprintf("unknown fory tag key %q", key)
 			}
 		} else {
 			// Handle standalone flags (presence means true)
@@ -181,6 +138,8 @@ func parseForyTag(field reflect.StructField) ForyTag {
 			case "ignore":
 				tag.Ignore = true
 				tag.IgnoreSet = true
+			default:
+				tag.ParseError = fmt.Sprintf("unknown fory tag flag %q", part)
 			}
 		}
 	}
@@ -190,18 +149,25 @@ func parseForyTag(field reflect.StructField) ForyTag {
 
 func splitTagParts(tagValue string) []string {
 	var parts []string
-	depth := 0
+	bracketDepth := 0
+	parenDepth := 0
 	start := 0
 	for i, r := range tagValue {
 		switch r {
 		case '[':
-			depth++
+			bracketDepth++
 		case ']':
-			if depth > 0 {
-				depth--
+			if bracketDepth > 0 {
+				bracketDepth--
+			}
+		case '(':
+			parenDepth++
+		case ')':
+			if parenDepth > 0 {
+				parenDepth--
 			}
 		case ',':
-			if depth == 0 {
+			if bracketDepth == 0 && parenDepth == 0 {
 				parts = append(parts, tagValue[start:i])
 				start = i + 1
 			}
@@ -213,40 +179,182 @@ func splitTagParts(tagValue string) []string {
 	return parts
 }
 
-func parseNestedRef(value string) ([]bool, bool) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return nil, false
+type typeOverrideParser struct {
+	input string
+	pos   int
+}
+
+func parseTypeOverride(value string) (*typeOverrideNode, error) {
+	parser := &typeOverrideParser{input: strings.TrimSpace(value)}
+	node, err := parser.parseTypeExpr(true)
+	if err != nil {
+		return nil, err
 	}
-	if !strings.HasPrefix(value, "[") || !strings.HasSuffix(value, "]") {
-		return nil, false
+	parser.skipSpaces()
+	if parser.pos != len(parser.input) {
+		return nil, fmt.Errorf("unexpected trailing type override input %q", parser.input[parser.pos:])
 	}
-	content := strings.TrimSpace(value[1 : len(value)-1])
-	if content == "" {
-		return []bool{}, true
+	return node, nil
+}
+
+func (p *typeOverrideParser) parseTypeExpr(root bool) (*typeOverrideNode, error) {
+	name := p.parseIdentifier()
+	if name == "" {
+		return nil, fmt.Errorf("expected type name at offset %d", p.pos)
 	}
-	outerParts := splitTagParts(content)
-	result := make([]bool, 0, len(outerParts))
-	for _, part := range outerParts {
-		part = strings.TrimSpace(part)
-		if part == "" {
+	if !root && isTypeChildLabel(name) && p.peek() == '(' {
+		node := &typeOverrideNode{name: "", explicitName: false}
+		p.pos++
+		if err := p.parseArgs(node); err != nil {
+			return nil, err
+		}
+		return node, nil
+	}
+	node := &typeOverrideNode{name: strings.ToLower(name), explicitName: true}
+	p.skipSpaces()
+	if p.peek() == '(' {
+		p.pos++
+		if err := p.parseArgs(node); err != nil {
+			return nil, err
+		}
+	}
+	return node, nil
+}
+
+func (p *typeOverrideParser) parseArgs(node *typeOverrideNode) error {
+	for {
+		p.skipSpaces()
+		if p.peek() == ')' {
+			p.pos++
+			return nil
+		}
+		name := p.parseIdentifier()
+		if name == "" {
+			return fmt.Errorf("expected option or child override at offset %d", p.pos)
+		}
+		name = strings.ToLower(name)
+		p.skipSpaces()
+		switch p.peek() {
+		case '=':
+			p.pos++
+			p.skipSpaces()
+			if isTypeChildLabel(name) {
+				child, err := p.parseTypeExpr(false)
+				if err != nil {
+					return err
+				}
+				setTypeChild(node, name, child)
+			} else {
+				value := p.parseScalarValue()
+				if err := setTypeOption(node, name, value); err != nil {
+					return err
+				}
+			}
+		case '(':
+			if !isTypeChildLabel(name) {
+				return fmt.Errorf("unexpected nested override %q at offset %d", name, p.pos)
+			}
+			p.pos++
+			child := &typeOverrideNode{explicitName: false}
+			if err := p.parseArgs(child); err != nil {
+				return err
+			}
+			setTypeChild(node, name, child)
+		default:
+			return fmt.Errorf("expected '=' or '(' after %q at offset %d", name, p.pos)
+		}
+		p.skipSpaces()
+		switch p.peek() {
+		case ',':
+			p.pos++
+		case ')':
+			p.pos++
+			return nil
+		default:
+			return fmt.Errorf("expected ',' or ')' at offset %d", p.pos)
+		}
+	}
+}
+
+func (p *typeOverrideParser) parseIdentifier() string {
+	p.skipSpaces()
+	start := p.pos
+	for p.pos < len(p.input) {
+		r := rune(p.input[p.pos])
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' {
+			p.pos++
 			continue
 		}
-		if !strings.HasPrefix(part, "[") || !strings.HasSuffix(part, "]") {
-			return nil, false
+		break
+	}
+	return p.input[start:p.pos]
+}
+
+func (p *typeOverrideParser) parseScalarValue() string {
+	p.skipSpaces()
+	start := p.pos
+	for p.pos < len(p.input) {
+		switch p.input[p.pos] {
+		case ',', ')':
+			return strings.TrimSpace(p.input[start:p.pos])
+		default:
+			p.pos++
 		}
-		inner := strings.TrimSpace(part[1 : len(part)-1])
-		if inner == "" {
-			result = append(result, false)
-			continue
-		}
-		val, ok := parseBoolStrict(inner)
+	}
+	return strings.TrimSpace(p.input[start:])
+}
+
+func (p *typeOverrideParser) skipSpaces() {
+	for p.pos < len(p.input) && unicode.IsSpace(rune(p.input[p.pos])) {
+		p.pos++
+	}
+}
+
+func (p *typeOverrideParser) peek() byte {
+	if p.pos >= len(p.input) {
+		return 0
+	}
+	return p.input[p.pos]
+}
+
+func isTypeChildLabel(name string) bool {
+	return name == "element" || name == "key" || name == "value"
+}
+
+func setTypeChild(node *typeOverrideNode, label string, child *typeOverrideNode) {
+	switch label {
+	case "element":
+		node.element = child
+	case "key":
+		node.key = child
+	case "value":
+		node.value = child
+	}
+}
+
+func setTypeOption(node *typeOverrideNode, name string, value string) error {
+	switch name {
+	case "encoding":
+		node.encoding = strings.ToLower(strings.TrimSpace(value))
+		node.encodingSet = true
+		return nil
+	case "nullable":
+		boolVal, ok := parseBoolStrict(value)
 		if !ok {
-			return nil, false
+			return fmt.Errorf("invalid nullable value %q", value)
 		}
-		result = append(result, val)
+		node.nullable = &boolVal
+		return nil
+	case "ref":
+		boolVal, ok := parseBoolStrict(value)
+		if !ok {
+			return fmt.Errorf("invalid ref value %q", value)
+		}
+		node.ref = &boolVal
+		return nil
+	default:
+		return fmt.Errorf("unknown type override option %q", name)
 	}
-	return result, true
 }
 
 func parseBoolStrict(s string) (bool, bool) {
@@ -258,17 +366,6 @@ func parseBoolStrict(s string) (bool, bool) {
 		return false, true
 	default:
 		return false, false
-	}
-}
-
-func parseTypeIdTag(value string) (TypeId, bool) {
-	switch strings.ToLower(strings.TrimSpace(value)) {
-	case "int8_array":
-		return INT8_ARRAY, true
-	case "uint8_array":
-		return UINT8_ARRAY, true
-	default:
-		return UNKNOWN, false
 	}
 }
 
@@ -320,28 +417,67 @@ func validateForyTags(t reflect.Type) error {
 			tagIDs[tag.ID] = field.Name
 		}
 
-		if tag.TypeIDSet && !tag.TypeIDValid {
+		if tag.ParseError != "" {
 			return InvalidTagErrorf(
-				"invalid fory tag type=%q on field %s: expected int8_array or uint8_array",
-				field.Tag.Get("fory"),
+				"invalid fory tag on field %s: %s",
+				field.Name,
+				tag.ParseError,
+			)
+		}
+		if tag.TypeSet && !tag.TypeValid {
+			return InvalidTagErrorf(
+				"invalid fory tag type override on field %s",
 				field.Name,
 			)
 		}
-		if tag.TypeIDSet && field.Type.Kind() != reflect.Slice && field.Type.Kind() != reflect.Array {
+		if tag.EncodingSet && !isValidTopLevelEncoding(field.Type, tag.Encoding) {
 			return InvalidTagErrorf(
-				"fory tag type override on field %s requires slice or array type",
+				"invalid fory tag encoding=%q on field %s",
+				tag.Encoding,
 				field.Name,
 			)
 		}
-		if tag.NestedRefSet && !tag.NestedRefValid {
-			return InvalidTagErrorf(
-				"invalid fory tag nested_ref on field %s: expected nested_ref=[[]] or nested_ref=[[],[]]",
-				field.Name,
-			)
+		if tag.EncodingSet && !isTopLevelNumericField(field.Type) {
+			return InvalidTagErrorf("fory tag encoding on field %s requires a top-level numeric scalar field", field.Name)
+		}
+		if tag.TypeSet && isTopLevelNumericField(field.Type) {
+			return InvalidTagErrorf("numeric field %s must use top-level encoding=... instead of type=...", field.Name)
 		}
 	}
 
 	return nil
+}
+
+func isTopLevelNumericField(type_ reflect.Type) bool {
+	if info, ok := getOptionalInfo(type_); ok {
+		type_ = info.valueType
+	}
+	if type_.Kind() == reflect.Ptr {
+		type_ = type_.Elem()
+	}
+	switch type_.Kind() {
+	case reflect.Int32, reflect.Int64, reflect.Uint32, reflect.Uint64:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidTopLevelEncoding(type_ reflect.Type, encoding string) bool {
+	if info, ok := getOptionalInfo(type_); ok {
+		type_ = info.valueType
+	}
+	if type_.Kind() == reflect.Ptr {
+		type_ = type_.Elem()
+	}
+	switch type_.Kind() {
+	case reflect.Int32, reflect.Uint32:
+		return encoding == "fixed" || encoding == "varint"
+	case reflect.Int64, reflect.Uint64:
+		return encoding == "fixed" || encoding == "varint" || encoding == "tagged"
+	default:
+		return false
+	}
 }
 
 // shouldIncludeField returns true if the field should be serialized.

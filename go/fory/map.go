@@ -83,8 +83,8 @@ func (s mapSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
 	for hasNext {
 		// Phase 1: Handle null entries (single-item chunks)
 		for {
-			keyValid := entryKey.IsValid()
-			valValid := entryVal.IsValid()
+			keyValid := !isNull(entryKey)
+			valValid := !isNull(entryVal)
 
 			if keyValid && valValid {
 				break // Proceed to regular chunk
@@ -250,7 +250,7 @@ func (s mapSerializer) writeChunk(ctx *WriteContext, iter *reflect.MapIter, entr
 		v := *entryVal
 
 		// Break if null or type changed
-		if !k.IsValid() || !v.IsValid() || k.Type() != keyType || v.Type() != valueType {
+		if isNull(k) || isNull(v) || k.Type() != keyType || v.Type() != valueType {
 			break
 		}
 

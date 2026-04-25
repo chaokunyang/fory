@@ -33,8 +33,8 @@ func ptr[T any](v T) *T {
 
 func TestUnsignedTypeSerialization(t *testing.T) {
 	type TestStruct struct {
-		U32Var    uint32 `fory:"compress=true"`
-		U32Fixed  uint32 `fory:"compress=false"`
+		U32Var    uint32 `fory:"encoding=varint"`
+		U32Fixed  uint32 `fory:"encoding=fixed"`
 		U64Var    uint64 `fory:"encoding=varint"`
 		U64Fixed  uint64 `fory:"encoding=fixed"`
 		U64Tagged uint64 `fory:"encoding=tagged"`

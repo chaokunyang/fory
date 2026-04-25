@@ -63,6 +63,15 @@ pub fn derive_serializer(ast: &syn::DeriveInput, attrs: ForyAttrs) -> TokenStrea
         quote! {}
     };
 
+    if let syn::Data::Struct(s) = &ast.data {
+        let source_fields = source_fields(&s.fields);
+        let fields = extract_fields(&source_fields);
+        if let Err(err) = crate::object::field_meta::parse_and_validate_fields(&fields) {
+            clear_struct_context();
+            return err.to_compile_error().into();
+        }
+    }
+
     // StructSerializer
     let (
         actual_type_id_ts,

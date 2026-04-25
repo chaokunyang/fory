@@ -313,23 +313,7 @@ pub(super) fn try_primitive_vec_type(node: &TypeNode) -> Option<TokenStream> {
     None
 }
 
-pub(super) fn try_vec_of_option_primitive(node: &TypeNode) -> Option<TokenStream> {
-    if node.name != "Vec" {
-        return None;
-    }
-    let child = node.generics.first()?;
-    if child.name != "Option" {
-        return None;
-    }
-    let grandchild = child.generics.first()?;
-    for (ty_name, _, _) in PRIMITIVE_ARRAY_TYPE_MAP {
-        if grandchild.name == *ty_name {
-            return Some(quote! {
-                compile_error!("Vec<Option<primitive>> is not allowed!");
-            });
-        }
-    }
-
+pub(super) fn try_vec_of_option_primitive(_node: &TypeNode) -> Option<TokenStream> {
     None
 }
 
@@ -736,221 +720,6 @@ pub(super) fn is_primitive_type(ty: &str) -> bool {
     PRIMITIVE_TYPE_NAMES.contains(&ty)
 }
 
-/// Mapping of primitive type names to their writer and reader method names
-/// Order: (type_name, writer_method, reader_method)
-static PRIMITIVE_IO_METHODS: &[(&str, &str, &str)] = &[
-    ("bool", "write_bool", "read_bool"),
-    ("i8", "write_i8", "read_i8"),
-    ("i16", "write_i16", "read_i16"),
-    ("i32", "write_var_i32", "read_var_i32"),
-    ("i64", "write_var_i64", "read_var_i64"),
-    ("f32", "write_f32", "read_f32"),
-    ("f64", "write_f64", "read_f64"),
-    ("u8", "write_u8", "read_u8"),
-    ("u16", "write_u16", "read_u16"),
-    ("u32", "write_u32", "read_u32"),
-    ("u64", "write_u64", "read_u64"),
-    ("usize", "write_usize", "read_usize"),
-    ("u128", "write_u128", "read_u128"),
-];
-
-/// Check if a type is a direct primitive type (numeric or String, not wrapped in Option, Vec, etc.)
-pub(super) fn is_direct_primitive_type(ty: &Type) -> bool {
-    if let Type::Path(type_path) = ty {
-        if let Some(seg) = type_path.path.segments.last() {
-            // Check if it's a simple type path without generics
-            if matches!(seg.arguments, PathArguments::None) {
-                let type_name = seg.ident.to_string();
-                // Check for String type
-                if type_name == "String" {
-                    return true;
-                }
-                // Check for numeric primitive types
-                return PRIMITIVE_IO_METHODS
-                    .iter()
-                    .any(|(name, _, _)| *name == type_name.as_str());
-            }
-        }
-    }
-    false
-}
-
-/// Get the writer method name for a primitive numeric type
-/// Panics if type_name is not a primitive type
-pub(super) fn get_primitive_writer_method(type_name: &str) -> &'static str {
-    PRIMITIVE_IO_METHODS
-        .iter()
-        .find(|(name, _, _)| *name == type_name)
-        .map(|(_, writer, _)| *writer)
-        .unwrap_or_else(|| panic!("type_name '{}' must be a primitive type", type_name))
-}
-
-/// Get the writer method name for a primitive numeric type, considering encoding attributes.
-///
-/// For i32 fields:
-/// - type_id=VARINT32 (default): write_var_i32
-/// - type_id=INT32: write_i32 (fixed 4-byte)
-///
-/// For u32 fields:
-/// - type_id=VARINT32/VAR_UINT32 (default): write_var_u32
-/// - type_id=INT32/UINT32: write_u32 (fixed 4-byte)
-///
-/// For u64 fields:
-/// - type_id=VARINT32/VAR_UINT64 (default): write_var_u64
-/// - type_id=INT32/UINT64: write_u64 (fixed 8-byte)
-/// - type_id=TAGGED_UINT64: write_tagged_u64
-pub(super) fn get_primitive_writer_method_with_encoding(
-    type_name: &str,
-    meta: &super::field_meta::ForyFieldMeta,
-) -> &'static str {
-    use fory_core::type_id::TypeId;
-
-    // Handle i32 with type_id
-    if type_name == "i32" {
-        if let Some(type_id) = meta.type_id {
-            if type_id == TypeId::INT32 as i16 {
-                return "write_i32"; // Fixed 4-byte encoding
-            }
-        }
-        return "write_var_i32"; // Variable-length (default)
-    }
-
-    // Handle u32 with type_id
-    if type_name == "u32" {
-        if let Some(type_id) = meta.type_id {
-            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT32 as i16 {
-                return "write_u32"; // Fixed 4-byte encoding
-            }
-        }
-        return "write_var_u32"; // Variable-length (default)
-    }
-
-    // Handle u64 with type_id
-    if type_name == "u64" {
-        if let Some(type_id) = meta.type_id {
-            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT64 as i16 {
-                return "write_u64"; // Fixed 8-byte encoding
-            } else if type_id == TypeId::TAGGED_UINT64 as i16 {
-                return "write_tagged_u64"; // Tagged variable-length
-            }
-        }
-        return "write_var_u64"; // Variable-length (default)
-    }
-
-    // For other types, use the default method from PRIMITIVE_IO_METHODS
-    get_primitive_writer_method(type_name)
-}
-
-/// Get the reader method name for a primitive numeric type
-/// Panics if type_name is not a primitive type
-pub(super) fn get_primitive_reader_method(type_name: &str) -> &'static str {
-    PRIMITIVE_IO_METHODS
-        .iter()
-        .find(|(name, _, _)| *name == type_name)
-        .map(|(_, _, reader)| *reader)
-        .unwrap_or_else(|| panic!("type_name '{}' must be a primitive type", type_name))
-}
-
-/// Get the reader method name for a primitive numeric type, considering encoding attributes.
-///
-/// For i32 fields:
-/// - type_id=VARINT32 (default): read_var_i32
-/// - type_id=INT32: read_i32 (fixed 4-byte)
-///
-/// For u32 fields:
-/// - type_id=VARINT32/VAR_UINT32 (default): read_var_u32
-/// - type_id=INT32/UINT32: read_u32 (fixed 4-byte)
-///
-/// For u64 fields:
-/// - type_id=VARINT32/VAR_UINT64 (default): read_var_u64
-/// - type_id=INT32/UINT64: read_u64 (fixed 8-byte)
-/// - type_id=TAGGED_UINT64: read_tagged_u64
-pub(super) fn get_primitive_reader_method_with_encoding(
-    type_name: &str,
-    meta: &super::field_meta::ForyFieldMeta,
-) -> &'static str {
-    use fory_core::type_id::TypeId;
-
-    // Handle i32 with type_id
-    if type_name == "i32" {
-        if let Some(type_id) = meta.type_id {
-            if type_id == TypeId::INT32 as i16 {
-                return "read_i32"; // Fixed 4-byte encoding
-            }
-        }
-        return "read_var_i32"; // Variable-length (default)
-    }
-
-    // Handle u32 with type_id
-    if type_name == "u32" {
-        if let Some(type_id) = meta.type_id {
-            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT32 as i16 {
-                return "read_u32"; // Fixed 4-byte encoding
-            }
-        }
-        return "read_var_u32"; // Variable-length (default)
-    }
-
-    // Handle u64 with type_id
-    if type_name == "u64" {
-        if let Some(type_id) = meta.type_id {
-            if type_id == TypeId::INT32 as i16 || type_id == TypeId::UINT64 as i16 {
-                return "read_u64"; // Fixed 8-byte encoding
-            } else if type_id == TypeId::TAGGED_UINT64 as i16 {
-                return "read_tagged_u64"; // Tagged variable-length
-            }
-        }
-        return "read_var_u64"; // Variable-length (default)
-    }
-
-    // For other types, use the default method from PRIMITIVE_IO_METHODS
-    get_primitive_reader_method(type_name)
-}
-
-/// Check if a type is `Option<i32>`, `Option<u32>`, or `Option<u64>` that needs encoding-aware handling
-/// based on the field metadata (type_id attribute).
-pub(super) fn is_option_encoding_primitive(
-    ty: &Type,
-    meta: &super::field_meta::ForyFieldMeta,
-) -> bool {
-    if let Some(inner_name) = get_option_inner_primitive_name(ty) {
-        // For i32/u32/u64, check if type_id is set
-        if (inner_name == "i32" || inner_name == "u32" || inner_name == "u64")
-            && meta.type_id.is_some()
-        {
-            return true;
-        }
-    }
-    false
-}
-
-/// Get the inner primitive name if the type is `Option<primitive>`
-/// Returns Some("u32"), Some("u64"), etc. for `Option<u32>`, `Option<u64>`, etc.
-pub(super) fn get_option_inner_primitive_name(ty: &Type) -> Option<&'static str> {
-    use syn::PathArguments;
-    if let Type::Path(type_path) = ty {
-        if let Some(seg) = type_path.path.segments.last() {
-            if seg.ident == "Option" {
-                if let PathArguments::AngleBracketed(args) = &seg.arguments {
-                    if let Some(syn::GenericArgument::Type(Type::Path(inner_path))) =
-                        args.args.first()
-                    {
-                        if let Some(inner_seg) = inner_path.path.segments.last() {
-                            let inner_name = inner_seg.ident.to_string();
-                            // Return static string for known primitives
-                            return PRIMITIVE_IO_METHODS
-                                .iter()
-                                .find(|(name, _, _)| *name == inner_name.as_str())
-                                .map(|(name, _, _)| *name);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    None
-}
-
 pub(crate) fn get_type_id_by_type_ast(ty: &Type) -> u32 {
     let ty_str: String = ty
         .to_token_stream()
@@ -1141,7 +910,9 @@ fn is_internal_type_id(type_id: u32) -> bool {
 /// Group fields into serialization categories while normalizing field names to snake_case.
 /// The returned groups preserve the ordering rules required by the serialization layout.
 fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
-    use super::field_meta::parse_field_meta;
+    use super::field_meta::{
+        effective_sort_key, effective_type_id_for_field_type, parse_field_meta_or_default,
+    };
 
     let mut primitive_fields = Vec::new();
     let mut nullable_primitive_fields = Vec::new();
@@ -1171,12 +942,8 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
         }
 
         // Parse field metadata to get encoding attributes and field ID
-        let meta = parse_field_meta(field).unwrap_or_default();
-        let sort_key = if meta.uses_tag_id() {
-            meta.effective_id().to_string()
-        } else {
-            ident.clone()
-        };
+        let meta = parse_field_meta_or_default(field);
+        let sort_key = effective_sort_key(&ident, &meta);
 
         let ty: String = field
             .ty
@@ -1191,7 +958,8 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             |ident: String, sort_key: String, ty_str: &str, is_primitive: bool| {
                 let base_type_id = get_type_id_by_name(ty_str);
                 // Adjust type ID based on encoding attributes for u32/u64 fields
-                let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
+                let type_id =
+                    effective_type_id_for_field_type(&field.ty, &meta).unwrap_or(base_type_id);
 
                 // Categorize based on type_id
                 if is_primitive {
@@ -1215,7 +983,8 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             if PRIMITIVE_TYPE_NAMES.contains(&inner) {
                 // Get base type ID and adjust for encoding attributes
                 let base_type_id = get_primitive_type_id(inner);
-                let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
+                let type_id =
+                    effective_type_id_for_field_type(&field.ty, &meta).unwrap_or(base_type_id);
                 nullable_primitive_fields.push((ident, sort_key, type_id));
             } else {
                 group_field(ident, sort_key, inner, false);
@@ -1348,93 +1117,30 @@ struct FieldFingerprintInfo {
 
 /// Adjusts type ID based on encoding attributes for i32/u32/u64 fields.
 ///
-/// The type_id in meta represents the desired encoding:
-/// - VARINT32: variable-length for i32/u32
-/// - INT32: fixed 4-byte for i32, u32
-/// - TAGGED_UINT64: tagged variable-length for u64
-fn adjust_type_id_for_encoding(base_type_id: u32, meta: &super::field_meta::ForyFieldMeta) -> u32 {
-    // If no explicit type_id is set, use the base type_id
-    let Some(explicit_type_id) = meta.type_id else {
-        return base_type_id;
-    };
-
-    if explicit_type_id == TypeId::UNION as i16 {
-        return TypeId::UNION as u32;
-    }
-
-    if explicit_type_id == TypeId::INT8_ARRAY as i16
-        || explicit_type_id == TypeId::UINT8_ARRAY as i16
-    {
-        let explicit = explicit_type_id as u32;
-        if base_type_id == TypeId::BINARY as u32
-            || base_type_id == TypeId::INT8_ARRAY as u32
-            || base_type_id == TypeId::UINT8_ARRAY as u32
-        {
-            return explicit;
-        }
-    }
-
-    // Handle i32 fields
-    if base_type_id == TypeId::VARINT32 as u32 {
-        if explicit_type_id == TypeId::INT32 as i16 {
-            return TypeId::INT32 as u32; // Fixed 4-byte encoding
-        }
-        return base_type_id; // VARINT32 (default)
-    }
-
-    // Handle u32 fields
-    if base_type_id == TypeId::VAR_UINT32 as u32 {
-        if explicit_type_id == TypeId::INT32 as i16 {
-            return TypeId::UINT32 as u32; // Fixed 4-byte encoding
-        }
-        return base_type_id; // VAR_UINT32 (default)
-    }
-
-    // Handle u64 fields
-    if base_type_id == TypeId::VAR_UINT64 as u32 {
-        if explicit_type_id == TypeId::INT32 as i16 {
-            return TypeId::UINT64 as u32; // Fixed 8-byte encoding
-        } else if explicit_type_id == TypeId::TAGGED_UINT64 as i16 {
-            return TypeId::TAGGED_UINT64 as u32; // Tagged variable-length
-        }
-        return base_type_id; // VAR_UINT64 (default)
-    }
-
-    base_type_id
-}
-
 /// Computes struct fingerprint string at compile time (during proc-macro execution).
 ///
 /// **Fingerprint Format:** `<field_name_or_id>,<type_id>,<ref>,<nullable>;`
 /// Fields are sorted by name lexicographically.
 fn compute_struct_fingerprint(fields: &[&Field]) -> String {
-    use super::field_meta::{classify_field_type, parse_field_meta};
+    use super::field_meta::{
+        effective_ref_for_field, effective_sort_key, effective_type_id_for_field_type,
+        parse_field_meta_or_default,
+    };
 
     let mut field_infos: Vec<FieldFingerprintInfo> = Vec::with_capacity(fields.len());
 
     for (idx, field) in fields.iter().enumerate() {
-        let meta = parse_field_meta(field).unwrap_or_default();
+        let meta = parse_field_meta_or_default(field);
         if meta.skip {
             continue;
         }
 
         let name = get_field_name(field, idx);
-        let field_id = meta.effective_id();
-        let name_or_id = if field_id >= 0 {
-            field_id.to_string()
-        } else {
-            to_snake_case(&name)
-        };
-
-        let type_class = classify_field_type(&field.ty);
-        let track_ref = meta.effective_ref(type_class);
+        let normalized_name = to_snake_case(&name);
+        let name_or_id = effective_sort_key(&normalized_name, &meta);
+        let track_ref = effective_ref_for_field(&field.ty, &meta);
         let explicit_nullable = meta.nullable;
 
-        // Get compile-time TypeId, considering encoding attributes for u32/u64 fields
-        let base_type_id = get_type_id_by_type_ast(&field.ty);
-        let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
-
-        // Check if field type is Option<T>
         let ty_str: String = field
             .ty
             .to_token_stream()
@@ -1443,6 +1149,9 @@ fn compute_struct_fingerprint(fields: &[&Field]) -> String {
             .filter(|c| !c.is_whitespace())
             .collect();
         let is_option_type = ty_str.starts_with("Option<");
+
+        let base_type_id = get_type_id_by_type_ast(&field.ty);
+        let type_id = effective_type_id_for_field_type(&field.ty, &meta).unwrap_or(base_type_id);
 
         field_infos.push(FieldFingerprintInfo {
             name_or_id,
@@ -1535,12 +1244,13 @@ impl ToTokens for FieldRefMode {
 /// Determine the RefMode for a field based on field meta attributes and type.
 /// This respects `#[fory(ref=false)]` and `#[fory(nullable)]` attributes.
 pub(crate) fn determine_field_ref_mode(field: &syn::Field) -> FieldRefMode {
-    use super::field_meta::{classify_field_type, parse_field_meta};
+    use super::field_meta::{
+        effective_nullable_for_field, effective_ref_for_field, parse_field_meta_or_default,
+    };
 
-    let meta = parse_field_meta(field).unwrap_or_default();
-    let type_class = classify_field_type(&field.ty);
-    let nullable = meta.effective_nullable(type_class);
-    let track_ref = meta.effective_ref(type_class);
+    let meta = parse_field_meta_or_default(field);
+    let nullable = effective_nullable_for_field(&field.ty, &meta);
+    let track_ref = effective_ref_for_field(&field.ty, &meta);
 
     if track_ref {
         FieldRefMode::Tracking

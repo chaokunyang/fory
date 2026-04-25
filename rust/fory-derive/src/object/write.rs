@@ -15,18 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use super::field_codec::codec_tokens_for_field;
-use super::field_meta::parse_field_meta;
+use super::codec::codec_tokens_for_field;
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts, get_field_accessor,
-    get_field_name, get_filtered_source_fields_iter, get_option_inner_primitive_name,
-    get_primitive_writer_method_with_encoding, get_struct_name, get_type_id_by_type_ast,
-    is_debug_enabled, is_direct_primitive_type, is_option_encoding_primitive, FieldRefMode,
-    StructField,
+    determine_field_ref_mode, gen_struct_version_hash_ts, get_field_accessor, get_field_name,
+    get_filtered_source_fields_iter, get_struct_name, is_debug_enabled, FieldRefMode, StructField,
 };
 use crate::util::SourceField;
-use fory_core::type_id::TypeId;
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
 use syn::Field;

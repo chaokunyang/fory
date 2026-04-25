@@ -19,6 +19,7 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::Field;
 
+use super::field_codec::codec_tokens_for_field;
 use super::field_meta::{extract_option_inner_type, parse_field_meta};
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
@@ -360,74 +361,17 @@ pub fn gen_read_field(field: &Field, private_ident: &Ident, field_name: &str) ->
             }
         }
         _ => {
-            let skip_type_info = should_skip_type_info_for_field(ty);
-            let meta = parse_field_meta(field).unwrap_or_default();
-
-            // Check if this is Option<u32> or Option<u64> with encoding attributes
-            // These need special inline handling because the generic Option<T> serializer
-            // doesn't know about field-level encoding attributes.
-            if is_option_encoding_primitive(ty, &meta) {
-                let inner_name = get_option_inner_primitive_name(ty).unwrap();
-                let reader_method = get_primitive_reader_method_with_encoding(inner_name, &meta);
-                let reader_ident = syn::Ident::new(reader_method, proc_macro2::Span::call_site());
-                // For Option<primitive>, read null flag first, then value if not null
-                quote! {
-                    let ref_flag = context.reader.read_i8()?;
-                    let #private_ident = if ref_flag == fory_core::RefFlag::Null as i8 {
-                        None
-                    } else {
-                        Some(context.reader.#reader_ident()?)
-                    };
-                }
-            }
-            // Check if this is a direct primitive type that can use direct reader calls
-            // Only apply when ref_mode is None (no ref tracking needed)
-            else if ref_mode == FieldRefMode::None && is_direct_primitive_type(ty) {
-                let type_name = extract_type_name(ty);
-                if type_name == "String" {
-                    // String: call fory_read_data directly
-                    quote! {
-                        let #private_ident = <#ty as fory_core::Serializer>::fory_read_data(context)?;
-                    }
+            let codec_ts = codec_tokens_for_field(field)
+                .unwrap_or_else(|_| quote! { fory_core::SerializerCodec<#ty> });
+            quote! {
+                let read_type_info = if context.is_compatible() {
+                    fory_core::type_id::need_to_write_type_for_field(
+                        <#codec_ts as fory_core::Codec<#ty>>::static_type_id()
+                    )
                 } else {
-                    // Numeric primitives: use direct buffer methods
-                    // For u32/u64, consider encoding attributes
-                    let reader_method =
-                        get_primitive_reader_method_with_encoding(&type_name, &meta);
-                    let reader_ident =
-                        syn::Ident::new(reader_method, proc_macro2::Span::call_site());
-                    quote! {
-                        let #private_ident = context.reader.#reader_ident()?;
-                    }
-                }
-            } else if skip_type_info {
-                // Known types (primitives, strings, collections) - skip type info at compile time
-                if ref_mode == FieldRefMode::None {
-                    quote! {
-                        let #private_ident = <#ty as fory_core::Serializer>::fory_read_data(context)?;
-                    }
-                } else {
-                    quote! {
-                        let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, #ref_mode, false)?;
-                    }
-                }
-            } else {
-                // Custom types (struct/enum/ext) - always need mode-dependent type info logic
-                // Determine read_type_info based on mode:
-                // - compatible=true: use need_to_write_type_for_field (struct types need type info)
-                // - compatible=false: use fory_is_polymorphic
-                // This applies regardless of ref_mode because Java always writes type info
-                // for struct-type fields in compatible mode, even for non-nullable fields.
-                quote! {
-                    let read_type_info = if context.is_compatible() {
-                        fory_core::type_id::need_to_write_type_for_field(
-                            <#ty as fory_core::Serializer>::fory_static_type_id()
-                        )
-                    } else {
-                        <#ty as fory_core::Serializer>::fory_is_polymorphic()
-                    };
-                    let #private_ident = <#ty as fory_core::Serializer>::fory_read(context, #ref_mode, read_type_info)?;
-                }
+                    <#codec_ts as fory_core::Codec<#ty>>::is_polymorphic()
+                };
+                let #private_ident = <#codec_ts as fory_core::Codec<#ty>>::read(context, #ref_mode, read_type_info)?;
             }
         }
     };

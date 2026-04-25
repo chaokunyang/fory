@@ -179,6 +179,7 @@
 //! ```
 
 pub mod buffer;
+pub mod codec;
 pub mod config;
 pub mod context;
 pub mod error;
@@ -195,6 +196,7 @@ pub mod util;
 pub use paste;
 
 pub use crate::buffer::{Reader, Writer};
+pub use crate::codec::*;
 pub use crate::config::Config;
 pub use crate::context::{ReadContext, WriteContext};
 pub use crate::error::Error;

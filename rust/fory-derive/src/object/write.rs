@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use super::field_codec::codec_tokens_for_field;
 use super::field_meta::parse_field_meta;
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
@@ -250,85 +251,17 @@ fn gen_write_field_impl(
             }
         }
         _ => {
-            let type_id = get_type_id_by_type_ast(ty);
-            let meta = parse_field_meta(field).unwrap_or_default();
-
-            // Check if this is Option<u32> or Option<u64> with encoding attributes
-            // These need special inline handling because the generic Option<T> serializer
-            // doesn't know about field-level encoding attributes.
-            if is_option_encoding_primitive(ty, &meta) {
-                let inner_name = get_option_inner_primitive_name(ty).unwrap();
-                let writer_method = get_primitive_writer_method_with_encoding(inner_name, &meta);
-                let writer_ident = syn::Ident::new(writer_method, proc_macro2::Span::call_site());
-                // For Option<primitive>, write null flag first, then value if Some
-                quote! {
-                    if let Some(v) = &#value_ts {
-                        context.writer.write_i8(fory_core::RefFlag::NotNullValue as i8);
-                        context.writer.#writer_ident(*v);
-                    } else {
-                        context.writer.write_i8(fory_core::RefFlag::Null as i8);
-                    }
-                }
-            }
-            // Check if this is a direct primitive type that can use direct writer calls
-            // Only apply when ref_mode is None (no ref tracking needed)
-            else if ref_mode == FieldRefMode::None && is_direct_primitive_type(ty) {
-                let type_name = extract_type_name(ty);
-                if type_name == "String" {
-                    // String: call fory_write_data directly
-                    quote! {
-                        <#ty as fory_core::Serializer>::fory_write_data(&#value_ts, context)?;
-                    }
+            let codec_ts = codec_tokens_for_field(field)
+                .unwrap_or_else(|_| quote! { fory_core::SerializerCodec<#ty> });
+            quote! {
+                let write_type_info = if context.is_compatible() {
+                    fory_core::type_id::need_to_write_type_for_field(
+                        <#codec_ts as fory_core::Codec<#ty>>::static_type_id()
+                    )
                 } else {
-                    // Numeric primitives: use direct buffer methods
-                    // For u32/u64, consider encoding attributes
-                    let writer_method =
-                        get_primitive_writer_method_with_encoding(&type_name, &meta);
-                    let writer_ident =
-                        syn::Ident::new(writer_method, proc_macro2::Span::call_site());
-                    // For primitives:
-                    // - use_self=true: #value_ts is `self.field`, which is T (copy happens automatically)
-                    // - use_self=false: #value_ts is `field` from pattern match on &self, which is &T
-                    let value_expr = if use_self {
-                        quote! { #value_ts }
-                    } else {
-                        quote! { *#value_ts }
-                    };
-                    quote! {
-                        context.writer.#writer_ident(#value_expr);
-                    }
-                }
-            } else if type_id == TypeId::LIST as u32
-                || type_id == TypeId::SET as u32
-                || type_id == TypeId::MAP as u32
-            {
-                // For collections - respect field meta for ref mode
-                if ref_mode == FieldRefMode::None {
-                    quote! {
-                        <#ty as fory_core::Serializer>::fory_write_data_generic(&#value_ts, context, true)?;
-                    }
-                } else {
-                    quote! {
-                        <#ty as fory_core::Serializer>::fory_write(&#value_ts, context, #ref_mode, false, true)?;
-                    }
-                }
-            } else {
-                // Custom types (struct/enum/ext) - always need mode-dependent type info logic
-                // Determine write_type_info based on mode:
-                // - compatible=true: use need_to_write_type_for_field (struct types need type info)
-                // - compatible=false: use fory_is_polymorphic
-                // This applies regardless of ref_mode because Java always writes type info
-                // for struct-type fields in compatible mode, even for non-nullable fields.
-                quote! {
-                    let write_type_info = if context.is_compatible() {
-                        fory_core::type_id::need_to_write_type_for_field(
-                            <#ty as fory_core::Serializer>::fory_static_type_id()
-                        )
-                    } else {
-                        <#ty as fory_core::Serializer>::fory_is_polymorphic()
-                    };
-                    <#ty as fory_core::Serializer>::fory_write(&#value_ts, context, #ref_mode, write_type_info, false)?;
-                }
+                    <#codec_ts as fory_core::Codec<#ty>>::is_polymorphic()
+                };
+                <#codec_ts as fory_core::Codec<#ty>>::write(&#value_ts, context, #ref_mode, write_type_info, true)?;
             }
         }
     };

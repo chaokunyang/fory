@@ -24,3 +24,5 @@ pub(crate) mod util;
 mod write;
 
 pub use serializer::derive_serializer;
+
+pub mod field_codec;

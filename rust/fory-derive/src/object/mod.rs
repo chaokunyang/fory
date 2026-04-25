@@ -25,4 +25,4 @@ mod write;
 
 pub use serializer::derive_serializer;
 
-pub mod field_codec;
+pub mod codec;

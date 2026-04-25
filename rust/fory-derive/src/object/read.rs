@@ -19,14 +19,13 @@ use proc_macro2::{Ident, TokenStream};
 use quote::{format_ident, quote};
 use syn::Field;
 
-use super::field_codec::codec_tokens_for_field;
-use super::field_meta::{extract_option_inner_type, parse_field_meta};
+use super::codec::codec_tokens_for_field;
+use super::field_meta::extract_option_inner_type;
 use super::util::{
     classify_trait_object_field, create_wrapper_types_arc, create_wrapper_types_rc,
-    determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts,
-    get_option_inner_primitive_name, get_primitive_reader_method_with_encoding, get_struct_name,
-    is_debug_enabled, is_direct_primitive_type, is_option_encoding_primitive, is_primitive_type,
-    is_skip_field, should_skip_type_info_for_field, FieldRefMode, StructField,
+    determine_field_ref_mode, extract_type_name, gen_struct_version_hash_ts, get_struct_name,
+    is_debug_enabled, is_primitive_type, is_skip_field, should_skip_type_info_for_field,
+    StructField,
 };
 use crate::util::SourceField;
 

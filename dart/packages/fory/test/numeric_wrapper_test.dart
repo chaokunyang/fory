@@ -22,6 +22,12 @@ import 'dart:typed_data';
 import 'package:fory/fory.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/compatible_struct_metadata.dart';
+import 'package:fory/src/types/int16.dart';
+import 'package:fory/src/types/int32.dart';
+import 'package:fory/src/types/int8.dart';
+import 'package:fory/src/types/uint16.dart';
+import 'package:fory/src/types/uint32.dart';
+import 'package:fory/src/types/uint8.dart';
 import 'package:test/test.dart';
 
 part 'numeric_wrapper_test.fory.dart';

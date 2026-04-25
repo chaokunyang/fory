@@ -35,45 +35,45 @@ class SignedFields {
 
   int plainInt = 0;
 
-  @Int32Type(compress: true)
+  @Int32Type()
   int i32Var = 0;
 
-  @Int32Type(compress: false)
+  @Int32Type(encoding: Encoding.fixed)
   int i32Fixed = 0;
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @Int64Type(encoding: Encoding.varint)
   int i64VarInt = 0;
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @Int64Type(encoding: Encoding.fixed)
   int i64FixedInt = 0;
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @Int64Type(encoding: Encoding.tagged)
   int i64TaggedInt = 0;
 
   Int64 i64Default = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @Int64Type(encoding: Encoding.varint)
   Int64 i64Var = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @Int64Type(encoding: Encoding.fixed)
   Int64 i64Fixed = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @Int64Type(encoding: Encoding.tagged)
   Int64 i64Tagged = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @Int64Type(encoding: Encoding.varint)
   int? optionalI64VarInt;
 
-  @Int32Type(compress: true)
+  @Int32Type()
   int? optionalI32Var;
 
-  @Int32Type(compress: false)
+  @Int32Type(encoding: Encoding.fixed)
   int? optionalI32Fixed;
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @Int64Type(encoding: Encoding.fixed)
   Int64? optionalI64Fixed;
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @Int64Type(encoding: Encoding.tagged)
   Int64? optionalI64Tagged;
 }
 
@@ -88,13 +88,13 @@ class SignedMetadataReader {
 class SignedIntFieldsReader {
   SignedIntFieldsReader();
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @Int64Type(encoding: Encoding.varint)
   int i64Var = 0;
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @Int64Type(encoding: Encoding.fixed)
   int i64Fixed = 0;
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @Int64Type(encoding: Encoding.tagged)
   int i64Tagged = 0;
 }
 

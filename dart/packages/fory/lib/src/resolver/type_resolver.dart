@@ -844,6 +844,10 @@ final class TypeResolver {
   }
 
   int _typeDefFieldTypeId(FieldType fieldType) {
+    if (fieldType.typeId == TypeIds.typedUnion ||
+        fieldType.typeId == TypeIds.namedUnion) {
+      return TypeIds.union;
+    }
     if (TypeIds.isPrimitive(fieldType.typeId) ||
         TypeIds.isContainer(fieldType.typeId) ||
         fieldType.typeId == TypeIds.string ||
@@ -1453,6 +1457,15 @@ final class TypeResolver {
   }
 
   Type _builtinTypeForFieldType(FieldType fieldType) {
+    if (fieldType.typeId == TypeIds.timestamp) {
+      final declaredTypeName = fieldType.declaredTypeName;
+      if (fieldType.type == DateTime ||
+          (declaredTypeName != null &&
+              _matchesDeclaredTypeName(declaredTypeName, 'DateTime'))) {
+        return DateTime;
+      }
+      return Timestamp;
+    }
     switch (fieldType.typeId) {
       case TypeIds.int64:
       case TypeIds.varInt64:

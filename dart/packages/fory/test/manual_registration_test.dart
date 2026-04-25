@@ -18,6 +18,7 @@
  */
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/types/int32.dart';
 import 'package:test/test.dart';
 
 final class ManualValue {

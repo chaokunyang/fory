@@ -17,6 +17,8 @@
  * under the License.
  */
 
+import 'type_spec.dart';
+
 /// Field-level code generation options for [ForyStruct].
 final class ForyField {
   /// Skips this field entirely in generated serializers.
@@ -27,29 +29,73 @@ final class ForyField {
   /// When omitted, the generator derives an identifier from the field name.
   final int? id;
 
-  /// Overrides the generator's inferred nullability.
-  ///
-  /// `null` means "use the Dart type as written".
+  /// Canonical recursive field-type override.
+  final TypeSpec? type;
+
+  /// Root-only sugar for overriding inferred nullability.
   final bool? nullable;
 
-  /// Enables reference tracking for this field.
-  ///
-  /// Basic scalar types never track references even if this flag is `true`.
-  final bool ref;
+  /// Root-only sugar for overriding reference tracking.
+  final bool? ref;
 
-  /// Controls whether generated code writes runtime type metadata for this
-  /// field.
-  ///
-  /// `null` means "auto", `false` means "use the declared type", and `true`
-  /// means "write runtime type information".
+  /// Root-only sugar for overriding runtime type metadata behavior.
   final bool? dynamic;
 
-  /// Creates field-level generation overrides.
+  /// Root-only sugar for numeric encodings when the declared field type is
+  /// already unambiguous.
+  final Encoding? encoding;
+
   const ForyField({
     this.skip = false,
     this.id,
+    this.type,
     this.nullable,
-    this.ref = false,
+    this.ref,
+    this.dynamic,
+    this.encoding,
+  });
+}
+
+final class ListField {
+  final TypeSpec element;
+  final bool? nullable;
+  final bool? ref;
+  final bool? dynamic;
+
+  const ListField({
+    this.element = const DeclaredType(),
+    this.nullable,
+    this.ref,
+    this.dynamic,
+  });
+}
+
+final class SetField {
+  final TypeSpec element;
+  final bool? nullable;
+  final bool? ref;
+  final bool? dynamic;
+
+  const SetField({
+    this.element = const DeclaredType(),
+    this.nullable,
+    this.ref,
+    this.dynamic,
+  });
+}
+
+final class MapField {
+  final TypeSpec key;
+  final TypeSpec value;
+  final bool? nullable;
+  final bool? ref;
+  final bool? dynamic;
+
+  const MapField({
+    this.key = const DeclaredType(),
+    this.value = const DeclaredType(),
+    this.nullable,
+    this.ref,
     this.dynamic,
   });
 }

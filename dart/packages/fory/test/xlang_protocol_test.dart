@@ -20,6 +20,7 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/types/uint16.dart';
 import 'package:test/test.dart';
 
 void main() {

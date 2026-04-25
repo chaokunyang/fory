@@ -17,95 +17,132 @@
  * under the License.
  */
 
-/// Type-level annotations for configuring nested container elements.
-///
-/// Use [ListType] and [MapType] on fields to override default ref-tracking
-/// and nullability for container elements, keys, and values.
+/// Recursive field-type specifications for generated serializers.
 library;
 
-/// Option that modifies a type's serialization behavior.
-abstract class TypeOption {
-  const TypeOption();
-
-  const factory TypeOption.ref([bool tracked]) = RefOption;
-  const factory TypeOption.nullable([bool value]) = NullableOption;
+enum Encoding {
+  fixed,
+  varint,
+  tagged,
 }
 
-/// Enables or disables reference tracking for a type.
-final class RefOption extends TypeOption {
-  final bool tracked;
-  const RefOption([this.tracked = true]);
-}
-
-/// Overrides nullability for a type.
-final class NullableOption extends TypeOption {
-  final bool value;
-  const NullableOption([this.value = true]);
-}
-
-/// Base class for type specifications that carry [TypeOption]s.
 abstract class TypeSpec {
-  final List<TypeOption> options;
-  const TypeSpec([this.options = const []]);
+  final bool? nullable;
+  final bool? ref;
+  final bool? dynamic;
+
+  const TypeSpec({
+    this.nullable,
+    this.ref,
+    this.dynamic,
+  });
 }
 
-/// Specifies options for a scalar or object value type.
-final class ValueType extends TypeSpec {
-  const ValueType([super.options]);
-
-  const ValueType.ref() : super(const [TypeOption.ref()]);
-  const ValueType.noRef() : super(const [TypeOption.ref(false)]);
-  const ValueType.nullable() : super(const [TypeOption.nullable()]);
-  const ValueType.nonNullable() : super(const [TypeOption.nullable(false)]);
-  const ValueType.refNullable()
-      : super(const [TypeOption.ref(), TypeOption.nullable()]);
+/// Uses the declared Dart type at this node and only overrides field flags.
+final class DeclaredType extends TypeSpec {
+  const DeclaredType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
 }
 
-/// Specifies options for a list or set field, including its element type.
+final class BoolType extends TypeSpec {
+  const BoolType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class StringType extends TypeSpec {
+  const StringType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class BinaryType extends TypeSpec {
+  const BinaryType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class DecimalType extends TypeSpec {
+  const DecimalType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class DateType extends TypeSpec {
+  const DateType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class DurationType extends TypeSpec {
+  const DurationType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class TimestampType extends TypeSpec {
+  const TimestampType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+/// Distinguishes `uint8[]` typed arrays from binary `Uint8List` payloads.
+final class Uint8ArrayType extends TypeSpec {
+  const Uint8ArrayType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
 final class ListType extends TypeSpec {
   final TypeSpec element;
 
   const ListType({
-    this.element = const ValueType(),
-    List<TypeOption> options = const [],
-  }) : super(options);
-
-  const ListType.ref({
-    this.element = const ValueType(),
-  }) : super(const [TypeOption.ref()]);
-
-  const ListType.noRef({
-    this.element = const ValueType(),
-  }) : super(const [TypeOption.ref(false)]);
-
-  const ListType.nullable({
-    this.element = const ValueType(),
-  }) : super(const [TypeOption.nullable()]);
+    this.element = const DeclaredType(),
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
 }
 
-/// Specifies options for a map field, including its key and value types.
+final class SetType extends TypeSpec {
+  final TypeSpec element;
+
+  const SetType({
+    this.element = const DeclaredType(),
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
 final class MapType extends TypeSpec {
   final TypeSpec key;
   final TypeSpec value;
 
   const MapType({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-    List<TypeOption> options = const [],
-  }) : super(options);
-
-  const MapType.ref({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-  }) : super(const [TypeOption.ref()]);
-
-  const MapType.noRef({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-  }) : super(const [TypeOption.ref(false)]);
-
-  const MapType.nullable({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-  }) : super(const [TypeOption.nullable()]);
+    this.key = const DeclaredType(),
+    this.value = const DeclaredType(),
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
 }

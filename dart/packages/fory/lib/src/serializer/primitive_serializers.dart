@@ -69,13 +69,13 @@ final class PrimitiveSerializer<T> extends Serializer<T> {
         buffer.writeBool(value as bool);
         return;
       case TypeIds.int8:
-        buffer.writeByte((value as Int8).value);
+        buffer.writeByte(value is Int8 ? value.value : value as int);
         return;
       case TypeIds.int16:
-        buffer.writeInt16((value as Int16).value);
+        buffer.writeInt16(value is Int16 ? value.value : value as int);
         return;
       case TypeIds.int32:
-        buffer.writeInt32((value as Int32).value);
+        buffer.writeInt32(value is Int32 ? value.value : value as int);
         return;
       case TypeIds.varInt32:
         buffer.writeVarInt32(value is Int32 ? value.value : value as int);

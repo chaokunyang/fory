@@ -176,7 +176,7 @@ final class StructSerializer extends Serializer<Object?> {
       for (var index = 0; index < layout.fields.length; index += 1) {
         final localField = layout.fields[index];
         if (localField == null) {
-          readCompatibleField(context, layout.remoteFields[index]);
+          skipCompatibleField(context, layout.remoteFields[index]);
           continue;
         }
         compatibleReadersBySlot[localField.slot](
@@ -198,7 +198,7 @@ final class StructSerializer extends Serializer<Object?> {
     for (var index = 0; index < layout.fields.length; index += 1) {
       final localField = layout.fields[index];
       if (localField == null) {
-        readCompatibleField(context, layout.remoteFields[index]);
+        skipCompatibleField(context, layout.remoteFields[index]);
         continue;
       }
       final slot = localField.slot;

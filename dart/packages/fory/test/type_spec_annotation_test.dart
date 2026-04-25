@@ -21,158 +21,107 @@ import 'package:fory/fory.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('TypeOption', () {
-    test('RefOption defaults tracked to true', () {
-      const ref = RefOption();
-      expect(ref.tracked, isTrue);
+  group('TypeSpec leaves', () {
+    test('DeclaredType stores root overrides', () {
+      const spec = DeclaredType(nullable: false, ref: true, dynamic: true);
+      expect(spec.nullable, isFalse);
+      expect(spec.ref, isTrue);
+      expect(spec.dynamic, isTrue);
     });
 
-    test('RefOption accepts explicit false', () {
-      const ref = RefOption(false);
-      expect(ref.tracked, isFalse);
+    test('numeric specs store encodings', () {
+      const i32 = Int32Type(encoding: Encoding.fixed);
+      const i64 = Int64Type(encoding: Encoding.tagged);
+      const u32 = Uint32Type(encoding: Encoding.fixed);
+      const u64 = Uint64Type(encoding: Encoding.tagged);
+
+      expect(i32.encoding, equals(Encoding.fixed));
+      expect(i64.encoding, equals(Encoding.tagged));
+      expect(u32.encoding, equals(Encoding.fixed));
+      expect(u64.encoding, equals(Encoding.tagged));
     });
 
-    test('NullableOption defaults value to true', () {
-      const nullable = NullableOption();
-      expect(nullable.value, isTrue);
-    });
+    test('builtin leaves expose override flags', () {
+      const stringSpec = StringType(nullable: false);
+      const binarySpec = BinaryType(ref: false);
+      const timestampSpec = TimestampType(dynamic: false);
 
-    test('NullableOption accepts explicit false', () {
-      const nullable = NullableOption(false);
-      expect(nullable.value, isFalse);
-    });
-
-    test('TypeOption.ref factory creates RefOption', () {
-      const option = TypeOption.ref();
-      expect(option, isA<RefOption>());
-      expect((option as RefOption).tracked, isTrue);
-    });
-
-    test('TypeOption.nullable factory creates NullableOption', () {
-      const option = TypeOption.nullable();
-      expect(option, isA<NullableOption>());
-      expect((option as NullableOption).value, isTrue);
+      expect(stringSpec.nullable, isFalse);
+      expect(binarySpec.ref, isFalse);
+      expect(timestampSpec.dynamic, isFalse);
     });
   });
 
-  group('ValueType', () {
-    test('default constructor has empty options', () {
-      const vt = ValueType();
-      expect(vt.options, isEmpty);
+  group('container TypeSpec nodes', () {
+    test('ListType defaults to DeclaredType elements', () {
+      const spec = ListType();
+      expect(spec.element, isA<DeclaredType>());
+      expect(spec.nullable, isNull);
+      expect(spec.ref, isNull);
+      expect(spec.dynamic, isNull);
     });
 
-    test('ValueType.ref() sets ref option', () {
-      const vt = ValueType.ref();
-      expect(vt.options, hasLength(1));
-      expect(vt.options.first, isA<RefOption>());
-      expect((vt.options.first as RefOption).tracked, isTrue);
+    test('SetType stores nested element specs', () {
+      const spec = SetType(
+        element: Int32Type(encoding: Encoding.fixed, nullable: false),
+        nullable: false,
+      );
+
+      expect(spec.element, isA<Int32Type>());
+      expect((spec.element as Int32Type).encoding, equals(Encoding.fixed));
+      expect(spec.nullable, isFalse);
     });
 
-    test('ValueType.noRef() sets ref(false)', () {
-      const vt = ValueType.noRef();
-      expect(vt.options, hasLength(1));
-      expect((vt.options.first as RefOption).tracked, isFalse);
-    });
+    test('MapType stores nested key/value specs', () {
+      const spec = MapType(
+        key: StringType(),
+        value: ListType(
+          element: Int32Type(
+            nullable: true,
+            encoding: Encoding.fixed,
+          ),
+        ),
+        ref: true,
+      );
 
-    test('ValueType.nullable() sets nullable option', () {
-      const vt = ValueType.nullable();
-      expect(vt.options, hasLength(1));
-      expect((vt.options.first as NullableOption).value, isTrue);
-    });
-
-    test('ValueType.nonNullable() sets nullable(false)', () {
-      const vt = ValueType.nonNullable();
-      expect(vt.options, hasLength(1));
-      expect((vt.options.first as NullableOption).value, isFalse);
-    });
-
-    test('ValueType.refNullable() sets both ref and nullable', () {
-      const vt = ValueType.refNullable();
-      expect(vt.options, hasLength(2));
-      expect(vt.options[0], isA<RefOption>());
-      expect(vt.options[1], isA<NullableOption>());
+      expect(spec.key, isA<StringType>());
+      final value = spec.value as ListType;
+      expect(value.element, isA<Int32Type>());
+      expect((value.element as Int32Type).encoding, equals(Encoding.fixed));
+      expect(spec.ref, isTrue);
     });
   });
 
-  group('ListType', () {
-    test('default constructor has empty options and default element', () {
-      const lt = ListType();
-      expect(lt.options, isEmpty);
-      expect(lt.element, isA<ValueType>());
-      expect(lt.element.options, isEmpty);
-    });
-
-    test('ListType.ref() sets ref option', () {
-      const lt = ListType.ref();
-      expect(lt.options, hasLength(1));
-      expect((lt.options.first as RefOption).tracked, isTrue);
-    });
-
-    test('ListType.noRef() sets ref(false)', () {
-      const lt = ListType.noRef();
-      expect(lt.options, hasLength(1));
-      expect((lt.options.first as RefOption).tracked, isFalse);
-    });
-
-    test('ListType.nullable() sets nullable option', () {
-      const lt = ListType.nullable();
-      expect(lt.options, hasLength(1));
-      expect((lt.options.first as NullableOption).value, isTrue);
-    });
-
-    test('accepts custom element TypeSpec', () {
-      const lt = ListType(element: ValueType.ref());
-      expect(lt.element.options, hasLength(1));
-      expect((lt.element.options.first as RefOption).tracked, isTrue);
-    });
-
-    test('nested MapType element', () {
-      const lt = ListType(
-        options: [TypeOption.ref()],
-        element: MapType(
-          value: ValueType.ref(),
+  group('field sugar annotations', () {
+    test('ForyField stores canonical TypeSpec', () {
+      const field = ForyField(
+        id: 7,
+        type: MapType(
+          key: StringType(),
+          value: ListType(
+            element: Int32Type(encoding: Encoding.fixed),
+          ),
         ),
       );
-      expect(lt.options, hasLength(1));
-      final mapElement = lt.element as MapType;
-      expect(mapElement.value.options, hasLength(1));
-      expect((mapElement.value.options.first as RefOption).tracked, isTrue);
-    });
-  });
 
-  group('MapType', () {
-    test('default constructor has empty options and default key/value', () {
-      const mt = MapType();
-      expect(mt.options, isEmpty);
-      expect(mt.key, isA<ValueType>());
-      expect(mt.value, isA<ValueType>());
+      expect(field.id, equals(7));
+      expect(field.type, isA<MapType>());
+      expect(field.encoding, isNull);
     });
 
-    test('MapType.ref() sets ref option', () {
-      const mt = MapType.ref();
-      expect(mt.options, hasLength(1));
-      expect((mt.options.first as RefOption).tracked, isTrue);
-    });
-
-    test('MapType.noRef() sets ref(false)', () {
-      const mt = MapType.noRef();
-      expect(mt.options, hasLength(1));
-      expect((mt.options.first as RefOption).tracked, isFalse);
-    });
-
-    test('MapType.nullable() sets nullable option', () {
-      const mt = MapType.nullable();
-      expect(mt.options, hasLength(1));
-      expect((mt.options.first as NullableOption).value, isTrue);
-    });
-
-    test('accepts custom key and value TypeSpecs', () {
-      const mt = MapType(
-        key: ValueType.ref(),
-        value: ValueType.refNullable(),
+    test('ListField, SetField, and MapField store child specs', () {
+      const listField = ListField(element: DeclaredType(ref: true));
+      const setField = SetField(element: Uint16Type());
+      const mapField = MapField(
+        key: StringType(),
+        value: DeclaredType(ref: true),
       );
-      expect(mt.key.options, hasLength(1));
-      expect(mt.value.options, hasLength(2));
+
+      expect(listField.element, isA<DeclaredType>());
+      expect((listField.element as DeclaredType).ref, isTrue);
+      expect(setField.element, isA<Uint16Type>());
+      expect(mapField.key, isA<StringType>());
+      expect(mapField.value, isA<DeclaredType>());
     });
   });
 }

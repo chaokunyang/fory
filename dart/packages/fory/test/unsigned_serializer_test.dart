@@ -39,28 +39,28 @@ class UnsignedFields {
   @Uint16Type()
   int u16 = 0;
 
-  @Uint32Type(compress: true)
+  @Uint32Type()
   int u32Var = 0;
 
-  @Uint32Type(compress: false)
+  @Uint32Type(encoding: Encoding.fixed)
   int u32Fixed = 0;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @Uint64Type(encoding: Encoding.varint)
   Uint64 u64Var = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @Uint64Type(encoding: Encoding.fixed)
   Uint64 u64Fixed = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @Uint64Type(encoding: Encoding.tagged)
   Uint64 u64Tagged = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @Uint64Type(encoding: Encoding.varint)
   int u64VarInt = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @Uint64Type(encoding: Encoding.fixed)
   int u64FixedInt = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @Uint64Type(encoding: Encoding.tagged)
   int u64TaggedInt = 0;
 
   @Uint8Type()
@@ -69,22 +69,22 @@ class UnsignedFields {
   @Uint16Type()
   int? u16Nullable;
 
-  @Uint32Type(compress: true)
+  @Uint32Type()
   int? u32VarNullable;
 
-  @Uint32Type(compress: false)
+  @Uint32Type(encoding: Encoding.fixed)
   int? u32FixedNullable;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @Uint64Type(encoding: Encoding.varint)
   Uint64? u64VarNullable;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @Uint64Type(encoding: Encoding.fixed)
   Uint64? u64FixedNullable;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @Uint64Type(encoding: Encoding.tagged)
   Uint64? u64TaggedNullable;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @Uint64Type(encoding: Encoding.varint)
   int? u64VarIntNullable;
 }
 
@@ -102,13 +102,13 @@ class UnsignedMetadataReader {
 class UnsignedIntFieldsReader {
   UnsignedIntFieldsReader();
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @Uint64Type(encoding: Encoding.varint)
   int u64Var = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @Uint64Type(encoding: Encoding.fixed)
   int u64Fixed = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @Uint64Type(encoding: Encoding.tagged)
   int u64Tagged = 0;
 }
 
@@ -116,13 +116,13 @@ class UnsignedIntFieldsReader {
 class UnsignedWrapperFields {
   UnsignedWrapperFields();
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @Uint64Type(encoding: Encoding.varint)
   Uint64 u64Var = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @Uint64Type(encoding: Encoding.fixed)
   Uint64 u64Fixed = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @Uint64Type(encoding: Encoding.tagged)
   Uint64 u64Tagged = Uint64(0);
 }
 
@@ -130,13 +130,13 @@ class UnsignedWrapperFields {
 class UnsignedWrapperAsIntFields {
   UnsignedWrapperAsIntFields();
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @Uint64Type(encoding: Encoding.varint)
   int u64Var = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @Uint64Type(encoding: Encoding.fixed)
   int u64Fixed = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @Uint64Type(encoding: Encoding.tagged)
   int u64Tagged = 0;
 }
 

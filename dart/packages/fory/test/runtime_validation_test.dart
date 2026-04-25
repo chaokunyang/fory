@@ -20,6 +20,7 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/types/int32.dart';
 import 'package:test/test.dart';
 
 part 'runtime_validation_test.fory.dart';

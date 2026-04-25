@@ -31,7 +31,8 @@ class Person {
   Person();
 
   String name = '';
-  Int32 age = Int32(0);
+  @Int32Type()
+  int age = 0;
   Color favoriteColor = Color.red;
   List<String> tags = <String>[];
 }
@@ -53,7 +54,7 @@ void main() {
 
   final person = Person()
     ..name = 'Ada'
-    ..age = Int32(36)
+    ..age = 36
     ..favoriteColor = Color.blue
     ..tags = <String>['engineer', 'mathematician'];
 

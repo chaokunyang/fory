@@ -217,6 +217,31 @@ struct ProductV2 {
   FORY_STRUCT(ProductV2, name, price, tags, attributes);
 };
 
+struct PackedInt32MapConfigured {
+  std::map<std::string, std::vector<int32_t>> groups;
+
+  bool operator==(const PackedInt32MapConfigured &other) const {
+    return groups == other.groups;
+  }
+  FORY_STRUCT(PackedInt32MapConfigured, groups);
+};
+
+FORY_FIELD_CONFIG(PackedInt32MapConfigured,
+                  (groups,
+                   fory::F().id(11).map(fory::T(),
+                                        fory::T().list(fory::T().fixed()))));
+
+struct PackedInt32MapPlain {
+  std::map<std::string, std::vector<int32_t>> groups;
+
+  bool operator==(const PackedInt32MapPlain &other) const {
+    return groups == other.groups;
+  }
+  FORY_STRUCT(PackedInt32MapPlain, groups);
+};
+
+FORY_FIELD_CONFIG(PackedInt32MapPlain, (groups, fory::F().id(11)));
+
 struct SkipNestedConfiguredFieldsFull {
   std::string keep;
   std::vector<int64_t> fixed_values;
@@ -664,6 +689,33 @@ TEST(SchemaEvolutionTest, CollectionFieldEvolution) {
   EXPECT_EQ(prod_v2.price, 999.99);
   EXPECT_TRUE(prod_v2.tags.empty());       // Default empty vector
   EXPECT_TRUE(prod_v2.attributes.empty()); // Default empty map
+}
+
+TEST(SchemaEvolutionTest, PackedFixedInt32VectorInsideMapStaysPrimitiveArray) {
+  auto fory_configured =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+  auto fory_plain =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+
+  constexpr uint32_t TYPE_ID = 1011;
+  ASSERT_TRUE(
+      fory_configured.register_struct<PackedInt32MapConfigured>(TYPE_ID).ok());
+  ASSERT_TRUE(fory_plain.register_struct<PackedInt32MapPlain>(TYPE_ID).ok());
+
+  PackedInt32MapConfigured configured{
+      {{"small", {1, 2, 3}}, {"mixed", {-1, 0x12345678, 42}}}};
+  auto ser_result = fory_configured.serialize(configured);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  auto deser_plain =
+      fory_plain.deserialize<PackedInt32MapPlain>(ser_result.value());
+  ASSERT_TRUE(deser_plain.ok()) << deser_plain.error().to_string();
+  EXPECT_EQ(deser_plain->groups, configured.groups);
+
+  auto deser_configured =
+      fory_configured.deserialize<PackedInt32MapConfigured>(ser_result.value());
+  ASSERT_TRUE(deser_configured.ok()) << deser_configured.error().to_string();
+  EXPECT_EQ(*deser_configured, configured);
 }
 
 TEST(SchemaEvolutionTest, RemovingUnsignedAndTaggedNumericFields) {

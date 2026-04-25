@@ -1986,6 +1986,73 @@ uint32_t configured_leaf_type_id(const Spec &spec) {
   }
 }
 
+inline constexpr bool is_packed_primitive_array_type_id(uint32_t type_id) {
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::BINARY:
+  case TypeId::BOOL_ARRAY:
+  case TypeId::INT8_ARRAY:
+  case TypeId::INT16_ARRAY:
+  case TypeId::INT32_ARRAY:
+  case TypeId::INT64_ARRAY:
+  case TypeId::UINT8_ARRAY:
+  case TypeId::UINT16_ARRAY:
+  case TypeId::UINT32_ARRAY:
+  case TypeId::UINT64_ARRAY:
+  case TypeId::FLOAT8_ARRAY:
+  case TypeId::FLOAT16_ARRAY:
+  case TypeId::BFLOAT16_ARRAY:
+  case TypeId::FLOAT32_ARRAY:
+  case TypeId::FLOAT64_ARRAY:
+    return true;
+  default:
+    return false;
+  }
+}
+
+template <typename VectorT, typename Spec>
+bool configured_uses_packed_primitive_array(const Spec &elem_spec) {
+  using Decayed = std::decay_t<VectorT>;
+  using Element = typename Decayed::value_type;
+  constexpr TypeId vec_type_id = Serializer<Decayed>::type_id;
+  if constexpr (vec_type_id == TypeId::LIST) {
+    return false;
+  }
+  if (spec_nullable(elem_spec, false) || spec_track_ref(elem_spec, false)) {
+    return false;
+  }
+  const uint32_t elem_type_id = configured_leaf_type_id<Element>(elem_spec);
+  switch (vec_type_id) {
+  case TypeId::BINARY:
+    return std::is_same_v<Element, int8_t> || std::is_same_v<Element, uint8_t>;
+  case TypeId::BOOL_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::BOOL);
+  case TypeId::INT16_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::INT16);
+  case TypeId::INT32_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::INT32);
+  case TypeId::INT64_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::INT64);
+  case TypeId::UINT16_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::UINT16);
+  case TypeId::UINT32_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::UINT32);
+  case TypeId::UINT64_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::UINT64);
+  case TypeId::FLOAT8_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::FLOAT8);
+  case TypeId::FLOAT16_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::FLOAT16);
+  case TypeId::BFLOAT16_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::BFLOAT16);
+  case TypeId::FLOAT32_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::FLOAT32);
+  case TypeId::FLOAT64_ARRAY:
+    return elem_type_id == static_cast<uint32_t>(TypeId::FLOAT64);
+  default:
+    return false;
+  }
+}
+
 template <typename T, typename Spec>
 bool configured_node_nullable(const Spec &spec) {
   return spec_nullable(spec, is_nullable_v<std::decay_t<T>>);
@@ -2388,9 +2455,19 @@ void write_configured_value(const T &value, WriteContext &ctx, const Spec &spec,
     auto inner_spec = configured_inner_spec(spec);
     write_configured_value<typename Decayed::element_type>(*value, ctx,
                                                            inner_spec, false);
-  } else if constexpr (is_vector_v<Decayed> || is_list_v<Decayed> ||
-                       is_deque_v<Decayed> || is_set_like_v<Decayed> ||
-                       is_forward_list_v<Decayed>) {
+  } else if constexpr (is_vector_v<Decayed>) {
+    auto elem_spec = configured_list_spec(spec);
+    // Per xlang spec, one-dimensional primitive arrays use *_ARRAY/BINARY wire
+    // types with a packed byte payload. A configured nested vector such as
+    // `map<string, vector<int32_t>>` plus `list(T().fixed())` must stay on the
+    // packed INT32_ARRAY path instead of degrading to LIST element encoding.
+    if (configured_uses_packed_primitive_array<Decayed>(elem_spec)) {
+      Serializer<Decayed>::write_data(value, ctx);
+    } else {
+      write_configured_collection_value(value, ctx, spec);
+    }
+  } else if constexpr (is_list_v<Decayed> || is_deque_v<Decayed> ||
+                       is_set_like_v<Decayed> || is_forward_list_v<Decayed>) {
     write_configured_collection_value(value, ctx, spec);
   } else if constexpr (is_map_like_v<Decayed>) {
     write_configured_map_value(value, ctx, spec);
@@ -2565,9 +2642,21 @@ T read_configured_value(ReadContext &ctx, const Spec &spec,
     using Inner = typename Decayed::element_type;
     return std::make_unique<Inner>(read_configured_value<Inner>(
         ctx, inner_spec, remote_field_type, false));
-  } else if constexpr (is_vector_v<Decayed> || is_list_v<Decayed> ||
-                       is_deque_v<Decayed> || is_set_like_v<Decayed> ||
-                       is_forward_list_v<Decayed>) {
+  } else if constexpr (is_vector_v<Decayed>) {
+    auto elem_spec = configured_list_spec(spec);
+    const bool use_packed_array =
+        remote_field_type != nullptr
+            ? remote_field_type->type_id ==
+                      static_cast<uint32_t>(Serializer<Decayed>::type_id) &&
+                  is_packed_primitive_array_type_id(remote_field_type->type_id)
+            : configured_uses_packed_primitive_array<Decayed>(elem_spec);
+    if (use_packed_array) {
+      return Serializer<Decayed>::read_data(ctx);
+    }
+    return read_configured_collection_value<Decayed>(ctx, spec,
+                                                     remote_field_type);
+  } else if constexpr (is_list_v<Decayed> || is_deque_v<Decayed> ||
+                       is_set_like_v<Decayed> || is_forward_list_v<Decayed>) {
     return read_configured_collection_value<Decayed>(ctx, spec,
                                                      remote_field_type);
   } else if constexpr (is_map_like_v<Decayed>) {

@@ -802,6 +802,46 @@ Result<FieldType, Error> build_leaf_field_type_with_spec(TypeResolver &resolver,
   return field_type;
 }
 
+template <typename VectorT>
+bool packed_vector_matches_element_field_type(
+    const FieldType &elem_field_type) {
+  using Decayed = decay_t<VectorT>;
+  using Element = typename Decayed::value_type;
+  if (elem_field_type.nullable || elem_field_type.track_ref ||
+      !elem_field_type.generics.empty()) {
+    return false;
+  }
+  constexpr TypeId vec_type_id = Serializer<Decayed>::type_id;
+  switch (vec_type_id) {
+  case TypeId::BINARY:
+    return std::is_same_v<Element, int8_t> || std::is_same_v<Element, uint8_t>;
+  case TypeId::BOOL_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::BOOL);
+  case TypeId::INT16_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::INT16);
+  case TypeId::INT32_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::INT32);
+  case TypeId::INT64_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::INT64);
+  case TypeId::UINT16_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::UINT16);
+  case TypeId::UINT32_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::UINT32);
+  case TypeId::UINT64_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::UINT64);
+  case TypeId::FLOAT16_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::FLOAT16);
+  case TypeId::BFLOAT16_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::BFLOAT16);
+  case TypeId::FLOAT32_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::FLOAT32);
+  case TypeId::FLOAT64_ARRAY:
+    return elem_field_type.type_id == static_cast<uint32_t>(TypeId::FLOAT64);
+  default:
+    return false;
+  }
+}
+
 template <typename T, typename Spec>
 Result<FieldType, Error> build_field_type_with_spec(TypeResolver &resolver,
                                                     const Spec &spec) {
@@ -920,13 +960,18 @@ Result<FieldType, Error> build_field_type_with_spec(TypeResolver &resolver,
       return inner;
     }
   } else if constexpr (is_vector_v<Decayed>) {
-    using Element = element_type_t<Decayed>;
+    using Element = typename Decayed::value_type;
     constexpr TypeId vec_type_id = Serializer<Decayed>::type_id;
-    FieldType field_type(to_type_id(vec_type_id), spec_nullable(spec, false),
-                         spec_track_ref(spec, false));
-    if constexpr (vec_type_id == TypeId::LIST) {
-      auto elem_spec = list_child_spec(spec);
-      FORY_TRY(elem, build_field_type_with_spec<Element>(resolver, elem_spec));
+    auto elem_spec = list_child_spec(spec);
+    FORY_TRY(elem, build_field_type_with_spec<Element>(resolver, elem_spec));
+    FieldType field_type(
+        to_type_id(
+            vec_type_id == TypeId::LIST ||
+                    !packed_vector_matches_element_field_type<Decayed>(elem)
+                ? TypeId::LIST
+                : vec_type_id),
+        spec_nullable(spec, false), spec_track_ref(spec, false));
+    if (field_type.type_id == static_cast<uint32_t>(TypeId::LIST)) {
       field_type.generics.push_back(std::move(elem));
     }
     if (spec.type_id_override_ >= 0) {
@@ -1113,14 +1158,19 @@ FieldType build_field_type_with_spec_no_resolver(const Spec &spec) {
       return inner;
     }
   } else if constexpr (is_vector_v<Decayed>) {
-    using Element = element_type_t<Decayed>;
+    using Element = typename Decayed::value_type;
     constexpr TypeId vec_type_id = Serializer<Decayed>::type_id;
-    FieldType field_type(to_type_id(vec_type_id), spec_nullable(spec, false),
-                         spec_track_ref(spec, false));
-    if constexpr (vec_type_id == TypeId::LIST) {
-      auto elem_spec = list_child_spec(spec);
-      field_type.generics.push_back(
-          build_field_type_with_spec_no_resolver<Element>(elem_spec));
+    auto elem_spec = list_child_spec(spec);
+    auto elem = build_field_type_with_spec_no_resolver<Element>(elem_spec);
+    FieldType field_type(
+        to_type_id(
+            vec_type_id == TypeId::LIST ||
+                    !packed_vector_matches_element_field_type<Decayed>(elem)
+                ? TypeId::LIST
+                : vec_type_id),
+        spec_nullable(spec, false), spec_track_ref(spec, false));
+    if (field_type.type_id == static_cast<uint32_t>(TypeId::LIST)) {
+      field_type.generics.push_back(std::move(elem));
     }
     if (spec.type_id_override_ >= 0) {
       field_type.type_id = static_cast<uint32_t>(spec.type_id_override_);

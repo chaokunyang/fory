@@ -217,6 +217,255 @@ struct ProductV2 {
   FORY_STRUCT(ProductV2, name, price, tags, attributes);
 };
 
+struct SkipNestedConfiguredFieldsFull {
+  std::string keep;
+  std::vector<int64_t> fixed_values;
+  std::map<std::string, int64_t> tagged_map;
+  std::optional<std::vector<int32_t>> maybe_fixed;
+
+  bool operator==(const SkipNestedConfiguredFieldsFull &other) const {
+    return keep == other.keep && fixed_values == other.fixed_values &&
+           tagged_map == other.tagged_map && maybe_fixed == other.maybe_fixed;
+  }
+  FORY_STRUCT(SkipNestedConfiguredFieldsFull, keep, fixed_values, tagged_map,
+              maybe_fixed);
+};
+
+FORY_FIELD_CONFIG(SkipNestedConfiguredFieldsFull, (keep, fory::F().id(1)),
+                  (fixed_values, fory::F().id(2).list(fory::T().fixed())),
+                  (tagged_map,
+                   fory::F().id(3).map(fory::T(), fory::T().tagged())),
+                  (maybe_fixed,
+                   fory::F().id(4).inner(fory::T().list(fory::T().fixed()))));
+
+struct SkipNestedConfiguredFieldsReduced {
+  std::string keep;
+
+  bool operator==(const SkipNestedConfiguredFieldsReduced &other) const {
+    return keep == other.keep;
+  }
+  FORY_STRUCT(SkipNestedConfiguredFieldsReduced, keep);
+};
+
+FORY_FIELD_CONFIG(SkipNestedConfiguredFieldsReduced, (keep, fory::F().id(1)));
+
+// ============================================================================
+// Test Case 6: Unsigned Scalar And Array Field Skipping
+// ============================================================================
+
+struct SkipUnsignedEncodingsFull {
+  std::string keep;
+  uint8_t uint8_value;
+  uint16_t uint16_value;
+  uint32_t fixed_uint32;
+  uint32_t var_uint32;
+  uint64_t fixed_uint64;
+  uint64_t var_uint64;
+  uint64_t tagged_uint64;
+  int64_t tagged_int64;
+
+  bool operator==(const SkipUnsignedEncodingsFull &other) const {
+    return keep == other.keep && uint8_value == other.uint8_value &&
+           uint16_value == other.uint16_value &&
+           fixed_uint32 == other.fixed_uint32 &&
+           var_uint32 == other.var_uint32 &&
+           fixed_uint64 == other.fixed_uint64 &&
+           var_uint64 == other.var_uint64 &&
+           tagged_uint64 == other.tagged_uint64 &&
+           tagged_int64 == other.tagged_int64;
+  }
+  FORY_STRUCT(SkipUnsignedEncodingsFull, keep, uint8_value, uint16_value,
+              fixed_uint32, var_uint32, fixed_uint64, var_uint64, tagged_uint64,
+              tagged_int64);
+};
+
+FORY_FIELD_CONFIG(SkipUnsignedEncodingsFull, (keep, fory::F().id(1)),
+                  (uint8_value, fory::F().id(2)),
+                  (uint16_value, fory::F().id(3)),
+                  (fixed_uint32, fory::F().id(4).fixed()),
+                  (var_uint32, fory::F().id(5).varint()),
+                  (fixed_uint64, fory::F().id(6).fixed()),
+                  (var_uint64, fory::F().id(7).varint()),
+                  (tagged_uint64, fory::F().id(8).tagged()),
+                  (tagged_int64, fory::F().id(9).tagged()));
+
+struct SkipUnsignedEncodingsReduced {
+  std::string keep;
+
+  bool operator==(const SkipUnsignedEncodingsReduced &other) const {
+    return keep == other.keep;
+  }
+  FORY_STRUCT(SkipUnsignedEncodingsReduced, keep);
+};
+
+FORY_FIELD_CONFIG(SkipUnsignedEncodingsReduced, (keep, fory::F().id(1)));
+
+struct SkipUnsignedArraysFull {
+  std::string keep;
+  std::vector<uint8_t> uint8_array;
+  std::vector<uint16_t> uint16_array;
+  std::vector<uint32_t> uint32_array;
+  std::vector<uint64_t> uint64_array;
+
+  bool operator==(const SkipUnsignedArraysFull &other) const {
+    return keep == other.keep && uint8_array == other.uint8_array &&
+           uint16_array == other.uint16_array &&
+           uint32_array == other.uint32_array &&
+           uint64_array == other.uint64_array;
+  }
+  FORY_STRUCT(SkipUnsignedArraysFull, keep, uint8_array, uint16_array,
+              uint32_array, uint64_array);
+};
+
+FORY_FIELD_CONFIG(
+    SkipUnsignedArraysFull, (keep, fory::F().id(1)),
+    (uint8_array, fory::F().id(2).uint8_array()),
+    (uint16_array, fory::F().id(3).type_id(fory::TypeId::UINT16_ARRAY)),
+    (uint32_array, fory::F().id(4).type_id(fory::TypeId::UINT32_ARRAY)),
+    (uint64_array, fory::F().id(5).type_id(fory::TypeId::UINT64_ARRAY)));
+
+struct SkipUnsignedArraysReduced {
+  std::string keep;
+
+  bool operator==(const SkipUnsignedArraysReduced &other) const {
+    return keep == other.keep;
+  }
+  FORY_STRUCT(SkipUnsignedArraysReduced, keep);
+};
+
+FORY_FIELD_CONFIG(SkipUnsignedArraysReduced, (keep, fory::F().id(1)));
+
+struct SkipSignedEncodingsFull {
+  std::string keep;
+  int32_t fixed_int32;
+  int64_t fixed_int64;
+  int32_t var_int32;
+  int64_t var_int64;
+  int64_t tagged_int64;
+
+  bool operator==(const SkipSignedEncodingsFull &other) const {
+    return keep == other.keep && fixed_int32 == other.fixed_int32 &&
+           fixed_int64 == other.fixed_int64 && var_int32 == other.var_int32 &&
+           var_int64 == other.var_int64 && tagged_int64 == other.tagged_int64;
+  }
+  FORY_STRUCT(SkipSignedEncodingsFull, keep, fixed_int32, fixed_int64,
+              var_int32, var_int64, tagged_int64);
+};
+
+FORY_FIELD_CONFIG(SkipSignedEncodingsFull, (keep, fory::F().id(1)),
+                  (fixed_int32, fory::F().id(2).fixed()),
+                  (fixed_int64, fory::F().id(3).fixed()),
+                  (var_int32, fory::F().id(4)), (var_int64, fory::F().id(5)),
+                  (tagged_int64, fory::F().id(6).tagged()));
+
+struct SkipSignedEncodingsReduced {
+  std::string keep;
+
+  bool operator==(const SkipSignedEncodingsReduced &other) const {
+    return keep == other.keep;
+  }
+  FORY_STRUCT(SkipSignedEncodingsReduced, keep);
+};
+
+FORY_FIELD_CONFIG(SkipSignedEncodingsReduced, (keep, fory::F().id(1)));
+
+struct SkipInternalFieldsFull {
+  std::vector<int16_t> keep_values;
+  std::string string_value;
+  fory::serialization::Duration duration_value;
+  fory::serialization::Timestamp timestamp_value;
+  fory::serialization::Date date_value;
+  fory::serialization::Decimal decimal_value;
+  std::vector<uint8_t> bytes_value;
+  std::vector<bool> bool_values;
+
+  bool operator==(const SkipInternalFieldsFull &other) const {
+    return keep_values == other.keep_values &&
+           string_value == other.string_value &&
+           duration_value == other.duration_value &&
+           timestamp_value == other.timestamp_value &&
+           date_value == other.date_value &&
+           decimal_value == other.decimal_value &&
+           bytes_value == other.bytes_value && bool_values == other.bool_values;
+  }
+  FORY_STRUCT(SkipInternalFieldsFull, keep_values, string_value, duration_value,
+              timestamp_value, date_value, decimal_value, bytes_value,
+              bool_values);
+};
+
+FORY_FIELD_CONFIG(SkipInternalFieldsFull, (keep_values, fory::F().id(1)),
+                  (string_value, fory::F().id(2)),
+                  (duration_value, fory::F().id(3)),
+                  (timestamp_value, fory::F().id(4)),
+                  (date_value, fory::F().id(5)),
+                  (decimal_value, fory::F().id(6)),
+                  (bytes_value, fory::F().id(7)),
+                  (bool_values, fory::F().id(8)));
+
+struct SkipInternalFieldsReduced {
+  std::vector<int16_t> keep_values;
+
+  bool operator==(const SkipInternalFieldsReduced &other) const {
+    return keep_values == other.keep_values;
+  }
+  FORY_STRUCT(SkipInternalFieldsReduced, keep_values);
+};
+
+FORY_FIELD_CONFIG(SkipInternalFieldsReduced, (keep_values, fory::F().id(1)));
+
+struct MatchTaggedBinaryFieldFull {
+  std::vector<uint8_t> bytes_value;
+  std::vector<uint8_t> uint8_array;
+
+  bool operator==(const MatchTaggedBinaryFieldFull &other) const {
+    return bytes_value == other.bytes_value && uint8_array == other.uint8_array;
+  }
+  FORY_STRUCT(MatchTaggedBinaryFieldFull, bytes_value, uint8_array);
+};
+
+FORY_FIELD_CONFIG(MatchTaggedBinaryFieldFull, (bytes_value, fory::F().id(21)),
+                  (uint8_array, fory::F().id(109).uint8_array()));
+
+struct MatchTaggedBinaryFieldReduced {
+  std::vector<uint8_t> bytes_value;
+
+  bool operator==(const MatchTaggedBinaryFieldReduced &other) const {
+    return bytes_value == other.bytes_value;
+  }
+  FORY_STRUCT(MatchTaggedBinaryFieldReduced, bytes_value);
+};
+
+FORY_FIELD_CONFIG(MatchTaggedBinaryFieldReduced,
+                  (bytes_value, fory::F().id(21)));
+
+struct MatchTaggedInt8FieldFull {
+  std::vector<uint8_t> bytes_value;
+  std::vector<int8_t> int8_array;
+  std::vector<uint8_t> uint8_array;
+
+  bool operator==(const MatchTaggedInt8FieldFull &other) const {
+    return bytes_value == other.bytes_value && int8_array == other.int8_array &&
+           uint8_array == other.uint8_array;
+  }
+  FORY_STRUCT(MatchTaggedInt8FieldFull, bytes_value, int8_array, uint8_array);
+};
+
+FORY_FIELD_CONFIG(MatchTaggedInt8FieldFull, (bytes_value, fory::F().id(21)),
+                  (int8_array, fory::F().id(102).int8_array()),
+                  (uint8_array, fory::F().id(109).uint8_array()));
+
+struct MatchTaggedInt8FieldReduced {
+  std::vector<int8_t> int8_array;
+
+  bool operator==(const MatchTaggedInt8FieldReduced &other) const {
+    return int8_array == other.int8_array;
+  }
+  FORY_STRUCT(MatchTaggedInt8FieldReduced, int8_array);
+};
+
+FORY_FIELD_CONFIG(MatchTaggedInt8FieldReduced,
+                  (int8_array, fory::F().id(102).int8_array()));
+
 // ============================================================================
 // TESTS
 // ============================================================================
@@ -415,6 +664,181 @@ TEST(SchemaEvolutionTest, CollectionFieldEvolution) {
   EXPECT_EQ(prod_v2.price, 999.99);
   EXPECT_TRUE(prod_v2.tags.empty());       // Default empty vector
   EXPECT_TRUE(prod_v2.attributes.empty()); // Default empty map
+}
+
+TEST(SchemaEvolutionTest, RemovingUnsignedAndTaggedNumericFields) {
+  auto fory_full =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+  auto fory_reduced =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+
+  constexpr uint32_t TYPE_ID = 1005;
+  ASSERT_TRUE(
+      fory_full.register_struct<SkipUnsignedEncodingsFull>(TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory_reduced.register_struct<SkipUnsignedEncodingsReduced>(TYPE_ID).ok());
+
+  SkipUnsignedEncodingsFull full{"keep-me",
+                                 255,
+                                 65535,
+                                 0xF1234567u,
+                                 4000000000u,
+                                 0xFEDCBA9876543210ULL,
+                                 9000000000000000000ULL,
+                                 1ULL << 40,
+                                 -1234567890123456789LL};
+  auto ser_result = fory_full.serialize(full);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(ser_result).value();
+
+  auto deser_result = fory_reduced.deserialize<SkipUnsignedEncodingsReduced>(
+      bytes.data(), bytes.size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  SkipUnsignedEncodingsReduced reduced = std::move(deser_result).value();
+  EXPECT_EQ(reduced.keep, full.keep);
+}
+
+TEST(SchemaEvolutionTest, RemovingUnsignedPrimitiveArrayFields) {
+  auto fory_full =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+  auto fory_reduced =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+
+  constexpr uint32_t TYPE_ID = 1006;
+  ASSERT_TRUE(fory_full.register_struct<SkipUnsignedArraysFull>(TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory_reduced.register_struct<SkipUnsignedArraysReduced>(TYPE_ID).ok());
+
+  SkipUnsignedArraysFull full{"keep-arrays",
+                              {0u, 1u, 200u, 255u},
+                              {0u, 1u, 65535u},
+                              {0u, 65537u, 4000000000u},
+                              {0ULL, 1ULL << 40, 0xFEDCBA9876543210ULL}};
+  auto ser_result = fory_full.serialize(full);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(ser_result).value();
+
+  auto deser_result = fory_reduced.deserialize<SkipUnsignedArraysReduced>(
+      bytes.data(), bytes.size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  SkipUnsignedArraysReduced reduced = std::move(deser_result).value();
+  EXPECT_EQ(reduced.keep, full.keep);
+}
+
+TEST(SchemaEvolutionTest, RemovingSignedConfiguredNumericFields) {
+  auto fory_full =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+  auto fory_reduced =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+
+  constexpr uint32_t TYPE_ID = 1007;
+  ASSERT_TRUE(fory_full.register_struct<SkipSignedEncodingsFull>(TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory_reduced.register_struct<SkipSignedEncodingsReduced>(TYPE_ID).ok());
+
+  SkipSignedEncodingsFull full{"keep-signed",          0x12345678,
+                               0x1234567890ABCDELL,    -1234567,
+                               -1234567890123456789LL, -1073741824LL};
+  auto ser_result = fory_full.serialize(full);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(ser_result).value();
+
+  auto deser_result = fory_reduced.deserialize<SkipSignedEncodingsReduced>(
+      bytes.data(), bytes.size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  SkipSignedEncodingsReduced reduced = std::move(deser_result).value();
+  EXPECT_EQ(reduced.keep, full.keep);
+}
+
+TEST(SchemaEvolutionTest, RemovingInternalFieldsAndBoolArray) {
+  auto fory_full =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+  auto fory_reduced =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+
+  constexpr uint32_t TYPE_ID = 1008;
+  ASSERT_TRUE(fory_full.register_struct<SkipInternalFieldsFull>(TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory_reduced.register_struct<SkipInternalFieldsReduced>(TYPE_ID).ok());
+
+  SkipInternalFieldsFull full{
+      {1234, -4321},
+      "example-string",
+      std::chrono::seconds(3723) + std::chrono::nanoseconds(456789000),
+      fory::serialization::Timestamp(std::chrono::seconds(1709210096) +
+                                     std::chrono::nanoseconds(789123000)),
+      fory::serialization::Date(19782),
+      fory::serialization::Decimal::from_int64(1234567890123456789LL, 4),
+      {1u, 2u, 3u, 4u},
+      {true, false, true},
+  };
+  auto ser_result = fory_full.serialize(full);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  std::vector<uint8_t> bytes = std::move(ser_result).value();
+
+  auto deser_result = fory_reduced.deserialize<SkipInternalFieldsReduced>(
+      bytes.data(), bytes.size());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  SkipInternalFieldsReduced reduced = std::move(deser_result).value();
+  EXPECT_EQ(reduced.keep_values, full.keep_values);
+}
+
+TEST(SchemaEvolutionTest, TaggedBinaryFieldKeepsExplicitIdMatch) {
+  auto fory_full =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+  auto fory_reduced =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+
+  constexpr uint32_t TYPE_ID = 1009;
+  ASSERT_TRUE(
+      fory_full.register_struct<MatchTaggedBinaryFieldFull>(TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory_reduced.register_struct<MatchTaggedBinaryFieldReduced>(TYPE_ID)
+          .ok());
+
+  MatchTaggedBinaryFieldFull full{{1u, 2u, 3u, 4u}, {200u, 17u}};
+  auto ser_result = fory_full.serialize(full);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  auto deser_result = fory_reduced.deserialize<MatchTaggedBinaryFieldReduced>(
+      ser_result.value());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  EXPECT_EQ(deser_result->bytes_value, full.bytes_value);
+}
+
+TEST(SchemaEvolutionTest, TaggedInt8FieldKeepsExplicitIdMatch) {
+  auto fory_full =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+  auto fory_reduced =
+      Fory::builder().compatible(true).xlang(true).track_ref(false).build();
+
+  constexpr uint32_t TYPE_ID = 1010;
+  ASSERT_TRUE(
+      fory_full.register_struct<MatchTaggedInt8FieldFull>(TYPE_ID).ok());
+  ASSERT_TRUE(
+      fory_reduced.register_struct<MatchTaggedInt8FieldReduced>(TYPE_ID).ok());
+
+  MatchTaggedInt8FieldFull full{
+      {1u, 2u, 3u, 4u},
+      {static_cast<int8_t>(-12), static_cast<int8_t>(8)},
+      {200u, 17u}};
+  auto ser_result = fory_full.serialize(full);
+  ASSERT_TRUE(ser_result.ok()) << ser_result.error().to_string();
+
+  auto deser_result =
+      fory_reduced.deserialize<MatchTaggedInt8FieldReduced>(ser_result.value());
+  ASSERT_TRUE(deser_result.ok()) << deser_result.error().to_string();
+
+  EXPECT_EQ(deser_result->int8_array, full.int8_array);
 }
 
 TEST(SchemaEvolutionTest, RoundtripWithSameVersion) {

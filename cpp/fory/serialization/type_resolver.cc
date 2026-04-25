@@ -55,6 +55,9 @@ Result<void, Error> FieldType::write_to(Buffer &buffer, bool write_flag,
     if (nullable_val) {
       header |= 2;
     }
+    if (track_ref) {
+      header |= 1;
+    }
     buffer.write_var_uint32(header);
   } else {
     buffer.write_uint8(static_cast<uint8_t>(header));
@@ -954,6 +957,7 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
   // local field is bound to at most one remote field when we fall
   // back to type-based matching.
   std::vector<bool> used(local_fields.size(), false);
+  std::vector<int16_t> assigned_local_indices(remote_fields.size(), -1);
 
   // Normalize user-defined type IDs so that different encodings of the
   // same logical category (STRUCT vs COMPATIBLE_STRUCT, ENUM vs
@@ -1011,52 +1015,61 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
     return true;
   };
 
-  // For each remote field, assign field ID (sorted index in local schema)
-  for (auto &remote_field : remote_fields) {
-    size_t local_index = static_cast<size_t>(-1);
+  // Pass 0: tagged fields are schema-identified by explicit field ID.
+  for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
+    const auto &remote_field = remote_fields[remote_idx];
+    if (remote_field.field_id < 0) {
+      continue;
+    }
+    auto id_it = local_field_id_map.find(remote_field.field_id);
+    if (id_it != local_field_id_map.end() && !used[id_it->second]) {
+      assigned_local_indices[remote_idx] = static_cast<int16_t>(id_it->second);
+      used[id_it->second] = true;
+    }
+  }
 
-    // 0) If remote field carries a tag ID, map directly by ID.
-    if (remote_field.field_id >= 0) {
-      auto id_it = local_field_id_map.find(remote_field.field_id);
-      if (id_it != local_field_id_map.end()) {
-        local_index = id_it->second;
+  // Pass 1: exact name + type match for untagged fields. Run this across the
+  // full remote schema before any type-only fallback so removed same-typed
+  // siblings do not steal the surviving local slot.
+  for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
+    const auto &remote_field = remote_fields[remote_idx];
+    if (assigned_local_indices[remote_idx] >= 0 || remote_field.field_id >= 0 ||
+        remote_field.field_name.empty()) {
+      continue;
+    }
+    auto it = local_field_index_map.find(remote_field.field_name);
+    if (it == local_field_index_map.end()) {
+      continue;
+    }
+    size_t idx = it->second;
+    const FieldInfo &local_field = local_fields[idx];
+    if (!local_field.field_name.empty() && !used[idx] &&
+        types_match(remote_field.field_type, local_field.field_type)) {
+      assigned_local_indices[remote_idx] = static_cast<int16_t>(idx);
+      used[idx] = true;
+    }
+  }
+
+  // Pass 2: fallback by type signature when names are unavailable or differ.
+  for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
+    const auto &remote_field = remote_fields[remote_idx];
+    if (assigned_local_indices[remote_idx] >= 0 || remote_field.field_id >= 0) {
+      continue;
+    }
+    for (size_t i = 0; i < local_fields.size(); ++i) {
+      if (used[i]) {
+        continue;
+      }
+      if (types_match(remote_field.field_type, local_fields[i].field_type)) {
+        assigned_local_indices[remote_idx] = static_cast<int16_t>(i);
+        used[i] = true;
+        break;
       }
     }
+  }
 
-    // 1) Try exact name + type match first (fast path for same-language
-    //    schemas and most C++-only cases).
-    if (local_index == static_cast<size_t>(-1)) {
-      auto it = local_field_index_map.find(remote_field.field_name);
-      if (it != local_field_index_map.end()) {
-        size_t idx = it->second;
-        const FieldInfo &local_field = local_fields[idx];
-        if (types_match(remote_field.field_type, local_field.field_type)) {
-          local_index = idx;
-        }
-      }
-    }
-
-    // 2) Fallback: match by type signature and position when field names
-    //    are not available or differ across languages.
-    if (local_index == static_cast<size_t>(-1)) {
-      for (size_t i = 0; i < local_fields.size(); ++i) {
-        if (used[i]) {
-          continue;
-        }
-        if (types_match(remote_field.field_type, local_fields[i].field_type)) {
-          local_index = i;
-          break;
-        }
-      }
-    }
-
-    if (local_index == static_cast<size_t>(-1)) {
-      // No suitable local field found -> mark as skipped.
-      remote_field.field_id = -1;
-    } else {
-      remote_field.field_id = static_cast<int16_t>(local_index);
-      used[local_index] = true;
-    }
+  for (size_t remote_idx = 0; remote_idx < remote_fields.size(); ++remote_idx) {
+    remote_fields[remote_idx].field_id = assigned_local_indices[remote_idx];
   }
 }
 

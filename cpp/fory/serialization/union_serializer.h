@@ -45,6 +45,10 @@ template <typename T, uint32_t CaseId> struct UnionCaseMeta;
 
 namespace detail {
 
+template <typename T> struct UnionMacroType {
+  using type = T;
+};
+
 template <typename T, typename = void>
 struct has_union_case_ids : std::false_type {};
 
@@ -411,6 +415,9 @@ inline bool dispatch_union_case(uint32_t case_id, F &&fn) {
 }
 
 } // namespace detail
+
+#define FORY_UNION_TYPE(...)                                                  \
+  ::fory::serialization::detail::UnionMacroType<__VA_ARGS__>
 
 // ============================================================================//
 // Union serializer
@@ -839,7 +846,7 @@ private:
 
 #define FORY_UNION_CASE(Type, CaseId, CaseType, Factory, MetaExpr)             \
   struct FORY_UNION_CASE_DESCRIPTOR_NAME(__LINE__) {                           \
-    using CaseT = CaseType;                                                    \
+    using CaseT = typename CaseType::type;                                     \
     static constexpr ::fory::FieldMeta meta = MetaExpr;                        \
     static inline Type make(CaseT value) { return Factory(std::move(value)); } \
   };                                                                           \

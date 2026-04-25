@@ -140,6 +140,11 @@ namespace serialization {
 namespace test {
 
 TEST(NamespaceMacros, FieldConfigAndTagsInNamespace) {
+  static_assert(decltype(::fory::meta::fory_field_info(
+                    std::declval<macro_test::Configured>()))::Size == 1);
+  static_assert(decltype(::fory::meta::fory_field_info(
+                    std::declval<macro_test::Partial>()))::Size == 3);
+
   static_assert(::fory::detail::has_field_config_v<macro_test::Configured>);
   static_assert(
       ::fory::detail::GetFieldConfigEntry<macro_test::Configured, 0>::id == 1);

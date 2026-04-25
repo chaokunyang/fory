@@ -230,6 +230,28 @@ TEST(FieldTraits, FieldTrackRef) {
       field_track_ref_v<field<std::shared_ptr<int>, 3, nullable, ref>> == true);
 }
 
+TEST(FieldConfig, RecursiveTypeSpecBuilders) {
+  constexpr auto list_spec = T().list(T().fixed());
+  static_assert(std::decay_t<decltype(list_spec)>::kind ==
+                detail::TypeSpecKind::List);
+  static_assert(std::decay_t<decltype(list_spec.first_)>::kind ==
+                detail::TypeSpecKind::Leaf);
+  static_assert(list_spec.first_.encoding_ == Encoding::Fixed);
+
+  constexpr auto map_spec = F(7).map(T(), T().tagged());
+  static_assert(std::decay_t<decltype(map_spec.spec_)>::kind ==
+                detail::TypeSpecKind::Map);
+  static_assert(map_spec.id_ == 7);
+  static_assert(map_spec.spec_.second_.encoding_ == Encoding::Tagged);
+
+  constexpr auto inner_spec = F(9).inner(T().list(T().fixed()));
+  static_assert(std::decay_t<decltype(inner_spec.spec_)>::kind ==
+                detail::TypeSpecKind::Inner);
+  static_assert(std::decay_t<decltype(inner_spec.spec_.first_)>::kind ==
+                detail::TypeSpecKind::List);
+  static_assert(inner_spec.spec_.first_.first_.encoding_ == Encoding::Fixed);
+}
+
 // ============================================================================
 // Struct with fory::field<> members
 // ============================================================================

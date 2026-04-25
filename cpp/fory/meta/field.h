@@ -267,74 +267,282 @@ enum class Encoding {
 };
 
 // ============================================================================
-// FieldMeta - Compile-time Field Configuration with Builder Pattern
+// FieldMeta - Compile-time Field Configuration with Recursive Type Specs
 // ============================================================================
 
-/// Compile-time field metadata with fluent builder API.
-/// Supports both:
-///   - Simple: F(0) - just field ID
-///   - Full:   F(0).nullable().varint().compress(false).dynamic(false)
-struct FieldMeta {
-  int16_t id_ = -1;
-  bool nullable_ = false;
-  bool ref_ = false;
-  int dynamic_ = -1; // -1 = AUTO, 0 = FALSE, 1 = TRUE
-  Encoding encoding_ = Encoding::Default;
-  bool compress_ = true;
-  int16_t type_id_override_ = -1; // -1 = unset
+template <typename Spec> struct BasicFieldMeta;
 
-  // Builder methods - each returns a modified copy
-  constexpr FieldMeta id(int16_t v) const {
+namespace detail {
+
+enum class TypeSpecKind {
+  Leaf,
+  List,
+  Set,
+  Map,
+  Inner,
+};
+
+struct NoChild {};
+
+template <TypeSpecKind Kind, typename First = NoChild,
+          typename Second = NoChild>
+struct TypeSpec {
+  static constexpr TypeSpecKind kind = Kind;
+  int nullable_override_ = -1; // -1 = AUTO, 0 = FALSE, 1 = TRUE
+  int ref_override_ = -1;      // -1 = AUTO, 0 = FALSE, 1 = TRUE
+  int dynamic_override_ = -1;  // -1 = AUTO, 0 = FALSE, 1 = TRUE
+  Encoding encoding_ = Encoding::Default;
+  int16_t type_id_override_ = -1;
+  First first_{};
+  Second second_{};
+
+  constexpr TypeSpec nullable(bool v = true) const {
     auto c = *this;
-    c.id_ = v;
+    c.nullable_override_ = v ? 1 : 0;
     return c;
   }
-  constexpr FieldMeta nullable(bool v = true) const {
+
+  constexpr TypeSpec ref(bool v = true) const {
     auto c = *this;
-    c.nullable_ = v;
+    c.ref_override_ = v ? 1 : 0;
     return c;
   }
-  constexpr FieldMeta ref(bool v = true) const {
+
+  constexpr TypeSpec dynamic(bool v) const {
     auto c = *this;
-    c.ref_ = v;
+    c.dynamic_override_ = v ? 1 : 0;
     return c;
   }
-  /// Set dynamic type dispatch: true = write type info, false = skip type info
-  constexpr FieldMeta dynamic(bool v) const {
-    auto c = *this;
-    c.dynamic_ = v ? 1 : 0;
-    return c;
-  }
-  constexpr FieldMeta encoding(Encoding v) const {
+
+  constexpr TypeSpec encoding(Encoding v) const {
     auto c = *this;
     c.encoding_ = v;
     return c;
   }
-  constexpr FieldMeta compress(bool v) const {
-    auto c = *this;
-    c.compress_ = v;
-    return c;
-  }
-  constexpr FieldMeta type_id(TypeId v) const {
+
+  constexpr TypeSpec type_id(TypeId v) const {
     auto c = *this;
     c.type_id_override_ = static_cast<int16_t>(v);
     return c;
   }
-  constexpr FieldMeta int8_array() const { return type_id(TypeId::INT8_ARRAY); }
-  constexpr FieldMeta uint8_array() const {
-    return type_id(TypeId::UINT8_ARRAY);
+
+  constexpr auto int8_array() const { return type_id(TypeId::INT8_ARRAY); }
+  constexpr auto uint8_array() const { return type_id(TypeId::UINT8_ARRAY); }
+  constexpr auto varint() const { return encoding(Encoding::Varint); }
+  constexpr auto fixed() const { return encoding(Encoding::Fixed); }
+  constexpr auto tagged() const { return encoding(Encoding::Tagged); }
+
+  template <typename Child> constexpr auto list(Child child) const {
+    TypeSpec<TypeSpecKind::List, std::decay_t<Child>> c{};
+    c.nullable_override_ = nullable_override_;
+    c.ref_override_ = ref_override_;
+    c.dynamic_override_ = dynamic_override_;
+    c.encoding_ = encoding_;
+    c.type_id_override_ = type_id_override_;
+    c.first_ = child;
+    return c;
   }
 
-  // Convenience shortcuts for common encodings
-  constexpr FieldMeta varint() const { return encoding(Encoding::Varint); }
-  constexpr FieldMeta fixed() const { return encoding(Encoding::Fixed); }
-  constexpr FieldMeta tagged() const { return encoding(Encoding::Tagged); }
+  template <typename Child> constexpr auto set(Child child) const {
+    TypeSpec<TypeSpecKind::Set, std::decay_t<Child>> c{};
+    c.nullable_override_ = nullable_override_;
+    c.ref_override_ = ref_override_;
+    c.dynamic_override_ = dynamic_override_;
+    c.encoding_ = encoding_;
+    c.type_id_override_ = type_id_override_;
+    c.first_ = child;
+    return c;
+  }
+
+  template <typename Key, typename Value>
+  constexpr auto map(Key key, Value value) const {
+    TypeSpec<TypeSpecKind::Map, std::decay_t<Key>, std::decay_t<Value>> c{};
+    c.nullable_override_ = nullable_override_;
+    c.ref_override_ = ref_override_;
+    c.dynamic_override_ = dynamic_override_;
+    c.encoding_ = encoding_;
+    c.type_id_override_ = type_id_override_;
+    c.first_ = key;
+    c.second_ = value;
+    return c;
+  }
+
+  template <typename Child> constexpr auto inner(Child child) const {
+    TypeSpec<TypeSpecKind::Inner, std::decay_t<Child>> c{};
+    c.nullable_override_ = nullable_override_;
+    c.ref_override_ = ref_override_;
+    c.dynamic_override_ = dynamic_override_;
+    c.encoding_ = encoding_;
+    c.type_id_override_ = type_id_override_;
+    c.first_ = child;
+    return c;
+  }
 };
+
+using LeafTypeSpec = TypeSpec<TypeSpecKind::Leaf>;
+
+template <typename T> struct is_type_spec : std::false_type {};
+
+template <TypeSpecKind Kind, typename First, typename Second>
+struct is_type_spec<TypeSpec<Kind, First, Second>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_type_spec_v = is_type_spec<std::decay_t<T>>::value;
+
+template <typename Spec>
+inline constexpr TypeSpecKind type_spec_kind_v = std::decay_t<Spec>::kind;
+
+template <typename Spec> struct field_meta_spec;
+
+template <size_t I, typename Entries, typename Enable = void>
+struct FieldConfigEntryAt {
+  using type = void;
+};
+
+template <size_t I, typename Entries>
+struct FieldConfigEntryAt<I, Entries,
+                          std::enable_if_t<I != k_invalid_field_index>> {
+  using type = std::tuple_element_t<I, Entries>;
+};
+
+template <size_t I, typename Entries, typename Enable = void>
+struct FieldConfigMetaAt {
+  using type = BasicFieldMeta<LeafTypeSpec>;
+};
+
+template <size_t I, typename Entries>
+struct FieldConfigMetaAt<I, Entries,
+                         std::enable_if_t<I != k_invalid_field_index>> {
+  using Entry = typename FieldConfigEntryAt<I, Entries>::type;
+  using type = typename Entry::meta_type;
+};
+
+} // namespace detail
+
+template <typename Spec = detail::LeafTypeSpec> struct BasicFieldMeta {
+  static_assert(detail::is_type_spec_v<Spec>,
+                "FieldMeta spec must be a detail::TypeSpec.");
+
+  int16_t id_ = -1;
+  int nullable_ = -1; // -1 = AUTO, 0 = FALSE, 1 = TRUE
+  int ref_ = -1;      // -1 = AUTO, 0 = FALSE, 1 = TRUE
+  int dynamic_ = -1;  // -1 = AUTO, 0 = FALSE, 1 = TRUE
+  Encoding encoding_ = Encoding::Default;
+  bool compress_ = true;
+  int16_t type_id_override_ = -1;
+  Spec spec_{};
+
+  constexpr BasicFieldMeta id(int16_t v) const {
+    auto c = *this;
+    c.id_ = v;
+    return c;
+  }
+
+  constexpr BasicFieldMeta nullable(bool v = true) const {
+    auto c = *this;
+    c.nullable_ = v ? 1 : 0;
+    c.spec_ = c.spec_.nullable(v);
+    return c;
+  }
+
+  constexpr BasicFieldMeta ref(bool v = true) const {
+    auto c = *this;
+    c.ref_ = v ? 1 : 0;
+    c.spec_ = c.spec_.ref(v);
+    return c;
+  }
+
+  constexpr BasicFieldMeta dynamic(bool v) const {
+    auto c = *this;
+    c.dynamic_ = v ? 1 : 0;
+    c.spec_ = c.spec_.dynamic(v);
+    return c;
+  }
+
+  constexpr BasicFieldMeta encoding(Encoding v) const {
+    auto c = *this;
+    c.encoding_ = v;
+    c.spec_ = c.spec_.encoding(v);
+    return c;
+  }
+
+  constexpr BasicFieldMeta compress(bool v) const {
+    auto c = *this;
+    c.compress_ = v;
+    return c;
+  }
+
+  constexpr BasicFieldMeta type_id(TypeId v) const {
+    auto c = *this;
+    c.type_id_override_ = static_cast<int16_t>(v);
+    c.spec_ = c.spec_.type_id(v);
+    return c;
+  }
+
+  constexpr auto int8_array() const { return type_id(TypeId::INT8_ARRAY); }
+  constexpr auto uint8_array() const { return type_id(TypeId::UINT8_ARRAY); }
+  constexpr auto varint() const { return encoding(Encoding::Varint); }
+  constexpr auto fixed() const { return encoding(Encoding::Fixed); }
+  constexpr auto tagged() const { return encoding(Encoding::Tagged); }
+
+  template <typename NewSpec> constexpr auto with_spec(NewSpec spec) const {
+    BasicFieldMeta<std::decay_t<NewSpec>> c{};
+    c.id_ = id_;
+    c.nullable_ = nullable_;
+    c.ref_ = ref_;
+    c.dynamic_ = dynamic_;
+    c.encoding_ = spec.encoding_;
+    c.compress_ = compress_;
+    c.type_id_override_ = spec.type_id_override_;
+    c.spec_ = spec;
+    return c;
+  }
+
+  template <typename Child> constexpr auto list(Child child) const {
+    return with_spec(spec_.list(child));
+  }
+
+  template <typename Child> constexpr auto set(Child child) const {
+    return with_spec(spec_.set(child));
+  }
+
+  template <typename Key, typename Value>
+  constexpr auto map(Key key, Value value) const {
+    return with_spec(spec_.map(key, value));
+  }
+
+  template <typename Child> constexpr auto inner(Child child) const {
+    return with_spec(spec_.inner(child));
+  }
+};
+
+using FieldMeta = BasicFieldMeta<detail::LeafTypeSpec>;
+
+namespace detail {
+
+template <typename Spec> struct field_meta_spec<BasicFieldMeta<Spec>> {
+  using type = Spec;
+};
+
+template <typename Meta>
+using field_meta_spec_t = typename field_meta_spec<std::decay_t<Meta>>::type;
+
+template <typename T> struct is_field_meta : std::false_type {};
+
+template <typename Spec>
+struct is_field_meta<BasicFieldMeta<Spec>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_field_meta_v = is_field_meta<std::decay_t<T>>::value;
+
+} // namespace detail
 
 /// Short factory functions for FieldMeta - use F() as a builder or F(id) for
 /// tag
 constexpr FieldMeta F() { return FieldMeta{}; }
 constexpr FieldMeta F(int16_t id) { return FieldMeta{}.id(id); }
+
+constexpr detail::LeafTypeSpec T() { return detail::LeafTypeSpec{}; }
 
 namespace detail {
 
@@ -343,36 +551,40 @@ namespace detail {
 // ============================================================================
 
 /// Normalize configuration: convert integer to FieldMeta, pass FieldMeta
-/// through
+/// through.
 template <typename T> constexpr auto normalize_config(T &&v) {
   if constexpr (std::is_integral_v<std::decay_t<T>>) {
-    // Old syntax: just an integer ID
     return FieldMeta{}.id(static_cast<int16_t>(v));
-  } else if constexpr (std::is_same_v<std::decay_t<T>, FieldMeta>) {
-    // New syntax: already a FieldMeta
+  } else if constexpr (is_field_meta_v<T>) {
     return v;
   } else {
     static_assert(
-        std::is_integral_v<std::decay_t<T>> ||
-            std::is_same_v<std::decay_t<T>, FieldMeta>,
+        std::is_integral_v<std::decay_t<T>> || is_field_meta_v<T>,
         "Field config must be an integer ID or FieldMeta (use F(id)...)");
     return FieldMeta{};
   }
 }
 
 /// Apply tag to FieldMeta
-constexpr FieldMeta apply_tag(FieldMeta m, nullable) { return m.nullable(); }
-constexpr FieldMeta apply_tag(FieldMeta m, not_null) {
+template <typename Meta> constexpr auto apply_tag(Meta m, nullable) {
+  return m.nullable();
+}
+
+template <typename Meta> constexpr auto apply_tag(Meta m, not_null) {
   return m.nullable(false);
 }
-constexpr FieldMeta apply_tag(FieldMeta m, ref) { return m.ref(); }
-template <bool V> constexpr FieldMeta apply_tag(FieldMeta m, dynamic<V>) {
+
+template <typename Meta> constexpr auto apply_tag(Meta m, ref) {
+  return m.ref();
+}
+
+template <typename Meta, bool V> constexpr auto apply_tag(Meta m, dynamic<V>) {
   return m.dynamic(V);
 }
 
 /// Fold multiple tags onto a base config
-template <typename... Tags>
-constexpr FieldMeta apply_tags(FieldMeta base, Tags... tags) {
+template <typename Meta, typename... Tags>
+constexpr auto apply_tags(Meta base, Tags... tags) {
   ((base = apply_tag(base, tags)), ...);
   return base;
 }
@@ -381,17 +593,21 @@ constexpr FieldMeta apply_tags(FieldMeta base, Tags... tags) {
 // FieldEntry - Stores Field Configuration Metadata
 // ============================================================================
 
-/// Field entry that stores name and configuration metadata
-struct FieldEntry {
-  const char *name; // Field name for debugging
-  FieldMeta meta;   // Field configuration
+template <typename Meta> struct FieldEntry {
+  using meta_type = Meta;
+  const char *name;
+  Meta meta;
 
-  constexpr FieldEntry(const char *n, FieldMeta m) : name(n), meta(m) {}
+  constexpr FieldEntry(const char *n, Meta m) : name(n), meta(m) {}
 };
 
-/// Create a FieldEntry
-constexpr auto make_field_entry(const char *name, FieldMeta meta) {
-  return FieldEntry{name, meta};
+template <typename Meta>
+constexpr auto make_field_entry(const char *name, Meta meta) {
+  return FieldEntry<Meta>{name, meta};
+}
+
+constexpr auto make_default_field_entry() {
+  return FieldEntry<FieldMeta>{"", FieldMeta{}};
 }
 
 /// Default: no field config defined for type T
@@ -439,46 +655,59 @@ inline constexpr bool has_field_config_v = FieldConfigInfo<T>::has_config;
 /// Helper to get field encoding from FieldConfigInfo
 template <typename T, size_t Index, typename = void>
 struct GetFieldConfigEntry {
+  using Spec = LeafTypeSpec;
   static constexpr Encoding encoding = Encoding::Default;
   static constexpr int16_t id = -1;
-  static constexpr bool nullable = false;
-  static constexpr bool ref = false;
+  static constexpr int nullable = -1;
+  static constexpr int ref = -1;
   static constexpr int dynamic_value = -1; // AUTO
   static constexpr bool compress = true;
   static constexpr int16_t type_id_override = -1;
   static constexpr bool has_entry = false;
+  static inline constexpr Spec spec = Spec{};
 };
 
 template <typename T, size_t Index>
 struct GetFieldConfigEntry<T, Index,
                            std::enable_if_t<FieldConfigInfo<T>::has_config>> {
 private:
+  using Entries = std::decay_t<decltype(FieldConfigInfo<T>::entries)>;
   static constexpr std::string_view field_name = FieldInfo<T>::Names[Index];
 
-  template <size_t I = 0> static constexpr FieldEntry find_entry() {
-    if constexpr (I >=
-                  std::tuple_size_v<
-                      std::decay_t<decltype(FieldConfigInfo<T>::entries)>>) {
-      return FieldEntry{"", FieldMeta{}};
+  template <size_t I = 0> static constexpr size_t find_entry_index() {
+    if constexpr (I >= std::tuple_size_v<Entries>) {
+      return k_invalid_field_index;
     } else {
       constexpr auto entry = std::get<I>(FieldConfigInfo<T>::entries);
       if (std::string_view{entry.name} == field_name) {
-        return entry;
+        return I;
       }
-      return find_entry<I + 1>();
+      return find_entry_index<I + 1>();
     }
   }
 
 public:
-  static constexpr FieldEntry entry = find_entry<>();
-  static constexpr Encoding encoding = entry.meta.encoding_;
-  static constexpr int16_t id = entry.meta.id_;
-  static constexpr bool nullable = entry.meta.nullable_;
-  static constexpr bool ref = entry.meta.ref_;
-  static constexpr int dynamic_value = entry.meta.dynamic_;
-  static constexpr bool compress = entry.meta.compress_;
-  static constexpr int16_t type_id_override = entry.meta.type_id_override_;
-  static constexpr bool has_entry = entry.name[0] != '\0';
+  static constexpr size_t entry_index = find_entry_index<>();
+  static constexpr bool has_entry = entry_index != k_invalid_field_index;
+  using Meta = typename FieldConfigMetaAt<entry_index, Entries>::type;
+  using Spec = field_meta_spec_t<Meta>;
+
+  static inline constexpr Meta meta = []() constexpr -> Meta {
+    if constexpr (has_entry) {
+      return std::get<entry_index>(FieldConfigInfo<T>::entries).meta;
+    } else {
+      return FieldMeta{};
+    }
+  }();
+
+  static inline constexpr Spec spec = meta.spec_;
+  static constexpr Encoding encoding = meta.encoding_;
+  static constexpr int16_t id = meta.id_;
+  static constexpr int nullable = meta.nullable_;
+  static constexpr int ref = meta.ref_;
+  static constexpr int dynamic_value = meta.dynamic_;
+  static constexpr bool compress = meta.compress_;
+  static constexpr int16_t type_id_override = meta.type_id_override_;
 };
 
 } // namespace detail
@@ -905,10 +1134,10 @@ public:
 #define FORY_FT_ENTRIES_I(Type, N, ...) FORY_FT_ENTRIES_II(Type, N, __VA_ARGS__)
 #define FORY_FT_ENTRIES_II(Type, N, ...) FORY_FT_ENTRIES_##N(Type, __VA_ARGS__)
 
-// Generate entries for 1-64 fields
+// Generate entries for 1-128 fields
 #define FORY_FT_ENTRIES_1(T, _1) FORY_FT_MAKE_ENTRY(T, _1)
 #define FORY_FT_ENTRIES_2(T, _1, _2)                                           \
-  FORY_FT_MAKE_ENTRY(T, _1), FORY_FT_MAKE_ENTRY(T, _2)
+  FORY_FT_ENTRIES_1(T, _1), FORY_FT_MAKE_ENTRY(T, _2)
 #define FORY_FT_ENTRIES_3(T, _1, _2, _3)                                       \
   FORY_FT_ENTRIES_2(T, _1, _2), FORY_FT_MAKE_ENTRY(T, _3)
 #define FORY_FT_ENTRIES_4(T, _1, _2, _3, _4)                                   \
@@ -1383,21 +1612,1110 @@ public:
                      _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
                      _57, _58, _59, _60, _61, _62, _63),                       \
       FORY_FT_MAKE_ENTRY(T, _64)
+#define FORY_FT_ENTRIES_65(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65)                                                        \
+  FORY_FT_ENTRIES_64(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64),                  \
+      FORY_FT_MAKE_ENTRY(T, _65)
+#define FORY_FT_ENTRIES_66(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66)                                                   \
+  FORY_FT_ENTRIES_65(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65),             \
+      FORY_FT_MAKE_ENTRY(T, _66)
+#define FORY_FT_ENTRIES_67(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67)                                              \
+  FORY_FT_ENTRIES_66(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66),        \
+      FORY_FT_MAKE_ENTRY(T, _67)
+#define FORY_FT_ENTRIES_68(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68)                                         \
+  FORY_FT_ENTRIES_67(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67),   \
+      FORY_FT_MAKE_ENTRY(T, _68)
+#define FORY_FT_ENTRIES_69(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69)                                    \
+  FORY_FT_ENTRIES_68(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68),                  \
+      FORY_FT_MAKE_ENTRY(T, _69)
+#define FORY_FT_ENTRIES_70(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70)                               \
+  FORY_FT_ENTRIES_69(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69),             \
+      FORY_FT_MAKE_ENTRY(T, _70)
+#define FORY_FT_ENTRIES_71(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71)                          \
+  FORY_FT_ENTRIES_70(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70),        \
+      FORY_FT_MAKE_ENTRY(T, _71)
+#define FORY_FT_ENTRIES_72(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72)                     \
+  FORY_FT_ENTRIES_71(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71),   \
+      FORY_FT_MAKE_ENTRY(T, _72)
+#define FORY_FT_ENTRIES_73(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73)                \
+  FORY_FT_ENTRIES_72(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72),                                 \
+      FORY_FT_MAKE_ENTRY(T, _73)
+#define FORY_FT_ENTRIES_74(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74)           \
+  FORY_FT_ENTRIES_73(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73),                            \
+      FORY_FT_MAKE_ENTRY(T, _74)
+#define FORY_FT_ENTRIES_75(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75)      \
+  FORY_FT_ENTRIES_74(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74),                       \
+      FORY_FT_MAKE_ENTRY(T, _75)
+#define FORY_FT_ENTRIES_76(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76) \
+  FORY_FT_ENTRIES_75(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75),                  \
+      FORY_FT_MAKE_ENTRY(T, _76)
+#define FORY_FT_ENTRIES_77(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77)                                                                       \
+  FORY_FT_ENTRIES_76(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76),             \
+      FORY_FT_MAKE_ENTRY(T, _77)
+#define FORY_FT_ENTRIES_78(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78)                                                                  \
+  FORY_FT_ENTRIES_77(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77),        \
+      FORY_FT_MAKE_ENTRY(T, _78)
+#define FORY_FT_ENTRIES_79(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79)                                                             \
+  FORY_FT_ENTRIES_78(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78),   \
+      FORY_FT_MAKE_ENTRY(T, _79)
+#define FORY_FT_ENTRIES_80(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80)                                                        \
+  FORY_FT_ENTRIES_79(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79),                                 \
+      FORY_FT_MAKE_ENTRY(T, _80)
+#define FORY_FT_ENTRIES_81(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81)                                                   \
+  FORY_FT_ENTRIES_80(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80),                            \
+      FORY_FT_MAKE_ENTRY(T, _81)
+#define FORY_FT_ENTRIES_82(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82)                                              \
+  FORY_FT_ENTRIES_81(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81),                       \
+      FORY_FT_MAKE_ENTRY(T, _82)
+#define FORY_FT_ENTRIES_83(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83)                                         \
+  FORY_FT_ENTRIES_82(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82),                  \
+      FORY_FT_MAKE_ENTRY(T, _83)
+#define FORY_FT_ENTRIES_84(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84)                                    \
+  FORY_FT_ENTRIES_83(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83),             \
+      FORY_FT_MAKE_ENTRY(T, _84)
+#define FORY_FT_ENTRIES_85(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85)                               \
+  FORY_FT_ENTRIES_84(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84),        \
+      FORY_FT_MAKE_ENTRY(T, _85)
+#define FORY_FT_ENTRIES_86(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86)                          \
+  FORY_FT_ENTRIES_85(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85),   \
+      FORY_FT_MAKE_ENTRY(T, _86)
+#define FORY_FT_ENTRIES_87(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87)                     \
+  FORY_FT_ENTRIES_86(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86),                  \
+      FORY_FT_MAKE_ENTRY(T, _87)
+#define FORY_FT_ENTRIES_88(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88)                \
+  FORY_FT_ENTRIES_87(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86, _87),             \
+      FORY_FT_MAKE_ENTRY(T, _88)
+#define FORY_FT_ENTRIES_89(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89)           \
+  FORY_FT_ENTRIES_88(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86, _87, _88),        \
+      FORY_FT_MAKE_ENTRY(T, _89)
+#define FORY_FT_ENTRIES_90(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90)      \
+  FORY_FT_ENTRIES_89(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89),   \
+      FORY_FT_MAKE_ENTRY(T, _90)
+#define FORY_FT_ENTRIES_91(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91) \
+  FORY_FT_ENTRIES_90(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90),                                                \
+      FORY_FT_MAKE_ENTRY(T, _91)
+#define FORY_FT_ENTRIES_92(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92)                                                                       \
+  FORY_FT_ENTRIES_91(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91),                                           \
+      FORY_FT_MAKE_ENTRY(T, _92)
+#define FORY_FT_ENTRIES_93(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93)                                                                  \
+  FORY_FT_ENTRIES_92(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92),                                      \
+      FORY_FT_MAKE_ENTRY(T, _93)
+#define FORY_FT_ENTRIES_94(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94)                                                             \
+  FORY_FT_ENTRIES_93(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93),                                 \
+      FORY_FT_MAKE_ENTRY(T, _94)
+#define FORY_FT_ENTRIES_95(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95)                                                        \
+  FORY_FT_ENTRIES_94(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94),                            \
+      FORY_FT_MAKE_ENTRY(T, _95)
+#define FORY_FT_ENTRIES_96(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96)                                                   \
+  FORY_FT_ENTRIES_95(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95),                       \
+      FORY_FT_MAKE_ENTRY(T, _96)
+#define FORY_FT_ENTRIES_97(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97)                                              \
+  FORY_FT_ENTRIES_96(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96),                  \
+      FORY_FT_MAKE_ENTRY(T, _97)
+#define FORY_FT_ENTRIES_98(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98)                                         \
+  FORY_FT_ENTRIES_97(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97),             \
+      FORY_FT_MAKE_ENTRY(T, _98)
+#define FORY_FT_ENTRIES_99(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99)                                    \
+  FORY_FT_ENTRIES_98(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98),        \
+      FORY_FT_MAKE_ENTRY(T, _99)
+#define FORY_FT_ENTRIES_100(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100)                              \
+  FORY_FT_ENTRIES_99(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99),   \
+      FORY_FT_MAKE_ENTRY(T, _100)
+#define FORY_FT_ENTRIES_101(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101)                        \
+  FORY_FT_ENTRIES_100(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,    \
+                      _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,   \
+                      _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,   \
+                      _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,   \
+                      _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,   \
+                      _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,   \
+                      _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,   \
+                      _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89,   \
+                      _90, _91, _92, _93, _94, _95, _96, _97, _98, _99, _100), \
+      FORY_FT_MAKE_ENTRY(T, _101)
+#define FORY_FT_ENTRIES_102(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102)                  \
+  FORY_FT_ENTRIES_101(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101),                                                             \
+      FORY_FT_MAKE_ENTRY(T, _102)
+#define FORY_FT_ENTRIES_103(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103)            \
+  FORY_FT_ENTRIES_102(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102),                                                       \
+      FORY_FT_MAKE_ENTRY(T, _103)
+#define FORY_FT_ENTRIES_104(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104)      \
+  FORY_FT_ENTRIES_103(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103),                                                 \
+      FORY_FT_MAKE_ENTRY(T, _104)
+#define FORY_FT_ENTRIES_105(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105)                                                                      \
+  FORY_FT_ENTRIES_104(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104),                                           \
+      FORY_FT_MAKE_ENTRY(T, _105)
+#define FORY_FT_ENTRIES_106(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106)                                                                \
+  FORY_FT_ENTRIES_105(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105),                                     \
+      FORY_FT_MAKE_ENTRY(T, _106)
+#define FORY_FT_ENTRIES_107(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107)                                                          \
+  FORY_FT_ENTRIES_106(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106),                               \
+      FORY_FT_MAKE_ENTRY(T, _107)
+#define FORY_FT_ENTRIES_108(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108)                                                    \
+  FORY_FT_ENTRIES_107(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107),                         \
+      FORY_FT_MAKE_ENTRY(T, _108)
+#define FORY_FT_ENTRIES_109(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109)                                              \
+  FORY_FT_ENTRIES_108(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108),                   \
+      FORY_FT_MAKE_ENTRY(T, _109)
+#define FORY_FT_ENTRIES_110(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110)                                        \
+  FORY_FT_ENTRIES_109(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109),             \
+      FORY_FT_MAKE_ENTRY(T, _110)
+#define FORY_FT_ENTRIES_111(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111)                                  \
+  FORY_FT_ENTRIES_110(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110),       \
+      FORY_FT_MAKE_ENTRY(T, _111)
+#define FORY_FT_ENTRIES_112(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112)                            \
+  FORY_FT_ENTRIES_111(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111), \
+      FORY_FT_MAKE_ENTRY(T, _112)
+#define FORY_FT_ENTRIES_113(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113)                      \
+  FORY_FT_ENTRIES_112(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112),                                                                   \
+      FORY_FT_MAKE_ENTRY(T, _113)
+#define FORY_FT_ENTRIES_114(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114)                \
+  FORY_FT_ENTRIES_113(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113),                                                             \
+      FORY_FT_MAKE_ENTRY(T, _114)
+#define FORY_FT_ENTRIES_115(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115)          \
+  FORY_FT_ENTRIES_114(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114),                                                       \
+      FORY_FT_MAKE_ENTRY(T, _115)
+#define FORY_FT_ENTRIES_116(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116)    \
+  FORY_FT_ENTRIES_115(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115),                                                 \
+      FORY_FT_MAKE_ENTRY(T, _116)
+#define FORY_FT_ENTRIES_117(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117)                                                                      \
+  FORY_FT_ENTRIES_116(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116),                                           \
+      FORY_FT_MAKE_ENTRY(T, _117)
+#define FORY_FT_ENTRIES_118(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118)                                                                \
+  FORY_FT_ENTRIES_117(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117),                                     \
+      FORY_FT_MAKE_ENTRY(T, _118)
+#define FORY_FT_ENTRIES_119(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119)                                                          \
+  FORY_FT_ENTRIES_118(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118),                               \
+      FORY_FT_MAKE_ENTRY(T, _119)
+#define FORY_FT_ENTRIES_120(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120)                                                    \
+  FORY_FT_ENTRIES_119(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119),                         \
+      FORY_FT_MAKE_ENTRY(T, _120)
+#define FORY_FT_ENTRIES_121(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121)                                              \
+  FORY_FT_ENTRIES_120(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120),                   \
+      FORY_FT_MAKE_ENTRY(T, _121)
+#define FORY_FT_ENTRIES_122(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122)                                        \
+  FORY_FT_ENTRIES_121(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121),             \
+      FORY_FT_MAKE_ENTRY(T, _122)
+#define FORY_FT_ENTRIES_123(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123)                                  \
+  FORY_FT_ENTRIES_122(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122),       \
+      FORY_FT_MAKE_ENTRY(T, _123)
+#define FORY_FT_ENTRIES_124(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124)                            \
+  FORY_FT_ENTRIES_123(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123), \
+      FORY_FT_MAKE_ENTRY(T, _124)
+#define FORY_FT_ENTRIES_125(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125)                      \
+  FORY_FT_ENTRIES_124(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124),                                                                   \
+      FORY_FT_MAKE_ENTRY(T, _125)
+#define FORY_FT_ENTRIES_126(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125, _126)                \
+  FORY_FT_ENTRIES_125(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124, _125),                                                             \
+      FORY_FT_MAKE_ENTRY(T, _126)
+#define FORY_FT_ENTRIES_127(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125, _126, _127)          \
+  FORY_FT_ENTRIES_126(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124, _125, _126),                                                       \
+      FORY_FT_MAKE_ENTRY(T, _127)
+#define FORY_FT_ENTRIES_128(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125, _126, _127, _128)    \
+  FORY_FT_ENTRIES_127(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124, _125, _126, _127),                                                 \
+      FORY_FT_MAKE_ENTRY(T, _128)
 
-// ============================================================================
-// FORY_FIELD_CONFIG Macro - New Syntax with Member Pointer Verification
-// ============================================================================
-//
-// Usage:
-//   FORY_FIELD_CONFIG(MyStruct,
-//       (field1, fory::F(0)),                  // Simple: just ID
-//       (field2, fory::F(1).nullable()),       // With nullable
-//       (field3, fory::F(2).varint()),         // With encoding
-//       (field4, fory::F(3).nullable().ref()), // Multiple options
-//       (field5, 4)                            // Backward compatible: integer
-//       ID
-//   );
-//
 // This macro:
 // 1. Verifies field names exist at compile time via member pointers
 // 2. Supports both integer IDs (old) and F(id).xxx() builder (new)
@@ -1427,10 +2745,10 @@ public:
 #define FORY_FC_ENTRIES_I(Type, N, ...) FORY_FC_ENTRIES_II(Type, N, __VA_ARGS__)
 #define FORY_FC_ENTRIES_II(Type, N, ...) FORY_FC_ENTRIES_##N(Type, __VA_ARGS__)
 
-// Generate entries for 1-64 fields
+// Generate entries for 1-128 fields
 #define FORY_FC_ENTRIES_1(T, _1) FORY_FC_MAKE_ENTRY(T, _1)
 #define FORY_FC_ENTRIES_2(T, _1, _2)                                           \
-  FORY_FC_MAKE_ENTRY(T, _1), FORY_FC_MAKE_ENTRY(T, _2)
+  FORY_FC_ENTRIES_1(T, _1), FORY_FC_MAKE_ENTRY(T, _2)
 #define FORY_FC_ENTRIES_3(T, _1, _2, _3)                                       \
   FORY_FC_ENTRIES_2(T, _1, _2), FORY_FC_MAKE_ENTRY(T, _3)
 #define FORY_FC_ENTRIES_4(T, _1, _2, _3, _4)                                   \
@@ -1905,6 +3223,1109 @@ public:
                      _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
                      _57, _58, _59, _60, _61, _62, _63),                       \
       FORY_FC_MAKE_ENTRY(T, _64)
+#define FORY_FC_ENTRIES_65(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65)                                                        \
+  FORY_FC_ENTRIES_64(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64),                  \
+      FORY_FC_MAKE_ENTRY(T, _65)
+#define FORY_FC_ENTRIES_66(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66)                                                   \
+  FORY_FC_ENTRIES_65(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65),             \
+      FORY_FC_MAKE_ENTRY(T, _66)
+#define FORY_FC_ENTRIES_67(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67)                                              \
+  FORY_FC_ENTRIES_66(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66),        \
+      FORY_FC_MAKE_ENTRY(T, _67)
+#define FORY_FC_ENTRIES_68(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68)                                         \
+  FORY_FC_ENTRIES_67(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67),   \
+      FORY_FC_MAKE_ENTRY(T, _68)
+#define FORY_FC_ENTRIES_69(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69)                                    \
+  FORY_FC_ENTRIES_68(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68),                  \
+      FORY_FC_MAKE_ENTRY(T, _69)
+#define FORY_FC_ENTRIES_70(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70)                               \
+  FORY_FC_ENTRIES_69(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69),             \
+      FORY_FC_MAKE_ENTRY(T, _70)
+#define FORY_FC_ENTRIES_71(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71)                          \
+  FORY_FC_ENTRIES_70(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70),        \
+      FORY_FC_MAKE_ENTRY(T, _71)
+#define FORY_FC_ENTRIES_72(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72)                     \
+  FORY_FC_ENTRIES_71(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71),   \
+      FORY_FC_MAKE_ENTRY(T, _72)
+#define FORY_FC_ENTRIES_73(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73)                \
+  FORY_FC_ENTRIES_72(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72),                                 \
+      FORY_FC_MAKE_ENTRY(T, _73)
+#define FORY_FC_ENTRIES_74(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74)           \
+  FORY_FC_ENTRIES_73(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73),                            \
+      FORY_FC_MAKE_ENTRY(T, _74)
+#define FORY_FC_ENTRIES_75(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75)      \
+  FORY_FC_ENTRIES_74(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74),                       \
+      FORY_FC_MAKE_ENTRY(T, _75)
+#define FORY_FC_ENTRIES_76(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76) \
+  FORY_FC_ENTRIES_75(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75),                  \
+      FORY_FC_MAKE_ENTRY(T, _76)
+#define FORY_FC_ENTRIES_77(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77)                                                                       \
+  FORY_FC_ENTRIES_76(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76),             \
+      FORY_FC_MAKE_ENTRY(T, _77)
+#define FORY_FC_ENTRIES_78(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78)                                                                  \
+  FORY_FC_ENTRIES_77(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77),        \
+      FORY_FC_MAKE_ENTRY(T, _78)
+#define FORY_FC_ENTRIES_79(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79)                                                             \
+  FORY_FC_ENTRIES_78(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78),   \
+      FORY_FC_MAKE_ENTRY(T, _79)
+#define FORY_FC_ENTRIES_80(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80)                                                        \
+  FORY_FC_ENTRIES_79(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79),                                 \
+      FORY_FC_MAKE_ENTRY(T, _80)
+#define FORY_FC_ENTRIES_81(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81)                                                   \
+  FORY_FC_ENTRIES_80(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80),                            \
+      FORY_FC_MAKE_ENTRY(T, _81)
+#define FORY_FC_ENTRIES_82(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82)                                              \
+  FORY_FC_ENTRIES_81(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81),                       \
+      FORY_FC_MAKE_ENTRY(T, _82)
+#define FORY_FC_ENTRIES_83(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83)                                         \
+  FORY_FC_ENTRIES_82(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82),                  \
+      FORY_FC_MAKE_ENTRY(T, _83)
+#define FORY_FC_ENTRIES_84(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84)                                    \
+  FORY_FC_ENTRIES_83(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83),             \
+      FORY_FC_MAKE_ENTRY(T, _84)
+#define FORY_FC_ENTRIES_85(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85)                               \
+  FORY_FC_ENTRIES_84(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84),        \
+      FORY_FC_MAKE_ENTRY(T, _85)
+#define FORY_FC_ENTRIES_86(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86)                          \
+  FORY_FC_ENTRIES_85(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85),   \
+      FORY_FC_MAKE_ENTRY(T, _86)
+#define FORY_FC_ENTRIES_87(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87)                     \
+  FORY_FC_ENTRIES_86(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86),                  \
+      FORY_FC_MAKE_ENTRY(T, _87)
+#define FORY_FC_ENTRIES_88(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88)                \
+  FORY_FC_ENTRIES_87(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86, _87),             \
+      FORY_FC_MAKE_ENTRY(T, _88)
+#define FORY_FC_ENTRIES_89(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89)           \
+  FORY_FC_ENTRIES_88(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86, _87, _88),        \
+      FORY_FC_MAKE_ENTRY(T, _89)
+#define FORY_FC_ENTRIES_90(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90)      \
+  FORY_FC_ENTRIES_89(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,     \
+                     _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,    \
+                     _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,    \
+                     _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,    \
+                     _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,    \
+                     _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,    \
+                     _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,    \
+                     _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89),   \
+      FORY_FC_MAKE_ENTRY(T, _90)
+#define FORY_FC_ENTRIES_91(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91) \
+  FORY_FC_ENTRIES_90(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90),                                                \
+      FORY_FC_MAKE_ENTRY(T, _91)
+#define FORY_FC_ENTRIES_92(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92)                                                                       \
+  FORY_FC_ENTRIES_91(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91),                                           \
+      FORY_FC_MAKE_ENTRY(T, _92)
+#define FORY_FC_ENTRIES_93(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93)                                                                  \
+  FORY_FC_ENTRIES_92(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92),                                      \
+      FORY_FC_MAKE_ENTRY(T, _93)
+#define FORY_FC_ENTRIES_94(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94)                                                             \
+  FORY_FC_ENTRIES_93(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93),                                 \
+      FORY_FC_MAKE_ENTRY(T, _94)
+#define FORY_FC_ENTRIES_95(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95)                                                        \
+  FORY_FC_ENTRIES_94(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94),                            \
+      FORY_FC_MAKE_ENTRY(T, _95)
+#define FORY_FC_ENTRIES_96(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96)                                                   \
+  FORY_FC_ENTRIES_95(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95),                       \
+      FORY_FC_MAKE_ENTRY(T, _96)
+#define FORY_FC_ENTRIES_97(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97)                                              \
+  FORY_FC_ENTRIES_96(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96),                  \
+      FORY_FC_MAKE_ENTRY(T, _97)
+#define FORY_FC_ENTRIES_98(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98)                                         \
+  FORY_FC_ENTRIES_97(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97),             \
+      FORY_FC_MAKE_ENTRY(T, _98)
+#define FORY_FC_ENTRIES_99(                                                    \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99)                                    \
+  FORY_FC_ENTRIES_98(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98),        \
+      FORY_FC_MAKE_ENTRY(T, _99)
+#define FORY_FC_ENTRIES_100(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100)                              \
+  FORY_FC_ENTRIES_99(                                                          \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99),   \
+      FORY_FC_MAKE_ENTRY(T, _100)
+#define FORY_FC_ENTRIES_101(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101)                        \
+  FORY_FC_ENTRIES_100(T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12,    \
+                      _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, _23,   \
+                      _24, _25, _26, _27, _28, _29, _30, _31, _32, _33, _34,   \
+                      _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45,   \
+                      _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56,   \
+                      _57, _58, _59, _60, _61, _62, _63, _64, _65, _66, _67,   \
+                      _68, _69, _70, _71, _72, _73, _74, _75, _76, _77, _78,   \
+                      _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89,   \
+                      _90, _91, _92, _93, _94, _95, _96, _97, _98, _99, _100), \
+      FORY_FC_MAKE_ENTRY(T, _101)
+#define FORY_FC_ENTRIES_102(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102)                  \
+  FORY_FC_ENTRIES_101(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101),                                                             \
+      FORY_FC_MAKE_ENTRY(T, _102)
+#define FORY_FC_ENTRIES_103(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103)            \
+  FORY_FC_ENTRIES_102(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102),                                                       \
+      FORY_FC_MAKE_ENTRY(T, _103)
+#define FORY_FC_ENTRIES_104(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104)      \
+  FORY_FC_ENTRIES_103(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103),                                                 \
+      FORY_FC_MAKE_ENTRY(T, _104)
+#define FORY_FC_ENTRIES_105(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105)                                                                      \
+  FORY_FC_ENTRIES_104(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104),                                           \
+      FORY_FC_MAKE_ENTRY(T, _105)
+#define FORY_FC_ENTRIES_106(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106)                                                                \
+  FORY_FC_ENTRIES_105(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105),                                     \
+      FORY_FC_MAKE_ENTRY(T, _106)
+#define FORY_FC_ENTRIES_107(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107)                                                          \
+  FORY_FC_ENTRIES_106(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106),                               \
+      FORY_FC_MAKE_ENTRY(T, _107)
+#define FORY_FC_ENTRIES_108(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108)                                                    \
+  FORY_FC_ENTRIES_107(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107),                         \
+      FORY_FC_MAKE_ENTRY(T, _108)
+#define FORY_FC_ENTRIES_109(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109)                                              \
+  FORY_FC_ENTRIES_108(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108),                   \
+      FORY_FC_MAKE_ENTRY(T, _109)
+#define FORY_FC_ENTRIES_110(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110)                                        \
+  FORY_FC_ENTRIES_109(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109),             \
+      FORY_FC_MAKE_ENTRY(T, _110)
+#define FORY_FC_ENTRIES_111(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111)                                  \
+  FORY_FC_ENTRIES_110(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110),       \
+      FORY_FC_MAKE_ENTRY(T, _111)
+#define FORY_FC_ENTRIES_112(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112)                            \
+  FORY_FC_ENTRIES_111(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111), \
+      FORY_FC_MAKE_ENTRY(T, _112)
+#define FORY_FC_ENTRIES_113(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113)                      \
+  FORY_FC_ENTRIES_112(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112),                                                                   \
+      FORY_FC_MAKE_ENTRY(T, _113)
+#define FORY_FC_ENTRIES_114(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114)                \
+  FORY_FC_ENTRIES_113(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113),                                                             \
+      FORY_FC_MAKE_ENTRY(T, _114)
+#define FORY_FC_ENTRIES_115(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115)          \
+  FORY_FC_ENTRIES_114(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114),                                                       \
+      FORY_FC_MAKE_ENTRY(T, _115)
+#define FORY_FC_ENTRIES_116(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116)    \
+  FORY_FC_ENTRIES_115(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115),                                                 \
+      FORY_FC_MAKE_ENTRY(T, _116)
+#define FORY_FC_ENTRIES_117(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117)                                                                      \
+  FORY_FC_ENTRIES_116(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116),                                           \
+      FORY_FC_MAKE_ENTRY(T, _117)
+#define FORY_FC_ENTRIES_118(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118)                                                                \
+  FORY_FC_ENTRIES_117(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117),                                     \
+      FORY_FC_MAKE_ENTRY(T, _118)
+#define FORY_FC_ENTRIES_119(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119)                                                          \
+  FORY_FC_ENTRIES_118(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118),                               \
+      FORY_FC_MAKE_ENTRY(T, _119)
+#define FORY_FC_ENTRIES_120(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120)                                                    \
+  FORY_FC_ENTRIES_119(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119),                         \
+      FORY_FC_MAKE_ENTRY(T, _120)
+#define FORY_FC_ENTRIES_121(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121)                                              \
+  FORY_FC_ENTRIES_120(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120),                   \
+      FORY_FC_MAKE_ENTRY(T, _121)
+#define FORY_FC_ENTRIES_122(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122)                                        \
+  FORY_FC_ENTRIES_121(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121),             \
+      FORY_FC_MAKE_ENTRY(T, _122)
+#define FORY_FC_ENTRIES_123(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123)                                  \
+  FORY_FC_ENTRIES_122(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122),       \
+      FORY_FC_MAKE_ENTRY(T, _123)
+#define FORY_FC_ENTRIES_124(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124)                            \
+  FORY_FC_ENTRIES_123(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123), \
+      FORY_FC_MAKE_ENTRY(T, _124)
+#define FORY_FC_ENTRIES_125(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125)                      \
+  FORY_FC_ENTRIES_124(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124),                                                                   \
+      FORY_FC_MAKE_ENTRY(T, _125)
+#define FORY_FC_ENTRIES_126(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125, _126)                \
+  FORY_FC_ENTRIES_125(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124, _125),                                                             \
+      FORY_FC_MAKE_ENTRY(T, _126)
+#define FORY_FC_ENTRIES_127(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125, _126, _127)          \
+  FORY_FC_ENTRIES_126(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124, _125, _126),                                                       \
+      FORY_FC_MAKE_ENTRY(T, _127)
+#define FORY_FC_ENTRIES_128(                                                   \
+    T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16,  \
+    _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29, _30, _31, \
+    _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43, _44, _45, _46, \
+    _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57, _58, _59, _60, _61, \
+    _62, _63, _64, _65, _66, _67, _68, _69, _70, _71, _72, _73, _74, _75, _76, \
+    _77, _78, _79, _80, _81, _82, _83, _84, _85, _86, _87, _88, _89, _90, _91, \
+    _92, _93, _94, _95, _96, _97, _98, _99, _100, _101, _102, _103, _104,      \
+    _105, _106, _107, _108, _109, _110, _111, _112, _113, _114, _115, _116,    \
+    _117, _118, _119, _120, _121, _122, _123, _124, _125, _126, _127, _128)    \
+  FORY_FC_ENTRIES_127(                                                         \
+      T, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15,     \
+      _16, _17, _18, _19, _20, _21, _22, _23, _24, _25, _26, _27, _28, _29,    \
+      _30, _31, _32, _33, _34, _35, _36, _37, _38, _39, _40, _41, _42, _43,    \
+      _44, _45, _46, _47, _48, _49, _50, _51, _52, _53, _54, _55, _56, _57,    \
+      _58, _59, _60, _61, _62, _63, _64, _65, _66, _67, _68, _69, _70, _71,    \
+      _72, _73, _74, _75, _76, _77, _78, _79, _80, _81, _82, _83, _84, _85,    \
+      _86, _87, _88, _89, _90, _91, _92, _93, _94, _95, _96, _97, _98, _99,    \
+      _100, _101, _102, _103, _104, _105, _106, _107, _108, _109, _110, _111,  \
+      _112, _113, _114, _115, _116, _117, _118, _119, _120, _121, _122, _123,  \
+      _124, _125, _126, _127),                                                 \
+      FORY_FC_MAKE_ENTRY(T, _128)
 
 // Main FORY_FIELD_CONFIG macro
 // Creates a constexpr tuple of FieldEntry objects with member pointer

@@ -50,7 +50,7 @@ import java.lang.annotation.Target;
  * }</pre>
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.TYPE_USE})
 public @interface Int32Type {
   /**
    * Whether to use variable-length compression for this int32 field.

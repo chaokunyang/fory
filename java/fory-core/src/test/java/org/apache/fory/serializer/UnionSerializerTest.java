@@ -26,6 +26,7 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
+import org.apache.fory.type.Types;
 import org.apache.fory.type.union.Union;
 import org.apache.fory.type.union.Union2;
 import org.apache.fory.type.union.Union3;
@@ -131,6 +133,118 @@ public class UnionSerializerTest extends ForyTestBase {
     }
   }
 
+  public static final class GeneratedFixedWidthUnion extends Union {
+    public enum GeneratedFixedWidthUnionCase {
+      FIXED_INT32_VALUE(1),
+      FIXED_INT64_VALUE(2),
+      FIXED_UINT32_VALUE(3),
+      FIXED_UINT64_VALUE(4),
+      BYTES_VALUE(5);
+
+      public final int id;
+
+      GeneratedFixedWidthUnionCase(int id) {
+        this.id = id;
+      }
+    }
+
+    private static int resolveTypeId(int caseId) {
+      switch (caseId) {
+        case 1:
+          return org.apache.fory.type.Types.INT32;
+        case 2:
+          return org.apache.fory.type.Types.INT64;
+        case 3:
+          return org.apache.fory.type.Types.UINT32;
+        case 4:
+          return org.apache.fory.type.Types.UINT64;
+        case 5:
+          return org.apache.fory.type.Types.BINARY;
+        default:
+          throw new IllegalStateException("Unknown GeneratedFixedWidthUnion case id: " + caseId);
+      }
+    }
+
+    private GeneratedFixedWidthUnion(int caseId, Object value) {
+      super(caseId, value, resolveTypeId(caseId));
+      if (value == null) {
+        throw new NullPointerException();
+      }
+    }
+
+    public static GeneratedFixedWidthUnion ofFixedInt32Value(int value) {
+      return new GeneratedFixedWidthUnion(GeneratedFixedWidthUnionCase.FIXED_INT32_VALUE.id, value);
+    }
+
+    public static GeneratedFixedWidthUnion ofFixedInt64Value(long value) {
+      return new GeneratedFixedWidthUnion(GeneratedFixedWidthUnionCase.FIXED_INT64_VALUE.id, value);
+    }
+
+    public static GeneratedFixedWidthUnion ofFixedUint32Value(int value) {
+      return new GeneratedFixedWidthUnion(
+          GeneratedFixedWidthUnionCase.FIXED_UINT32_VALUE.id, value);
+    }
+
+    public static GeneratedFixedWidthUnion ofFixedUint64Value(long value) {
+      return new GeneratedFixedWidthUnion(
+          GeneratedFixedWidthUnionCase.FIXED_UINT64_VALUE.id, value);
+    }
+
+    public static GeneratedFixedWidthUnion ofBytesValue(byte[] value) {
+      return new GeneratedFixedWidthUnion(GeneratedFixedWidthUnionCase.BYTES_VALUE.id, value);
+    }
+
+    public int getFixedInt32Value() {
+      return (Integer) value;
+    }
+
+    public void setFixedInt32Value(int value) {
+      this.index = GeneratedFixedWidthUnionCase.FIXED_INT32_VALUE.id;
+      this.value = value;
+      this.typeId = org.apache.fory.type.Types.INT32;
+    }
+
+    public long getFixedInt64Value() {
+      return (Long) value;
+    }
+
+    public void setFixedInt64Value(long value) {
+      this.index = GeneratedFixedWidthUnionCase.FIXED_INT64_VALUE.id;
+      this.value = value;
+      this.typeId = org.apache.fory.type.Types.INT64;
+    }
+
+    public int getFixedUint32Value() {
+      return (Integer) value;
+    }
+
+    public void setFixedUint32Value(int value) {
+      this.index = GeneratedFixedWidthUnionCase.FIXED_UINT32_VALUE.id;
+      this.value = value;
+      this.typeId = org.apache.fory.type.Types.UINT32;
+    }
+
+    public long getFixedUint64Value() {
+      return (Long) value;
+    }
+
+    public void setFixedUint64Value(long value) {
+      this.index = GeneratedFixedWidthUnionCase.FIXED_UINT64_VALUE.id;
+      this.value = value;
+      this.typeId = org.apache.fory.type.Types.UINT64;
+    }
+
+    public byte[] getBytesValue() {
+      return (byte[]) value;
+    }
+
+    public void setBytesValue(byte[] value) {
+      this.index = GeneratedFixedWidthUnionCase.BYTES_VALUE.id;
+      this.value = value;
+      this.typeId = org.apache.fory.type.Types.BINARY;
+    }
+  }
+
   @Test(dataProvider = "compatibleMode")
   public void testUnionBasicTypes(CompatibleMode mode) {
     Fory fory = createXlangFory(mode);
@@ -148,6 +262,26 @@ public class UnionSerializerTest extends ForyTestBase {
     deserialized = (StructWithUnion) fory.deserialize(bytes);
     assertEquals(deserialized.union.getValue(), "hello");
     assertEquals(deserialized.union.getIndex(), 1);
+  }
+
+  @Test(dataProvider = "compatibleMode")
+  public void testUnionPreservesExplicitXlangScalarEncodings(CompatibleMode mode) {
+    Fory fory = createXlangFory(mode);
+
+    List<Union> values = new ArrayList<>();
+    values.add(new Union(0, 123456789, Types.INT32));
+    values.add(new Union(1, -1234567, Types.VARINT32));
+    values.add(new Union(2, 1234567890123456789L, Types.INT64));
+    values.add(new Union(3, 1073741824L, Types.TAGGED_INT64));
+    values.add(new Union(4, 2222222222L, Types.TAGGED_UINT64));
+
+    for (Union value : values) {
+      StructWithUnion struct = new StructWithUnion(value);
+      byte[] bytes = fory.serialize(struct);
+      StructWithUnion deserialized = (StructWithUnion) fory.deserialize(bytes);
+      assertEquals(deserialized.union.getIndex(), value.getIndex());
+      assertEquals(deserialized.union.getValue(), value.getValue());
+    }
   }
 
   @Test(dataProvider = "compatibleMode")
@@ -266,6 +400,52 @@ public class UnionSerializerTest extends ForyTestBase {
     assertEquals(deserialized.union.getValue(), 1.5f);
     assertEquals(deserialized.union.getIndex(), 5);
     assertTrue(deserialized.union.isT6());
+  }
+
+  @Test(dataProvider = "compatibleMode")
+  public void testGeneratedUnionExplicitWireTypes(CompatibleMode mode) {
+    Fory fory =
+        Fory.builder()
+            .withLanguage(Language.XLANG)
+            .withCompatibleMode(mode)
+            .requireClassRegistration(true)
+            .build();
+    fory.getTypeResolver()
+        .registerUnion(
+            GeneratedFixedWidthUnion.class,
+            32100L,
+            new UnionSerializer(fory.getTypeResolver(), GeneratedFixedWidthUnion.class));
+
+    GeneratedFixedWidthUnion fixedInt32 =
+        fory.deserialize(
+            fory.serialize(GeneratedFixedWidthUnion.ofFixedInt32Value(123456789)),
+            GeneratedFixedWidthUnion.class);
+    assertEquals(fixedInt32.getFixedInt32Value(), 123456789);
+
+    GeneratedFixedWidthUnion fixedInt64 =
+        fory.deserialize(
+            fory.serialize(GeneratedFixedWidthUnion.ofFixedInt64Value(0x1234_5678_9ABCDEFL)),
+            GeneratedFixedWidthUnion.class);
+    assertEquals(fixedInt64.getFixedInt64Value(), 0x1234_5678_9ABCDEFL);
+
+    GeneratedFixedWidthUnion fixedUint32 =
+        fory.deserialize(
+            fory.serialize(GeneratedFixedWidthUnion.ofFixedUint32Value(0x7BCD_EF12)),
+            GeneratedFixedWidthUnion.class);
+    assertEquals(fixedUint32.getFixedUint32Value(), 0x7BCD_EF12);
+
+    GeneratedFixedWidthUnion fixedUint64 =
+        fory.deserialize(
+            fory.serialize(GeneratedFixedWidthUnion.ofFixedUint64Value(0x1234_5678_7654_3210L)),
+            GeneratedFixedWidthUnion.class);
+    assertEquals(fixedUint64.getFixedUint64Value(), 0x1234_5678_7654_3210L);
+
+    byte[] expectedBytes = new byte[] {1, 2, 3, 4, 5};
+    GeneratedFixedWidthUnion bytesValue =
+        fory.deserialize(
+            fory.serialize(GeneratedFixedWidthUnion.ofBytesValue(expectedBytes)),
+            GeneratedFixedWidthUnion.class);
+    assertTrue(Arrays.equals(bytesValue.getBytesValue(), expectedBytes));
   }
 
   @Test(dataProvider = "compatibleMode")

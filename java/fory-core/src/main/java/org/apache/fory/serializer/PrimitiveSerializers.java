@@ -170,6 +170,23 @@ public class PrimitiveSerializers {
     }
   }
 
+  public static final class FixedInt32Serializer extends ImmutableSerializer<Integer>
+      implements Shareable {
+    public FixedInt32Serializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Integer value) {
+      writeContext.getBuffer().writeInt32(value);
+    }
+
+    @Override
+    public Integer read(ReadContext readContext) {
+      return readContext.getBuffer().readInt32();
+    }
+  }
+
   public static final class VarUint32Serializer extends Serializer<Integer> implements Shareable {
     public VarUint32Serializer(Config config) {
       super(config, Integer.class);
@@ -255,6 +272,57 @@ public class PrimitiveSerializers {
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);
       }
+    }
+  }
+
+  public static final class FixedInt64Serializer extends ImmutableSerializer<Long>
+      implements Shareable {
+    public FixedInt64Serializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Long value) {
+      writeContext.getBuffer().writeInt64(value);
+    }
+
+    @Override
+    public Long read(ReadContext readContext) {
+      return readContext.getBuffer().readInt64();
+    }
+  }
+
+  public static final class TaggedInt64Serializer extends ImmutableSerializer<Long>
+      implements Shareable {
+    public TaggedInt64Serializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Long value) {
+      writeContext.getBuffer().writeTaggedInt64(value);
+    }
+
+    @Override
+    public Long read(ReadContext readContext) {
+      return readContext.getBuffer().readTaggedInt64();
+    }
+  }
+
+  public static final class TaggedUint64Serializer extends ImmutableSerializer<Long>
+      implements Shareable {
+    public TaggedUint64Serializer(Config config, Class<?> cls) {
+      super(config, (Class) cls, false);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Long value) {
+      writeContext.getBuffer().writeTaggedUint64(value);
+    }
+
+    @Override
+    public Long read(ReadContext readContext) {
+      return readContext.getBuffer().readTaggedUint64();
     }
   }
 

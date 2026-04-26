@@ -23,7 +23,6 @@ import java.util.AbstractList;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.RandomAccess;
-import org.apache.fory.type.unsigned.Uint64;
 
 /**
  * Resizable list backed by a long array for unsigned 64-bit values.
@@ -33,7 +32,7 @@ import org.apache.fory.type.unsigned.Uint64;
  * elements are always non-null. The {@link #size()} tracks the logical element count while the
  * backing array capacity may be larger.
  */
-public final class Uint64List extends AbstractList<Uint64> implements RandomAccess {
+public final class Uint64List extends AbstractList<Long> implements RandomAccess {
   private static final int DEFAULT_CAPACITY = 10;
 
   private long[] array;
@@ -69,9 +68,9 @@ public final class Uint64List extends AbstractList<Uint64> implements RandomAcce
   }
 
   @Override
-  public Uint64 get(int index) {
+  public Long get(int index) {
     checkIndex(index);
-    return new Uint64(array[index]);
+    return getLong(index);
   }
 
   @Override
@@ -80,12 +79,12 @@ public final class Uint64List extends AbstractList<Uint64> implements RandomAcce
   }
 
   @Override
-  public Uint64 set(int index, Uint64 element) {
+  public Long set(int index, Long element) {
     checkIndex(index);
     Objects.requireNonNull(element, "element");
     long prev = array[index];
     array[index] = element.longValue();
-    return new Uint64(prev);
+    return prev;
   }
 
   /** Sets a value without boxing. */
@@ -95,8 +94,9 @@ public final class Uint64List extends AbstractList<Uint64> implements RandomAcce
   }
 
   @Override
-  public void add(int index, Uint64 element) {
+  public void add(int index, Long element) {
     checkPositionIndex(index);
+    Objects.requireNonNull(element, "element");
     ensureCapacity(size + 1);
     System.arraycopy(array, index, array, index + 1, size - index);
     array[index] = element.longValue();
@@ -105,7 +105,7 @@ public final class Uint64List extends AbstractList<Uint64> implements RandomAcce
   }
 
   @Override
-  public boolean add(Uint64 element) {
+  public boolean add(Long element) {
     Objects.requireNonNull(element, "element");
     ensureCapacity(size + 1);
     array[size++] = element.longValue();

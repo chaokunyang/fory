@@ -44,5 +44,5 @@ import java.lang.annotation.Target;
  * }</pre>
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.TYPE_USE})
 public @interface Uint8Type {}

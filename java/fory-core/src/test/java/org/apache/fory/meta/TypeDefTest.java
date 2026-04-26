@@ -35,6 +35,13 @@ import java.util.TreeSet;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Int32Type;
+import org.apache.fory.annotation.Int64Type;
+import org.apache.fory.annotation.Uint16Type;
+import org.apache.fory.annotation.Uint32Type;
+import org.apache.fory.annotation.Uint64Type;
+import org.apache.fory.annotation.Uint8Type;
+import org.apache.fory.config.LongEncoding;
 import org.apache.fory.config.Language;
 import org.apache.fory.data.AllUnsignedFields;
 import org.apache.fory.data.UnsignedArrayFields;
@@ -45,6 +52,7 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.test.bean.Foo;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.GenericType;
 import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -84,6 +92,45 @@ public class TypeDefTest extends ForyTestBase {
     private Map<String, Object> map1;
     private Map<String, Integer> map2;
     private Map map3;
+  }
+
+  static class GenericNumericContainerFields {
+    private List<@Int32Type(compress = false) Integer> fixedInt32List;
+    private List<@Int32Type(compress = true) Integer> varint32List;
+    private Map<@Int32Type(compress = false) Integer, String> stringValuesByFixedInt32;
+    private Map<@Int64Type(encoding = LongEncoding.FIXED) Long, String> stringValuesByFixedInt64;
+    private Map<
+            @Int64Type(encoding = LongEncoding.TAGGED) Long,
+            String>
+        stringValuesByTaggedInt64;
+    private Map<@Uint8Type Integer, String> stringValuesByUint8;
+    private Map<@Uint16Type Integer, String> stringValuesByUint16;
+    private Map<@Uint32Type(compress = false) Long, String> stringValuesByFixedUint32;
+    private Map<
+            @Uint64Type(encoding = LongEncoding.FIXED) Long,
+            String>
+        stringValuesByFixedUint64;
+    private Map<
+            @Uint64Type(encoding = LongEncoding.TAGGED) Long,
+            String>
+        stringValuesByTaggedUint64;
+  }
+
+  static class NestedAnnotatedNumericContainerFields {
+    private Map<
+            @Int32Type(compress = false) Integer,
+            List<@Int64Type(encoding = LongEncoding.FIXED) Long>>
+        fixedMap;
+    private List<
+            Map<
+                @Uint32Type(compress = false) Long,
+                @Uint64Type(encoding = LongEncoding.TAGGED) Long>>
+        nestedUnsignedMaps;
+  }
+
+  static class DefaultNestedNumericContainerFields {
+    private Map<Integer, List<Long>> fixedMap;
+    private List<Map<Long, Long>> nestedUnsignedMaps;
   }
 
   @Test
@@ -200,6 +247,57 @@ public class TypeDefTest extends ForyTestBase {
     assertFalse(
         classResolver.needToWriteRef(
             TypeRef.of(Foo.class, new TypeExtMeta(Types.STRUCT, true, false))));
+  }
+
+  @Test
+  public void testRemoteNestedNumericOverridesWinOverLocalDefaults() {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).withMetaShare(true).build();
+    fory.register(NestedAnnotatedNumericContainerFields.class, 32001);
+    TypeDef remoteTypeDef =
+        TypeDef.buildTypeDef(fory.getTypeResolver(), NestedAnnotatedNumericContainerFields.class);
+    Descriptor localNestedUnsignedMapsDescriptor =
+        Descriptor.getDescriptors(DefaultNestedNumericContainerFields.class).stream()
+            .filter(descriptor -> descriptor.getName().equals("nestedUnsignedMaps"))
+            .findFirst()
+            .orElseThrow();
+    TypeRef<?> localNestedUnsignedMapType =
+        localNestedUnsignedMapsDescriptor.getTypeRef().getTypeArguments().get(0);
+    assertEquals(localNestedUnsignedMapType.getTypeArguments().get(0).getRawType(), Long.class);
+    assertEquals(localNestedUnsignedMapType.getTypeArguments().get(1).getRawType(), Long.class);
+
+    List<Descriptor> descriptors =
+        remoteTypeDef.getDescriptors(
+            fory.getTypeResolver(), DefaultNestedNumericContainerFields.class);
+
+    Descriptor fixedMapDescriptor = descriptors.stream()
+        .filter(descriptor -> descriptor.getName().equals("fixedMap"))
+        .findFirst()
+        .orElseThrow();
+    TypeRef<?> fixedMapType = fixedMapDescriptor.getTypeRef();
+    TypeRef<?> fixedMapKeyType = fixedMapType.getTypeArguments().get(0);
+    TypeRef<?> fixedMapValueType = fixedMapType.getTypeArguments().get(1);
+    TypeRef<?> fixedMapElementType = fixedMapValueType.getTypeArguments().get(0);
+    Assert.assertNotNull(fixedMapKeyType.getTypeExtMeta());
+    assertEquals(fixedMapKeyType.getTypeExtMeta().typeId(), Types.INT32);
+    assertEquals(fixedMapKeyType.getRawType(), Integer.class);
+    Assert.assertNotNull(fixedMapElementType.getTypeExtMeta());
+    assertEquals(fixedMapElementType.getTypeExtMeta().typeId(), Types.INT64);
+    assertEquals(fixedMapElementType.getRawType(), Long.class);
+
+    Descriptor nestedUnsignedMapsDescriptor = descriptors.stream()
+        .filter(descriptor -> descriptor.getName().equals("nestedUnsignedMaps"))
+        .findFirst()
+        .orElseThrow();
+    TypeRef<?> nestedUnsignedMapType =
+        nestedUnsignedMapsDescriptor.getTypeRef().getTypeArguments().get(0);
+    TypeRef<?> nestedUnsignedMapKeyType = nestedUnsignedMapType.getTypeArguments().get(0);
+    TypeRef<?> nestedUnsignedMapValueType = nestedUnsignedMapType.getTypeArguments().get(1);
+    Assert.assertNotNull(nestedUnsignedMapKeyType.getTypeExtMeta());
+    assertEquals(nestedUnsignedMapKeyType.getTypeExtMeta().typeId(), Types.UINT32);
+    assertEquals(nestedUnsignedMapKeyType.getRawType(), Long.class);
+    Assert.assertNotNull(nestedUnsignedMapValueType.getTypeExtMeta());
+    assertEquals(nestedUnsignedMapValueType.getTypeExtMeta().typeId(), Types.TAGGED_UINT64);
+    assertEquals(nestedUnsignedMapValueType.getRawType(), Long.class);
   }
 
   // Test classes for duplicate tag ID validation
@@ -591,6 +689,123 @@ public class TypeDefTest extends ForyTestBase {
           expectedTypeId.intValue(),
           "Field " + fieldName + " should have type id " + expectedTypeId);
     }
+  }
+
+  @Test
+  public void testGenericNumericContainerTypeIds() {
+    Fory fory = builder().withLanguage(Language.XLANG).withMetaShare(true).build();
+    fory.register(GenericNumericContainerFields.class, "test.GenericNumericContainerFields");
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), GenericNumericContainerFields.class);
+
+    Map<String, Integer> expectedListElementTypeIds = new HashMap<>();
+    expectedListElementTypeIds.put("fixedInt32List", Types.INT32);
+    expectedListElementTypeIds.put("varint32List", Types.VARINT32);
+
+    Map<String, Integer> expectedMapKeyTypeIds = new HashMap<>();
+    expectedMapKeyTypeIds.put("stringValuesByFixedInt32", Types.INT32);
+    expectedMapKeyTypeIds.put("stringValuesByFixedInt64", Types.INT64);
+    expectedMapKeyTypeIds.put("stringValuesByTaggedInt64", Types.TAGGED_INT64);
+    expectedMapKeyTypeIds.put("stringValuesByUint8", Types.UINT8);
+    expectedMapKeyTypeIds.put("stringValuesByUint16", Types.UINT16);
+    expectedMapKeyTypeIds.put("stringValuesByFixedUint32", Types.UINT32);
+    expectedMapKeyTypeIds.put("stringValuesByFixedUint64", Types.UINT64);
+    expectedMapKeyTypeIds.put("stringValuesByTaggedUint64", Types.TAGGED_UINT64);
+
+    for (FieldInfo fieldInfo : typeDef.getFieldsInfo()) {
+      String fieldName = fieldInfo.getFieldName();
+      FieldTypes.FieldType fieldType = fieldInfo.getFieldType();
+      Integer expectedListElementTypeId = expectedListElementTypeIds.get(fieldName);
+      if (expectedListElementTypeId != null) {
+        assertTrue(fieldType instanceof FieldTypes.CollectionFieldType);
+        FieldTypes.FieldType elementType =
+            ((FieldTypes.CollectionFieldType) fieldType).getElementType();
+        assertEquals(
+            elementType.typeId,
+            expectedListElementTypeId.intValue(),
+            "List field " + fieldName + " should preserve its explicit xlang element type id");
+      }
+      Integer expectedMapKeyTypeId = expectedMapKeyTypeIds.get(fieldName);
+      if (expectedMapKeyTypeId != null) {
+        assertTrue(fieldType instanceof FieldTypes.MapFieldType);
+        FieldTypes.FieldType keyType = ((FieldTypes.MapFieldType) fieldType).getKeyType();
+        assertEquals(
+            keyType.typeId,
+            expectedMapKeyTypeId.intValue(),
+            "Map field " + fieldName + " should preserve its explicit xlang key type id");
+      }
+    }
+  }
+
+  @Test
+  public void testGenericNumericContainerGenericTypeKeysPreserveAnnotations()
+      throws NoSuchFieldException {
+    TypeRef<?> fixedInt32Map =
+        TypeRef.of(
+            GenericNumericContainerFields.class
+                .getDeclaredField("stringValuesByFixedInt32")
+                .getAnnotatedType());
+    TypeRef<?> fixedUint32Map =
+        TypeRef.of(
+            GenericNumericContainerFields.class
+                .getDeclaredField("stringValuesByFixedUint32")
+                .getAnnotatedType());
+    TypeRef<?> fixedInt32List =
+        TypeRef.of(
+            GenericNumericContainerFields.class
+                .getDeclaredField("fixedInt32List")
+                .getAnnotatedType());
+    TypeRef<?> varint32List =
+        TypeRef.of(
+            GenericNumericContainerFields.class
+                .getDeclaredField("varint32List")
+                .getAnnotatedType());
+
+    assertFalse(fixedInt32Map.getGenericTypeKey().equals(fixedUint32Map.getGenericTypeKey()));
+    assertFalse(fixedInt32List.getGenericTypeKey().equals(varint32List.getGenericTypeKey()));
+  }
+
+  @Test
+  public void testGenericNumericContainerRuntimeGenericTypesPreserveAnnotations()
+      throws NoSuchFieldException {
+    Fory fory = builder().withLanguage(Language.XLANG).withMetaShare(true).withCodegen(true).build();
+
+    TypeRef<?> uint8MapType =
+        TypeRef.of(
+            GenericNumericContainerFields.class
+                .getDeclaredField("stringValuesByUint8")
+                .getAnnotatedType());
+    GenericType uint8MapGenericType =
+        fory.getTypeResolver()
+            .getGenericTypeInStruct(
+                GenericNumericContainerFields.class, uint8MapType.getGenericTypeKey());
+    assertEquals(
+        uint8MapGenericType.getTypeParameter0().getTypeRef().getTypeExtMeta().typeId(), Types.UINT8);
+
+    TypeRef<?> fixedInt32ListType =
+        TypeRef.of(
+            GenericNumericContainerFields.class
+                .getDeclaredField("fixedInt32List")
+                .getAnnotatedType());
+    GenericType fixedInt32ListGenericType =
+        fory.getTypeResolver()
+            .getGenericTypeInStruct(
+                GenericNumericContainerFields.class, fixedInt32ListType.getGenericTypeKey());
+    assertEquals(
+        fixedInt32ListGenericType.getTypeParameter0().getTypeRef().getTypeExtMeta().typeId(),
+        Types.INT32);
+
+    TypeRef<?> varint32ListType =
+        TypeRef.of(
+            GenericNumericContainerFields.class
+                .getDeclaredField("varint32List")
+                .getAnnotatedType());
+    GenericType varint32ListGenericType =
+        fory.getTypeResolver()
+            .getGenericTypeInStruct(
+                GenericNumericContainerFields.class, varint32ListType.getGenericTypeKey());
+    assertEquals(
+        varint32ListGenericType.getTypeParameter0().getTypeRef().getTypeExtMeta().typeId(),
+        Types.VARINT32);
   }
 
   @Test

@@ -23,7 +23,6 @@ import java.util.AbstractList;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.RandomAccess;
-import org.apache.fory.type.unsigned.Uint16;
 
 /**
  * Resizable list backed by a short array for unsigned 16-bit values.
@@ -33,7 +32,7 @@ import org.apache.fory.type.unsigned.Uint16;
  * elements are always non-null. The {@link #size()} tracks the logical element count while the
  * backing array capacity may be larger.
  */
-public final class Uint16List extends AbstractList<Uint16> implements RandomAccess {
+public final class Uint16List extends AbstractList<Integer> implements RandomAccess {
   private static final int DEFAULT_CAPACITY = 10;
 
   private short[] array;
@@ -69,9 +68,9 @@ public final class Uint16List extends AbstractList<Uint16> implements RandomAcce
   }
 
   @Override
-  public Uint16 get(int index) {
+  public Integer get(int index) {
     checkIndex(index);
-    return new Uint16(array[index]);
+    return getInt(index);
   }
 
   @Override
@@ -80,12 +79,12 @@ public final class Uint16List extends AbstractList<Uint16> implements RandomAcce
   }
 
   @Override
-  public Uint16 set(int index, Uint16 element) {
+  public Integer set(int index, Integer element) {
     checkIndex(index);
     Objects.requireNonNull(element, "element");
-    short prev = array[index];
-    array[index] = element.shortValue();
-    return new Uint16(prev);
+    int prev = getInt(index);
+    array[index] = (short) element.intValue();
+    return prev;
   }
 
   /** Sets a value without boxing. */
@@ -101,20 +100,21 @@ public final class Uint16List extends AbstractList<Uint16> implements RandomAcce
   }
 
   @Override
-  public void add(int index, Uint16 element) {
+  public void add(int index, Integer element) {
     checkPositionIndex(index);
+    Objects.requireNonNull(element, "element");
     ensureCapacity(size + 1);
     System.arraycopy(array, index, array, index + 1, size - index);
-    array[index] = element.shortValue();
+    array[index] = (short) element.intValue();
     size++;
     modCount++;
   }
 
   @Override
-  public boolean add(Uint16 element) {
+  public boolean add(Integer element) {
     Objects.requireNonNull(element, "element");
     ensureCapacity(size + 1);
-    array[size++] = element.shortValue();
+    array[size++] = (short) element.intValue();
     modCount++;
     return true;
   }

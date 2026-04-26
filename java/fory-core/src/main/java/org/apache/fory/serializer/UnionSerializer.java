@@ -273,9 +273,6 @@ public class UnionSerializer extends Serializer<Union> {
       case Types.STRING:
         writeContext.writeString((String) value);
         return;
-      case Types.BINARY:
-        buffer.writeBytes((byte[]) value);
-        return;
       default:
         break;
     }

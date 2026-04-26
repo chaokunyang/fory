@@ -55,7 +55,7 @@ import org.apache.fory.config.LongEncoding;
  * }</pre>
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.TYPE_USE})
 public @interface Int64Type {
   /**
    * The encoding strategy to use for this int64 field.

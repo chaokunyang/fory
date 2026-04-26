@@ -130,7 +130,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    * Write elements data header. Keep this consistent with
    * `BaseObjectCodecBuilder#writeElementsHeader`.
    *
-   * @return a bitmap, higher 24 bits are reserved.
+   * @return a bitmap, higher 4 bits are reserved.
    */
   protected final int writeElementsHeader(WriteContext writeContext, Collection value) {
     MemoryBuffer buffer = writeContext.getBuffer();

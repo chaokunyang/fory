@@ -23,7 +23,6 @@ import java.util.AbstractList;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.RandomAccess;
-import org.apache.fory.type.unsigned.Uint32;
 
 /**
  * Resizable list backed by an int array for unsigned 32-bit values.
@@ -33,7 +32,7 @@ import org.apache.fory.type.unsigned.Uint32;
  * elements are always non-null. The {@link #size()} tracks the logical element count while the
  * backing array capacity may be larger.
  */
-public final class Uint32List extends AbstractList<Uint32> implements RandomAccess {
+public final class Uint32List extends AbstractList<Long> implements RandomAccess {
   private static final int DEFAULT_CAPACITY = 10;
 
   private int[] array;
@@ -69,9 +68,9 @@ public final class Uint32List extends AbstractList<Uint32> implements RandomAcce
   }
 
   @Override
-  public Uint32 get(int index) {
+  public Long get(int index) {
     checkIndex(index);
-    return new Uint32(array[index]);
+    return getLong(index);
   }
 
   @Override
@@ -80,12 +79,12 @@ public final class Uint32List extends AbstractList<Uint32> implements RandomAcce
   }
 
   @Override
-  public Uint32 set(int index, Uint32 element) {
+  public Long set(int index, Long element) {
     checkIndex(index);
     Objects.requireNonNull(element, "element");
-    int prev = array[index];
-    array[index] = element.intValue();
-    return new Uint32(prev);
+    long prev = getLong(index);
+    array[index] = (int) element.longValue();
+    return prev;
   }
 
   /** Sets a value without boxing. */
@@ -101,20 +100,21 @@ public final class Uint32List extends AbstractList<Uint32> implements RandomAcce
   }
 
   @Override
-  public void add(int index, Uint32 element) {
+  public void add(int index, Long element) {
     checkPositionIndex(index);
+    Objects.requireNonNull(element, "element");
     ensureCapacity(size + 1);
     System.arraycopy(array, index, array, index + 1, size - index);
-    array[index] = element.intValue();
+    array[index] = (int) element.longValue();
     size++;
     modCount++;
   }
 
   @Override
-  public boolean add(Uint32 element) {
+  public boolean add(Long element) {
     Objects.requireNonNull(element, "element");
     ensureCapacity(size + 1);
-    array[size++] = element.intValue();
+    array[size++] = (int) element.longValue();
     modCount++;
     return true;
   }

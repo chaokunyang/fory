@@ -461,16 +461,16 @@ public class Types {
       case BOOL:
         return Boolean.class;
       case INT8:
-      case UINT8:
         return Byte.class;
       case INT16:
-      case UINT16:
         return Short.class;
+      case UINT8:
+      case UINT16:
       case INT32:
       case VARINT32:
+        return Integer.class;
       case UINT32:
       case VAR_UINT32:
-        return Integer.class;
       case INT64:
       case VARINT64:
       case TAGGED_INT64:

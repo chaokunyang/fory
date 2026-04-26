@@ -84,7 +84,7 @@ public class GenericType {
   }
 
   public static GenericType build(TypeRef<?> type) {
-    return build(type.getType());
+    return build(type, defaultFinalPredicate);
   }
 
   public static GenericType build(Type type) {
@@ -132,17 +132,18 @@ public class GenericType {
     Type type = typeRef.getType();
     if (type instanceof ParameterizedType) {
       // List<String>, List<T>, Map<String, List<String>>, SomeClass<T>
-      Type[] actualTypeArguments = ((ParameterizedType) type).getActualTypeArguments();
+      List<TypeRef<?>> actualTypeArguments = typeRef.getTypeArguments();
       List<GenericType> list = new ArrayList<>();
-      for (Type t : actualTypeArguments) {
-        GenericType build = GenericType.build(t, finalPredicate);
+      for (TypeRef<?> argumentTypeRef : actualTypeArguments) {
+        GenericType build = GenericType.build(argumentTypeRef, finalPredicate);
         list.add(build);
       }
       GenericType[] genericTypes = list.toArray(new GenericType[0]);
       return new GenericType(typeRef, finalPredicate.test(type), genericTypes);
-    } else if (type instanceof GenericArrayType) { // List<String>[] or T[]
-      Type componentType = ((GenericArrayType) type).getGenericComponentType();
-      return new GenericType(typeRef, finalPredicate.test(type), build(componentType));
+    } else if (type instanceof GenericArrayType || typeRef.getComponentType() != null) {
+      // List<String>[] or T[]
+      return new GenericType(
+          typeRef, finalPredicate.test(type), build(typeRef.getComponentType(), finalPredicate));
     } else if (type instanceof TypeVariable) { // T
       TypeVariable typeVariable = (TypeVariable) type;
       Type typeVariableBound =

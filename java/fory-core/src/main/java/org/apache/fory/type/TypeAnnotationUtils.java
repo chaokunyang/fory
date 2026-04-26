@@ -34,6 +34,30 @@ import org.apache.fory.annotation.Uint8Type;
 
 public class TypeAnnotationUtils {
 
+  public static boolean isCompatibleCarrier(int typeId, Class<?> fieldType) {
+    if (fieldType == null) {
+      return false;
+    }
+    switch (typeId) {
+      case Types.UINT8:
+      case Types.UINT16:
+      case Types.INT32:
+      case Types.VARINT32:
+        return fieldType == int.class || fieldType == Integer.class;
+      case Types.UINT32:
+      case Types.VAR_UINT32:
+      case Types.INT64:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
+      case Types.UINT64:
+      case Types.VAR_UINT64:
+      case Types.TAGGED_UINT64:
+        return fieldType == long.class || fieldType == Long.class;
+      default:
+        return false;
+    }
+  }
+
   /**
    * Get the type id for the given type annotation and validate it against the field type.
    *
@@ -47,13 +71,13 @@ public class TypeAnnotationUtils {
       return Types.UNKNOWN;
     }
     if (typeAnnotation instanceof Uint8Type) {
-      checkFieldType(fieldType, "@Uint8Type", byte.class, Byte.class);
+      checkFieldType(fieldType, "@Uint8Type", int.class, Integer.class);
       return Types.UINT8;
     } else if (typeAnnotation instanceof Uint16Type) {
-      checkFieldType(fieldType, "@Uint16Type", short.class, Short.class);
+      checkFieldType(fieldType, "@Uint16Type", int.class, Integer.class);
       return Types.UINT16;
     } else if (typeAnnotation instanceof Uint32Type) {
-      checkFieldType(fieldType, "@Uint32Type", int.class, Integer.class);
+      checkFieldType(fieldType, "@Uint32Type", long.class, Long.class);
       Uint32Type uint32Type = (Uint32Type) typeAnnotation;
       return uint32Type.compress() ? Types.VAR_UINT32 : Types.UINT32;
     } else if (typeAnnotation instanceof Uint64Type) {

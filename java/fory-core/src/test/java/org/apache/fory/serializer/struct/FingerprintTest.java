@@ -24,6 +24,8 @@ import static org.testng.Assert.assertEquals;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.collection.BFloat16List;
+import org.apache.fory.collection.Float16List;
 import org.apache.fory.data.AllUnsignedFields;
 import org.apache.fory.data.UnsignedArrayFields;
 import org.apache.fory.data.UnsignedScalarFields;
@@ -33,6 +35,11 @@ import org.testng.annotations.Test;
 
 /** Tests for {@link Fingerprint} with unsigned integer types and unsigned integer array types. */
 public class FingerprintTest extends ForyTestBase {
+
+  public static class ReducedPrecisionArrayFields {
+    private Float16List float16Array;
+    private BFloat16List bfloat16Array;
+  }
 
   @Test
   public void testUnsignedScalarFieldsFingerprint() {
@@ -134,6 +141,23 @@ public class FingerprintTest extends ForyTestBase {
             + ",0,0;"
             + "u8_array,"
             + Types.UINT8_ARRAY
+            + ",0,1;";
+    assertEquals(fingerprint, expected);
+  }
+
+  @Test
+  public void testReducedPrecisionArrayFieldsFingerprint() {
+    Fory fory = Fory.builder().build();
+    List<Descriptor> descriptors = Descriptor.getDescriptors(ReducedPrecisionArrayFields.class);
+
+    String fingerprint = Fingerprint.computeStructFingerprint(fory, descriptors);
+
+    String expected =
+        "bfloat16_array,"
+            + Types.BFLOAT16_ARRAY
+            + ",0,1;"
+            + "float16_array,"
+            + Types.FLOAT16_ARRAY
             + ",0,1;";
     assertEquals(fingerprint, expected);
   }

@@ -27,15 +27,15 @@ import org.apache.fory.config.LongEncoding;
 
 /** Test class with all unsigned integer scalar fields. */
 public class UnsignedScalarFields {
-  @Uint8Type public byte u8;
+  @Uint8Type public int u8;
 
-  @Uint16Type public short u16;
+  @Uint16Type public int u16;
 
   @Uint32Type(compress = false)
-  public int u32;
+  public long u32;
 
   @Uint32Type(compress = true)
-  public int u32Var;
+  public long u32Var;
 
   @Uint64Type(encoding = LongEncoding.FIXED)
   public long u64;

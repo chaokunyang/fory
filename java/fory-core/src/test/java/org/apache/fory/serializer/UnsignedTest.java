@@ -39,9 +39,9 @@ import org.testng.annotations.Test;
  * <p>Type annotation constraints:
  *
  * <ul>
- *   <li>{@code @Uint8Type} can only be applied to {@code byte} or {@code Byte} fields
- *   <li>{@code @Uint16Type} can only be applied to {@code short} or {@code Short} fields
- *   <li>{@code @Uint32Type} can only be applied to {@code int} or {@code Integer} fields
+ *   <li>{@code @Uint8Type} can only be applied to {@code int} or {@code Integer} fields
+ *   <li>{@code @Uint16Type} can only be applied to {@code int} or {@code Integer} fields
+ *   <li>{@code @Uint32Type} can only be applied to {@code long} or {@code Long} fields
  *   <li>{@code @Uint64Type} can only be applied to {@code long} or {@code Long} fields
  * </ul>
  *
@@ -51,28 +51,28 @@ import org.testng.annotations.Test;
 public class UnsignedTest extends ForyTestBase {
 
   // Max values for unsigned types (represented in their signed Java equivalents)
-  public static final byte UINT8_MAX = (byte) 255; // -1 as signed byte
-  public static final short UINT16_MAX = (short) 65535; // -1 as signed short
-  public static final int UINT32_MAX = (int) 4294967295L; // -1 as signed int
+  public static final int UINT8_MAX = 255;
+  public static final int UINT16_MAX = 65535;
+  public static final long UINT32_MAX = 4294967295L;
   public static final long UINT64_MAX = -1L; // 0xFFFFFFFFFFFFFFFF as signed long
 
   // Mid-point values (at the signed/unsigned boundary)
-  public static final byte UINT8_MID = (byte) 128; // -128 as signed byte
-  public static final short UINT16_MID = (short) 32768; // -32768 as signed short
-  public static final int UINT32_MID = (int) 2147483648L; // Integer.MIN_VALUE as signed int
+  public static final int UINT8_MID = 128;
+  public static final int UINT16_MID = 32768;
+  public static final long UINT32_MID = 2147483648L;
   public static final long UINT64_MID = Long.MIN_VALUE; // 0x8000000000000000
 
   @Data
   public static class UnsignedSchemaConsistent {
-    @Uint8Type byte u8;
+    @Uint8Type int u8;
 
-    @Uint16Type short u16;
+    @Uint16Type int u16;
 
     @Uint32Type(compress = true)
-    int u32Var;
+    long u32Var;
 
     @Uint32Type(compress = false)
-    int u32Fixed;
+    long u32Fixed;
 
     @Uint64Type(encoding = LongEncoding.VARINT)
     long u64Var;
@@ -85,19 +85,19 @@ public class UnsignedTest extends ForyTestBase {
 
     @ForyField(nullable = true)
     @Uint8Type
-    Byte u8Nullable;
+    Integer u8Nullable;
 
     @ForyField(nullable = true)
     @Uint16Type
-    Short u16Nullable;
+    Integer u16Nullable;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = true)
-    Integer u32VarNullable;
+    Long u32VarNullable;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = false)
-    Integer u32FixedNullable;
+    Long u32FixedNullable;
 
     @ForyField(nullable = true)
     @Uint64Type(encoding = LongEncoding.VARINT)
@@ -113,15 +113,15 @@ public class UnsignedTest extends ForyTestBase {
   }
 
   public static class UnsignedSchemaCompatible {
-    @Uint8Type byte u8;
+    @Uint8Type int u8;
 
-    @Uint16Type short u16;
+    @Uint16Type int u16;
 
     @Uint32Type(compress = true)
-    int u32Var;
+    long u32Var;
 
     @Uint32Type(compress = false)
-    int u32Fixed;
+    long u32Fixed;
 
     @Uint64Type(encoding = LongEncoding.VARINT)
     long u64Var;
@@ -134,19 +134,19 @@ public class UnsignedTest extends ForyTestBase {
 
     @ForyField(nullable = true)
     @Uint8Type
-    Byte u8Field2;
+    Integer u8Field2;
 
     @ForyField(nullable = true)
     @Uint16Type
-    Short u16Field2;
+    Integer u16Field2;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = true)
-    Integer u32VarField2;
+    Long u32VarField2;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = false)
-    Integer u32FixedField2;
+    Long u32FixedField2;
 
     @ForyField(nullable = true)
     @Uint64Type(encoding = LongEncoding.VARINT)
@@ -203,17 +203,17 @@ public class UnsignedTest extends ForyTestBase {
 
   private static UnsignedSchemaConsistent createConsistentWithNormalValues() {
     UnsignedSchemaConsistent obj = new UnsignedSchemaConsistent();
-    obj.u8 = (byte) 200; // Unsigned 200
-    obj.u16 = (short) 60000; // Unsigned 60000
+    obj.u8 = 200;
+    obj.u16 = 60000;
     obj.u32Var = 2000000000; // Within signed int range
     obj.u32Fixed = 2100000000; // Within signed int range
     obj.u64Var = 10000000000L;
     obj.u64Fixed = 15000000000L;
     obj.u64Tagged = 1000000000L;
-    obj.u8Nullable = (byte) 128; // Unsigned 128
-    obj.u16Nullable = (short) 40000; // Unsigned 40000
-    obj.u32VarNullable = 1500000000;
-    obj.u32FixedNullable = 1800000000;
+    obj.u8Nullable = 128;
+    obj.u16Nullable = 40000;
+    obj.u32VarNullable = 1500000000L;
+    obj.u32FixedNullable = 1800000000L;
     obj.u64VarNullable = 8000000000L;
     obj.u64FixedNullable = 12000000000L;
     obj.u64TaggedNullable = 500000000L;
@@ -231,8 +231,8 @@ public class UnsignedTest extends ForyTestBase {
     obj.u64Tagged = 0;
     obj.u8Nullable = 0;
     obj.u16Nullable = 0;
-    obj.u32VarNullable = 0;
-    obj.u32FixedNullable = 0;
+    obj.u32VarNullable = 0L;
+    obj.u32FixedNullable = 0L;
     obj.u64VarNullable = 0L;
     obj.u64FixedNullable = 0L;
     obj.u64TaggedNullable = 0L;
@@ -298,17 +298,17 @@ public class UnsignedTest extends ForyTestBase {
 
   private static UnsignedSchemaCompatible createCompatibleWithNormalValues() {
     UnsignedSchemaCompatible obj = new UnsignedSchemaCompatible();
-    obj.u8 = (byte) 200;
-    obj.u16 = (short) 60000;
+    obj.u8 = 200;
+    obj.u16 = 60000;
     obj.u32Var = 2000000000;
     obj.u32Fixed = 2100000000;
     obj.u64Var = 10000000000L;
     obj.u64Fixed = 15000000000L;
     obj.u64Tagged = 1000000000L;
-    obj.u8Field2 = (byte) 128;
-    obj.u16Field2 = (short) 40000;
-    obj.u32VarField2 = 1500000000;
-    obj.u32FixedField2 = 1800000000;
+    obj.u8Field2 = 128;
+    obj.u16Field2 = 40000;
+    obj.u32VarField2 = 1500000000L;
+    obj.u32FixedField2 = 1800000000L;
     obj.u64VarField2 = 8000000000L;
     obj.u64FixedField2 = 12000000000L;
     obj.u64TaggedField2 = 500000000L;
@@ -326,8 +326,8 @@ public class UnsignedTest extends ForyTestBase {
     obj.u64Tagged = 0;
     obj.u8Field2 = 0;
     obj.u16Field2 = 0;
-    obj.u32VarField2 = 0;
-    obj.u32FixedField2 = 0;
+    obj.u32VarField2 = 0L;
+    obj.u32FixedField2 = 0L;
     obj.u64VarField2 = 0L;
     obj.u64FixedField2 = 0L;
     obj.u64TaggedField2 = 0L;
@@ -488,11 +488,11 @@ public class UnsignedTest extends ForyTestBase {
 
   // Test specific edge cases for each unsigned type
   public static class Uint8OnlyStruct {
-    @Uint8Type byte value;
+    @Uint8Type int value;
 
     @ForyField(nullable = true)
     @Uint8Type
-    Byte nullableValue;
+    Integer nullableValue;
 
     @Override
     public boolean equals(Object o) {
@@ -530,29 +530,29 @@ public class UnsignedTest extends ForyTestBase {
 
     // Test 128 (unsigned, appears as -128 in signed byte)
     Uint8OnlyStruct val128 = new Uint8OnlyStruct();
-    val128.value = (byte) 128;
-    val128.nullableValue = (byte) 128;
+    val128.value = 128;
+    val128.nullableValue = 128;
     serDeCheck(fory, val128);
 
     // Test 255 (max uint8, appears as -1 in signed byte)
     Uint8OnlyStruct maxUint8 = new Uint8OnlyStruct();
-    maxUint8.value = (byte) 255;
-    maxUint8.nullableValue = (byte) 255;
+    maxUint8.value = 255;
+    maxUint8.nullableValue = 255;
     serDeCheck(fory, maxUint8);
 
     // Test null
     Uint8OnlyStruct withNull = new Uint8OnlyStruct();
-    withNull.value = (byte) 200;
+    withNull.value = 200;
     withNull.nullableValue = null;
     serDeCheck(fory, withNull);
   }
 
   public static class Uint16OnlyStruct {
-    @Uint16Type short value;
+    @Uint16Type int value;
 
     @ForyField(nullable = true)
     @Uint16Type
-    Short nullableValue;
+    Integer nullableValue;
 
     @Override
     public boolean equals(Object o) {
@@ -590,37 +590,37 @@ public class UnsignedTest extends ForyTestBase {
 
     // Test 32768 (unsigned, appears as -32768 in signed short)
     Uint16OnlyStruct val32768 = new Uint16OnlyStruct();
-    val32768.value = (short) 32768;
-    val32768.nullableValue = (short) 32768;
+    val32768.value = 32768;
+    val32768.nullableValue = 32768;
     serDeCheck(fory, val32768);
 
     // Test 65535 (max uint16, appears as -1 in signed short)
     Uint16OnlyStruct maxUint16 = new Uint16OnlyStruct();
-    maxUint16.value = (short) 65535;
-    maxUint16.nullableValue = (short) 65535;
+    maxUint16.value = 65535;
+    maxUint16.nullableValue = 65535;
     serDeCheck(fory, maxUint16);
 
     // Test null
     Uint16OnlyStruct withNull = new Uint16OnlyStruct();
-    withNull.value = (short) 50000;
+    withNull.value = 50000;
     withNull.nullableValue = null;
     serDeCheck(fory, withNull);
   }
 
   public static class Uint32OnlyStruct {
     @Uint32Type(compress = true)
-    int varValue;
+    long varValue;
 
     @Uint32Type(compress = false)
-    int fixedValue;
+    long fixedValue;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = true)
-    Integer varNullableValue;
+    Long varNullableValue;
 
     @ForyField(nullable = true)
     @Uint32Type(compress = false)
-    Integer fixedNullableValue;
+    Long fixedNullableValue;
 
     @Override
     public boolean equals(Object o) {
@@ -645,40 +645,40 @@ public class UnsignedTest extends ForyTestBase {
     Uint32OnlyStruct zero = new Uint32OnlyStruct();
     zero.varValue = 0;
     zero.fixedValue = 0;
-    zero.varNullableValue = 0;
-    zero.fixedNullableValue = 0;
+    zero.varNullableValue = 0L;
+    zero.fixedNullableValue = 0L;
     serDeCheck(fory, zero);
 
     // Test 1
     Uint32OnlyStruct one = new Uint32OnlyStruct();
     one.varValue = 1;
     one.fixedValue = 1;
-    one.varNullableValue = 1;
-    one.fixedNullableValue = 1;
+    one.varNullableValue = 1L;
+    one.fixedNullableValue = 1L;
     serDeCheck(fory, one);
 
     // Test 2147483647 (max signed int)
     Uint32OnlyStruct maxSignedInt = new Uint32OnlyStruct();
     maxSignedInt.varValue = 2147483647;
     maxSignedInt.fixedValue = 2147483647;
-    maxSignedInt.varNullableValue = 2147483647;
-    maxSignedInt.fixedNullableValue = 2147483647;
+    maxSignedInt.varNullableValue = 2147483647L;
+    maxSignedInt.fixedNullableValue = 2147483647L;
     serDeCheck(fory, maxSignedInt);
 
     // Test 2147483648 (unsigned, appears as Integer.MIN_VALUE in signed int)
     Uint32OnlyStruct val2147483648 = new Uint32OnlyStruct();
-    val2147483648.varValue = (int) 2147483648L;
-    val2147483648.fixedValue = (int) 2147483648L;
-    val2147483648.varNullableValue = (int) 2147483648L;
-    val2147483648.fixedNullableValue = (int) 2147483648L;
+    val2147483648.varValue = 2147483648L;
+    val2147483648.fixedValue = 2147483648L;
+    val2147483648.varNullableValue = 2147483648L;
+    val2147483648.fixedNullableValue = 2147483648L;
     serDeCheck(fory, val2147483648);
 
     // Test 4294967295 (max uint32, appears as -1 in signed int)
     Uint32OnlyStruct maxUint32 = new Uint32OnlyStruct();
-    maxUint32.varValue = (int) 4294967295L;
-    maxUint32.fixedValue = (int) 4294967295L;
-    maxUint32.varNullableValue = (int) 4294967295L;
-    maxUint32.fixedNullableValue = (int) 4294967295L;
+    maxUint32.varValue = 4294967295L;
+    maxUint32.fixedValue = 4294967295L;
+    maxUint32.varNullableValue = 4294967295L;
+    maxUint32.fixedNullableValue = 4294967295L;
     serDeCheck(fory, maxUint32);
 
     // Test null
@@ -850,54 +850,54 @@ public class UnsignedTest extends ForyTestBase {
     // 1-byte varint boundary (0-127)
     obj32.varValue = 127;
     obj32.fixedValue = 127;
-    obj32.varNullableValue = 127;
-    obj32.fixedNullableValue = 127;
+    obj32.varNullableValue = 127L;
+    obj32.fixedNullableValue = 127L;
     serDeCheck(fory, obj32);
 
     // 2-byte varint boundary (128-16383)
     obj32.varValue = 128;
     obj32.fixedValue = 128;
-    obj32.varNullableValue = 128;
-    obj32.fixedNullableValue = 128;
+    obj32.varNullableValue = 128L;
+    obj32.fixedNullableValue = 128L;
     serDeCheck(fory, obj32);
 
     obj32.varValue = 16383;
     obj32.fixedValue = 16383;
-    obj32.varNullableValue = 16383;
-    obj32.fixedNullableValue = 16383;
+    obj32.varNullableValue = 16383L;
+    obj32.fixedNullableValue = 16383L;
     serDeCheck(fory, obj32);
 
     // 3-byte varint boundary (16384-2097151)
     obj32.varValue = 16384;
     obj32.fixedValue = 16384;
-    obj32.varNullableValue = 16384;
-    obj32.fixedNullableValue = 16384;
+    obj32.varNullableValue = 16384L;
+    obj32.fixedNullableValue = 16384L;
     serDeCheck(fory, obj32);
 
     obj32.varValue = 2097151;
     obj32.fixedValue = 2097151;
-    obj32.varNullableValue = 2097151;
-    obj32.fixedNullableValue = 2097151;
+    obj32.varNullableValue = 2097151L;
+    obj32.fixedNullableValue = 2097151L;
     serDeCheck(fory, obj32);
 
     // 4-byte varint boundary (2097152-268435455)
     obj32.varValue = 2097152;
     obj32.fixedValue = 2097152;
-    obj32.varNullableValue = 2097152;
-    obj32.fixedNullableValue = 2097152;
+    obj32.varNullableValue = 2097152L;
+    obj32.fixedNullableValue = 2097152L;
     serDeCheck(fory, obj32);
 
     obj32.varValue = 268435455;
     obj32.fixedValue = 268435455;
-    obj32.varNullableValue = 268435455;
-    obj32.fixedNullableValue = 268435455;
+    obj32.varNullableValue = 268435455L;
+    obj32.fixedNullableValue = 268435455L;
     serDeCheck(fory, obj32);
 
     // 5-byte varint boundary (268435456+)
     obj32.varValue = 268435456;
     obj32.fixedValue = 268435456;
-    obj32.varNullableValue = 268435456;
-    obj32.fixedNullableValue = 268435456;
+    obj32.varNullableValue = 268435456L;
+    obj32.fixedNullableValue = 268435456L;
     serDeCheck(fory, obj32);
   }
 }

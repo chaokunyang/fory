@@ -56,6 +56,7 @@ type Config struct {
 	Compatible        bool // Schema evolution compatibility mode
 	MaxCollectionSize int
 	MaxBinarySize     int
+	MaxTypeFields     int
 }
 
 // defaultConfig returns the default configuration
@@ -66,6 +67,7 @@ func defaultConfig() Config {
 		IsXlang:           false,
 		MaxCollectionSize: 1_000_000,
 		MaxBinarySize:     64 * 1024 * 1024,
+		MaxTypeFields:     10000,
 	}
 }
 
@@ -116,6 +118,13 @@ func WithMaxCollectionSize(size int) Option {
 func WithMaxBinarySize(size int) Option {
 	return func(f *Fory) {
 		f.config.MaxBinarySize = size
+	}
+}
+
+// WithMaxTypeFields sets the maximum field count limit for schema definition deserialization
+func WithMaxTypeFields(size int) Option {
+	return func(f *Fory) {
+		f.config.MaxTypeFields = size
 	}
 }
 

@@ -24,7 +24,6 @@ from typing import TypeVar, Union
 import cython
 from libc.stdint cimport int32_t, int64_t, uint8_t, uint64_t
 from libc.stdint cimport *
-from libc.string cimport memcmp
 from libcpp cimport bool as c_bool
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
@@ -535,9 +534,7 @@ cdef class TypeResolver:
         ]
         cdef TypeInfo typeinfo
         if typeinfo_ptr != NULL:
-            typeinfo = <TypeInfo> typeinfo_ptr
-            if typeinfo.namespace_bytes == ns_metabytes and typeinfo.typename_bytes == type_metabytes:
-                return typeinfo
+            return <TypeInfo>typeinfo_ptr
         typeinfo = self.resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
         self._c_meta_hash_to_type_info[
             pair[int64_t, int64_t](

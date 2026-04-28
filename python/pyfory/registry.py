@@ -75,9 +75,11 @@ from pyfory.serializer import (
     EnumSerializer,
     SliceSerializer,
     StatefulSerializer,
+    _DefaultPolicyStatefulSerializer,
     ReduceSerializer,
     FunctionSerializer,
     ObjectSerializer,
+    _DefaultPolicyObjectSerializer,
     TypeSerializer,
     ModuleSerializer,
     MappingProxySerializer,
@@ -87,6 +89,7 @@ from pyfory.serializer import (
     PickleBufferSerializer,
     UnionSerializer,
 )
+from pyfory.policy import DEFAULT_POLICY
 from pyfory.serialization import (
     Serializer as CythonSerializer,
     bfloat16,
@@ -331,6 +334,7 @@ class TypeResolver:
         "meta_share",
         "_internal_py_serializer_map",
         "_actual_type_resolver",
+        "_allow_unregistered_typedef",
     )
 
     def __init__(self, config, *, shared_registry):
@@ -365,6 +369,7 @@ class TypeResolver:
         self.meta_share = config.meta_share
         self._internal_py_serializer_map = {}
         self._actual_type_resolver = self
+        self._allow_unregistered_typedef = False
 
     def _set_actual_resolver(self, type_resolver):
         # Cython mode injects the compiled companion before initialize() so all
@@ -840,6 +845,7 @@ class TypeResolver:
 
     def _create_serializer(self, cls):
         serializer_type_resolver = self._actual_type_resolver
+        use_default_policy = serializer_type_resolver.policy is DEFAULT_POLICY
         # Check if it's a Union type first
         origin = typing.get_origin(cls) if hasattr(typing, "get_origin") else getattr(cls, "__origin__", None)
         if origin is typing.Union:
@@ -894,9 +900,11 @@ class TypeResolver:
                 serializer = ReduceSerializer(serializer_type_resolver, cls)
             elif hasattr(cls, "__getstate__") and hasattr(cls, "__setstate__"):
                 # Use StatefulSerializer for objects that support __getstate__ and __setstate__
-                serializer = StatefulSerializer(serializer_type_resolver, cls)
+                serializer_cls = _DefaultPolicyStatefulSerializer if use_default_policy else StatefulSerializer
+                serializer = serializer_cls(serializer_type_resolver, cls)
             elif hasattr(cls, "__dict__") or hasattr(cls, "__slots__"):
-                serializer = ObjectSerializer(serializer_type_resolver, cls)
+                serializer_cls = _DefaultPolicyObjectSerializer if use_default_policy else ObjectSerializer
+                serializer = serializer_cls(serializer_type_resolver, cls)
             else:
                 # c-extension types will go to here
                 serializer = UnsupportedSerializer(serializer_type_resolver, cls)

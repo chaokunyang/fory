@@ -888,6 +888,24 @@ class StatefulSerializer(Serializer):
         return obj
 
 
+class _DefaultPolicyStatefulSerializer(StatefulSerializer):
+    def read(self, read_context):
+        args = read_context.read_ref()
+        kwargs = read_context.read_ref()
+        state = read_context.read_ref()
+
+        if args or kwargs:
+            # Case 1: __getnewargs__ was used. Re-create by calling __init__.
+            obj = self.cls(*args, **kwargs)
+        else:
+            # Case 2: Only __getstate__ was used. Create without calling __init__.
+            obj = self.cls.__new__(self.cls)
+
+        if state is not None:
+            obj.__setstate__(state)
+        return obj
+
+
 class ReduceSerializer(Serializer):
     """
     Serializer for objects that support __reduce__ or __reduce_ex__.
@@ -1414,6 +1432,7 @@ class MethodSerializer(Serializer):
     def __init__(self, type_resolver, cls):
         super().__init__(type_resolver, cls)
         self.cls = cls
+        self._use_default_policy = type_resolver.policy is DEFAULT_POLICY
 
     def write(self, write_context, value):
         instance = value.__self__
@@ -1426,12 +1445,11 @@ class MethodSerializer(Serializer):
         instance = read_context.read_ref()
         method_name = read_context.read_string()
 
+        if self._use_default_policy:
+            return getattr(instance, method_name)
         cls = instance if isinstance(instance, type) else instance.__class__
         is_local = cls.__module__ == "__main__" or "<locals>" in cls.__qualname__
-        policy = read_context.policy
-        if policy is DEFAULT_POLICY:
-            return getattr(instance, method_name)
-        return _resolve_validated_bound_method(policy, instance, method_name, is_local=is_local)
+        return _resolve_validated_bound_method(read_context.policy, instance, method_name, is_local=is_local)
 
 
 class ObjectSerializer(Serializer):
@@ -1465,27 +1483,34 @@ class ObjectSerializer(Serializer):
 
     def read(self, read_context):
         policy = read_context.policy
-        if policy is not DEFAULT_POLICY:
-            policy.authorize_instantiation(self.type_)
+        policy.authorize_instantiation(self.type_)
         obj = self.type_.__new__(self.type_)
         read_context.reference(obj)
         num_fields = read_context.read_var_uint32()
         if num_fields > read_context.max_collection_size:
             raise ValueError(f"object field size {num_fields} exceeds the configured limit of {read_context.max_collection_size}")
-        if policy is DEFAULT_POLICY:
-            for _ in range(num_fields):
-                field_name = read_context.read_string()
-                field_value = read_context.read_ref()
-                setattr(obj, field_name, field_value)
-        else:
-            state = {}
-            for _ in range(num_fields):
-                field_name = read_context.read_string()
-                field_value = read_context.read_ref()
-                state[field_name] = field_value
-            policy.intercept_setstate(obj, state)
-            for field_name, field_value in state.items():
-                setattr(obj, field_name, field_value)
+        state = {}
+        for _ in range(num_fields):
+            field_name = read_context.read_string()
+            field_value = read_context.read_ref()
+            state[field_name] = field_value
+        policy.intercept_setstate(obj, state)
+        for field_name, field_value in state.items():
+            setattr(obj, field_name, field_value)
+        return obj
+
+
+class _DefaultPolicyObjectSerializer(ObjectSerializer):
+    def read(self, read_context):
+        obj = self.type_.__new__(self.type_)
+        read_context.reference(obj)
+        num_fields = read_context.read_var_uint32()
+        if num_fields > read_context.max_collection_size:
+            raise ValueError(f"object field size {num_fields} exceeds the configured limit of {read_context.max_collection_size}")
+        for _ in range(num_fields):
+            field_name = read_context.read_string()
+            field_value = read_context.read_ref()
+            setattr(obj, field_name, field_value)
         return obj
 
 

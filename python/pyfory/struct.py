@@ -562,9 +562,10 @@ class DataClassSerializer(Serializer):
             is_dynamic = self._dynamic_fields.get(field_name, False)
             is_tracking_ref = self._ref_fields.get(field_name, False)
             is_basic = self._basic_field_flags[index]
-            field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
             if field_name not in self._current_class_field_names:
+                self._read_missing_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
                 continue
+            field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
             interned_name = self._field_name_interned[field_name]
             if obj_dict is not None:
                 obj_dict[interned_name] = field_value
@@ -580,6 +581,14 @@ class DataClassSerializer(Serializer):
                     setattr(obj, field_name, value)
         read_context.shrink_input_buffer()
         return obj
+
+    def _read_missing_field_value(self, read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref):
+        previous = self.type_resolver._allow_unregistered_typedef
+        self.type_resolver._allow_unregistered_typedef = True
+        try:
+            return self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
+        finally:
+            self.type_resolver._allow_unregistered_typedef = previous
 
 
 class DataClassStubSerializer(DataClassSerializer):

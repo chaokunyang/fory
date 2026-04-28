@@ -152,7 +152,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     if has_fields_meta:
         field_infos = read_fields_info(meta_buffer, resolver, name, num_fields)
     if type_cls is None:
-        if getattr(resolver, "strict", False):
+        if getattr(resolver, "strict", False) and not getattr(resolver, "_allow_unregistered_typedef", False):
             raise ValueError(f"TypeDef {name} is not registered in strict mode")
         # Check generated class count limit
         if _generated_class_count >= MAX_GENERATED_CLASSES:

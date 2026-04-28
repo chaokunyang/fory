@@ -13,7 +13,7 @@ from cpython.unicode cimport (
     PyUnicode_FromKindAndData,
     PyUnicode_DecodeUTF8,
 )
-from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize, PyBytes_AS_STRING, PyBytes_GET_SIZE
+from cpython.bytes cimport PyBytes_AsString, PyBytes_FromStringAndSize, PyBytes_AS_STRING
 from libcpp.memory cimport shared_ptr, unique_ptr
 from libcpp.utility cimport move
 from cython.operator cimport dereference as deref

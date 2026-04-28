@@ -146,6 +146,36 @@ def test_sanitize_state():
     assert result.password == "***REDACTED***"
 
 
+def test_reduce_state_sanitizes_state():
+    """Test sanitizing object state restored from __reduce__."""
+
+    class CountingSanitizePolicy(DeserializationPolicy):
+        def __init__(self):
+            self.intercept_setstate_calls = 0
+
+        def intercept_setstate(self, obj, state, **kwargs):
+            self.intercept_setstate_calls += 1
+            if isinstance(state, dict) and "password" in state:
+                state["password"] = "***REDACTED***"
+            return None
+
+    class SecretReduceHolder:
+        def __reduce__(self):
+            return (SecretReduceHolder, (), {"username": "admin", "password": "secret123"})
+
+        def __setstate__(self, state):
+            self.__dict__.update(state)
+
+    policy = CountingSanitizePolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    data = fory.serialize(SecretReduceHolder())
+
+    result = fory.deserialize(data)
+    assert policy.intercept_setstate_calls == 1
+    assert result.username == "admin"
+    assert result.password == "***REDACTED***"
+
+
 def test_policy_with_local_class():
     """Test policy intercepts local class deserialization."""
 
@@ -291,3 +321,87 @@ def test_validate_module():
     fory3 = Fory(ref=True, strict=False, policy=BlockPolicy())
     with pytest.raises(ValueError, match="blocked"):
         fory3.deserialize(fory3.serialize(json))
+
+
+def test_reduce_global_name_validates_module():
+    """Test validate_module policy hook for reduce global-name deserialization."""
+
+    class GlobalNamePayload:
+        def __reduce__(self):
+            return "subprocess.Popen"
+
+    class BlockModulePolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            if module_name == "subprocess":
+                raise ValueError(f"Module {module_name} blocked")
+            return None
+
+    policy = BlockModulePolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="subprocess blocked"):
+        fory.deserialize(fory.serialize(GlobalNamePayload()))
+    assert policy.validate_module_calls == 1
+
+
+def test_reduce_global_name_validates_class():
+    """Test validate_class policy hook for reduce global-name deserialization."""
+
+    class GlobalNamePayload:
+        def __reduce__(self):
+            return "subprocess.Popen"
+
+    class BlockClassPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+            self.validate_class_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            return None
+
+        def validate_class(self, cls, is_local, **kwargs):
+            self.validate_class_calls += 1
+            if cls.__module__ == "subprocess" and cls.__name__ == "Popen":
+                raise ValueError("subprocess.Popen blocked")
+            return None
+
+    policy = BlockClassPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="subprocess.Popen blocked"):
+        fory.deserialize(fory.serialize(GlobalNamePayload()))
+    assert policy.validate_module_calls == 1
+    assert policy.validate_class_calls == 1
+
+
+def test_reduce_global_name_validates_function():
+    """Test validate_function policy hook for reduce builtins-name deserialization."""
+
+    class GlobalNamePayload:
+        def __reduce__(self):
+            return "eval"
+
+    class BlockFunctionPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+            self.validate_function_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            return None
+
+        def validate_function(self, func, is_local, **kwargs):
+            self.validate_function_calls += 1
+            if func.__name__ == "eval":
+                raise ValueError("eval blocked")
+            return None
+
+    policy = BlockFunctionPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="eval blocked"):
+        fory.deserialize(fory.serialize(GlobalNamePayload()))
+    assert policy.validate_module_calls == 1
+    assert policy.validate_function_calls == 1

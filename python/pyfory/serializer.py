@@ -817,6 +817,46 @@ class ReduceSerializer(Serializer):
         self._getnewargs_ex = getattr(cls, "__getnewargs_ex__", None)
         self._getnewargs = getattr(cls, "__getnewargs__", None)
 
+    def _resolve_module(self, policy, module_name):
+        result = policy.validate_module(module_name)
+        if result is not None:
+            if isinstance(result, types.ModuleType):
+                return result
+            assert isinstance(result, str), f"validate_module must return module, str, or None, got {type(result)}"
+            module_name = result
+        return importlib.import_module(module_name)
+
+    def _validate_global_object(self, policy, obj):
+        result = None
+        if isinstance(obj, type):
+            result = policy.validate_class(obj, is_local=False)
+        elif isinstance(
+            obj,
+            (
+                types.FunctionType,
+                types.BuiltinFunctionType,
+                types.MethodType,
+                types.BuiltinMethodType,
+            ),
+        ):
+            result = policy.validate_function(obj, is_local=False)
+        if result is not None:
+            obj = result
+        return obj
+
+    def _resolve_global_name(self, read_context, global_name):
+        policy = read_context.policy
+        if "." in global_name:
+            module_name, obj_name = global_name.rsplit(".", 1)
+        else:
+            module_name, obj_name = "builtins", global_name
+        module = self._resolve_module(policy, module_name)
+        try:
+            obj = getattr(module, obj_name)
+        except AttributeError:
+            raise ValueError(f"Cannot resolve global name: {global_name}")
+        return self._validate_global_object(policy, obj)
+
     def write(self, write_context, value):
         # Try __reduce_ex__ first (with protocol 5 for pickle5 out-of-band buffer support), then __reduce__
         # Check if the object has a custom __reduce_ex__ method (not just the default from object)
@@ -876,21 +916,7 @@ class ReduceSerializer(Serializer):
 
         if reduce_data[0] == 0:
             # Case 1: Global name
-            global_name = reduce_data[1]
-            # Import and return the global object
-            if "." in global_name:
-                module_name, obj_name = global_name.rsplit(".", 1)
-                module = __import__(module_name, fromlist=[obj_name])
-                return getattr(module, obj_name)
-            else:
-                # Handle case where global_name doesn't contain a dot
-                # This might be a built-in type or a simple name
-                try:
-                    import builtins
-
-                    return getattr(builtins, global_name)
-                except AttributeError:
-                    raise ValueError(f"Cannot resolve global name: {global_name}")
+            return self._resolve_global_name(read_context, reduce_data[1])
         elif reduce_data[0] == 1:
             # Case 2-5: Callable with args and optional state/items
             callable_obj = reduce_data[1]
@@ -906,6 +932,7 @@ class ReduceSerializer(Serializer):
 
             # Restore state if present
             if state is not None:
+                read_context.policy.intercept_setstate(obj, state)
                 if hasattr(obj, "__setstate__"):
                     obj.__setstate__(state)
                 else:

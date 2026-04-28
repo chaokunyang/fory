@@ -63,7 +63,7 @@ enum OperationKind: String, CaseIterable {
     }
 }
 
-@ForyObject
+@ForyStruct
 struct NumericStruct: Codable, Equatable {
     @ForyField(id: 1)
     var f1: Int32 = 0
@@ -83,7 +83,7 @@ struct NumericStruct: Codable, Equatable {
     var f8: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 struct Sample: Codable, Equatable {
     @ForyField(id: 1)
     var intValue: Int32 = 0
@@ -131,19 +131,19 @@ struct Sample: Codable, Equatable {
     var string: String = ""
 }
 
-@ForyObject
+@ForyEnum
 enum Player: Int32, Codable, Equatable {
     case java = 0
     case flash = 1
 }
 
-@ForyObject
+@ForyEnum
 enum Size: Int32, Codable, Equatable {
     case small = 0
     case large = 1
 }
 
-@ForyObject
+@ForyStruct
 struct Media: Codable, Equatable {
     @ForyField(id: 1)
     var uri: String = ""
@@ -171,7 +171,7 @@ struct Media: Codable, Equatable {
     var copyright: String = ""
 }
 
-@ForyObject
+@ForyStruct
 struct Image: Codable, Equatable {
     @ForyField(id: 1)
     var uri: String = ""
@@ -185,7 +185,7 @@ struct Image: Codable, Equatable {
     var size: Size = .small
 }
 
-@ForyObject
+@ForyStruct
 struct MediaContent: Codable, Equatable {
     @ForyField(id: 1)
     var media: Media = .init()
@@ -193,19 +193,19 @@ struct MediaContent: Codable, Equatable {
     var images: [Image] = []
 }
 
-@ForyObject
+@ForyStruct
 struct StructList: Codable, Equatable {
     @ForyField(id: 1)
     var structList: [NumericStruct] = []
 }
 
-@ForyObject
+@ForyStruct
 struct SampleList: Codable, Equatable {
     @ForyField(id: 1)
     var sampleList: [Sample] = []
 }
 
-@ForyObject
+@ForyStruct
 struct MediaContentList: Codable, Equatable {
     @ForyField(id: 1)
     var mediaContentList: [MediaContent] = []

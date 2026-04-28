@@ -57,10 +57,46 @@ def test_swift_generator_emits_field_ids_and_encodings():
     """
     content = generate_swift(source)
     assert "public enum Demo" in content
+    assert "@ForyStruct" in content
     assert "@ForyField(id: 1, encoding: .fixed)" in content
     assert "@ForyField(id: 2)" in content
     assert "@ForyField(id: 3, encoding: .tagged)" in content
     assert "fory.register(Demo.Scalar.self, id: 100)" in content
+
+
+def test_swift_generator_emits_nested_field_encoding_hints():
+    source = """
+    package demo;
+
+    message Nested [id=100] {
+        list<fixed_int32> fixed_values = 1;
+        list<fixed_uint64> fixed_unsigned_values = 2;
+        map<fixed_int32, tagged_uint64> indexed_values = 3;
+        list<optional fixed_int32> maybe_fixed_values = 4;
+        list<optional uint64> maybe_unsigned_values = 5;
+        map<string, optional float16> maybe_float_values = 6;
+        bfloat16 bfloat_value = 7;
+    }
+
+    union Event [id=101] {
+        fixed_uint64 deleted = 1;
+        list<fixed_int32> many = 2;
+        map<fixed_int32, string> fixed_keys = 3;
+    }
+    """
+    content = generate_swift(source)
+    assert content.count("@ListField(element: .encoding(.fixed))") == 3
+    assert "public var fixedUnsignedValues: [UInt64] = []" in content
+    assert "public var maybeFixedValues: [Int32?] = []" in content
+    assert "public var maybeUnsignedValues: [UInt64?] = []" in content
+    assert "public var maybeFloatValues: [String: Float16?] = [:]" in content
+    assert "public var bfloatValue: BFloat16 = BFloat16.foryDefault()" in content
+    assert "bfloatValue: BFloat16 = BFloat16.foryDefault()" in content
+    assert "@MapField(key: .encoding(.fixed), value: .encoding(.tagged))" in content
+    assert "@ForyUnion" in content
+    assert "@ForyCase(id: 1, payload: .encoding(.fixed))" in content
+    assert "@ForyCase(id: 2, payload: .list(element: .encoding(.fixed)))" in content
+    assert "@ForyCase(id: 3, payload: .map(key: .encoding(.fixed)))" in content
 
 
 def test_swift_generator_emits_tagged_union_case_ids():
@@ -77,10 +113,11 @@ def test_swift_generator_emits_tagged_union_case_ids():
     }
     """
     content = generate_swift(source)
+    assert "@ForyUnion" in content
     assert "public enum Animal: Equatable" in content
-    assert "@ForyField(id: 3)" in content
+    assert "@ForyCase(id: 3)" in content
     assert "case node(Demo.Node)" in content
-    assert "@ForyField(id: 7)" in content
+    assert "@ForyCase(id: 7)" in content
     assert "case note(String)" in content
     assert "fory.register(Demo.Animal.self, id: 101)" in content
 
@@ -110,20 +147,25 @@ def test_swift_generator_maps_date_to_local_date():
     message Temporal [id=100] {
         date day = 1;
         timestamp instant = 2;
+        duration elapsed = 3;
     }
 
     union Value [id=101] {
         date day = 1;
         timestamp instant = 2;
+        duration elapsed = 3;
     }
     """
     content = generate_swift(source)
     assert "@ForyField(id: 1)" in content
     assert "@ForyField(id: 2)" in content
+    assert "@ForyField(id: 3)" in content
     assert "public var day: LocalDate = LocalDate.foryDefault()" in content
     assert "public var instant: Date = Date.foryDefault()" in content
+    assert "public var elapsed: Duration = Duration.foryDefault()" in content
     assert "case day(LocalDate)" in content
     assert "case instant(Date)" in content
+    assert "case elapsed(Duration)" in content
 
 
 def test_swift_generator_uses_class_for_ref_targets_and_weak_fields():

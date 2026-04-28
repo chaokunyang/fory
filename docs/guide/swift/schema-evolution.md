@@ -32,14 +32,14 @@ let fory = Fory(xlang: true, trackRef: false, compatible: true)
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 struct PersonV1 {
     var name: String = ""
     var age: Int32 = 0
     var address: String = ""
 }
 
-@ForyObject
+@ForyStruct
 struct PersonV2 {
     var name: String = ""
     var age: Int32 = 0

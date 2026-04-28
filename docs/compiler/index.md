@@ -102,7 +102,7 @@ Generated code uses native language constructs:
 - C++: Structs with `FORY_STRUCT` macros
 - C#: Classes with `[ForyObject]` and registration helpers
 - JavaScript: Interfaces with registration function
-- Swift: `@ForyObject` models with `@ForyField` metadata and registration helpers
+- Swift: Fory model macros with field/case metadata and registration helpers
 - Dart: `@ForyStruct` classes with `@ForyField` annotations and registration helpers
 
 ## Quick Start

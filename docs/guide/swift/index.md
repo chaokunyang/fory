@@ -24,7 +24,7 @@ Apache Fory Swift provides high-performance object graph serialization with stro
 ## Why Fory Swift?
 
 - Fast binary serialization for Swift value and reference types
-- `@ForyObject` macro for zero-boilerplate model serialization
+- `@ForyStruct`, `@ForyEnum`, and `@ForyUnion` macros for zero-boilerplate model serialization
 - Cross-language protocol compatibility (`xlang`) with Java, Rust, Go, Python, and more
 - Compatible mode for schema evolution across versions
 - Built-in support for dynamic values (`Any`, `AnyObject`, `any Serializer`, `AnyHashable`)
@@ -67,7 +67,7 @@ targets: [
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 struct User: Equatable {
     var name: String = ""
     var age: Int32 = 0

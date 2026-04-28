@@ -19,7 +19,7 @@ import Foundation
 import Testing
 @testable import Fory
 
-@ForyObject
+@ForyStruct
 private final class RefKeyNode: Hashable {
     var id: Int32 = 0
 
@@ -38,21 +38,69 @@ private final class RefKeyNode: Hashable {
     }
 }
 
-@ForyObject
+@ForyStruct
 private struct RefKeyHolder {
     var key: RefKeyNode = .init()
     var map: [RefKeyNode: Int32] = [:]
 }
 
-@ForyObject
+@ForyStruct
 private struct RefKeyValueHolder {
     var map: [RefKeyNode: RefKeyNode] = [:]
 }
 
-@ForyObject
+@ForyStruct
 private struct RefKeyChunkHolder {
     var keys: [RefKeyNode] = []
     var map: [RefKeyNode: Int32] = [:]
+}
+
+@ForyStruct
+private struct AnnotatedFieldCodecHolder: Equatable {
+    @ForyField(encoding: .fixed)
+    var id: UInt32 = 0
+
+    @ListField(element: .encoding(.fixed))
+    var values: [Int32?] = []
+
+    @ListField(element: .encoding(.fixed))
+    var packedValues: [Int32] = []
+
+    @ListField(element: .uint64(encoding: .fixed))
+    var packedUInt64Values: [UInt64] = []
+
+    @SetField(element: .encoding(.fixed))
+    var fixedSet: Set<Int32?> = []
+
+    @SetField(element: .encoding(.fixed))
+    var fixedNonNullSet: Set<Int32> = []
+
+    @MapField(key: .encoding(.fixed), value: .encoding(.fixed))
+    var data: [Int32?: Int32?] = [:]
+}
+
+@ForyStruct
+private struct DeepAnnotatedFieldCodecHolder: Equatable {
+    @MapField(
+        value: .list(
+            element: .map(
+                key: .encoding(.fixed),
+                value: .list(element: .encoding(.fixed))
+            )
+        )
+    )
+    var data: [String: [[Int32: [UInt32]]]] = [:]
+}
+
+private typealias MapAlias = [String: [Int32?]]
+
+@ForyStruct
+private struct AliasAnnotatedFieldCodecHolder: Equatable {
+    @ForyField(type: .map(
+        key: .string,
+        value: .list(element: .int32(nullable: true, encoding: .fixed))
+    ))
+    var data: MapAlias = [:]
 }
 
 @Test
@@ -210,6 +258,115 @@ func nestedCollectionsAndNullabilityRoundTrip() throws {
     ]
     let decodedMap: [Int32?: [String?]?] = try fory.deserialize(try fory.serialize(map))
     #expect(decodedMap == map)
+}
+
+@Test
+func annotatedNestedFieldCodecsRoundTrip() throws {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    fory.register(AnnotatedFieldCodecHolder.self, id: 9601)
+    fory.register(DeepAnnotatedFieldCodecHolder.self, id: 9602)
+    fory.register(AliasAnnotatedFieldCodecHolder.self, id: 9603)
+
+    let value = AnnotatedFieldCodecHolder(
+        id: UInt32.max,
+        values: [1, nil, -2, Int32.max],
+        packedValues: [1, -3, 100_000],
+        packedUInt64Values: [1, UInt64.max],
+        fixedSet: [nil, -7, 42],
+        fixedNonNullSet: [6, -7],
+        data: [
+            nil: nil,
+            1: -1,
+            Int32.max: Int32.min
+        ]
+    )
+    let decoded: AnnotatedFieldCodecHolder = try fory.deserialize(try fory.serialize(value))
+    #expect(decoded == value)
+
+    let deep = DeepAnnotatedFieldCodecHolder(
+        data: [
+            "left": [
+                [1: [UInt32.max, 7]],
+                [2: [3, 4]]
+            ],
+            "empty": []
+        ]
+    )
+    let decodedDeep: DeepAnnotatedFieldCodecHolder = try fory.deserialize(try fory.serialize(deep))
+    #expect(decodedDeep == deep)
+
+    let alias = AliasAnnotatedFieldCodecHolder(data: ["numbers": [1, nil, -3]])
+    let decodedAlias: AliasAnnotatedFieldCodecHolder = try fory.deserialize(try fory.serialize(alias))
+    #expect(decodedAlias == alias)
+}
+
+@Test
+func annotatedNestedFieldCodecsEmitRecursiveMetadata() {
+    let fields = Dictionary(
+        uniqueKeysWithValues: AnnotatedFieldCodecHolder.foryFieldsInfo(trackRef: false).map {
+            ($0.fieldName, $0.fieldType)
+        }
+    )
+    #expect(fields["id"] == UInt32FixedCodec.fieldType(nullable: false, trackRef: false))
+    #expect(
+        fields["values"] ==
+            ListFieldCodec<OptionalFieldCodec<Int32FixedCodec>>.fieldType(nullable: false, trackRef: false)
+    )
+    #expect(
+        fields["packedValues"] ==
+            TypeMeta.FieldType(typeID: TypeId.int32Array.rawValue, nullable: false, trackRef: false)
+    )
+    #expect(
+        fields["packedUInt64Values"] ==
+            TypeMeta.FieldType(typeID: TypeId.uint64Array.rawValue, nullable: false, trackRef: false)
+    )
+    #expect(
+        fields["fixedSet"] ==
+            SetFieldCodec<OptionalFieldCodec<Int32FixedCodec>>.fieldType(nullable: false, trackRef: false)
+    )
+    #expect(
+        fields["fixedNonNullSet"] ==
+            SetFieldCodec<Int32FixedCodec>.fieldType(nullable: false, trackRef: false)
+    )
+    #expect(fields["fixedNonNullSet"]?.typeID == TypeId.set.rawValue)
+    #expect(
+        fields["data"] ==
+            MapFieldCodec<
+                OptionalFieldCodec<Int32FixedCodec>,
+                OptionalFieldCodec<Int32FixedCodec>
+            >.fieldType(nullable: false, trackRef: false)
+    )
+
+    let deepFields = Dictionary(
+        uniqueKeysWithValues: DeepAnnotatedFieldCodecHolder.foryFieldsInfo(trackRef: false).map {
+            ($0.fieldName, $0.fieldType)
+        }
+    )
+    #expect(
+        deepFields["data"] ==
+            MapFieldCodec<
+                StringCodec,
+                ListFieldCodec<
+                    MapFieldCodec<
+                        Int32FixedCodec,
+                        ListFieldCodec<UInt32FixedCodec>
+                    >
+                >
+            >.fieldType(nullable: false, trackRef: false)
+    )
+
+    let aliasFields = Dictionary(
+        uniqueKeysWithValues: AliasAnnotatedFieldCodecHolder.foryFieldsInfo(trackRef: false).map {
+            ($0.fieldName, $0.fieldType)
+        }
+    )
+    #expect(
+        aliasFields["data"] ==
+            MapFieldCodec<
+                StringCodec,
+                ListFieldCodec<OptionalFieldCodec<Int32FixedCodec>>
+            >.fieldType(nullable: false, trackRef: false)
+    )
 }
 
 @Test

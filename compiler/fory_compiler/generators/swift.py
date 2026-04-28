@@ -38,7 +38,7 @@ from fory_compiler.ir.types import PrimitiveKind
 
 
 class SwiftGenerator(BaseGenerator):
-    """Generates Swift types using @ForyObject / @ForyField macros."""
+    """Generates Swift types using Fory Swift model macros."""
 
     language_name = "swift"
     file_extension = ".swift"
@@ -67,6 +67,7 @@ class SwiftGenerator(BaseGenerator):
         PrimitiveKind.BYTES: "Data",
         PrimitiveKind.DATE: "LocalDate",
         PrimitiveKind.TIMESTAMP: "Date",
+        PrimitiveKind.DURATION: "Duration",
         PrimitiveKind.DECIMAL: "Decimal",
         PrimitiveKind.ANY: "Any",
     }
@@ -608,7 +609,7 @@ class SwiftGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                nullable=False,
+                nullable=field_type.value_optional,
                 parent_stack=parent_stack,
             )
             result = f"[{key_type}: {value_type}]"
@@ -626,6 +627,56 @@ class SwiftGenerator(BaseGenerator):
             return ".fixed"
         if field_type.kind in self.TAGGED_ENCODING_KINDS:
             return ".tagged"
+        return None
+
+    def type_hint_expression(self, field_type: FieldType) -> Optional[str]:
+        if isinstance(field_type, PrimitiveType):
+            if field_type.kind in self.FIXED_ENCODING_KINDS:
+                return ".encoding(.fixed)"
+            if field_type.kind in self.TAGGED_ENCODING_KINDS:
+                return ".encoding(.tagged)"
+            return None
+
+        if isinstance(field_type, ListType):
+            element_hint = self.type_hint_expression(field_type.element_type)
+            if element_hint is None:
+                return None
+            return f".list(element: {element_hint})"
+
+        if isinstance(field_type, MapType):
+            key_hint = self.type_hint_expression(field_type.key_type)
+            value_hint = self.type_hint_expression(field_type.value_type)
+            parts: List[str] = []
+            if key_hint is not None:
+                parts.append(f"key: {key_hint}")
+            if value_hint is not None:
+                parts.append(f"value: {value_hint}")
+            if not parts:
+                return None
+            return f".map({', '.join(parts)})"
+
+        return None
+
+    def nested_field_attribute(self, field: Field) -> Optional[str]:
+        field_type = field.field_type
+        if isinstance(field_type, ListType):
+            element_hint = self.type_hint_expression(field_type.element_type)
+            if element_hint is None:
+                return None
+            return f"@ListField(element: {element_hint})"
+
+        if isinstance(field_type, MapType):
+            key_hint = self.type_hint_expression(field_type.key_type)
+            value_hint = self.type_hint_expression(field_type.value_type)
+            parts: List[str] = []
+            if key_hint is not None:
+                parts.append(f"key: {key_hint}")
+            if value_hint is not None:
+                parts.append(f"value: {value_hint}")
+            if not parts:
+                return None
+            return f"@MapField({', '.join(parts)})"
+
         return None
 
     def message_field_id_argument(self, field: Field) -> Optional[int]:
@@ -684,11 +735,12 @@ class SwiftGenerator(BaseGenerator):
                 PrimitiveKind.VAR_UINT64,
                 PrimitiveKind.TAGGED_UINT64,
                 PrimitiveKind.FLOAT16,
-                PrimitiveKind.BFLOAT16,
                 PrimitiveKind.FLOAT32,
                 PrimitiveKind.FLOAT64,
             }:
                 return "0"
+            if field_type.kind == PrimitiveKind.BFLOAT16:
+                return "BFloat16.foryDefault()"
             if field_type.kind == PrimitiveKind.STRING:
                 return '""'
             if field_type.kind == PrimitiveKind.BYTES:
@@ -825,7 +877,7 @@ class SwiftGenerator(BaseGenerator):
         comment = self.format_type_id_comment(enum, f"{ind}//")
         if comment:
             lines.append(comment)
-        lines.append(f"{ind}@ForyObject")
+        lines.append(f"{ind}@ForyEnum")
         lines.append(f"{ind}public enum {type_name}: Int32, CaseIterable {{")
         for value in enum.values:
             stripped_name = self.strip_enum_prefix(enum.name, value.name)
@@ -848,7 +900,7 @@ class SwiftGenerator(BaseGenerator):
         comment = self.format_type_id_comment(union, f"{ind}//")
         if comment:
             lines.append(comment)
-        lines.append(f"{ind}@ForyObject")
+        lines.append(f"{ind}@ForyUnion")
         conformances = ": Equatable" if self.union_supports_equatable(union) else ""
         lines.append(f"{ind}public enum {type_name}{conformances} {{")
         lineage = parent_stack or []
@@ -859,7 +911,11 @@ class SwiftGenerator(BaseGenerator):
                 parent_stack=lineage,
             )
             case_name = self.safe_enum_case_name(field.name)
-            attr = f"@ForyField(id: {self.union_case_id_argument(field)})"
+            attr_parts = [f"id: {self.union_case_id_argument(field)}"]
+            payload_hint = self.type_hint_expression(field.field_type)
+            if payload_hint is not None:
+                attr_parts.append(f"payload: {payload_hint}")
+            attr = f"@ForyCase({', '.join(attr_parts)})"
             lines.append(f"{ind}{self.indent_str}{attr}")
             lines.append(f"{ind}{self.indent_str}case {case_name}({field_type})")
         lines.append("")
@@ -884,9 +940,9 @@ class SwiftGenerator(BaseGenerator):
         if comment:
             lines.append(comment)
         if self.get_effective_evolving(message):
-            lines.append(f"{ind}@ForyObject")
+            lines.append(f"{ind}@ForyStruct")
         else:
-            lines.append(f"{ind}@ForyObject(evolving: false)")
+            lines.append(f"{ind}@ForyStruct(evolving: false)")
 
         if is_class:
             declaration = f"public final class {type_name}"
@@ -971,6 +1027,9 @@ class SwiftGenerator(BaseGenerator):
                 attr_parts.append(f"encoding: {encoding}")
             if attr_parts:
                 lines.append(f"{ind}@ForyField({', '.join(attr_parts)})")
+            nested_attr = self.nested_field_attribute(field)
+            if nested_attr is not None:
+                lines.append(f"{ind}{nested_attr}")
 
             field_type = self.field_swift_type(field, lineage)
             weak_prefix = "weak " if self.is_weak_ref_field(field) else ""

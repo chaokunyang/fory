@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-For types that cannot or should not use `@ForyObject`, implement `Serializer` manually.
+For types that cannot or should not use Fory model macros, implement `Serializer` manually.
 
 ## When to Use Custom Serializers
 

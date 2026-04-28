@@ -248,7 +248,7 @@ Compiling src/main.fdl...
 | C++        | `cpp`        | `.h`             | Structs with FORY macros               |
 | C#         | `csharp`     | `.cs`            | Classes with Fory attributes           |
 | JavaScript | `javascript` | `.ts`            | Interfaces with registration function  |
-| Swift      | `swift`      | `.swift`         | `@ForyObject` Swift models             |
+| Swift      | `swift`      | `.swift`         | Fory Swift model macros                |
 | Dart       | `dart`       | `.dart`          | `@ForyStruct` classes with annotations |
 
 ## Output Structure
@@ -359,7 +359,7 @@ generated/
 
 - Single `.swift` file per schema
 - Package segments are mapped to nested Swift enums (for example `addressbook.*` -> `Addressbook.*`)
-- Generated messages/unions/enums use `@ForyObject` and `@ForyField(id: ...)`
+- Generated messages use `@ForyStruct`, enums use `@ForyEnum`, and unions use `@ForyUnion`/`@ForyCase`
 - Union types are generated as tagged enums with associated payload values
 - Each schema includes `ForyRegistration` and `toBytes`/`fromBytes` helpers
 - Imported schemas are registered transitively by generated registration helpers

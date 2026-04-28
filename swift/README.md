@@ -10,7 +10,7 @@ The Swift implementation provides high-performance object graph serialization wi
 ## 🚀 Why Apache Fory™ Swift?
 
 - **🔥 Fast Binary Serialization**: Efficient encoding for Swift value and reference types
-- **🧩 Macro-Driven Models**: Use `@ForyObject` to generate serializers for structs, classes, and enums
+- **🧩 Macro-Driven Models**: Use `@ForyStruct`, `@ForyEnum`, and `@ForyUnion` to generate serializers
 - **🌍 Cross-Language**: Exchange payloads with Java, Rust, Go, Python, and other Fory runtimes via xlang
 - **🔄 Shared/Circular References**: Preserve object identity with `trackRef` for reference graphs
 - **🧬 Dynamic Values**: Serialize `Any`, `AnyObject`, `any Serializer`, `AnyHashable`, and dynamic containers
@@ -18,12 +18,12 @@ The Swift implementation provides high-performance object graph serialization wi
 
 ## 📦 Package Layout
 
-| Target           | Description                                                 |
-| ---------------- | ----------------------------------------------------------- |
-| `Fory`           | Core Swift runtime and macro declarations                   |
-| `ForyMacro`      | Macro implementation used by `@ForyObject` and `@ForyField` |
-| `ForyXlangTests` | Executable used by Java-driven xlang integration tests      |
-| `ForyTests`      | Swift unit tests                                            |
+| Target           | Description                                              |
+| ---------------- | -------------------------------------------------------- |
+| `Fory`           | Core Swift runtime and macro declarations                |
+| `ForyMacro`      | Macro implementation used by Fory model and field macros |
+| `ForyXlangTests` | Executable used by Java-driven xlang integration tests   |
+| `ForyTests`      | Swift unit tests                                         |
 
 ## 🏃 Quick Start
 
@@ -56,7 +56,7 @@ Swift Package Index documentation for the Swift target:
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 struct User: Equatable {
     var name: String = ""
     var age: Int32 = 0
@@ -91,18 +91,18 @@ assert(output2 == input)
 
 ### 1. Object Graph Serialization
 
-Use `@ForyObject`, register user types, then serialize/deserialize.
+Use Fory model macros, register user types, then serialize/deserialize.
 
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 struct Address: Equatable {
     var street: String = ""
     var zip: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 struct Person: Equatable {
     var id: Int64 = 0
     var name: String = ""
@@ -145,7 +145,7 @@ Shared reference identity is preserved:
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 final class Animal {
     var name: String = ""
 
@@ -156,7 +156,7 @@ final class Animal {
     }
 }
 
-@ForyObject
+@ForyStruct
 final class AnimalPair {
     var first: Animal? = nil
     var second: Animal? = nil
@@ -184,7 +184,7 @@ assert(decoded.first === decoded.second)
 For cyclic graphs, use `weak` on at least one edge to avoid ARC leaks:
 
 ```swift
-@ForyObject
+@ForyStruct
 final class Node {
     var value: Int32 = 0
     weak var next: Node? = nil
@@ -211,7 +211,7 @@ If dynamic payloads contain user-defined concrete types, register those types be
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 struct DynamicAddress {
     var street: String = ""
     var zip: Int32 = 0
@@ -243,14 +243,14 @@ Use compatible mode to evolve schemas between peers.
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 struct PersonV1 {
     var name: String = ""
     var age: Int32 = 0
     var address: String = ""
 }
 
-@ForyObject
+@ForyStruct
 struct PersonV2 {
     var name: String = ""
     var age: Int32 = 0
@@ -289,7 +289,7 @@ Use `@ForyField(encoding:)` to control integer wire encoding.
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 struct Metrics {
     @ForyField(encoding: .fixed)
     var u32Fixed: UInt32 = 0
@@ -306,21 +306,46 @@ Supported combinations:
 | `Int32`, `UInt32`                | `.varint`, `.fixed`            |
 | `Int64`, `UInt64`, `Int`, `UInt` | `.varint`, `.fixed`, `.tagged` |
 
+Nested collection fields can carry the same integer encoding metadata through
+field type hints:
+
+```swift
+@ForyStruct
+struct NestedMetrics {
+    @ListField(element: .encoding(.fixed))
+    var values: [Int32?] = []
+
+    @SetField(element: .encoding(.fixed))
+    var ids: Set<UInt32?> = []
+
+    @MapField(value: .list(element: .encoding(.fixed)))
+    var grouped: [String: [Int32?]] = [:]
+}
+```
+
+For `List` fields with non-null fixed-width integer elements, Swift emits the
+corresponding Fory primitive packed-array type. `Set` fields remain Fory sets,
+even when their element metadata uses fixed integer encoding.
+
+`Date` maps to Fory `timestamp`. `LocalDate` maps to Fory `date` and exposes
+`epochDay`, `init(epochDay:)`, `fromEpochDay(_:)`, `init(year:month:day:)`,
+`year`, `month`, `day`, `toEpochDay()`, `init(utcDate:)`, and `toUTCDate()`.
+
 ### 6. Enum and Tagged Union Support
 
-`@ForyObject` supports C-style enums and associated-value enums.
+Use `@ForyEnum` for C-style enums and `@ForyUnion` for associated-value enums.
 
 ```swift
 import Fory
 
-@ForyObject
+@ForyEnum
 enum Color: Equatable {
     case red
     case green
     case blue
 }
 
-@ForyObject
+@ForyUnion
 enum StringOrLong: Equatable {
     case text(String)
     case number(Int64)
@@ -342,7 +367,7 @@ assert(value == .text("hello"))
 
 ### 7. Custom Serializers
 
-For types that should not use `@ForyObject`, implement `Serializer` manually and register the type.
+For types that should not use Fory model macros, implement `Serializer` manually and register the type.
 See `../docs/guide/swift/custom-serializers.md` for a complete example.
 
 ## 🌍 Cross-Language Serialization

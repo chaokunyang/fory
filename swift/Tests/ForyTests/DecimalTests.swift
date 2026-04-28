@@ -19,7 +19,7 @@ import Foundation
 import Testing
 @testable import Fory
 
-@ForyObject
+@ForyStruct
 private struct DecimalEnvelope: Equatable {
     var amount: Decimal = .zero
     var note: String = ""

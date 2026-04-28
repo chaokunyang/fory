@@ -6,6 +6,7 @@ Load this file when changing `rust/` or Rust xlang behavior.
 
 - Run all cargo commands from within `rust/`.
 - Changes under `rust/` must pass `clippy` and tests.
+- Rust code must compile without compiler or Clippy warnings. Treat warnings as blockers and keep `cargo clippy --all-targets --all-features -- -D warnings` passing.
 - Use `RUST_BACKTRACE=1 FORY_PANIC_ON_ERROR=1` when debugging failing Rust tests.
 - Add `-- --nocapture` when you need test output during debugging.
 - Do not set `FORY_PANIC_ON_ERROR=1` when running the full Rust test suite, because some tests assert on error contents.

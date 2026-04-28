@@ -82,12 +82,15 @@ class MapType:
 
     key_type: "FieldType"
     value_type: "FieldType"
+    value_optional: bool = False
     value_ref: bool = False
     value_ref_options: dict = field(default_factory=dict)
     location: Optional[SourceLocation] = None
 
     def __repr__(self) -> str:
         suffix = ""
+        if self.value_optional:
+            suffix = ", value_optional=True"
         if self.value_ref:
             suffix = ", value_ref=True"
             if self.value_ref_options:

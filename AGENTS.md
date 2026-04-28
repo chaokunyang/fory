@@ -48,7 +48,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Do not replace existing C, C++, Cython, unsafe, or other low-level optimized paths with simpler high-level implementations just to make a refactor easier.
 - If a refactor accidentally changes logic or implementation strategy, revert that part and re-implement the refactor around the existing logic.
 - Use English only in code, comments, and documentation.
+- After editing any Markdown file, run `prettier --write <file>` on each changed Markdown file before finishing.
 - Add comments only when behavior is hard to understand or an algorithm is non-obvious.
+- Do not remove existing code comments unless they are stale, misleading, redundant, or no longer necessary after the change.
 - Only add tests that verify internal behaviors or fix specific bugs; do not create unnecessary tests unless requested.
 - Do not add cleanup-sentinel tests that only pin deleted APIs or removed fields.
 - Tests must exercise the actual code you wrote or changed. Do not write tests that pass by exercising a pre-existing code path that produces similar-looking results. Before writing a test, identify the exact new code path (annotation, codegen output, new API) and verify the test would fail if that code path were removed. When the change involves codegen or annotations, the test must use those annotations on real structs, run through the codegen pipeline, and verify the generated output drives the expected runtime behavior.
@@ -81,7 +83,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Keep hot paths allocation-minimal. Avoid per-call or per-element object allocation, boxing, wrapper round-trips, callbacks, iterator carriers, or holder objects unless there is a measured reason and no lower-allocation design preserves the same behavior.
 - Keep hot-path control flow direct and predictable. Hoist repeated buffer/cache/state lookups into locals for multi-step operations, keep cold rebuild or restoration logic on slow branches, and avoid tiny forwarding helpers that only obscure the owner.
 - In unified native/xlang hot paths, branch only where the wire format or protocol behavior actually differs. Do not add mode booleans or mode-specific helper parameters for equivalent behavior.
-- Public APIs must be well-documented and easy to understand.
+- Public APIs must be well-documented and easy to understand. When adding a public API, write source-level API documentation in the owning code.
 - Implement comprehensive error handling with meaningful messages.
 - Use strong typing and generics appropriately.
 - Handle null values appropriately for each language.
@@ -101,6 +103,8 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 ## Shared Validation Expectations
 
 - Run the relevant tests for every touched language or subsystem before finishing.
+- Run applicable test commands in a subagent with a thinking budget one level lower than the main task budget, using medium when the current budget is unclear, unless the change is docs-only or the user explicitly asks to run them locally.
+- Reuse the same test subagent for repeated runs within one task and subsystem so it keeps failure context; create a fresh subagent when switching unrelated subsystems or when prior context may be stale or misleading.
 - Use `integration_tests/` for cross-language compatibility validation when behavior crosses runtimes.
 - If xlang behavior or type mapping changes, run `org.apache.fory.xlang.CPPXlangTest`, `org.apache.fory.xlang.CSharpXlangTest`, `org.apache.fory.xlang.RustXlangTest`, `org.apache.fory.xlang.GoXlangTest`, and `org.apache.fory.xlang.PythonXlangTest`.
 - If Swift xlang behavior changes, run `org.apache.fory.xlang.SwiftXlangTest` too.
@@ -133,6 +137,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Commit And PR Expectations
 
+- After each finished task, create a git commit automatically for the task's tracked code and documentation changes, excluding `tasks/task-*.md`, `tasks/lessons.md`, and unrelated user changes.
 - PR titles must follow Conventional Commits; `.github/workflows/pr-lint.yml` enforces this.
 - Performance changes should use the `perf` type and include benchmark data.
 - See `.agents/ci-and-pr.md` for GitHub CLI triage commands and commit message examples.

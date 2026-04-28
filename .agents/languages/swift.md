@@ -6,6 +6,7 @@ Load this file when changing `swift/` or Swift xlang behavior.
 
 - Run Swift commands from within `swift/`.
 - Changes under `swift/` must pass lint and tests.
+- Swift code must compile without compiler warnings. Treat warnings as blockers, including warnings in generated Swift code.
 - Swift lint uses `swift/.swiftlint.yml`.
 - Use `ENABLE_FORY_DEBUG_OUTPUT=1` when debugging Swift tests.
 - Prefer the user-requested or existing Foundation public value type when it is the intended Swift surface; do not invent Fory-prefixed wrappers only to avoid import ambiguity.

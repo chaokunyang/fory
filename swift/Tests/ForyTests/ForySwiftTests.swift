@@ -19,13 +19,13 @@ import Foundation
 import Testing
 @testable import Fory
 
-@ForyObject
+@ForyStruct
 struct Address: Equatable {
     var street: String
     var zip: Int32
 }
 
-@ForyObject
+@ForyStruct
 struct Person: Equatable {
     var id: Int64
     var name: String
@@ -36,7 +36,7 @@ struct Person: Equatable {
     var metadata: [Int8: Int32?]
 }
 
-@ForyObject
+@ForyStruct
 struct FieldOrder: Equatable {
     var textTail: String
     var longValue: Int64
@@ -44,7 +44,7 @@ struct FieldOrder: Equatable {
     var intValue: Int32
 }
 
-@ForyObject
+@ForyStruct
 struct EncodedNumberFields: Equatable {
     @ForyField(encoding: .fixed)
     var u32Fixed: UInt32
@@ -53,7 +53,7 @@ struct EncodedNumberFields: Equatable {
     var u64Tagged: UInt64
 }
 
-@ForyObject
+@ForyStruct
 struct ReducedPrecisionMacroFields: Equatable {
     var float16Value: Float16
     var bfloat16Value: BFloat16
@@ -61,7 +61,7 @@ struct ReducedPrecisionMacroFields: Equatable {
     var bfloat16Array: [BFloat16]
 }
 
-@ForyObject
+@ForyStruct
 struct FieldIdConfigured: Equatable {
     @ForyField(id: 2)
     var stableID: Int32
@@ -70,7 +70,7 @@ struct FieldIdConfigured: Equatable {
     var fixedValue: Int32
 }
 
-@ForyObject
+@ForyStruct
 struct FieldIdSource: Equatable {
     @ForyField(id: 1)
     var value: Int32
@@ -79,7 +79,7 @@ struct FieldIdSource: Equatable {
     var label: String
 }
 
-@ForyObject
+@ForyStruct
 struct FieldIdTarget: Equatable {
     @ForyField(id: 1)
     var renamedValue: Int32
@@ -88,62 +88,62 @@ struct FieldIdTarget: Equatable {
     var renamedLabel: String
 }
 
-@ForyObject
+@ForyEnum
 enum SparseStatus: Int32, CaseIterable {
     case unknown = 4096
     case ok = 8192
 }
 
-@ForyObject
+@ForyStruct
 struct EvolvingOverrideValue: Equatable {
     var f1: String = ""
 }
 
-@ForyObject(evolving: false)
+@ForyStruct(evolving: false)
 struct FixedOverrideValue: Equatable {
     var f1: String = ""
 }
 
-@ForyObject
+@ForyUnion
 enum FieldIdUnionSource: Equatable {
-    @ForyField(id: 3)
+    @ForyCase(id: 3)
     case number(Int32)
 
-    @ForyField(id: 9)
+    @ForyCase(id: 9)
     case text(String)
 }
 
-@ForyObject
+@ForyUnion
 enum FieldIdUnionTarget: Equatable {
-    @ForyField(id: 3)
+    @ForyCase(id: 3)
     case renamedNumber(Int32)
 
-    @ForyField(id: 9)
+    @ForyCase(id: 9)
     case renamedText(String)
 }
 
-@ForyObject
+@ForyStruct
 struct CompatibleNestedItem: Equatable {
     var id: Int32
     var name: String
 }
 
-@ForyObject
+@ForyStruct
 struct CompatibleNestedArrayHolder: Equatable {
     var items: [CompatibleNestedItem]
 }
 
-@ForyObject
+@ForyStruct
 struct CompatibleNestedOptionalArrayHolder: Equatable {
     var items: [CompatibleNestedItem?]
 }
 
-@ForyObject
+@ForyStruct
 struct CompatibleNestedMapHolder: Equatable {
     var items: [Int32: CompatibleNestedItem]
 }
 
-@ForyObject
+@ForyStruct
 final class Node {
     var value: Int32 = 0
     var next: Node?
@@ -156,7 +156,7 @@ final class Node {
     }
 }
 
-@ForyObject
+@ForyStruct
 final class WeakNode {
     var value: Int32 = 0
     weak var next: WeakNode?
@@ -169,21 +169,21 @@ final class WeakNode {
     }
 }
 
-@ForyObject
+@ForyStruct
 struct AnyObjectHolder {
     var value: AnyObject
     var optionalValue: AnyObject?
     var items: [AnyObject]
 }
 
-@ForyObject
+@ForyStruct
 struct AnySerializerHolder {
     var value: any Serializer
     var items: [any Serializer]
     var map: [String: any Serializer]
 }
 
-@ForyObject
+@ForyStruct
 struct AnyFieldHolder {
     var value: Any
     var optionalValue: Any?

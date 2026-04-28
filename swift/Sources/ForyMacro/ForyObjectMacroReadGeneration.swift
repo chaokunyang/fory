@@ -403,10 +403,8 @@ private func readFieldExpr(
         )
     }
     if let codecType = field.customCodecType {
-        if field.isOptional {
-            return "try \(codecType)?.foryRead(context, refMode: \(refModeExpr), readTypeInfo: false)?.rawValue"
-        }
-        return "try \(codecType).foryRead(context, refMode: \(refModeExpr), readTypeInfo: false).rawValue"
+        let fieldCodec = field.isOptional ? "OptionalFieldCodec<\(codecType)>" : codecType
+        return "try \(fieldCodec).read(context, refMode: \(refModeExpr), readTypeInfo: false)"
     }
     return "try \(field.typeText).foryRead(context, refMode: \(refModeExpr), readTypeInfo: \(readTypeInfoExpr))"
 }
@@ -487,7 +485,7 @@ private func dynamicAnyReadExpr(
 }
 
 private func compatibleDefaultDecl(_ field: ParsedField) -> String {
-    let explicitType = field.dynamicAnyCodec != nil ? ": \(field.typeText)" : ""
+    let explicitType = (field.dynamicAnyCodec != nil || field.customCodecType != nil) ? ": \(field.typeText)" : ""
     return "var __\(field.name)\(explicitType) = \(fieldDefaultExpr(field))"
 }
 

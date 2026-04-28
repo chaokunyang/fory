@@ -19,13 +19,13 @@ import Foundation
 import Testing
 @testable import Fory
 
-@ForyObject
+@ForyStruct
 private struct CompatibleProfileV1: Equatable {
     var id: Int32 = 0
     var name: String = ""
 }
 
-@ForyObject
+@ForyStruct
 private struct CompatibleProfileV2: Equatable {
     var id: Int32 = 0
     var name: String = ""
@@ -33,13 +33,13 @@ private struct CompatibleProfileV2: Equatable {
     var scores: [Int32] = []
 }
 
-@ForyObject
+@ForyStruct
 private struct CompatibleNestedProfileV1: Equatable {
     var id: Int32 = 0
     var name: String = ""
 }
 
-@ForyObject
+@ForyStruct
 private struct CompatibleNestedProfileV2: Equatable {
     var id: Int32 = 0
     var name: String = ""
@@ -47,40 +47,86 @@ private struct CompatibleNestedProfileV2: Equatable {
     var scores: [Int32] = []
 }
 
-@ForyObject
+@ForyStruct
 private struct CompatibleNestedArrayV1: Equatable {
     var items: [CompatibleNestedProfileV1] = []
 }
 
-@ForyObject
+@ForyStruct
 private struct CompatibleNestedArrayV2: Equatable {
     var items: [CompatibleNestedProfileV2] = []
 }
 
-@ForyObject
+@ForyStruct
 private struct CompatibleNestedMapV1: Equatable {
     var items: [Int32: CompatibleNestedProfileV1] = [:]
 }
 
-@ForyObject
+@ForyStruct
 private struct CompatibleNestedMapV2: Equatable {
     var items: [Int32: CompatibleNestedProfileV2] = [:]
 }
 
-@ForyObject
+@ForyStruct
+private struct RemoteFixedUInt32V1: Equatable {
+    @ForyField(id: 1, encoding: .fixed)
+    var id: UInt32 = 0
+
+    @ForyField(id: 2)
+    var keep: Int32 = 0
+
+}
+
+@ForyStruct
+private struct LocalVarUInt32V2: Equatable {
+    @ForyField(id: 1)
+    var id: UInt32 = 0
+
+    @ForyField(id: 2)
+    var keep: Int32 = 0
+
+}
+
+@ForyStruct
+private struct RemoteNestedFixedMapV1: Equatable {
+    @ForyField(id: 1)
+    @MapField(value: .list(element: .encoding(.fixed)))
+    var data: [String: [Int32?]] = [:]
+
+    @ForyField(id: 2)
+    var keep: Int32 = 0
+
+    @ForyField(id: 3)
+    @SetField(element: .encoding(.fixed))
+    var ids: Set<Int32?> = []
+}
+
+@ForyStruct
+private struct LocalNestedVarintMapV2: Equatable {
+    @ForyField(id: 1)
+    var data: [String: [Int32?]] = [:]
+
+    @ForyField(id: 2)
+    var keep: Int32 = 0
+
+    @ForyField(id: 3)
+    var ids: Set<Int32?> = []
+}
+
+@ForyStruct
 private struct SchemaVersionV1: Equatable {
     var id: Int32 = 0
     var name: String = ""
 }
 
-@ForyObject
+@ForyStruct
 private struct SchemaVersionV2: Equatable {
     var id: Int32 = 0
     var alias: String = ""
     var count: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 private final class CompatibleGraphNode {
     var value: Int32 = 0
     var next: CompatibleGraphNode?
@@ -93,7 +139,7 @@ private final class CompatibleGraphNode {
     }
 }
 
-@ForyObject
+@ForyStruct
 private final class CompatibleGraphContainer {
     var first: CompatibleGraphNode?
     var second: CompatibleGraphNode?
@@ -190,6 +236,14 @@ func compatibleModePreservesSharedAndCircularReferencesForMacroObjects() throws 
 }
 
 @Test
+func schemaHashMatchesJavaFingerprintForTaggedUnsignedFields() {
+    #expect(
+        SchemaHash.structHash32("u64_tagged,15,0,0;u64_tagged_nullable,15,0,1;") ==
+            UInt32(2_653_134_377)
+    )
+}
+
+@Test
 func compatibleNestedArrayEvolves() throws {
     let writerV1 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     writerV1.register(CompatibleNestedProfileV1.self, id: 9910)
@@ -230,6 +284,42 @@ func compatibleNestedArrayEvolves() throws {
         CompatibleNestedProfileV1(id: 3, name: "gamma"),
         CompatibleNestedProfileV1(id: 4, name: "delta")
     ])
+}
+
+@Test
+func compatibleSkipUsesRemoteMetadataForFixedIntegerMismatch() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(RemoteFixedUInt32V1.self, id: 9920)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(LocalVarUInt32V2.self, id: 9920)
+
+    let source = RemoteFixedUInt32V1(id: UInt32.max, keep: 42)
+    let decoded: LocalVarUInt32V2 = try reader.deserialize(try writer.serialize(source))
+    #expect(decoded.id == 0)
+    #expect(decoded.keep == source.keep)
+}
+
+@Test
+func compatibleSkipUsesRemoteMetadataForNestedMapListSetFields() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(RemoteNestedFixedMapV1.self, id: 9921)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(LocalNestedVarintMapV2.self, id: 9921)
+
+    let source = RemoteNestedFixedMapV1(
+        data: [
+            "a": [1, nil, Int32.max],
+            "b": []
+        ],
+        keep: 84,
+        ids: [nil, -1, Int32.max]
+    )
+    let decoded: LocalNestedVarintMapV2 = try reader.deserialize(try writer.serialize(source))
+    #expect(decoded.data.isEmpty)
+    #expect(decoded.keep == source.keep)
+    #expect(decoded.ids.isEmpty)
 }
 
 @Test

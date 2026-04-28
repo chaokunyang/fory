@@ -17,7 +17,7 @@
 
 import Foundation
 
-public enum TypeId: UInt32, CaseIterable {
+public enum TypeId: UInt32, CaseIterable, Sendable {
     case unknown = 0
     case bool = 1
     case int8 = 2

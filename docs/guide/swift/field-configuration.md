@@ -23,15 +23,18 @@ This page covers macro-level field configuration in Swift.
 
 ## Available Macro Attributes
 
-- `@ForyObject` on struct/class/enum
+- `@ForyStruct` on struct/class models
+- `@ForyEnum` on C-style enum models
+- `@ForyUnion` and `@ForyCase` on associated-value enum models
 - `@ForyField(encoding: ...)` on numeric fields
+- `@ListField`, `@SetField`, and `@MapField` for nested collection field metadata
 
 ## `@ForyField(encoding:)`
 
 Use `@ForyField` to override integer encoding strategy.
 
 ```swift
-@ForyObject
+@ForyStruct
 struct Metrics: Equatable {
     @ForyField(encoding: .fixed)
     var u32Fixed: UInt32 = 0
@@ -54,7 +57,62 @@ struct Metrics: Equatable {
 
 Compile-time validation rejects unsupported combinations (for example, `Int32` with `.tagged`).
 
-## `@ForyObject` Requirements
+## Nested Collection Field Metadata
+
+Use `@ListField`, `@SetField`, and `@MapField` when a nested field needs type-specific
+wire metadata, such as fixed or tagged integer encoding inside a container.
+
+```swift
+@ForyStruct
+struct NestedMetrics: Equatable {
+    @ListField(element: .encoding(.fixed))
+    var values: [Int32?] = []
+
+    @SetField(element: .encoding(.fixed))
+    var ids: Set<UInt32?> = []
+
+    @MapField(key: .encoding(.fixed), value: .encoding(.tagged))
+    var byId: [Int32: UInt64] = [:]
+
+    @MapField(value: .list(element: .encoding(.fixed)))
+    var groups: [String: [Int32?]] = [:]
+}
+```
+
+Non-null `List` elements with fixed-width signed or unsigned integer metadata are
+classified and encoded as the matching Fory primitive packed-array type. `Set`
+fields stay classified as Fory sets, including fixed-width integer sets.
+
+When the Swift property type is an alias or otherwise needs a full hint, use
+`@ForyField(type:)`:
+
+```swift
+typealias MetricsMap = [String: [Int32?]]
+
+@ForyStruct
+struct AliasMetrics: Equatable {
+    @ForyField(type: .map(
+        key: .string,
+        value: .list(.int32(nullable: true, encoding: .fixed))
+    ))
+    var metrics: MetricsMap = [:]
+}
+```
+
+Union payloads use the same DSL through `@ForyCase(payload:)`:
+
+```swift
+@ForyUnion
+enum Event: Equatable {
+    @ForyCase(id: 1)
+    case created(String)
+
+    @ForyCase(id: 2, payload: .uint64(encoding: .fixed))
+    case deleted(UInt64)
+}
+```
+
+## Model Macro Requirements
 
 ### Struct and class fields
 
@@ -64,10 +122,10 @@ Compile-time validation rejects unsupported combinations (for example, `Int32` w
 
 ### Class requirement
 
-Classes annotated with `@ForyObject` must provide a `required init()` for default construction.
+Classes annotated with `@ForyStruct` must provide a `required init()` for default construction.
 
 ```swift
-@ForyObject
+@ForyStruct
 final class Node {
     var value: Int32 = 0
     var next: Node? = nil
@@ -78,7 +136,7 @@ final class Node {
 
 ## Dynamic Any Fields in Macro Types
 
-`@ForyObject` supports dynamic fields and nested containers:
+Fory model macros support dynamic fields and nested containers:
 
 - `Any`, `AnyObject`, `any Serializer`
 - `AnyHashable`

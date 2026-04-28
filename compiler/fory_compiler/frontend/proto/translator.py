@@ -207,6 +207,7 @@ class ProtoTranslator:
             field_type = MapType(
                 field_type.key_type,
                 field_type.value_type,
+                value_optional=field_type.value_optional,
                 value_ref=True,
                 value_ref_options=ref_options,
                 location=field_type.location,
@@ -216,6 +217,7 @@ class ProtoTranslator:
             field_type = MapType(
                 field_type.key_type,
                 field_type.value_type,
+                value_optional=field_type.value_optional,
                 value_ref=field_type.value_ref,
                 value_ref_options=ref_options,
                 location=field_type.location,

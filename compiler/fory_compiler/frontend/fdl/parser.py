@@ -1090,11 +1090,18 @@ class Parser:
 
         self.consume(TokenType.COMMA, "Expected ',' between map key and value types")
 
+        value_optional = False
         value_ref = False
         value_ref_options = {}
-        if self.match(TokenType.REF):
-            value_ref = True
-            value_ref_options = self.parse_ref_options(name="map value")
+        while True:
+            if self.match(TokenType.OPTIONAL):
+                value_optional = True
+                continue
+            if self.match(TokenType.REF):
+                value_ref = True
+                value_ref_options = self.parse_ref_options(name="map value")
+                continue
+            break
         value_type = self.parse_type()
 
         self.consume(TokenType.RANGLE, "Expected '>' after map value type")
@@ -1102,6 +1109,7 @@ class Parser:
         return MapType(
             key_type,
             value_type,
+            value_optional=value_optional,
             value_ref=value_ref,
             value_ref_options=value_ref_options,
             location=self.make_location(start),

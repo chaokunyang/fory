@@ -957,7 +957,7 @@ class TypeResolver:
         if typeinfo is not None:
             self._ns_type_to_type_info[(ns_metabytes, type_metabytes)] = typeinfo
             return typeinfo
-        cls = load_class(ns + "#" + typename)
+        cls = load_class(ns + "#" + typename, policy=self.policy)
         typeinfo = self.get_type_info(cls)
         self._ns_type_to_type_info[(ns_metabytes, type_metabytes)] = typeinfo
         return typeinfo

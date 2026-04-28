@@ -19,6 +19,10 @@ import pytest
 from pyfory import Fory, DeserializationPolicy
 
 
+def policy_global_function():
+    return "safe"
+
+
 class BlockClassPolicy(DeserializationPolicy):
     """Policy that blocks specific class names from deserialization."""
 
@@ -291,6 +295,63 @@ def test_policy_with_nested_reduce():
         fory.deserialize(data)
 
 
+def test_stateful_authorizes_instantiation():
+    """Test authorize_instantiation policy hook for stateful deserialization."""
+
+    class StatefulPayload:
+        def __init__(self):
+            self.value = 1
+
+        def __getstate__(self):
+            return {"value": self.value}
+
+        def __setstate__(self, state):
+            self.__dict__.update(state)
+
+    class BlockInstantiationPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.authorize_instantiation_calls = 0
+
+        def authorize_instantiation(self, cls, **kwargs):
+            self.authorize_instantiation_calls += 1
+            if cls is StatefulPayload:
+                raise ValueError("StatefulPayload blocked")
+            return None
+
+    policy = BlockInstantiationPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="StatefulPayload blocked"):
+        fory.deserialize(fory.serialize(StatefulPayload()))
+    assert policy.authorize_instantiation_calls == 1
+
+
+def test_reduce_class_callable_authorizes_instantiation():
+    """Test authorize_instantiation policy hook for reduce class callables."""
+
+    class ReduceTarget:
+        pass
+
+    class ReducePayload:
+        def __reduce__(self):
+            return (ReduceTarget, ())
+
+    class BlockInstantiationPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.authorize_instantiation_calls = 0
+
+        def authorize_instantiation(self, cls, **kwargs):
+            self.authorize_instantiation_calls += 1
+            if cls.__name__ == "ReduceTarget":
+                raise ValueError("ReduceTarget blocked")
+            return None
+
+    policy = BlockInstantiationPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="ReduceTarget blocked"):
+        fory.deserialize(fory.serialize(ReducePayload()))
+    assert policy.authorize_instantiation_calls == 1
+
+
 def test_validate_module():
     """Test validate_module policy hook for module deserialization."""
     import json
@@ -321,6 +382,147 @@ def test_validate_module():
     fory3 = Fory(ref=True, strict=False, policy=BlockPolicy())
     with pytest.raises(ValueError, match="blocked"):
         fory3.deserialize(fory3.serialize(json))
+
+
+def test_type_deserialization_validates_module():
+    """Test validate_module policy hook for global class deserialization."""
+    import subprocess
+
+    class BlockModulePolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            if module_name == "subprocess":
+                raise ValueError("subprocess blocked")
+            return None
+
+    policy = BlockModulePolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="subprocess blocked"):
+        fory.deserialize(fory.serialize(subprocess.Popen))
+    assert policy.validate_module_calls == 1
+
+
+def test_global_function_deserialization_validates_module():
+    """Test validate_module policy hook for global function deserialization."""
+
+    class BlockModulePolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            if module_name == policy_global_function.__module__:
+                raise ValueError("function module blocked")
+            return None
+
+    policy = BlockModulePolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="function module blocked"):
+        fory.deserialize(fory.serialize(policy_global_function))
+    assert policy.validate_module_calls == 1
+
+
+def test_local_function_deserialization_validates_module():
+    """Test validate_module policy hook for local function deserialization."""
+
+    def local_function():
+        return "safe"
+
+    class BlockModulePolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            if module_name == local_function.__module__:
+                raise ValueError("local function module blocked")
+            return None
+
+    policy = BlockModulePolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="local function module blocked"):
+        fory.deserialize(fory.serialize(local_function))
+    assert policy.validate_module_calls == 1
+
+
+def test_native_function_deserialization_validates_module():
+    """Test validate_module policy hook for native function deserialization."""
+    import time
+
+    class BlockModulePolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            if module_name == "time":
+                raise ValueError("time blocked")
+            return None
+
+    policy = BlockModulePolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    with pytest.raises(ValueError, match="time blocked"):
+        fory.deserialize(fory.serialize(time.time))
+    assert policy.validate_module_calls == 1
+
+
+def test_type_metadata_load_validates_module():
+    """Test validate_module policy hook for by-name type metadata loading."""
+
+    class BlockModulePolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_module_calls = 0
+
+        def validate_module(self, module_name, **kwargs):
+            self.validate_module_calls += 1
+            if module_name == "subprocess":
+                raise ValueError("subprocess blocked")
+            return None
+
+    policy = BlockModulePolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    from pyfory.registry import SharedRegistry, TypeResolver
+
+    resolver = TypeResolver(fory.config, shared_registry=SharedRegistry())
+    namespace = resolver.namespace_encoder.encode("subprocess")
+    ns_metabytes = resolver.shared_registry.get_encoded_meta_string(namespace)
+    typename = resolver.typename_encoder.encode("Popen")
+    type_metabytes = resolver.shared_registry.get_encoded_meta_string(typename)
+
+    with pytest.raises(ValueError, match="subprocess blocked"):
+        resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
+    assert policy.validate_module_calls == 1
+
+
+def test_type_metadata_load_validates_class():
+    """Test validate_class policy hook for by-name type metadata loading."""
+
+    class BlockClassPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_class_calls = 0
+
+        def validate_class(self, cls, is_local, **kwargs):
+            self.validate_class_calls += 1
+            if cls.__module__ == "subprocess" and cls.__name__ == "Popen":
+                raise ValueError("Popen blocked")
+            return None
+
+    policy = BlockClassPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    from pyfory.registry import SharedRegistry, TypeResolver
+
+    resolver = TypeResolver(fory.config, shared_registry=SharedRegistry())
+    namespace = resolver.namespace_encoder.encode("subprocess")
+    ns_metabytes = resolver.shared_registry.get_encoded_meta_string(namespace)
+    typename = resolver.typename_encoder.encode("Popen")
+    type_metabytes = resolver.shared_registry.get_encoded_meta_string(typename)
+
+    with pytest.raises(ValueError, match="Popen blocked"):
+        resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
+    assert policy.validate_class_calls == 1
 
 
 def test_reduce_global_name_validates_module():

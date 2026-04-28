@@ -45,6 +45,29 @@ _WINDOWS = os.name == "nt"
 
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 
+
+def _import_validated_module(policy, module_name):
+    result = policy.validate_module(module_name)
+    if result is not None:
+        if isinstance(result, types.ModuleType):
+            return result
+        assert isinstance(result, str), f"validate_module must return module, str, or None, got {type(result)}"
+        module_name = result
+    return importlib.import_module(module_name)
+
+
+def _resolve_validated_module_attr(policy, module_name, attr_name):
+    module = _import_validated_module(policy, module_name)
+    return getattr(module, attr_name)
+
+
+def _resolve_validated_module_qualname(policy, module_name, qualname):
+    obj = _import_validated_module(policy, module_name)
+    for name in qualname.split("."):
+        obj = getattr(obj, name)
+    return obj
+
+
 # Keep the mode switch here instead of inside `_serializer.py`.
 # In Cython mode the active hot-path serializer classes, including primitive,
 # enum/slice, and collection serializers, must come from `pyfory.serialization`.
@@ -788,6 +811,7 @@ class StatefulSerializer(Serializer):
         kwargs = read_context.read_ref()
         state = read_context.read_ref()
 
+        read_context.policy.authorize_instantiation(self.cls)
         if args or kwargs:
             # Case 1: __getnewargs__ was used. Re-create by calling __init__.
             obj = self.cls(*args, **kwargs)
@@ -817,15 +841,6 @@ class ReduceSerializer(Serializer):
         self._getnewargs_ex = getattr(cls, "__getnewargs_ex__", None)
         self._getnewargs = getattr(cls, "__getnewargs__", None)
 
-    def _resolve_module(self, policy, module_name):
-        result = policy.validate_module(module_name)
-        if result is not None:
-            if isinstance(result, types.ModuleType):
-                return result
-            assert isinstance(result, str), f"validate_module must return module, str, or None, got {type(result)}"
-            module_name = result
-        return importlib.import_module(module_name)
-
     def _validate_global_object(self, policy, obj):
         result = None
         if isinstance(obj, type):
@@ -850,9 +865,8 @@ class ReduceSerializer(Serializer):
             module_name, obj_name = global_name.rsplit(".", 1)
         else:
             module_name, obj_name = "builtins", global_name
-        module = self._resolve_module(policy, module_name)
         try:
-            obj = getattr(module, obj_name)
+            obj = _resolve_validated_module_attr(policy, module_name, obj_name)
         except AttributeError:
             raise ValueError(f"Cannot resolve global name: {global_name}")
         return self._validate_global_object(policy, obj)
@@ -928,6 +942,8 @@ class ReduceSerializer(Serializer):
             obj = read_context.policy.intercept_reduce_call(callable_obj, args)
             if obj is None:
                 # Create the object using the callable and args
+                if isinstance(callable_obj, type):
+                    read_context.policy.authorize_instantiation(callable_obj)
                 obj = callable_obj(*args)
 
             # Restore state if present
@@ -986,9 +1002,7 @@ class TypeSerializer(Serializer):
             return self._deserialize_local_class(read_context)
         module_name = read_context.read_string()
         qualname = read_context.read_string()
-        cls = importlib.import_module(module_name)
-        for name in qualname.split("."):
-            cls = getattr(cls, name)
+        cls = _resolve_validated_module_qualname(read_context.policy, module_name, qualname)
         result = read_context.policy.validate_class(cls, is_local=False)
         if result is not None:
             cls = result
@@ -1069,13 +1083,7 @@ class ModuleSerializer(Serializer):
 
     def read(self, read_context):
         mod_name = read_context.read_string()
-        result = read_context.policy.validate_module(mod_name)
-        if result is not None:
-            if isinstance(result, types.ModuleType):
-                return result
-            assert isinstance(result, str), f"validate_module must return module, str, or None, got {type(result)}"
-            mod_name = result
-        return importlib.import_module(mod_name)
+        return _import_validated_module(read_context.policy, mod_name)
 
 
 class MappingProxySerializer(Serializer):
@@ -1231,9 +1239,7 @@ class FunctionSerializer(Serializer):
         if func_type_id == 1:
             module = read_context.read_string()
             qualname = read_context.read_string()
-            mod = importlib.import_module(module)
-            for name in qualname.split("."):
-                mod = getattr(mod, name)
+            mod = _resolve_validated_module_qualname(read_context.policy, module, qualname)
             result = read_context.policy.validate_function(mod, is_local=False)
             if result is not None:
                 mod = result
@@ -1241,6 +1247,7 @@ class FunctionSerializer(Serializer):
 
         module = read_context.read_string()
         qualname = read_context.read_string()
+        mod = _import_validated_module(read_context.policy, module)
         name = qualname.rsplit(".")[-1]
 
         marshalled_code = read_context.read_bytes_and_size()
@@ -1275,12 +1282,8 @@ class FunctionSerializer(Serializer):
 
         # Create a globals dictionary with module's globals as the base
         func_globals = {}
-        try:
-            mod = importlib.import_module(module)
-            if mod:
-                func_globals.update(mod.__dict__)
-        except (KeyError, AttributeError):
-            pass
+        if mod:
+            func_globals.update(mod.__dict__)
 
         func_globals.update(globals_dict)
 
@@ -1326,8 +1329,7 @@ class NativeFuncMethodSerializer(Serializer):
         name = read_context.read_string()
         if read_context.read_bool():
             module = read_context.read_string()
-            mod = importlib.import_module(module)
-            func = getattr(mod, name)
+            func = _resolve_validated_module_attr(read_context.policy, module, name)
         else:
             obj = read_context.read_ref()
             func = getattr(obj, name)

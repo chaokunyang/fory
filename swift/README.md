@@ -18,12 +18,12 @@ The Swift implementation provides high-performance object graph serialization wi
 
 ## 📦 Package Layout
 
-| Target           | Description                                                 |
-| ---------------- | ----------------------------------------------------------- |
-| `Fory`           | Core Swift runtime and macro declarations                   |
-| `ForyMacro`      | Macro implementation used by Fory model and field macros     |
-| `ForyXlangTests` | Executable used by Java-driven xlang integration tests      |
-| `ForyTests`      | Swift unit tests                                            |
+| Target           | Description                                              |
+| ---------------- | -------------------------------------------------------- |
+| `Fory`           | Core Swift runtime and macro declarations                |
+| `ForyMacro`      | Macro implementation used by Fory model and field macros |
+| `ForyXlangTests` | Executable used by Java-driven xlang integration tests   |
+| `ForyTests`      | Swift unit tests                                         |
 
 ## 🏃 Quick Start
 

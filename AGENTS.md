@@ -48,6 +48,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Do not replace existing C, C++, Cython, unsafe, or other low-level optimized paths with simpler high-level implementations just to make a refactor easier.
 - If a refactor accidentally changes logic or implementation strategy, revert that part and re-implement the refactor around the existing logic.
 - Use English only in code, comments, and documentation.
+- After editing any Markdown file, run `prettier --write <file>` on each changed Markdown file before finishing.
 - Add comments only when behavior is hard to understand or an algorithm is non-obvious.
 - Do not remove existing code comments unless they are stale, misleading, redundant, or no longer necessary after the change.
 - Only add tests that verify internal behaviors or fix specific bugs; do not create unnecessary tests unless requested.
@@ -136,6 +137,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Commit And PR Expectations
 
+- After each finished task, create a git commit automatically for the task's tracked code and documentation changes, excluding `tasks/task-*.md`, `tasks/lessons.md`, and unrelated user changes.
 - PR titles must follow Conventional Commits; `.github/workflows/pr-lint.yml` enforces this.
 - Performance changes should use the `perf` type and include benchmark data.
 - See `.agents/ci-and-pr.md` for GitHub CLI triage commands and commit message examples.

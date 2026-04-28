@@ -169,6 +169,8 @@ class FDLEmitter:
         if isinstance(field_type, MapType):
             key = self._emit_type(field_type.key_type)
             value = self._emit_type(field_type.value_type)
+            if field_type.value_optional:
+                value = f"optional {value}"
             if field_type.value_ref:
                 value = (
                     f"{self._emit_ref_modifier(field_type.value_ref_options)} {value}"

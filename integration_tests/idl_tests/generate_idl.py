@@ -41,6 +41,10 @@ SCHEMAS = [
     IDL_DIR / "idl" / "auto_id.fdl",
 ]
 
+SWIFT_SCHEMAS = [
+    IDL_DIR / "idl" / "example.fdl",
+]
+
 LANG_OUTPUTS = {
     "java": REPO_ROOT / "integration_tests/idl_tests/java/src/main/java/generated",
     "python": REPO_ROOT / "integration_tests/idl_tests/python/idl_tests/generated",
@@ -141,6 +145,22 @@ def main() -> int:
             cmd.append(f"--{lang}_out={out_dir}")
 
         subprocess.check_call(cmd, env=env)
+
+    if "swift" in langs:
+        for schema in SWIFT_SCHEMAS:
+            out_dir = LANG_OUTPUTS["swift"]
+            out_dir.mkdir(parents=True, exist_ok=True)
+            subprocess.check_call(
+                [
+                    sys.executable,
+                    "-m",
+                    "fory_compiler",
+                    "compile",
+                    str(schema),
+                    f"--swift_out={out_dir}",
+                ],
+                env=env,
+            )
     return 0
 
 

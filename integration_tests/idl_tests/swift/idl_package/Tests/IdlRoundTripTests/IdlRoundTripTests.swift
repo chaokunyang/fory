@@ -99,6 +99,42 @@ final class IdlRoundTripTests: XCTestCase {
         XCTAssertEqual(decodedAnimal, animal)
     }
 
+    func testGeneratedFixedIntegerListsUsePackedArrayMetadata() throws {
+        let fory = Fory(xlang: true, trackRef: false, compatible: true)
+        try Example.ForyRegistration.register(fory)
+        let maybeFloat16Values: [String: Float16?] = ["none": nil, "one": Float16(1)]
+        let maybeBFloat16Values: [String: BFloat16?] = ["none": nil, "one": BFloat16(rawValue: 0x3F80)]
+
+        let message = Example.ExampleMessage(
+            fixedInt32List: [1, -2, Int32.max],
+            varint32List: [7, -8],
+            fixedInt64List: [3, -4, Int64.max],
+            fixedUint32List: [5, UInt32.max],
+            fixedUint64List: [6, UInt64.max],
+            maybeFixedInt32List: [nil, 11, -12],
+            maybeUint64List: [nil, 13],
+            maybeFloat16ValuesByName: maybeFloat16Values,
+            maybeBfloat16ValuesByName: maybeBFloat16Values
+        )
+        let decodedMessage: Example.ExampleMessage = try roundTrip(fory, value: message)
+        XCTAssertEqual(decodedMessage, message)
+
+        let messageFields = Dictionary(
+            uniqueKeysWithValues: Example.ExampleMessage.foryFieldsInfo(trackRef: false).map {
+                ($0.fieldName, $0.fieldType)
+            }
+        )
+        XCTAssertEqual(messageFields["fixedInt32List"]?.typeID, TypeId.int32Array.rawValue)
+        XCTAssertEqual(messageFields["fixedInt64List"]?.typeID, TypeId.int64Array.rawValue)
+        XCTAssertEqual(messageFields["fixedUint32List"]?.typeID, TypeId.uint32Array.rawValue)
+        XCTAssertEqual(messageFields["fixedUint64List"]?.typeID, TypeId.uint64Array.rawValue)
+        XCTAssertEqual(messageFields["maybeFixedInt32List"]?.typeID, TypeId.list.rawValue)
+
+        let event = Example.ExampleMessageUnion.maybeFixedInt32List([nil, 9, -10])
+        let decodedEvent: Example.ExampleMessageUnion = try roundTrip(fory, value: event)
+        XCTAssertEqual(decodedEvent, event)
+    }
+
     private func runIdlMatrixRoundTrip(compatible: Bool) throws {
         let fory = Fory(xlang: true, trackRef: false, compatible: compatible)
         try Addressbook.ForyRegistration.register(fory)
@@ -421,7 +457,7 @@ final class IdlRoundTripTests: XCTestCase {
             float64Value: 3.5,
             stringValue: "optional",
             bytesValue: Data([1, 2, 3]),
-            dateValue: LocalDate(daysSinceEpoch: 19724),
+            dateValue: LocalDate(epochDay: 19724),
             timestampValue: Date(timeIntervalSince1970: 1704164645),
             int32List: [1, 2, 3],
             stringList: ["alpha", "beta"],
@@ -437,7 +473,7 @@ final class IdlRoundTripTests: XCTestCase {
         AnyExample.AnyHolder(
             boolValue: true,
             stringValue: "hello",
-            dateValue: LocalDate(daysSinceEpoch: 19724),
+            dateValue: LocalDate(epochDay: 19724),
             timestampValue: Date(timeIntervalSince1970: 1704164645),
             messageValue: AnyExample.AnyInner(name: "inner"),
             unionValue: AnyExample.AnyUnion.text("union"),
@@ -450,7 +486,7 @@ final class IdlRoundTripTests: XCTestCase {
         AnyExamplePb.AnyHolder(
             boolValue: true,
             stringValue: "hello",
-            dateValue: LocalDate(daysSinceEpoch: 19724),
+            dateValue: LocalDate(epochDay: 19724),
             timestampValue: Date(timeIntervalSince1970: 1704164645),
             messageValue: AnyExamplePb.AnyInner(name: "inner"),
             unionValue: AnyExamplePb.AnyUnion(kind: .text("proto-union")),

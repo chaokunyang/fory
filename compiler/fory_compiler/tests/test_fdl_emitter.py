@@ -31,6 +31,7 @@ def test_emit_round_trip_preserves_list_modifiers():
         list<optional string> tags = 1;
         list<ref Bar> items = 2;
         fixed_uint32 count = 3;
+        map<string, optional float16> scores = 4;
     }
 
     message Bar [id=11] {
@@ -46,11 +47,13 @@ def test_emit_round_trip_preserves_list_modifiers():
     assert "list<optional string> tags = 1;" in emitted
     assert "list<ref Bar> items = 2;" in emitted
     assert "fixed_uint32 count = 3;" in emitted
+    assert "map<string, optional float16> scores = 4;" in emitted
 
     round_trip = Parser(Lexer(emitted).tokenize()).parse()
     foo = round_trip.messages[0]
     assert foo.fields[0].element_optional is True
     assert foo.fields[1].element_ref is True
+    assert foo.fields[3].field_type.value_optional is True
 
 
 def test_emit_from_proto_translation():

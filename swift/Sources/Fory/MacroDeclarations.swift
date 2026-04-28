@@ -164,6 +164,16 @@ public struct ForyFieldType: Sendable {
         return .init()
     }
 
+    public static func map(key: ForyFieldType) -> ForyFieldType {
+        _ = key
+        return .init()
+    }
+
+    public static func map(value: ForyFieldType) -> ForyFieldType {
+        _ = value
+        return .init()
+    }
+
     public static func map(key: ForyFieldType, value: ForyFieldType) -> ForyFieldType {
         _ = key
         _ = value

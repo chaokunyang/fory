@@ -68,6 +68,7 @@ class SchemaValidator:
         self._check_type_references()
         self._check_services()
         self._check_collection_nesting()
+        self._check_map_key_rules()
         self._check_ref_rules()
         self._check_weak_refs()
         return not self.errors
@@ -537,6 +538,84 @@ class SchemaValidator:
                         "nested list/map types are not allowed; only one collection layer is supported",
                         field.location,
                     )
+
+        def check_message_fields(
+            message: Message,
+            enclosing_messages: Optional[List[Message]] = None,
+        ) -> None:
+            lineage = (enclosing_messages or []) + [message]
+            for f in message.fields:
+                check_field(f, lineage)
+            for nested_msg in message.nested_messages:
+                check_message_fields(nested_msg, lineage)
+            for nested_union in message.nested_unions:
+                for f in nested_union.fields:
+                    check_field(f, lineage)
+
+        for message in self.schema.messages:
+            check_message_fields(message)
+        for union in self.schema.unions:
+            for f in union.fields:
+                check_field(f, None)
+
+    def _check_map_key_rules(self) -> None:
+        disallowed_float_map_keys = {
+            PrimitiveKind.FLOAT16,
+            PrimitiveKind.BFLOAT16,
+            PrimitiveKind.FLOAT32,
+            PrimitiveKind.FLOAT64,
+        }
+
+        def resolve_map_key_target(
+            key_type: NamedType,
+            enclosing_messages: Optional[List[Message]],
+        ) -> tuple[Optional[TypingUnion[Message, Enum, Union]], bool]:
+            if "." in key_type.name:
+                parts = key_type.name.split(".")
+                current = self._find_top_level_type(parts[0])
+                for part in parts[1:]:
+                    if not isinstance(current, Message):
+                        return None, True
+                    current = current.get_nested_type(part)
+                return current, True
+            if enclosing_messages is not None:
+                for message in reversed(enclosing_messages):
+                    nested = message.get_nested_type(key_type.name)
+                    if nested is not None:
+                        return nested, True
+            return self._find_top_level_type(key_type.name), False
+
+        def check_field(
+            field: Field,
+            enclosing_messages: Optional[List[Message]] = None,
+        ) -> None:
+            if not isinstance(field.field_type, MapType):
+                return
+            key_type = field.field_type.key_type
+            if isinstance(key_type, PrimitiveType):
+                if key_type.kind in disallowed_float_map_keys:
+                    self._error(
+                        "map keys cannot use floating-point types",
+                        field.location,
+                    )
+                elif key_type.kind == PrimitiveKind.BYTES:
+                    self._error(
+                        "map keys cannot use bytes/binary types",
+                        field.location,
+                    )
+                return
+            if not isinstance(key_type, NamedType):
+                return
+            resolved, is_nested = resolve_map_key_target(key_type, enclosing_messages)
+            if resolved is None:
+                return
+            if is_nested:
+                self._error("map keys cannot use nested types", field.location)
+            elif isinstance(resolved, (Message, Union)):
+                self._error(
+                    "map keys cannot use message or union types",
+                    field.location,
+                )
 
         def check_message_fields(
             message: Message,

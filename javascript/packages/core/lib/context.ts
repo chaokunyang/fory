@@ -32,6 +32,7 @@ type TypeResolverLike = {
   getSerializerByName(name: string): Serializer | undefined;
   getSerializerByData(value: any): Serializer | null | undefined;
   isCompatible(): boolean;
+  isMonomorphic(typeInfo: TypeInfo): boolean;
   regenerateReadSerializer(typeInfo: TypeInfo): Serializer;
 };
 

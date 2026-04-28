@@ -569,14 +569,27 @@ class Parser:
         if self.check(TokenType.OPTIONAL) or self.check(TokenType.REF):
             raise self.error("Union cases do not support optional/ref modifiers")
 
+        element_optional = False
+        element_ref = False
+        element_ref_options = {}
         repeated = False
         if self.check(TokenType.REPEATED):
             self.advance()
             repeated = True
 
         field_type = self.parse_type()
+        if not repeated and isinstance(field_type, ListType):
+            element_optional = field_type.element_optional
+            element_ref = field_type.element_ref
+            element_ref_options = field_type.element_ref_options
         if repeated:
-            field_type = ListType(field_type, location=self.make_location(start))
+            field_type = ListType(
+                field_type,
+                element_optional=element_optional,
+                element_ref=element_ref,
+                element_ref_options=element_ref_options,
+                location=self.make_location(start),
+            )
         name = self.consume(TokenType.IDENT, "Expected union case name").value
         self.consume(TokenType.EQUALS, "Expected '=' after union case name")
         number_token = self.consume(TokenType.INT, "Expected union case id")
@@ -593,6 +606,9 @@ class Parser:
             field_type=field_type,
             number=number,
             tag_id=number,
+            element_optional=element_optional,
+            element_ref=element_ref,
+            element_ref_options=element_ref_options,
             options=field_options,
             line=start.line,
             column=start.column,

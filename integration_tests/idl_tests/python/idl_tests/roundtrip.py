@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import datetime
+import decimal
 import os
 from pathlib import Path
 
@@ -29,6 +30,9 @@ import complex_pb
 import collection
 import evolving1
 import evolving2
+import example
+import example_common
+import example_schema_evolution
 import monster
 import optional_types
 import graph
@@ -36,6 +40,20 @@ import tree
 import root
 import numpy as np
 import pyfory
+
+
+# The generated union validator resolves these names as module globals.
+example.ExampleState = example_common.ExampleState
+example.ExampleLeaf = example_common.ExampleLeaf
+example.ExampleLeafUnion = example_common.ExampleLeafUnion
+
+EXAMPLE_DATE = datetime.date(2024, 2, 29)
+EXAMPLE_TIMESTAMP = datetime.datetime(
+    2024, 2, 29, 12, 34, 56, 789123, tzinfo=datetime.timezone.utc
+)
+# Python's temporal carriers are microsecond-based, so the canonical nanos are rounded down.
+EXAMPLE_DURATION = datetime.timedelta(seconds=3723, microseconds=456789)
+EXAMPLE_DECIMAL = decimal.Decimal("123456789012345.6789")
 
 
 def build_address_book() -> "addressbook.AddressBook":
@@ -111,6 +129,136 @@ def build_auto_id_wrapper(envelope: "auto_id.Envelope") -> "auto_id.Wrapper":
     return auto_id.Wrapper.envelope(envelope)
 
 
+def build_example_leafs() -> tuple[
+    "example_common.ExampleLeaf", "example_common.ExampleLeaf"
+]:
+    return (
+        example_common.ExampleLeaf(label="leaf-a", count=7),
+        example_common.ExampleLeaf(label="leaf-b", count=-3),
+    )
+
+
+def build_example_message() -> "example.ExampleMessage":
+    leaf_a, leaf_b = build_example_leafs()
+    leaf_b_union = example_common.ExampleLeafUnion.leaf(leaf_b)
+    return example.ExampleMessage(
+        bool_value=True,
+        int8_value=-12,
+        int16_value=1234,
+        fixed_int32_value=123456789,
+        varint32_value=-1234567,
+        fixed_int64_value=1234567890123456789,
+        varint64_value=-1234567890123456789,
+        tagged_int64_value=1073741824,
+        uint8_value=200,
+        uint16_value=60000,
+        fixed_uint32_value=2000000000,
+        var_uint32_value=2100000000,
+        fixed_uint64_value=9000000000,
+        var_uint64_value=12000000000,
+        tagged_uint64_value=2222222222,
+        float16_value=pyfory.float16(1.5),
+        bfloat16_value=pyfory.bfloat16(-2.75),
+        float32_value=3.25,
+        float64_value=-4.5,
+        string_value="example-string",
+        bytes_value=bytes([1, 2, 3, 4]),
+        date_value=EXAMPLE_DATE,
+        timestamp_value=EXAMPLE_TIMESTAMP,
+        duration_value=EXAMPLE_DURATION,
+        decimal_value=EXAMPLE_DECIMAL,
+        enum_value=example_common.ExampleState.READY,
+        message_value=leaf_a,
+        union_value=leaf_b_union,
+        bool_list=np.array([True, False], dtype=np.bool_),
+        int8_list=np.array([-12, 7], dtype=np.int8),
+        int16_list=np.array([1234, -2345], dtype=np.int16),
+        fixed_int32_list=np.array([123456789, -123456789], dtype=np.int32),
+        varint32_list=np.array([-1234567, 7654321], dtype=np.int32),
+        fixed_int64_list=np.array(
+            [1234567890123456789, -123456789012345678], dtype=np.int64
+        ),
+        varint64_list=np.array(
+            [-1234567890123456789, 123456789012345678], dtype=np.int64
+        ),
+        tagged_int64_list=np.array([1073741824, -1073741824], dtype=np.int64),
+        uint8_list=np.array([200, 42], dtype=np.uint8),
+        uint16_list=np.array([60000, 12345], dtype=np.uint16),
+        fixed_uint32_list=np.array([2000000000, 1234567890], dtype=np.uint32),
+        var_uint32_list=np.array([2100000000, 1234567890], dtype=np.uint32),
+        fixed_uint64_list=np.array([9000000000, 4000000000], dtype=np.uint64),
+        var_uint64_list=np.array([12000000000, 5000000000], dtype=np.uint64),
+        tagged_uint64_list=np.array([2222222222, 3333333333], dtype=np.uint64),
+        float16_list=pyfory.float16array([1.5, -0.5]),
+        bfloat16_list=pyfory.bfloat16array([-2.75, 2.25]),
+        maybe_float16_list=[pyfory.float16(1.5), None, pyfory.float16(-0.5)],
+        maybe_bfloat16_list=[None, pyfory.bfloat16(2.25), pyfory.bfloat16(-1.0)],
+        float32_list=np.array([3.25, -0.5], dtype=np.float32),
+        float64_list=np.array([-4.5, 6.75], dtype=np.float64),
+        string_list=["example-string", "secondary"],
+        bytes_list=[bytes([1, 2, 3, 4]), bytes([5, 6])],
+        date_list=[EXAMPLE_DATE, datetime.date(2024, 3, 1)],
+        timestamp_list=[
+            EXAMPLE_TIMESTAMP,
+            datetime.datetime(
+                2024, 3, 1, 0, 0, 0, 123456, tzinfo=datetime.timezone.utc
+            ),
+        ],
+        duration_list=[
+            EXAMPLE_DURATION,
+            datetime.timedelta(seconds=1, microseconds=234567),
+        ],
+        decimal_list=[EXAMPLE_DECIMAL, decimal.Decimal("-0.5")],
+        enum_list=[
+            example_common.ExampleState.READY,
+            example_common.ExampleState.FAILED,
+        ],
+        message_list=[leaf_a, leaf_b],
+        union_list=[example_common.ExampleLeafUnion.leaf(leaf_a), leaf_b_union],
+        string_values_by_bool={True: "true-value", False: "false-value"},
+        string_values_by_int8={-12: "minus-twelve"},
+        string_values_by_int16={1234: "twelve-thirty-four"},
+        string_values_by_fixed_int32={123456789: "fixed-int32"},
+        string_values_by_varint32={-1234567: "varint32"},
+        string_values_by_fixed_int64={1234567890123456789: "fixed-int64"},
+        string_values_by_varint64={-1234567890123456789: "varint64"},
+        string_values_by_tagged_int64={1073741824: "tagged-int64"},
+        string_values_by_uint8={200: "uint8"},
+        string_values_by_uint16={60000: "uint16"},
+        string_values_by_fixed_uint32={2000000000: "fixed-uint32"},
+        string_values_by_var_uint32={2100000000: "var-uint32"},
+        string_values_by_fixed_uint64={9000000000: "fixed-uint64"},
+        string_values_by_var_uint64={12000000000: "var-uint64"},
+        string_values_by_tagged_uint64={2222222222: "tagged-uint64"},
+        string_values_by_string={"example-string": "string"},
+        string_values_by_timestamp={EXAMPLE_TIMESTAMP: "timestamp"},
+        string_values_by_duration={EXAMPLE_DURATION: "duration"},
+        string_values_by_enum={example_common.ExampleState.READY: "ready"},
+        float16_values_by_name={"primary": pyfory.float16(1.5)},
+        maybe_float16_values_by_name={
+            "primary": pyfory.float16(1.5),
+            "missing": None,
+        },
+        bfloat16_values_by_name={"primary": pyfory.bfloat16(-2.75)},
+        maybe_bfloat16_values_by_name={
+            "missing": None,
+            "secondary": pyfory.bfloat16(2.25),
+        },
+        bytes_values_by_name={"payload": bytes([1, 2, 3, 4])},
+        date_values_by_name={"leap-day": EXAMPLE_DATE},
+        decimal_values_by_name={"amount": EXAMPLE_DECIMAL},
+        message_values_by_name={"leaf-a": leaf_a, "leaf-b": leaf_b},
+        union_values_by_name={"leaf-b": leaf_b_union},
+    )
+
+
+def build_example_message_union() -> "example.ExampleMessageUnion":
+    _, leaf_b = build_example_leafs()
+    return example.ExampleMessageUnion.union_value(
+        example_common.ExampleLeafUnion.leaf(leaf_b)
+    )
+
+
 def local_roundtrip(fory: pyfory.Fory, book: "addressbook.AddressBook") -> None:
     data = fory.serialize(book)
     decoded = fory.deserialize(data)
@@ -169,6 +317,264 @@ def file_roundtrip_auto_id(fory: pyfory.Fory, envelope: "auto_id.Envelope") -> N
     decoded = fory.deserialize(payload)
     assert isinstance(decoded, auto_id.Envelope)
     assert decoded == envelope
+    Path(data_file).write_bytes(fory.serialize(decoded))
+
+
+def assert_example_leaf_union_equal(
+    decoded: "example_common.ExampleLeafUnion",
+    expected: "example_common.ExampleLeafUnion",
+) -> None:
+    assert decoded.case() == expected.case()
+    if decoded.is_note():
+        assert decoded.note_value() == expected.note_value()
+        return
+    if decoded.is_code():
+        assert decoded.code_value() == expected.code_value()
+        return
+    if decoded.is_leaf():
+        assert decoded.leaf_value() == expected.leaf_value()
+        return
+    raise AssertionError(f"unexpected example leaf union case: {decoded.case()}")
+
+
+def assert_example_message_equal(
+    decoded: "example.ExampleMessage", expected: "example.ExampleMessage"
+) -> None:
+    assert decoded.bool_value == expected.bool_value
+    assert decoded.int8_value == expected.int8_value
+    assert decoded.int16_value == expected.int16_value
+    assert decoded.fixed_int32_value == expected.fixed_int32_value
+    assert decoded.varint32_value == expected.varint32_value
+    assert decoded.fixed_int64_value == expected.fixed_int64_value
+    assert decoded.varint64_value == expected.varint64_value
+    assert decoded.tagged_int64_value == expected.tagged_int64_value
+    assert decoded.uint8_value == expected.uint8_value
+    assert decoded.uint16_value == expected.uint16_value
+    assert decoded.fixed_uint32_value == expected.fixed_uint32_value
+    assert decoded.var_uint32_value == expected.var_uint32_value
+    assert decoded.fixed_uint64_value == expected.fixed_uint64_value
+    assert decoded.var_uint64_value == expected.var_uint64_value
+    assert decoded.tagged_uint64_value == expected.tagged_uint64_value
+    assert decoded.float16_value == expected.float16_value
+    assert decoded.bfloat16_value == expected.bfloat16_value
+    assert decoded.float32_value == expected.float32_value
+    assert decoded.float64_value == expected.float64_value
+    assert decoded.string_value == expected.string_value
+    assert decoded.bytes_value == expected.bytes_value
+    assert decoded.date_value == expected.date_value
+    assert decoded.timestamp_value == expected.timestamp_value
+    assert decoded.duration_value == expected.duration_value
+    assert decoded.decimal_value == expected.decimal_value
+    assert decoded.enum_value == expected.enum_value
+    assert decoded.message_value == expected.message_value
+    assert decoded.union_value is not None
+    assert expected.union_value is not None
+    assert_example_leaf_union_equal(decoded.union_value, expected.union_value)
+    np.testing.assert_array_equal(decoded.bool_list, expected.bool_list)
+    np.testing.assert_array_equal(decoded.int8_list, expected.int8_list)
+    np.testing.assert_array_equal(decoded.int16_list, expected.int16_list)
+    np.testing.assert_array_equal(decoded.fixed_int32_list, expected.fixed_int32_list)
+    np.testing.assert_array_equal(decoded.varint32_list, expected.varint32_list)
+    np.testing.assert_array_equal(decoded.fixed_int64_list, expected.fixed_int64_list)
+    np.testing.assert_array_equal(decoded.varint64_list, expected.varint64_list)
+    np.testing.assert_array_equal(decoded.tagged_int64_list, expected.tagged_int64_list)
+    np.testing.assert_array_equal(decoded.uint8_list, expected.uint8_list)
+    np.testing.assert_array_equal(decoded.uint16_list, expected.uint16_list)
+    np.testing.assert_array_equal(decoded.fixed_uint32_list, expected.fixed_uint32_list)
+    np.testing.assert_array_equal(decoded.var_uint32_list, expected.var_uint32_list)
+    np.testing.assert_array_equal(decoded.fixed_uint64_list, expected.fixed_uint64_list)
+    np.testing.assert_array_equal(decoded.var_uint64_list, expected.var_uint64_list)
+    np.testing.assert_array_equal(
+        decoded.tagged_uint64_list, expected.tagged_uint64_list
+    )
+    assert list(decoded.float16_list) == list(expected.float16_list)
+    assert list(decoded.bfloat16_list) == list(expected.bfloat16_list)
+    assert decoded.maybe_float16_list == expected.maybe_float16_list
+    assert decoded.maybe_bfloat16_list == expected.maybe_bfloat16_list
+    np.testing.assert_array_equal(decoded.float32_list, expected.float32_list)
+    np.testing.assert_array_equal(decoded.float64_list, expected.float64_list)
+    assert decoded.string_list == expected.string_list
+    assert decoded.bytes_list == expected.bytes_list
+    assert decoded.date_list == expected.date_list
+    assert decoded.timestamp_list == expected.timestamp_list
+    assert decoded.duration_list == expected.duration_list
+    assert decoded.decimal_list == expected.decimal_list
+    assert decoded.enum_list == expected.enum_list
+    assert decoded.message_list == expected.message_list
+    assert decoded.union_list == expected.union_list
+    assert decoded.string_values_by_bool == expected.string_values_by_bool
+    assert decoded.string_values_by_int8 == expected.string_values_by_int8
+    assert decoded.string_values_by_int16 == expected.string_values_by_int16
+    assert decoded.string_values_by_fixed_int32 == expected.string_values_by_fixed_int32
+    assert decoded.string_values_by_varint32 == expected.string_values_by_varint32
+    assert decoded.string_values_by_fixed_int64 == expected.string_values_by_fixed_int64
+    assert decoded.string_values_by_varint64 == expected.string_values_by_varint64
+    assert (
+        decoded.string_values_by_tagged_int64 == expected.string_values_by_tagged_int64
+    )
+    assert decoded.string_values_by_uint8 == expected.string_values_by_uint8
+    assert decoded.string_values_by_uint16 == expected.string_values_by_uint16
+    assert (
+        decoded.string_values_by_fixed_uint32 == expected.string_values_by_fixed_uint32
+    )
+    assert decoded.string_values_by_var_uint32 == expected.string_values_by_var_uint32
+    assert (
+        decoded.string_values_by_fixed_uint64 == expected.string_values_by_fixed_uint64
+    )
+    assert decoded.string_values_by_var_uint64 == expected.string_values_by_var_uint64
+    assert (
+        decoded.string_values_by_tagged_uint64
+        == expected.string_values_by_tagged_uint64
+    )
+    assert decoded.string_values_by_string == expected.string_values_by_string
+    assert decoded.string_values_by_timestamp == expected.string_values_by_timestamp
+    assert decoded.string_values_by_duration == expected.string_values_by_duration
+    assert decoded.string_values_by_enum == expected.string_values_by_enum
+    assert decoded.float16_values_by_name == expected.float16_values_by_name
+    assert decoded.maybe_float16_values_by_name == expected.maybe_float16_values_by_name
+    assert decoded.bfloat16_values_by_name == expected.bfloat16_values_by_name
+    assert (
+        decoded.maybe_bfloat16_values_by_name == expected.maybe_bfloat16_values_by_name
+    )
+    assert decoded.bytes_values_by_name == expected.bytes_values_by_name
+    assert decoded.date_values_by_name == expected.date_values_by_name
+    assert decoded.decimal_values_by_name == expected.decimal_values_by_name
+    assert decoded.message_values_by_name == expected.message_values_by_name
+    assert decoded.union_values_by_name == expected.union_values_by_name
+
+
+def assert_example_message_union_equal(
+    decoded: "example.ExampleMessageUnion", expected: "example.ExampleMessageUnion"
+) -> None:
+    assert decoded.case() == expected.case()
+    if decoded.is_union_value():
+        assert_example_leaf_union_equal(
+            decoded.union_value_value(), expected.union_value_value()
+        )
+        return
+    raise AssertionError(f"unexpected example message union case: {decoded.case()}")
+
+
+EXAMPLE_NDARRAY_FIELDS = {
+    "bool_list",
+    "int8_list",
+    "int16_list",
+    "fixed_int32_list",
+    "varint32_list",
+    "fixed_int64_list",
+    "varint64_list",
+    "tagged_int64_list",
+    "uint8_list",
+    "uint16_list",
+    "fixed_uint32_list",
+    "var_uint32_list",
+    "fixed_uint64_list",
+    "var_uint64_list",
+    "tagged_uint64_list",
+    "float32_list",
+    "float64_list",
+}
+
+EXAMPLE_REDUCED_PRECISION_ARRAY_FIELDS = {
+    "float16_list",
+    "bfloat16_list",
+}
+
+
+def assert_example_schema_evolution_value_equal(
+    field_name: str, actual: object, expected: object
+) -> None:
+    if field_name in EXAMPLE_NDARRAY_FIELDS:
+        np.testing.assert_array_equal(actual, expected)
+        return
+    if field_name in EXAMPLE_REDUCED_PRECISION_ARRAY_FIELDS:
+        assert list(actual) == list(expected)
+        return
+    if field_name == "union_value":
+        assert actual is not None
+        assert expected is not None
+        assert_example_leaf_union_equal(actual, expected)
+        return
+    assert actual == expected
+
+
+def build_example_schema_evolution_fory(
+    compatible: bool, value_type: type[object]
+) -> pyfory.Fory:
+    fory = pyfory.Fory(xlang=True, ref=False, compatible=compatible)
+    example_common.register_example_common_types(fory)
+    fory.register_type(
+        value_type, type_id=example_schema_evolution.EXAMPLE_MESSAGE_TYPE_ID
+    )
+    return fory
+
+
+def local_roundtrip_example_message(
+    fory: pyfory.Fory, message: "example.ExampleMessage"
+) -> None:
+    data = fory.serialize(message)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, example.ExampleMessage)
+    assert_example_message_equal(decoded, message)
+
+
+def local_roundtrip_example_union(
+    fory: pyfory.Fory, union_value: "example.ExampleMessageUnion"
+) -> None:
+    data = fory.serialize(union_value)
+    decoded = fory.deserialize(data)
+    assert isinstance(decoded, example.ExampleMessageUnion)
+    assert_example_message_union_equal(decoded, union_value)
+
+
+def file_roundtrip_example_message(
+    fory: pyfory.Fory, message: "example.ExampleMessage"
+) -> None:
+    data_file = os.environ.get("DATA_FILE_EXAMPLE_MESSAGE")
+    if not data_file:
+        return
+    payload = Path(data_file).read_bytes()
+    decoded = fory.deserialize(payload)
+    assert isinstance(decoded, example.ExampleMessage)
+    assert_example_message_equal(decoded, message)
+    Path(data_file).write_bytes(fory.serialize(decoded))
+
+
+def file_roundtrip_example_message_schema_evolution(
+    compatible: bool, message: "example.ExampleMessage"
+) -> None:
+    data_file = os.environ.get("DATA_FILE_EXAMPLE_MESSAGE")
+    if not data_file:
+        return
+
+    payload = Path(data_file).read_bytes()
+    empty_fory = build_example_schema_evolution_fory(
+        compatible, example_schema_evolution.ExampleMessageEmpty
+    )
+    decoded_empty = empty_fory.deserialize(payload)
+    assert isinstance(decoded_empty, example_schema_evolution.ExampleMessageEmpty)
+
+    for _, field_name, variant_type in example_schema_evolution.VARIANT_SPECS:
+        variant_fory = build_example_schema_evolution_fory(compatible, variant_type)
+        decoded_variant = variant_fory.deserialize(payload)
+        assert isinstance(decoded_variant, variant_type)
+        assert_example_schema_evolution_value_equal(
+            field_name,
+            getattr(decoded_variant, field_name),
+            getattr(message, field_name),
+        )
+
+
+def file_roundtrip_example_union(
+    fory: pyfory.Fory, union_value: "example.ExampleMessageUnion"
+) -> None:
+    data_file = os.environ.get("DATA_FILE_EXAMPLE_UNION")
+    if not data_file:
+        return
+    payload = Path(data_file).read_bytes()
+    decoded = fory.deserialize(payload)
+    assert isinstance(decoded, example.ExampleMessageUnion)
+    assert_example_message_union_equal(decoded, union_value)
     Path(data_file).write_bytes(fory.serialize(decoded))
 
 
@@ -769,6 +1175,8 @@ def run_roundtrip(compatible: bool) -> None:
     collection.register_collection_types(fory)
     optional_types.register_optional_types_types(fory)
     any_example.register_any_example_types(fory)
+    example_common.register_example_common_types(fory)
+    example.register_example_types(fory)
 
     book = build_address_book()
     bytes_roundtrip_addressbook(book)
@@ -811,6 +1219,14 @@ def run_roundtrip(compatible: bool) -> None:
 
     any_holder = build_any_holder()
     local_roundtrip_any(fory, any_holder)
+
+    example_message = build_example_message()
+    local_roundtrip_example_message(fory, example_message)
+    file_roundtrip_example_message(fory, example_message)
+    file_roundtrip_example_message_schema_evolution(compatible, example_message)
+    example_union = build_example_message_union()
+    local_roundtrip_example_union(fory, example_union)
+    file_roundtrip_example_union(fory, example_union)
 
     ref_fory = pyfory.Fory(xlang=True, ref=True, compatible=compatible)
     tree.register_tree_types(ref_fory)

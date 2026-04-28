@@ -63,6 +63,26 @@ def test_swift_generator_emits_field_ids_and_encodings():
     assert "fory.register(Demo.Scalar.self, id: 100)" in content
 
 
+def test_swift_generator_uses_wrappers_for_fixed_and_tagged_map_generics():
+    source = """
+    package demo;
+
+    message EncodedMap [id=100] {
+        map<fixed_int32, string> fixed_int32_keys = 1;
+        map<tagged_int64, string> tagged_int64_keys = 2;
+        map<string, fixed_uint32> fixed_uint32_values = 3;
+        map<string, tagged_uint64> tagged_uint64_values = 4;
+        map<uint32, string> var_uint32_keys = 5;
+    }
+    """
+    content = generate_swift(source)
+    assert "public var fixedInt32Keys: [ForyInt32Fixed: String] = [:]" in content
+    assert "public var taggedInt64Keys: [ForyInt64Tagged: String] = [:]" in content
+    assert "public var fixedUint32Values: [String: ForyUInt32Fixed] = [:]" in content
+    assert "public var taggedUint64Values: [String: ForyUInt64Tagged] = [:]" in content
+    assert "public var varUint32Keys: [UInt32: String] = [:]" in content
+
+
 def test_swift_generator_emits_tagged_union_case_ids():
     source = """
     package demo;
@@ -121,9 +141,9 @@ def test_swift_generator_maps_date_to_local_date():
     assert "@ForyField(id: 1)" in content
     assert "@ForyField(id: 2)" in content
     assert "public var day: LocalDate = LocalDate.foryDefault()" in content
-    assert "public var instant: Date = Date.foryDefault()" in content
+    assert "public var instant: Timestamp = Timestamp.foryDefault()" in content
     assert "case day(LocalDate)" in content
-    assert "case instant(Date)" in content
+    assert "case instant(Timestamp)" in content
 
 
 def test_swift_generator_supports_duration_fields_and_unions():
@@ -141,6 +161,20 @@ def test_swift_generator_supports_duration_fields_and_unions():
     content = generate_swift(source)
     assert "public var span: Duration = Duration.foryDefault()" in content
     assert "case span(Duration)" in content
+
+
+def test_swift_generator_uses_compile_safe_reduced_precision_defaults():
+    source = """
+    package demo;
+
+    message ReducedPrecision [id=100] {
+        float16 f16 = 1;
+        bfloat16 bf16 = 2;
+    }
+    """
+    content = generate_swift(source)
+    assert content.count("f16: Float16 = Float16.foryDefault()") == 2
+    assert content.count("bf16: BFloat16 = BFloat16.foryDefault()") == 2
 
 
 def test_swift_generator_uses_class_for_ref_targets_and_weak_fields():

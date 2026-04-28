@@ -219,10 +219,10 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.INT64: "long",
         PrimitiveKind.VARINT64: "long",
         PrimitiveKind.TAGGED_INT64: "long",
-        PrimitiveKind.UINT8: "byte",
-        PrimitiveKind.UINT16: "short",
-        PrimitiveKind.UINT32: "int",
-        PrimitiveKind.VAR_UINT32: "int",
+        PrimitiveKind.UINT8: "int",
+        PrimitiveKind.UINT16: "int",
+        PrimitiveKind.UINT32: "long",
+        PrimitiveKind.VAR_UINT32: "long",
         PrimitiveKind.UINT64: "long",
         PrimitiveKind.VAR_UINT64: "long",
         PrimitiveKind.TAGGED_UINT64: "long",
@@ -249,10 +249,10 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.INT64: "Long",
         PrimitiveKind.VARINT64: "Long",
         PrimitiveKind.TAGGED_INT64: "Long",
-        PrimitiveKind.UINT8: "Byte",
-        PrimitiveKind.UINT16: "Short",
-        PrimitiveKind.UINT32: "Integer",
-        PrimitiveKind.VAR_UINT32: "Integer",
+        PrimitiveKind.UINT8: "Integer",
+        PrimitiveKind.UINT16: "Integer",
+        PrimitiveKind.UINT32: "Long",
+        PrimitiveKind.VAR_UINT32: "Long",
         PrimitiveKind.UINT64: "Long",
         PrimitiveKind.VAR_UINT64: "Long",
         PrimitiveKind.TAGGED_UINT64: "Long",
@@ -280,8 +280,8 @@ class JavaGenerator(BaseGenerator):
         PrimitiveKind.UINT64: "long[]",
         PrimitiveKind.VAR_UINT64: "long[]",
         PrimitiveKind.TAGGED_UINT64: "long[]",
-        PrimitiveKind.FLOAT16: "Float16[]",
-        PrimitiveKind.BFLOAT16: "BFloat16[]",
+        PrimitiveKind.FLOAT16: "short[]",
+        PrimitiveKind.BFLOAT16: "short[]",
         PrimitiveKind.FLOAT32: "float[]",
         PrimitiveKind.FLOAT64: "double[]",
     }
@@ -766,6 +766,8 @@ class JavaGenerator(BaseGenerator):
                 isinstance(field.field_type, ListType)
                 and isinstance(field.field_type.element_type, PrimitiveType)
                 and field.field_type.element_type.kind in self.PRIMITIVE_LIST_MAP
+                and not field.element_optional
+                and not field.element_ref
                 and not self.java_array(field)
             ):
                 kind = field.field_type.element_type.kind
@@ -1160,11 +1162,6 @@ class JavaGenerator(BaseGenerator):
             return self.PRIMITIVE_MAP[field_type.kind]
 
         elif isinstance(field_type, NamedType):
-            named_type = self.schema.get_type(field_type.name)
-            if named_type is not None and self.is_imported_type(named_type):
-                java_package = self._java_package_for_type(named_type)
-                if java_package:
-                    return f"{java_package}.{field_type.name}"
             return field_type.name
 
         elif isinstance(field_type, ListType):
@@ -1179,6 +1176,9 @@ class JavaGenerator(BaseGenerator):
                     if kind in self.PRIMITIVE_ARRAY_MAP:
                         return self.PRIMITIVE_ARRAY_MAP[kind]
             element_type = self.generate_type(field_type.element_type, True)
+            element_type = self.apply_type_use_annotations(
+                field_type.element_type, element_type
+            )
             if self.is_ref_target_type(field_type.element_type):
                 ref_annotation = "@Ref" if element_ref else "@Ref(enable=false)"
                 element_type = f"{ref_annotation} {element_type}"
@@ -1187,6 +1187,8 @@ class JavaGenerator(BaseGenerator):
         elif isinstance(field_type, MapType):
             key_type = self.generate_type(field_type.key_type, True)
             value_type = self.generate_type(field_type.value_type, True)
+            key_type = self.apply_type_use_annotations(field_type.key_type, key_type)
+            value_type = self.apply_type_use_annotations(field_type.value_type, value_type)
             if self.is_ref_target_type(field_type.value_type):
                 ref_annotation = (
                     "@Ref" if field_type.value_ref else "@Ref(enable=false)"
@@ -1218,6 +1220,15 @@ class JavaGenerator(BaseGenerator):
                 imports.add("org.apache.fory.type.Float16")
             elif field_type.kind == PrimitiveKind.BFLOAT16:
                 imports.add("org.apache.fory.type.BFloat16")
+            self.collect_integer_imports(field_type, imports)
+
+        elif isinstance(field_type, NamedType):
+            named_type = self.schema.get_type(field_type.name)
+            if named_type is not None and self.is_imported_type(named_type):
+                java_package = self._java_package_for_type(named_type)
+                current_package = self.get_java_package()
+                if java_package and java_package != current_package:
+                    imports.add(f"{java_package}.{field_type.name}")
 
         elif isinstance(field_type, ListType):
             # Specialized primitive lists/arrays don't need java.util.List imports.
@@ -1312,9 +1323,13 @@ class JavaGenerator(BaseGenerator):
         if not isinstance(field_type, PrimitiveType):
             return
         kind = field_type.kind
-        if kind in (PrimitiveKind.INT32,):
+        if kind in (PrimitiveKind.INT32, PrimitiveKind.VARINT32):
             imports.add("org.apache.fory.annotation.Int32Type")
-        if kind in (PrimitiveKind.INT64, PrimitiveKind.TAGGED_INT64):
+        if kind in (
+            PrimitiveKind.INT64,
+            PrimitiveKind.VARINT64,
+            PrimitiveKind.TAGGED_INT64,
+        ):
             imports.add("org.apache.fory.annotation.Int64Type")
             imports.add("org.apache.fory.config.LongEncoding")
         if kind in (PrimitiveKind.UINT8,):
@@ -1340,6 +1355,44 @@ class JavaGenerator(BaseGenerator):
             return "@Int32Type(compress = false)"
         if kind == PrimitiveKind.INT64:
             return "@Int64Type(encoding = LongEncoding.FIXED)"
+        if kind == PrimitiveKind.TAGGED_INT64:
+            return "@Int64Type(encoding = LongEncoding.TAGGED)"
+        if kind == PrimitiveKind.UINT8:
+            return "@Uint8Type"
+        if kind == PrimitiveKind.UINT16:
+            return "@Uint16Type"
+        if kind == PrimitiveKind.UINT32:
+            return "@Uint32Type(compress = false)"
+        if kind == PrimitiveKind.VAR_UINT32:
+            return "@Uint32Type(compress = true)"
+        if kind == PrimitiveKind.UINT64:
+            return "@Uint64Type(encoding = LongEncoding.FIXED)"
+        if kind == PrimitiveKind.VAR_UINT64:
+            return "@Uint64Type(encoding = LongEncoding.VARINT)"
+        if kind == PrimitiveKind.TAGGED_UINT64:
+            return "@Uint64Type(encoding = LongEncoding.TAGGED)"
+        return None
+
+    def apply_type_use_annotations(
+        self, field_type: FieldType, rendered_type: str
+    ) -> str:
+        annotation = self.get_type_use_annotation(field_type)
+        if annotation is None:
+            return rendered_type
+        return f"{annotation} {rendered_type}"
+
+    def get_type_use_annotation(self, field_type: FieldType) -> Optional[str]:
+        if not isinstance(field_type, PrimitiveType):
+            return None
+        kind = field_type.kind
+        if kind == PrimitiveKind.INT32:
+            return "@Int32Type(compress = false)"
+        if kind == PrimitiveKind.VARINT32:
+            return "@Int32Type(compress = true)"
+        if kind == PrimitiveKind.INT64:
+            return "@Int64Type(encoding = LongEncoding.FIXED)"
+        if kind == PrimitiveKind.VARINT64:
+            return "@Int64Type(encoding = LongEncoding.VARINT)"
         if kind == PrimitiveKind.TAGGED_INT64:
             return "@Int64Type(encoding = LongEncoding.TAGGED)"
         if kind == PrimitiveKind.UINT8:

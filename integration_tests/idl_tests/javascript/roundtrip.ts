@@ -29,7 +29,7 @@
 import * as assert from "assert/strict";
 import * as fs from "fs";
 
-import Fory, { Type } from "@apache-fory/core";
+import Fory, { BFloat16, Decimal, Type } from "@apache-fory/core";
 import { AnyHelper } from "@apache-fory/core/dist/lib/gen/any";
 import { ConfigFlags, RefFlags, type Serializer } from "@apache-fory/core/dist/lib/type";
 
@@ -82,9 +82,26 @@ import {
   TreeNode,
   registerTreeTypes,
 } from "./generated/tree";
+import {
+  ExampleLeaf,
+  ExampleLeafUnion,
+  ExampleLeafUnionCase,
+  ExampleState,
+  registerExampleCommonTypes,
+} from "./generated/example_common";
+import {
+  ExampleMessage,
+  ExampleMessageUnion,
+  ExampleMessageUnionCase,
+  registerExampleTypes,
+} from "./generated/example";
 
 type RegisterFn = (fory: Fory, type: typeof Type) => void;
 type AssertFn<T> = (expected: T, actual: unknown) => void;
+type ExampleSchemaEvolutionVariantSpec = {
+  fieldName: keyof ExampleMessage;
+  buildTypeInfo: () => any;
+};
 
 function resolveCompatibleModes(): boolean[] {
   const value = process.env.IDL_COMPATIBLE;
@@ -153,7 +170,7 @@ function runFileRoundTrip<T>(
   console.log(`Processing ${envVar}: ${filePath}`);
   const payload = new Uint8Array(fs.readFileSync(filePath));
   const serializer = resolveRootSerializer(fory, payload);
-  const decoded = fory.deserialize(payload, serializer);
+  const decoded = fory.deserialize(payload);
   assertFn(expected, decoded);
   const roundTripBytes = fory.serialize(decoded, serializer);
   fs.writeFileSync(filePath, roundTripBytes);
@@ -161,14 +178,21 @@ function runFileRoundTrip<T>(
 }
 
 function normalizeAcyclic(value: unknown): unknown {
+  if (value instanceof BFloat16) {
+    return { __bfloat16Bits: value.toBits() };
+  }
+  if (value instanceof Decimal) {
+    return { __decimal: value.toString() };
+  }
   if (value instanceof Date) {
     return { __dateMs: value.getTime() };
   }
   if (value instanceof Map) {
-    const entries = Array.from(value.entries()).map(([key, itemValue]) => (
-      [normalizeAcyclic(key), normalizeAcyclic(itemValue)] as const
-    ));
-    entries.sort((left, right) => String(left[0]).localeCompare(String(right[0])));
+    const entries = Array.from(value.entries()).map(([key, itemValue]) => {
+      const normalizedKey = normalizeAcyclic(key);
+      return [normalizedKey, normalizeAcyclic(itemValue)] as const;
+    });
+    entries.sort((left, right) => normalizedSortKey(left[0]).localeCompare(normalizedSortKey(right[0])));
     return entries;
   }
   if (ArrayBuffer.isView(value)) {
@@ -186,6 +210,35 @@ function normalizeAcyclic(value: unknown): unknown {
     return Object.fromEntries(entries.map(([key, itemValue]) => [key, normalizeAcyclic(itemValue)]));
   }
   return value;
+}
+
+function normalizedSortKey(value: unknown): string {
+  if (value === null) {
+    return "null";
+  }
+  switch (typeof value) {
+    case "bigint":
+      return `bigint:${value.toString()}`;
+    case "boolean":
+      return `boolean:${value ? "1" : "0"}`;
+    case "number":
+      return `number:${Object.is(value, -0) ? "-0" : String(value)}`;
+    case "string":
+      return `string:${value}`;
+    case "undefined":
+      return "undefined";
+    default:
+      break;
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => normalizedSortKey(item)).join(",")}]`;
+  }
+  if (value != null && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>);
+    entries.sort(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, itemValue]) => `${key}:${normalizedSortKey(itemValue)}`).join(",")}}`;
+  }
+  return String(value);
 }
 
 function assertAcyclicEqual<T>(label: string, expected: T, actual: unknown): void {
@@ -406,6 +459,160 @@ function buildOptionalHolder(): OptionalHolder {
   };
 }
 
+function buildExampleLeafA(): ExampleLeaf {
+  return {
+    label: "leaf-a",
+    count: 7,
+  };
+}
+
+function buildExampleLeafB(): ExampleLeaf {
+  return {
+    label: "leaf-b",
+    count: -3,
+  };
+}
+
+function buildExampleLeafUnionLeaf(value: ExampleLeaf): ExampleLeafUnion {
+  return {
+    case: ExampleLeafUnionCase.LEAF,
+    value,
+  };
+}
+
+function buildExampleTimestamp(): Date {
+  return new Date("2024-02-29T12:34:56.789Z");
+}
+
+function buildExampleTimestamp2(): Date {
+  return new Date("2024-03-01T00:00:00.123Z");
+}
+
+function buildExampleDurationMillis(): number {
+  return 3_723_456.789;
+}
+
+function buildExampleDurationMillis2(): number {
+  return 1_234.567;
+}
+
+function buildExampleDecimal(): Decimal {
+  return Decimal.from("1234567890123456789", 4);
+}
+
+function buildExampleDecimal2(): Decimal {
+  return Decimal.from(-5, 1);
+}
+
+function buildBFloat16(value: number): BFloat16 {
+  return BFloat16.fromFloat32(value);
+}
+
+function buildExampleMessage(): ExampleMessage {
+  const bytesValue = Uint8Array.from([1, 2, 3, 4]);
+  const dateValue = buildLocalDate(2024, 2, 29);
+  const timestampValue = buildExampleTimestamp();
+  const durationValue = buildExampleDurationMillis();
+  const decimalValue = buildExampleDecimal();
+  const messageValue = buildExampleLeafA();
+  const unionValue = buildExampleLeafUnionLeaf(buildExampleLeafB());
+  return {
+    boolValue: true,
+    int8Value: -12,
+    int16Value: 1234,
+    fixedInt32Value: 123456789,
+    varint32Value: -1234567,
+    fixedInt64Value: 1234567890123456789n,
+    varint64Value: -1234567890123456789n,
+    taggedInt64Value: 1073741824n,
+    uint8Value: 200,
+    uint16Value: 60000,
+    fixedUint32Value: 2000000000,
+    varUint32Value: 2100000000,
+    fixedUint64Value: 9000000000n,
+    varUint64Value: 12000000000n,
+    taggedUint64Value: 2222222222n,
+    float16Value: 1.5,
+    bfloat16Value: buildBFloat16(-2.75),
+    float32Value: 3.25,
+    float64Value: -4.5,
+    stringValue: "example-string",
+    bytesValue,
+    dateValue,
+    timestampValue,
+    durationValue,
+    decimalValue,
+    enumValue: ExampleState.READY,
+    messageValue,
+    unionValue,
+    boolList: [true, false],
+    int8List: [-12, 7],
+    int16List: [1234, -2345],
+    fixedInt32List: [123456789, -123456789],
+    varint32List: [-1234567, 7654321],
+    fixedInt64List: [1234567890123456789n, -123456789012345678n],
+    varint64List: [-1234567890123456789n, 123456789012345678n],
+    taggedInt64List: [1073741824n, -1073741824n],
+    uint8List: [200, 42],
+    uint16List: [60000, 12345],
+    fixedUint32List: [2000000000, 1234567890],
+    varUint32List: [2100000000, 1234567890],
+    fixedUint64List: [9000000000n, 4000000000n],
+    varUint64List: [12000000000n, 5000000000n],
+    taggedUint64List: [2222222222n, 3333333333n],
+    float16List: [1.5, -0.5],
+    bfloat16List: [buildBFloat16(-2.75), buildBFloat16(2.25)],
+    maybeFloat16List: [1.5, null, -0.5],
+    maybeBfloat16List: [null, buildBFloat16(2.25), buildBFloat16(-1.0)],
+    float32List: [3.25, -0.5],
+    float64List: [-4.5, 6.75],
+    stringList: ["example-string", "secondary"],
+    bytesList: [Uint8Array.from([1, 2, 3, 4]), Uint8Array.from([5, 6])],
+    dateList: [buildLocalDate(2024, 2, 29), buildLocalDate(2024, 3, 1)],
+    timestampList: [buildExampleTimestamp(), buildExampleTimestamp2()],
+    durationList: [buildExampleDurationMillis(), buildExampleDurationMillis2()],
+    decimalList: [buildExampleDecimal(), buildExampleDecimal2()],
+    enumList: [ExampleState.READY, ExampleState.FAILED],
+    messageList: [buildExampleLeafA(), buildExampleLeafB()],
+    unionList: [buildExampleLeafUnionLeaf(buildExampleLeafA()), buildExampleLeafUnionLeaf(buildExampleLeafB())],
+    stringValuesByBool: new Map([[true, "true-value"], [false, "false-value"]]),
+    stringValuesByInt8: new Map([[-12, "minus-twelve"]]),
+    stringValuesByInt16: new Map([[1234, "twelve-thirty-four"]]),
+    stringValuesByFixedInt32: new Map([[123456789, "fixed-int32"]]),
+    stringValuesByVarint32: new Map([[-1234567, "varint32"]]),
+    stringValuesByFixedInt64: new Map([[1234567890123456789n, "fixed-int64"]]),
+    stringValuesByVarint64: new Map([[-1234567890123456789n, "varint64"]]),
+    stringValuesByTaggedInt64: new Map([[1073741824n, "tagged-int64"]]),
+    stringValuesByUint8: new Map([[200, "uint8"]]),
+    stringValuesByUint16: new Map([[60000, "uint16"]]),
+    stringValuesByFixedUint32: new Map([[2000000000, "fixed-uint32"]]),
+    stringValuesByVarUint32: new Map([[2100000000, "var-uint32"]]),
+    stringValuesByFixedUint64: new Map([[9000000000n, "fixed-uint64"]]),
+    stringValuesByVarUint64: new Map([[12000000000n, "var-uint64"]]),
+    stringValuesByTaggedUint64: new Map([[2222222222n, "tagged-uint64"]]),
+    stringValuesByString: new Map([["example-string", "string"]]),
+    stringValuesByTimestamp: new Map([[buildExampleTimestamp(), "timestamp"]]),
+    stringValuesByDuration: new Map([[buildExampleDurationMillis(), "duration"]]),
+    stringValuesByEnum: new Map([[ExampleState.READY, "ready"]]),
+    float16ValuesByName: new Map([["primary", 1.5]]),
+    maybeFloat16ValuesByName: new Map([["primary", 1.5], ["missing", null]]),
+    bfloat16ValuesByName: new Map([["primary", buildBFloat16(-2.75)]]),
+    maybeBfloat16ValuesByName: new Map([["missing", null], ["secondary", buildBFloat16(2.25)]]),
+    bytesValuesByName: new Map([["payload", Uint8Array.from([1, 2, 3, 4])]]),
+    dateValuesByName: new Map([["leap-day", buildLocalDate(2024, 2, 29)]]),
+    decimalValuesByName: new Map([["amount", buildExampleDecimal()]]),
+    messageValuesByName: new Map([["leaf-a", buildExampleLeafA()], ["leaf-b", buildExampleLeafB()]]),
+    unionValuesByName: new Map([["leaf-b", buildExampleLeafUnionLeaf(buildExampleLeafB())]]),
+  };
+}
+
+function buildExampleMessageUnion(): ExampleMessageUnion {
+  return {
+    case: ExampleMessageUnionCase.UNION_VALUE,
+    value: buildExampleLeafUnionLeaf(buildExampleLeafB()),
+  };
+}
+
 function buildTree(): TreeNode {
   const childA: TreeNode = {
     id: "child-a",
@@ -493,6 +700,136 @@ function assertOptionalHolderEqual(expected: OptionalHolder, actual: unknown): v
   assertAcyclicEqual("optional holder", expected, actual);
 }
 
+function assertExampleMessageEqual(expected: ExampleMessage, actual: unknown): void {
+  assertAcyclicEqual("example message", expected, actual);
+}
+
+function assertExampleMessageUnionEqual(expected: ExampleMessageUnion, actual: unknown): void {
+  assertAcyclicEqual("example message union", expected, actual);
+}
+
+const exampleSchemaEvolutionVariantSpecs: ReadonlyArray<ExampleSchemaEvolutionVariantSpec> = [
+  { fieldName: "boolValue", buildTypeInfo: () => Type.bool().setId(1) },
+  { fieldName: "int8Value", buildTypeInfo: () => Type.int8().setId(2) },
+  { fieldName: "int16Value", buildTypeInfo: () => Type.int16().setId(3) },
+  { fieldName: "fixedInt32Value", buildTypeInfo: () => Type.int32().setId(4) },
+  { fieldName: "varint32Value", buildTypeInfo: () => Type.varInt32().setId(5) },
+  { fieldName: "fixedInt64Value", buildTypeInfo: () => Type.int64().setId(6) },
+  { fieldName: "varint64Value", buildTypeInfo: () => Type.varInt64().setId(7) },
+  { fieldName: "taggedInt64Value", buildTypeInfo: () => Type.sliInt64().setId(8) },
+  { fieldName: "uint8Value", buildTypeInfo: () => Type.uint8().setId(9) },
+  { fieldName: "uint16Value", buildTypeInfo: () => Type.uint16().setId(10) },
+  { fieldName: "fixedUint32Value", buildTypeInfo: () => Type.uint32().setId(11) },
+  { fieldName: "varUint32Value", buildTypeInfo: () => Type.varUInt32().setId(12) },
+  { fieldName: "fixedUint64Value", buildTypeInfo: () => Type.uint64().setId(13) },
+  { fieldName: "varUint64Value", buildTypeInfo: () => Type.varUInt64().setId(14) },
+  { fieldName: "taggedUint64Value", buildTypeInfo: () => Type.taggedUInt64().setId(15) },
+  { fieldName: "float16Value", buildTypeInfo: () => Type.float16().setId(16) },
+  { fieldName: "bfloat16Value", buildTypeInfo: () => Type.bfloat16().setId(17) },
+  { fieldName: "float32Value", buildTypeInfo: () => Type.float32().setId(18) },
+  { fieldName: "float64Value", buildTypeInfo: () => Type.float64().setId(19) },
+  { fieldName: "stringValue", buildTypeInfo: () => Type.string().setId(20) },
+  { fieldName: "bytesValue", buildTypeInfo: () => Type.binary().setId(21) },
+  { fieldName: "dateValue", buildTypeInfo: () => Type.date().setId(22) },
+  { fieldName: "timestampValue", buildTypeInfo: () => Type.timestamp().setId(23) },
+  { fieldName: "durationValue", buildTypeInfo: () => Type.duration().setId(24) },
+  { fieldName: "decimalValue", buildTypeInfo: () => Type.decimal().setId(25) },
+  { fieldName: "enumValue", buildTypeInfo: () => Type.enum(1504, { UNKNOWN: 0, READY: 1, FAILED: 2 }).setId(26) },
+  { fieldName: "messageValue", buildTypeInfo: () => Type.struct({ typeId: 1502, evolving: false }).setId(27).setNullable(true) },
+  { fieldName: "unionValue", buildTypeInfo: () => Type.union(1503, { 1: Type.string(), 2: Type.varInt32(), 3: Type.struct({ typeId: 1502, evolving: false }) }).setId(28) },
+  { fieldName: "boolList", buildTypeInfo: () => Type.boolArray().setId(101) },
+  { fieldName: "int8List", buildTypeInfo: () => Type.int8Array().setId(102) },
+  { fieldName: "int16List", buildTypeInfo: () => Type.int16Array().setId(103) },
+  { fieldName: "fixedInt32List", buildTypeInfo: () => Type.int32Array().setId(104) },
+  { fieldName: "varint32List", buildTypeInfo: () => Type.int32Array().setId(105) },
+  { fieldName: "fixedInt64List", buildTypeInfo: () => Type.int64Array().setId(106) },
+  { fieldName: "varint64List", buildTypeInfo: () => Type.int64Array().setId(107) },
+  { fieldName: "taggedInt64List", buildTypeInfo: () => Type.int64Array().setId(108) },
+  { fieldName: "uint8List", buildTypeInfo: () => Type.uint8Array().setId(109) },
+  { fieldName: "uint16List", buildTypeInfo: () => Type.uint16Array().setId(110) },
+  { fieldName: "fixedUint32List", buildTypeInfo: () => Type.uint32Array().setId(111) },
+  { fieldName: "varUint32List", buildTypeInfo: () => Type.uint32Array().setId(112) },
+  { fieldName: "fixedUint64List", buildTypeInfo: () => Type.uint64Array().setId(113) },
+  { fieldName: "varUint64List", buildTypeInfo: () => Type.uint64Array().setId(114) },
+  { fieldName: "taggedUint64List", buildTypeInfo: () => Type.uint64Array().setId(115) },
+  { fieldName: "float16List", buildTypeInfo: () => Type.float16Array().setId(116) },
+  { fieldName: "bfloat16List", buildTypeInfo: () => Type.bfloat16Array().setId(117) },
+  { fieldName: "maybeFloat16List", buildTypeInfo: () => Type.array(Type.float16().setNullable(true)).setId(118) },
+  { fieldName: "maybeBfloat16List", buildTypeInfo: () => Type.array(Type.bfloat16().setNullable(true)).setId(119) },
+  { fieldName: "float32List", buildTypeInfo: () => Type.float32Array().setId(120) },
+  { fieldName: "float64List", buildTypeInfo: () => Type.float64Array().setId(121) },
+  { fieldName: "stringList", buildTypeInfo: () => Type.array(Type.string()).setId(122) },
+  { fieldName: "bytesList", buildTypeInfo: () => Type.array(Type.binary()).setId(123) },
+  { fieldName: "dateList", buildTypeInfo: () => Type.array(Type.date()).setId(124) },
+  { fieldName: "timestampList", buildTypeInfo: () => Type.array(Type.timestamp()).setId(125) },
+  { fieldName: "durationList", buildTypeInfo: () => Type.array(Type.duration()).setId(126) },
+  { fieldName: "decimalList", buildTypeInfo: () => Type.array(Type.decimal()).setId(127) },
+  { fieldName: "enumList", buildTypeInfo: () => Type.array(Type.enum(1504, { UNKNOWN: 0, READY: 1, FAILED: 2 })).setId(128) },
+  { fieldName: "messageList", buildTypeInfo: () => Type.array(Type.struct({ typeId: 1502, evolving: false })).setId(129) },
+  { fieldName: "unionList", buildTypeInfo: () => Type.array(Type.union(1503, { 1: Type.string(), 2: Type.varInt32(), 3: Type.struct({ typeId: 1502, evolving: false }) })).setId(130) },
+  { fieldName: "stringValuesByBool", buildTypeInfo: () => Type.map(Type.bool(), Type.string()).setId(201) },
+  { fieldName: "stringValuesByInt8", buildTypeInfo: () => Type.map(Type.int8(), Type.string()).setId(202) },
+  { fieldName: "stringValuesByInt16", buildTypeInfo: () => Type.map(Type.int16(), Type.string()).setId(203) },
+  { fieldName: "stringValuesByFixedInt32", buildTypeInfo: () => Type.map(Type.int32(), Type.string()).setId(204) },
+  { fieldName: "stringValuesByVarint32", buildTypeInfo: () => Type.map(Type.varInt32(), Type.string()).setId(205) },
+  { fieldName: "stringValuesByFixedInt64", buildTypeInfo: () => Type.map(Type.int64(), Type.string()).setId(206) },
+  { fieldName: "stringValuesByVarint64", buildTypeInfo: () => Type.map(Type.varInt64(), Type.string()).setId(207) },
+  { fieldName: "stringValuesByTaggedInt64", buildTypeInfo: () => Type.map(Type.sliInt64(), Type.string()).setId(208) },
+  { fieldName: "stringValuesByUint8", buildTypeInfo: () => Type.map(Type.uint8(), Type.string()).setId(209) },
+  { fieldName: "stringValuesByUint16", buildTypeInfo: () => Type.map(Type.uint16(), Type.string()).setId(210) },
+  { fieldName: "stringValuesByFixedUint32", buildTypeInfo: () => Type.map(Type.uint32(), Type.string()).setId(211) },
+  { fieldName: "stringValuesByVarUint32", buildTypeInfo: () => Type.map(Type.varUInt32(), Type.string()).setId(212) },
+  { fieldName: "stringValuesByFixedUint64", buildTypeInfo: () => Type.map(Type.uint64(), Type.string()).setId(213) },
+  { fieldName: "stringValuesByVarUint64", buildTypeInfo: () => Type.map(Type.varUInt64(), Type.string()).setId(214) },
+  { fieldName: "stringValuesByTaggedUint64", buildTypeInfo: () => Type.map(Type.taggedUInt64(), Type.string()).setId(215) },
+  { fieldName: "stringValuesByString", buildTypeInfo: () => Type.map(Type.string(), Type.string()).setId(218) },
+  { fieldName: "stringValuesByTimestamp", buildTypeInfo: () => Type.map(Type.timestamp(), Type.string()).setId(219) },
+  { fieldName: "stringValuesByDuration", buildTypeInfo: () => Type.map(Type.duration(), Type.string()).setId(220) },
+  { fieldName: "stringValuesByEnum", buildTypeInfo: () => Type.map(Type.enum(1504, { UNKNOWN: 0, READY: 1, FAILED: 2 }), Type.string()).setId(221) },
+  { fieldName: "float16ValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.float16()).setId(222) },
+  { fieldName: "maybeFloat16ValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.float16().setNullable(true)).setId(223) },
+  { fieldName: "bfloat16ValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.bfloat16()).setId(224) },
+  { fieldName: "maybeBfloat16ValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.bfloat16().setNullable(true)).setId(225) },
+  { fieldName: "bytesValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.binary()).setId(226) },
+  { fieldName: "dateValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.date()).setId(227) },
+  { fieldName: "decimalValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.decimal()).setId(228) },
+  { fieldName: "messageValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.struct({ typeId: 1502, evolving: false })).setId(229) },
+  { fieldName: "unionValuesByName", buildTypeInfo: () => Type.map(Type.string(), Type.union(1503, { 1: Type.string(), 2: Type.varInt32(), 3: Type.struct({ typeId: 1502, evolving: false }) })).setId(230) },
+];
+
+function buildExampleSchemaEvolutionRegistration(typeInfoFactory: () => any) {
+  const fory = new Fory({ compatible: true, ref: false });
+  registerExampleCommonTypes(fory, Type);
+  return fory.register(typeInfoFactory());
+}
+
+function runExampleMessageRoundTrip(fory: Fory, compatible: boolean): void {
+  const filePath = process.env.DATA_FILE_EXAMPLE_MESSAGE;
+  if (!filePath) {
+    return;
+  }
+  const expected = buildExampleMessage();
+  const payload = new Uint8Array(fs.readFileSync(filePath));
+  const serializer = resolveRootSerializer(fory, payload);
+  const decoded = fory.deserialize(payload);
+  assertExampleMessageEqual(expected, decoded);
+  if (compatible) {
+    const emptyDecoded = buildExampleSchemaEvolutionRegistration(() => Type.struct(1500, {})).deserialize(payload);
+    assert.ok(emptyDecoded != null && typeof emptyDecoded === "object", "example empty schema decode failed");
+    for (const spec of exampleSchemaEvolutionVariantSpecs) {
+      const variantDecoded = buildExampleSchemaEvolutionRegistration(
+        () => Type.struct(1500, { [spec.fieldName]: spec.buildTypeInfo() }),
+      ).deserialize(payload) as Record<string, unknown>;
+      assertAcyclicEqual(
+        `example schema evolution ${String(spec.fieldName)}`,
+        expected[spec.fieldName],
+        variantDecoded[spec.fieldName],
+      );
+    }
+  }
+  fs.writeFileSync(filePath, fory.serialize(decoded, serializer));
+}
+
 function assertTreeEqual(expected: TreeNode, actualValue: unknown): void {
   assert.ok(actualValue != null && typeof actualValue === "object", "tree payload must decode to an object");
   const actual = actualValue as TreeNode;
@@ -541,6 +878,7 @@ function runStandardRoundTrip(compatible: boolean): void {
     registerComplexFbsTypes,
     registerCollectionTypes,
     registerOptionalTypesTypes,
+    registerExampleTypes,
   ]);
 
   runFileRoundTrip("DATA_FILE", fory, buildAddressBook(), assertAddressBookEqual);
@@ -566,6 +904,8 @@ function runStandardRoundTrip(compatible: boolean): void {
     assertNumericCollectionArrayUnionEqual,
   );
   runFileRoundTrip("DATA_FILE_OPTIONAL_TYPES", fory, buildOptionalHolder(), assertOptionalHolderEqual);
+  runExampleMessageRoundTrip(fory, compatible);
+  runFileRoundTrip("DATA_FILE_EXAMPLE_UNION", fory, buildExampleMessageUnion(), assertExampleMessageUnionEqual);
   runFileRoundTrip("DATA_FILE_FLATBUFFERS_MONSTER", fory, buildMonster(), assertMonsterEqual);
   runFileRoundTrip("DATA_FILE_FLATBUFFERS_TEST2", fory, buildContainer(), assertContainerEqual);
 }

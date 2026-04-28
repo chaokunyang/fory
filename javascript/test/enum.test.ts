@@ -87,4 +87,31 @@ describe('enum', () => {
     );
     expect(result).toEqual(Foo.f1)
   });
+
+  test('should auto-register embedded enums for declared enum map fields', () => {
+    const Status = {
+      UNKNOWN: 0,
+      READY: 1,
+      FAILED: 2,
+    };
+    const holderType = Type.struct(1500, {
+      enumValue: Type.enum(1504, Status).setId(26),
+      stringValuesByEnum: Type.map(Type.enum(1504, Status), Type.string()).setId(221),
+    });
+    const fory = new Fory({ compatible: true });
+    const { serialize, deserialize } = fory.register(holderType);
+
+    expect(fory.typeResolver.getSerializerByTypeInfo(Type.enum(1504, Status))).toBeDefined();
+
+    const input = {
+      enumValue: Status.READY,
+      stringValuesByEnum: new Map([[Status.READY, 'ready']]),
+    };
+    const result = deserialize(serialize(input));
+
+    expect(result).toEqual({
+      enumValue: Status.READY,
+      stringValuesByEnum: new Map([[Status.READY, 'ready']]),
+    });
+  });
 });

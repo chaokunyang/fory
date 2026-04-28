@@ -575,18 +575,18 @@ class CSharpGenerator(BaseGenerator):
 
     def _field_encoding(self, field: Field) -> Optional[str]:
         field_type = field.field_type
-        if not isinstance(field_type, PrimitiveType):
+        if isinstance(field_type, PrimitiveType):
+            kind = field_type.kind
+            if kind in {
+                PrimitiveKind.INT32,
+                PrimitiveKind.INT64,
+                PrimitiveKind.UINT32,
+                PrimitiveKind.UINT64,
+            }:
+                return "Fixed"
+            if kind in {PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64}:
+                return "Tagged"
             return None
-        kind = field_type.kind
-        if kind in {
-            PrimitiveKind.INT32,
-            PrimitiveKind.INT64,
-            PrimitiveKind.UINT32,
-            PrimitiveKind.UINT64,
-        }:
-            return "Fixed"
-        if kind in {PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64}:
-            return "Tagged"
         return None
 
     def _type_reference_for_local(
@@ -775,10 +775,13 @@ class CSharpGenerator(BaseGenerator):
         for field in message.fields:
             lines.append("")
             encoding = self._field_encoding(field)
+            field_args: List[str] = []
+            if field.tag_id is not None:
+                field_args.append(f"Id = {field.tag_id}")
             if encoding:
-                lines.append(
-                    f"{ind}{self.indent_str}[Field(Encoding = FieldEncoding.{encoding})]"
-                )
+                field_args.append(f"Encoding = FieldEncoding.{encoding}")
+            if field_args:
+                lines.append(f"{ind}{self.indent_str}[Field({', '.join(field_args)})]")
             field_name = self._field_member_name(field, message, used_field_names)
             field_type = self.generate_type(
                 field.field_type,

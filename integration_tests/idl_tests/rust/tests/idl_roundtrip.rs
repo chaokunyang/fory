@@ -19,8 +19,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::{env, fs};
 
-use chrono::NaiveDate;
-use fory::{ArcWeak, Fory};
+use chrono::{Duration, NaiveDate};
+use fory::{
+    ArcWeak, BFloat16, Decimal, Float16, Fory, ForyDefault, ForyObject, Serializer,
+};
+use fory_core::StructSerializer;
 use idl_tests::generated::addressbook::{
     self,
     person::{PhoneNumber, PhoneType},
@@ -36,10 +39,260 @@ use idl_tests::generated::complex_fbs::{self, Container, Note, Payload, ScalarPa
 use idl_tests::generated::complex_pb::{self, PrimitiveTypes};
 use idl_tests::generated::evolving1;
 use idl_tests::generated::evolving2;
+use idl_tests::generated::example::{self, ExampleMessage, ExampleMessageUnion};
+use idl_tests::generated::example_common::{self, ExampleLeaf, ExampleLeafUnion, ExampleState};
 use idl_tests::generated::monster::{self, Color, Monster, Vec3};
 use idl_tests::generated::optional_types::{self, AllOptionalTypes, OptionalHolder, OptionalUnion};
 use idl_tests::generated::root;
 use idl_tests::generated::{graph, tree};
+use num_bigint::BigInt;
+
+const EXAMPLE_MESSAGE_TYPE_ID: u32 = 1500;
+
+macro_rules! define_example_schema_variant_structs {
+    ($( $(#[$attr:meta])* $name:ident { $field:ident : $ty:ty }; )*) => {
+        $(
+            #[derive(ForyObject, Debug, PartialEq, Clone, Default)]
+            struct $name {
+                $(#[$attr])*
+                $field: $ty,
+            }
+        )*
+    };
+}
+
+macro_rules! assert_example_schema_variant_structs {
+    ($payload:expr, $expected:expr, $( $(#[$attr:meta])* $name:ident { $field:ident : $ty:ty }; )*) => {
+        $(
+            assert_example_schema_variant_decode(
+                $payload,
+                $name {
+                    $field: $expected.$field.clone(),
+                },
+            );
+        )*
+    };
+}
+
+macro_rules! for_each_example_schema_variant {
+    ($macro:ident) => {
+        $macro! {
+            #[fory(id = 1)] ExampleFieldBoolValue { bool_value: bool };
+            #[fory(id = 2)] ExampleFieldInt8Value { int8_value: i8 };
+            #[fory(id = 3)] ExampleFieldInt16Value { int16_value: i16 };
+            #[fory(id = 4, encoding = "fixed")] ExampleFieldFixedInt32Value { fixed_int32_value: i32 };
+            #[fory(id = 5)] ExampleFieldVarint32Value { varint32_value: i32 };
+            #[fory(id = 6, encoding = "fixed")] ExampleFieldFixedInt64Value { fixed_int64_value: i64 };
+            #[fory(id = 7)] ExampleFieldVarint64Value { varint64_value: i64 };
+            #[fory(id = 8, encoding = "tagged")] ExampleFieldTaggedInt64Value { tagged_int64_value: i64 };
+            #[fory(id = 9)] ExampleFieldUint8Value { uint8_value: u8 };
+            #[fory(id = 10)] ExampleFieldUint16Value { uint16_value: u16 };
+            #[fory(id = 11, encoding = "fixed")] ExampleFieldFixedUint32Value { fixed_uint32_value: u32 };
+            #[fory(id = 12)] ExampleFieldVarUint32Value { var_uint32_value: u32 };
+            #[fory(id = 13, encoding = "fixed")] ExampleFieldFixedUint64Value { fixed_uint64_value: u64 };
+            #[fory(id = 14)] ExampleFieldVarUint64Value { var_uint64_value: u64 };
+            #[fory(id = 15, encoding = "tagged")] ExampleFieldTaggedUint64Value { tagged_uint64_value: u64 };
+            #[fory(id = 16)] ExampleFieldFloat16Value { float16_value: fory::Float16 };
+            #[fory(id = 17)] ExampleFieldBfloat16Value { bfloat16_value: fory::BFloat16 };
+            #[fory(id = 18)] ExampleFieldFloat32Value { float32_value: f32 };
+            #[fory(id = 19)] ExampleFieldFloat64Value { float64_value: f64 };
+            #[fory(id = 20)] ExampleFieldStringValue { string_value: String };
+            #[fory(id = 21)] ExampleFieldBytesValue { bytes_value: Vec<u8> };
+            #[fory(id = 22)] ExampleFieldDateValue { date_value: chrono::NaiveDate };
+            #[fory(id = 23)] ExampleFieldTimestampValue { timestamp_value: chrono::NaiveDateTime };
+            #[fory(id = 24)] ExampleFieldDurationValue { duration_value: chrono::Duration };
+            #[fory(id = 25)] ExampleFieldDecimalValue { decimal_value: fory::Decimal };
+            #[fory(id = 26)] ExampleFieldEnumValue { enum_value: crate::example_common::ExampleState };
+            #[fory(id = 27, nullable = true)] ExampleFieldMessageValue { message_value: Option<crate::example_common::ExampleLeaf> };
+            #[fory(id = 28, type_id = "union")] ExampleFieldUnionValue { union_value: crate::example_common::ExampleLeafUnion };
+            #[fory(id = 101)] ExampleFieldBoolList { bool_list: Vec<bool> };
+            #[fory(id = 102, type_id = "int8_array")] ExampleFieldInt8List { int8_list: Vec<i8> };
+            #[fory(id = 103)] ExampleFieldInt16List { int16_list: Vec<i16> };
+            #[fory(id = 104)] ExampleFieldFixedInt32List { fixed_int32_list: Vec<i32> };
+            #[fory(id = 105)] ExampleFieldVarint32List { varint32_list: Vec<i32> };
+            #[fory(id = 106)] ExampleFieldFixedInt64List { fixed_int64_list: Vec<i64> };
+            #[fory(id = 107)] ExampleFieldVarint64List { varint64_list: Vec<i64> };
+            #[fory(id = 108)] ExampleFieldTaggedInt64List { tagged_int64_list: Vec<i64> };
+            #[fory(id = 109, type_id = "uint8_array")] ExampleFieldUint8List { uint8_list: Vec<u8> };
+            #[fory(id = 110)] ExampleFieldUint16List { uint16_list: Vec<u16> };
+            #[fory(id = 111)] ExampleFieldFixedUint32List { fixed_uint32_list: Vec<u32> };
+            #[fory(id = 112)] ExampleFieldVarUint32List { var_uint32_list: Vec<u32> };
+            #[fory(id = 113)] ExampleFieldFixedUint64List { fixed_uint64_list: Vec<u64> };
+            #[fory(id = 114)] ExampleFieldVarUint64List { var_uint64_list: Vec<u64> };
+            #[fory(id = 115)] ExampleFieldTaggedUint64List { tagged_uint64_list: Vec<u64> };
+            #[fory(id = 116)] ExampleFieldFloat16List { float16_list: Vec<fory::Float16> };
+            #[fory(id = 117)] ExampleFieldBfloat16List { bfloat16_list: Vec<fory::BFloat16> };
+            #[fory(id = 118)] ExampleFieldMaybeFloat16List { maybe_float16_list: Vec<Option<fory::Float16>> };
+            #[fory(id = 119)] ExampleFieldMaybeBfloat16List { maybe_bfloat16_list: Vec<Option<fory::BFloat16>> };
+            #[fory(id = 120)] ExampleFieldFloat32List { float32_list: Vec<f32> };
+            #[fory(id = 121)] ExampleFieldFloat64List { float64_list: Vec<f64> };
+            #[fory(id = 122)] ExampleFieldStringList { string_list: Vec<String> };
+            #[fory(id = 123)] ExampleFieldBytesList { bytes_list: Vec<Vec<u8>> };
+            #[fory(id = 124)] ExampleFieldDateList { date_list: Vec<chrono::NaiveDate> };
+            #[fory(id = 125)] ExampleFieldTimestampList { timestamp_list: Vec<chrono::NaiveDateTime> };
+            #[fory(id = 126)] ExampleFieldDurationList { duration_list: Vec<chrono::Duration> };
+            #[fory(id = 127)] ExampleFieldDecimalList { decimal_list: Vec<fory::Decimal> };
+            #[fory(id = 128)] ExampleFieldEnumList { enum_list: Vec<crate::example_common::ExampleState> };
+            #[fory(id = 129)] ExampleFieldMessageList { message_list: Vec<crate::example_common::ExampleLeaf> };
+            #[fory(id = 130)] ExampleFieldUnionList { union_list: Vec<crate::example_common::ExampleLeafUnion> };
+            #[fory(id = 201)] ExampleFieldStringValuesByBool { string_values_by_bool: HashMap<bool, String> };
+            #[fory(id = 202)] ExampleFieldStringValuesByInt8 { string_values_by_int8: HashMap<i8, String> };
+            #[fory(id = 203)] ExampleFieldStringValuesByInt16 { string_values_by_int16: HashMap<i16, String> };
+            #[fory(id = 204)] ExampleFieldStringValuesByFixedInt32 { string_values_by_fixed_int32: HashMap<i32, String> };
+            #[fory(id = 205)] ExampleFieldStringValuesByVarint32 { string_values_by_varint32: HashMap<i32, String> };
+            #[fory(id = 206)] ExampleFieldStringValuesByFixedInt64 { string_values_by_fixed_int64: HashMap<i64, String> };
+            #[fory(id = 207)] ExampleFieldStringValuesByVarint64 { string_values_by_varint64: HashMap<i64, String> };
+            #[fory(id = 208)] ExampleFieldStringValuesByTaggedInt64 { string_values_by_tagged_int64: HashMap<i64, String> };
+            #[fory(id = 209)] ExampleFieldStringValuesByUint8 { string_values_by_uint8: HashMap<u8, String> };
+            #[fory(id = 210)] ExampleFieldStringValuesByUint16 { string_values_by_uint16: HashMap<u16, String> };
+            #[fory(id = 211)] ExampleFieldStringValuesByFixedUint32 { string_values_by_fixed_uint32: HashMap<u32, String> };
+            #[fory(id = 212)] ExampleFieldStringValuesByVarUint32 { string_values_by_var_uint32: HashMap<u32, String> };
+            #[fory(id = 213)] ExampleFieldStringValuesByFixedUint64 { string_values_by_fixed_uint64: HashMap<u64, String> };
+            #[fory(id = 214)] ExampleFieldStringValuesByVarUint64 { string_values_by_var_uint64: HashMap<u64, String> };
+            #[fory(id = 215)] ExampleFieldStringValuesByTaggedUint64 { string_values_by_tagged_uint64: HashMap<u64, String> };
+            #[fory(id = 218)] ExampleFieldStringValuesByString { string_values_by_string: HashMap<String, String> };
+            #[fory(id = 219)] ExampleFieldStringValuesByTimestamp { string_values_by_timestamp: HashMap<chrono::NaiveDateTime, String> };
+            #[fory(id = 220)] ExampleFieldStringValuesByDuration { string_values_by_duration: HashMap<chrono::Duration, String> };
+            #[fory(id = 221)] ExampleFieldStringValuesByEnum { string_values_by_enum: HashMap<crate::example_common::ExampleState, String> };
+            #[fory(id = 222)] ExampleFieldFloat16ValuesByName { float16_values_by_name: HashMap<String, fory::Float16> };
+            #[fory(id = 223)] ExampleFieldMaybeFloat16ValuesByName { maybe_float16_values_by_name: HashMap<String, Option<fory::Float16>> };
+            #[fory(id = 224)] ExampleFieldBfloat16ValuesByName { bfloat16_values_by_name: HashMap<String, fory::BFloat16> };
+            #[fory(id = 225)] ExampleFieldMaybeBfloat16ValuesByName { maybe_bfloat16_values_by_name: HashMap<String, Option<fory::BFloat16>> };
+            #[fory(id = 226)] ExampleFieldBytesValuesByName { bytes_values_by_name: HashMap<String, Vec<u8>> };
+            #[fory(id = 227)] ExampleFieldDateValuesByName { date_values_by_name: HashMap<String, chrono::NaiveDate> };
+            #[fory(id = 228)] ExampleFieldDecimalValuesByName { decimal_values_by_name: HashMap<String, fory::Decimal> };
+            #[fory(id = 229)] ExampleFieldMessageValuesByName { message_values_by_name: HashMap<String, crate::example_common::ExampleLeaf> };
+            #[fory(id = 230)] ExampleFieldUnionValuesByName { union_values_by_name: HashMap<String, crate::example_common::ExampleLeafUnion> };
+        }
+    };
+    ($macro:ident, $($prefix:tt)*) => {
+        $macro! {
+            $($prefix)*
+            #[fory(id = 1)] ExampleFieldBoolValue { bool_value: bool };
+            #[fory(id = 2)] ExampleFieldInt8Value { int8_value: i8 };
+            #[fory(id = 3)] ExampleFieldInt16Value { int16_value: i16 };
+            #[fory(id = 4, encoding = "fixed")] ExampleFieldFixedInt32Value { fixed_int32_value: i32 };
+            #[fory(id = 5)] ExampleFieldVarint32Value { varint32_value: i32 };
+            #[fory(id = 6, encoding = "fixed")] ExampleFieldFixedInt64Value { fixed_int64_value: i64 };
+            #[fory(id = 7)] ExampleFieldVarint64Value { varint64_value: i64 };
+            #[fory(id = 8, encoding = "tagged")] ExampleFieldTaggedInt64Value { tagged_int64_value: i64 };
+            #[fory(id = 9)] ExampleFieldUint8Value { uint8_value: u8 };
+            #[fory(id = 10)] ExampleFieldUint16Value { uint16_value: u16 };
+            #[fory(id = 11, encoding = "fixed")] ExampleFieldFixedUint32Value { fixed_uint32_value: u32 };
+            #[fory(id = 12)] ExampleFieldVarUint32Value { var_uint32_value: u32 };
+            #[fory(id = 13, encoding = "fixed")] ExampleFieldFixedUint64Value { fixed_uint64_value: u64 };
+            #[fory(id = 14)] ExampleFieldVarUint64Value { var_uint64_value: u64 };
+            #[fory(id = 15, encoding = "tagged")] ExampleFieldTaggedUint64Value { tagged_uint64_value: u64 };
+            #[fory(id = 16)] ExampleFieldFloat16Value { float16_value: fory::Float16 };
+            #[fory(id = 17)] ExampleFieldBfloat16Value { bfloat16_value: fory::BFloat16 };
+            #[fory(id = 18)] ExampleFieldFloat32Value { float32_value: f32 };
+            #[fory(id = 19)] ExampleFieldFloat64Value { float64_value: f64 };
+            #[fory(id = 20)] ExampleFieldStringValue { string_value: String };
+            #[fory(id = 21)] ExampleFieldBytesValue { bytes_value: Vec<u8> };
+            #[fory(id = 22)] ExampleFieldDateValue { date_value: chrono::NaiveDate };
+            #[fory(id = 23)] ExampleFieldTimestampValue { timestamp_value: chrono::NaiveDateTime };
+            #[fory(id = 24)] ExampleFieldDurationValue { duration_value: chrono::Duration };
+            #[fory(id = 25)] ExampleFieldDecimalValue { decimal_value: fory::Decimal };
+            #[fory(id = 26)] ExampleFieldEnumValue { enum_value: crate::example_common::ExampleState };
+            #[fory(id = 27, nullable = true)] ExampleFieldMessageValue { message_value: Option<crate::example_common::ExampleLeaf> };
+            #[fory(id = 28, type_id = "union")] ExampleFieldUnionValue { union_value: crate::example_common::ExampleLeafUnion };
+            #[fory(id = 101)] ExampleFieldBoolList { bool_list: Vec<bool> };
+            #[fory(id = 102, type_id = "int8_array")] ExampleFieldInt8List { int8_list: Vec<i8> };
+            #[fory(id = 103)] ExampleFieldInt16List { int16_list: Vec<i16> };
+            #[fory(id = 104)] ExampleFieldFixedInt32List { fixed_int32_list: Vec<i32> };
+            #[fory(id = 105)] ExampleFieldVarint32List { varint32_list: Vec<i32> };
+            #[fory(id = 106)] ExampleFieldFixedInt64List { fixed_int64_list: Vec<i64> };
+            #[fory(id = 107)] ExampleFieldVarint64List { varint64_list: Vec<i64> };
+            #[fory(id = 108)] ExampleFieldTaggedInt64List { tagged_int64_list: Vec<i64> };
+            #[fory(id = 109, type_id = "uint8_array")] ExampleFieldUint8List { uint8_list: Vec<u8> };
+            #[fory(id = 110)] ExampleFieldUint16List { uint16_list: Vec<u16> };
+            #[fory(id = 111)] ExampleFieldFixedUint32List { fixed_uint32_list: Vec<u32> };
+            #[fory(id = 112)] ExampleFieldVarUint32List { var_uint32_list: Vec<u32> };
+            #[fory(id = 113)] ExampleFieldFixedUint64List { fixed_uint64_list: Vec<u64> };
+            #[fory(id = 114)] ExampleFieldVarUint64List { var_uint64_list: Vec<u64> };
+            #[fory(id = 115)] ExampleFieldTaggedUint64List { tagged_uint64_list: Vec<u64> };
+            #[fory(id = 116)] ExampleFieldFloat16List { float16_list: Vec<fory::Float16> };
+            #[fory(id = 117)] ExampleFieldBfloat16List { bfloat16_list: Vec<fory::BFloat16> };
+            #[fory(id = 118)] ExampleFieldMaybeFloat16List { maybe_float16_list: Vec<Option<fory::Float16>> };
+            #[fory(id = 119)] ExampleFieldMaybeBfloat16List { maybe_bfloat16_list: Vec<Option<fory::BFloat16>> };
+            #[fory(id = 120)] ExampleFieldFloat32List { float32_list: Vec<f32> };
+            #[fory(id = 121)] ExampleFieldFloat64List { float64_list: Vec<f64> };
+            #[fory(id = 122)] ExampleFieldStringList { string_list: Vec<String> };
+            #[fory(id = 123)] ExampleFieldBytesList { bytes_list: Vec<Vec<u8>> };
+            #[fory(id = 124)] ExampleFieldDateList { date_list: Vec<chrono::NaiveDate> };
+            #[fory(id = 125)] ExampleFieldTimestampList { timestamp_list: Vec<chrono::NaiveDateTime> };
+            #[fory(id = 126)] ExampleFieldDurationList { duration_list: Vec<chrono::Duration> };
+            #[fory(id = 127)] ExampleFieldDecimalList { decimal_list: Vec<fory::Decimal> };
+            #[fory(id = 128)] ExampleFieldEnumList { enum_list: Vec<crate::example_common::ExampleState> };
+            #[fory(id = 129)] ExampleFieldMessageList { message_list: Vec<crate::example_common::ExampleLeaf> };
+            #[fory(id = 130)] ExampleFieldUnionList { union_list: Vec<crate::example_common::ExampleLeafUnion> };
+            #[fory(id = 201)] ExampleFieldStringValuesByBool { string_values_by_bool: HashMap<bool, String> };
+            #[fory(id = 202)] ExampleFieldStringValuesByInt8 { string_values_by_int8: HashMap<i8, String> };
+            #[fory(id = 203)] ExampleFieldStringValuesByInt16 { string_values_by_int16: HashMap<i16, String> };
+            #[fory(id = 204)] ExampleFieldStringValuesByFixedInt32 { string_values_by_fixed_int32: HashMap<i32, String> };
+            #[fory(id = 205)] ExampleFieldStringValuesByVarint32 { string_values_by_varint32: HashMap<i32, String> };
+            #[fory(id = 206)] ExampleFieldStringValuesByFixedInt64 { string_values_by_fixed_int64: HashMap<i64, String> };
+            #[fory(id = 207)] ExampleFieldStringValuesByVarint64 { string_values_by_varint64: HashMap<i64, String> };
+            #[fory(id = 208)] ExampleFieldStringValuesByTaggedInt64 { string_values_by_tagged_int64: HashMap<i64, String> };
+            #[fory(id = 209)] ExampleFieldStringValuesByUint8 { string_values_by_uint8: HashMap<u8, String> };
+            #[fory(id = 210)] ExampleFieldStringValuesByUint16 { string_values_by_uint16: HashMap<u16, String> };
+            #[fory(id = 211)] ExampleFieldStringValuesByFixedUint32 { string_values_by_fixed_uint32: HashMap<u32, String> };
+            #[fory(id = 212)] ExampleFieldStringValuesByVarUint32 { string_values_by_var_uint32: HashMap<u32, String> };
+            #[fory(id = 213)] ExampleFieldStringValuesByFixedUint64 { string_values_by_fixed_uint64: HashMap<u64, String> };
+            #[fory(id = 214)] ExampleFieldStringValuesByVarUint64 { string_values_by_var_uint64: HashMap<u64, String> };
+            #[fory(id = 215)] ExampleFieldStringValuesByTaggedUint64 { string_values_by_tagged_uint64: HashMap<u64, String> };
+            #[fory(id = 218)] ExampleFieldStringValuesByString { string_values_by_string: HashMap<String, String> };
+            #[fory(id = 219)] ExampleFieldStringValuesByTimestamp { string_values_by_timestamp: HashMap<chrono::NaiveDateTime, String> };
+            #[fory(id = 220)] ExampleFieldStringValuesByDuration { string_values_by_duration: HashMap<chrono::Duration, String> };
+            #[fory(id = 221)] ExampleFieldStringValuesByEnum { string_values_by_enum: HashMap<crate::example_common::ExampleState, String> };
+            #[fory(id = 222)] ExampleFieldFloat16ValuesByName { float16_values_by_name: HashMap<String, fory::Float16> };
+            #[fory(id = 223)] ExampleFieldMaybeFloat16ValuesByName { maybe_float16_values_by_name: HashMap<String, Option<fory::Float16>> };
+            #[fory(id = 224)] ExampleFieldBfloat16ValuesByName { bfloat16_values_by_name: HashMap<String, fory::BFloat16> };
+            #[fory(id = 225)] ExampleFieldMaybeBfloat16ValuesByName { maybe_bfloat16_values_by_name: HashMap<String, Option<fory::BFloat16>> };
+            #[fory(id = 226)] ExampleFieldBytesValuesByName { bytes_values_by_name: HashMap<String, Vec<u8>> };
+            #[fory(id = 227)] ExampleFieldDateValuesByName { date_values_by_name: HashMap<String, chrono::NaiveDate> };
+            #[fory(id = 228)] ExampleFieldDecimalValuesByName { decimal_values_by_name: HashMap<String, fory::Decimal> };
+            #[fory(id = 229)] ExampleFieldMessageValuesByName { message_values_by_name: HashMap<String, crate::example_common::ExampleLeaf> };
+            #[fory(id = 230)] ExampleFieldUnionValuesByName { union_values_by_name: HashMap<String, crate::example_common::ExampleLeafUnion> };
+        }
+    };
+}
+
+for_each_example_schema_variant!(define_example_schema_variant_structs);
+
+#[derive(ForyObject, Debug, PartialEq, Clone, Default)]
+struct ExampleMessageEmpty {}
+
+fn build_example_schema_evolution_fory<T>() -> Fory
+where
+    T: StructSerializer + Serializer + ForyDefault + 'static,
+{
+    let mut fory = Fory::builder().xlang(true).compatible(true).build();
+    example_common::register_types(&mut fory).expect("register example common types for schema evolution");
+    fory.register::<T>(EXAMPLE_MESSAGE_TYPE_ID)
+        .expect("register schema evolution type");
+    fory
+}
+
+fn assert_example_schema_variant_decode<T>(payload: &[u8], expected: T)
+where
+    T: StructSerializer + Serializer + ForyDefault + PartialEq + std::fmt::Debug + Clone + 'static,
+{
+    let fory = build_example_schema_evolution_fory::<T>();
+    let actual: T = fory
+        .deserialize(payload)
+        .expect("deserialize schema evolution variant");
+    assert_eq!(expected, actual);
+}
+
+fn assert_example_message_schema_evolution(payload: &[u8], expected: &ExampleMessage) {
+    let empty_fory = build_example_schema_evolution_fory::<ExampleMessageEmpty>();
+    let _: ExampleMessageEmpty = empty_fory
+        .deserialize(payload)
+        .expect("deserialize empty schema evolution type");
+
+    for_each_example_schema_variant!(assert_example_schema_variant_structs, payload, expected,);
+}
 
 fn build_address_book() -> AddressBook {
     let mobile = PhoneNumber {
@@ -126,6 +379,184 @@ fn build_auto_id_wrapper(envelope: auto_id::Envelope) -> auto_id::Wrapper {
     auto_id::Wrapper::Envelope(envelope)
 }
 
+fn decimal_value(unscaled: &str, scale: i32) -> Decimal {
+    Decimal::new(
+        BigInt::parse_bytes(unscaled.as_bytes(), 10).expect("invalid decimal"),
+        scale,
+    )
+}
+
+fn build_example_leafs() -> (ExampleLeaf, ExampleLeaf) {
+    (
+        ExampleLeaf {
+            label: "leaf-a".to_string(),
+            count: 7,
+        },
+        ExampleLeaf {
+            label: "leaf-b".to_string(),
+            count: -3,
+        },
+    )
+}
+
+fn build_example_message() -> ExampleMessage {
+    let (leaf_a, leaf_b) = build_example_leafs();
+    let leaf_union = ExampleLeafUnion::Leaf(leaf_b.clone());
+    let date_value = NaiveDate::from_ymd_opt(2024, 2, 29).expect("example date");
+    let timestamp_value = date_value
+        .and_hms_micro_opt(12, 34, 56, 789_123)
+        .expect("example timestamp");
+    let duration_value = Duration::seconds(3723) + Duration::microseconds(456_789);
+    let amount = decimal_value("1234567890123456789", 4);
+
+    ExampleMessage {
+        bool_value: true,
+        int8_value: -12,
+        int16_value: 1234,
+        fixed_int32_value: 123_456_789,
+        varint32_value: -1_234_567,
+        fixed_int64_value: 1_234_567_890_123_456_789,
+        varint64_value: -1_234_567_890_123_456_789,
+        tagged_int64_value: 1_073_741_824,
+        uint8_value: 200,
+        uint16_value: 60_000,
+        fixed_uint32_value: 2_000_000_000,
+        var_uint32_value: 2_100_000_000,
+        fixed_uint64_value: 9_000_000_000,
+        var_uint64_value: 12_000_000_000,
+        tagged_uint64_value: 2_222_222_222,
+        float16_value: Float16::from_f32(1.5),
+        bfloat16_value: BFloat16::from_f32(-2.75),
+        float32_value: 3.25,
+        float64_value: -4.5,
+        string_value: "example-string".to_string(),
+        bytes_value: vec![1, 2, 3, 4],
+        date_value,
+        timestamp_value,
+        duration_value,
+        decimal_value: amount.clone(),
+        enum_value: ExampleState::Ready,
+        message_value: Some(leaf_a.clone()),
+        union_value: leaf_union.clone(),
+        bool_list: vec![true, false],
+        int8_list: vec![-12, 8],
+        int16_list: vec![1234, -4321],
+        fixed_int32_list: vec![123_456_789, -98_765_432],
+        varint32_list: vec![-1_234_567, 7_654_321],
+        fixed_int64_list: vec![1_234_567_890_123_456_789, -123_456_789_012_345_678],
+        varint64_list: vec![-1_234_567_890_123_456_789, 2_233_445_566_778_899],
+        tagged_int64_list: vec![1_073_741_824, -1_073_741_824],
+        uint8_list: vec![200, 17],
+        uint16_list: vec![60_000, 42],
+        fixed_uint32_list: vec![2_000_000_000, 77],
+        var_uint32_list: vec![2_100_000_000, 123],
+        fixed_uint64_list: vec![9_000_000_000, 456],
+        var_uint64_list: vec![12_000_000_000, 789],
+        tagged_uint64_list: vec![2_222_222_222, 321],
+        float16_list: vec![Float16::from_f32(1.5), Float16::from_f32(-0.5)],
+        bfloat16_list: vec![BFloat16::from_f32(-2.75), BFloat16::from_f32(2.25)],
+        maybe_float16_list: vec![
+            Some(Float16::from_f32(1.5)),
+            None,
+            Some(Float16::from_f32(-0.5)),
+        ],
+        maybe_bfloat16_list: vec![
+            None,
+            Some(BFloat16::from_f32(2.25)),
+            Some(BFloat16::from_f32(-1.0)),
+        ],
+        float32_list: vec![3.25, -1.25],
+        float64_list: vec![-4.5, 6.75],
+        string_list: vec!["example-string".to_string(), "example-alt".to_string()],
+        bytes_list: vec![vec![1, 2, 3, 4], vec![4, 3, 2, 1]],
+        date_list: vec![
+            date_value,
+            NaiveDate::from_ymd_opt(2024, 3, 1).expect("example date list"),
+        ],
+        timestamp_list: vec![
+            timestamp_value,
+            NaiveDate::from_ymd_opt(2024, 3, 1)
+                .expect("example timestamp date")
+                .and_hms_micro_opt(12, 35, 56, 789_123)
+                .expect("example timestamp list"),
+        ],
+        duration_list: vec![duration_value, duration_value + Duration::seconds(1)],
+        decimal_list: vec![amount.clone(), decimal_value("-9999", 3)],
+        enum_list: vec![ExampleState::Ready, ExampleState::Failed],
+        message_list: vec![leaf_a.clone(), leaf_b.clone()],
+        union_list: vec![
+            ExampleLeafUnion::Note("example-note".to_string()),
+            leaf_union.clone(),
+        ],
+        string_values_by_bool: HashMap::from([
+            (true, "bool-true".to_string()),
+            (false, "bool-false".to_string()),
+        ]),
+        string_values_by_int8: HashMap::from([(-12, "int8".to_string())]),
+        string_values_by_int16: HashMap::from([(1234, "int16".to_string())]),
+        string_values_by_fixed_int32: HashMap::from([(123_456_789, "fixed-int32".to_string())]),
+        string_values_by_varint32: HashMap::from([(-1_234_567, "varint32".to_string())]),
+        string_values_by_fixed_int64: HashMap::from([(
+            1_234_567_890_123_456_789,
+            "fixed-int64".to_string(),
+        )]),
+        string_values_by_varint64: HashMap::from([(
+            -1_234_567_890_123_456_789,
+            "varint64".to_string(),
+        )]),
+        string_values_by_tagged_int64: HashMap::from([(1_073_741_824, "tagged-int64".to_string())]),
+        string_values_by_uint8: HashMap::from([(200, "uint8".to_string())]),
+        string_values_by_uint16: HashMap::from([(60_000, "uint16".to_string())]),
+        string_values_by_fixed_uint32: HashMap::from([(2_000_000_000, "fixed-uint32".to_string())]),
+        string_values_by_var_uint32: HashMap::from([(2_100_000_000, "var-uint32".to_string())]),
+        string_values_by_fixed_uint64: HashMap::from([(9_000_000_000, "fixed-uint64".to_string())]),
+        string_values_by_var_uint64: HashMap::from([(12_000_000_000, "var-uint64".to_string())]),
+        string_values_by_tagged_uint64: HashMap::from([(
+            2_222_222_222,
+            "tagged-uint64".to_string(),
+        )]),
+        string_values_by_string: HashMap::from([(
+            "example-string".to_string(),
+            "string".to_string(),
+        )]),
+        string_values_by_timestamp: HashMap::from([(timestamp_value, "timestamp".to_string())]),
+        string_values_by_duration: HashMap::from([(duration_value, "duration".to_string())]),
+        string_values_by_enum: HashMap::from([(ExampleState::Ready, "ready".to_string())]),
+        float16_values_by_name: HashMap::from([
+            ("primary".to_string(), Float16::from_f32(1.5)),
+            ("secondary".to_string(), Float16::from_f32(-0.5)),
+        ]),
+        maybe_float16_values_by_name: HashMap::from([
+            ("primary".to_string(), Some(Float16::from_f32(1.5))),
+            ("missing".to_string(), None),
+        ]),
+        bfloat16_values_by_name: HashMap::from([
+            ("primary".to_string(), BFloat16::from_f32(-2.75)),
+            ("secondary".to_string(), BFloat16::from_f32(2.25)),
+        ]),
+        maybe_bfloat16_values_by_name: HashMap::from([
+            ("missing".to_string(), None),
+            ("primary".to_string(), Some(BFloat16::from_f32(-2.75))),
+        ]),
+        bytes_values_by_name: HashMap::from([
+            ("primary".to_string(), vec![1, 2, 3, 4]),
+            ("secondary".to_string(), vec![4, 3, 2, 1]),
+        ]),
+        date_values_by_name: HashMap::from([("leap-day".to_string(), date_value)]),
+        decimal_values_by_name: HashMap::from([("primary".to_string(), amount)]),
+        message_values_by_name: HashMap::from([
+            ("leaf-a".to_string(), leaf_a),
+            ("leaf-b".to_string(), leaf_b),
+        ]),
+        union_values_by_name: HashMap::from([("leaf-b".to_string(), leaf_union)]),
+    }
+}
+
+fn build_example_message_union() -> ExampleMessageUnion {
+    let (_, leaf_b) = build_example_leafs();
+    ExampleMessageUnion::UnionValue(ExampleLeafUnion::Leaf(leaf_b))
+}
+
 #[test]
 fn test_to_bytes_from_bytes() {
     let book = build_address_book();
@@ -139,20 +570,28 @@ fn test_to_bytes_from_bytes() {
     };
     let animal = Animal::Dog(dog);
     let animal_bytes = animal.to_bytes().expect("serialize animal");
-    let decoded_animal =
-        Animal::from_bytes(&animal_bytes).expect("deserialize animal");
+    let decoded_animal = Animal::from_bytes(&animal_bytes).expect("deserialize animal");
     assert_eq!(decoded_animal, animal);
 
     let multi = build_root_holder();
     let multi_bytes = multi.to_bytes().expect("serialize root");
-    let decoded_multi =
-        root::MultiHolder::from_bytes(&multi_bytes).expect("deserialize root");
+    let decoded_multi = root::MultiHolder::from_bytes(&multi_bytes).expect("deserialize root");
     assert_eq!(decoded_multi, multi);
+
+    let example_message = build_example_message();
+    let example_bytes = example_message.to_bytes().expect("serialize example");
+    let decoded_example = ExampleMessage::from_bytes(&example_bytes).expect("deserialize example");
+    assert_eq!(decoded_example, example_message);
+
+    let example_union = build_example_message_union();
+    let example_union_bytes = example_union.to_bytes().expect("serialize example union");
+    let decoded_example_union =
+        ExampleMessageUnion::from_bytes(&example_union_bytes).expect("deserialize example union");
+    assert_eq!(decoded_example_union, example_union);
 }
 
 fn build_primitive_types() -> PrimitiveTypes {
-    let mut contact =
-        complex_pb::primitive_types::Contact::Email("alice@example.com".to_string());
+    let mut contact = complex_pb::primitive_types::Contact::Email("alice@example.com".to_string());
     contact = complex_pb::primitive_types::Contact::Phone(12345);
 
     PrimitiveTypes {
@@ -297,7 +736,10 @@ fn build_optional_holder() -> OptionalHolder {
         ),
         int32_list: Some(vec![1, 2, 3]),
         string_list: Some(vec!["alpha".to_string(), "beta".to_string()]),
-        int64_map: Some(HashMap::from([("alpha".to_string(), 10), ("beta".to_string(), 20)])),
+        int64_map: Some(HashMap::from([
+            ("alpha".to_string(), 10),
+            ("beta".to_string(), 20),
+        ])),
     };
 
     OptionalHolder {
@@ -401,17 +843,17 @@ fn build_tree() -> tree::TreeNode {
 
     let child_a_weak = ArcWeak::from(&child_a);
     let child_b_weak = ArcWeak::from(&child_b);
-    Arc::get_mut(&mut child_a)
-        .expect("child a unique")
-        .parent = Some(child_b_weak);
-    Arc::get_mut(&mut child_b)
-        .expect("child b unique")
-        .parent = Some(child_a_weak);
+    Arc::get_mut(&mut child_a).expect("child a unique").parent = Some(child_b_weak);
+    Arc::get_mut(&mut child_b).expect("child b unique").parent = Some(child_a_weak);
 
     tree::TreeNode {
         id: "root".to_string(),
         name: "root".to_string(),
-        children: vec![Arc::clone(&child_a), Arc::clone(&child_a), Arc::clone(&child_b)],
+        children: vec![
+            Arc::clone(&child_a),
+            Arc::clone(&child_a),
+            Arc::clone(&child_b),
+        ],
         parent: None,
     }
 }
@@ -455,15 +897,9 @@ fn build_graph() -> graph::Graph {
         to: Some(ArcWeak::from(&node_b)),
     });
 
-    Arc::get_mut(&mut node_a)
-        .expect("node a unique")
-        .out_edges = vec![Arc::clone(&edge)];
-    Arc::get_mut(&mut node_a)
-        .expect("node a unique")
-        .in_edges = vec![Arc::clone(&edge)];
-    Arc::get_mut(&mut node_b)
-        .expect("node b unique")
-        .in_edges = vec![Arc::clone(&edge)];
+    Arc::get_mut(&mut node_a).expect("node a unique").out_edges = vec![Arc::clone(&edge)];
+    Arc::get_mut(&mut node_a).expect("node a unique").in_edges = vec![Arc::clone(&edge)];
+    Arc::get_mut(&mut node_b).expect("node b unique").in_edges = vec![Arc::clone(&edge)];
 
     graph::Graph {
         nodes: vec![Arc::clone(&node_a), Arc::clone(&node_b)],
@@ -538,9 +974,7 @@ fn test_evolving_roundtrip() {
         score: 90,
         note: "note".to_string(),
     };
-    let fixed_bytes = fory_v1
-        .serialize(&fixed_v1)
-        .expect("serialize fixed v1");
+    let fixed_bytes = fory_v1.serialize(&fixed_v1).expect("serialize fixed v1");
     let fixed_v2 = fory_v2.deserialize::<evolving2::FixedMessage>(&fixed_bytes);
     match fixed_v2 {
         Err(_) => return,
@@ -557,10 +991,7 @@ fn test_evolving_roundtrip() {
 }
 
 fn run_address_book_roundtrip(compatible: bool) {
-    let mut fory = Fory::builder()
-        .xlang(true)
-        .compatible(compatible)
-        .build();
+    let mut fory = Fory::builder().xlang(true).compatible(compatible).build();
     complex_pb::register_types(&mut fory).expect("register complex pb types");
     addressbook::register_types(&mut fory).expect("register types");
     auto_id::register_types(&mut fory).expect("register auto_id types");
@@ -569,6 +1000,8 @@ fn run_address_book_roundtrip(compatible: bool) {
     collection::register_types(&mut fory).expect("register collection types");
     optional_types::register_types(&mut fory).expect("register optional types");
     any_example::register_types(&mut fory).expect("register any example types");
+    example_common::register_types(&mut fory).expect("register example common types");
+    example::register_types(&mut fory).expect("register example types");
 
     let book = build_address_book();
     let bytes = fory.serialize(&book).expect("serialize");
@@ -586,9 +1019,26 @@ fn run_address_book_roundtrip(compatible: bool) {
     let wrapper_bytes = fory
         .serialize(&auto_wrapper)
         .expect("serialize auto_id wrapper");
-    let wrapper_roundtrip: auto_id::Wrapper =
-        fory.deserialize(&wrapper_bytes).expect("deserialize auto_id wrapper");
+    let wrapper_roundtrip: auto_id::Wrapper = fory
+        .deserialize(&wrapper_bytes)
+        .expect("deserialize auto_id wrapper");
     assert_eq!(auto_wrapper, wrapper_roundtrip);
+
+    let example_message = build_example_message();
+    let example_bytes = fory.serialize(&example_message).expect("serialize example");
+    let example_roundtrip: ExampleMessage = fory
+        .deserialize(&example_bytes)
+        .expect("deserialize example");
+    assert_eq!(example_message, example_roundtrip);
+
+    let example_union = build_example_message_union();
+    let example_union_bytes = fory
+        .serialize(&example_union)
+        .expect("serialize example union");
+    let example_union_roundtrip: ExampleMessageUnion = fory
+        .deserialize(&example_union_bytes)
+        .expect("deserialize example union");
+    assert_eq!(example_union, example_union_roundtrip);
 
     let data_file = match env::var("DATA_FILE") {
         Ok(path) => path,
@@ -608,8 +1058,37 @@ fn run_address_book_roundtrip(compatible: bool) {
             .deserialize(&payload)
             .expect("deserialize auto_id peer payload");
         assert_eq!(auto_env, peer_env);
-        let encoded = fory.serialize(&peer_env).expect("serialize auto_id payload");
+        let encoded = fory
+            .serialize(&peer_env)
+            .expect("serialize auto_id payload");
         fs::write(data_file, encoded).expect("write auto_id data file");
+    }
+
+    if let Ok(data_file) = env::var("DATA_FILE_EXAMPLE_MESSAGE") {
+        let payload = fs::read(&data_file).expect("read example data file");
+        let peer_message: ExampleMessage = fory
+            .deserialize(&payload)
+            .expect("deserialize example peer payload");
+        assert_eq!(example_message, peer_message);
+        if compatible {
+            assert_example_message_schema_evolution(&payload, &example_message);
+        }
+        let encoded = fory
+            .serialize(&peer_message)
+            .expect("serialize example payload");
+        fs::write(data_file, encoded).expect("write example data file");
+    }
+
+    if let Ok(data_file) = env::var("DATA_FILE_EXAMPLE_UNION") {
+        let payload = fs::read(&data_file).expect("read example union data file");
+        let peer_union: ExampleMessageUnion = fory
+            .deserialize(&payload)
+            .expect("deserialize example union peer payload");
+        assert_eq!(example_union, peer_union);
+        let encoded = fory
+            .serialize(&peer_union)
+            .expect("serialize example union payload");
+        fs::write(data_file, encoded).expect("write example union data file");
     }
 
     let types = build_primitive_types();
@@ -659,9 +1138,7 @@ fn run_address_book_roundtrip(compatible: bool) {
             .deserialize(&payload)
             .expect("deserialize peer payload");
         assert_eq!(collection_union, peer_union);
-        let encoded = fory
-            .serialize(&peer_union)
-            .expect("serialize peer payload");
+        let encoded = fory.serialize(&peer_union).expect("serialize peer payload");
         fs::write(data_file, encoded).expect("write data file");
     }
 
@@ -678,9 +1155,7 @@ fn run_address_book_roundtrip(compatible: bool) {
             .deserialize(&payload)
             .expect("deserialize peer payload");
         assert_eq!(collections_array, peer_array);
-        let encoded = fory
-            .serialize(&peer_array)
-            .expect("serialize peer payload");
+        let encoded = fory.serialize(&peer_array).expect("serialize peer payload");
         fs::write(data_file, encoded).expect("write data file");
     }
 
@@ -688,8 +1163,7 @@ fn run_address_book_roundtrip(compatible: bool) {
     let bytes = fory
         .serialize(&collection_array_union)
         .expect("serialize collection array union");
-    let roundtrip: NumericCollectionArrayUnion =
-        fory.deserialize(&bytes).expect("deserialize");
+    let roundtrip: NumericCollectionArrayUnion = fory.deserialize(&bytes).expect("deserialize");
     assert_eq!(collection_array_union, roundtrip);
 
     if let Ok(data_file) = env::var("DATA_FILE_COLLECTION_ARRAY_UNION") {
@@ -698,9 +1172,7 @@ fn run_address_book_roundtrip(compatible: bool) {
             .deserialize(&payload)
             .expect("deserialize peer payload");
         assert_eq!(collection_array_union, peer_union);
-        let encoded = fory
-            .serialize(&peer_union)
-            .expect("serialize peer payload");
+        let encoded = fory.serialize(&peer_union).expect("serialize peer payload");
         fs::write(data_file, encoded).expect("write data file");
     }
 

@@ -44,5 +44,12 @@ pub mod generated {
     pub mod root;
     #[path = "../generated/tree.rs"]
     pub mod tree;
+    pub use crate::example;
+    pub use crate::example_common;
 }
+
+#[path = "generated/example.rs"]
+pub mod example;
+#[path = "generated/example_common.rs"]
+pub mod example_common;
 pub use generated::*;

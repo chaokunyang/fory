@@ -21,21 +21,28 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/codegen/generated_registry.dart';
+import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/serializer/serialization_field_info.dart';
+import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:test/test.dart';
 
-import 'package:idl_dart_tests/generated/addressbook/addressbook.dart' as addressbook;
+import 'package:idl_dart_tests/generated/addressbook/addressbook.dart'
+    as addressbook;
 import 'package:idl_dart_tests/generated/auto_id/auto_id.dart' as auto_id;
-import 'package:idl_dart_tests/generated/collection/collection.dart' as collection;
+import 'package:idl_dart_tests/generated/collection/collection.dart'
+    as collection;
+import 'package:idl_dart_tests/generated/example/example.dart' as example;
+import 'package:idl_dart_tests/generated/example_common/example_common.dart'
+    as example_common;
 import 'package:idl_dart_tests/generated/graph/graph.dart' as graph;
-import 'package:idl_dart_tests/generated/optional_types/optional_types.dart' as optional_types;
+import 'package:idl_dart_tests/generated/optional_types/optional_types.dart'
+    as optional_types;
 import 'package:idl_dart_tests/generated/root/root.dart' as root;
 import 'package:idl_dart_tests/generated/tree/tree.dart' as tree;
 
 Fory _newFory({bool compatible = false}) {
-  return Fory(
-    compatible: compatible,
-    checkStructVersion: !compatible,
-  );
+  return Fory(compatible: compatible, checkStructVersion: !compatible);
 }
 
 void _registerCommon(Fory fory) {
@@ -50,11 +57,7 @@ void _registerCommon(Fory fory) {
     addressbook.Person_PhoneNumber,
     id: 102,
   );
-  addressbook.ForyRegistration.register(
-    fory,
-    addressbook.AddressBook,
-    id: 103,
-  );
+  addressbook.ForyRegistration.register(fory, addressbook.AddressBook, id: 103);
   addressbook.ForyRegistration.register(fory, addressbook.Dog, id: 104);
   addressbook.ForyRegistration.register(fory, addressbook.Cat, id: 105);
   addressbook.ForyRegistration.register(fory, addressbook.Animal, id: 106);
@@ -111,13 +114,163 @@ void _registerRefs(Fory fory) {
   root.ForyRegistration.register(fory, root.MultiHolder, id: 300);
 }
 
+void _registerExample(Fory fory) {
+  example_common.ForyRegistration.register(fory, example_common.ExampleState);
+  example_common.ForyRegistration.register(
+    fory,
+    example_common.ExampleLeafUnion,
+  );
+  example_common.ForyRegistration.register(fory, example_common.ExampleLeaf);
+  example.ForyRegistration.register(fory, example.ExampleMessageUnion);
+  example.ForyRegistration.register(fory, example.ExampleMessage);
+}
+
+void _registerExampleCommon(Fory fory) {
+  example_common.ForyRegistration.register(fory, example_common.ExampleState);
+  example_common.ForyRegistration.register(
+    fory,
+    example_common.ExampleLeafUnion,
+  );
+  example_common.ForyRegistration.register(fory, example_common.ExampleLeaf);
+}
+
+List<bool> _requestedCompatibleModes() {
+  final value = Platform.environment['IDL_COMPATIBLE'];
+  if (value == null || value.isEmpty) {
+    return <bool>[true, false];
+  }
+  return <bool>[value.toLowerCase() == 'true'];
+}
+
+final class _ExampleSchemaEmpty {}
+
+final class _ExampleSchemaSingleField {
+  Object? value;
+}
+
+final class _ExampleSchemaEmptySerializer
+    extends Serializer<_ExampleSchemaEmpty> {
+  const _ExampleSchemaEmptySerializer();
+
+  @override
+  void write(WriteContext context, _ExampleSchemaEmpty value) {}
+
+  @override
+  _ExampleSchemaEmpty read(ReadContext context) {
+    final value = _ExampleSchemaEmpty();
+    context.reference(value);
+    return value;
+  }
+}
+
+final class _ExampleSchemaSingleFieldSerializer
+    extends Serializer<_ExampleSchemaSingleField> {
+  final FieldInfo _field;
+
+  _ExampleSchemaSingleFieldSerializer(this._field);
+
+  SerializationFieldInfo _localField(WriteContext context) {
+    return context.typeResolver.serializationFieldInfo(_field, slot: 0);
+  }
+
+  SerializationFieldInfo _readField(ReadContext context) {
+    return context.typeResolver.serializationFieldInfo(_field, slot: 0);
+  }
+
+  @override
+  void write(WriteContext context, _ExampleSchemaSingleField value) {
+    writeGeneratedStructFieldInfoValue(
+      context,
+      _localField(context),
+      value.value,
+    );
+  }
+
+  @override
+  _ExampleSchemaSingleField read(ReadContext context) {
+    final value = _ExampleSchemaSingleField();
+    context.reference(value);
+    value.value = readGeneratedStructFieldInfoValue(
+      context,
+      _readField(context),
+    );
+    return value;
+  }
+}
+
+List<FieldInfo> _exampleMessageFields() {
+  var registration = GeneratedRegistrationCatalog.lookup(
+    example.ExampleMessage,
+  );
+  if (registration == null) {
+    final fory = _newFory(compatible: true);
+    _registerExample(fory);
+    registration = GeneratedRegistrationCatalog.lookup(example.ExampleMessage);
+  }
+  final fields = registration!.fields
+      .where((field) => field.id != null)
+      .toList(growable: false);
+  fields.sort((left, right) => left.id!.compareTo(right.id!));
+  return fields;
+}
+
+void _registerExampleSchemaEmpty(Fory fory) {
+  GeneratedRegistrationCatalog.remember(
+    _ExampleSchemaEmpty,
+    GeneratedRegistration(
+      kind: GeneratedRegistrationKind.struct,
+      serializerFactory: _ExampleSchemaEmptySerializer.new,
+      compatibleFactory: _ExampleSchemaEmpty.new,
+      compatibleReadersBySlot: const <GeneratedStructCompatibleFieldReader<
+          Object>>[],
+    ),
+  );
+  fory.register(_ExampleSchemaEmpty, id: 1500);
+}
+
+void _registerExampleSchemaField(Fory fory, FieldInfo field) {
+  GeneratedRegistrationCatalog.remember(
+    _ExampleSchemaSingleField,
+    GeneratedRegistration(
+      kind: GeneratedRegistrationKind.struct,
+      serializerFactory: () => _ExampleSchemaSingleFieldSerializer(field),
+      fields: <FieldInfo>[field],
+      compatibleFactory: _ExampleSchemaSingleField.new,
+      compatibleReadersBySlot: <GeneratedStructCompatibleFieldReader<Object>>[
+        (ReadContext context, Object value, Object? rawValue) {
+          (value as _ExampleSchemaSingleField).value =
+              resolveGeneratedSlotRawValue(context, rawValue);
+        },
+      ],
+    ),
+  );
+  fory.register(_ExampleSchemaSingleField, id: 1500);
+}
+
+_ExampleSchemaEmpty _decodeExampleSchemaEmpty(Uint8List bytes) {
+  final fory = _newFory(compatible: true);
+  _registerExampleCommon(fory);
+  _registerExampleSchemaEmpty(fory);
+  return fory.deserialize<_ExampleSchemaEmpty>(bytes);
+}
+
+_ExampleSchemaSingleField _decodeExampleSchemaField(
+  Uint8List bytes,
+  FieldInfo field,
+) {
+  final fory = _newFory(compatible: true);
+  _registerExampleCommon(fory);
+  _registerExampleSchemaField(fory, field);
+  return fory.deserialize<_ExampleSchemaSingleField>(bytes);
+}
+
 addressbook.AddressBook buildAddressBook() {
   final mobile = addressbook.Person_PhoneNumber()
     ..number = '555-0100'
-    ..phoneType = addressbook.Person_PhoneType.mobile;
+    ..phoneType = addressbook.Person_PhoneType.phoneTypeMobile;
   final work = addressbook.Person_PhoneNumber()
     ..number = '555-0111'
-    ..phoneType = addressbook.Person_PhoneType.work;
+    ..phoneType = addressbook.Person_PhoneType.phoneTypeWork;
 
   final pet = addressbook.Animal.cat(
     addressbook.Cat()
@@ -130,10 +283,7 @@ addressbook.AddressBook buildAddressBook() {
     ..id = Int32(123)
     ..email = 'alice@example.com'
     ..tags = <String>['friend', 'colleague']
-    ..scores = <String, Int32>{
-      'math': Int32(100),
-      'science': Int32(98),
-    }
+    ..scores = <String, Int32>{'math': Int32(100), 'science': Int32(98)}
     ..salary = 120000.5
     ..phones = <addressbook.Person_PhoneNumber>[mobile, work]
     ..pet = pet;
@@ -204,11 +354,11 @@ optional_types.OptionalHolder buildOptionalHolder() {
     ..fixedInt64Value = -123456789
     ..varint64Value = -987654321
     ..taggedInt64Value = 123456789
-    ..uint8Value = UInt8(200)
-    ..uint16Value = UInt16(60000)
-    ..uint32Value = UInt32(1234567890)
-    ..fixedUint32Value = UInt32(1234567890)
-    ..varUint32Value = UInt32(1234567890)
+    ..uint8Value = Uint8(200)
+    ..uint16Value = Uint16(60000)
+    ..uint32Value = Uint32(1234567890)
+    ..fixedUint32Value = Uint32(1234567890)
+    ..varUint32Value = Uint32(1234567890)
     ..uint64Value = 9876543210
     ..fixedUint64Value = 9876543210
     ..varUint64Value = 12345678901
@@ -276,6 +426,182 @@ root.MultiHolder buildRootHolder() {
     ..owner = book.people.first;
 }
 
+example_common.ExampleLeaf _buildExampleLeaf(String label, int count) {
+  return example_common.ExampleLeaf()
+    ..label = label
+    ..count = Int32(count);
+}
+
+Timestamp _buildExampleTimestamp() {
+  return Timestamp.fromDateTime(
+      DateTime.utc(2024, 2, 29, 12, 34, 56, 789, 123));
+}
+
+Duration _buildExampleDuration() {
+  return const Duration(seconds: 3723, microseconds: 456789);
+}
+
+Decimal _buildExampleDecimal() {
+  return Decimal(BigInt.parse('1234567890123456789'), 4);
+}
+
+example.ExampleMessage buildExampleMessage() {
+  final leafA = _buildExampleLeaf('leaf-a', 7);
+  final leafB = _buildExampleLeaf('leaf-b', -3);
+  final timestamp = _buildExampleTimestamp();
+  final alternateTimestamp =
+      Timestamp.fromDateTime(DateTime.utc(2024, 3, 1, 0, 0, 0, 123, 456));
+  final duration = _buildExampleDuration();
+  final alternateDuration = const Duration(seconds: 1, microseconds: 234567);
+  final decimal = _buildExampleDecimal();
+
+  return example.ExampleMessage()
+    ..boolValue = true
+    ..int8Value = Int8(-12)
+    ..int16Value = Int16(1234)
+    ..fixedInt32Value = Int32(123456789)
+    ..varint32Value = Int32(-1234567)
+    ..fixedInt64Value = 1234567890123456789
+    ..varint64Value = -1234567890123456789
+    ..taggedInt64Value = 1073741824
+    ..uint8Value = Uint8(200)
+    ..uint16Value = Uint16(60000)
+    ..fixedUint32Value = Uint32(2000000000)
+    ..varUint32Value = Uint32(2100000000)
+    ..fixedUint64Value = 9000000000
+    ..varUint64Value = 12000000000
+    ..taggedUint64Value = 2222222222
+    ..float16Value = Float16(1.5)
+    ..bfloat16Value = Bfloat16(-2.75)
+    ..float32Value = Float32(3.25)
+    ..float64Value = -4.5
+    ..stringValue = 'example-string'
+    ..bytesValue = Uint8List.fromList(<int>[1, 2, 3, 4])
+    ..dateValue = const LocalDate(2024, 2, 29)
+    ..timestampValue = timestamp
+    ..durationValue = duration
+    ..decimalValue = decimal
+    ..enumValue = example_common.ExampleState.ready
+    ..messageValue = leafA
+    ..unionValue = example_common.ExampleLeafUnion.leaf(
+      _buildExampleLeaf('leaf-b', -3),
+    )
+    ..boolList = <bool>[true, false]
+    ..int8List = Int8List.fromList(<int>[-12, 7])
+    ..int16List = Int16List.fromList(<int>[1234, -2345])
+    ..fixedInt32List = Int32List.fromList(<int>[123456789, -123456789])
+    ..varint32List = Int32List.fromList(<int>[-1234567, 7654321])
+    ..fixedInt64List = Int64List.fromList(<int>[
+      1234567890123456789,
+      -123456789012345678,
+    ])
+    ..varint64List = Int64List.fromList(
+      <int>[-1234567890123456789, 123456789012345678],
+    )
+    ..taggedInt64List = Int64List.fromList(<int>[1073741824, -1073741824])
+    ..uint8List = Uint8List.fromList(<int>[200, 42])
+    ..uint16List = Uint16List.fromList(<int>[60000, 12345])
+    ..fixedUint32List = Uint32List.fromList(<int>[2000000000, 1234567890])
+    ..varUint32List = Uint32List.fromList(<int>[2100000000, 1234567890])
+    ..fixedUint64List = Uint64List.fromList(<int>[9000000000, 4000000000])
+    ..varUint64List = Uint64List.fromList(<int>[12000000000, 5000000000])
+    ..taggedUint64List = Uint64List.fromList(<int>[2222222222, 3333333333])
+    ..float16List = Float16List.fromList(<Float16>[Float16(1.5), Float16(-0.5)])
+    ..bfloat16List = Bfloat16List.fromList(<Bfloat16>[
+      Bfloat16(-2.75),
+      Bfloat16(2.25),
+    ])
+    ..maybeFloat16List = <Float16?>[Float16(1.5), null, Float16(-0.5)]
+    ..maybeBfloat16List = <Bfloat16?>[null, Bfloat16(2.25), Bfloat16(-1.0)]
+    ..float32List = Float32List.fromList(<double>[3.25, -0.5])
+    ..float64List = Float64List.fromList(<double>[-4.5, 6.75])
+    ..stringList = <String>['example-string', 'secondary']
+    ..bytesList = <Uint8List>[
+      Uint8List.fromList(<int>[1, 2, 3, 4]),
+      Uint8List.fromList(<int>[5, 6]),
+    ]
+    ..dateList = <LocalDate>[
+      const LocalDate(2024, 2, 29),
+      const LocalDate(2024, 3, 1),
+    ]
+    ..timestampList = <Timestamp>[timestamp, alternateTimestamp]
+    ..durationList = <Duration>[duration, alternateDuration]
+    ..decimalList = <Decimal>[decimal, Decimal(BigInt.from(-5), 1)]
+    ..enumList = <example_common.ExampleState>[
+      example_common.ExampleState.ready,
+      example_common.ExampleState.failed,
+    ]
+    ..messageList = <example_common.ExampleLeaf>[leafA, leafB]
+    ..unionList = <example_common.ExampleLeafUnion>[
+      example_common.ExampleLeafUnion.leaf(_buildExampleLeaf('leaf-a', 7)),
+      example_common.ExampleLeafUnion.leaf(_buildExampleLeaf('leaf-b', -3)),
+    ]
+    ..stringValuesByBool = <bool, String>{
+      true: 'true-value',
+      false: 'false-value',
+    }
+    ..stringValuesByInt8 = <Int8, String>{Int8(-12): 'minus-twelve'}
+    ..stringValuesByInt16 = <Int16, String>{Int16(1234): 'twelve-thirty-four'}
+    ..stringValuesByFixedInt32 = <Int32, String>{
+      Int32(123456789): 'fixed-int32',
+    }
+    ..stringValuesByVarint32 = <Int32, String>{Int32(-1234567): 'varint32'}
+    ..stringValuesByFixedInt64 = <int, String>{
+      1234567890123456789: 'fixed-int64',
+    }
+    ..stringValuesByVarint64 = <int, String>{-1234567890123456789: 'varint64'}
+    ..stringValuesByTaggedInt64 = <int, String>{1073741824: 'tagged-int64'}
+    ..stringValuesByUint8 = <Uint8, String>{Uint8(200): 'uint8'}
+    ..stringValuesByUint16 = <Uint16, String>{Uint16(60000): 'uint16'}
+    ..stringValuesByFixedUint32 = <Uint32, String>{
+      Uint32(2000000000): 'fixed-uint32',
+    }
+    ..stringValuesByVarUint32 = <Uint32, String>{
+      Uint32(2100000000): 'var-uint32',
+    }
+    ..stringValuesByFixedUint64 = <int, String>{9000000000: 'fixed-uint64'}
+    ..stringValuesByVarUint64 = <int, String>{12000000000: 'var-uint64'}
+    ..stringValuesByTaggedUint64 = <int, String>{2222222222: 'tagged-uint64'}
+    ..stringValuesByString = <String, String>{'example-string': 'string'}
+    ..stringValuesByTimestamp = <Timestamp, String>{timestamp: 'timestamp'}
+    ..stringValuesByDuration = <Duration, String>{duration: 'duration'}
+    ..stringValuesByEnum = <example_common.ExampleState, String>{
+      example_common.ExampleState.ready: 'ready',
+    }
+    ..float16ValuesByName = <String, Float16>{'primary': Float16(1.5)}
+    ..maybeFloat16ValuesByName = <String, Float16?>{
+      'primary': Float16(1.5),
+      'missing': null,
+    }
+    ..bfloat16ValuesByName = <String, Bfloat16>{'primary': Bfloat16(-2.75)}
+    ..maybeBfloat16ValuesByName = <String, Bfloat16?>{
+      'missing': null,
+      'secondary': Bfloat16(2.25),
+    }
+    ..bytesValuesByName = <String, Uint8List>{
+      'payload': Uint8List.fromList(<int>[1, 2, 3, 4]),
+    }
+    ..dateValuesByName = <String, LocalDate>{
+      'leap-day': const LocalDate(2024, 2, 29),
+    }
+    ..decimalValuesByName = <String, Decimal>{'amount': decimal}
+    ..messageValuesByName = <String, example_common.ExampleLeaf>{
+      'leaf-a': leafA,
+      'leaf-b': leafB,
+    }
+    ..unionValuesByName = <String, example_common.ExampleLeafUnion>{
+      'leaf-b': example_common.ExampleLeafUnion.leaf(
+        _buildExampleLeaf('leaf-b', -3),
+      ),
+    };
+}
+
+example.ExampleMessageUnion buildExampleMessageUnion() {
+  return example.ExampleMessageUnion.unionValue(
+    example_common.ExampleLeafUnion.leaf(_buildExampleLeaf('leaf-b', -3)),
+  );
+}
+
 T _roundTrip<T>(Fory fory, T value, {bool trackRef = false}) {
   final bytes = fory.serialize(value, trackRef: trackRef);
   return fory.deserialize<T>(bytes);
@@ -315,6 +641,87 @@ void _expectMapEquals<K, V>(Map<K, V> actual, Map<K, V> expected) {
   }
 }
 
+void _expectBytesEquals(Uint8List actual, Uint8List expected) {
+  expect(actual, orderedEquals(expected));
+}
+
+void _expectOrderedIterableEquals<T>(Iterable<T> actual, Iterable<T> expected) {
+  expect(actual, orderedEquals(expected));
+}
+
+void _expectUntypedIterableEquals(Iterable actual, Iterable expected) {
+  expect(actual.toList(growable: false),
+      orderedEquals(expected.toList(growable: false)));
+}
+
+void _expectIterableWith<T>(
+  Iterable<T> actual,
+  Iterable<T> expected,
+  void Function(T actual, T expected) check,
+) {
+  final actualValues = actual.toList(growable: false);
+  final expectedValues = expected.toList(growable: false);
+  expect(actualValues.length, equals(expectedValues.length));
+  for (var index = 0; index < expectedValues.length; index += 1) {
+    check(actualValues[index], expectedValues[index]);
+  }
+}
+
+void _expectUntypedIterableWith(
+  Iterable actual,
+  Iterable expected,
+  void Function(Object? actual, Object? expected) check,
+) {
+  final actualValues = actual.toList(growable: false);
+  final expectedValues = expected.toList(growable: false);
+  expect(actualValues.length, equals(expectedValues.length));
+  for (var index = 0; index < expectedValues.length; index += 1) {
+    check(actualValues[index], expectedValues[index]);
+  }
+}
+
+void _expectMapValuesEqual<K, V>(
+  Map<K, V> actual,
+  Map<K, V> expected, {
+  void Function(V actual, V expected)? checkValue,
+}) {
+  expect(actual.length, equals(expected.length));
+  for (final entry in expected.entries) {
+    expect(actual.containsKey(entry.key), isTrue);
+    final actualValue = actual[entry.key];
+    if (checkValue == null) {
+      expect(actualValue, equals(entry.value));
+    } else {
+      checkValue(actualValue as V, entry.value);
+    }
+  }
+}
+
+void _expectUntypedMapEquals(Map actual, Map expected) {
+  expect(actual.length, expected.length);
+  for (final entry in expected.entries) {
+    expect(actual.containsKey(entry.key), isTrue);
+    expect(actual[entry.key], equals(entry.value));
+  }
+}
+
+void _expectUntypedMapValuesEqual(
+  Map actual,
+  Map expected, {
+  void Function(Object? actual, Object? expected)? checkValue,
+}) {
+  expect(actual.length, expected.length);
+  for (final entry in expected.entries) {
+    expect(actual.containsKey(entry.key), isTrue);
+    final actualValue = actual[entry.key];
+    if (checkValue == null) {
+      expect(actualValue, equals(entry.value));
+    } else {
+      checkValue(actualValue, entry.value);
+    }
+  }
+}
+
 void _expectPhoneNumberEquals(
   addressbook.Person_PhoneNumber actual,
   addressbook.Person_PhoneNumber expected,
@@ -338,7 +745,10 @@ void _expectAnimalEquals(
   }
 }
 
-void _expectPersonEquals(addressbook.Person actual, addressbook.Person expected) {
+void _expectPersonEquals(
+  addressbook.Person actual,
+  addressbook.Person expected,
+) {
   expect(actual.name, equals(expected.name));
   expect(actual.id, equals(expected.id));
   expect(actual.email, equals(expected.email));
@@ -377,7 +787,10 @@ void _expectEnvelopeEquals(auto_id.Envelope actual, auto_id.Envelope expected) {
   expect(actual.detail.caseValue, equals(expected.detail.caseValue));
   switch (expected.detail.caseValue) {
     case auto_id.Envelope_DetailCase.payload:
-      expect(actual.detail.payloadValue.value, equals(expected.detail.payloadValue.value));
+      expect(
+        actual.detail.payloadValue.value,
+        equals(expected.detail.payloadValue.value),
+      );
     case auto_id.Envelope_DetailCase.note:
       expect(actual.detail.noteValue, equals(expected.detail.noteValue));
   }
@@ -442,15 +855,30 @@ void _expectNumericCollectionUnionEquals(
     case collection.NumericCollectionUnionCase.uint8Values:
       expect(actual.uint8ValuesValue, orderedEquals(expected.uint8ValuesValue));
     case collection.NumericCollectionUnionCase.uint16Values:
-      expect(actual.uint16ValuesValue, orderedEquals(expected.uint16ValuesValue));
+      expect(
+        actual.uint16ValuesValue,
+        orderedEquals(expected.uint16ValuesValue),
+      );
     case collection.NumericCollectionUnionCase.uint32Values:
-      expect(actual.uint32ValuesValue, orderedEquals(expected.uint32ValuesValue));
+      expect(
+        actual.uint32ValuesValue,
+        orderedEquals(expected.uint32ValuesValue),
+      );
     case collection.NumericCollectionUnionCase.uint64Values:
-      expect(actual.uint64ValuesValue, orderedEquals(expected.uint64ValuesValue));
+      expect(
+        actual.uint64ValuesValue,
+        orderedEquals(expected.uint64ValuesValue),
+      );
     case collection.NumericCollectionUnionCase.float32Values:
-      expect(actual.float32ValuesValue, orderedEquals(expected.float32ValuesValue));
+      expect(
+        actual.float32ValuesValue,
+        orderedEquals(expected.float32ValuesValue),
+      );
     case collection.NumericCollectionUnionCase.float64Values:
-      expect(actual.float64ValuesValue, orderedEquals(expected.float64ValuesValue));
+      expect(
+        actual.float64ValuesValue,
+        orderedEquals(expected.float64ValuesValue),
+      );
   }
 }
 
@@ -471,15 +899,30 @@ void _expectNumericCollectionArrayUnionEquals(
     case collection.NumericCollectionArrayUnionCase.uint8Values:
       expect(actual.uint8ValuesValue, orderedEquals(expected.uint8ValuesValue));
     case collection.NumericCollectionArrayUnionCase.uint16Values:
-      expect(actual.uint16ValuesValue, orderedEquals(expected.uint16ValuesValue));
+      expect(
+        actual.uint16ValuesValue,
+        orderedEquals(expected.uint16ValuesValue),
+      );
     case collection.NumericCollectionArrayUnionCase.uint32Values:
-      expect(actual.uint32ValuesValue, orderedEquals(expected.uint32ValuesValue));
+      expect(
+        actual.uint32ValuesValue,
+        orderedEquals(expected.uint32ValuesValue),
+      );
     case collection.NumericCollectionArrayUnionCase.uint64Values:
-      expect(actual.uint64ValuesValue, orderedEquals(expected.uint64ValuesValue));
+      expect(
+        actual.uint64ValuesValue,
+        orderedEquals(expected.uint64ValuesValue),
+      );
     case collection.NumericCollectionArrayUnionCase.float32Values:
-      expect(actual.float32ValuesValue, orderedEquals(expected.float32ValuesValue));
+      expect(
+        actual.float32ValuesValue,
+        orderedEquals(expected.float32ValuesValue),
+      );
     case collection.NumericCollectionArrayUnionCase.float64Values:
-      expect(actual.float64ValuesValue, orderedEquals(expected.float64ValuesValue));
+      expect(
+        actual.float64ValuesValue,
+        orderedEquals(expected.float64ValuesValue),
+      );
   }
 }
 
@@ -590,7 +1033,10 @@ void _expectGraph(graph.Graph actual) {
   expect(identical(edge.to, nodeB), isTrue);
 }
 
-void _expectRootHolderEquals(root.MultiHolder actual, root.MultiHolder expected) {
+void _expectRootHolderEquals(
+  root.MultiHolder actual,
+  root.MultiHolder expected,
+) {
   expect(actual.book, isNotNull);
   expect(expected.book, isNotNull);
   _expectAddressBookEquals(actual.book!, expected.book!);
@@ -605,26 +1051,614 @@ void _expectRootHolderEquals(root.MultiHolder actual, root.MultiHolder expected)
   _expectPersonEquals(actual.owner!, expected.owner!);
 }
 
+void _expectExampleLeafEquals(
+  example_common.ExampleLeaf actual,
+  example_common.ExampleLeaf expected,
+) {
+  expect(actual.label, equals(expected.label));
+  expect(actual.count, equals(expected.count));
+}
+
+void _expectExampleLeafUnionEquals(
+  example_common.ExampleLeafUnion actual,
+  example_common.ExampleLeafUnion expected,
+) {
+  expect(actual.caseValue, equals(expected.caseValue));
+  switch (expected.caseValue) {
+    case example_common.ExampleLeafUnionCase.note:
+      expect(actual.noteValue, equals(expected.noteValue));
+    case example_common.ExampleLeafUnionCase.code:
+      expect(actual.codeValue, equals(expected.codeValue));
+    case example_common.ExampleLeafUnionCase.leaf:
+      _expectExampleLeafEquals(actual.leafValue, expected.leafValue);
+  }
+}
+
+void _expectExampleMessageUnionEquals(
+  example.ExampleMessageUnion actual,
+  example.ExampleMessageUnion expected,
+) {
+  expect(actual.caseValue, equals(expected.caseValue));
+  switch (expected.caseValue) {
+    case example.ExampleMessageUnionCase.unionValue:
+      _expectExampleLeafUnionEquals(
+        actual.unionValueValue,
+        expected.unionValueValue,
+      );
+    default:
+      fail('Unhandled ExampleMessageUnion case ${expected.caseValue}.');
+  }
+}
+
+void _expectExampleMessageEquals(
+  example.ExampleMessage actual,
+  example.ExampleMessage expected,
+) {
+  expect(actual.boolValue, equals(expected.boolValue));
+  expect(actual.int8Value, equals(expected.int8Value));
+  expect(actual.int16Value, equals(expected.int16Value));
+  expect(actual.fixedInt32Value, equals(expected.fixedInt32Value));
+  expect(actual.varint32Value, equals(expected.varint32Value));
+  expect(actual.fixedInt64Value, equals(expected.fixedInt64Value));
+  expect(actual.varint64Value, equals(expected.varint64Value));
+  expect(actual.taggedInt64Value, equals(expected.taggedInt64Value));
+  expect(actual.uint8Value, equals(expected.uint8Value));
+  expect(actual.uint16Value, equals(expected.uint16Value));
+  expect(actual.fixedUint32Value, equals(expected.fixedUint32Value));
+  expect(actual.varUint32Value, equals(expected.varUint32Value));
+  expect(actual.fixedUint64Value, equals(expected.fixedUint64Value));
+  expect(actual.varUint64Value, equals(expected.varUint64Value));
+  expect(actual.taggedUint64Value, equals(expected.taggedUint64Value));
+  expect(actual.float16Value, equals(expected.float16Value));
+  expect(actual.bfloat16Value, equals(expected.bfloat16Value));
+  expect(actual.float32Value, equals(expected.float32Value));
+  expect(actual.float64Value, equals(expected.float64Value));
+  expect(actual.stringValue, equals(expected.stringValue));
+  _expectBytesEquals(actual.bytesValue, expected.bytesValue);
+  expect(actual.dateValue, equals(expected.dateValue));
+  expect(actual.timestampValue, equals(expected.timestampValue));
+  expect(actual.durationValue, equals(expected.durationValue));
+  expect(actual.decimalValue, equals(expected.decimalValue));
+  expect(actual.enumValue, equals(expected.enumValue));
+  expect(actual.messageValue, isNotNull);
+  expect(expected.messageValue, isNotNull);
+  _expectExampleLeafEquals(actual.messageValue!, expected.messageValue!);
+  _expectExampleLeafUnionEquals(actual.unionValue, expected.unionValue);
+
+  _expectOrderedIterableEquals(actual.boolList, expected.boolList);
+  _expectOrderedIterableEquals(actual.int8List, expected.int8List);
+  _expectOrderedIterableEquals(actual.int16List, expected.int16List);
+  _expectOrderedIterableEquals(actual.fixedInt32List, expected.fixedInt32List);
+  _expectOrderedIterableEquals(actual.varint32List, expected.varint32List);
+  _expectOrderedIterableEquals(actual.fixedInt64List, expected.fixedInt64List);
+  _expectOrderedIterableEquals(actual.varint64List, expected.varint64List);
+  _expectOrderedIterableEquals(
+    actual.taggedInt64List,
+    expected.taggedInt64List,
+  );
+  _expectOrderedIterableEquals(actual.uint8List, expected.uint8List);
+  _expectOrderedIterableEquals(actual.uint16List, expected.uint16List);
+  _expectOrderedIterableEquals(
+    actual.fixedUint32List,
+    expected.fixedUint32List,
+  );
+  _expectOrderedIterableEquals(actual.varUint32List, expected.varUint32List);
+  _expectOrderedIterableEquals(
+    actual.fixedUint64List,
+    expected.fixedUint64List,
+  );
+  _expectOrderedIterableEquals(actual.varUint64List, expected.varUint64List);
+  _expectOrderedIterableEquals(
+    actual.taggedUint64List,
+    expected.taggedUint64List,
+  );
+  _expectOrderedIterableEquals(actual.float16List, expected.float16List);
+  _expectOrderedIterableEquals(actual.bfloat16List, expected.bfloat16List);
+  _expectOrderedIterableEquals(
+    actual.maybeFloat16List,
+    expected.maybeFloat16List,
+  );
+  _expectOrderedIterableEquals(
+    actual.maybeBfloat16List,
+    expected.maybeBfloat16List,
+  );
+  _expectOrderedIterableEquals(actual.float32List, expected.float32List);
+  _expectOrderedIterableEquals(actual.float64List, expected.float64List);
+  _expectOrderedIterableEquals(actual.stringList, expected.stringList);
+  _expectIterableWith(actual.bytesList, expected.bytesList, _expectBytesEquals);
+  _expectOrderedIterableEquals(actual.dateList, expected.dateList);
+  _expectOrderedIterableEquals(actual.timestampList, expected.timestampList);
+  _expectOrderedIterableEquals(actual.durationList, expected.durationList);
+  _expectOrderedIterableEquals(actual.decimalList, expected.decimalList);
+  _expectOrderedIterableEquals(actual.enumList, expected.enumList);
+  _expectIterableWith(
+    actual.messageList,
+    expected.messageList,
+    _expectExampleLeafEquals,
+  );
+  _expectIterableWith(
+    actual.unionList,
+    expected.unionList,
+    _expectExampleLeafUnionEquals,
+  );
+
+  _expectMapEquals(actual.stringValuesByBool, expected.stringValuesByBool);
+  _expectMapEquals(actual.stringValuesByInt8, expected.stringValuesByInt8);
+  _expectMapEquals(actual.stringValuesByInt16, expected.stringValuesByInt16);
+  _expectMapEquals(
+    actual.stringValuesByFixedInt32,
+    expected.stringValuesByFixedInt32,
+  );
+  _expectMapEquals(
+    actual.stringValuesByVarint32,
+    expected.stringValuesByVarint32,
+  );
+  _expectMapEquals(
+    actual.stringValuesByFixedInt64,
+    expected.stringValuesByFixedInt64,
+  );
+  _expectMapEquals(
+    actual.stringValuesByVarint64,
+    expected.stringValuesByVarint64,
+  );
+  _expectMapEquals(
+    actual.stringValuesByTaggedInt64,
+    expected.stringValuesByTaggedInt64,
+  );
+  _expectMapEquals(actual.stringValuesByUint8, expected.stringValuesByUint8);
+  _expectMapEquals(actual.stringValuesByUint16, expected.stringValuesByUint16);
+  _expectMapEquals(
+    actual.stringValuesByFixedUint32,
+    expected.stringValuesByFixedUint32,
+  );
+  _expectMapEquals(
+    actual.stringValuesByVarUint32,
+    expected.stringValuesByVarUint32,
+  );
+  _expectMapEquals(
+    actual.stringValuesByFixedUint64,
+    expected.stringValuesByFixedUint64,
+  );
+  _expectMapEquals(
+    actual.stringValuesByVarUint64,
+    expected.stringValuesByVarUint64,
+  );
+  _expectMapEquals(
+    actual.stringValuesByTaggedUint64,
+    expected.stringValuesByTaggedUint64,
+  );
+  _expectMapEquals(actual.stringValuesByString, expected.stringValuesByString);
+  _expectMapEquals(
+    actual.stringValuesByTimestamp,
+    expected.stringValuesByTimestamp,
+  );
+  _expectMapEquals(
+    actual.stringValuesByDuration,
+    expected.stringValuesByDuration,
+  );
+  _expectMapEquals(actual.stringValuesByEnum, expected.stringValuesByEnum);
+  _expectMapEquals(actual.float16ValuesByName, expected.float16ValuesByName);
+  _expectMapEquals(
+    actual.maybeFloat16ValuesByName,
+    expected.maybeFloat16ValuesByName,
+  );
+  _expectMapEquals(actual.bfloat16ValuesByName, expected.bfloat16ValuesByName);
+  _expectMapEquals(
+    actual.maybeBfloat16ValuesByName,
+    expected.maybeBfloat16ValuesByName,
+  );
+  _expectMapValuesEqual(
+    actual.bytesValuesByName,
+    expected.bytesValuesByName,
+    checkValue: _expectBytesEquals,
+  );
+  _expectMapEquals(actual.dateValuesByName, expected.dateValuesByName);
+  _expectMapEquals(actual.decimalValuesByName, expected.decimalValuesByName);
+  _expectMapValuesEqual(
+    actual.messageValuesByName,
+    expected.messageValuesByName,
+    checkValue: _expectExampleLeafEquals,
+  );
+  _expectMapValuesEqual(
+    actual.unionValuesByName,
+    expected.unionValuesByName,
+    checkValue: _expectExampleLeafUnionEquals,
+  );
+}
+
+void _expectExampleSchemaFieldValue(
+  FieldInfo field,
+  Object? actual,
+  example.ExampleMessage expected,
+) {
+  switch (field.id!) {
+    case 1:
+      expect(actual, equals(expected.boolValue));
+      return;
+    case 2:
+      expect(actual, equals(expected.int8Value));
+      return;
+    case 3:
+      expect(actual, equals(expected.int16Value));
+      return;
+    case 4:
+      expect(actual, equals(expected.fixedInt32Value));
+      return;
+    case 5:
+      expect(actual, equals(expected.varint32Value));
+      return;
+    case 6:
+      expect(actual, equals(expected.fixedInt64Value));
+      return;
+    case 7:
+      expect(actual, equals(expected.varint64Value));
+      return;
+    case 8:
+      expect(actual, equals(expected.taggedInt64Value));
+      return;
+    case 9:
+      expect(actual, equals(expected.uint8Value));
+      return;
+    case 10:
+      expect(actual, equals(expected.uint16Value));
+      return;
+    case 11:
+      expect(actual, equals(expected.fixedUint32Value));
+      return;
+    case 12:
+      expect(actual, equals(expected.varUint32Value));
+      return;
+    case 13:
+      expect(actual, equals(expected.fixedUint64Value));
+      return;
+    case 14:
+      expect(actual, equals(expected.varUint64Value));
+      return;
+    case 15:
+      expect(actual, equals(expected.taggedUint64Value));
+      return;
+    case 16:
+      expect(actual, equals(expected.float16Value));
+      return;
+    case 17:
+      expect(actual, equals(expected.bfloat16Value));
+      return;
+    case 18:
+      expect(actual, equals(expected.float32Value));
+      return;
+    case 19:
+      expect(actual, equals(expected.float64Value));
+      return;
+    case 20:
+      expect(actual, equals(expected.stringValue));
+      return;
+    case 21:
+      _expectBytesEquals(actual as Uint8List, expected.bytesValue);
+      return;
+    case 22:
+      expect(actual, equals(expected.dateValue));
+      return;
+    case 23:
+      expect(actual, equals(expected.timestampValue));
+      return;
+    case 24:
+      expect(actual, equals(expected.durationValue));
+      return;
+    case 25:
+      expect(actual, equals(expected.decimalValue));
+      return;
+    case 26:
+      expect(actual, equals(expected.enumValue));
+      return;
+    case 27:
+      _expectExampleLeafEquals(
+        actual as example_common.ExampleLeaf,
+        expected.messageValue!,
+      );
+      return;
+    case 28:
+      _expectExampleLeafUnionEquals(
+        actual as example_common.ExampleLeafUnion,
+        expected.unionValue,
+      );
+      return;
+    case 101:
+      _expectOrderedIterableEquals(actual as List<bool>, expected.boolList);
+      return;
+    case 102:
+      _expectOrderedIterableEquals(actual as Int8List, expected.int8List);
+      return;
+    case 103:
+      _expectOrderedIterableEquals(actual as Int16List, expected.int16List);
+      return;
+    case 104:
+      _expectOrderedIterableEquals(
+        actual as Int32List,
+        expected.fixedInt32List,
+      );
+      return;
+    case 105:
+      _expectOrderedIterableEquals(actual as Int32List, expected.varint32List);
+      return;
+    case 106:
+      _expectOrderedIterableEquals(
+        actual as Int64List,
+        expected.fixedInt64List,
+      );
+      return;
+    case 107:
+      _expectOrderedIterableEquals(actual as Int64List, expected.varint64List);
+      return;
+    case 108:
+      _expectOrderedIterableEquals(
+        actual as Int64List,
+        expected.taggedInt64List,
+      );
+      return;
+    case 109:
+      _expectOrderedIterableEquals(actual as Uint8List, expected.uint8List);
+      return;
+    case 110:
+      _expectOrderedIterableEquals(actual as Uint16List, expected.uint16List);
+      return;
+    case 111:
+      _expectOrderedIterableEquals(
+        actual as Uint32List,
+        expected.fixedUint32List,
+      );
+      return;
+    case 112:
+      _expectOrderedIterableEquals(
+        actual as Uint32List,
+        expected.varUint32List,
+      );
+      return;
+    case 113:
+      _expectOrderedIterableEquals(
+        actual as Uint64List,
+        expected.fixedUint64List,
+      );
+      return;
+    case 114:
+      _expectOrderedIterableEquals(
+        actual as Uint64List,
+        expected.varUint64List,
+      );
+      return;
+    case 115:
+      _expectOrderedIterableEquals(
+        actual as Uint64List,
+        expected.taggedUint64List,
+      );
+      return;
+    case 116:
+      _expectOrderedIterableEquals(actual as Float16List, expected.float16List);
+      return;
+    case 117:
+      _expectOrderedIterableEquals(
+        actual as Bfloat16List,
+        expected.bfloat16List,
+      );
+      return;
+    case 118:
+      _expectUntypedIterableEquals(
+          actual as Iterable, expected.maybeFloat16List);
+      return;
+    case 119:
+      _expectUntypedIterableEquals(
+        actual as Iterable,
+        expected.maybeBfloat16List,
+      );
+      return;
+    case 120:
+      _expectOrderedIterableEquals(actual as Float32List, expected.float32List);
+      return;
+    case 121:
+      _expectOrderedIterableEquals(actual as Float64List, expected.float64List);
+      return;
+    case 122:
+      _expectUntypedIterableEquals(actual as Iterable, expected.stringList);
+      return;
+    case 123:
+      _expectUntypedIterableWith(
+        actual as Iterable,
+        expected.bytesList,
+        (actualValue, expectedValue) => _expectBytesEquals(
+          actualValue as Uint8List,
+          expectedValue as Uint8List,
+        ),
+      );
+      return;
+    case 124:
+      _expectUntypedIterableEquals(actual as Iterable, expected.dateList);
+      return;
+    case 125:
+      _expectUntypedIterableEquals(actual as Iterable, expected.timestampList);
+      return;
+    case 126:
+      _expectUntypedIterableEquals(actual as Iterable, expected.durationList);
+      return;
+    case 127:
+      _expectUntypedIterableEquals(actual as Iterable, expected.decimalList);
+      return;
+    case 128:
+      _expectUntypedIterableEquals(actual as Iterable, expected.enumList);
+      return;
+    case 129:
+      _expectUntypedIterableWith(
+        actual as Iterable,
+        expected.messageList,
+        (actualValue, expectedValue) => _expectExampleLeafEquals(
+          actualValue as example_common.ExampleLeaf,
+          expectedValue as example_common.ExampleLeaf,
+        ),
+      );
+      return;
+    case 130:
+      _expectUntypedIterableWith(
+        actual as Iterable,
+        expected.unionList,
+        (actualValue, expectedValue) => _expectExampleLeafUnionEquals(
+          actualValue as example_common.ExampleLeafUnion,
+          expectedValue as example_common.ExampleLeafUnion,
+        ),
+      );
+      return;
+    case 201:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByBool);
+      return;
+    case 202:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByInt8);
+      return;
+    case 203:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByInt16);
+      return;
+    case 204:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByFixedInt32);
+      return;
+    case 205:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByVarint32);
+      return;
+    case 206:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByFixedInt64);
+      return;
+    case 207:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByVarint64);
+      return;
+    case 208:
+      _expectUntypedMapEquals(
+          actual as Map, expected.stringValuesByTaggedInt64);
+      return;
+    case 209:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByUint8);
+      return;
+    case 210:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByUint16);
+      return;
+    case 211:
+      _expectUntypedMapEquals(
+          actual as Map, expected.stringValuesByFixedUint32);
+      return;
+    case 212:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByVarUint32);
+      return;
+    case 213:
+      _expectUntypedMapEquals(
+          actual as Map, expected.stringValuesByFixedUint64);
+      return;
+    case 214:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByVarUint64);
+      return;
+    case 215:
+      _expectUntypedMapEquals(
+          actual as Map, expected.stringValuesByTaggedUint64);
+      return;
+    case 218:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByString);
+      return;
+    case 219:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByTimestamp);
+      return;
+    case 220:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByDuration);
+      return;
+    case 221:
+      _expectUntypedMapEquals(actual as Map, expected.stringValuesByEnum);
+      return;
+    case 222:
+      _expectUntypedMapEquals(actual as Map, expected.float16ValuesByName);
+      return;
+    case 223:
+      _expectUntypedMapEquals(actual as Map, expected.maybeFloat16ValuesByName);
+      return;
+    case 224:
+      _expectUntypedMapEquals(actual as Map, expected.bfloat16ValuesByName);
+      return;
+    case 225:
+      _expectUntypedMapEquals(
+        actual as Map,
+        expected.maybeBfloat16ValuesByName,
+      );
+      return;
+    case 226:
+      _expectUntypedMapValuesEqual(
+        actual as Map,
+        expected.bytesValuesByName,
+        checkValue: (actualValue, expectedValue) => _expectBytesEquals(
+          actualValue as Uint8List,
+          expectedValue as Uint8List,
+        ),
+      );
+      return;
+    case 227:
+      _expectUntypedMapEquals(actual as Map, expected.dateValuesByName);
+      return;
+    case 228:
+      _expectUntypedMapEquals(actual as Map, expected.decimalValuesByName);
+      return;
+    case 229:
+      _expectUntypedMapValuesEqual(
+        actual as Map,
+        expected.messageValuesByName,
+        checkValue: (actualValue, expectedValue) => _expectExampleLeafEquals(
+          actualValue as example_common.ExampleLeaf,
+          expectedValue as example_common.ExampleLeaf,
+        ),
+      );
+      return;
+    case 230:
+      _expectUntypedMapValuesEqual(
+        actual as Map,
+        expected.unionValuesByName,
+        checkValue: (actualValue, expectedValue) =>
+            _expectExampleLeafUnionEquals(
+          actualValue as example_common.ExampleLeafUnion,
+          expectedValue as example_common.ExampleLeafUnion,
+        ),
+      );
+      return;
+    default:
+      fail('Unhandled example schema field ${field.id} (${field.name}).');
+  }
+}
+
+void _expectExampleSchemaEvolution(
+  Uint8List payload,
+  example.ExampleMessage expected,
+) {
+  _decodeExampleSchemaEmpty(payload);
+  for (final field in _exampleMessageFields()) {
+    final decoded = _decodeExampleSchemaField(payload, field);
+    _expectExampleSchemaFieldValue(field, decoded.value, expected);
+  }
+}
+
 void main() {
   group('dart schema idl integration', () {
-    test('addressbook and auto-id roundtrip in compatible and schema-consistent modes', () {
-      for (final compatible in <bool>[true, false]) {
-        final fory = _newFory(compatible: compatible);
-        _registerCommon(fory);
+    test(
+      'addressbook and auto-id roundtrip in compatible and schema-consistent modes',
+      () {
+        for (final compatible in <bool>[true, false]) {
+          final fory = _newFory(compatible: compatible);
+          _registerCommon(fory);
 
-        final book = buildAddressBook();
-        final bookRoundTrip = _roundTrip<addressbook.AddressBook>(fory, book);
-        _expectAddressBookEquals(bookRoundTrip, book);
+          final book = buildAddressBook();
+          final bookRoundTrip = _roundTrip<addressbook.AddressBook>(fory, book);
+          _expectAddressBookEquals(bookRoundTrip, book);
 
-        final envelope = buildAutoIdEnvelope();
-        final envelopeRoundTrip = _roundTrip<auto_id.Envelope>(fory, envelope);
-        _expectEnvelopeEquals(envelopeRoundTrip, envelope);
+          final envelope = buildAutoIdEnvelope();
+          final envelopeRoundTrip = _roundTrip<auto_id.Envelope>(
+            fory,
+            envelope,
+          );
+          _expectEnvelopeEquals(envelopeRoundTrip, envelope);
 
-        final wrapper = auto_id.Wrapper.envelope(envelope);
-        final wrapperRoundTrip = _roundTrip<auto_id.Wrapper>(fory, wrapper);
-        _expectWrapperEquals(wrapperRoundTrip, wrapper);
-      }
-    });
+          final wrapper = auto_id.Wrapper.envelope(envelope);
+          final wrapperRoundTrip = _roundTrip<auto_id.Wrapper>(fory, wrapper);
+          _expectWrapperEquals(wrapperRoundTrip, wrapper);
+        }
+      },
+    );
 
     test('collection and optional payloads roundtrip', () {
       final fory = _newFory(compatible: true);
@@ -650,7 +1684,10 @@ void main() {
 
       final collectionArrayUnion = buildNumericCollectionArrayUnion();
       _expectNumericCollectionArrayUnionEquals(
-        _roundTrip<collection.NumericCollectionArrayUnion>(fory, collectionArrayUnion),
+        _roundTrip<collection.NumericCollectionArrayUnion>(
+          fory,
+          collectionArrayUnion,
+        ),
         collectionArrayUnion,
       );
 
@@ -660,6 +1697,33 @@ void main() {
         holder,
       );
     });
+
+    test(
+      'example schema family roundtrip in compatible and schema-consistent modes',
+      () {
+        for (final compatible in <bool>[true, false]) {
+          final fory = _newFory(compatible: compatible);
+          _registerExample(fory);
+
+          final message = buildExampleMessage();
+          final messageRoundTrip = _roundTrip<example.ExampleMessage>(
+            fory,
+            message,
+          );
+          _expectExampleMessageEquals(messageRoundTrip, message);
+          if (compatible) {
+            _expectExampleSchemaEvolution(fory.serialize(message), message);
+          }
+
+          final union = buildExampleMessageUnion();
+          final unionRoundTrip = _roundTrip<example.ExampleMessageUnion>(
+            fory,
+            union,
+          );
+          _expectExampleMessageUnionEquals(unionRoundTrip, union);
+        }
+      },
+    );
 
     test('reference graphs and root helpers roundtrip', () {
       final fory = _newFory(compatible: true);
@@ -689,36 +1753,67 @@ void main() {
     });
 
     test('interop file roundtrip hooks when env vars are set', () {
-      final fory = _newFory(compatible: true);
-      _registerCommon(fory);
-      _registerRefs(fory);
+      for (final compatible in _requestedCompatibleModes()) {
+        final fory = _newFory(compatible: compatible);
+        _registerCommon(fory);
+        _registerRefs(fory);
 
-      _roundTripFile(
-        Platform.environment['DATA_FILE'],
-        fory,
-        buildAddressBook(),
-        (actual) => _expectAddressBookEquals(actual, buildAddressBook()),
-      );
-      _roundTripFile(
-        Platform.environment['DATA_FILE_AUTO_ID'],
-        fory,
-        buildAutoIdEnvelope(),
-        (actual) => _expectEnvelopeEquals(actual, buildAutoIdEnvelope()),
-      );
-      _roundTripFile(
-        Platform.environment['DATA_FILE_TREE'],
-        fory,
-        buildTree(),
-        (actual) => _expectTree(actual),
-        trackRef: true,
-      );
-      _roundTripFile(
-        Platform.environment['DATA_FILE_GRAPH'],
-        fory,
-        buildGraph(),
-        (actual) => _expectGraph(actual),
-        trackRef: true,
-      );
+        _roundTripFile(
+          Platform.environment['DATA_FILE'],
+          fory,
+          buildAddressBook(),
+          (actual) => _expectAddressBookEquals(actual, buildAddressBook()),
+        );
+        _roundTripFile(
+          Platform.environment['DATA_FILE_AUTO_ID'],
+          fory,
+          buildAutoIdEnvelope(),
+          (actual) => _expectEnvelopeEquals(actual, buildAutoIdEnvelope()),
+        );
+        _roundTripFile(
+          Platform.environment['DATA_FILE_TREE'],
+          fory,
+          buildTree(),
+          (actual) => _expectTree(actual),
+          trackRef: true,
+        );
+        _roundTripFile(
+          Platform.environment['DATA_FILE_GRAPH'],
+          fory,
+          buildGraph(),
+          (actual) => _expectGraph(actual),
+          trackRef: true,
+        );
+
+        final exampleFory = _newFory(compatible: compatible);
+        _registerExample(exampleFory);
+
+        final expectedMessage = buildExampleMessage();
+        final exampleMessageFile =
+            Platform.environment['DATA_FILE_EXAMPLE_MESSAGE'];
+        _roundTripFile(
+          exampleMessageFile,
+          exampleFory,
+          expectedMessage,
+          (actual) => _expectExampleMessageEquals(actual, expectedMessage),
+        );
+        if (compatible &&
+            exampleMessageFile != null &&
+            exampleMessageFile.isNotEmpty) {
+          _expectExampleSchemaEvolution(
+            Uint8List.fromList(File(exampleMessageFile).readAsBytesSync()),
+            expectedMessage,
+          );
+        }
+
+        final expectedUnion = buildExampleMessageUnion();
+        _roundTripFile(
+          Platform.environment['DATA_FILE_EXAMPLE_UNION'],
+          exampleFory,
+          expectedUnion,
+          (actual) => _expectExampleMessageUnionEquals(actual, expectedUnion),
+        );
+      }
     });
   });
 }

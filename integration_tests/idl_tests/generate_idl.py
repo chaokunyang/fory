@@ -22,8 +22,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from example_schema import render_common_schema, render_example_schema, write_if_changed
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 IDL_DIR = Path(__file__).resolve().parent
+write_if_changed(IDL_DIR / "idl" / "example_common.fdl", render_common_schema())
+write_if_changed(IDL_DIR / "idl" / "example.fdl", render_example_schema())
 SCHEMAS = [
     IDL_DIR / "idl" / "addressbook.fdl",
     IDL_DIR / "idl" / "collection.fdl",
@@ -39,6 +43,8 @@ SCHEMAS = [
     IDL_DIR / "idl" / "monster.fbs",
     IDL_DIR / "idl" / "complex_fbs.fbs",
     IDL_DIR / "idl" / "auto_id.fdl",
+    IDL_DIR / "idl" / "example_common.fdl",
+    IDL_DIR / "idl" / "example.fdl",
 ]
 
 LANG_OUTPUTS = {
@@ -70,6 +76,8 @@ GO_OUTPUT_OVERRIDES = {
     "any_example.proto": IDL_DIR / "go" / "any_example_pb" / "generated",
     "complex_pb.proto": IDL_DIR / "go" / "complex_pb" / "generated",
     "auto_id.fdl": IDL_DIR / "go" / "auto_id" / "generated",
+    "example_common.fdl": IDL_DIR / "go" / "example_common" / "generated",
+    "example.fdl": IDL_DIR / "go" / "example" / "generated",
 }
 
 
@@ -81,6 +89,28 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated list of languages to generate (default: all)",
     )
     return parser.parse_args()
+
+
+def schema_langs(schema: Path, langs: list[str]) -> list[str]:
+    return langs
+
+
+def refresh_dart_generated_parts() -> None:
+    dart_dir = IDL_DIR / "dart"
+    generated_dir = dart_dir / "lib" / "generated"
+    for part_file in generated_dir.rglob("*.fory.dart"):
+        part_file.unlink()
+    subprocess.check_call(["dart", "pub", "get"], cwd=dart_dir)
+    subprocess.check_call(
+        [
+            "dart",
+            "run",
+            "build_runner",
+            "build",
+            "--delete-conflicting-outputs",
+        ],
+        cwd=dart_dir,
+    )
 
 
 def main() -> int:
@@ -101,13 +131,13 @@ def main() -> int:
     env["PYTHONPATH"] = compiler_path + os.pathsep + env.get("PYTHONPATH", "")
 
     generated_roots = set()
-    for lang in langs:
-        out_dir = LANG_OUTPUTS[lang]
-        if lang == "go":
-            for schema in SCHEMAS:
+    for schema in SCHEMAS:
+        for lang in schema_langs(schema, langs):
+            out_dir = LANG_OUTPUTS[lang]
+            if lang == "go":
                 generated_roots.add(GO_OUTPUT_OVERRIDES.get(schema.name, out_dir))
-        else:
-            generated_roots.add(out_dir)
+            else:
+                generated_roots.add(out_dir)
 
     for root in sorted(generated_roots):
         Path(root).mkdir(parents=True, exist_ok=True)
@@ -125,6 +155,10 @@ def main() -> int:
         )
 
     for schema in SCHEMAS:
+        langs_for_schema = schema_langs(schema, langs)
+        if not langs_for_schema:
+            continue
+
         cmd = [
             sys.executable,
             "-m",
@@ -133,7 +167,7 @@ def main() -> int:
             str(schema),
         ]
 
-        for lang in langs:
+        for lang in langs_for_schema:
             out_dir = LANG_OUTPUTS[lang]
             if lang == "go":
                 out_dir = GO_OUTPUT_OVERRIDES.get(schema.name, out_dir)
@@ -141,6 +175,8 @@ def main() -> int:
             cmd.append(f"--{lang}_out={out_dir}")
 
         subprocess.check_call(cmd, env=env)
+    if "dart" in langs:
+        refresh_dart_generated_parts()
     return 0
 
 

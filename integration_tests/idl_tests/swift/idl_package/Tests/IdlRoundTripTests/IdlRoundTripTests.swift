@@ -108,6 +108,8 @@ final class IdlRoundTripTests: XCTestCase {
         try AnyExample.ForyRegistration.register(fory)
         try MonsterNamespace.ForyRegistration.register(fory)
         try ComplexFbs.ForyRegistration.register(fory)
+        try ExampleCommon.ForyRegistration.register(fory)
+        try Example.ForyRegistration.register(fory)
 
         let book = buildAddressBook()
         let bookRoundTrip: Addressbook.AddressBook = try roundTrip(fory, value: book)
@@ -219,6 +221,18 @@ final class IdlRoundTripTests: XCTestCase {
             XCTAssertEqual(actual, expected)
         }
 
+        let exampleMessage = buildExampleMessage()
+        let exampleMessageRoundTrip: Example.ExampleMessage = try roundTrip(fory, value: exampleMessage)
+        assertExampleMessage(expected: exampleMessage, actual: exampleMessageRoundTrip)
+        try roundTripExampleMessageFile(fory, compatible: compatible, expected: exampleMessage)
+
+        let exampleUnion = buildExampleMessageUnion()
+        let exampleUnionRoundTrip: Example.ExampleMessageUnion = try roundTrip(fory, value: exampleUnion)
+        assertExampleMessageUnion(expected: exampleUnion, actual: exampleUnionRoundTrip)
+        try roundTripFile(fory, env: "DATA_FILE_EXAMPLE_UNION", expected: exampleUnion) { expected, actual in
+            self.assertExampleMessageUnion(expected: expected, actual: actual)
+        }
+
         let refFory = Fory(xlang: true, trackRef: true, compatible: compatible)
         try Tree.ForyRegistration.register(refFory)
         try GraphNamespace.ForyRegistration.register(refFory)
@@ -276,6 +290,38 @@ final class IdlRoundTripTests: XCTestCase {
 
         let decoded: T = try fory.deserialize(inputData)
         try assertRoundTrip(expected, decoded)
+        let output = try fory.serialize(decoded)
+        try output.write(to: url)
+    }
+
+    private func roundTripExampleMessageFile(
+        _ fory: Fory,
+        compatible: Bool,
+        expected: Example.ExampleMessage
+    ) throws {
+        guard let path = ProcessInfo.processInfo.environment["DATA_FILE_EXAMPLE_MESSAGE"], !path.isEmpty else {
+            return
+        }
+        let url = URL(fileURLWithPath: path)
+        let fileManager = FileManager.default
+        if !fileManager.fileExists(atPath: path) {
+            fileManager.createFile(atPath: path, contents: nil)
+        }
+
+        let inputData: Data
+        if let existing = try? Data(contentsOf: url), !existing.isEmpty {
+            inputData = existing
+        } else {
+            inputData = try fory.serialize(expected)
+            try inputData.write(to: url)
+        }
+
+        if compatible {
+            try assertExampleMessageSchemaEvolution(payload: inputData, expected: expected)
+        }
+
+        let decoded: Example.ExampleMessage = try fory.deserialize(inputData)
+        assertExampleMessage(expected: expected, actual: decoded)
         let output = try fory.serialize(decoded)
         try output.write(to: url)
     }
@@ -422,7 +468,7 @@ final class IdlRoundTripTests: XCTestCase {
             stringValue: "optional",
             bytesValue: Data([1, 2, 3]),
             dateValue: LocalDate(daysSinceEpoch: 19724),
-            timestampValue: Date(timeIntervalSince1970: 1704164645),
+            timestampValue: Timestamp(seconds: 1_704_164_645, nanos: 0),
             int32List: [1, 2, 3],
             stringList: ["alpha", "beta"],
             int64Map: ["alpha": 10, "beta": 20]
@@ -438,7 +484,7 @@ final class IdlRoundTripTests: XCTestCase {
             boolValue: true,
             stringValue: "hello",
             dateValue: LocalDate(daysSinceEpoch: 19724),
-            timestampValue: Date(timeIntervalSince1970: 1704164645),
+            timestampValue: Timestamp(seconds: 1_704_164_645, nanos: 0),
             messageValue: AnyExample.AnyInner(name: "inner"),
             unionValue: AnyExample.AnyUnion.text("union"),
             listValue: ["alpha", "beta"],
@@ -451,7 +497,7 @@ final class IdlRoundTripTests: XCTestCase {
             boolValue: true,
             stringValue: "hello",
             dateValue: LocalDate(daysSinceEpoch: 19724),
-            timestampValue: Date(timeIntervalSince1970: 1704164645),
+            timestampValue: Timestamp(seconds: 1_704_164_645, nanos: 0),
             messageValue: AnyExamplePb.AnyInner(name: "inner"),
             unionValue: AnyExamplePb.AnyUnion(kind: .text("proto-union")),
             listValue: ["alpha", "beta"],
@@ -459,11 +505,112 @@ final class IdlRoundTripTests: XCTestCase {
         )
     }
 
+    private func buildExampleMessage() -> Example.ExampleMessage {
+        let leafA = ExampleCommon.ExampleLeaf(label: "leaf-a", count: 7)
+        let leafB = ExampleCommon.ExampleLeaf(label: "leaf-b", count: -3)
+        let timestamp = exampleTimestamp()
+        let duration = exampleDuration()
+        let decimal = exampleDecimal()
+
+        return Example.ExampleMessage(
+            boolValue: true,
+            int8Value: -12,
+            int16Value: 1234,
+            fixedInt32Value: 123_456_789,
+            varint32Value: -1_234_567,
+            fixedInt64Value: 1_234_567_890_123_456_789,
+            varint64Value: -1_234_567_890_123_456_789,
+            taggedInt64Value: 1_073_741_824,
+            uint8Value: 200,
+            uint16Value: 60_000,
+            fixedUint32Value: 2_000_000_000,
+            varUint32Value: 2_100_000_000,
+            fixedUint64Value: 9_000_000_000,
+            varUint64Value: 12_000_000_000,
+            taggedUint64Value: 2_222_222_222,
+            float16Value: Float16(1.5),
+            bfloat16Value: BFloat16(rawValue: 0xC030),
+            float32Value: 3.25,
+            float64Value: -4.5,
+            stringValue: "example-string",
+            bytesValue: Data([1, 2, 3, 4]),
+            dateValue: LocalDate.fromEpochDay(19_782),
+            timestampValue: timestamp,
+            durationValue: duration,
+            decimalValue: decimal,
+            enumValue: .ready,
+            messageValue: leafA,
+            unionValue: .leaf(leafB),
+            boolList: [true, false],
+            int8List: [-12, 7],
+            int16List: [1234, -2345],
+            fixedInt32List: [123_456_789, -123_456_789],
+            varint32List: [-1_234_567, 7_654_321],
+            fixedInt64List: [1_234_567_890_123_456_789, -123_456_789_012_345_678],
+            varint64List: [-1_234_567_890_123_456_789, 123_456_789_012_345_678],
+            taggedInt64List: [1_073_741_824, -1_073_741_824],
+            uint8List: [200, 42],
+            uint16List: [60_000, 12_345],
+            fixedUint32List: [2_000_000_000, 1_234_567_890],
+            varUint32List: [2_100_000_000, 1_234_567_890],
+            fixedUint64List: [9_000_000_000, 4_000_000_000],
+            varUint64List: [12_000_000_000, 5_000_000_000],
+            taggedUint64List: [2_222_222_222, 3_333_333_333],
+            float16List: [Float16(1.5), Float16(-0.5)],
+            bfloat16List: [BFloat16(rawValue: 0xC030), BFloat16(rawValue: 0x4010)],
+            maybeFloat16List: [Float16(1.5), nil, Float16(-0.5)],
+            maybeBfloat16List: [nil, BFloat16(rawValue: 0x4010), BFloat16(rawValue: 0xBF80)],
+            float32List: [3.25, -0.5],
+            float64List: [-4.5, 6.75],
+            stringList: ["example-string", "secondary"],
+            bytesList: [Data([1, 2, 3, 4]), Data([5, 6])],
+            dateList: [LocalDate.fromEpochDay(19_782), LocalDate.fromEpochDay(19_783)],
+            timestampList: [timestamp, Timestamp(seconds: 1_709_251_200, nanos: 123_456_000)],
+            durationList: [duration, .seconds(1) + .nanoseconds(234_567_000)],
+            decimalList: [decimal, decimalWithString("-0.5")],
+            enumList: [.ready, .failed],
+            messageList: [leafA, leafB],
+            unionList: [.leaf(leafA), .leaf(leafB)],
+            stringValuesByBool: [true: "true-value", false: "false-value"],
+            stringValuesByInt8: [-12: "minus-twelve"],
+            stringValuesByInt16: [1234: "twelve-thirty-four"],
+            stringValuesByFixedInt32: [.init(rawValue: 123_456_789): "fixed-int32"],
+            stringValuesByVarint32: [-1_234_567: "varint32"],
+            stringValuesByFixedInt64: [.init(rawValue: 1_234_567_890_123_456_789): "fixed-int64"],
+            stringValuesByVarint64: [-1_234_567_890_123_456_789: "varint64"],
+            stringValuesByTaggedInt64: [.init(rawValue: 1_073_741_824): "tagged-int64"],
+            stringValuesByUint8: [200: "uint8"],
+            stringValuesByUint16: [60_000: "uint16"],
+            stringValuesByFixedUint32: [.init(rawValue: 2_000_000_000): "fixed-uint32"],
+            stringValuesByVarUint32: [2_100_000_000: "var-uint32"],
+            stringValuesByFixedUint64: [.init(rawValue: 9_000_000_000): "fixed-uint64"],
+            stringValuesByVarUint64: [12_000_000_000: "var-uint64"],
+            stringValuesByTaggedUint64: [.init(rawValue: 2_222_222_222): "tagged-uint64"],
+            stringValuesByString: ["example-string": "string"],
+            stringValuesByTimestamp: [timestamp: "timestamp"],
+            stringValuesByDuration: [duration: "duration"],
+            stringValuesByEnum: [.ready: "ready"],
+            float16ValuesByName: ["primary": Float16(1.5)],
+            maybeFloat16ValuesByName: ["primary": Float16(1.5), "missing": nil],
+            bfloat16ValuesByName: ["primary": BFloat16(rawValue: 0xC030)],
+            maybeBfloat16ValuesByName: ["missing": nil, "secondary": BFloat16(rawValue: 0x4010)],
+            bytesValuesByName: ["payload": Data([1, 2, 3, 4])],
+            dateValuesByName: ["leap-day": LocalDate.fromEpochDay(19_782)],
+            decimalValuesByName: ["amount": decimal],
+            messageValuesByName: ["leaf-a": leafA, "leaf-b": leafB],
+            unionValuesByName: ["leaf-b": .leaf(leafB)]
+        )
+    }
+
+    private func buildExampleMessageUnion() -> Example.ExampleMessageUnion {
+        .unionValue(.leaf(ExampleCommon.ExampleLeaf(label: "leaf-b", count: -3)))
+    }
+
     private func assertAnyHolder(expected: AnyExample.AnyHolder, actual: AnyExample.AnyHolder) {
         XCTAssertEqual(actual.boolValue as? Bool, expected.boolValue as? Bool)
         XCTAssertEqual(actual.stringValue as? String, expected.stringValue as? String)
         XCTAssertEqual(actual.dateValue as? LocalDate, expected.dateValue as? LocalDate)
-        XCTAssertEqual((actual.timestampValue as? Date)?.timeIntervalSince1970, (expected.timestampValue as? Date)?.timeIntervalSince1970)
+        XCTAssertEqual(normalizeTimestampAny(actual.timestampValue), normalizeTimestampAny(expected.timestampValue))
         XCTAssertEqual(actual.messageValue as? AnyExample.AnyInner, expected.messageValue as? AnyExample.AnyInner)
         XCTAssertEqual(actual.unionValue as? AnyExample.AnyUnion, expected.unionValue as? AnyExample.AnyUnion)
         XCTAssertEqual(normalizeStringList(actual.listValue), normalizeStringList(expected.listValue))
@@ -474,11 +621,22 @@ final class IdlRoundTripTests: XCTestCase {
         XCTAssertEqual(actual.boolValue as? Bool, expected.boolValue as? Bool)
         XCTAssertEqual(actual.stringValue as? String, expected.stringValue as? String)
         XCTAssertEqual(actual.dateValue as? LocalDate, expected.dateValue as? LocalDate)
-        XCTAssertEqual((actual.timestampValue as? Date)?.timeIntervalSince1970, (expected.timestampValue as? Date)?.timeIntervalSince1970)
+        XCTAssertEqual(normalizeTimestampAny(actual.timestampValue), normalizeTimestampAny(expected.timestampValue))
         XCTAssertEqual(actual.messageValue as? AnyExamplePb.AnyInner, expected.messageValue as? AnyExamplePb.AnyInner)
         XCTAssertEqual(actual.unionValue as? AnyExamplePb.AnyUnion, expected.unionValue as? AnyExamplePb.AnyUnion)
         XCTAssertEqual(normalizeStringList(actual.listValue), normalizeStringList(expected.listValue))
         XCTAssertEqual(normalizeStringMap(actual.mapValue), normalizeStringMap(expected.mapValue))
+    }
+
+    private func normalizeTimestampAny(_ value: Any?) -> Timestamp? {
+        switch value {
+        case let timestamp as Timestamp:
+            return timestamp
+        case let date as Date:
+            return Timestamp(date: date)
+        default:
+            return nil
+        }
     }
 
     private func normalizeStringList(_ value: Any) -> [String]? {
@@ -516,6 +674,210 @@ final class IdlRoundTripTests: XCTestCase {
             return normalized
         }
         return nil
+    }
+
+    private func exampleTimestamp() -> Timestamp {
+        Timestamp(seconds: 1_709_210_096, nanos: 789_123_000)
+    }
+
+    private func exampleDuration() -> Duration {
+        .seconds(3723) + .nanoseconds(456_789_000)
+    }
+
+    private func exampleDecimal() -> Decimal {
+        decimalWithString("123456789012345.6789")
+    }
+
+    private func decimalWithString(_ value: String) -> Decimal {
+        Decimal(string: value, locale: Locale(identifier: "en_US_POSIX"))!
+    }
+
+    private func assertExampleMessage(expected: Example.ExampleMessage, actual: Example.ExampleMessage) {
+        XCTAssertEqual(actual.boolValue, expected.boolValue)
+        XCTAssertEqual(actual.int8Value, expected.int8Value)
+        XCTAssertEqual(actual.int16Value, expected.int16Value)
+        XCTAssertEqual(actual.fixedInt32Value, expected.fixedInt32Value)
+        XCTAssertEqual(actual.varint32Value, expected.varint32Value)
+        XCTAssertEqual(actual.fixedInt64Value, expected.fixedInt64Value)
+        XCTAssertEqual(actual.varint64Value, expected.varint64Value)
+        XCTAssertEqual(actual.taggedInt64Value, expected.taggedInt64Value)
+        XCTAssertEqual(actual.uint8Value, expected.uint8Value)
+        XCTAssertEqual(actual.uint16Value, expected.uint16Value)
+        XCTAssertEqual(actual.fixedUint32Value, expected.fixedUint32Value)
+        XCTAssertEqual(actual.varUint32Value, expected.varUint32Value)
+        XCTAssertEqual(actual.fixedUint64Value, expected.fixedUint64Value)
+        XCTAssertEqual(actual.varUint64Value, expected.varUint64Value)
+        XCTAssertEqual(actual.taggedUint64Value, expected.taggedUint64Value)
+        XCTAssertEqual(actual.float16Value, expected.float16Value)
+        XCTAssertEqual(actual.bfloat16Value, expected.bfloat16Value)
+        XCTAssertEqual(actual.float32Value, expected.float32Value)
+        XCTAssertEqual(actual.float64Value, expected.float64Value)
+        XCTAssertEqual(actual.stringValue, expected.stringValue)
+        XCTAssertEqual(actual.bytesValue, expected.bytesValue)
+        XCTAssertEqual(actual.dateValue, expected.dateValue)
+        assertTimestampsEqual(expected: expected.timestampValue, actual: actual.timestampValue)
+        XCTAssertEqual(actual.durationValue, expected.durationValue)
+        assertDecimalsEqual(expected: expected.decimalValue, actual: actual.decimalValue)
+        XCTAssertEqual(actual.enumValue, expected.enumValue)
+        XCTAssertEqual(actual.messageValue, expected.messageValue)
+        assertExampleLeafUnion(expected: expected.unionValue, actual: actual.unionValue)
+        XCTAssertEqual(actual.boolList, expected.boolList)
+        XCTAssertEqual(actual.int8List, expected.int8List)
+        XCTAssertEqual(actual.int16List, expected.int16List)
+        XCTAssertEqual(actual.fixedInt32List, expected.fixedInt32List)
+        XCTAssertEqual(actual.varint32List, expected.varint32List)
+        XCTAssertEqual(actual.fixedInt64List, expected.fixedInt64List)
+        XCTAssertEqual(actual.varint64List, expected.varint64List)
+        XCTAssertEqual(actual.taggedInt64List, expected.taggedInt64List)
+        XCTAssertEqual(actual.uint8List, expected.uint8List)
+        XCTAssertEqual(actual.uint16List, expected.uint16List)
+        XCTAssertEqual(actual.fixedUint32List, expected.fixedUint32List)
+        XCTAssertEqual(actual.varUint32List, expected.varUint32List)
+        XCTAssertEqual(actual.fixedUint64List, expected.fixedUint64List)
+        XCTAssertEqual(actual.varUint64List, expected.varUint64List)
+        XCTAssertEqual(actual.taggedUint64List, expected.taggedUint64List)
+        XCTAssertEqual(actual.float16List, expected.float16List)
+        XCTAssertEqual(actual.bfloat16List, expected.bfloat16List)
+        XCTAssertEqual(actual.maybeFloat16List, expected.maybeFloat16List)
+        XCTAssertEqual(actual.maybeBfloat16List, expected.maybeBfloat16List)
+        XCTAssertEqual(actual.float32List, expected.float32List)
+        XCTAssertEqual(actual.float64List, expected.float64List)
+        XCTAssertEqual(actual.stringList, expected.stringList)
+        XCTAssertEqual(actual.bytesList, expected.bytesList)
+        XCTAssertEqual(actual.dateList, expected.dateList)
+        assertTimestampListsEqual(expected: expected.timestampList, actual: actual.timestampList)
+        XCTAssertEqual(actual.durationList, expected.durationList)
+        assertDecimalListsEqual(expected: expected.decimalList, actual: actual.decimalList)
+        XCTAssertEqual(actual.enumList, expected.enumList)
+        XCTAssertEqual(actual.messageList, expected.messageList)
+        assertExampleLeafUnionListsEqual(expected: expected.unionList, actual: actual.unionList)
+        XCTAssertEqual(actual.stringValuesByBool, expected.stringValuesByBool)
+        XCTAssertEqual(actual.stringValuesByInt8, expected.stringValuesByInt8)
+        XCTAssertEqual(actual.stringValuesByInt16, expected.stringValuesByInt16)
+        XCTAssertEqual(actual.stringValuesByFixedInt32, expected.stringValuesByFixedInt32)
+        XCTAssertEqual(actual.stringValuesByVarint32, expected.stringValuesByVarint32)
+        XCTAssertEqual(actual.stringValuesByFixedInt64, expected.stringValuesByFixedInt64)
+        XCTAssertEqual(actual.stringValuesByVarint64, expected.stringValuesByVarint64)
+        XCTAssertEqual(actual.stringValuesByTaggedInt64, expected.stringValuesByTaggedInt64)
+        XCTAssertEqual(actual.stringValuesByUint8, expected.stringValuesByUint8)
+        XCTAssertEqual(actual.stringValuesByUint16, expected.stringValuesByUint16)
+        XCTAssertEqual(actual.stringValuesByFixedUint32, expected.stringValuesByFixedUint32)
+        XCTAssertEqual(actual.stringValuesByVarUint32, expected.stringValuesByVarUint32)
+        XCTAssertEqual(actual.stringValuesByFixedUint64, expected.stringValuesByFixedUint64)
+        XCTAssertEqual(actual.stringValuesByVarUint64, expected.stringValuesByVarUint64)
+        XCTAssertEqual(actual.stringValuesByTaggedUint64, expected.stringValuesByTaggedUint64)
+        XCTAssertEqual(actual.stringValuesByString, expected.stringValuesByString)
+        assertTimestampMapsEqual(expected: expected.stringValuesByTimestamp, actual: actual.stringValuesByTimestamp)
+        XCTAssertEqual(actual.stringValuesByDuration, expected.stringValuesByDuration)
+        XCTAssertEqual(actual.stringValuesByEnum, expected.stringValuesByEnum)
+        XCTAssertEqual(actual.float16ValuesByName, expected.float16ValuesByName)
+        XCTAssertEqual(actual.maybeFloat16ValuesByName, expected.maybeFloat16ValuesByName)
+        XCTAssertEqual(actual.bfloat16ValuesByName, expected.bfloat16ValuesByName)
+        XCTAssertEqual(actual.maybeBfloat16ValuesByName, expected.maybeBfloat16ValuesByName)
+        XCTAssertEqual(actual.bytesValuesByName, expected.bytesValuesByName)
+        XCTAssertEqual(actual.dateValuesByName, expected.dateValuesByName)
+        assertDecimalMapsEqual(expected: expected.decimalValuesByName, actual: actual.decimalValuesByName)
+        XCTAssertEqual(actual.messageValuesByName, expected.messageValuesByName)
+        assertExampleLeafUnionMapsEqual(expected: expected.unionValuesByName, actual: actual.unionValuesByName)
+    }
+
+    private func assertExampleMessageUnion(expected: Example.ExampleMessageUnion, actual: Example.ExampleMessageUnion) {
+        switch (expected, actual) {
+        case let (.unionValue(expectedValue), .unionValue(actualValue)):
+            assertExampleLeafUnion(expected: expectedValue, actual: actualValue)
+        default:
+            XCTFail("Example.ExampleMessageUnion case mismatch")
+        }
+    }
+
+    private func assertExampleLeafUnion(expected: ExampleCommon.ExampleLeafUnion, actual: ExampleCommon.ExampleLeafUnion) {
+        switch (expected, actual) {
+        case let (.note(expectedValue), .note(actualValue)):
+            XCTAssertEqual(actualValue, expectedValue)
+        case let (.code(expectedValue), .code(actualValue)):
+            XCTAssertEqual(actualValue, expectedValue)
+        case let (.leaf(expectedValue), .leaf(actualValue)):
+            XCTAssertEqual(actualValue, expectedValue)
+        default:
+            XCTFail("ExampleCommon.ExampleLeafUnion case mismatch")
+        }
+    }
+
+    private func assertExampleLeafUnionListsEqual(
+        expected: [ExampleCommon.ExampleLeafUnion],
+        actual: [ExampleCommon.ExampleLeafUnion]
+    ) {
+        XCTAssertEqual(actual.count, expected.count)
+        for (expectedValue, actualValue) in zip(expected, actual) {
+            assertExampleLeafUnion(expected: expectedValue, actual: actualValue)
+        }
+    }
+
+    private func assertExampleLeafUnionMapsEqual(
+        expected: [String: ExampleCommon.ExampleLeafUnion],
+        actual: [String: ExampleCommon.ExampleLeafUnion]
+    ) {
+        XCTAssertEqual(actual.keys.sorted(), expected.keys.sorted())
+        for key in expected.keys.sorted() {
+            guard let expectedValue = expected[key], let actualValue = actual[key] else {
+                XCTFail("Missing union value for key \(key)")
+                continue
+            }
+            assertExampleLeafUnion(expected: expectedValue, actual: actualValue)
+        }
+    }
+
+    private func assertDecimalsEqual(expected: Decimal, actual: Decimal) {
+        do {
+            let fory = Fory(xlang: true, trackRef: false, compatible: true)
+            XCTAssertEqual(try fory.serialize(actual), try fory.serialize(expected))
+        } catch {
+            XCTFail("Failed to compare decimal wire form: \(error)")
+        }
+    }
+
+    private func assertDecimalListsEqual(expected: [Decimal], actual: [Decimal]) {
+        XCTAssertEqual(actual.count, expected.count)
+        for (expectedValue, actualValue) in zip(expected, actual) {
+            assertDecimalsEqual(expected: expectedValue, actual: actualValue)
+        }
+    }
+
+    private func assertDecimalMapsEqual(expected: [String: Decimal], actual: [String: Decimal]) {
+        XCTAssertEqual(actual.keys.sorted(), expected.keys.sorted())
+        for key in expected.keys.sorted() {
+            guard let expectedValue = expected[key], let actualValue = actual[key] else {
+                XCTFail("Missing decimal value for key \(key)")
+                continue
+            }
+            assertDecimalsEqual(expected: expectedValue, actual: actualValue)
+        }
+    }
+
+    private func assertTimestampsEqual(expected: Timestamp, actual: Timestamp) {
+        XCTAssertEqual(actual, expected)
+    }
+
+    private func assertTimestampListsEqual(expected: [Timestamp], actual: [Timestamp]) {
+        XCTAssertEqual(actual.count, expected.count)
+        for (expectedValue, actualValue) in zip(expected, actual) {
+            assertTimestampsEqual(expected: expectedValue, actual: actualValue)
+        }
+    }
+
+    private func assertTimestampMapsEqual(expected: [Timestamp: String], actual: [Timestamp: String]) {
+        let expectedEntries = expected.map { ($0.key.seconds, $0.key.nanos, $0.value) }.sorted {
+            ($0.0, $0.1) < ($1.0, $1.1)
+        }
+        let actualEntries = actual.map { ($0.key.seconds, $0.key.nanos, $0.value) }.sorted {
+            ($0.0, $0.1) < ($1.0, $1.1)
+        }
+        XCTAssertEqual(actualEntries.count, expectedEntries.count)
+        for (expectedEntry, actualEntry) in zip(expectedEntries, actualEntries) {
+            XCTAssertEqual(actualEntry.0, expectedEntry.0)
+            XCTAssertEqual(actualEntry.1, expectedEntry.1)
+            XCTAssertEqual(actualEntry.2, expectedEntry.2)
+        }
     }
 
     private func buildMonster() -> MonsterNamespace.Monster {

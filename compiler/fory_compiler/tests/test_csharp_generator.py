@@ -101,9 +101,33 @@ def test_csharp_field_encoding_attributes():
         """
     )
 
-    assert "[Field(Encoding = FieldEncoding.Fixed)]" in file.content
-    assert "[Field(Encoding = FieldEncoding.Tagged)]" in file.content
+    assert "[Field(Id = 1, Encoding = FieldEncoding.Fixed)]" in file.content
+    assert "[Field(Id = 2, Encoding = FieldEncoding.Tagged)]" in file.content
+    assert "[Field(Id = 3)]" in file.content
     assert "public int Plain { get; set; }" in file.content
+
+
+def test_csharp_container_field_encoding_attributes():
+    file = generate(
+        """
+        package example;
+
+        message EncodedContainers {
+            list<fixed_uint64> fixed_ids = 1;
+            list<uint64> var_ids = 2;
+            list<tagged_uint64> tagged_ids = 3;
+            map<fixed_uint64, string> fixed_names = 4;
+            map<uint64, string> var_names = 5;
+            map<tagged_uint64, string> tagged_names = 6;
+            map<string, tagged_int64> tagged_values = 7;
+        }
+        """
+    )
+
+    for field_id in range(1, 8):
+        assert f"[Field(Id = {field_id})]" in file.content
+
+    assert "FieldEncoding." not in file.content
 
 
 def test_csharp_imported_registration_calls_generated():

@@ -21,15 +21,35 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${SCRIPT_DIR}/build"
+VENV_DIR="${BUILD_DIR}/cmake-venv"
+
+resolve_cmake() {
+  if command -v cmake >/dev/null 2>&1; then
+    echo "cmake"
+    return
+  fi
+
+  if python -m cmake --version >/dev/null 2>&1; then
+    echo "python -m cmake"
+    return
+  fi
+
+  if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
+    python -m venv "${VENV_DIR}"
+    "${VENV_DIR}/bin/python" -m pip install --quiet cmake
+  fi
+
+  echo "${VENV_DIR}/bin/python -m cmake"
+}
 
 if [[ "${FORY_CPP_IDL_SKIP_BUILD:-}" == "1" && -x "${BUILD_DIR}/idl_roundtrip" ]]; then
   "${BUILD_DIR}/idl_roundtrip"
   exit 0
 fi
 
-python -m pip install --quiet cmake
+cmake_cmd="$(resolve_cmake)"
 
-cmake -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
-cmake --build "${BUILD_DIR}" --parallel
+eval "${cmake_cmd}" -S "${SCRIPT_DIR}" -B "${BUILD_DIR}" -DCMAKE_BUILD_TYPE=Release
+eval "${cmake_cmd}" --build "${BUILD_DIR}" --parallel
 
 "${BUILD_DIR}/idl_roundtrip"

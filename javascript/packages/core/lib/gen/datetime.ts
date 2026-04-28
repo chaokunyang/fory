@@ -33,22 +33,87 @@ class TimestampSerializerGenerator extends BaseSerializerGenerator {
   }
 
   write(accessor: string): string {
+    const valueVar = this.scope.uniqueName("ts_value");
     const msVar = this.scope.uniqueName("ts_ms");
     const secondsVar = this.scope.uniqueName("ts_sec");
     const nanosVar = this.scope.uniqueName("ts_nanos");
+    const exactSecondsVar = this.scope.uniqueName("ts_exact_sec");
+    const exactNanosVar = this.scope.uniqueName("ts_exact_nanos");
+    const exactMillisVar = this.scope.uniqueName("ts_exact_ms");
+    const secondsSymbol = this.scope.declareByName(
+      "timestampSecondsSymbol",
+      "Symbol.for(\"@apache-fory/timestampSeconds\")",
+    );
+    const nanosSymbol = this.scope.declareByName(
+      "timestampNanosSymbol",
+      "Symbol.for(\"@apache-fory/timestampNanos\")",
+    );
+    const millisSymbol = this.scope.declareByName(
+      "timestampMillisSymbol",
+      "Symbol.for(\"@apache-fory/timestampMillis\")",
+    );
     return `
-      const ${msVar} = (${accessor} instanceof Date) ? ${accessor}.getTime() : ${accessor};
-      const ${secondsVar} = Math.floor(${msVar} / 1000);
-      const ${nanosVar} = (${msVar} - ${secondsVar} * 1000) * 1000000;
+      const ${valueVar} = ${accessor};
+      let ${secondsVar};
+      let ${nanosVar};
+      if (${valueVar} instanceof Date) {
+        const ${exactSecondsVar} = ${valueVar}[${secondsSymbol}];
+        const ${exactNanosVar} = ${valueVar}[${nanosSymbol}];
+        const ${exactMillisVar} = ${valueVar}[${millisSymbol}];
+        if (${exactSecondsVar} !== undefined && ${exactNanosVar} !== undefined
+          && ${exactMillisVar} === ${valueVar}.getTime()) {
+          ${secondsVar} = ${exactSecondsVar};
+          ${nanosVar} = ${exactNanosVar};
+        } else {
+          const ${msVar} = ${valueVar}.getTime();
+          ${secondsVar} = BigInt(Math.floor(${msVar} / 1000));
+          ${nanosVar} = Math.round((${msVar} - Number(${secondsVar}) * 1000) * 1000000);
+          if (${nanosVar} >= 1000000000) {
+            ${secondsVar} += 1n;
+            ${nanosVar} -= 1000000000;
+          }
+        }
+      } else {
+        const ${msVar} = ${valueVar};
+        ${secondsVar} = BigInt(Math.floor(${msVar} / 1000));
+        ${nanosVar} = Math.round((${msVar} - Number(${secondsVar}) * 1000) * 1000000);
+        if (${nanosVar} >= 1000000000) {
+          ${secondsVar} += 1n;
+          ${nanosVar} -= 1000000000;
+        }
+      }
       ${this.builder.writer.writeInt64(`${secondsVar}`)}
       ${this.builder.writer.writeUint32(`${nanosVar}`)}
       `;
   }
 
   read(accessor: (expr: string) => string): string {
-    const seconds = this.builder.reader.readInt64();
-    const nanos = this.builder.reader.readUint32();
-    return accessor(`new Date(Number(${seconds}) * 1000 + Math.floor(${nanos} / 1000000))`);
+    const seconds = this.scope.uniqueName("ts_sec");
+    const nanos = this.scope.uniqueName("ts_nanos");
+    const result = this.scope.uniqueName("ts_date");
+    const millis = this.scope.uniqueName("ts_ms");
+    const secondsSymbol = this.scope.declareByName(
+      "timestampSecondsSymbol",
+      "Symbol.for(\"@apache-fory/timestampSeconds\")",
+    );
+    const nanosSymbol = this.scope.declareByName(
+      "timestampNanosSymbol",
+      "Symbol.for(\"@apache-fory/timestampNanos\")",
+    );
+    const millisSymbol = this.scope.declareByName(
+      "timestampMillisSymbol",
+      "Symbol.for(\"@apache-fory/timestampMillis\")",
+    );
+    return `
+      const ${seconds} = ${this.builder.reader.readInt64()};
+      const ${nanos} = ${this.builder.reader.readUint32()};
+      const ${millis} = Number(${seconds}) * 1000 + Math.floor(${nanos} / 1000000);
+      const ${result} = new Date(${millis});
+      ${result}[${secondsSymbol}] = ${seconds};
+      ${result}[${nanosSymbol}] = ${nanos};
+      ${result}[${millisSymbol}] = ${result}.getTime();
+      ${accessor(result)}
+    `;
   }
 
   getFixedSize(): number {
@@ -70,8 +135,12 @@ class DurationSerializerGenerator extends BaseSerializerGenerator {
     const nanosVar = this.scope.uniqueName("ts_nanos");
     return `
       const ${msVar} = ${accessor};
-      const ${secondsVar} = Math.floor(${msVar} / 1000);
-      const ${nanosVar} = (${msVar} - ${secondsVar} * 1000) * 1000000;
+      let ${secondsVar} = BigInt(Math.floor(${msVar} / 1000));
+      let ${nanosVar} = Math.round((${msVar} - Number(${secondsVar}) * 1000) * 1000000);
+      if (${nanosVar} >= 1000000000) {
+        ${secondsVar} += 1n;
+        ${nanosVar} -= 1000000000;
+      }
       ${this.builder.writer.writeVarInt64(`${secondsVar}`)}
       ${this.builder.writer.writeInt32(`${nanosVar}`)}
       `;
@@ -80,7 +149,7 @@ class DurationSerializerGenerator extends BaseSerializerGenerator {
   read(accessor: (expr: string) => string): string {
     const seconds = this.builder.reader.readVarInt64();
     const nanos = this.builder.reader.readInt32();
-    return accessor(`Number(${seconds}) * 1000 + Math.floor(${nanos} / 1000000)`);
+    return accessor(`Number(${seconds}) * 1000 + ${nanos} / 1000000`);
   }
 
   getFixedSize(): number {

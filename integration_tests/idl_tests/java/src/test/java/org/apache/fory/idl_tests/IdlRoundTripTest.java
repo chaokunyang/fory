@@ -30,6 +30,13 @@ import addressbook.Person.PhoneType;
 import auto_id.AutoIdForyRegistration;
 import auto_id.Envelope;
 import auto_id.Wrapper;
+import example.ExampleForyRegistration;
+import example.ExampleMessage;
+import example.ExampleMessageUnion;
+import example_common.ExampleCommonForyRegistration;
+import example_common.ExampleLeaf;
+import example_common.ExampleLeafUnion;
+import example_common.ExampleState;
 import collection.CollectionForyRegistration;
 import collection.NumericCollectionArrayUnion;
 import collection.NumericCollectionUnion;
@@ -73,20 +80,28 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Array;
+import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.BFloat16List;
+import org.apache.fory.collection.Float16List;
 import org.apache.fory.collection.Int16List;
 import org.apache.fory.collection.Int32List;
 import org.apache.fory.collection.Int64List;
@@ -97,6 +112,8 @@ import org.apache.fory.collection.Uint64List;
 import org.apache.fory.collection.Uint8List;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.config.Language;
+import org.apache.fory.type.BFloat16;
+import org.apache.fory.type.Float16;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -138,7 +155,8 @@ public class IdlRoundTripTest {
     Assert.assertTrue(decoded instanceof AddressBook);
     Assert.assertEquals(decoded, book);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = Collections.singletonMap("DATA_FILE", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path dataFile = Files.createTempFile("idl-" + peer + "-", ".bin");
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
@@ -172,7 +190,8 @@ public class IdlRoundTripTest {
     Assert.assertTrue(decodedWrapper instanceof Wrapper);
     Assert.assertEquals(decodedWrapper, wrapper);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = Collections.singletonMap("DATA_FILE_AUTO_ID", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path dataFile = Files.createTempFile("idl-auto-id-" + peer + "-", ".bin");
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
@@ -329,7 +348,8 @@ public class IdlRoundTripTest {
     Assert.assertTrue(decoded instanceof PrimitiveTypes);
     Assert.assertEquals(decoded, types);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = Collections.singletonMap("DATA_FILE_PRIMITIVES", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path dataFile = Files.createTempFile("idl-primitive-" + peer + "-", ".bin");
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
@@ -383,7 +403,12 @@ public class IdlRoundTripTest {
     Object arrayUnionDecoded = fory.deserialize(arrayUnionBytes);
     assertNumericCollectionArrayUnion(arrayUnionDecoded, collectionArrayUnion);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = new HashMap<>();
+    peerSelection.put("DATA_FILE_COLLECTION", "");
+    peerSelection.put("DATA_FILE_COLLECTION_UNION", "");
+    peerSelection.put("DATA_FILE_COLLECTION_ARRAY", "");
+    peerSelection.put("DATA_FILE_COLLECTION_ARRAY_UNION", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path collectionsFile =
           Files.createTempFile("idl-collections-" + peer + "-", ".bin");
       collectionsFile.toFile().deleteOnExit();
@@ -443,6 +468,16 @@ public class IdlRoundTripTest {
     runOptionalTypesRoundTrip(false);
   }
 
+  @Test
+  public void testExampleRoundTripCompatible() throws Exception {
+    runExampleRoundTrip(true);
+  }
+
+  @Test
+  public void testExampleRoundTripSchemaConsistent() throws Exception {
+    runExampleRoundTrip(false);
+  }
+
   private void runOptionalTypesRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
     OptionalTypesForyRegistration.register(fory);
@@ -454,7 +489,8 @@ public class IdlRoundTripTest {
     Assert.assertTrue(decoded instanceof OptionalHolder);
     Assert.assertEquals(decoded, holder);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = Collections.singletonMap("DATA_FILE_OPTIONAL_TYPES", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path dataFile = Files.createTempFile("idl-optional-" + peer + "-", ".bin");
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
@@ -468,6 +504,68 @@ public class IdlRoundTripTest {
       Object roundTrip = fory.deserialize(peerBytes);
       Assert.assertTrue(roundTrip instanceof OptionalHolder);
       Assert.assertEquals(roundTrip, holder);
+    }
+  }
+
+  private void runExampleRoundTrip(boolean compatible) throws Exception {
+    List<ExampleSchemaEvolutionTypes.ExampleVariantSpec> variantSpecs =
+        ExampleSchemaEvolutionTypes.variantSpecs();
+    ExampleMessage message = buildExampleMessage();
+    Map<String, Object> expectedValues = buildExampleFieldValues(message, variantSpecs);
+    Fory fory = buildExampleFory(compatible);
+
+    ExampleMessage messageRoundTrip =
+        fory.deserialize(fory.serialize(message), ExampleMessage.class);
+    assertExampleMessageValues(
+        messageRoundTrip, expectedValues, variantSpecs, "java local example message");
+
+    ExampleMessageUnion unionValue = buildExampleMessageUnion();
+    ExampleMessageUnion unionRoundTrip =
+        fory.deserialize(fory.serialize(unionValue), ExampleMessageUnion.class);
+    assertExampleUnionEquals(unionRoundTrip, unionValue, "java local example union");
+    assertExampleUnionLocalRoundTrips(fory, expectedValues, variantSpecs);
+
+    byte[] messageBytes = fory.serialize(message);
+    if (compatible) {
+      assertExampleSchemaEvolution(
+          messageBytes, expectedValues, variantSpecs, "java example message");
+    }
+
+    byte[] unionBytes = fory.serialize(unionValue);
+
+    Map<String, String> peerSelection = new HashMap<>();
+    peerSelection.put("DATA_FILE_EXAMPLE_MESSAGE", "");
+    peerSelection.put("DATA_FILE_EXAMPLE_UNION", "");
+    for (String peer : resolvePeers(peerSelection)) {
+      Path messageFile = Files.createTempFile("idl-example-message-" + peer + "-", ".bin");
+      messageFile.toFile().deleteOnExit();
+      Files.write(messageFile, messageBytes);
+
+      Path unionFile = Files.createTempFile("idl-example-union-" + peer + "-", ".bin");
+      unionFile.toFile().deleteOnExit();
+      Files.write(unionFile, unionBytes);
+
+      Map<String, String> env = new HashMap<>();
+      env.put("DATA_FILE_EXAMPLE_MESSAGE", messageFile.toAbsolutePath().toString());
+      env.put("DATA_FILE_EXAMPLE_UNION", unionFile.toAbsolutePath().toString());
+      PeerCommand command = buildPeerCommand(peer, env, compatible);
+      runPeer(command, peer);
+
+      ExampleMessage peerMessage =
+          fory.deserialize(Files.readAllBytes(messageFile), ExampleMessage.class);
+      assertExampleMessageValues(
+          peerMessage, expectedValues, variantSpecs, peer + " example message");
+      if (compatible) {
+        assertExampleSchemaEvolution(
+            Files.readAllBytes(messageFile),
+            expectedValues,
+            variantSpecs,
+            peer + " example message");
+      }
+
+      ExampleMessageUnion peerUnion =
+          fory.deserialize(Files.readAllBytes(unionFile), ExampleMessageUnion.class);
+      assertExampleUnionEquals(peerUnion, unionValue, peer + " example union");
     }
   }
 
@@ -515,7 +613,8 @@ public class IdlRoundTripTest {
     TreeNode roundTrip = (TreeNode) decoded;
     assertTree(roundTrip);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = Collections.singletonMap("DATA_FILE_TREE", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path dataFile = Files.createTempFile("idl-tree-" + peer + "-", ".bin");
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
@@ -554,7 +653,8 @@ public class IdlRoundTripTest {
     Graph roundTrip = (Graph) decoded;
     assertGraph(roundTrip);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = Collections.singletonMap("DATA_FILE_GRAPH", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path dataFile = Files.createTempFile("idl-graph-" + peer + "-", ".bin");
       dataFile.toFile().deleteOnExit();
       Files.write(dataFile, bytes);
@@ -598,7 +698,10 @@ public class IdlRoundTripTest {
     Assert.assertTrue(containerDecoded instanceof Container);
     Assert.assertEquals(containerDecoded, container);
 
-    for (String peer : resolvePeers()) {
+    Map<String, String> peerSelection = new HashMap<>();
+    peerSelection.put("DATA_FILE_FLATBUFFERS_MONSTER", "");
+    peerSelection.put("DATA_FILE_FLATBUFFERS_TEST2", "");
+    for (String peer : resolvePeers(peerSelection)) {
       Path monsterFile =
           Files.createTempFile("idl-flatbuffers-monster-" + peer + "-", ".bin");
       monsterFile.toFile().deleteOnExit();
@@ -644,7 +747,7 @@ public class IdlRoundTripTest {
         .build();
   }
 
-  private List<String> resolvePeers() {
+  private List<String> resolvePeers(Map<String, String> environment) {
     String peerEnv = System.getenv("IDL_PEER_LANG");
     if (peerEnv == null || peerEnv.trim().isEmpty()) {
       return Collections.emptyList();
@@ -655,9 +758,31 @@ public class IdlRoundTripTest {
             .filter(value -> !value.isEmpty())
             .collect(Collectors.toList());
     if (peers.contains("all")) {
-      return Arrays.asList("python", "go", "rust", "cpp", "swift", "javascript");
+      peers =
+          new ArrayList<>(
+              Arrays.asList("python", "go", "rust", "cpp", "swift", "javascript", "csharp", "dart"));
     }
-    return peers;
+    return peers.stream()
+        .filter(peer -> supportsPeerPayload(peer, environment))
+        .collect(Collectors.toList());
+  }
+
+  private boolean supportsDartPeerPayload(Map<String, String> environment) {
+    return !(environment.containsKey("DATA_FILE_PRIMITIVES")
+        || environment.containsKey("DATA_FILE_COLLECTION")
+        || environment.containsKey("DATA_FILE_COLLECTION_UNION")
+        || environment.containsKey("DATA_FILE_COLLECTION_ARRAY")
+        || environment.containsKey("DATA_FILE_COLLECTION_ARRAY_UNION")
+        || environment.containsKey("DATA_FILE_OPTIONAL_TYPES")
+        || environment.containsKey("DATA_FILE_FLATBUFFERS_MONSTER")
+        || environment.containsKey("DATA_FILE_FLATBUFFERS_TEST2"));
+  }
+
+  private boolean supportsPeerPayload(String peer, Map<String, String> environment) {
+    if ("dart".equals(peer)) {
+      return supportsDartPeerPayload(environment);
+    }
+    return true;
   }
 
   private PeerCommand buildPeerCommand(
@@ -689,10 +814,18 @@ public class IdlRoundTripTest {
         break;
       case "go":
         workDir = idlRoot.resolve("go");
-        String goTest =
-            compatible
-                ? "TestAddressBookRoundTripCompatible"
-                : "TestAddressBookRoundTripSchemaConsistent";
+        String goTest;
+        if (usesExamplePeerPayload(environment)) {
+          goTest =
+              compatible
+                  ? "TestExampleRoundTripCompatible"
+                  : "TestExampleRoundTripSchemaConsistent";
+        } else {
+          goTest =
+              compatible
+                  ? "TestAddressBookRoundTripCompatible"
+                  : "TestAddressBookRoundTripSchemaConsistent";
+        }
         command = Arrays.asList("go", "test", "-run", goTest, "-v");
         break;
       case "rust":
@@ -720,6 +853,33 @@ public class IdlRoundTripTest {
         command = Arrays.asList("npx", "ts-node", "roundtrip.ts");
         peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
         break;
+      case "dart":
+        if (!supportsDartPeerPayload(environment)) {
+          throw new IllegalArgumentException(
+              "Dart peer does not support payload set " + environment.keySet());
+        }
+        workDir = idlRoot.resolve("dart");
+        command =
+            Arrays.asList(
+                "dart",
+                "test",
+                "test/idl_roundtrip_test.dart",
+                "--plain-name",
+                "interop file roundtrip hooks when env vars are set");
+        peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
+        break;
+      case "csharp":
+        workDir = idlRoot.resolve("csharp").resolve("IdlTests");
+        command =
+            Arrays.asList(
+                "dotnet",
+                "test",
+                "-c",
+                "Release",
+                "--filter",
+                "FullyQualifiedName~" + resolveCsharpPeerTest(environment));
+        peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
+        break;
       default:
         throw new IllegalArgumentException("Unknown peer language: " + peer);
     }
@@ -727,6 +887,47 @@ public class IdlRoundTripTest {
     peerCommand.command = command;
     peerCommand.workDir = workDir;
     return peerCommand;
+  }
+
+  private boolean usesExamplePeerPayload(Map<String, String> environment) {
+    return environment.containsKey("DATA_FILE_EXAMPLE_MESSAGE")
+        || environment.containsKey("DATA_FILE_EXAMPLE_UNION");
+  }
+
+  private String resolveCsharpPeerTest(Map<String, String> environment) {
+    if (environment.containsKey("DATA_FILE_COLLECTION")
+        || environment.containsKey("DATA_FILE_COLLECTION_UNION")
+        || environment.containsKey("DATA_FILE_COLLECTION_ARRAY")
+        || environment.containsKey("DATA_FILE_COLLECTION_ARRAY_UNION")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.CollectionRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE_EXAMPLE_MESSAGE")
+        || environment.containsKey("DATA_FILE_EXAMPLE_UNION")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.ExampleRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE_FLATBUFFERS_MONSTER")
+        || environment.containsKey("DATA_FILE_FLATBUFFERS_TEST2")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.FlatbuffersRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE_AUTO_ID")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.AutoIdRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE_PRIMITIVES")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.PrimitiveTypesRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE_OPTIONAL_TYPES")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.OptionalTypesRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE_TREE")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.TreeRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE_GRAPH")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.GraphRoundTrip";
+    }
+    if (environment.containsKey("DATA_FILE")) {
+      return "Apache.Fory.IdlTests.RoundtripTests.AddressBookRoundTrip";
+    }
+    throw new IllegalArgumentException("Unsupported C# peer payload set " + environment.keySet());
   }
 
   private void runPeer(PeerCommand command, String peer) throws IOException, InterruptedException {
@@ -1023,6 +1224,441 @@ public class IdlRoundTripTest {
     holder.setAllTypes(allTypes);
     holder.setChoice(OptionalUnion.ofNote("optional"));
     return holder;
+  }
+
+  private Fory buildExampleFory(boolean compatible) {
+    Fory fory = buildFory(compatible);
+    ExampleCommonForyRegistration.register(fory);
+    ExampleForyRegistration.register(fory);
+    return fory;
+  }
+
+  private Fory buildExampleEmptyFory(boolean compatible) {
+    Fory fory = buildFory(compatible);
+    ExampleCommonForyRegistration.register(fory);
+    ExampleSchemaEvolutionTypes.registerEmptyType(fory);
+    return fory;
+  }
+
+  private Fory buildExampleVariantFory(
+      boolean compatible, ExampleSchemaEvolutionTypes.ExampleVariantSpec spec) {
+    Fory fory = buildFory(compatible);
+    ExampleCommonForyRegistration.register(fory);
+    ExampleSchemaEvolutionTypes.registerVariantType(fory, spec);
+    return fory;
+  }
+
+  private Map<String, Object> buildExampleFieldValues(
+      ExampleMessage message, List<ExampleSchemaEvolutionTypes.ExampleVariantSpec> variantSpecs)
+      throws Exception {
+    Map<String, Object> values = new LinkedHashMap<>();
+    for (ExampleSchemaEvolutionTypes.ExampleVariantSpec spec : variantSpecs) {
+      values.put(spec.javaProperty, readBeanProperty(message, spec.javaProperty));
+    }
+    return values;
+  }
+
+  private ExampleMessage buildExampleMessage() {
+    ExampleLeaf leafA = buildExampleLeaf("leaf-a", 7);
+    ExampleLeaf leafB = buildExampleLeaf("leaf-b", -3);
+    ExampleLeafUnion leafUnion = ExampleLeafUnion.ofLeaf(buildExampleLeaf("leaf-b", -3));
+    LocalDate dateValue = LocalDate.of(2024, 2, 29);
+    Instant timestampValue = Instant.parse("2024-02-29T12:34:56.789123Z");
+    Duration durationValue = Duration.ofSeconds(3723).plusNanos(456_789_000);
+    BigDecimal decimalValue = new BigDecimal("123456789012345.6789");
+
+    ExampleMessage message = new ExampleMessage();
+    message.setBoolValue(true);
+    message.setInt8Value((byte) -12);
+    message.setInt16Value((short) 1234);
+    message.setFixedInt32Value(123456789);
+    message.setVarint32Value(-1234567);
+    message.setFixedInt64Value(1234567890123456789L);
+    message.setVarint64Value(-1234567890123456789L);
+    message.setTaggedInt64Value(1073741824L);
+    message.setUint8Value((byte) 200);
+    message.setUint16Value((short) 60000);
+    message.setFixedUint32Value(2000000000);
+    message.setVarUint32Value(2100000000);
+    message.setFixedUint64Value(9000000000L);
+    message.setVarUint64Value(12000000000L);
+    message.setTaggedUint64Value(2222222222L);
+    message.setFloat16Value(exampleFloat16(1.5f));
+    message.setBfloat16Value(exampleBFloat16(-2.75f));
+    message.setFloat32Value(3.25f);
+    message.setFloat64Value(-4.5d);
+    message.setStringValue("example-string");
+    message.setBytesValue(new byte[] {1, 2, 3, 4});
+    message.setDateValue(dateValue);
+    message.setTimestampValue(timestampValue);
+    message.setDurationValue(durationValue);
+    message.setDecimalValue(decimalValue);
+    message.setEnumValue(ExampleState.READY);
+    message.setMessageValue(leafA);
+    message.setUnionValue(leafUnion);
+    message.setBoolList(new boolean[] {true, false});
+    message.setInt8List(new Int8List(new byte[] {-12, 7}));
+    message.setInt16List(new Int16List(new short[] {1234, -2345}));
+    message.setFixedInt32List(new Int32List(new int[] {123456789, -123456789}));
+    message.setVarint32List(new Int32List(new int[] {-1234567, 7654321}));
+    message.setFixedInt64List(
+        new Int64List(new long[] {1234567890123456789L, -123456789012345678L}));
+    message.setVarint64List(
+        new Int64List(new long[] {-1234567890123456789L, 123456789012345678L}));
+    message.setTaggedInt64List(new Int64List(new long[] {1073741824L, -1073741824L}));
+    message.setUint8List(new Uint8List(new byte[] {(byte) 200, 42}));
+    message.setUint16List(new Uint16List(new short[] {(short) 60000, (short) 12345}));
+    message.setFixedUint32List(new Uint32List(new int[] {2000000000, 1234567890}));
+    message.setVarUint32List(new Uint32List(new int[] {2100000000, 1234567890}));
+    message.setFixedUint64List(new Uint64List(new long[] {9000000000L, 4000000000L}));
+    message.setVarUint64List(new Uint64List(new long[] {12000000000L, 5000000000L}));
+    message.setTaggedUint64List(new Uint64List(new long[] {2222222222L, 3333333333L}));
+    message.setFloat16List(
+        new Float16List(
+            new short[] {exampleFloat16(1.5f).toBits(), exampleFloat16(-0.5f).toBits()}));
+    message.setBfloat16List(
+        new BFloat16List(
+            new short[] {
+              exampleBFloat16(-2.75f).toBits(),
+              exampleBFloat16(2.25f).toBits()
+            }));
+    message.setMaybeFloat16List(
+        Arrays.asList(exampleFloat16(1.5f), null, exampleFloat16(-0.5f)));
+    message.setMaybeBfloat16List(
+        Arrays.asList(null, exampleBFloat16(2.25f), exampleBFloat16(-1.0f)));
+    message.setFloat32List(new float[] {3.25f, -0.5f});
+    message.setFloat64List(new double[] {-4.5d, 6.75d});
+    message.setStringList(Arrays.asList("example-string", "secondary"));
+    message.setBytesList(Arrays.asList(new byte[] {1, 2, 3, 4}, new byte[] {5, 6}));
+    message.setDateList(Arrays.asList(dateValue, LocalDate.of(2024, 3, 1)));
+    message.setTimestampList(
+        Arrays.asList(timestampValue, Instant.parse("2024-03-01T00:00:00.123456Z")));
+    message.setDurationList(
+        Arrays.asList(durationValue, Duration.ofSeconds(1).plusNanos(234_567_000)));
+    message.setDecimalList(Arrays.asList(decimalValue, new BigDecimal("-0.5")));
+    message.setEnumList(Arrays.asList(ExampleState.READY, ExampleState.FAILED));
+    message.setMessageList(Arrays.asList(leafA, leafB));
+    message.setUnionList(Arrays.asList(ExampleLeafUnion.ofLeaf(leafA), leafUnion));
+
+    Map<Boolean, String> stringValuesByBool = new LinkedHashMap<>();
+    stringValuesByBool.put(Boolean.TRUE, "true-value");
+    stringValuesByBool.put(Boolean.FALSE, "false-value");
+    message.setStringValuesByBool(stringValuesByBool);
+
+    Map<Byte, String> stringValuesByInt8 = new LinkedHashMap<>();
+    stringValuesByInt8.put((byte) -12, "minus-twelve");
+    message.setStringValuesByInt8(stringValuesByInt8);
+
+    Map<Short, String> stringValuesByInt16 = new LinkedHashMap<>();
+    stringValuesByInt16.put((short) 1234, "twelve-thirty-four");
+    message.setStringValuesByInt16(stringValuesByInt16);
+
+    Map<Integer, String> stringValuesByFixedInt32 = new LinkedHashMap<>();
+    stringValuesByFixedInt32.put(123456789, "fixed-int32");
+    message.setStringValuesByFixedInt32(stringValuesByFixedInt32);
+
+    Map<Integer, String> stringValuesByVarint32 = new LinkedHashMap<>();
+    stringValuesByVarint32.put(-1234567, "varint32");
+    message.setStringValuesByVarint32(stringValuesByVarint32);
+
+    Map<Long, String> stringValuesByFixedInt64 = new LinkedHashMap<>();
+    stringValuesByFixedInt64.put(1234567890123456789L, "fixed-int64");
+    message.setStringValuesByFixedInt64(stringValuesByFixedInt64);
+
+    Map<Long, String> stringValuesByVarint64 = new LinkedHashMap<>();
+    stringValuesByVarint64.put(-1234567890123456789L, "varint64");
+    message.setStringValuesByVarint64(stringValuesByVarint64);
+
+    Map<Long, String> stringValuesByTaggedInt64 = new LinkedHashMap<>();
+    stringValuesByTaggedInt64.put(1073741824L, "tagged-int64");
+    message.setStringValuesByTaggedInt64(stringValuesByTaggedInt64);
+
+    Map<Byte, String> stringValuesByUint8 = new LinkedHashMap<>();
+    stringValuesByUint8.put((byte) 200, "uint8");
+    message.setStringValuesByUint8(stringValuesByUint8);
+
+    Map<Short, String> stringValuesByUint16 = new LinkedHashMap<>();
+    stringValuesByUint16.put((short) 60000, "uint16");
+    message.setStringValuesByUint16(stringValuesByUint16);
+
+    Map<Integer, String> stringValuesByFixedUint32 = new LinkedHashMap<>();
+    stringValuesByFixedUint32.put(2000000000, "fixed-uint32");
+    message.setStringValuesByFixedUint32(stringValuesByFixedUint32);
+
+    Map<Integer, String> stringValuesByVarUint32 = new LinkedHashMap<>();
+    stringValuesByVarUint32.put(2100000000, "var-uint32");
+    message.setStringValuesByVarUint32(stringValuesByVarUint32);
+
+    Map<Long, String> stringValuesByFixedUint64 = new LinkedHashMap<>();
+    stringValuesByFixedUint64.put(9000000000L, "fixed-uint64");
+    message.setStringValuesByFixedUint64(stringValuesByFixedUint64);
+
+    Map<Long, String> stringValuesByVarUint64 = new LinkedHashMap<>();
+    stringValuesByVarUint64.put(12000000000L, "var-uint64");
+    message.setStringValuesByVarUint64(stringValuesByVarUint64);
+
+    Map<Long, String> stringValuesByTaggedUint64 = new LinkedHashMap<>();
+    stringValuesByTaggedUint64.put(2222222222L, "tagged-uint64");
+    message.setStringValuesByTaggedUint64(stringValuesByTaggedUint64);
+
+    Map<String, String> stringValuesByString = new LinkedHashMap<>();
+    stringValuesByString.put("example-string", "string");
+    message.setStringValuesByString(stringValuesByString);
+
+    Map<Instant, String> stringValuesByTimestamp = new LinkedHashMap<>();
+    stringValuesByTimestamp.put(timestampValue, "timestamp");
+    message.setStringValuesByTimestamp(stringValuesByTimestamp);
+
+    Map<Duration, String> stringValuesByDuration = new LinkedHashMap<>();
+    stringValuesByDuration.put(durationValue, "duration");
+    message.setStringValuesByDuration(stringValuesByDuration);
+
+    Map<ExampleState, String> stringValuesByEnum = new LinkedHashMap<>();
+    stringValuesByEnum.put(ExampleState.READY, "ready");
+    message.setStringValuesByEnum(stringValuesByEnum);
+
+    Map<String, Float16> float16ValuesByName = new LinkedHashMap<>();
+    float16ValuesByName.put("primary", exampleFloat16(1.5f));
+    message.setFloat16ValuesByName(float16ValuesByName);
+
+    Map<String, Float16> maybeFloat16ValuesByName = new LinkedHashMap<>();
+    maybeFloat16ValuesByName.put("primary", exampleFloat16(1.5f));
+    maybeFloat16ValuesByName.put("missing", null);
+    message.setMaybeFloat16ValuesByName(maybeFloat16ValuesByName);
+
+    Map<String, BFloat16> bfloat16ValuesByName = new LinkedHashMap<>();
+    bfloat16ValuesByName.put("primary", exampleBFloat16(-2.75f));
+    message.setBfloat16ValuesByName(bfloat16ValuesByName);
+
+    Map<String, BFloat16> maybeBfloat16ValuesByName = new LinkedHashMap<>();
+    maybeBfloat16ValuesByName.put("missing", null);
+    maybeBfloat16ValuesByName.put("secondary", exampleBFloat16(2.25f));
+    message.setMaybeBfloat16ValuesByName(maybeBfloat16ValuesByName);
+
+    Map<String, byte[]> bytesValuesByName = new LinkedHashMap<>();
+    bytesValuesByName.put("payload", new byte[] {1, 2, 3, 4});
+    message.setBytesValuesByName(bytesValuesByName);
+
+    Map<String, LocalDate> dateValuesByName = new LinkedHashMap<>();
+    dateValuesByName.put("leap-day", dateValue);
+    message.setDateValuesByName(dateValuesByName);
+
+    Map<String, BigDecimal> decimalValuesByName = new LinkedHashMap<>();
+    decimalValuesByName.put("amount", decimalValue);
+    message.setDecimalValuesByName(decimalValuesByName);
+
+    Map<String, ExampleLeaf> messageValuesByName = new LinkedHashMap<>();
+    messageValuesByName.put("leaf-a", leafA);
+    messageValuesByName.put("leaf-b", leafB);
+    message.setMessageValuesByName(messageValuesByName);
+
+    Map<String, ExampleLeafUnion> unionValuesByName = new LinkedHashMap<>();
+    unionValuesByName.put("leaf-b", leafUnion);
+    message.setUnionValuesByName(unionValuesByName);
+    return message;
+  }
+
+  private ExampleMessageUnion buildExampleMessageUnion() {
+    return ExampleMessageUnion.ofUnionValue(
+        ExampleLeafUnion.ofLeaf(buildExampleLeaf("leaf-b", -3)));
+  }
+
+  private ExampleLeaf buildExampleLeaf(String label, int count) {
+    ExampleLeaf leaf = new ExampleLeaf();
+    leaf.setLabel(label);
+    leaf.setCount(count);
+    return leaf;
+  }
+
+  private Float16 exampleFloat16(float value) {
+    return Float16.valueOf(value);
+  }
+
+  private BFloat16 exampleBFloat16(float value) {
+    return BFloat16.valueOf(value);
+  }
+
+  private void assertExampleSchemaEvolution(
+      byte[] bytes,
+      Map<String, Object> expectedValues,
+      List<ExampleSchemaEvolutionTypes.ExampleVariantSpec> variantSpecs,
+      String sourceLabel)
+      throws Exception {
+    ExampleMessage decoded = buildExampleFory(true).deserialize(bytes, ExampleMessage.class);
+    assertExampleMessageValues(
+        decoded, expectedValues, variantSpecs, sourceLabel + " full-schema decode");
+
+    Object emptyDecoded = buildExampleEmptyFory(true).deserialize(bytes);
+    Assert.assertEquals(
+        emptyDecoded.getClass(),
+        ExampleSchemaEvolutionTypes.emptyType(),
+        sourceLabel + " empty-schema decode");
+
+    for (ExampleSchemaEvolutionTypes.ExampleVariantSpec spec : variantSpecs) {
+      Object variantDecoded = buildExampleVariantFory(true, spec).deserialize(bytes);
+      Assert.assertEquals(
+          variantDecoded.getClass(),
+          spec.variantClass,
+          sourceLabel + " variant decode type for " + spec.javaProperty);
+      assertNormalizedEquals(
+          sourceLabel + " variant field " + spec.javaProperty,
+          readBeanProperty(variantDecoded, spec.javaProperty),
+          expectedValues.get(spec.javaProperty));
+    }
+  }
+
+  private void assertExampleUnionLocalRoundTrips(
+      Fory fory,
+      Map<String, Object> expectedValues,
+      List<ExampleSchemaEvolutionTypes.ExampleVariantSpec> variantSpecs)
+      throws Exception {
+    for (ExampleSchemaEvolutionTypes.ExampleVariantSpec spec : variantSpecs) {
+      ExampleMessageUnion expected =
+          buildExampleUnionCase(spec.javaProperty, expectedValues.get(spec.javaProperty));
+      ExampleMessageUnion actual =
+          fory.deserialize(fory.serialize(expected), ExampleMessageUnion.class);
+      assertExampleUnionEquals(actual, expected, "java union case " + spec.javaProperty);
+    }
+  }
+
+  private ExampleMessageUnion buildExampleUnionCase(String javaProperty, Object value)
+      throws Exception {
+    Method factory = findSingleArgumentMethod(ExampleMessageUnion.class, "of" + accessorSuffix(javaProperty));
+    return (ExampleMessageUnion) factory.invoke(null, value);
+  }
+
+  private void assertExampleMessageValues(
+      ExampleMessage actual,
+      Map<String, Object> expectedValues,
+      List<ExampleSchemaEvolutionTypes.ExampleVariantSpec> variantSpecs,
+      String sourceLabel)
+      throws Exception {
+    for (ExampleSchemaEvolutionTypes.ExampleVariantSpec spec : variantSpecs) {
+      assertNormalizedEquals(
+          sourceLabel + "." + spec.javaProperty,
+          readBeanProperty(actual, spec.javaProperty),
+          expectedValues.get(spec.javaProperty));
+    }
+  }
+
+  private void assertExampleUnionEquals(
+      ExampleMessageUnion actual, ExampleMessageUnion expected, String sourceLabel) throws Exception {
+    Assert.assertEquals(
+        actual.getExampleMessageUnionCaseId(),
+        expected.getExampleMessageUnionCaseId(),
+        sourceLabel + " case id");
+    assertNormalizedEquals(
+        sourceLabel + "." + unionCaseProperty(actual),
+        readExampleUnionValue(actual),
+        readExampleUnionValue(expected));
+  }
+
+  private Object readExampleUnionValue(ExampleMessageUnion union) throws Exception {
+    return readBeanProperty(union, unionCaseProperty(union));
+  }
+
+  private String unionCaseProperty(ExampleMessageUnion union) {
+    return enumNameToJavaProperty(union.getExampleMessageUnionCase().name());
+  }
+
+  private Object readBeanProperty(Object bean, String javaProperty) throws Exception {
+    Method getter = bean.getClass().getMethod("get" + accessorSuffix(javaProperty));
+    return getter.invoke(bean);
+  }
+
+  private Method findSingleArgumentMethod(Class<?> type, String methodName) {
+    for (Method method : type.getMethods()) {
+      if (method.getName().equals(methodName) && method.getParameterCount() == 1) {
+        return method;
+      }
+    }
+    throw new IllegalArgumentException("Missing method " + type.getName() + "." + methodName);
+  }
+
+  private String accessorSuffix(String javaProperty) {
+    return Character.toUpperCase(javaProperty.charAt(0)) + javaProperty.substring(1);
+  }
+
+  private String enumNameToJavaProperty(String enumName) {
+    StringBuilder builder = new StringBuilder();
+    boolean uppercaseNext = false;
+    for (int i = 0; i < enumName.length(); i++) {
+      char ch = enumName.charAt(i);
+      if (ch == '_') {
+        uppercaseNext = true;
+        continue;
+      }
+      char lower = Character.toLowerCase(ch);
+      if (builder.length() == 0) {
+        builder.append(lower);
+      } else if (uppercaseNext) {
+        builder.append(Character.toUpperCase(lower));
+        uppercaseNext = false;
+      } else {
+        builder.append(lower);
+      }
+    }
+    return builder.toString();
+  }
+
+  private void assertNormalizedEquals(String message, Object actual, Object expected) {
+    Assert.assertEquals(normalizeValue(actual), normalizeValue(expected), message);
+  }
+
+  private Object normalizeValue(Object value) {
+    if (value == null) {
+      return null;
+    }
+    if (value instanceof Float16) {
+      return ((Float16) value).toBits();
+    }
+    if (value instanceof BFloat16) {
+      return ((BFloat16) value).toBits();
+    }
+    if (value instanceof BigDecimal) {
+      return ((BigDecimal) value).toPlainString();
+    }
+    if (value instanceof Instant || value instanceof Duration || value instanceof LocalDate) {
+      return value.toString();
+    }
+    if (value instanceof Enum<?>) {
+      return ((Enum<?>) value).name();
+    }
+    if (value.getClass().isArray()) {
+      int length = Array.getLength(value);
+      List<Object> normalized = new ArrayList<>(length);
+      for (int i = 0; i < length; i++) {
+        normalized.add(normalizeValue(Array.get(value, i)));
+      }
+      return normalized;
+    }
+    if (value instanceof List<?>) {
+      List<?> list = (List<?>) value;
+      List<Object> normalized = new ArrayList<>(list.size());
+      for (Object element : list) {
+        normalized.add(normalizeValue(element));
+      }
+      return normalized;
+    }
+    if (value instanceof Map<?, ?>) {
+      Map<?, ?> map = (Map<?, ?>) value;
+      List<Map.Entry<?, ?>> entries = new ArrayList<>(map.entrySet());
+      entries.sort(Comparator.comparing(entry -> normalizeMapKey(entry.getKey())));
+      Map<String, Object> normalized = new LinkedHashMap<>();
+      for (Map.Entry<?, ?> entry : entries) {
+        normalized.put(normalizeMapKey(entry.getKey()), normalizeValue(entry.getValue()));
+      }
+      return normalized;
+    }
+    return value;
+  }
+
+  private String normalizeMapKey(Object key) {
+    if (key == null) {
+      return "null";
+    }
+    Object normalized = normalizeValue(key);
+    return key.getClass().getName() + ":" + normalized;
   }
 
   private AnyHolder buildAnyHolder() {

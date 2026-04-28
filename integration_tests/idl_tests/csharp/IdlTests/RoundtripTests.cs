@@ -16,6 +16,7 @@
 // under the License.
 
 using System.Globalization;
+using System.Numerics;
 using Apache.Fory;
 using ForyRuntime = Apache.Fory.Fory;
 
@@ -28,6 +29,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void AddressBookRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         addressbook.AddressbookForyRegistration.Register(fory);
 
@@ -43,6 +48,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void AutoIdRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         auto_id.AutoIdForyRegistration.Register(fory);
 
@@ -64,6 +73,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void PrimitiveTypesRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         complex_pb.ComplexPbForyRegistration.Register(fory);
 
@@ -79,6 +92,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void CollectionRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         collection.CollectionForyRegistration.Register(fory);
 
@@ -114,6 +131,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void OptionalTypesRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         optional_types.OptionalTypesForyRegistration.Register(fory);
 
@@ -129,6 +150,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void AnyRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         any_example.AnyExampleForyRegistration.Register(fory);
 
@@ -144,6 +169,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void AnyProtoRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         any_example_pb.AnyExamplePbForyRegistration.Register(fory);
 
@@ -157,8 +186,38 @@ public sealed class RoundtripTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
+    public void ExampleRoundTrip(bool compatible)
+    {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
+        ForyRuntime fory = BuildFory(compatible, false);
+        example.ExampleForyRegistration.Register(fory);
+
+        example.ExampleMessage message = BuildExampleMessage();
+        example.ExampleMessageUnion unionValue = BuildExampleMessageUnion();
+
+        example.ExampleMessage messageDecoded = fory.Deserialize<example.ExampleMessage>(fory.Serialize(message));
+        AssertExampleMessage(message, messageDecoded);
+
+        example.ExampleMessageUnion unionDecoded =
+            fory.Deserialize<example.ExampleMessageUnion>(fory.Serialize(unionValue));
+        AssertExampleMessageUnion(unionValue, unionDecoded);
+
+        RoundTripFile(fory, "DATA_FILE_EXAMPLE_MESSAGE", message, AssertExampleMessage);
+        RoundTripFile(fory, "DATA_FILE_EXAMPLE_UNION", unionValue, AssertExampleMessageUnion);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
     public void FlatbuffersRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, false);
         monster.MonsterForyRegistration.Register(fory);
         complex_fbs.ComplexFbsForyRegistration.Register(fory);
@@ -180,6 +239,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void TreeRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, true);
         tree.TreeForyRegistration.Register(fory);
 
@@ -195,6 +258,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void GraphRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, true);
         graph.GraphForyRegistration.Register(fory);
 
@@ -292,6 +359,10 @@ public sealed class RoundtripTests
     [InlineData(false)]
     public void RootRoundTrip(bool compatible)
     {
+        if (!ShouldRunCompatibleMode(compatible))
+        {
+            return;
+        }
         ForyRuntime fory = BuildFory(compatible, true);
         root.RootForyRegistration.Register(fory);
 
@@ -337,6 +408,22 @@ public sealed class RoundtripTests
             .Build();
     }
 
+    private static bool ShouldRunCompatibleMode(bool compatible)
+    {
+        string? requested = Environment.GetEnvironmentVariable("IDL_COMPATIBLE");
+        if (string.IsNullOrWhiteSpace(requested))
+        {
+            return true;
+        }
+
+        if (!bool.TryParse(requested, out bool expected))
+        {
+            throw new InvalidOperationException($"Unsupported IDL_COMPATIBLE value: {requested}");
+        }
+
+        return compatible == expected;
+    }
+
     private static void RoundTripFile<T>(
         ForyRuntime fory,
         string envName,
@@ -349,9 +436,7 @@ public sealed class RoundtripTests
             return;
         }
 
-        string modeFile = dataFile +
-                          (fory.Config.Compatible ? ".compatible" : ".schema_consistent") +
-                          (fory.Config.TrackRef ? ".track_ref" : ".no_ref");
+        string modeFile = ResolveRoundTripFilePath(fory, dataFile);
 
         if (!File.Exists(modeFile) || new FileInfo(modeFile).Length == 0)
         {
@@ -364,6 +449,18 @@ public sealed class RoundtripTests
 
         byte[] output = fory.Serialize(decoded);
         File.WriteAllBytes(modeFile, output);
+    }
+
+    private static string ResolveRoundTripFilePath(ForyRuntime fory, string dataFile)
+    {
+        if (!string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("IDL_COMPATIBLE")))
+        {
+            return dataFile;
+        }
+
+        return dataFile +
+               (fory.Config.Compatible ? ".compatible" : ".schema_consistent") +
+               (fory.Config.TrackRef ? ".track_ref" : ".no_ref");
     }
 
     private static addressbook.AddressBook BuildAddressBook()
@@ -605,6 +702,225 @@ public sealed class RoundtripTests
         };
     }
 
+    private static example.ExampleMessage BuildExampleMessage()
+    {
+        example_common.ExampleLeaf leafA = new()
+        {
+            Label = "leaf-a",
+            Count = 7,
+        };
+        example_common.ExampleLeaf leafB = new()
+        {
+            Label = "leaf-b",
+            Count = -3,
+        };
+        example_common.ExampleLeafUnion leafUnion = example_common.ExampleLeafUnion.Leaf(leafB);
+        DateOnly dateValue = new(2024, 2, 29);
+        DateTimeOffset timestampValue =
+            new DateTimeOffset(2024, 2, 29, 12, 34, 56, 789, TimeSpan.Zero).AddTicks(1230);
+        TimeSpan durationValue = TimeSpan.FromSeconds(3723) + TimeSpan.FromTicks(4_567_890);
+        ForyDecimal decimalValue = new(
+            BigInteger.Parse("1234567890123456789", CultureInfo.InvariantCulture),
+            4);
+
+        return new example.ExampleMessage
+        {
+            BoolValue = true,
+            Int8Value = -12,
+            Int16Value = 1234,
+            FixedInt32Value = 123456789,
+            Varint32Value = -1234567,
+            FixedInt64Value = 1234567890123456789L,
+            Varint64Value = -1234567890123456789L,
+            TaggedInt64Value = 1073741824L,
+            Uint8Value = 200,
+            Uint16Value = 60000,
+            FixedUint32Value = 2000000000U,
+            VarUint32Value = 2100000000U,
+            FixedUint64Value = 9000000000UL,
+            VarUint64Value = 12000000000UL,
+            TaggedUint64Value = 2222222222UL,
+            Float16Value = (Half)1.5f,
+            Bfloat16Value = BFloat16.FromSingle(-2.75f),
+            Float32Value = 3.25f,
+            Float64Value = -4.5,
+            StringValue = "example-string",
+            BytesValue = [1, 2, 3, 4],
+            DateValue = dateValue,
+            TimestampValue = timestampValue,
+            DurationValue = durationValue,
+            DecimalValue = decimalValue,
+            EnumValue = example_common.ExampleState.Ready,
+            MessageValue = leafA,
+            UnionValue = leafUnion,
+            BoolList = [true, false],
+            Int8List = [-12, 7],
+            Int16List = [1234, -2345],
+            FixedInt32List = [123456789, -123456789],
+            Varint32List = [-1234567, 7654321],
+            FixedInt64List = [1234567890123456789L, -123456789012345678L],
+            Varint64List = [-1234567890123456789L, 123456789012345678L],
+            TaggedInt64List = [1073741824L, -1073741824L],
+            Uint8List = [200, 42],
+            Uint16List = [60000, 12345],
+            FixedUint32List = [2000000000U, 1234567890U],
+            VarUint32List = [2100000000U, 1234567890U],
+            FixedUint64List = [9000000000UL, 4000000000UL],
+            VarUint64List = [12000000000UL, 5000000000UL],
+            TaggedUint64List = [2222222222UL, 3333333333UL],
+            Float16List = [(Half)1.5f, (Half)(-0.5f)],
+            Bfloat16List = [BFloat16.FromSingle(-2.75f), BFloat16.FromSingle(2.25f)],
+            MaybeFloat16List = [(Half)1.5f, null, (Half)(-0.5f)],
+            MaybeBfloat16List = [null, BFloat16.FromSingle(2.25f), BFloat16.FromSingle(-1.0f)],
+            Float32List = [3.25f, -0.5f],
+            Float64List = [-4.5, 6.75],
+            StringList = ["example-string", "secondary"],
+            BytesList = [[1, 2, 3, 4], [5, 6]],
+            DateList = [dateValue, new DateOnly(2024, 3, 1)],
+            TimestampList =
+            [
+                timestampValue,
+                new DateTimeOffset(2024, 3, 1, 0, 0, 0, 123, TimeSpan.Zero).AddTicks(4560),
+            ],
+            DurationList = [durationValue, TimeSpan.FromSeconds(1) + TimeSpan.FromTicks(2_345_670)],
+            DecimalList = [decimalValue, new ForyDecimal(new BigInteger(-5), 1)],
+            EnumList = [example_common.ExampleState.Ready, example_common.ExampleState.Failed],
+            MessageList = [leafA, leafB],
+            UnionList =
+            [
+                example_common.ExampleLeafUnion.Leaf(leafA),
+                leafUnion,
+            ],
+            StringValuesByBool = new Dictionary<bool, string>
+            {
+                [true] = "true-value",
+                [false] = "false-value",
+            },
+            StringValuesByInt8 = new Dictionary<sbyte, string>
+            {
+                [-12] = "minus-twelve",
+            },
+            StringValuesByInt16 = new Dictionary<short, string>
+            {
+                [1234] = "twelve-thirty-four",
+            },
+            StringValuesByFixedInt32 = new Dictionary<int, string>
+            {
+                [123456789] = "fixed-int32",
+            },
+            StringValuesByVarint32 = new Dictionary<int, string>
+            {
+                [-1234567] = "varint32",
+            },
+            StringValuesByFixedInt64 = new Dictionary<long, string>
+            {
+                [1234567890123456789L] = "fixed-int64",
+            },
+            StringValuesByVarint64 = new Dictionary<long, string>
+            {
+                [-1234567890123456789L] = "varint64",
+            },
+            StringValuesByTaggedInt64 = new Dictionary<long, string>
+            {
+                [1073741824L] = "tagged-int64",
+            },
+            StringValuesByUint8 = new Dictionary<byte, string>
+            {
+                [200] = "uint8",
+            },
+            StringValuesByUint16 = new Dictionary<ushort, string>
+            {
+                [60000] = "uint16",
+            },
+            StringValuesByFixedUint32 = new Dictionary<uint, string>
+            {
+                [2000000000U] = "fixed-uint32",
+            },
+            StringValuesByVarUint32 = new Dictionary<uint, string>
+            {
+                [2100000000U] = "var-uint32",
+            },
+            StringValuesByFixedUint64 = new Dictionary<ulong, string>
+            {
+                [9000000000UL] = "fixed-uint64",
+            },
+            StringValuesByVarUint64 = new Dictionary<ulong, string>
+            {
+                [12000000000UL] = "var-uint64",
+            },
+            StringValuesByTaggedUint64 = new Dictionary<ulong, string>
+            {
+                [2222222222UL] = "tagged-uint64",
+            },
+            StringValuesByString = new Dictionary<string, string>
+            {
+                ["example-string"] = "string",
+            },
+            StringValuesByTimestamp = new Dictionary<DateTimeOffset, string>
+            {
+                [timestampValue] = "timestamp",
+            },
+            StringValuesByDuration = new Dictionary<TimeSpan, string>
+            {
+                [durationValue] = "duration",
+            },
+            StringValuesByEnum = new Dictionary<example_common.ExampleState, string>
+            {
+                [example_common.ExampleState.Ready] = "ready",
+            },
+            Float16ValuesByName = new Dictionary<string, Half>
+            {
+                ["primary"] = (Half)1.5f,
+            },
+            MaybeFloat16ValuesByName = new Dictionary<string, Half?>
+            {
+                ["primary"] = (Half)1.5f,
+                ["missing"] = null,
+            },
+            Bfloat16ValuesByName = new Dictionary<string, BFloat16>
+            {
+                ["primary"] = BFloat16.FromSingle(-2.75f),
+            },
+            MaybeBfloat16ValuesByName = new Dictionary<string, BFloat16?>
+            {
+                ["missing"] = null,
+                ["secondary"] = BFloat16.FromSingle(2.25f),
+            },
+            BytesValuesByName = new Dictionary<string, byte[]>
+            {
+                ["payload"] = [1, 2, 3, 4],
+            },
+            DateValuesByName = new Dictionary<string, DateOnly>
+            {
+                ["leap-day"] = dateValue,
+            },
+            DecimalValuesByName = new Dictionary<string, ForyDecimal>
+            {
+                ["amount"] = decimalValue,
+            },
+            MessageValuesByName = new Dictionary<string, example_common.ExampleLeaf>
+            {
+                ["leaf-a"] = leafA,
+                ["leaf-b"] = leafB,
+            },
+            UnionValuesByName = new Dictionary<string, example_common.ExampleLeafUnion>
+            {
+                ["leaf-b"] = leafUnion,
+            },
+        };
+    }
+
+    private static example.ExampleMessageUnion BuildExampleMessageUnion()
+    {
+        example_common.ExampleLeaf leafB = new()
+        {
+            Label = "leaf-b",
+            Count = -3,
+        };
+
+        return example.ExampleMessageUnion.UnionValue(example_common.ExampleLeafUnion.Leaf(leafB));
+    }
+
     private static monster.Monster BuildMonster()
     {
         return new monster.Monster
@@ -683,39 +999,32 @@ public sealed class RoundtripTests
 
     private static graph.Graph BuildGraph()
     {
-        graph.Node node1 = new()
+        graph.Node nodeA = new()
         {
-            Id = "n1",
+            Id = "node-a",
         };
-        graph.Node node2 = new()
+        graph.Node nodeB = new()
         {
-            Id = "n2",
+            Id = "node-b",
         };
 
-        graph.Edge edge12 = new()
+        graph.Edge edge = new()
         {
-            Id = "e12",
+            Id = "edge-1",
             Weight = 1.5f,
-            From = node1,
-            To = node2,
-        };
-        graph.Edge edge21 = new()
-        {
-            Id = "e21",
-            Weight = 2.5f,
-            From = node2,
-            To = node1,
+            From = nodeA,
+            To = nodeB,
         };
 
-        node1.OutEdges = [edge12];
-        node1.InEdges = [edge21];
-        node2.OutEdges = [edge21];
-        node2.InEdges = [edge12];
+        nodeA.OutEdges = [edge];
+        nodeA.InEdges = [edge];
+        nodeB.OutEdges = [];
+        nodeB.InEdges = [edge];
 
         return new graph.Graph
         {
-            Nodes = [node1, node2],
-            Edges = [edge12, edge21],
+            Nodes = [nodeA, nodeB],
+            Edges = [edge],
         };
     }
 
@@ -973,6 +1282,114 @@ public sealed class RoundtripTests
         AssertMap(expectedMap, actualMap);
     }
 
+    private static void AssertExampleMessage(example.ExampleMessage expected, example.ExampleMessage actual)
+    {
+        Assert.Equal(expected.BoolValue, actual.BoolValue);
+        Assert.Equal(expected.Int8Value, actual.Int8Value);
+        Assert.Equal(expected.Int16Value, actual.Int16Value);
+        Assert.Equal(expected.FixedInt32Value, actual.FixedInt32Value);
+        Assert.Equal(expected.Varint32Value, actual.Varint32Value);
+        Assert.Equal(expected.FixedInt64Value, actual.FixedInt64Value);
+        Assert.Equal(expected.Varint64Value, actual.Varint64Value);
+        Assert.Equal(expected.TaggedInt64Value, actual.TaggedInt64Value);
+        Assert.Equal(expected.Uint8Value, actual.Uint8Value);
+        Assert.Equal(expected.Uint16Value, actual.Uint16Value);
+        Assert.Equal(expected.FixedUint32Value, actual.FixedUint32Value);
+        Assert.Equal(expected.VarUint32Value, actual.VarUint32Value);
+        Assert.Equal(expected.FixedUint64Value, actual.FixedUint64Value);
+        Assert.Equal(expected.VarUint64Value, actual.VarUint64Value);
+        Assert.Equal(expected.TaggedUint64Value, actual.TaggedUint64Value);
+        Assert.Equal(expected.Float16Value, actual.Float16Value);
+        Assert.Equal(expected.Bfloat16Value, actual.Bfloat16Value);
+        Assert.Equal(expected.Float32Value, actual.Float32Value);
+        Assert.Equal(expected.Float64Value, actual.Float64Value);
+        Assert.Equal(expected.StringValue, actual.StringValue);
+        Assert.Equal(expected.BytesValue, actual.BytesValue);
+        Assert.Equal(expected.DateValue, actual.DateValue);
+        Assert.Equal(expected.TimestampValue, actual.TimestampValue);
+        Assert.Equal(expected.DurationValue, actual.DurationValue);
+        AssertExampleDecimal(expected.DecimalValue, actual.DecimalValue);
+        Assert.Equal(expected.EnumValue, actual.EnumValue);
+
+        Assert.NotNull(expected.MessageValue);
+        Assert.NotNull(actual.MessageValue);
+        AssertExampleLeaf(expected.MessageValue!, actual.MessageValue!);
+        AssertExampleLeafUnion(expected.UnionValue, actual.UnionValue);
+
+        Assert.Equal(expected.BoolList, actual.BoolList);
+        Assert.Equal(expected.Int8List, actual.Int8List);
+        Assert.Equal(expected.Int16List, actual.Int16List);
+        Assert.Equal(expected.FixedInt32List, actual.FixedInt32List);
+        Assert.Equal(expected.Varint32List, actual.Varint32List);
+        Assert.Equal(expected.FixedInt64List, actual.FixedInt64List);
+        Assert.Equal(expected.Varint64List, actual.Varint64List);
+        Assert.Equal(expected.TaggedInt64List, actual.TaggedInt64List);
+        Assert.Equal(expected.Uint8List, actual.Uint8List);
+        Assert.Equal(expected.Uint16List, actual.Uint16List);
+        Assert.Equal(expected.FixedUint32List, actual.FixedUint32List);
+        Assert.Equal(expected.VarUint32List, actual.VarUint32List);
+        Assert.Equal(expected.FixedUint64List, actual.FixedUint64List);
+        Assert.Equal(expected.VarUint64List, actual.VarUint64List);
+        Assert.Equal(expected.TaggedUint64List, actual.TaggedUint64List);
+        Assert.Equal(expected.Float16List, actual.Float16List);
+        Assert.Equal(expected.Bfloat16List, actual.Bfloat16List);
+        Assert.Equal(expected.MaybeFloat16List, actual.MaybeFloat16List);
+        Assert.Equal(expected.MaybeBfloat16List, actual.MaybeBfloat16List);
+        Assert.Equal(expected.Float32List, actual.Float32List);
+        Assert.Equal(expected.Float64List, actual.Float64List);
+        Assert.Equal(expected.StringList, actual.StringList);
+        AssertList(expected.BytesList, actual.BytesList, (expectedBytes, actualBytes) => Assert.Equal(expectedBytes, actualBytes));
+        Assert.Equal(expected.DateList, actual.DateList);
+        Assert.Equal(expected.TimestampList, actual.TimestampList);
+        Assert.Equal(expected.DurationList, actual.DurationList);
+        AssertList(expected.DecimalList, actual.DecimalList, AssertExampleDecimal);
+        Assert.Equal(expected.EnumList, actual.EnumList);
+        AssertList(expected.MessageList, actual.MessageList, AssertExampleLeaf);
+        AssertList(expected.UnionList, actual.UnionList, AssertExampleLeafUnion);
+
+        AssertMap(expected.StringValuesByBool, actual.StringValuesByBool);
+        AssertMap(expected.StringValuesByInt8, actual.StringValuesByInt8);
+        AssertMap(expected.StringValuesByInt16, actual.StringValuesByInt16);
+        AssertMap(expected.StringValuesByFixedInt32, actual.StringValuesByFixedInt32);
+        AssertMap(expected.StringValuesByVarint32, actual.StringValuesByVarint32);
+        AssertMap(expected.StringValuesByFixedInt64, actual.StringValuesByFixedInt64);
+        AssertMap(expected.StringValuesByVarint64, actual.StringValuesByVarint64);
+        AssertMap(expected.StringValuesByTaggedInt64, actual.StringValuesByTaggedInt64);
+        AssertMap(expected.StringValuesByUint8, actual.StringValuesByUint8);
+        AssertMap(expected.StringValuesByUint16, actual.StringValuesByUint16);
+        AssertMap(expected.StringValuesByFixedUint32, actual.StringValuesByFixedUint32);
+        AssertMap(expected.StringValuesByVarUint32, actual.StringValuesByVarUint32);
+        AssertMap(expected.StringValuesByFixedUint64, actual.StringValuesByFixedUint64);
+        AssertMap(expected.StringValuesByVarUint64, actual.StringValuesByVarUint64);
+        AssertMap(expected.StringValuesByTaggedUint64, actual.StringValuesByTaggedUint64);
+        AssertMap(expected.StringValuesByString, actual.StringValuesByString);
+        AssertMap(expected.StringValuesByTimestamp, actual.StringValuesByTimestamp);
+        AssertMap(expected.StringValuesByDuration, actual.StringValuesByDuration);
+        AssertMap(expected.StringValuesByEnum, actual.StringValuesByEnum);
+        AssertMap(expected.Float16ValuesByName, actual.Float16ValuesByName);
+        AssertMap(expected.MaybeFloat16ValuesByName, actual.MaybeFloat16ValuesByName);
+        AssertMap(expected.Bfloat16ValuesByName, actual.Bfloat16ValuesByName);
+        AssertMap(expected.MaybeBfloat16ValuesByName, actual.MaybeBfloat16ValuesByName);
+        AssertMap(
+            expected.BytesValuesByName,
+            actual.BytesValuesByName,
+            (expectedBytes, actualBytes) => Assert.Equal(expectedBytes, actualBytes));
+        AssertMap(expected.DateValuesByName, actual.DateValuesByName);
+        AssertMap(expected.DecimalValuesByName, actual.DecimalValuesByName, AssertExampleDecimal);
+        AssertMap(expected.MessageValuesByName, actual.MessageValuesByName, AssertExampleLeaf);
+        AssertMap(expected.UnionValuesByName, actual.UnionValuesByName, AssertExampleLeafUnion);
+    }
+
+    private static void AssertExampleMessageUnion(
+        example.ExampleMessageUnion expected,
+        example.ExampleMessageUnion actual)
+    {
+        Assert.Equal(expected.CaseId(), actual.CaseId());
+        Assert.True(expected.IsUnionValue);
+        Assert.True(actual.IsUnionValue);
+        AssertExampleLeafUnion(expected.UnionValueValue(), actual.UnionValueValue());
+    }
+
     private static void AssertMonster(monster.Monster expected, monster.Monster actual)
     {
         Assert.NotNull(actual.Pos);
@@ -1040,38 +1457,29 @@ public sealed class RoundtripTests
     private static void AssertGraph(graph.Graph graphValue)
     {
         Assert.Equal(2, graphValue.Nodes.Count);
-        Assert.Equal(2, graphValue.Edges.Count);
+        Assert.Single(graphValue.Edges);
 
-        Dictionary<string, graph.Node> nodes = graphValue.Nodes.ToDictionary(n => n.Id, n => n);
-        Dictionary<string, graph.Edge> edges = graphValue.Edges.ToDictionary(e => e.Id, e => e);
+        graph.Node nodeA = graphValue.Nodes[0];
+        graph.Node nodeB = graphValue.Nodes[1];
+        graph.Edge edge = graphValue.Edges[0];
 
-        Assert.True(nodes.ContainsKey("n1"));
-        Assert.True(nodes.ContainsKey("n2"));
-        Assert.True(edges.ContainsKey("e12"));
-        Assert.True(edges.ContainsKey("e21"));
+        Assert.Equal("node-a", nodeA.Id);
+        Assert.Equal("node-b", nodeB.Id);
+        Assert.Equal("edge-1", edge.Id);
+        Assert.Equal(1.5f, edge.Weight);
 
-        graph.Edge edge12 = edges["e12"];
-        graph.Edge edge21 = edges["e21"];
+        Assert.Single(nodeA.OutEdges);
+        Assert.Single(nodeA.InEdges);
+        Assert.Empty(nodeB.OutEdges);
+        Assert.Single(nodeB.InEdges);
 
-        Assert.NotNull(edge12.From);
-        Assert.NotNull(edge12.To);
-        Assert.NotNull(edge21.From);
-        Assert.NotNull(edge21.To);
-
-        Assert.Same(nodes["n1"], edge12.From);
-        Assert.Same(nodes["n2"], edge12.To);
-        Assert.Same(nodes["n2"], edge21.From);
-        Assert.Same(nodes["n1"], edge21.To);
-
-        Assert.Single(nodes["n1"].OutEdges);
-        Assert.Single(nodes["n1"].InEdges);
-        Assert.Single(nodes["n2"].OutEdges);
-        Assert.Single(nodes["n2"].InEdges);
-
-        Assert.Same(edge12, nodes["n1"].OutEdges[0]);
-        Assert.Same(edge21, nodes["n1"].InEdges[0]);
-        Assert.Same(edge21, nodes["n2"].OutEdges[0]);
-        Assert.Same(edge12, nodes["n2"].InEdges[0]);
+        Assert.Same(edge, nodeA.OutEdges[0]);
+        Assert.Same(edge, nodeA.InEdges[0]);
+        Assert.Same(edge, nodeB.InEdges[0]);
+        Assert.NotNull(edge.From);
+        Assert.NotNull(edge.To);
+        Assert.Same(nodeA, edge.From);
+        Assert.Same(nodeB, edge.To);
     }
 
     private static void AssertRootHolder(root.MultiHolder expected, root.MultiHolder actual)
@@ -1094,6 +1502,42 @@ public sealed class RoundtripTests
         Assert.Equal(expected.Owner.Email, actual.Owner.Email);
         Assert.Equal(expected.Owner.Tags, actual.Owner.Tags);
         AssertMap(expected.Owner.Scores, actual.Owner.Scores);
+    }
+
+    private static void AssertExampleLeaf(example_common.ExampleLeaf expected, example_common.ExampleLeaf actual)
+    {
+        Assert.Equal(expected.Label, actual.Label);
+        Assert.Equal(expected.Count, actual.Count);
+    }
+
+    private static void AssertExampleLeafUnion(
+        example_common.ExampleLeafUnion expected,
+        example_common.ExampleLeafUnion actual)
+    {
+        Assert.Equal(expected.CaseId(), actual.CaseId());
+        switch (expected.Case())
+        {
+            case example_common.ExampleLeafUnion.ExampleLeafUnionCase.Note:
+                Assert.True(actual.IsNote);
+                Assert.Equal(expected.NoteValue(), actual.NoteValue());
+                break;
+            case example_common.ExampleLeafUnion.ExampleLeafUnionCase.Code:
+                Assert.True(actual.IsCode);
+                Assert.Equal(expected.CodeValue(), actual.CodeValue());
+                break;
+            case example_common.ExampleLeafUnion.ExampleLeafUnionCase.Leaf:
+                Assert.True(actual.IsLeaf);
+                AssertExampleLeaf(expected.LeafValue(), actual.LeafValue());
+                break;
+            default:
+                throw new InvalidOperationException($"Unsupported ExampleLeafUnion case {expected.CaseId()}");
+        }
+    }
+
+    private static void AssertExampleDecimal(ForyDecimal expected, ForyDecimal actual)
+    {
+        Assert.Equal(expected.UnscaledValue, actual.UnscaledValue);
+        Assert.Equal(expected.Scale, actual.Scale);
     }
 
     private static bool TryAsBool(object? value, out bool result)
@@ -1243,6 +1687,20 @@ public sealed class RoundtripTests
         }
     }
 
+    private static void AssertMap<TKey, TValue>(
+        IReadOnlyDictionary<TKey, TValue> expected,
+        IReadOnlyDictionary<TKey, TValue> actual,
+        Action<TValue, TValue> assertValue)
+        where TKey : notnull
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        foreach (KeyValuePair<TKey, TValue> pair in expected)
+        {
+            Assert.True(actual.TryGetValue(pair.Key, out TValue? value));
+            assertValue(pair.Value, value!);
+        }
+    }
+
     private static void AssertNullableMap<TKey, TValue>(
         IReadOnlyDictionary<TKey, TValue>? expected,
         IReadOnlyDictionary<TKey, TValue>? actual)
@@ -1255,5 +1713,17 @@ public sealed class RoundtripTests
         }
 
         AssertMap(expected, actual);
+    }
+
+    private static void AssertList<T>(
+        IReadOnlyList<T> expected,
+        IReadOnlyList<T> actual,
+        Action<T, T> assertItem)
+    {
+        Assert.Equal(expected.Count, actual.Count);
+        for (int i = 0; i < expected.Count; i++)
+        {
+            assertItem(expected[i], actual[i]);
+        }
     }
 }

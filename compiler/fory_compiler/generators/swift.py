@@ -66,10 +66,19 @@ class SwiftGenerator(BaseGenerator):
         PrimitiveKind.STRING: "String",
         PrimitiveKind.BYTES: "Data",
         PrimitiveKind.DATE: "LocalDate",
-        PrimitiveKind.TIMESTAMP: "Date",
+        PrimitiveKind.TIMESTAMP: "Timestamp",
         PrimitiveKind.DURATION: "Duration",
         PrimitiveKind.DECIMAL: "Decimal",
         PrimitiveKind.ANY: "Any",
+    }
+
+    MAP_GENERIC_PRIMITIVE_MAP = {
+        PrimitiveKind.INT32: "ForyInt32Fixed",
+        PrimitiveKind.INT64: "ForyInt64Fixed",
+        PrimitiveKind.TAGGED_INT64: "ForyInt64Tagged",
+        PrimitiveKind.UINT32: "ForyUInt32Fixed",
+        PrimitiveKind.UINT64: "ForyUInt64Fixed",
+        PrimitiveKind.TAGGED_UINT64: "ForyUInt64Tagged",
     }
 
     FIXED_ENCODING_KINDS = {
@@ -577,10 +586,16 @@ class SwiftGenerator(BaseGenerator):
         field_type: FieldType,
         nullable: bool = False,
         parent_stack: Optional[List[Message]] = None,
+        map_generic: bool = False,
     ) -> str:
         parent_stack = parent_stack or []
         if isinstance(field_type, PrimitiveType):
-            base = self.PRIMITIVE_MAP[field_type.kind]
+            if map_generic:
+                base = self.MAP_GENERIC_PRIMITIVE_MAP.get(
+                    field_type.kind, self.PRIMITIVE_MAP[field_type.kind]
+                )
+            else:
+                base = self.PRIMITIVE_MAP[field_type.kind]
             if nullable:
                 return f"{base}?"
             return base
@@ -606,11 +621,13 @@ class SwiftGenerator(BaseGenerator):
                 field_type.key_type,
                 nullable=False,
                 parent_stack=parent_stack,
+                map_generic=True,
             )
             value_type = self.generate_type(
                 field_type.value_type,
                 nullable=field_type.value_optional,
                 parent_stack=parent_stack,
+                map_generic=True,
             )
             result = f"[{key_type}: {value_type}]"
             if nullable:
@@ -684,12 +701,15 @@ class SwiftGenerator(BaseGenerator):
                 PrimitiveKind.UINT64,
                 PrimitiveKind.VAR_UINT64,
                 PrimitiveKind.TAGGED_UINT64,
-                PrimitiveKind.FLOAT16,
-                PrimitiveKind.BFLOAT16,
                 PrimitiveKind.FLOAT32,
                 PrimitiveKind.FLOAT64,
             }:
                 return "0"
+            if field_type.kind in {
+                PrimitiveKind.FLOAT16,
+                PrimitiveKind.BFLOAT16,
+            }:
+                return f"{type_name}.foryDefault()"
             if field_type.kind == PrimitiveKind.STRING:
                 return '""'
             if field_type.kind == PrimitiveKind.BYTES:

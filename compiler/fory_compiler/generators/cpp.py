@@ -268,6 +268,7 @@ class CppGenerator(BaseGenerator):
         includes.add("<utility>")
         includes.add('"fory/serialization/fory.h"')
         if self.schema_has_unions():
+            includes.add("<cstddef>")
             includes.add("<utility>")
             includes.add("<variant>")
             includes.add("<memory>")
@@ -1016,13 +1017,13 @@ class CppGenerator(BaseGenerator):
         lines.append(f"{body_indent}  {class_name}() = default;")
         lines.append("")
 
-        for field, case_type in zip(union.fields, case_types):
+        for index, (field, case_type) in enumerate(zip(union.fields, case_types)):
             case_name = self.to_snake_case(field.name)
             lines.append(
                 f"{body_indent}  static {class_name} {case_name}({case_type} v) {{"
             )
             lines.append(
-                f"{body_indent}    return {class_name}(std::in_place_type<{case_type}>, std::move(v));"
+                f"{body_indent}    return {class_name}(std::in_place_index<{index}>, std::move(v));"
             )
             lines.append(f"{body_indent}  }}")
             lines.append("")
@@ -1030,14 +1031,16 @@ class CppGenerator(BaseGenerator):
         lines.append(
             f"{body_indent}  {case_enum} {self.to_snake_case(class_name)}_case() const noexcept {{"
         )
-        for i, (field, case_type) in enumerate(zip(union.fields, case_types)):
+        lines.append(f"{body_indent}    switch (value_.index()) {{")
+        for i, field in enumerate(union.fields):
             case_name = self.to_upper_snake_case(field.name)
-            if i < len(case_types) - 1:
-                lines.append(
-                    f"{body_indent}    if (std::holds_alternative<{case_type}>(value_)) return {case_enum}::{case_name};"
-                )
-            else:
-                lines.append(f"{body_indent}    return {case_enum}::{case_name};")
+            lines.append(f"{body_indent}      case {i}:")
+            lines.append(f"{body_indent}        return {case_enum}::{case_name};")
+        lines.append(f"{body_indent}      default:")
+        lines.append(
+            f"{body_indent}        return {case_enum}::{self.to_upper_snake_case(union.fields[0].name)};"
+        )
+        lines.append(f"{body_indent}    }}")
         lines.append(f"{body_indent}  }}")
         lines.append("")
 
@@ -1056,30 +1059,28 @@ class CppGenerator(BaseGenerator):
         lines.append(f"{body_indent}  }}")
         lines.append("")
 
-        for field, case_type in zip(union.fields, case_types):
+        for index, (field, case_type) in enumerate(zip(union.fields, case_types)):
             case_snake = self.to_snake_case(field.name)
             lines.append(f"{body_indent}  bool is_{case_snake}() const noexcept {{")
-            lines.append(
-                f"{body_indent}    return std::holds_alternative<{case_type}>(value_);"
-            )
+            lines.append(f"{body_indent}    return value_.index() == {index};")
             lines.append(f"{body_indent}  }}")
             lines.append("")
             lines.append(
                 f"{body_indent}  const {case_type}* as_{case_snake}() const noexcept {{"
             )
-            lines.append(f"{body_indent}    return std::get_if<{case_type}>(&value_);")
+            lines.append(f"{body_indent}    return std::get_if<{index}>(&value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
             lines.append(f"{body_indent}  {case_type}* as_{case_snake}() noexcept {{")
-            lines.append(f"{body_indent}    return std::get_if<{case_type}>(&value_);")
+            lines.append(f"{body_indent}    return std::get_if<{index}>(&value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
             lines.append(f"{body_indent}  const {case_type}& {case_snake}() const {{")
-            lines.append(f"{body_indent}    return std::get<{case_type}>(value_);")
+            lines.append(f"{body_indent}    return std::get<{index}>(value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
             lines.append(f"{body_indent}  {case_type}& {case_snake}() {{")
-            lines.append(f"{body_indent}    return std::get<{case_type}>(value_);")
+            lines.append(f"{body_indent}    return std::get<{index}>(value_);")
             lines.append(f"{body_indent}  }}")
             lines.append("")
 
@@ -1109,9 +1110,9 @@ class CppGenerator(BaseGenerator):
         lines.append(f"{body_indent}private:")
         lines.append(f"{body_indent}  {variant_type} value_;")
         lines.append("")
-        lines.append(f"{body_indent}  template <class T, class... Args>")
+        lines.append(f"{body_indent}  template <std::size_t Index, class... Args>")
         lines.append(
-            f"{body_indent}  explicit {class_name}(std::in_place_type_t<T> tag, Args&&... args)"
+            f"{body_indent}  explicit {class_name}(std::in_place_index_t<Index> tag, Args&&... args)"
         )
         lines.append(
             f"{body_indent}      : value_(tag, std::forward<Args>(args)...) {{}}"
@@ -1134,16 +1135,7 @@ class CppGenerator(BaseGenerator):
             union_type = self.get_namespaced_type_name(union.name, parent_stack)
             lines.append(f"FORY_UNION({union_type},")
             for index, field in enumerate(union.fields):
-                case_type = self.generate_namespaced_type(
-                    field.field_type,
-                    False,
-                    field.ref,
-                    field.element_optional,
-                    field.element_ref,
-                    False,
-                    False,
-                    parent_stack,
-                )
+                case_type = self.get_union_case_type(field, parent_stack)
                 case_ctor = self.to_snake_case(field.name)
                 meta = self.get_union_field_meta(field)
                 suffix = "," if index + 1 < len(union.fields) else ""
@@ -1155,20 +1147,11 @@ class CppGenerator(BaseGenerator):
         case_ids = ", ".join(str(field.number) for field in union.fields)
         lines.append(f"FORY_UNION_IDS({union_type}, {case_ids});")
         for field in union.fields:
-            case_type = self.generate_namespaced_type(
-                field.field_type,
-                False,
-                field.ref,
-                field.element_optional,
-                field.element_ref,
-                False,
-                False,
-                parent_stack,
-            )
+            case_type = self.get_union_case_type(field, parent_stack)
             case_ctor = self.to_snake_case(field.name)
             meta = self.get_union_field_meta(field)
             lines.append(
-                f"FORY_UNION_CASE({union_type}, {field.number}, {case_type}, {union_type}::{case_ctor}, {meta});"
+                f"FORY_UNION_CASE({union_type}, {field.number}, FORY_UNION_TYPE({case_type}), {union_type}::{case_ctor}, {meta});"
             )
 
         return lines

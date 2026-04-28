@@ -36,6 +36,13 @@ def assert_nested_collections_rejected(source: str) -> None:
     )
 
 
+def assert_validation_error(source: str, expected_message: str) -> None:
+    schema = parse_schema(source)
+    validator = SchemaValidator(schema)
+    assert not validator.validate()
+    assert any(expected_message in err.message for err in validator.errors)
+
+
 def test_nested_list_rejected():
     source = """
     message Foo {
@@ -79,3 +86,78 @@ def test_map_with_list_key_rejected():
     }
     """
     assert_nested_collections_rejected(source)
+
+
+def test_map_with_float16_key_rejected():
+    source = """
+    message Foo {
+        map<float16, string> values = 1;
+    }
+    """
+    assert_validation_error(source, "map keys cannot use floating-point types")
+
+
+def test_map_with_bytes_key_rejected():
+    source = """
+    message Foo {
+        map<bytes, string> values = 1;
+    }
+    """
+    assert_validation_error(source, "map keys cannot use bytes/binary types")
+
+
+def test_map_with_message_key_rejected():
+    source = """
+    message Key {
+        string name = 1;
+    }
+
+    message Foo {
+        map<Key, string> values = 1;
+    }
+    """
+    assert_validation_error(source, "map keys cannot use message or union types")
+
+
+def test_map_with_union_key_rejected():
+    source = """
+    union Key {
+        string value = 1;
+    }
+
+    message Foo {
+        map<Key, string> values = 1;
+    }
+    """
+    assert_validation_error(source, "map keys cannot use message or union types")
+
+
+def test_map_with_nested_enum_key_rejected():
+    source = """
+    message Foo {
+        enum Status {
+            UNKNOWN = 0;
+            READY = 1;
+        }
+
+        map<Status, string> values = 1;
+    }
+    """
+    assert_validation_error(source, "map keys cannot use nested types")
+
+
+def test_map_with_top_level_enum_and_timestamp_keys_allowed():
+    source = """
+    enum Status {
+        UNKNOWN = 0;
+        READY = 1;
+    }
+
+    message Foo {
+        map<Status, string> by_status = 1;
+        map<timestamp, string> by_timestamp = 2;
+    }
+    """
+    schema = parse_schema(source)
+    validator = SchemaValidator(schema)
+    assert validator.validate(), validator.errors

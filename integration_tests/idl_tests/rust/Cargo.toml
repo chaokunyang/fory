@@ -25,3 +25,4 @@ license = "Apache-2.0"
 chrono = "0.4"
 fory = { path = "../../../rust/fory" }
 fory-core = { path = "../../../rust/fory-core" }
+num-bigint = "0.4"

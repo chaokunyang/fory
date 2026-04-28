@@ -19,18 +19,18 @@ import Foundation
 import Testing
 @testable import Fory
 
-@ForyObject
+@ForyStruct
 private struct AnyHashableDynamicKey: Equatable, Hashable {
     var id: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 private struct AnyHashableDynamicValue: Equatable {
     var label: String = ""
     var score: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 private final class AnyObjectDynamicNode {
     var value: Int32 = 0
 
@@ -41,7 +41,7 @@ private final class AnyObjectDynamicNode {
     }
 }
 
-@ForyObject
+@ForyStruct
 private final class AnyObjectDynamicGraphNode {
     var value: Int32 = 0
     var next: AnyObjectDynamicGraphNode?
@@ -54,13 +54,13 @@ private final class AnyObjectDynamicGraphNode {
     }
 }
 
-@ForyObject
+@ForyStruct
 private struct AnyHashableMapHolder {
     var map: [AnyHashable: Any] = [:]
     var optionalMap: [AnyHashable: Any]?
 }
 
-@ForyObject
+@ForyStruct
 private struct AnyCoreFieldHolder {
     var anyValue: Any = ForyAnyNullValue()
     var anyObjectValue: AnyObject = NSNull()
@@ -70,13 +70,13 @@ private struct AnyCoreFieldHolder {
     var int32AnyMap: [Int32: Any] = [:]
 }
 
-@ForyObject
+@ForyStruct
 private struct AnyHashableSetHolder {
     var set: Set<AnyHashable> = []
     var optionalSet: Set<AnyHashable>?
 }
 
-@ForyObject
+@ForyStruct
 private struct AnyHashableValueHolder {
     var value: AnyHashable = AnyHashable(Int32(0))
 }

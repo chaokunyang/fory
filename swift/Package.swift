@@ -44,7 +44,11 @@ let package = Package(
         ),
         .testTarget(
             name: "ForyTests",
-            dependencies: ["Fory"],
+            dependencies: [
+                "Fory",
+                "ForyMacro",
+                .product(name: "SwiftSyntaxMacrosTestSupport", package: "swift-syntax")
+            ],
             path: "Tests/ForyTests"
         )
     ]

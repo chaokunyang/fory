@@ -19,32 +19,41 @@ import Foundation
 import Testing
 @testable import Fory
 
-@ForyObject
+@ForyEnum
 private enum Color: Equatable {
     case red
     case green
     case blue
 }
 
-@ForyObject
+@ForyUnion
 private enum StringOrLong: Equatable {
     case text(String)
     case number(Int64)
 }
 
-@ForyObject
+@ForyUnion
+private enum FixedPayloadEvent: Equatable {
+    @ForyCase(id: 1)
+    case created(String)
+
+    @ForyCase(id: 2, payload: .uint64(encoding: .fixed))
+    case deleted(UInt64)
+}
+
+@ForyStruct
 private struct StructWithEnum: Equatable {
     var name: String = ""
     var color: Color = .red
     var value: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 private struct StructWithUnion: Equatable {
     var unionField: StringOrLong = .foryDefault()
 }
 
-@ForyObject
+@ForyUnion
 private indirect enum Token: Equatable {
     case plus
     case number(Int64)
@@ -90,6 +99,21 @@ func taggedUnionXlangRoundTrip() throws {
 
     #expect(firstDecoded == first)
     #expect(secondDecoded == second)
+}
+
+@Test
+func taggedUnionPayloadFieldCodecsRoundTrip() throws {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+    fory.register(FixedPayloadEvent.self, id: 302)
+
+    let values: [FixedPayloadEvent] = [
+        .created("item"),
+        .deleted(UInt64.max)
+    ]
+    for value in values {
+        let decoded: FixedPayloadEvent = try fory.deserialize(try fory.serialize(value))
+        #expect(decoded == value)
+    }
 }
 
 @Test

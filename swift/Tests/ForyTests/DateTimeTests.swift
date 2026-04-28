@@ -21,7 +21,7 @@ import Testing
 
 private let secondsPerDay = 86_400.0
 
-@ForyObject
+@ForyStruct
 private struct DateMacroHolder {
     var day: LocalDate = .foryDefault()
 
@@ -29,12 +29,12 @@ private struct DateMacroHolder {
     var timestamp: Date = .foryDefault()
 }
 
-private func midnightUTC(daysSinceEpoch: Int32) -> Date {
-    Date(timeIntervalSince1970: Double(daysSinceEpoch) * secondsPerDay)
+private func midnightUTC(epochDay: Int32) -> Date {
+    Date(timeIntervalSince1970: Double(epochDay) * secondsPerDay)
 }
 
-private func localDate(_ daysSinceEpoch: Int32) -> LocalDate {
-    .init(daysSinceEpoch: daysSinceEpoch)
+private func localDate(_ epochDay: Int32) -> LocalDate {
+    .init(epochDay: epochDay)
 }
 
 @Test
@@ -69,7 +69,7 @@ func dateAndTimestampRoundTrip() throws {
 func localDateConvenienceMethodsExposeEpochAndCalendarViews() throws {
     let beforeEpoch = LocalDate.fromEpochDay(-1)
     let leapDay = LocalDate.fromEpochDay(19_782)
-    let epoch = try LocalDate(date: Date(timeIntervalSince1970: 0))
+    let epoch = try LocalDate(utcDate: Date(timeIntervalSince1970: 0))
 
     #expect(beforeEpoch.toEpochDay() == -1)
     #expect(beforeEpoch.year == 1969)
@@ -80,7 +80,7 @@ func localDateConvenienceMethodsExposeEpochAndCalendarViews() throws {
     #expect(leapDay.day == 29)
     #expect(epoch == .fromEpochDay(0))
     #expect(beforeEpoch < epoch)
-    #expect(abs(epoch.toDate().timeIntervalSince1970) < 0.000_001)
+    #expect(abs(epoch.toUTCDate().timeIntervalSince1970) < 0.000_001)
 }
 
 @Test

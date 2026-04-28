@@ -17,14 +17,14 @@
 
 import Foundation
 
-private enum CollectionHeader {
+enum CollectionHeader {
     static let trackingRef: UInt8 = 0b0000_0001
     static let hasNull: UInt8 = 0b0000_0010
     static let declaredElementType: UInt8 = 0b0000_0100
     static let sameType: UInt8 = 0b0000_1000
 }
 
-private enum MapHeader {
+enum MapHeader {
     static let trackingKeyRef: UInt8 = 0b0000_0001
     static let keyNull: UInt8 = 0b0000_0010
     static let declaredKeyType: UInt8 = 0b0000_0100

@@ -530,7 +530,10 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
             var localMatch: (Int, FieldInfo)?
             if let fieldID = field.fieldID, fieldID >= 0 {
-                localMatch = fieldIndexByID[fieldID]
+                if let candidate = fieldIndexByID[fieldID],
+                   Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) {
+                    localMatch = candidate
+                }
             }
 
             if localMatch == nil {

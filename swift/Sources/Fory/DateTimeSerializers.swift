@@ -50,22 +50,22 @@ private func timestampDate(seconds: Int64, nanos: UInt32) -> Date {
 }
 
 @inline(__always)
-private func localDateDaysSinceEpoch(for date: Date) throws -> Int32 {
+private func localDateEpochDay(for date: Date) throws -> Int32 {
     let days = floor(date.timeIntervalSince1970 / secondsPerDay)
     guard days >= Double(Int32.min), days <= Double(Int32.max) else {
-        throw ForyError.encodingError("date daysSinceEpoch is out of Int32 range")
+        throw ForyError.encodingError("date epochDay is out of Int32 range")
     }
     return Int32(days)
 }
 
 @inline(__always)
-private func localDateFromDaysSinceEpoch(_ daysSinceEpoch: Int32) -> Date {
-    Date(timeIntervalSince1970: Double(daysSinceEpoch) * secondsPerDay)
+private func localDateFromEpochDay(_ epochDay: Int32) -> Date {
+    Date(timeIntervalSince1970: Double(epochDay) * secondsPerDay)
 }
 
 @inline(__always)
-private func localDateComponents(_ daysSinceEpoch: Int32) -> DateComponents {
-    localDateCalendar.dateComponents([.year, .month, .day], from: localDateFromDaysSinceEpoch(daysSinceEpoch))
+private func localDateComponents(_ epochDay: Int32) -> DateComponents {
+    localDateCalendar.dateComponents([.year, .month, .day], from: localDateFromEpochDay(epochDay))
 }
 
 @inline(__always)
@@ -169,43 +169,58 @@ private func readTypeID(_ context: ReadContext, expectedTypeIDs: [TypeId]) throw
     throw ForyError.invalidData("expected one of type ids [\(expectedList)], got \(rawTypeID)")
 }
 
+/// A calendar date without time-of-day or timezone, encoded as Fory `date`.
 public struct LocalDate: Serializer, Equatable, Hashable, Comparable {
-    public var daysSinceEpoch: Int32
+    /// Days since 1970-01-01 in the UTC Gregorian calendar.
+    public var epochDay: Int32
 
-    public init(daysSinceEpoch: Int32 = 0) {
-        self.daysSinceEpoch = daysSinceEpoch
+    public init(epochDay: Int32 = 0) {
+        self.epochDay = epochDay
     }
 
     public static func fromEpochDay(_ epochDay: Int32) -> LocalDate {
-        .init(daysSinceEpoch: epochDay)
+        .init(epochDay: epochDay)
     }
 
-    public init(date: Date) throws {
-        self.daysSinceEpoch = try localDateDaysSinceEpoch(for: date)
+    public init(year: Int, month: Int, day: Int) throws {
+        var components = DateComponents()
+        components.calendar = localDateCalendar
+        components.timeZone = localDateCalendar.timeZone
+        components.year = year
+        components.month = month
+        components.day = day
+        guard let date = localDateCalendar.date(from: components) else {
+            throw ForyError.encodingError("invalid LocalDate components")
+        }
+        self.epochDay = try localDateEpochDay(for: date)
+    }
+
+    public init(utcDate: Date) throws {
+        self.epochDay = try localDateEpochDay(for: utcDate)
     }
 
     public func toEpochDay() -> Int32 {
-        daysSinceEpoch
+        epochDay
     }
 
-    public func toDate() -> Date {
-        localDateFromDaysSinceEpoch(daysSinceEpoch)
+    public func toUTCDate() -> Date {
+        localDateFromEpochDay(epochDay)
     }
 
     public var year: Int {
-        localDateComponents(daysSinceEpoch).year ?? 1970
+        localDateComponents(epochDay).year ?? 1970
     }
 
     public var month: Int {
-        localDateComponents(daysSinceEpoch).month ?? 1
+        localDateComponents(epochDay).month ?? 1
     }
 
     public var day: Int {
-        localDateComponents(daysSinceEpoch).day ?? 1
+        localDateComponents(epochDay).day ?? 1
     }
 
     public static func < (lhs: LocalDate, rhs: LocalDate) -> Bool {
-        lhs.daysSinceEpoch < rhs.daysSinceEpoch
+        lhs.epochDay < rhs.epochDay
     }
 
     public static func foryDefault() -> LocalDate {
@@ -245,9 +260,9 @@ public extension WriteContext {
     @inline(__always)
     func writeLocalDate(_ value: LocalDate) throws {
         if xlang {
-            buffer.writeVarInt64(Int64(value.daysSinceEpoch))
+            buffer.writeVarInt64(Int64(value.epochDay))
         } else {
-            buffer.writeInt32(value.daysSinceEpoch)
+            buffer.writeInt32(value.epochDay)
         }
     }
 
@@ -293,12 +308,12 @@ public extension ReadContext {
     @inline(__always)
     func readLocalDate() throws -> LocalDate {
         if xlang {
-            guard let daysSinceEpoch = Int32(exactly: try buffer.readVarInt64()) else {
-                throw ForyError.invalidData("date daysSinceEpoch is out of Int32 range")
+            guard let epochDay = Int32(exactly: try buffer.readVarInt64()) else {
+                throw ForyError.invalidData("date epochDay is out of Int32 range")
             }
-            return .init(daysSinceEpoch: daysSinceEpoch)
+            return .init(epochDay: epochDay)
         }
-        return .init(daysSinceEpoch: try buffer.readInt32())
+        return .init(epochDay: try buffer.readInt32())
     }
 
     @inline(__always)

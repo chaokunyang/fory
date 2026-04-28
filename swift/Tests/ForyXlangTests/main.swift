@@ -20,7 +20,7 @@ import Fory
 
 // MARK: - Shared test types
 
-@ForyObject
+@ForyEnum
 private enum PeerColor {
     case green
     case red
@@ -28,19 +28,19 @@ private enum PeerColor {
     case white
 }
 
-@ForyObject
+@ForyEnum
 private enum PeerTestEnum {
     case valueA
     case valueB
     case valueC
 }
 
-@ForyObject
+@ForyStruct
 private struct Item {
     var name: String = ""
 }
 
-@ForyObject
+@ForyStruct
 private struct SimpleStruct {
     var f1: [Int32: Double] = [:]
     var f2: Int32 = 0
@@ -53,17 +53,17 @@ private struct SimpleStruct {
     var last: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 private struct EvolvingOverrideStruct {
     var f1: String = ""
 }
 
-@ForyObject(evolving: false)
+@ForyStruct(evolving: false)
 private struct FixedOverrideStruct {
     var f1: String = ""
 }
 
-@ForyObject
+@ForyStruct
 private struct Item1 {
     var f1: Int32 = 0
     var f2: Int32 = 0
@@ -73,38 +73,38 @@ private struct Item1 {
     var f6: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 private struct StructWithList {
     var items: [String?] = []
 }
 
-@ForyObject
+@ForyStruct
 private struct StructWithMap {
     var data: [String?: String?] = [:]
 }
 
-@ForyObject
+@ForyStruct
 private struct VersionCheckStruct {
     var f1: Int32 = 0
     var f2: String?
     var f3: Double = 0
 }
 
-@ForyObject
+@ForyStruct
 private struct EmptyStructEvolution {}
 
-@ForyObject
+@ForyStruct
 private struct OneStringFieldStruct {
     var f1: String?
 }
 
-@ForyObject
+@ForyStruct
 private struct TwoStringFieldStruct {
     var f1: String = ""
     var f2: String = ""
 }
 
-@ForyObject
+@ForyStruct
 private struct ReducedPrecisionFloatStruct {
     var float16Value: Float16 = 0
     var bfloat16Value: BFloat16 = .init()
@@ -112,18 +112,18 @@ private struct ReducedPrecisionFloatStruct {
     var bfloat16Array: [BFloat16] = []
 }
 
-@ForyObject
+@ForyStruct
 private struct OneEnumFieldStruct {
     var f1: PeerTestEnum = .valueA
 }
 
-@ForyObject
+@ForyStruct
 private struct TwoEnumFieldStruct {
     var f1: PeerTestEnum = .valueA
     var f2: PeerTestEnum = .valueA
 }
 
-@ForyObject
+@ForyStruct
 private struct NullableComprehensiveSchemaConsistent {
     var byteField: Int8 = 0
     var shortField: Int16 = 0
@@ -150,7 +150,7 @@ private struct NullableComprehensiveSchemaConsistent {
     var nullableMap: [String: String]?
 }
 
-@ForyObject
+@ForyStruct
 private struct NullableComprehensiveCompatibleSwift {
     var byteField: Int8 = 0
     var shortField: Int16 = 0
@@ -183,7 +183,7 @@ private struct NullableComprehensiveCompatibleSwift {
     var nullableMap2: [String: String] = [:]
 }
 
-@ForyObject
+@ForyStruct
 private final class RefInnerSchemaConsistent {
     var id: Int32 = 0
     var name: String = ""
@@ -191,7 +191,7 @@ private final class RefInnerSchemaConsistent {
     required init() {}
 }
 
-@ForyObject
+@ForyStruct
 private final class RefOuterSchemaConsistent {
     var inner1: RefInnerSchemaConsistent?
     var inner2: RefInnerSchemaConsistent?
@@ -199,7 +199,7 @@ private final class RefOuterSchemaConsistent {
     required init() {}
 }
 
-@ForyObject
+@ForyStruct
 private final class RefInnerCompatible {
     var id: Int32 = 0
     var name: String = ""
@@ -207,7 +207,7 @@ private final class RefInnerCompatible {
     required init() {}
 }
 
-@ForyObject
+@ForyStruct
 private final class RefOuterCompatible {
     var inner1: RefInnerCompatible?
     var inner2: RefInnerCompatible?
@@ -215,7 +215,7 @@ private final class RefOuterCompatible {
     required init() {}
 }
 
-@ForyObject
+@ForyStruct
 private final class RefOverrideElement {
     var id: Int32 = 0
     var name: String = ""
@@ -223,7 +223,7 @@ private final class RefOverrideElement {
     required init() {}
 }
 
-@ForyObject
+@ForyStruct
 private final class RefOverrideContainer {
     var listField: [RefOverrideElement] = []
     var mapField: [String: RefOverrideElement] = [:]
@@ -231,7 +231,7 @@ private final class RefOverrideContainer {
     required init() {}
 }
 
-@ForyObject
+@ForyStruct
 private final class CircularRefStruct {
     var name: String = ""
     weak var selfRef: CircularRefStruct?
@@ -239,7 +239,7 @@ private final class CircularRefStruct {
     required init() {}
 }
 
-@ForyObject
+@ForyStruct
 private struct MyStruct {
     var id: Int32 = 0
 }
@@ -265,50 +265,50 @@ private struct MyExt: Serializer, Equatable {
     }
 }
 
-@ForyObject
+@ForyStruct
 private struct MyWrapper {
     var color: PeerColor = .green
     var myExt: MyExt = .foryDefault()
     var myStruct: MyStruct = .foryDefault()
 }
 
-@ForyObject
+@ForyStruct
 private struct EmptyWrapper {}
 
-@ForyObject
+@ForyStruct
 private struct Dog {
     var age: Int32 = 0
     var name: String?
 }
 
-@ForyObject
+@ForyStruct
 private struct Cat {
     var age: Int32 = 0
     var lives: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 private struct AnimalListHolder {
     var animals: [Any] = []
 }
 
-@ForyObject
+@ForyStruct
 private struct AnimalMapHolder {
     var animalMap: [String: Any] = [:]
 }
 
-@ForyObject
+@ForyUnion
 private enum StringOrLong {
     case text(String)
     case number(Int64)
 }
 
-@ForyObject
+@ForyStruct
 private struct StructWithUnion2 {
     var union: StringOrLong = .foryDefault()
 }
 
-@ForyObject
+@ForyStruct
 private struct UnsignedSchemaConsistentSimple {
     @ForyField(encoding: .tagged)
     var u64Tagged: UInt64 = 0
@@ -316,7 +316,7 @@ private struct UnsignedSchemaConsistentSimple {
     var u64TaggedNullable: UInt64?
 }
 
-@ForyObject
+@ForyStruct
 private struct UnsignedSchemaConsistent {
     var u8Field: UInt8 = 0
     var u16Field: UInt16 = 0
@@ -341,7 +341,7 @@ private struct UnsignedSchemaConsistent {
     var u64TaggedNullableField: UInt64?
 }
 
-@ForyObject
+@ForyStruct
 private struct UnsignedSchemaCompatible {
     var u8Field1: UInt8?
     var u16Field1: UInt16?

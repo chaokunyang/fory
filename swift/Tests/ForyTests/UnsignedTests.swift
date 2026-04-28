@@ -19,23 +19,29 @@ import Foundation
 import Testing
 @testable import Fory
 
-@ForyObject
+@ForyStruct
 private struct UnsignedFieldBundle: Equatable {
     var u8: UInt8 = 0
     var u16: UInt16 = 0
     var u32Var: UInt32 = 0
-    var u32Fixed: ForyUInt32Fixed = .init()
+    @ForyField(encoding: .fixed)
+    var u32Fixed: UInt32 = 0
     var u64Var: UInt64 = 0
-    var u64Fixed: ForyUInt64Fixed = .init()
-    var u64Tagged: ForyUInt64Tagged = .init()
+    @ForyField(encoding: .fixed)
+    var u64Fixed: UInt64 = 0
+    @ForyField(encoding: .tagged)
+    var u64Tagged: UInt64 = 0
 
     var u8Nullable: UInt8?
     var u16Nullable: UInt16?
     var u32VarNullable: UInt32?
-    var u32FixedNullable: ForyUInt32Fixed?
+    @ForyField(encoding: .fixed)
+    var u32FixedNullable: UInt32?
     var u64VarNullable: UInt64?
-    var u64FixedNullable: ForyUInt64Fixed?
-    var u64TaggedNullable: ForyUInt64Tagged?
+    @ForyField(encoding: .fixed)
+    var u64FixedNullable: UInt64?
+    @ForyField(encoding: .tagged)
+    var u64TaggedNullable: UInt64?
 }
 
 @Test
@@ -66,55 +72,55 @@ func unsignedPrimitiveRoundTripsCoverZeroMidpointAndMax() throws {
 }
 
 @Test
-func unsignedEncodingWrappersPreserveExpectedWireWidths() throws {
-    let fixed32 = ForyUInt32Fixed(rawValue: UInt32.max)
+func unsignedFieldCodecsPreserveExpectedWireWidths() throws {
+    let fixed32 = UInt32.max
     let fixed32Context = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try fixed32.foryWriteData(fixed32Context, hasGenerics: false)
+    UInt32FixedCodec.writePayload(fixed32, fixed32Context)
     #expect(fixed32Context.buffer.count == 4)
-    let fixed32Decoded = try ForyUInt32Fixed.foryReadData(
+    let fixed32Decoded = try UInt32FixedCodec.readPayload(
         ReadContext(buffer: fixed32Context.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
     #expect(fixed32Decoded == fixed32)
 
-    let fixed64 = ForyUInt64Fixed(rawValue: UInt64.max)
+    let fixed64 = UInt64.max
     let fixed64Context = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try fixed64.foryWriteData(fixed64Context, hasGenerics: false)
+    UInt64FixedCodec.writePayload(fixed64, fixed64Context)
     #expect(fixed64Context.buffer.count == 8)
-    let fixed64Decoded = try ForyUInt64Fixed.foryReadData(
+    let fixed64Decoded = try UInt64FixedCodec.readPayload(
         ReadContext(buffer: fixed64Context.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
     #expect(fixed64Decoded == fixed64)
 
-    let compactTagged = ForyUInt64Tagged(rawValue: UInt64(Int32.max))
+    let compactTagged = UInt64(Int32.max)
     let compactContext = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try compactTagged.foryWriteData(compactContext, hasGenerics: false)
+    UInt64TaggedCodec.writePayload(compactTagged, compactContext)
     #expect(compactContext.buffer.count == 4)
-    let compactDecoded = try ForyUInt64Tagged.foryReadData(
+    let compactDecoded = try UInt64TaggedCodec.readPayload(
         ReadContext(buffer: compactContext.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
     #expect(compactDecoded == compactTagged)
 
-    let wideTagged = ForyUInt64Tagged(rawValue: UInt64(Int32.max) + 1)
+    let wideTagged = UInt64(Int32.max) + 1
     let wideContext = WriteContext(
         buffer: ByteBuffer(),
         typeResolver: TypeResolver(trackRef: false),
         trackRef: false
     )
-    try wideTagged.foryWriteData(wideContext, hasGenerics: false)
+    UInt64TaggedCodec.writePayload(wideTagged, wideContext)
     #expect(wideContext.buffer.count == 9)
-    let wideDecoded = try ForyUInt64Tagged.foryReadData(
+    let wideDecoded = try UInt64TaggedCodec.readPayload(
         ReadContext(buffer: wideContext.buffer, typeResolver: TypeResolver(trackRef: false), trackRef: false)
     )
     #expect(wideDecoded == wideTagged)
@@ -127,10 +133,10 @@ func unsignedMacroFieldsRoundTripAcrossSchemaModes() throws {
             u8: 0,
             u16: 0,
             u32Var: 0,
-            u32Fixed: .init(rawValue: 0),
+            u32Fixed: 0,
             u64Var: 0,
-            u64Fixed: .init(rawValue: 0),
-            u64Tagged: .init(rawValue: 0),
+            u64Fixed: 0,
+            u64Tagged: 0,
             u8Nullable: nil,
             u16Nullable: nil,
             u32VarNullable: nil,
@@ -143,33 +149,33 @@ func unsignedMacroFieldsRoundTripAcrossSchemaModes() throws {
             u8: 128,
             u16: 32_768,
             u32Var: UInt32(Int32.max) + 1,
-            u32Fixed: .init(rawValue: UInt32(Int32.max) + 1),
+            u32Fixed: UInt32(Int32.max) + 1,
             u64Var: UInt64(Int64.max) + 1,
-            u64Fixed: .init(rawValue: UInt64(Int64.max) + 1),
-            u64Tagged: .init(rawValue: UInt64(Int32.max) + 1),
+            u64Fixed: UInt64(Int64.max) + 1,
+            u64Tagged: UInt64(Int32.max) + 1,
             u8Nullable: 128,
             u16Nullable: 32_768,
             u32VarNullable: UInt32(Int32.max) + 1,
-            u32FixedNullable: .init(rawValue: UInt32(Int32.max) + 1),
+            u32FixedNullable: UInt32(Int32.max) + 1,
             u64VarNullable: UInt64(Int64.max) + 1,
-            u64FixedNullable: .init(rawValue: UInt64(Int64.max) + 1),
-            u64TaggedNullable: .init(rawValue: UInt64(Int32.max) + 1)
+            u64FixedNullable: UInt64(Int64.max) + 1,
+            u64TaggedNullable: UInt64(Int32.max) + 1
         ),
         UnsignedFieldBundle(
             u8: UInt8.max,
             u16: UInt16.max,
             u32Var: UInt32.max,
-            u32Fixed: .init(rawValue: UInt32.max),
+            u32Fixed: UInt32.max,
             u64Var: UInt64.max,
-            u64Fixed: .init(rawValue: UInt64.max),
-            u64Tagged: .init(rawValue: UInt64.max),
+            u64Fixed: UInt64.max,
+            u64Tagged: UInt64.max,
             u8Nullable: UInt8.max,
             u16Nullable: UInt16.max,
             u32VarNullable: UInt32.max,
-            u32FixedNullable: .init(rawValue: UInt32.max),
+            u32FixedNullable: UInt32.max,
             u64VarNullable: UInt64.max,
-            u64FixedNullable: .init(rawValue: UInt64.max),
-            u64TaggedNullable: .init(rawValue: UInt64.max)
+            u64FixedNullable: UInt64.max,
+            u64TaggedNullable: UInt64.max
         )
     ]
 

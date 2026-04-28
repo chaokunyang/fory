@@ -323,6 +323,10 @@ struct NestedMetrics {
 }
 ```
 
+For `List` fields with non-null fixed-width integer elements, Swift emits the
+corresponding Fory primitive packed-array type. `Set` fields remain Fory sets,
+even when their element metadata uses fixed integer encoding.
+
 `Date` maps to Fory `timestamp`. `LocalDate` maps to Fory `date` and exposes
 `epochDay`, `init(epochDay:)`, `fromEpochDay(_:)`, `init(year:month:day:)`,
 `year`, `month`, `day`, `toEpochDay()`, `init(utcDate:)`, and `toUTCDate()`.

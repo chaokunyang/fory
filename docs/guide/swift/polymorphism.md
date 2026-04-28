@@ -41,10 +41,10 @@ Equivalent overloads exist for:
 - `[Int32: Any]`
 - `[AnyHashable: Any]`
 
-## Dynamic Fields in `@ForyObject` Types
+## Dynamic Fields in Fory Model Types
 
 ```swift
-@ForyObject
+@ForyStruct
 struct DynamicHolder {
     var value: Any = ForyAnyNullValue()
     var list: [Any] = []
@@ -59,7 +59,7 @@ struct DynamicHolder {
 If dynamic values contain user-defined runtime types, register those concrete types.
 
 ```swift
-@ForyObject
+@ForyStruct
 struct Address {
     var street: String = ""
     var zip: Int32 = 0

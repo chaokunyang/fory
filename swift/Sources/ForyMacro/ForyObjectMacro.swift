@@ -1308,7 +1308,20 @@ private func resolveFieldType(
 
 private func classification(for typeText: String, hint: FieldTypeHint) throws -> TypeClassification {
     switch hint {
-    case .list:
+    case .list(let elementHint):
+        let elementType = parseArrayElement(trimType(typeText)) ?? hintedValueTypeName(elementHint)
+        if let elementType,
+           let packedTypeID = packedArrayTypeID(typeText: elementType, hint: elementHint) {
+            return .init(
+                typeID: packedTypeID,
+                isPrimitive: false,
+                isBuiltIn: true,
+                isCollection: false,
+                isMap: false,
+                isCompressedNumeric: false,
+                primitiveSize: 0
+            )
+        }
         return .init(
             typeID: 22,
             isPrimitive: false,
@@ -1346,6 +1359,64 @@ private func classification(for typeText: String, hint: FieldTypeHint) throws ->
             return try integerEncodingClassification(typeText: swiftType, encoding: encoding)
         }
         return classifyType(swiftType)
+    }
+}
+
+private func packedArrayTypeID(typeText: String, hint: FieldTypeHint) -> UInt32? {
+    let optional = unwrapOptional(typeText)
+    if optional.isOptional {
+        return nil
+    }
+    let normalized = trimKnownModulePrefix(trimType(optional.type))
+    switch hint {
+    case .inferredEncoding(.fixed):
+        return fixedIntegerArrayTypeID(typeText: normalized)
+    case .scalar(let name, let nullable, let encoding):
+        if nullable == true {
+            return nil
+        }
+        switch name {
+        case "int8":
+            return 44
+        case "int16":
+            return 45
+        case "uint8":
+            return 48
+        case "uint16":
+            return 49
+        case "int32", "int64", "int", "uint32", "uint64", "uint":
+            guard encoding == .fixed else {
+                return nil
+            }
+            return fixedIntegerArrayTypeID(typeText: swiftTypeName(forScalarHint: name))
+        default:
+            return nil
+        }
+    default:
+        return nil
+    }
+}
+
+private func fixedIntegerArrayTypeID(typeText: String) -> UInt32? {
+    switch trimKnownModulePrefix(trimType(typeText)) {
+    case "Int8":
+        return 44
+    case "Int16":
+        return 45
+    case "Int32":
+        return 46
+    case "Int64", "Int":
+        return 47
+    case "UInt8":
+        return 48
+    case "UInt16":
+        return 49
+    case "UInt32":
+        return 50
+    case "UInt64", "UInt":
+        return 51
+    default:
+        return nil
     }
 }
 

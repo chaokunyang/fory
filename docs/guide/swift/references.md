@@ -34,7 +34,7 @@ When enabled, reference-trackable types preserve identity and cycles.
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 final class Animal {
     var name: String = ""
 
@@ -45,7 +45,7 @@ final class Animal {
     }
 }
 
-@ForyObject
+@ForyStruct
 final class AnimalPair {
     var first: Animal? = nil
     var second: Animal? = nil
@@ -79,7 +79,7 @@ Use `weak` on at least one edge in a cycle to avoid leaks.
 ```swift
 import Fory
 
-@ForyObject
+@ForyStruct
 final class Node {
     var value: Int32 = 0
     weak var next: Node? = nil

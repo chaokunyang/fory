@@ -32,7 +32,7 @@ let fory = Fory(xlang: true, trackRef: false, compatible: true)
 ### ID-based registration
 
 ```swift
-@ForyObject
+@ForyStruct
 struct Order {
     var id: Int64 = 0
     var amount: Double = 0
@@ -64,7 +64,7 @@ foryc schema.fdl --swift_out ./Sources/Generated
 
 Generated Swift code includes:
 
-- `@ForyObject` models and `@ForyField(id: ...)` metadata
+- `@ForyStruct`, `@ForyEnum`, `@ForyUnion`, and field/case metadata
 - Tagged union enums (associated-value enum cases)
 - `ForyRegistration.register(_:)` helpers with transitive import registration
 - `toBytes` / `fromBytes` helpers on generated types

@@ -34,7 +34,7 @@ If a type is missing, deserialization fails with:
 Use a stable ID shared by serializer and deserializer peers.
 
 ```swift
-@ForyObject
+@ForyStruct
 struct User {
     var name: String = ""
     var age: Int32 = 0

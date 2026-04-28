@@ -57,10 +57,33 @@ def test_swift_generator_emits_field_ids_and_encodings():
     """
     content = generate_swift(source)
     assert "public enum Demo" in content
+    assert "@ForyStruct" in content
     assert "@ForyField(id: 1, encoding: .fixed)" in content
     assert "@ForyField(id: 2)" in content
     assert "@ForyField(id: 3, encoding: .tagged)" in content
     assert "fory.register(Demo.Scalar.self, id: 100)" in content
+
+
+def test_swift_generator_emits_nested_field_encoding_hints():
+    source = """
+    package demo;
+
+    message Nested [id=100] {
+        list<fixed_int32> fixed_values = 1;
+        map<fixed_int32, tagged_uint64> indexed_values = 2;
+    }
+
+    union Event [id=101] {
+        fixed_uint64 deleted = 1;
+        list<fixed_int32> many = 2;
+    }
+    """
+    content = generate_swift(source)
+    assert "@ListField(element: .encoding(.fixed))" in content
+    assert "@MapField(key: .encoding(.fixed), value: .encoding(.tagged))" in content
+    assert "@ForyUnion" in content
+    assert "@ForyCase(id: 1, payload: .encoding(.fixed))" in content
+    assert "@ForyCase(id: 2, payload: .list(element: .encoding(.fixed)))" in content
 
 
 def test_swift_generator_emits_tagged_union_case_ids():
@@ -77,10 +100,11 @@ def test_swift_generator_emits_tagged_union_case_ids():
     }
     """
     content = generate_swift(source)
+    assert "@ForyUnion" in content
     assert "public enum Animal: Equatable" in content
-    assert "@ForyField(id: 3)" in content
+    assert "@ForyCase(id: 3)" in content
     assert "case node(Demo.Node)" in content
-    assert "@ForyField(id: 7)" in content
+    assert "@ForyCase(id: 7)" in content
     assert "case note(String)" in content
     assert "fory.register(Demo.Animal.self, id: 101)" in content
 

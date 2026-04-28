@@ -798,7 +798,7 @@ Swift output is one `.swift` file per schema, for example:
 
 ### Type Generation
 
-The generator creates Swift models with `@ForyObject` and field IDs.
+The generator creates Swift models with split model macros and stable field/case IDs.
 
 When package/namespace is non-empty, namespace shaping is controlled by `swift_namespace_style`:
 
@@ -811,15 +811,15 @@ For non-empty package with default `enum` style:
 
 ```swift
 public enum Addressbook {
-    @ForyObject
+    @ForyUnion
     public enum Animal: Equatable {
-        @ForyField(id: 1)
+        @ForyCase(id: 1)
         case dog(Addressbook.Dog)
-        @ForyField(id: 2)
+        @ForyCase(id: 2)
         case cat(Addressbook.Cat)
     }
 
-    @ForyObject
+    @ForyStruct
     public struct Person: Equatable {
         @ForyField(id: 1)
         public var name: String = ""
@@ -832,7 +832,7 @@ public enum Addressbook {
 For non-empty package with `flatten` style:
 
 ```swift
-@ForyObject
+@ForyStruct
 public struct Addressbook_Person: Equatable { ... }
 ```
 
@@ -840,6 +840,12 @@ The CLI flag `--swift_namespace_style` overrides schema option `swift_namespace_
 
 Unions are generated as tagged Swift enums with associated payload values.
 Messages with `ref`/`weak_ref` fields are generated as `final class` models to preserve reference semantics.
+Fixed or tagged integer encodings inside list/map fields are emitted as Swift
+field type hints, for example `@ListField(element: .encoding(.fixed))` or
+`@MapField(value: .encoding(.tagged))`.
+For non-null fixed-width integer list elements, Swift classifies the field as
+the corresponding Fory primitive packed-array type; fixed-width integer sets
+remain Fory sets.
 
 ### Registration
 

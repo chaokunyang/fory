@@ -23,19 +23,19 @@ This page covers object graph serialization and core API usage in Swift.
 
 ## Object Graph Serialization
 
-Use `@ForyObject` on structs/classes/enums, register types, then serialize and deserialize.
+Use `@ForyStruct`, `@ForyEnum`, or `@ForyUnion`, register types, then serialize and deserialize.
 
 ```swift
 import Foundation
 import Fory
 
-@ForyObject
+@ForyStruct
 struct Address: Equatable {
     var street: String = ""
     var zip: Int32 = 0
 }
 
-@ForyObject
+@ForyStruct
 struct Person: Equatable {
     var id: Int64 = 0
     var name: String = ""
@@ -97,7 +97,7 @@ assert(fromBuffer == person)
 
 Use `Date` for timestamp values and `LocalDate` for day-only dates. `LocalDate`
 supports epoch-day and `Date` conversions through `fromEpochDay(_:)`,
-`toEpochDay()`, `init(date:)`, and `toDate()`.
+`toEpochDay()`, `init(utcDate:)`, and `toUTCDate()`.
 
 ### Collections
 

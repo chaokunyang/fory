@@ -63,8 +63,17 @@ private struct AnnotatedFieldCodecHolder: Equatable {
     @ListField(element: .encoding(.fixed))
     var values: [Int32?] = []
 
+    @ListField(element: .encoding(.fixed))
+    var packedValues: [Int32] = []
+
+    @ListField(element: .uint64(encoding: .fixed))
+    var packedUInt64Values: [UInt64] = []
+
     @SetField(element: .encoding(.fixed))
     var fixedSet: Set<Int32?> = []
+
+    @SetField(element: .encoding(.fixed))
+    var fixedNonNullSet: Set<Int32> = []
 
     @MapField(key: .encoding(.fixed), value: .encoding(.fixed))
     var data: [Int32?: Int32?] = [:]
@@ -261,7 +270,10 @@ func annotatedNestedFieldCodecsRoundTrip() throws {
     let value = AnnotatedFieldCodecHolder(
         id: UInt32.max,
         values: [1, nil, -2, Int32.max],
+        packedValues: [1, -3, 100_000],
+        packedUInt64Values: [1, UInt64.max],
         fixedSet: [nil, -7, 42],
+        fixedNonNullSet: [6, -7],
         data: [
             nil: nil,
             1: -1,
@@ -301,9 +313,22 @@ func annotatedNestedFieldCodecsEmitRecursiveMetadata() {
             ListFieldCodec<OptionalFieldCodec<Int32FixedCodec>>.fieldType(nullable: false, trackRef: false)
     )
     #expect(
+        fields["packedValues"] ==
+            TypeMeta.FieldType(typeID: TypeId.int32Array.rawValue, nullable: false, trackRef: false)
+    )
+    #expect(
+        fields["packedUInt64Values"] ==
+            TypeMeta.FieldType(typeID: TypeId.uint64Array.rawValue, nullable: false, trackRef: false)
+    )
+    #expect(
         fields["fixedSet"] ==
             SetFieldCodec<OptionalFieldCodec<Int32FixedCodec>>.fieldType(nullable: false, trackRef: false)
     )
+    #expect(
+        fields["fixedNonNullSet"] ==
+            SetFieldCodec<Int32FixedCodec>.fieldType(nullable: false, trackRef: false)
+    )
+    #expect(fields["fixedNonNullSet"]?.typeID == TypeId.set.rawValue)
     #expect(
         fields["data"] ==
             MapFieldCodec<

@@ -59,15 +59,15 @@ Fix:
 
 ## Common Macro-time Errors
 
-### `@ForyObject requires explicit types for stored properties`
+### `@ForyStruct requires explicit types for stored properties`
 
 Add explicit type annotations to stored properties.
 
-### `@ForyObject enum associated values cannot have default values`
+### `Fory enum associated values cannot have default values`
 
 Remove default values from enum case associated values.
 
-### `Set<...> with Any elements is not supported by @ForyObject yet`
+### `Set<...> with Any elements is not supported by @ForyStruct yet`
 
 Use `[Any]` or a typed set instead.
 

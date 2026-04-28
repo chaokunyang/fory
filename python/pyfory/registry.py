@@ -129,7 +129,7 @@ from pyfory._fory import (
     NO_USER_TYPE_ID,
 )
 from pyfory.meta.typedef import TypeDef
-from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
+from pyfory.meta.typedef_decoder import decode_typedef, validate_and_skip_typedef
 from pyfory.meta.typedef_encoder import encode_typedef
 
 try:
@@ -1012,7 +1012,7 @@ class TypeResolver:
                         return typeinfo
                     typename = split_typename
                     ns = split_ns
-                if typename:
+                if typename and not self.strict:
                     matches = [info for (reg_ns, reg_typename), info in self._named_type_to_type_info.items() if reg_typename == typename]
                     if len(matches) == 1:
                         typeinfo = matches[0]
@@ -1127,12 +1127,9 @@ class TypeResolver:
         # Check if we already have this TypeDef cached
         type_info = self._meta_shared_type_info.get(header)
         if type_info is not None:
-            # Skip the rest of the TypeDef binary for faster performance
-            skip_typedef(buffer, header)
+            validate_and_skip_typedef(buffer, header)
         else:
-            # Read the TypeDef and create TypeInfo
             type_def = decode_typedef(buffer, self, header=header)
             type_info = self._build_type_info_from_typedef(type_def)
-            # Cache the tuple for future use
             self._meta_shared_type_info[header] = type_info
         return type_info

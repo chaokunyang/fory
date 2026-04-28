@@ -68,6 +68,62 @@ def _resolve_validated_module_qualname(policy, module_name, qualname):
     return obj
 
 
+def _check_collection_size(read_context, size, kind):
+    if size < 0:
+        raise ValueError(f"{kind} size {size} must be non-negative")
+    if size > read_context.max_collection_size:
+        raise ValueError(f"{kind} size {size} exceeds the configured limit of {read_context.max_collection_size}")
+
+
+def _validate_function_value(policy, func, is_local):
+    if isinstance(func, type):
+        result = policy.validate_class(func, is_local=is_local)
+        if result is not None:
+            func = result
+        if isinstance(func, type):
+            raise TypeError(f"Function serializer resolved class {func.__module__}.{func.__qualname__}")
+    if not callable(func):
+        raise TypeError(f"Function serializer resolved non-callable object {func!r}")
+    result = policy.validate_function(func, is_local=is_local)
+    if result is not None:
+        func = result
+    return func
+
+
+def _bind_static_method(obj, method_name):
+    cls = obj if isinstance(obj, type) else obj.__class__
+    try:
+        attr = inspect.getattr_static(obj, method_name)
+    except AttributeError as exc:
+        raise ValueError(f"Cannot resolve method {method_name!r} safely") from exc
+
+    if isinstance(attr, staticmethod):
+        method = attr.__func__
+    elif isinstance(attr, classmethod):
+        method = types.MethodType(attr.__func__, cls)
+    elif isinstance(attr, types.FunctionType):
+        method = types.MethodType(attr, obj)
+    elif isinstance(attr, (types.MethodType, types.BuiltinMethodType)):
+        method = attr
+    elif isinstance(attr, (types.MethodDescriptorType, types.WrapperDescriptorType)):
+        method = attr.__get__(obj, cls)
+    elif callable(attr) and not hasattr(type(attr), "__get__"):
+        method = attr
+    else:
+        raise ValueError(f"Cannot resolve method {method_name!r} safely")
+    if not callable(method):
+        raise ValueError(f"Resolved method {method_name!r} is not callable")
+    return method
+
+
+def _resolve_validated_bound_method(policy, obj, method_name, is_local):
+    method = _bind_static_method(obj, method_name)
+    result = policy.validate_method(method, is_local=is_local)
+    if result is not None:
+        method = result
+    return method
+
+
 # Keep the mode switch here instead of inside `_serializer.py`.
 # In Cython mode the active hot-path serializer classes, including primitive,
 # enum/slice, and collection serializers, must come from `pyfory.serialization`.
@@ -669,11 +725,15 @@ class PythonNDArraySerializer(NDArraySerializer):
         read_context.set_reader_index(reader_index)
         dtype = np.dtype(read_context.read_string())
         ndim = read_context.read_var_uint32()
+        _check_collection_size(read_context, ndim, "ndarray dimension")
         shape = tuple(read_context.read_var_uint32() for _ in range(ndim))
         if dtype.kind == "O":
             length = read_context.read_varint32()
+            _check_collection_size(read_context, length, "ndarray object")
             items = [read_context.read_ref() for _ in range(length)]
             return np.array(items, dtype=object)
+        for dim in shape:
+            _check_collection_size(read_context, dim, "ndarray dimension")
         fory_buf = read_context.read_buffer_object()
         if isinstance(fory_buf, memoryview):
             return np.frombuffer(fory_buf, dtype=dtype).reshape(shape)
@@ -819,7 +879,7 @@ class StatefulSerializer(Serializer):
             # Case 2: Only __getstate__ was used. Create without calling __init__.
             obj = self.cls.__new__(self.cls)
 
-        if state:
+        if state is not None:
             read_context.policy.intercept_setstate(obj, state)
             obj.__setstate__(state)
         return obj
@@ -923,7 +983,8 @@ class ReduceSerializer(Serializer):
 
     def read(self, read_context):
         reduce_data_num_items = read_context.read_var_uint32()
-        assert reduce_data_num_items <= 6, read_context
+        if reduce_data_num_items > 6:
+            raise ValueError(f"Invalid reduce data length: {reduce_data_num_items}")
         reduce_data = [None] * 6
         for i in range(reduce_data_num_items):
             reduce_data[i] = read_context.read_ref()
@@ -1050,11 +1111,18 @@ class TypeSerializer(Serializer):
         ref_id = read_context.last_preserved_ref_id()
 
         num_bases = read_context.read_var_uint32()
+        _check_collection_size(read_context, num_bases, "local class base")
         bases = tuple(read_context.read_ref() for _ in range(num_bases))
+        read_context.policy.authorize_instantiation(type, module=module, qualname=qualname, bases=bases)
         cls = type(name, bases, {})
         read_context.set_read_ref(ref_id, cls)
+        result = read_context.policy.validate_class(cls, is_local=True)
+        if result is not None:
+            cls = result
 
-        for _ in range(read_context.read_var_uint32()):
+        num_class_methods = read_context.read_var_uint32()
+        _check_collection_size(read_context, num_class_methods, "local class method")
+        for _ in range(num_class_methods):
             attr_name = read_context.read_string()
             func = read_context.read_ref()
             method = types.MethodType(func, cls)
@@ -1230,20 +1298,13 @@ class FunctionSerializer(Serializer):
         if func_type_id == 0:
             self_obj = read_context.read_ref()
             method_name = read_context.read_string()
-            func = getattr(self_obj, method_name)
-            result = read_context.policy.validate_function(func, is_local=False)
-            if result is not None:
-                func = result
-            return func
+            return _resolve_validated_bound_method(read_context.policy, self_obj, method_name, is_local=False)
 
         if func_type_id == 1:
             module = read_context.read_string()
             qualname = read_context.read_string()
             mod = _resolve_validated_module_qualname(read_context.policy, module, qualname)
-            result = read_context.policy.validate_function(mod, is_local=False)
-            if result is not None:
-                mod = result
-            return mod
+            return _validate_function_value(read_context.policy, mod, is_local=False)
 
         module = read_context.read_string()
         qualname = read_context.read_string()
@@ -1257,6 +1318,7 @@ class FunctionSerializer(Serializer):
         defaults = None
         if has_defaults:
             num_defaults = read_context.read_var_uint32()
+            _check_collection_size(read_context, num_defaults, "function default")
             default_values = []
             for _ in range(num_defaults):
                 default_values.append(read_context.read_ref())
@@ -1264,6 +1326,7 @@ class FunctionSerializer(Serializer):
 
         has_closure = read_context.read_bool()
         num_freevars = read_context.read_var_uint32()
+        _check_collection_size(read_context, num_freevars, "function closure")
         closure = None
 
         closure_values = []
@@ -1274,6 +1337,7 @@ class FunctionSerializer(Serializer):
             closure = tuple(types.CellType(value) for value in closure_values)
 
         num_freevars = read_context.read_var_uint32()
+        _check_collection_size(read_context, num_freevars, "function free variable")
         freevars = []
         for _ in range(num_freevars):
             freevars.append(read_context.read_string())
@@ -1300,10 +1364,7 @@ class FunctionSerializer(Serializer):
         for attr_name, attr_value in attrs.items():
             setattr(func, attr_name, attr_value)
 
-        result = read_context.policy.validate_function(func, is_local=True)
-        if result is not None:
-            func = result
-        return func
+        return _validate_function_value(read_context.policy, func, is_local=True)
 
     def write(self, write_context, value):
         self._serialize_function(write_context, value)
@@ -1330,12 +1391,10 @@ class NativeFuncMethodSerializer(Serializer):
         if read_context.read_bool():
             module = read_context.read_string()
             func = _resolve_validated_module_attr(read_context.policy, module, name)
+            func = _validate_function_value(read_context.policy, func, is_local=False)
         else:
             obj = read_context.read_ref()
-            func = getattr(obj, name)
-        result = read_context.policy.validate_function(func, is_local=False)
-        if result is not None:
-            func = result
+            func = _resolve_validated_bound_method(read_context.policy, obj, name, is_local=False)
         return func
 
 
@@ -1357,13 +1416,9 @@ class MethodSerializer(Serializer):
         instance = read_context.read_ref()
         method_name = read_context.read_string()
 
-        method = getattr(instance, method_name)
-        cls = method.__self__.__class__
+        cls = instance if isinstance(instance, type) else instance.__class__
         is_local = cls.__module__ == "__main__" or "<locals>" in cls.__qualname__
-        result = read_context.policy.validate_method(method, is_local=is_local)
-        if result is not None:
-            method = result
-        return method
+        return _resolve_validated_bound_method(read_context.policy, instance, method_name, is_local=is_local)
 
 
 class ObjectSerializer(Serializer):
@@ -1400,9 +1455,14 @@ class ObjectSerializer(Serializer):
         obj = self.type_.__new__(self.type_)
         read_context.reference(obj)
         num_fields = read_context.read_var_uint32()
+        _check_collection_size(read_context, num_fields, "object field")
+        state = {}
         for _ in range(num_fields):
             field_name = read_context.read_string()
             field_value = read_context.read_ref()
+            state[field_name] = field_value
+        read_context.policy.intercept_setstate(obj, state)
+        for field_name, field_value in state.items():
             setattr(obj, field_name, field_value)
         return obj
 

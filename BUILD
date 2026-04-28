@@ -48,6 +48,7 @@ pyx_library(
         linkstatic = 1,
     ),
     deps = [
+        "//cpp/fory/thirdparty:libmmh3",
         "//cpp/fory/util:fory_util",
         "//cpp/fory/type:fory_type",
         "//python/pyfory/cpp:_pyfory",

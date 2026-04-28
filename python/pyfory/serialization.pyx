@@ -24,6 +24,7 @@ from typing import TypeVar, Union
 import cython
 from libc.stdint cimport int32_t, int64_t, uint8_t, uint64_t
 from libc.stdint cimport *
+from libc.string cimport memcmp
 from libcpp cimport bool as c_bool
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
@@ -40,7 +41,7 @@ from pyfory._fory import (
     NO_USER_TYPE_ID,
     NOT_NULL_INT64_FLAG,
 )
-from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
+from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.meta.metastring import MetaStringDecoder
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
@@ -72,6 +73,9 @@ cdef extern from *:
     PyObject **fory_sequence_get_items(object collection)
     dict _PyDict_NewPresized(Py_ssize_t minused)
     Py_ssize_t Py_SIZE(object obj)
+
+cdef extern from "fory/thirdparty/MurmurHash3.h":
+    void MurmurHash3_x64_128(const void* key, int length, uint32_t seed, void* out) nogil
 
 ENABLE_FORY_CYTHON_SERIALIZATION = os.environ.get(
     "ENABLE_FORY_CYTHON_SERIALIZATION", "True"
@@ -518,7 +522,7 @@ cdef class TypeResolver:
         cdef TypeInfo typeinfo = self._meta_shared_type_info.get(header)
         cdef object type_def
         if typeinfo is not None:
-            _skip_typedef_fast(buffer, header)
+            _validate_and_skip_typedef_fast(buffer, header)
             return typeinfo
         type_def = decode_typedef(buffer, self.resolver, header=header)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
@@ -534,7 +538,9 @@ cdef class TypeResolver:
         ]
         cdef TypeInfo typeinfo
         if typeinfo_ptr != NULL:
-            return <TypeInfo>typeinfo_ptr
+            typeinfo = <TypeInfo> typeinfo_ptr
+            if typeinfo.namespace_bytes == ns_metabytes and typeinfo.typename_bytes == type_metabytes:
+                return typeinfo
         typeinfo = self.resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
         self._c_meta_hash_to_type_info[
             pair[int64_t, int64_t](
@@ -554,6 +560,41 @@ cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
         return
     reader_index = buffer.get_reader_index()
     buffer.check_bound(reader_index, meta_size)
+    buffer.set_reader_index(reader_index + meta_size)
+
+
+cdef inline uint64_t _typedef_hash_bits(const void* data, int32_t length) noexcept:
+    cdef int64_t[2] out
+    cdef uint64_t magnitude
+    MurmurHash3_x64_128(data, length, <uint32_t>47, &out)
+    if out[0] < 0:
+        magnitude = <uint64_t>(-(out[0] + 1)) + 1
+    else:
+        magnitude = <uint64_t>out[0]
+    return (magnitude << (64 - 50)) & <uint64_t>0x7FFFFFFFFFFFFFFF
+
+
+cdef inline void _validate_typedef_header_fast(int64_t header, const void* data, int32_t length) except *:
+    cdef uint64_t expected = _typedef_hash_bits(data, length)
+    if (<uint64_t>header & ~<uint64_t>0x3FF) != (expected & ~<uint64_t>0x3FF):
+        raise ValueError("TypeDef header hash does not match metadata bytes")
+
+
+cdef inline void _validate_and_skip_typedef_fast(Buffer buffer, int64_t header) except *:
+    cdef int32_t meta_size = <int32_t>(header & 0xFF)
+    cdef int32_t reader_index
+    cdef bytes meta_data
+    if meta_size == 0xFF:
+        meta_size += buffer.read_var_uint32()
+    if buffer.has_input_stream():
+        meta_data = buffer.read_bytes(meta_size)
+        if meta_size > 0:
+            _validate_typedef_header_fast(header, PyBytes_AS_STRING(meta_data), meta_size)
+        return
+    reader_index = buffer.get_reader_index()
+    buffer.check_bound(reader_index, meta_size)
+    if meta_size > 0:
+        _validate_typedef_header_fast(header, buffer.c_buffer.data() + reader_index, meta_size)
     buffer.set_reader_index(reader_index + meta_size)
 
 

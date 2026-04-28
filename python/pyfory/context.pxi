@@ -49,6 +49,14 @@ cdef inline int64_t _hash_small_metastring(
     return <int64_t> h
 
 
+cdef inline bint _buffer_matches_bytes(Buffer buffer, int32_t offset, int32_t length, bytes data):
+    if PyBytes_GET_SIZE(data) != length:
+        return False
+    if length == 0:
+        return True
+    return memcmp(buffer.c_buffer.data() + offset, PyBytes_AS_STRING(data), length) == 0
+
+
 cdef class WriteContext
 cdef class ReadContext
 
@@ -326,9 +334,13 @@ cdef class MetaStringReader:
         cdef int8_t encoding = 0
         cdef bytes data
         cdef object encoded_meta_string
+        cdef object cached_encoded_meta_string
+        cdef bytes cached_data
         if header & 0b1:
             if length <= 0:
                 raise ValueError("Invalid dynamic metastring id 0")
+            if length > <int32_t> self._c_dynamic_id_to_encoded_meta_string_vec.size():
+                raise ValueError(f"Invalid dynamic metastring id {length}")
             return <object> self._c_dynamic_id_to_encoded_meta_string_vec[length - 1]
         if length <= SMALL_STRING_THRESHOLD:
             if length == 0:
@@ -342,30 +354,34 @@ cdef class MetaStringReader:
                 v1 = buffer.read_int64()
                 v2 = buffer.read_bytes_as_int64(length - 8)
             hashcode = _hash_small_metastring(v1, v2, length, <uint8_t> encoding)
+            reader_index = buffer.get_reader_index()
             encoded_meta_string_ptr = self._c_hash_to_small_encoded_meta_string[hashcode]
-            if encoded_meta_string_ptr == NULL:
-                reader_index = buffer.get_reader_index()
-                data = buffer.get_bytes(reader_index - length, length)
-                encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(
-                    data,
-                    hashcode,
-                )
-                encoded_meta_string_ptr = <PyObject *> encoded_meta_string
-                self._c_hash_to_small_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+            if encoded_meta_string_ptr != NULL:
+                cached_encoded_meta_string = <object> encoded_meta_string_ptr
+                cached_data = cached_encoded_meta_string.data
+                if _buffer_matches_bytes(buffer, reader_index - length, length, cached_data):
+                    self._c_dynamic_id_to_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
+                    return cached_encoded_meta_string
+            data = buffer.get_bytes(reader_index - length, length)
+            encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(data, hashcode)
+            encoded_meta_string_ptr = <PyObject *> encoded_meta_string
+            self._c_hash_to_small_encoded_meta_string[hashcode] = encoded_meta_string_ptr
         else:
             hashcode = buffer.read_int64()
             reader_index = buffer.get_reader_index()
             buffer.check_bound(reader_index, length)
             buffer.set_reader_index(reader_index + length)
             encoded_meta_string_ptr = self._c_hash_to_encoded_meta_string[hashcode]
-            if encoded_meta_string_ptr == NULL:
-                data = buffer.get_bytes(reader_index, length)
-                encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(
-                    data,
-                    hashcode,
-                )
-                encoded_meta_string_ptr = <PyObject *> encoded_meta_string
-                self._c_hash_to_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+            if encoded_meta_string_ptr != NULL:
+                cached_encoded_meta_string = <object> encoded_meta_string_ptr
+                cached_data = cached_encoded_meta_string.data
+                if _buffer_matches_bytes(buffer, reader_index, length, cached_data):
+                    self._c_dynamic_id_to_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
+                    return cached_encoded_meta_string
+            data = buffer.get_bytes(reader_index, length)
+            encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(data, hashcode)
+            encoded_meta_string_ptr = <PyObject *> encoded_meta_string
+            self._c_hash_to_encoded_meta_string[hashcode] = encoded_meta_string_ptr
         self._c_dynamic_id_to_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
         return <object> encoded_meta_string_ptr
 
@@ -868,11 +884,13 @@ cdef class ReadContext:
         return obj
 
     cpdef read_buffer_object(self):
-        cdef int32_t size
+        cdef uint32_t size
         cdef int32_t reader_index
         cdef Buffer buf
         if not self.peer_out_of_band_enabled:
             size = self.read_var_uint32()
+            if size > <uint32_t>self.max_binary_size:
+                raise ValueError(f"Binary size {size} exceeds the configured limit of {self.max_binary_size}")
             if self.buffer.has_input_stream():
                 return self.buffer.read_bytes(size)
             reader_index = self.buffer.get_reader_index()
@@ -883,6 +901,8 @@ cdef class ReadContext:
             assert self.buffers is not None
             return next(self.buffers)
         size = self.read_var_uint32()
+        if size > <uint32_t>self.max_binary_size:
+            raise ValueError(f"Binary size {size} exceeds the configured limit of {self.max_binary_size}")
         if self.buffer.has_input_stream():
             return self.buffer.read_bytes(size)
         reader_index = self.buffer.get_reader_index()

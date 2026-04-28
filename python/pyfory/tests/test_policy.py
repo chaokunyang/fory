@@ -15,12 +15,54 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import types
+
 import pytest
 from pyfory import Fory, DeserializationPolicy
+from pyfory.serializer import FunctionSerializer, NativeFuncMethodSerializer
 
 
 def policy_global_function():
     return "safe"
+
+
+class FakeReadContext:
+    def __init__(self, policy, values):
+        self.policy = policy
+        self._values = iter(values)
+
+    def read_int8(self):
+        return next(self._values)
+
+    def read_bool(self):
+        return next(self._values)
+
+    def read_string(self):
+        return next(self._values)
+
+
+class FalseyState:
+    bool_called = False
+
+    def __bool__(self):
+        type(self).bool_called = True
+        return False
+
+
+class FalseyStatePayload:
+    def __getstate__(self):
+        return FalseyState()
+
+    def __setstate__(self, state):
+        self.state = state
+
+
+class ObjectSetAttrPayload:
+    setattr_called = False
+
+    def __setattr__(self, name, value):
+        type(self).setattr_called = True
+        super().__setattr__(name, value)
 
 
 class BlockClassPolicy(DeserializationPolicy):
@@ -178,6 +220,43 @@ def test_reduce_state_sanitizes_state():
     assert policy.intercept_setstate_calls == 1
     assert result.username == "admin"
     assert result.password == "***REDACTED***"
+
+
+def test_stateful_intercepts_falsey_state_before_bool():
+    """Test stateful path calls intercept_setstate without evaluating state truthiness."""
+
+    class BlockSetStatePolicy(DeserializationPolicy):
+        def intercept_setstate(self, obj, state, **kwargs):
+            raise ValueError("state blocked")
+
+    FalseyState.bool_called = False
+    fory = Fory(ref=True, strict=False, policy=BlockSetStatePolicy())
+    data = fory.serialize(FalseyStatePayload())
+
+    with pytest.raises(ValueError, match="state blocked"):
+        fory.deserialize(data)
+    assert not FalseyState.bool_called
+
+
+def test_object_serializer_intercepts_state_before_setattr():
+    """Test object serializer state hook runs before applying attacker-controlled fields."""
+
+    class BlockSetStatePolicy(DeserializationPolicy):
+        def intercept_setstate(self, obj, state, **kwargs):
+            raise ValueError("object state blocked")
+
+    obj = ObjectSetAttrPayload()
+    obj.value = 1
+    ObjectSetAttrPayload.setattr_called = False
+
+    writer = Fory(ref=True, strict=False)
+    reader = Fory(ref=True, strict=False, policy=BlockSetStatePolicy())
+    writer.register(ObjectSetAttrPayload)
+    reader.register(ObjectSetAttrPayload)
+
+    with pytest.raises(ValueError, match="object state blocked"):
+        reader.deserialize(writer.serialize(obj))
+    assert not ObjectSetAttrPayload.setattr_called
 
 
 def test_policy_with_local_class():
@@ -338,10 +417,12 @@ def test_reduce_class_callable_authorizes_instantiation():
     class BlockInstantiationPolicy(DeserializationPolicy):
         def __init__(self):
             self.authorize_instantiation_calls = 0
+            self.reduce_target_calls = 0
 
         def authorize_instantiation(self, cls, **kwargs):
             self.authorize_instantiation_calls += 1
             if cls.__name__ == "ReduceTarget":
+                self.reduce_target_calls += 1
                 raise ValueError("ReduceTarget blocked")
             return None
 
@@ -349,6 +430,35 @@ def test_reduce_class_callable_authorizes_instantiation():
     fory = Fory(ref=True, strict=False, policy=policy)
     with pytest.raises(ValueError, match="ReduceTarget blocked"):
         fory.deserialize(fory.serialize(ReducePayload()))
+    assert policy.reduce_target_calls == 1
+
+
+def test_registered_dataclass_authorizes_instantiation_in_strict_mode():
+    """Test registered dataclass reads still honor authorize_instantiation."""
+    from dataclasses import dataclass
+
+    @dataclass
+    class StrictDataClass:
+        value: int
+
+    class BlockInstantiationPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.authorize_instantiation_calls = 0
+
+        def authorize_instantiation(self, cls, **kwargs):
+            self.authorize_instantiation_calls += 1
+            if cls is StrictDataClass:
+                raise ValueError("StrictDataClass blocked")
+            return None
+
+    policy = BlockInstantiationPolicy()
+    writer = Fory(ref=True, strict=True)
+    reader = Fory(ref=True, strict=True, policy=policy)
+    writer.register(StrictDataClass)
+    reader.register(StrictDataClass)
+
+    with pytest.raises(ValueError, match="StrictDataClass blocked"):
+        reader.deserialize(writer.serialize(StrictDataClass(1)))
     assert policy.authorize_instantiation_calls == 1
 
 
@@ -403,6 +513,114 @@ def test_type_deserialization_validates_module():
     with pytest.raises(ValueError, match="subprocess blocked"):
         fory.deserialize(fory.serialize(subprocess.Popen))
     assert policy.validate_module_calls == 1
+
+
+def test_native_bound_method_uses_validate_method():
+    """Test bound native methods are checked by method policy, not function policy."""
+
+    class BlockMethodPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_method_calls = 0
+            self.validate_function_calls = 0
+
+        def validate_method(self, method, is_local, **kwargs):
+            self.validate_method_calls += 1
+            raise ValueError("method blocked")
+
+        def validate_function(self, func, is_local, **kwargs):
+            self.validate_function_calls += 1
+            return None
+
+    policy = BlockMethodPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+
+    with pytest.raises(ValueError, match="method blocked"):
+        fory.deserialize(fory.serialize([].append))
+    assert policy.validate_method_calls == 1
+    assert policy.validate_function_calls == 0
+
+
+def test_bound_method_policy_runs_before_getattribute_side_effect():
+    """Test bound method deserialization validates before dynamic attribute lookup."""
+
+    class GuardedMethod:
+        getattribute_called = False
+
+        def __getattribute__(self, name):
+            if name == "run":
+                type(self).getattribute_called = True
+            return super().__getattribute__(name)
+
+        def run(self):
+            return "unsafe"
+
+    class BlockMethodPolicy(DeserializationPolicy):
+        def validate_method(self, method, is_local, **kwargs):
+            raise ValueError("method blocked")
+
+    obj = GuardedMethod()
+    method = types.MethodType(GuardedMethod.run, obj)
+    fory = Fory(ref=True, strict=False, policy=BlockMethodPolicy())
+    data = fory.serialize(method)
+
+    GuardedMethod.getattribute_called = False
+    with pytest.raises(ValueError, match="method blocked"):
+        fory.deserialize(data)
+    assert not GuardedMethod.getattribute_called
+
+
+def test_function_serializer_rejects_class_resolution():
+    """Test function deserialization cannot resolve classes through the function policy."""
+
+    class BlockClassPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_class_calls = 0
+            self.validate_function_calls = 0
+
+        def validate_class(self, cls, is_local, **kwargs):
+            self.validate_class_calls += 1
+            raise ValueError("class blocked")
+
+        def validate_function(self, func, is_local, **kwargs):
+            self.validate_function_calls += 1
+            return None
+
+    policy = BlockClassPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    serializer = FunctionSerializer(fory.type_resolver, type(policy_global_function))
+    read_context = FakeReadContext(policy, [1, "subprocess", "Popen"])
+
+    with pytest.raises(ValueError, match="class blocked"):
+        serializer._deserialize_function(read_context)
+    assert policy.validate_class_calls == 1
+    assert policy.validate_function_calls == 0
+
+
+def test_native_function_serializer_rejects_class_resolution():
+    """Test native function deserialization cannot resolve classes through the function policy."""
+
+    class BlockClassPolicy(DeserializationPolicy):
+        def __init__(self):
+            self.validate_class_calls = 0
+            self.validate_function_calls = 0
+
+        def validate_class(self, cls, is_local, **kwargs):
+            self.validate_class_calls += 1
+            raise ValueError("class blocked")
+
+        def validate_function(self, func, is_local, **kwargs):
+            self.validate_function_calls += 1
+            return None
+
+    policy = BlockClassPolicy()
+    fory = Fory(ref=True, strict=False, policy=policy)
+    serializer = NativeFuncMethodSerializer(fory.type_resolver, type(policy_global_function))
+    read_context = FakeReadContext(policy, ["Popen", True, "subprocess"])
+
+    with pytest.raises(ValueError, match="class blocked"):
+        serializer.read(read_context)
+    assert policy.validate_class_calls == 1
+    assert policy.validate_function_calls == 0
 
 
 def test_global_function_deserialization_validates_module():

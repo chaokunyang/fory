@@ -38,14 +38,17 @@ from pyfory.meta.typedef import (
     TYPE_NAME_ENCODINGS,
     FIELD_NAME_ENCODING_TAG_ID,
     TAG_ID_SIZE_THRESHOLD,
+    NUM_HASH_BITS,
 )
 from pyfory.types import TypeId
 from pyfory._fory import NO_USER_TYPE_ID
+from pyfory.lib.mmh3 import hash_buffer
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 
 MAX_GENERATED_CLASSES = 1000
 MAX_FIELDS_PER_CLASS = 256
+HEADER_CONTROL_BITS_MASK = META_SIZE_MASKS | COMPRESS_META_FLAG | HAS_FIELDS_META_FLAG
 _generated_class_count = 0
 
 
@@ -66,6 +69,25 @@ def skip_typedef(buffer: Buffer, header) -> None:
         meta_size += buffer.read_var_uint32()
     # Read meta data
     buffer.read_bytes(meta_size)
+
+
+def validate_and_skip_typedef(buffer: Buffer, header) -> None:
+    """
+    Validate a cached TypeDef header against its bytes, then skip it.
+    """
+    meta_size = header & META_SIZE_MASKS
+    if meta_size == META_SIZE_MASKS:
+        meta_size += buffer.read_var_uint32()
+    meta_data = buffer.read_bytes(meta_size)
+    _validate_typedef_header(header, meta_data)
+
+
+def _validate_typedef_header(header, meta_data: bytes) -> None:
+    hash_ = hash_buffer(meta_data, 47)[0]
+    hash_ <<= 64 - NUM_HASH_BITS
+    expected_header = abs(hash_) & 0x7FFFFFFFFFFFFFFF
+    if (header & ~HEADER_CONTROL_BITS_MASK) != (expected_header & ~HEADER_CONTROL_BITS_MASK):
+        raise ValueError("TypeDef header hash does not match metadata bytes")
 
 
 def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
@@ -96,6 +118,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
 
     # Read meta data
     meta_data = buffer.read_bytes(meta_size)
+    _validate_typedef_header(header, meta_data)
 
     # Decompress if needed
     if is_compressed:
@@ -152,6 +175,8 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     if has_fields_meta:
         field_infos = read_fields_info(meta_buffer, resolver, name, num_fields)
     if type_cls is None:
+        if getattr(resolver, "strict", False):
+            raise ValueError(f"TypeDef {name} is not registered in strict mode")
         # Check generated class count limit
         if _generated_class_count >= MAX_GENERATED_CLASSES:
             raise ValueError(
@@ -164,6 +189,11 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         # Use a valid Python identifier for class name
         class_name = typename.replace(".", "_").replace("$", "_")
         type_cls = make_dataclass(class_name, field_definitions)
+        policy = getattr(resolver, "policy", None)
+        if policy is not None:
+            result = policy.validate_class(type_cls, is_local=False)
+            if result is not None:
+                type_cls = result
 
     # Create TypeDef object
     type_def = TypeDef(

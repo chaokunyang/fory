@@ -544,8 +544,7 @@ class DataClassSerializer(Serializer):
         write_context.try_flush()
 
     def read(self, read_context):
-        if not self.type_resolver.strict:
-            read_context.policy.authorize_instantiation(self.type_)
+        read_context.policy.authorize_instantiation(self.type_)
         if not self.type_resolver.compatible:
             hash_ = read_context.read_int32()
             if hash_ != self._hash:

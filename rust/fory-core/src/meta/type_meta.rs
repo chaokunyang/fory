@@ -951,25 +951,15 @@ impl TypeMeta {
                     if field.field_name.is_empty() {
                         field.field_name = local_info.field_name.clone();
                     }
-                    // Use FieldType comparison which normalizes type IDs for cross-language
-                    // schema evolution (e.g., UNKNOWN=0 matches STRUCT variants)
-                    if field.field_type != local_info.field_type {
-                        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                            eprintln!(
-                                "[fory-debug] field type mismatch: name={}, remote_type={:?}, local_type={:?}",
-                                field.field_name, field.field_type, local_info.field_type
-                            );
-                        }
-                        field.field_id = -1; // Type mismatch, skip
-                    } else {
-                        // Assign SORTED INDEX for matching in generated code
-                        field.field_id = sorted_index as i16;
-                        if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
-                            eprintln!(
-                                "[fory-debug]   matched field: name={}, assigned_field_id={}",
-                                field.field_name, field.field_id
-                            );
-                        }
+                    // Assign SORTED INDEX for generated code. The generated field
+                    // codec inspects the remote FieldType and either consumes it or
+                    // asks the caller to skip the remote payload.
+                    field.field_id = sorted_index as i16;
+                    if crate::util::ENABLE_FORY_DEBUG_OUTPUT {
+                        eprintln!(
+                            "[fory-debug]   matched field: name={}, assigned_field_id={}, remote_type={:?}, local_type={:?}",
+                            field.field_name, field.field_id, field.field_type, local_info.field_type
+                        );
                     }
                 }
                 None => {

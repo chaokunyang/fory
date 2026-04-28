@@ -18,12 +18,13 @@
 //! Tests for field-level `#[fory(...)]` attributes
 
 use fory_core::Fory;
-use fory_derive::ForyObject;
+use fory_derive::ForyStruct;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
 /// Test struct with skip attribute
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithSkip {
     name: String,
     #[fory(skip)]
@@ -51,7 +52,7 @@ fn test_skip_field() {
 }
 
 /// Test struct with nullable attribute on Option fields
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithNullable {
     name: String,
     #[fory(nullable)]
@@ -86,12 +87,12 @@ fn test_nullable_attribute() {
 }
 
 /// Test struct with explicit ref tracking disabled
-#[derive(ForyObject, Debug, PartialEq, Clone)]
+#[derive(ForyStruct, Debug, PartialEq, Clone)]
 struct InnerData {
     value: i32,
 }
 
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithRefTracking {
     #[fory(ref = false)]
     data: Rc<InnerData>,
@@ -112,7 +113,7 @@ fn test_ref_tracking_disabled() {
 }
 
 /// Test struct with explicit nullable = false
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithExplicitNotNull {
     #[fory(nullable = false)]
     required_option: Option<String>,
@@ -132,7 +133,7 @@ fn test_explicit_not_nullable() {
 }
 
 /// Test struct with Arc and ref tracking
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithArc {
     data: Arc<InnerData>,
 }
@@ -152,7 +153,7 @@ fn test_arc_default_ref_tracking() {
 }
 
 /// Test struct with multiple attributes combined
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithCombinedAttrs {
     name: String,
     #[fory(skip)]
@@ -181,7 +182,7 @@ fn test_combined_attributes() {
 }
 
 /// Test struct with primitive types (should be non-nullable by default)
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithPrimitives {
     count: i32,
     value: f64,
@@ -204,8 +205,65 @@ fn test_primitive_defaults() {
     assert_eq!(original, deserialized);
 }
 
+#[derive(ForyStruct, Debug, PartialEq)]
+struct NestedVarEncoding {
+    #[fory(id = 0)]
+    values: Vec<Option<i32>>,
+    #[fory(id = 1)]
+    data: HashMap<Option<i32>, Option<i32>>,
+    #[fory(id = 2)]
+    maybe_values: Option<Vec<Option<i32>>>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct NestedFixedEncoding {
+    #[fory(id = 0, list(element(encoding = fixed)))]
+    values: Vec<Option<i32>>,
+    #[fory(id = 1, map(key(encoding = fixed), value(encoding = fixed)))]
+    data: HashMap<Option<i32>, Option<i32>>,
+    #[fory(id = 2, nullable, list(element(nullable = true, encoding = fixed)))]
+    maybe_values: Option<Vec<Option<i32>>>,
+}
+
+#[test]
+fn test_nested_codec_annotations_roundtrip() {
+    let mut fory = Fory::default();
+    fory.register::<NestedFixedEncoding>(10).unwrap();
+
+    let original = NestedFixedEncoding {
+        values: vec![Some(1), None, Some(-300)],
+        data: HashMap::from([(Some(1), Some(-1)), (None, Some(2)), (Some(3), None)]),
+        maybe_values: Some(vec![Some(10), None, Some(-20)]),
+    };
+
+    let bytes = fory.serialize(&original).unwrap();
+    let deserialized: NestedFixedEncoding = fory.deserialize(&bytes).unwrap();
+    assert_eq!(original, deserialized);
+}
+
+#[test]
+fn test_compatible_nested_integer_encoding_mismatch() {
+    let mut writer = Fory::builder().compatible(true).build();
+    writer.register::<NestedVarEncoding>(11).unwrap();
+
+    let mut reader = Fory::builder().compatible(true).build();
+    reader.register::<NestedFixedEncoding>(11).unwrap();
+
+    let original = NestedVarEncoding {
+        values: vec![Some(1), None, Some(-300)],
+        data: HashMap::from([(Some(1), Some(-1)), (None, Some(2)), (Some(3), None)]),
+        maybe_values: Some(vec![Some(10), None, Some(-20)]),
+    };
+
+    let bytes = writer.serialize(&original).unwrap();
+    let deserialized: NestedFixedEncoding = reader.deserialize(&bytes).unwrap();
+    assert_eq!(original.values, deserialized.values);
+    assert_eq!(original.data, deserialized.data);
+    assert_eq!(original.maybe_values, deserialized.maybe_values);
+}
+
 /// Test struct with field IDs for compact encoding
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithFieldIds {
     #[fory(id = 0)]
     name: String,
@@ -232,7 +290,7 @@ fn test_field_id_attribute() {
 }
 
 /// Test struct with mixed field IDs and non-ID fields
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithMixedIds {
     #[fory(id = 0)]
     id_field: i32,
@@ -258,7 +316,7 @@ fn test_mixed_field_ids() {
 }
 
 /// Test field ID with skip and nullable combined
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithCombinedFieldAttrs {
     #[fory(id = 0)]
     name: String,
@@ -296,10 +354,10 @@ fn test_field_id_with_other_attrs() {
 // ============================================================================
 
 mod compatible_v1 {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Version 1 of a user struct - original version
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct UserV1 {
         #[fory(id = 0)]
         pub name: String,
@@ -309,10 +367,10 @@ mod compatible_v1 {
 }
 
 mod compatible_v2 {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Version 2 of a user struct - added email field
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct UserV2 {
         #[fory(id = 0)]
         pub name: String,
@@ -375,10 +433,10 @@ fn test_compatible_mode_v2_to_v1() {
 }
 
 mod compatible_reorder_v1 {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Version with specific field order
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct DataV1 {
         #[fory(id = 0)]
         pub field_a: String,
@@ -390,10 +448,10 @@ mod compatible_reorder_v1 {
 }
 
 mod compatible_reorder_v2 {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Version with reordered fields (same IDs, different order in struct)
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct DataV2 {
         #[fory(id = 2)]
         pub field_c: f64,
@@ -435,10 +493,10 @@ fn test_compatible_mode_field_reorder() {
 }
 
 mod compatible_remove_field_v1 {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Version with 3 fields
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct ConfigV1 {
         #[fory(id = 0)]
         pub name: String,
@@ -450,10 +508,10 @@ mod compatible_remove_field_v1 {
 }
 
 mod compatible_remove_field_v2 {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Version with extra_field removed (simulates field removal)
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct ConfigV2 {
         #[fory(id = 0)]
         pub name: String,
@@ -493,7 +551,7 @@ fn test_compatible_mode_field_removed() {
 }
 
 /// Test skip attribute in non-compatible mode (simpler case)
-#[derive(ForyObject, Debug, PartialEq)]
+#[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithSkipAndId {
     #[fory(id = 0)]
     name: String,
@@ -545,10 +603,10 @@ fn test_compatible_mode_roundtrip() {
 // ============================================================================
 
 mod payload_with_field_ids {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Struct using field IDs for compact encoding
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct CompactUser {
         #[fory(id = 0)]
         pub username: String,
@@ -564,10 +622,10 @@ mod payload_with_field_ids {
 }
 
 mod payload_without_field_ids {
-    use fory_derive::ForyObject;
+    use fory_derive::ForyStruct;
 
     /// Struct using field names (no field IDs)
-    #[derive(ForyObject, Debug, PartialEq, Clone)]
+    #[derive(ForyStruct, Debug, PartialEq, Clone)]
     pub struct VerboseUser {
         pub username: String,
         pub email_address: String,

@@ -20,6 +20,7 @@ use super::field_meta::{
     ForyFieldMeta, IntEncoding,
 };
 use super::read::create_private_field_name;
+use super::util::get_type_id_by_type_ast;
 use crate::util::{is_arc_dyn_trait, is_box_dyn_trait, is_rc_dyn_trait, SourceField};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, ToTokens};
@@ -28,38 +29,111 @@ use syn::{GenericArgument, PathArguments, Type};
 pub(crate) struct ResolvedField<'a> {
     pub source: &'a SourceField<'a>,
     pub private_ident: syn::Ident,
-    pub codec_ty: TokenStream,
+    pub dispatch: FieldDispatch,
     pub value_ty: &'a Type,
     pub field_id: i16,
+}
+
+pub(crate) enum FieldDispatch {
+    Codec {
+        codec_ty: TokenStream,
+    },
+    Serializer {
+        field_type: TokenStream,
+        has_generics: bool,
+    },
 }
 
 impl<'a> ResolvedField<'a> {
     #[inline]
     pub fn codec_call(&self) -> TokenStream {
-        let codec_ty = &self.codec_ty;
-        let value_ty = self.value_ty;
-        quote! { <#codec_ty as fory_core::serializer::codec::Codec<#value_ty>> }
+        match &self.dispatch {
+            FieldDispatch::Codec { codec_ty } => {
+                let value_ty = self.value_ty;
+                quote! { <#codec_ty as fory_core::serializer::codec::Codec<#value_ty>> }
+            }
+            FieldDispatch::Serializer { .. } => {
+                quote! { compile_error!("serializer-dispatched field has no codec call") }
+            }
+        }
     }
 
     pub fn reserved_space(&self) -> TokenStream {
-        let call = self.codec_call();
-        quote! { #call::reserved_space() }
+        match &self.dispatch {
+            FieldDispatch::Codec { .. } => {
+                let call = self.codec_call();
+                quote! { #call::reserved_space() }
+            }
+            FieldDispatch::Serializer { .. } => {
+                let ty = self.value_ty;
+                quote! {
+                    <#ty as fory_core::Serializer>::fory_reserved_space()
+                        + fory_core::type_id::SIZE_OF_REF_AND_TYPE
+                }
+            }
+        }
     }
 
     pub fn write_field(&self) -> TokenStream {
-        let call = self.codec_call();
         let access =
             super::util::get_field_accessor(self.source.field, self.source.original_index, true);
-        quote! {
-            #call::write_field(&#access, context)?;
+        match &self.dispatch {
+            FieldDispatch::Codec { .. } => {
+                let call = self.codec_call();
+                quote! {
+                    #call::write_field(&#access, context)?;
+                }
+            }
+            FieldDispatch::Serializer { has_generics, .. } => {
+                let ty = self.value_ty;
+                let ref_mode = serializer_ref_mode_for_field(self.source.field);
+                quote! {
+                    let write_type_info = if context.is_compatible() {
+                        fory_core::type_id::need_to_write_type_for_field(
+                            <#ty as fory_core::Serializer>::fory_static_type_id()
+                        )
+                    } else {
+                        <#ty as fory_core::Serializer>::fory_is_polymorphic()
+                    };
+                    <#ty as fory_core::Serializer>::fory_write(
+                        &#access,
+                        context,
+                        #ref_mode,
+                        write_type_info,
+                        #has_generics
+                    )?;
+                }
+            }
         }
     }
 
     pub fn read_field(&self) -> TokenStream {
-        let call = self.codec_call();
         let var = &self.private_ident;
-        quote! {
-            let #var = #call::read_field(context)?;
+        match &self.dispatch {
+            FieldDispatch::Codec { .. } => {
+                let call = self.codec_call();
+                quote! {
+                    let #var = #call::read_field(context)?;
+                }
+            }
+            FieldDispatch::Serializer { .. } => {
+                let ty = self.value_ty;
+                let ref_mode = serializer_ref_mode_for_field(self.source.field);
+                quote! {
+                    let read_type_info = if context.is_compatible() {
+                        fory_core::serializer::util::field_need_read_type_info(
+                            <#ty as fory_core::Serializer>::fory_static_type_id() as u32
+                        )
+                    } else {
+                        <#ty as fory_core::Serializer>::fory_is_polymorphic()
+                    };
+                    let #var = <#ty as fory_core::Serializer>::fory_read(
+                        context,
+                        #ref_mode,
+                        read_type_info
+                    )?;
+                }
+            }
         }
     }
 
@@ -80,32 +154,82 @@ impl<'a> ResolvedField<'a> {
     }
 
     pub fn read_compatible(&self) -> TokenStream {
-        let call = self.codec_call();
         let var = &self.private_ident;
-        quote! {
-            if let Some(value) = #call::read_compatible(context, &_field.field_type)? {
-                #var = Some(value);
-            } else {
-                let field_type = &_field.field_type;
-                let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
-                    field_type.type_id,
-                    field_type.nullable,
-                );
-                fory_core::serializer::skip::skip_field_value(context, field_type, read_ref_flag)?;
+        match &self.dispatch {
+            FieldDispatch::Codec { .. } => {
+                let call = self.codec_call();
+                quote! {
+                    if let Some(value) = #call::read_compatible(context, &_field.field_type)? {
+                        #var = Some(value);
+                    } else {
+                        let field_type = &_field.field_type;
+                        let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
+                            field_type.type_id,
+                            field_type.nullable,
+                        );
+                        fory_core::serializer::skip::skip_field_value(context, field_type, read_ref_flag)?;
+                    }
+                }
+            }
+            FieldDispatch::Serializer { field_type, .. } => {
+                let ty = self.value_ty;
+                quote! {
+                    let type_resolver = context.get_type_resolver();
+                    let local_field_type = #field_type;
+                    if fory_core::serializer::codec::field_types_compatible(
+                        &local_field_type,
+                        &_field.field_type,
+                    ) {
+                        let read_ref_mode =
+                            fory_core::serializer::codec::field_ref_mode(&_field.field_type);
+                        let read_type_info = if context.is_compatible() {
+                            fory_core::serializer::util::field_need_read_type_info(
+                                _field.field_type.type_id
+                            )
+                        } else {
+                            <#ty as fory_core::Serializer>::fory_is_polymorphic()
+                        };
+                        #var = Some(<#ty as fory_core::Serializer>::fory_read(
+                            context,
+                            read_ref_mode,
+                            read_type_info,
+                        )?);
+                    } else {
+                        let field_type = &_field.field_type;
+                        let read_ref_flag = fory_core::serializer::util::field_need_write_ref_into(
+                            field_type.type_id,
+                            field_type.nullable,
+                        );
+                        fory_core::serializer::skip::skip_field_value(context, field_type, read_ref_flag)?;
+                    }
+                }
             }
         }
     }
 
     pub fn field_info(&self) -> TokenStream {
-        let call = self.codec_call();
         let field_id = self.field_id;
         let name = &self.source.field_name;
-        quote! {
-            fory_core::meta::FieldInfo::new_with_id(
-                #field_id,
-                #name,
-                #call::field_type(type_resolver)?
-            )
+        match &self.dispatch {
+            FieldDispatch::Codec { .. } => {
+                let call = self.codec_call();
+                quote! {
+                    fory_core::meta::FieldInfo::new_with_id(
+                        #field_id,
+                        #name,
+                        #call::field_type(type_resolver)?
+                    )
+                }
+            }
+            FieldDispatch::Serializer { field_type, .. } => {
+                quote! {
+                    fory_core::meta::FieldInfo::new_with_id(
+                        #field_id,
+                        #name,
+                        #field_type
+                    )
+                }
+            }
         }
     }
 }
@@ -158,16 +282,34 @@ pub(crate) fn build_bindings<'a>(
             } else {
                 -1
             };
-            let codec_ty = codec_type_for(&source.field.ty, &meta, nullable, track_ref)?;
+            let dispatch = field_dispatch_for(&source.field.ty, &meta, nullable, track_ref)?;
             Ok(FieldBinding::Codec(ResolvedField {
                 source,
                 private_ident,
-                codec_ty,
+                dispatch,
                 value_ty: &source.field.ty,
                 field_id,
             }))
         })
         .collect()
+}
+
+fn field_dispatch_for(
+    ty: &Type,
+    meta: &ForyFieldMeta,
+    nullable: bool,
+    track_ref: bool,
+) -> syn::Result<FieldDispatch> {
+    if meta.encoding.is_none() && meta.list.is_none() && meta.map.is_none() && is_container_type(ty)
+    {
+        return Ok(FieldDispatch::Serializer {
+            field_type: field_type_expr_for(ty, nullable, track_ref)?,
+            has_generics: true,
+        });
+    }
+    Ok(FieldDispatch::Codec {
+        codec_ty: codec_type_for(ty, meta, nullable, track_ref)?,
+    })
 }
 
 pub(crate) fn codec_type_for(
@@ -196,7 +338,38 @@ pub(crate) fn codec_type_for(
                     "encoding is only valid on integer values; use list(element(encoding = ...)) for Vec elements",
                 ));
             }
+            if meta.map.is_some() {
+                return Err(syn::Error::new_spanned(
+                    ty,
+                    "map(...) config is only valid for HashMap fields",
+                ));
+            }
             let elem_ty = single_type_arg(args, ty, "Vec")?;
+            if meta.list.is_none() && is_primitive_vec_type(ty) {
+                return Ok(quote! {
+                    fory_core::serializer::codec::SerializerCodec<#ty, #nullable, #track_ref>
+                });
+            }
+            if meta.list.is_none() {
+                let elem_meta = ForyFieldMeta::default();
+                let elem_class = classify_field_type(elem_ty);
+                let elem_codec = codec_type_for(
+                    elem_ty,
+                    &elem_meta,
+                    elem_meta.effective_nullable(elem_class) || is_option_type(elem_ty),
+                    elem_meta.effective_ref(elem_class),
+                )?;
+                return Ok(quote! {
+                    fory_core::serializer::codec::CollectionSerializerCodec<
+                        #ty,
+                        #elem_ty,
+                        #elem_codec,
+                        { fory_core::type_id::TypeId::LIST as u8 },
+                        #nullable,
+                        #track_ref
+                    >
+                });
+            }
             let elem_meta = meta.element_meta();
             let elem_class = classify_field_type(elem_ty);
             let elem_nullable = elem_meta.effective_nullable(elem_class) || is_option_type(elem_ty);
@@ -213,7 +386,42 @@ pub(crate) fn codec_type_for(
                     "encoding is only valid on integer values; use map(key(...), value(...)) for HashMap entries",
                 ));
             }
+            if meta.list.is_some() {
+                return Err(syn::Error::new_spanned(
+                    ty,
+                    "list(...) config is only valid for Vec fields",
+                ));
+            }
             let (key_ty, value_ty) = two_type_args(args, ty, "HashMap")?;
+            if meta.map.is_none() {
+                let key_meta = ForyFieldMeta::default();
+                let value_meta = ForyFieldMeta::default();
+                let key_class = classify_field_type(key_ty);
+                let value_class = classify_field_type(value_ty);
+                let key_codec = codec_type_for(
+                    key_ty,
+                    &key_meta,
+                    key_meta.effective_nullable(key_class) || is_option_type(key_ty),
+                    key_meta.effective_ref(key_class),
+                )?;
+                let value_codec = codec_type_for(
+                    value_ty,
+                    &value_meta,
+                    value_meta.effective_nullable(value_class) || is_option_type(value_ty),
+                    value_meta.effective_ref(value_class),
+                )?;
+                return Ok(quote! {
+                    fory_core::serializer::codec::MapSerializerCodec<
+                        #ty,
+                        #key_ty,
+                        #value_ty,
+                        #key_codec,
+                        #value_codec,
+                        #nullable,
+                        #track_ref
+                    >
+                });
+            }
             let key_meta = meta.map_key_meta();
             let value_meta = meta.map_value_meta();
             let key_class = classify_field_type(key_ty);
@@ -232,6 +440,141 @@ pub(crate) fn codec_type_for(
             )?;
             return Ok(quote! {
                 fory_core::serializer::codec::HashMapCodec<#key_ty, #value_ty, #key_codec, #value_codec, #nullable, #track_ref>
+            });
+        }
+        if name == "HashSet" {
+            if meta.encoding.is_some() {
+                return Err(syn::Error::new_spanned(
+                    ty,
+                    "encoding is only valid on integer values",
+                ));
+            }
+            if meta.list.is_some() {
+                return Err(syn::Error::new_spanned(
+                    ty,
+                    "list(...) config is only valid for Vec fields",
+                ));
+            }
+            if meta.map.is_some() {
+                return Err(syn::Error::new_spanned(
+                    ty,
+                    "map(...) config is only valid for HashMap fields",
+                ));
+            }
+            let elem_ty = single_type_arg(args, ty, "HashSet")?;
+            let elem_meta = ForyFieldMeta::default();
+            let elem_class = classify_field_type(elem_ty);
+            let elem_codec = codec_type_for(
+                elem_ty,
+                &elem_meta,
+                elem_meta.effective_nullable(elem_class) || is_option_type(elem_ty),
+                elem_meta.effective_ref(elem_class),
+            )?;
+            return Ok(quote! {
+                fory_core::serializer::codec::CollectionSerializerCodec<
+                    #ty,
+                    #elem_ty,
+                    #elem_codec,
+                    { fory_core::type_id::TypeId::SET as u8 },
+                    #nullable,
+                    #track_ref
+                >
+            });
+        }
+        if is_serializer_backed_collection(&name) {
+            validate_serializer_backed_collection_meta(ty, meta, &name)?;
+            let elem_ty = single_type_arg(args, ty, &name)?;
+            let elem_meta = ForyFieldMeta::default();
+            let elem_class = classify_field_type(elem_ty);
+            let elem_codec = codec_type_for(
+                elem_ty,
+                &elem_meta,
+                elem_meta.effective_nullable(elem_class) || is_option_type(elem_ty),
+                elem_meta.effective_ref(elem_class),
+            )?;
+            let type_id = serializer_backed_collection_type_id(&name);
+            return Ok(quote! {
+                fory_core::serializer::codec::CollectionSerializerCodec<
+                    #ty,
+                    #elem_ty,
+                    #elem_codec,
+                    #type_id,
+                    #nullable,
+                    #track_ref
+                >
+            });
+        }
+        if is_serializer_backed_map(&name) {
+            validate_serializer_backed_map_meta(ty, meta, &name)?;
+            let (key_ty, value_ty) = two_type_args(args, ty, &name)?;
+            let key_meta = ForyFieldMeta::default();
+            let value_meta = ForyFieldMeta::default();
+            let key_class = classify_field_type(key_ty);
+            let value_class = classify_field_type(value_ty);
+            let key_codec = codec_type_for(
+                key_ty,
+                &key_meta,
+                key_meta.effective_nullable(key_class) || is_option_type(key_ty),
+                key_meta.effective_ref(key_class),
+            )?;
+            let value_codec = codec_type_for(
+                value_ty,
+                &value_meta,
+                value_meta.effective_nullable(value_class) || is_option_type(value_ty),
+                value_meta.effective_ref(value_class),
+            )?;
+            return Ok(quote! {
+                fory_core::serializer::codec::MapSerializerCodec<
+                    #ty,
+                    #key_ty,
+                    #value_ty,
+                    #key_codec,
+                    #value_codec,
+                    #nullable,
+                    #track_ref
+                >
+            });
+        }
+    }
+
+    if let Type::Array(array) = ty {
+        if meta.encoding.is_some() {
+            return Err(syn::Error::new_spanned(
+                ty,
+                "encoding is only valid on integer values",
+            ));
+        }
+        if meta.list.is_some() {
+            return Err(syn::Error::new_spanned(
+                ty,
+                "list(...) config is only valid for Vec fields",
+            ));
+        }
+        if meta.map.is_some() {
+            return Err(syn::Error::new_spanned(
+                ty,
+                "map(...) config is only valid for HashMap fields",
+            ));
+        }
+        if !is_primitive_array_type(ty) {
+            let elem_ty = array.elem.as_ref();
+            let elem_meta = ForyFieldMeta::default();
+            let elem_class = classify_field_type(elem_ty);
+            let elem_codec = codec_type_for(
+                elem_ty,
+                &elem_meta,
+                elem_meta.effective_nullable(elem_class) || is_option_type(elem_ty),
+                elem_meta.effective_ref(elem_class),
+            )?;
+            return Ok(quote! {
+                fory_core::serializer::codec::CollectionSerializerCodec<
+                    #ty,
+                    #elem_ty,
+                    #elem_codec,
+                    { fory_core::type_id::TypeId::LIST as u8 },
+                    #nullable,
+                    #track_ref
+                >
             });
         }
     }
@@ -399,6 +742,233 @@ fn two_type_args<'a>(
     Ok((first, second))
 }
 
+fn is_container_type(ty: &Type) -> bool {
+    if matches!(ty, Type::Array(_) | Type::Tuple(_)) {
+        return true;
+    }
+    let Some((name, _)) = type_name_and_args(ty) else {
+        return false;
+    };
+    matches!(
+        name.as_str(),
+        "Vec"
+            | "VecDeque"
+            | "LinkedList"
+            | "HashSet"
+            | "BTreeSet"
+            | "BinaryHeap"
+            | "HashMap"
+            | "BTreeMap"
+    )
+}
+
+fn field_type_expr_for(ty: &Type, nullable: bool, track_ref: bool) -> syn::Result<TokenStream> {
+    if let Some(inner) = extract_option_inner_type(ty) {
+        return field_type_expr_for(&inner, true, track_ref);
+    }
+
+    if let Type::Array(array) = ty {
+        let type_id = get_type_id_by_type_ast(ty);
+        if fory_core::type_id::PRIMITIVE_ARRAY_TYPES.contains(&type_id) {
+            return Ok(field_type_literal(type_id, nullable, track_ref, Vec::new()));
+        }
+        let elem_ty = array.elem.as_ref();
+        let elem_type = nested_field_type_expr(elem_ty)?;
+        return Ok(field_type_literal(
+            fory_core::type_id::TypeId::LIST as u32,
+            nullable,
+            track_ref,
+            vec![elem_type],
+        ));
+    }
+
+    if matches!(ty, Type::Tuple(_)) {
+        return Ok(field_type_literal(
+            fory_core::type_id::TypeId::LIST as u32,
+            nullable,
+            track_ref,
+            vec![quote! {
+                fory_core::meta::FieldType {
+                    type_id: fory_core::type_id::TypeId::UNKNOWN as u32,
+                    user_type_id: u32::MAX,
+                    nullable: true,
+                    track_ref: false,
+                    generics: Vec::new(),
+                }
+            }],
+        ));
+    }
+
+    if let Some((name, Some(args))) = type_name_and_args(ty) {
+        match name.as_str() {
+            "Vec" => {
+                let type_id = get_type_id_by_type_ast(ty);
+                if fory_core::type_id::PRIMITIVE_ARRAY_TYPES.contains(&type_id) {
+                    return Ok(field_type_literal(type_id, nullable, track_ref, Vec::new()));
+                }
+                let elem_ty = single_type_arg(args, ty, "Vec")?;
+                let elem_type = nested_field_type_expr(elem_ty)?;
+                return Ok(field_type_literal(
+                    fory_core::type_id::TypeId::LIST as u32,
+                    nullable,
+                    track_ref,
+                    vec![elem_type],
+                ));
+            }
+            "VecDeque" | "LinkedList" => {
+                let elem_ty = single_type_arg(args, ty, &name)?;
+                let elem_type = nested_field_type_expr(elem_ty)?;
+                return Ok(field_type_literal(
+                    fory_core::type_id::TypeId::LIST as u32,
+                    nullable,
+                    track_ref,
+                    vec![elem_type],
+                ));
+            }
+            "HashSet" | "BTreeSet" | "BinaryHeap" => {
+                let elem_ty = single_type_arg(args, ty, &name)?;
+                let elem_type = nested_field_type_expr(elem_ty)?;
+                return Ok(field_type_literal(
+                    fory_core::type_id::TypeId::SET as u32,
+                    nullable,
+                    track_ref,
+                    vec![elem_type],
+                ));
+            }
+            "HashMap" | "BTreeMap" => {
+                let (key_ty, value_ty) = two_type_args(args, ty, &name)?;
+                let key_type = nested_field_type_expr(key_ty)?;
+                let value_type = nested_field_type_expr(value_ty)?;
+                return Ok(field_type_literal(
+                    fory_core::type_id::TypeId::MAP as u32,
+                    nullable,
+                    track_ref,
+                    vec![key_type, value_type],
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    Ok(serializer_field_type_expr(ty, nullable, track_ref))
+}
+
+fn nested_field_type_expr(ty: &Type) -> syn::Result<TokenStream> {
+    let meta = ForyFieldMeta::default();
+    let class = classify_field_type(ty);
+    let nullable = meta.effective_nullable(class) || is_option_type(ty);
+    let track_ref = meta.effective_ref(class);
+    let codec_ty = codec_type_for(ty, &meta, nullable, track_ref)?;
+    Ok(quote! {
+        <#codec_ty as fory_core::serializer::codec::Codec<#ty>>::field_type(type_resolver)?
+    })
+}
+
+fn field_type_literal(
+    type_id: u32,
+    nullable: bool,
+    track_ref: bool,
+    generics: Vec<TokenStream>,
+) -> TokenStream {
+    quote! {
+        fory_core::meta::FieldType {
+            type_id: #type_id,
+            user_type_id: u32::MAX,
+            nullable: #nullable,
+            track_ref: #track_ref,
+            generics: vec![#(#generics),*],
+        }
+    }
+}
+
+fn serializer_field_type_expr(ty: &Type, nullable: bool, track_ref: bool) -> TokenStream {
+    quote! {
+        <fory_core::serializer::codec::SerializerCodec<#ty, #nullable, #track_ref>
+            as fory_core::serializer::codec::Codec<#ty>>::field_type(type_resolver)?
+    }
+}
+
+fn serializer_ref_mode_for_field(field: &syn::Field) -> TokenStream {
+    let meta = parse_field_meta(field).unwrap_or_default();
+    let type_class = classify_field_type(&field.ty);
+    let nullable = meta.effective_nullable(type_class) || is_option_type(&field.ty);
+    let track_ref = meta.effective_ref(type_class);
+    if track_ref {
+        quote! { fory_core::RefMode::Tracking }
+    } else if nullable {
+        quote! { fory_core::RefMode::NullOnly }
+    } else {
+        quote! { fory_core::RefMode::None }
+    }
+}
+
+fn is_serializer_backed_collection(name: &str) -> bool {
+    matches!(name, "VecDeque" | "LinkedList" | "BTreeSet" | "BinaryHeap")
+}
+
+fn serializer_backed_collection_type_id(name: &str) -> TokenStream {
+    match name {
+        "BTreeSet" | "BinaryHeap" => quote! { { fory_core::type_id::TypeId::SET as u8 } },
+        _ => quote! { { fory_core::type_id::TypeId::LIST as u8 } },
+    }
+}
+
+fn validate_serializer_backed_collection_meta(
+    ty: &Type,
+    meta: &ForyFieldMeta,
+    name: &str,
+) -> syn::Result<()> {
+    if meta.encoding.is_some() {
+        return Err(syn::Error::new_spanned(
+            ty,
+            "encoding is only valid on integer values",
+        ));
+    }
+    if meta.list.is_some() {
+        return Err(syn::Error::new_spanned(
+            ty,
+            format!("list(...) config is only valid for Vec fields, not {name}"),
+        ));
+    }
+    if meta.map.is_some() {
+        return Err(syn::Error::new_spanned(
+            ty,
+            format!("map(...) config is only valid for map fields, not {name}"),
+        ));
+    }
+    Ok(())
+}
+
+fn is_serializer_backed_map(name: &str) -> bool {
+    matches!(name, "BTreeMap")
+}
+
+fn validate_serializer_backed_map_meta(
+    ty: &Type,
+    meta: &ForyFieldMeta,
+    name: &str,
+) -> syn::Result<()> {
+    if meta.encoding.is_some() {
+        return Err(syn::Error::new_spanned(
+            ty,
+            "encoding is only valid on integer values; use map(key(...), value(...)) for map entries",
+        ));
+    }
+    if meta.list.is_some() {
+        return Err(syn::Error::new_spanned(
+            ty,
+            format!("list(...) config is only valid for list fields, not {name}"),
+        ));
+    }
+    if meta.map.is_some() {
+        return Err(syn::Error::new_spanned(
+            ty,
+            format!("map(...) config is currently supported only for HashMap fields, not {name}"),
+        ));
+    }
+    Ok(())
+}
+
 fn is_exact_any(ty: &Type, owner: &str) -> bool {
     let Some((name, Some(args))) = type_name_and_args(ty) else {
         return false;
@@ -420,6 +990,14 @@ fn is_exact_any(ty: &Type, owner: &str) -> bool {
             false
         }
     })
+}
+
+fn is_primitive_vec_type(ty: &Type) -> bool {
+    fory_core::type_id::PRIMITIVE_ARRAY_TYPES.contains(&get_type_id_by_type_ast(ty))
+}
+
+fn is_primitive_array_type(ty: &Type) -> bool {
+    fory_core::type_id::PRIMITIVE_ARRAY_TYPES.contains(&get_type_id_by_type_ast(ty))
 }
 
 pub(crate) fn default_expr_for_type(ty: &Type) -> TokenStream {

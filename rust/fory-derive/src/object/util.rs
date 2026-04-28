@@ -297,15 +297,11 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
     }
 
     // Check collection types
-    if ty.starts_with("Vec<")
-        || ty.starts_with("VecDeque<")
-        || ty.starts_with("LinkedList<")
-        || ty.starts_with("BinaryHeap<")
-    {
+    if ty.starts_with("Vec<") || ty.starts_with("VecDeque<") || ty.starts_with("LinkedList<") {
         return TypeId::LIST as u32;
     }
 
-    if ty.starts_with("HashSet<") || ty.starts_with("BTreeSet<") {
+    if ty.starts_with("HashSet<") || ty.starts_with("BTreeSet<") || ty.starts_with("BinaryHeap<") {
         return TypeId::SET as u32;
     }
 

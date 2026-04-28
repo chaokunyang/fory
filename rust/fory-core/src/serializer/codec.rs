@@ -81,6 +81,39 @@ fn field_write_type_info<T: Serializer>(context: &WriteContext) -> bool {
 }
 
 #[inline(always)]
+fn serializer_static_field_type_id<T: Serializer>() -> u32 {
+    let type_id = T::fory_static_type_id() as u32;
+    if type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32 {
+        TypeId::UNION as u32
+    } else {
+        type_id
+    }
+}
+
+#[inline(always)]
+fn serializer_ref_mode<T: Serializer, const NULLABLE: bool, const TRACK_REF: bool>() -> RefMode {
+    if TRACK_REF {
+        RefMode::Tracking
+    } else if crate::serializer::util::field_need_write_ref_into(
+        serializer_static_field_type_id::<T>(),
+        NULLABLE,
+    ) {
+        RefMode::NullOnly
+    } else {
+        RefMode::None
+    }
+}
+
+#[inline(always)]
+fn serializer_read_type_info<T: Serializer>(context: &ReadContext) -> bool {
+    if context.is_compatible() {
+        crate::serializer::util::field_need_read_type_info(serializer_static_field_type_id::<T>())
+    } else {
+        T::fory_is_polymorphic()
+    }
+}
+
+#[inline(always)]
 fn codec_read_type_info<T, C>(context: &ReadContext, field_type: &FieldType) -> bool
 where
     T: 'static,
@@ -340,11 +373,10 @@ where
 
     #[inline(always)]
     fn write_field(value: &T, context: &mut WriteContext) -> Result<(), Error> {
-        let field_type = Self::field_type(context.get_type_resolver())?;
         T::fory_write(
             value,
             context,
-            field_ref_mode(&field_type),
+            serializer_ref_mode::<T, NULLABLE, TRACK_REF>(),
             field_write_type_info::<T>(context),
             false,
         )
@@ -352,8 +384,11 @@ where
 
     #[inline(always)]
     fn read_field(context: &mut ReadContext) -> Result<T, Error> {
-        let field_type = Self::field_type(context.get_type_resolver())?;
-        Self::read_field_with_type(context, &field_type)
+        T::fory_read(
+            context,
+            serializer_ref_mode::<T, NULLABLE, TRACK_REF>(),
+            serializer_read_type_info::<T>(context),
+        )
     }
 
     #[inline(always)]
@@ -450,6 +485,264 @@ where
     #[inline(always)]
     fn concrete_type_id(value: &T) -> std::any::TypeId {
         value.fory_concrete_type_id()
+    }
+}
+
+pub struct CollectionSerializerCodec<
+    T,
+    E,
+    EC,
+    const TYPE_ID: u8,
+    const NULLABLE: bool,
+    const TRACK_REF: bool,
+>(PhantomData<(T, E, EC)>);
+
+impl<T, E, EC, const TYPE_ID: u8, const NULLABLE: bool, const TRACK_REF: bool> Codec<T>
+    for CollectionSerializerCodec<T, E, EC, TYPE_ID, NULLABLE, TRACK_REF>
+where
+    T: Serializer + ForyDefault,
+    E: 'static,
+    EC: Codec<E>,
+{
+    #[inline(always)]
+    fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
+        Ok(FieldType {
+            type_id: TYPE_ID as u32,
+            user_type_id: u32::MAX,
+            nullable: NULLABLE,
+            track_ref: TRACK_REF,
+            generics: vec![EC::field_type(type_resolver)?],
+        })
+    }
+
+    #[inline(always)]
+    fn reserved_space() -> usize {
+        T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE
+    }
+
+    #[inline(always)]
+    fn write_field(value: &T, context: &mut WriteContext) -> Result<(), Error> {
+        T::fory_write(
+            value,
+            context,
+            serializer_ref_mode::<T, NULLABLE, TRACK_REF>(),
+            field_write_type_info::<T>(context),
+            true,
+        )
+    }
+
+    #[inline(always)]
+    fn read_field(context: &mut ReadContext) -> Result<T, Error> {
+        T::fory_read(
+            context,
+            serializer_ref_mode::<T, NULLABLE, TRACK_REF>(),
+            serializer_read_type_info::<T>(context),
+        )
+    }
+
+    #[inline(always)]
+    fn write_data(value: &T, context: &mut WriteContext) -> Result<(), Error> {
+        T::fory_write_data_generic(value, context, true)
+    }
+
+    #[inline(always)]
+    fn read_data(context: &mut ReadContext) -> Result<T, Error> {
+        T::fory_read_data(context)
+    }
+
+    #[inline(always)]
+    fn read_field_with_type(
+        context: &mut ReadContext,
+        remote_field_type: &FieldType,
+    ) -> Result<T, Error> {
+        T::fory_read(
+            context,
+            field_ref_mode(remote_field_type),
+            field_read_type_info::<T>(context, remote_field_type),
+        )
+    }
+
+    #[inline(always)]
+    fn write_with_mode(
+        value: &T,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        write_type_info: bool,
+        _has_generics: bool,
+    ) -> Result<(), Error> {
+        T::fory_write(value, context, ref_mode, write_type_info, true)
+    }
+
+    #[inline(always)]
+    fn read_with_mode(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        read_type_info: bool,
+    ) -> Result<T, Error> {
+        T::fory_read(context, ref_mode, read_type_info)
+    }
+
+    #[inline(always)]
+    fn read_with_type_info(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        type_info: std::rc::Rc<crate::TypeInfo>,
+    ) -> Result<T, Error> {
+        T::fory_read_with_type_info(context, ref_mode, type_info)
+    }
+
+    #[inline(always)]
+    fn default_value() -> T {
+        T::fory_default()
+    }
+
+    #[inline(always)]
+    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        context.writer.write_u8(TYPE_ID);
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        let remote = context.reader.read_u8()?;
+        if remote != TYPE_ID {
+            return Err(Error::type_mismatch(TYPE_ID as u32, remote as u32));
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn static_type_id() -> TypeId {
+        TypeId::try_from(TYPE_ID).unwrap_or(TypeId::UNKNOWN)
+    }
+}
+
+pub struct MapSerializerCodec<T, K, V, KC, VC, const NULLABLE: bool, const TRACK_REF: bool>(
+    PhantomData<(T, K, V, KC, VC)>,
+);
+
+impl<T, K, V, KC, VC, const NULLABLE: bool, const TRACK_REF: bool> Codec<T>
+    for MapSerializerCodec<T, K, V, KC, VC, NULLABLE, TRACK_REF>
+where
+    T: Serializer + ForyDefault,
+    K: 'static,
+    V: 'static,
+    KC: Codec<K>,
+    VC: Codec<V>,
+{
+    #[inline(always)]
+    fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
+        Ok(FieldType {
+            type_id: TypeId::MAP as u32,
+            user_type_id: u32::MAX,
+            nullable: NULLABLE,
+            track_ref: TRACK_REF,
+            generics: vec![
+                KC::field_type(type_resolver)?,
+                VC::field_type(type_resolver)?,
+            ],
+        })
+    }
+
+    #[inline(always)]
+    fn reserved_space() -> usize {
+        T::fory_reserved_space() + SIZE_OF_REF_AND_TYPE
+    }
+
+    #[inline(always)]
+    fn write_field(value: &T, context: &mut WriteContext) -> Result<(), Error> {
+        T::fory_write(
+            value,
+            context,
+            serializer_ref_mode::<T, NULLABLE, TRACK_REF>(),
+            field_write_type_info::<T>(context),
+            true,
+        )
+    }
+
+    #[inline(always)]
+    fn read_field(context: &mut ReadContext) -> Result<T, Error> {
+        T::fory_read(
+            context,
+            serializer_ref_mode::<T, NULLABLE, TRACK_REF>(),
+            serializer_read_type_info::<T>(context),
+        )
+    }
+
+    #[inline(always)]
+    fn write_data(value: &T, context: &mut WriteContext) -> Result<(), Error> {
+        T::fory_write_data_generic(value, context, true)
+    }
+
+    #[inline(always)]
+    fn read_data(context: &mut ReadContext) -> Result<T, Error> {
+        T::fory_read_data(context)
+    }
+
+    #[inline(always)]
+    fn read_field_with_type(
+        context: &mut ReadContext,
+        remote_field_type: &FieldType,
+    ) -> Result<T, Error> {
+        T::fory_read(
+            context,
+            field_ref_mode(remote_field_type),
+            field_read_type_info::<T>(context, remote_field_type),
+        )
+    }
+
+    #[inline(always)]
+    fn write_with_mode(
+        value: &T,
+        context: &mut WriteContext,
+        ref_mode: RefMode,
+        write_type_info: bool,
+        _has_generics: bool,
+    ) -> Result<(), Error> {
+        T::fory_write(value, context, ref_mode, write_type_info, true)
+    }
+
+    #[inline(always)]
+    fn read_with_mode(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        read_type_info: bool,
+    ) -> Result<T, Error> {
+        T::fory_read(context, ref_mode, read_type_info)
+    }
+
+    #[inline(always)]
+    fn read_with_type_info(
+        context: &mut ReadContext,
+        ref_mode: RefMode,
+        type_info: std::rc::Rc<crate::TypeInfo>,
+    ) -> Result<T, Error> {
+        T::fory_read_with_type_info(context, ref_mode, type_info)
+    }
+
+    #[inline(always)]
+    fn default_value() -> T {
+        T::fory_default()
+    }
+
+    #[inline(always)]
+    fn write_type_info(context: &mut WriteContext) -> Result<(), Error> {
+        context.writer.write_u8(TypeId::MAP as u8);
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn read_type_info(context: &mut ReadContext) -> Result<(), Error> {
+        let remote = context.reader.read_u8()? as u32;
+        if remote != TypeId::MAP as u32 {
+            return Err(Error::type_mismatch(TypeId::MAP as u32, remote));
+        }
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn static_type_id() -> TypeId {
+        TypeId::MAP
     }
 }
 
@@ -1032,8 +1325,47 @@ where
     }
 
     fn read_data(context: &mut ReadContext) -> Result<Vec<T>, Error> {
-        let field_type = Self::field_type(context.get_type_resolver())?;
-        Self::read_data_with_type(context, &field_type)
+        let len = context.reader.read_var_u32()?;
+        if len == 0 {
+            return Ok(Vec::new());
+        }
+        let max = context.max_collection_size();
+        if len > max {
+            return Err(Error::size_limit_exceeded(format!(
+                "Collection size {} exceeds limit {}",
+                len, max
+            )));
+        }
+        let header = context.reader.read_u8()?;
+        if C::is_polymorphic() || C::is_shared_ref() {
+            let field_type = Self::field_type(context.get_type_resolver())?;
+            return read_vec_dynamic_items::<T, C>(context, len, header, &field_type);
+        }
+        if (header & IS_SAME_TYPE) == 0 {
+            return Err(Error::type_error(
+                "Type inconsistent, target collection element type is not polymorphic",
+            ));
+        }
+        if (header & DECL_ELEMENT_TYPE) == 0 {
+            C::read_type_info(context)?;
+        }
+        let has_null = (header & HAS_NULL) != 0;
+        let mut vec = Vec::with_capacity(len as usize);
+        if has_null {
+            for _ in 0..len {
+                let flag = context.reader.read_i8()?;
+                if flag == RefFlag::Null as i8 {
+                    vec.push(C::default_value());
+                } else {
+                    vec.push(C::read_data(context)?);
+                }
+            }
+        } else {
+            for _ in 0..len {
+                vec.push(C::read_data(context)?);
+            }
+        }
+        Ok(vec)
     }
 
     fn read_data_with_type(

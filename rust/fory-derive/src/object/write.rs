@@ -44,7 +44,7 @@ pub fn gen_reserved_space(source_fields: &[SourceField<'_>]) -> TokenStream {
 
 pub fn gen_write_type_info() -> TokenStream {
     quote! {
-        fory_core::serializer::struct_::write_type_info::<Self>(context)
+        fory_core::serializer::struct_::write_type_info_fast::<Self>(context)
     }
 }
 

@@ -39,13 +39,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Durable Task State And Compaction
 
-- For non-trivial multi-step tasks, keep durable task notes under `tasks/` instead of relying only on chat.
-- If a named skill or workflow already maintains equivalent durable task state, use that workflow's files as the canonical plan/state; its files satisfy the requirements below, so do not create duplicate `tasks/<task-slug>-plan.md` or `tasks/<task-slug>-state.md` files.
-- Otherwise, before implementation, create or update `tasks/<task-slug>-plan.md` with scope, milestones, acceptance criteria, validation commands, and non-goals.
-- Otherwise, during execution, maintain `tasks/<task-slug>-state.md` with the current milestone, completed work, changed files, important decisions, failed attempts, validation results, open questions, and exact next step.
-- Update the canonical state file after meaningful milestones and before context compaction.
-- After compaction or resume, read `AGENTS.md`, then the canonical plan and state files, then inspect the working tree diff before continuing from the recorded next action.
-- Do not add task plan or state files to git.
+For non-trivial multi-step tasks, write the plan and progress into the canonical durable task file (use a matched skill/workflow file if it provides one, otherwise use a file under `tasks/`) and read that file after compaction before continuing.
 
 ## Repo-Wide Hard Rules
 

@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Fory Go uses struct tags to customize field-level serialization behavior. This allows fine-grained control over how individual fields are serialized.
+Fory Go uses struct tags to customize field-level serialization behavior. The current tag surface is built around top-level field flags plus a recursive `type=` DSL for nested collection overrides.
 
 ## Tag Syntax
 
@@ -32,6 +32,17 @@ type MyStruct struct {
 ```
 
 Multiple options are separated by commas (`,`).
+
+Nested `type=` overrides use a recursive DSL:
+
+```go
+type Example struct {
+    Size   uint64              `fory:"id=1,encoding=tagged"`
+    Values []*int32            `fory:"id=2,type=list(element=int32(nullable=true,encoding=fixed))"`
+    Data   map[int32]*int32    `fory:"id=3,type=map(value=int32(nullable=true,encoding=fixed))"`
+    Packed []int32             `fory:"id=4,type=list(element(encoding=fixed))"`
+}
+```
 
 ## Available Tags
 
@@ -122,7 +133,7 @@ type Container struct {
 
 ### Encoding
 
-Use `encoding` to control how numeric fields are encoded:
+Use top-level `encoding` to control how numeric scalar fields are encoded:
 
 ```go
 type Metrics struct {
@@ -152,16 +163,27 @@ type Metrics struct {
 - `fixed`: Best for values that use full range (e.g., timestamps, hashes)
 - `tagged`: When type information needs to be preserved
 
-**Shorthand for int32/uint32**:
+`encoding` is only valid on top-level numeric scalar fields. Nested numeric overrides must use `type=...`, for example `type=list(element=int32(encoding=fixed))`.
 
-Use `compress` as a convenience tag for int32/uint32 fields:
+### Nested Type Overrides
+
+Use `type=` to override nested collection/set/map element behavior:
 
 ```go
-type Data struct {
-    SmallValue int32  `fory:"compress"`        // Same as encoding=varint (default)
-    FixedValue uint32 `fory:"compress=false"`  // Same as encoding=fixed
+type Example struct {
+    Values []*int32            `fory:"type=list(element=int32(nullable=true,encoding=fixed))"`
+    Data   map[int32]*int32    `fory:"type=map(value=int32(nullable=true,encoding=fixed))"`
+    Nested map[string][]*int32 `fory:"type=map(value=list(element=int32(nullable=true,encoding=fixed)))"`
 }
 ```
+
+Rules:
+
+- Root numeric fields use top-level `encoding=...`, not `type=int64(...)`.
+- `type=` is the canonical way to override nested `element`, `key`, and `value` behavior.
+- Nested nodes may set `encoding`, `nullable`, and `ref`.
+- Override-only nested forms are allowed, for example `type=list(element(encoding=fixed))`.
+- One-dimensional primitive slices normalize back to packed `*_ARRAY` or `BINARY` when the final nested element spec is fixed-width, non-nullable, and `ref=false`.
 
 ## Combining Tags
 

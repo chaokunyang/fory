@@ -98,7 +98,7 @@ Use this rule when choosing field types:
 | Signed 64-bit value within JS-safe range | `int`                                                                | Works with default `int64` mapping and `@Int64Type` encodings.       |
 | Full signed 64-bit range                 | `Int64`                                                              | Preserves values outside the JS-safe range.                          |
 | Unsigned 64-bit value                    | `Uint64`                                                             | Required for values that do not fit in signed or JS-safe Dart `int`. |
-| 8/16/32-bit integer                      | `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32` or annotations | Use wrappers or numeric annotations to match peer runtimes exactly.  |
+| 8/16/32-bit integer                      | `int` + numeric annotations                                          | Use `@Int8Type`, `@Int16Type`, `@Int32Type`, `@Uint8Type`, `@Uint16Type`, or `@Uint32Type` to match peer runtimes exactly. |
 
 `@Int64Type` controls the wire encoding of a Dart `int` field:
 
@@ -107,7 +107,7 @@ Use this rule when choosing field types:
 class SafeCounter {
   SafeCounter();
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @Int64Type(encoding: Encoding.tagged)
   int count = 0; // keep web values inside the JS-safe range
 }
 ```

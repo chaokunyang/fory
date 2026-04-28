@@ -974,7 +974,7 @@ apply to elements. `repeated` is accepted as an alias for `list`.
 | `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                      |
 | `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                      |
 | `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`               |
-| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListType(element: ValueType.ref())` |
+| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` |
 
 Use `ref(thread_safe=false)` in Fory IDL (or `[(fory).thread_safe_pointer = false]` in protobuf)
 to generate `Rc` instead of `Arc` in Rust.
@@ -1150,6 +1150,7 @@ you need fixed-width or tagged encoding:
 | C++        | `fory::serialization::Date` |                         |
 | JavaScript | `Date`                      |                         |
 | Dart       | `LocalDate`                 | Fory package type       |
+| Swift      | `LocalDate`                 | Fory package type       |
 
 ##### Timestamp
 
@@ -1162,6 +1163,7 @@ you need fixed-width or tagged encoding:
 | C++        | `fory::serialization::Timestamp` |                         |
 | JavaScript | `Date`                           |                         |
 | Dart       | `Timestamp`                      | Fory package type       |
+| Swift      | `Timestamp`                      | Fory package type       |
 
 #### Any
 
@@ -1237,8 +1239,10 @@ message Order {
 Use the `list<...>` type for list fields. `repeated` is accepted as an alias. See [Field Modifiers](#field-modifiers) for
 modifier combinations and language mapping.
 
-Nested collection types are not supported. Use a message wrapper if you need
-`list<list<...>>`, `list<map<...>>`, or `map<..., list<...>>`.
+Nested collection types are not supported. `list<T>` element types and
+`map<K, V>` key/value types must be non-collection types. Use a message wrapper
+if you need `list<list<...>>`, `list<map<...>>`, `map<..., list<...>>`, or
+`map<..., map<...>>`.
 
 #### Map
 
@@ -1261,11 +1265,10 @@ message Config {
 
 **Key Type Restrictions:**
 
-- `string` (most common)
-- Integer types (`int8`, `int16`, `int32`, `int64`)
-- `bool`
-
-Avoid using messages or complex types as keys.
+- Allowed: `string`, `bool`, integer encodings, `date`, `timestamp`, `duration`,
+  `decimal`, and top-level enums.
+- Disallowed: floating-point types (`float16`, `bfloat16`, `float32`,
+  `float64`), `bytes`, messages, unions, nested types, and any collection type.
 
 ### Type Compatibility Matrix
 

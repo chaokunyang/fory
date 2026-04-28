@@ -948,14 +948,14 @@ Nested types use flat underscore naming (e.g., `Person_PhoneNumber`, `Person_Pho
 
 Non-optional, non-ref lists of primitive types use typed arrays for zero-copy performance (e.g., `list<int32>` → `Int32List`).
 
-Reference tracking on list elements or map values uses `@ListType` / `@MapType` annotations:
+Reference tracking on list elements or map values uses `@ListField` / `@MapField` annotations:
 
 ```dart
-@ListType(element: ValueType.ref())
+@ListField(element: DeclaredType(ref: true))
 @ForyField(id: 3)
 List<Node> children = <Node>[];
 
-@MapType(value: ValueType.ref())
+@MapField(value: DeclaredType(ref: true))
 @ForyField(id: 2)
 Map<String, Node> byName = <String, Node>{};
 ```

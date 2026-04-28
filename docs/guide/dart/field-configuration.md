@@ -97,23 +97,19 @@ Dart `int` is a 64-bit value at runtime. When exchanging messages with Java, Go,
 class Sample {
   Sample();
 
-  @Int32Type(compress: false)   // always writes 4 bytes
+  @Int32Type(encoding: Encoding.fixed)   // always writes 4 bytes
   int fixedWidthInt = 0;
 
-  @Int64Type(encoding: LongEncoding.tagged)  // variable-length encoding
+  @Int64Type(encoding: Encoding.tagged)  // compact tagged encoding
   int compactLong = 0;
 
-  @Uint32Type(compress: true)   // variable-length unsigned
+  @Uint32Type()   // variable-length unsigned
   int smallUnsigned = 0;
 }
 ```
 
-Available annotations: `@Int32Type`, `@Int64Type`, `@Uint8Type`, `@Uint16Type`, `@Uint32Type`, `@Uint64Type`.
-
-Alternatively, use explicit wrapper types such as `Int32`, `Int64`, `Uint32`,
-and `Uint64` as described in [Supported Types](supported-types.md). Wrappers use
-compact varint encodings by default; use annotations or generated field
-metadata when a fixed-width or tagged encoding is required.
+Available annotations: `@Int8Type`, `@Int16Type`, `@Int32Type`, `@Int64Type`,
+`@Uint8Type`, `@Uint16Type`, `@Uint32Type`, and `@Uint64Type`.
 
 ## Aligning Fields Across Languages
 

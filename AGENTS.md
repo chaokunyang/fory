@@ -37,6 +37,16 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Finish the whole surface. A feature or behavior change is incomplete until code, tests, docs, exports, examples, and build wiring agree, unless the user explicitly defers part of that surface.
 - Keep task boundaries strict. Review tasks do not edit code, analysis-only tasks do not silently turn into implementation, and active-branch fixes must land in the active branch/workspace.
 
+## Durable Task State And Compaction
+
+- For non-trivial multi-step tasks, keep durable task notes under `tasks/` instead of relying only on chat.
+- If a named skill or workflow already maintains equivalent durable task state, use that workflow's files as the canonical plan/state; its files satisfy the requirements below, so do not create duplicate `tasks/<task-slug>-plan.md` or `tasks/<task-slug>-state.md` files.
+- Otherwise, before implementation, create or update `tasks/<task-slug>-plan.md` with scope, milestones, acceptance criteria, validation commands, and non-goals.
+- Otherwise, during execution, maintain `tasks/<task-slug>-state.md` with the current milestone, completed work, changed files, important decisions, failed attempts, validation results, open questions, and exact next step.
+- Update the canonical state file after meaningful milestones and before context compaction.
+- After compaction or resume, read `AGENTS.md`, then the canonical plan and state files, then inspect the working tree diff before continuing from the recorded next action.
+- Do not add task plan or state files to git.
+
 ## Repo-Wide Hard Rules
 
 - Do not preserve legacy, dead, or useless code, tests, or docs unless the user explicitly requests it.
@@ -137,7 +147,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 
 ## Commit And PR Expectations
 
-- After each finished task, create a git commit automatically for the task's tracked code and documentation changes, excluding `tasks/task-*.md`, `tasks/lessons.md`, and unrelated user changes.
+- After each finished task, create a git commit automatically for the task's tracked code and documentation changes, excluding `tasks/task-*.md`, `tasks/*-plan.md`, `tasks/*-state.md`, `tasks/lessons.md`, and unrelated user changes.
 - PR titles must follow Conventional Commits; `.github/workflows/pr-lint.yml` enforces this.
 - Performance changes should use the `perf` type and include benchmark data.
 - See `.agents/ci-and-pr.md` for GitHub CLI triage commands and commit message examples.

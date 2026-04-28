@@ -349,7 +349,8 @@ cdef class DataClassSerializer(Serializer):
         cdef object obj
         cdef int32_t read_hash
 
-        read_context.policy.authorize_instantiation(self.type_)
+        if read_context.policy is not DEFAULT_POLICY:
+            read_context.policy.authorize_instantiation(self.type_)
 
         if not read_context.compatible:
             read_hash = read_context.read_int32()

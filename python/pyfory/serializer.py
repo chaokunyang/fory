@@ -29,6 +29,7 @@ from typing import Tuple
 
 from pyfory.serialization import Buffer
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
+from pyfory.policy import DEFAULT_POLICY
 
 try:
     import numpy as np
@@ -117,6 +118,8 @@ def _bind_static_method(obj, method_name):
 
 
 def _resolve_validated_bound_method(policy, obj, method_name, is_local):
+    if policy is DEFAULT_POLICY:
+        return getattr(obj, method_name)
     method = _bind_static_method(obj, method_name)
     result = policy.validate_method(method, is_local=is_local)
     if result is not None:
@@ -1298,7 +1301,10 @@ class FunctionSerializer(Serializer):
         if func_type_id == 0:
             self_obj = read_context.read_ref()
             method_name = read_context.read_string()
-            return _resolve_validated_bound_method(read_context.policy, self_obj, method_name, is_local=False)
+            policy = read_context.policy
+            if policy is DEFAULT_POLICY:
+                return getattr(self_obj, method_name)
+            return _resolve_validated_bound_method(policy, self_obj, method_name, is_local=False)
 
         if func_type_id == 1:
             module = read_context.read_string()
@@ -1394,7 +1400,11 @@ class NativeFuncMethodSerializer(Serializer):
             func = _validate_function_value(read_context.policy, func, is_local=False)
         else:
             obj = read_context.read_ref()
-            func = _resolve_validated_bound_method(read_context.policy, obj, name, is_local=False)
+            policy = read_context.policy
+            if policy is DEFAULT_POLICY:
+                func = getattr(obj, name)
+            else:
+                func = _resolve_validated_bound_method(policy, obj, name, is_local=False)
         return func
 
 
@@ -1418,7 +1428,10 @@ class MethodSerializer(Serializer):
 
         cls = instance if isinstance(instance, type) else instance.__class__
         is_local = cls.__module__ == "__main__" or "<locals>" in cls.__qualname__
-        return _resolve_validated_bound_method(read_context.policy, instance, method_name, is_local=is_local)
+        policy = read_context.policy
+        if policy is DEFAULT_POLICY:
+            return getattr(instance, method_name)
+        return _resolve_validated_bound_method(policy, instance, method_name, is_local=is_local)
 
 
 class ObjectSerializer(Serializer):
@@ -1451,19 +1464,28 @@ class ObjectSerializer(Serializer):
             write_context.write_ref(field_value)
 
     def read(self, read_context):
-        read_context.policy.authorize_instantiation(self.type_)
+        policy = read_context.policy
+        if policy is not DEFAULT_POLICY:
+            policy.authorize_instantiation(self.type_)
         obj = self.type_.__new__(self.type_)
         read_context.reference(obj)
         num_fields = read_context.read_var_uint32()
-        _check_collection_size(read_context, num_fields, "object field")
-        state = {}
-        for _ in range(num_fields):
-            field_name = read_context.read_string()
-            field_value = read_context.read_ref()
-            state[field_name] = field_value
-        read_context.policy.intercept_setstate(obj, state)
-        for field_name, field_value in state.items():
-            setattr(obj, field_name, field_value)
+        if num_fields > read_context.max_collection_size:
+            raise ValueError(f"object field size {num_fields} exceeds the configured limit of {read_context.max_collection_size}")
+        if policy is DEFAULT_POLICY:
+            for _ in range(num_fields):
+                field_name = read_context.read_string()
+                field_value = read_context.read_ref()
+                setattr(obj, field_name, field_value)
+        else:
+            state = {}
+            for _ in range(num_fields):
+                field_name = read_context.read_string()
+                field_value = read_context.read_ref()
+                state[field_name] = field_value
+            policy.intercept_setstate(obj, state)
+            for field_name, field_value in state.items():
+                setattr(obj, field_name, field_value)
         return obj
 
 

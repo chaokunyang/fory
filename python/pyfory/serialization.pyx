@@ -74,9 +74,6 @@ cdef extern from *:
     dict _PyDict_NewPresized(Py_ssize_t minused)
     Py_ssize_t Py_SIZE(object obj)
 
-cdef extern from "fory/thirdparty/MurmurHash3.h":
-    void MurmurHash3_x64_128(const void* key, int length, uint32_t seed, void* out) nogil
-
 ENABLE_FORY_CYTHON_SERIALIZATION = os.environ.get(
     "ENABLE_FORY_CYTHON_SERIALIZATION", "True"
 ).lower() in ("true", "1")
@@ -522,7 +519,7 @@ cdef class TypeResolver:
         cdef TypeInfo typeinfo = self._meta_shared_type_info.get(header)
         cdef object type_def
         if typeinfo is not None:
-            _validate_and_skip_typedef_fast(buffer, header)
+            _skip_typedef_fast(buffer, header)
             return typeinfo
         type_def = decode_typedef(buffer, self.resolver, header=header)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
@@ -560,41 +557,6 @@ cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
         return
     reader_index = buffer.get_reader_index()
     buffer.check_bound(reader_index, meta_size)
-    buffer.set_reader_index(reader_index + meta_size)
-
-
-cdef inline uint64_t _typedef_hash_bits(const void* data, int32_t length) noexcept:
-    cdef int64_t[2] out
-    cdef uint64_t magnitude
-    MurmurHash3_x64_128(data, length, <uint32_t>47, &out)
-    if out[0] < 0:
-        magnitude = <uint64_t>(-(out[0] + 1)) + 1
-    else:
-        magnitude = <uint64_t>out[0]
-    return (magnitude << (64 - 50)) & <uint64_t>0x7FFFFFFFFFFFFFFF
-
-
-cdef inline void _validate_typedef_header_fast(int64_t header, const void* data, int32_t length) except *:
-    cdef uint64_t expected = _typedef_hash_bits(data, length)
-    if (<uint64_t>header & ~<uint64_t>0x3FF) != (expected & ~<uint64_t>0x3FF):
-        raise ValueError("TypeDef header hash does not match metadata bytes")
-
-
-cdef inline void _validate_and_skip_typedef_fast(Buffer buffer, int64_t header) except *:
-    cdef int32_t meta_size = <int32_t>(header & 0xFF)
-    cdef int32_t reader_index
-    cdef bytes meta_data
-    if meta_size == 0xFF:
-        meta_size += buffer.read_var_uint32()
-    if buffer.has_input_stream():
-        meta_data = buffer.read_bytes(meta_size)
-        if meta_size > 0:
-            _validate_typedef_header_fast(header, PyBytes_AS_STRING(meta_data), meta_size)
-        return
-    reader_index = buffer.get_reader_index()
-    buffer.check_bound(reader_index, meta_size)
-    if meta_size > 0:
-        _validate_typedef_header_fast(header, buffer.c_buffer.data() + reader_index, meta_size)
     buffer.set_reader_index(reader_index + meta_size)
 
 

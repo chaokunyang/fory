@@ -28,6 +28,7 @@ import typing
 from typing import List, Dict
 
 from pyfory.lib.mmh3 import hash_buffer
+from pyfory.policy import DEFAULT_POLICY
 from pyfory.types import (
     TypeId,
     int8,
@@ -544,7 +545,8 @@ class DataClassSerializer(Serializer):
         write_context.try_flush()
 
     def read(self, read_context):
-        read_context.policy.authorize_instantiation(self.type_)
+        if read_context.policy is not DEFAULT_POLICY:
+            read_context.policy.authorize_instantiation(self.type_)
         if not self.type_resolver.compatible:
             hash_ = read_context.read_int32()
             if hash_ != self._hash:

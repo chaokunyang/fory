@@ -129,7 +129,7 @@ from pyfory._fory import (
     NO_USER_TYPE_ID,
 )
 from pyfory.meta.typedef import TypeDef
-from pyfory.meta.typedef_decoder import decode_typedef, validate_and_skip_typedef
+from pyfory.meta.typedef_decoder import decode_typedef, skip_typedef
 from pyfory.meta.typedef_encoder import encode_typedef
 
 try:
@@ -1127,7 +1127,7 @@ class TypeResolver:
         # Check if we already have this TypeDef cached
         type_info = self._meta_shared_type_info.get(header)
         if type_info is not None:
-            validate_and_skip_typedef(buffer, header)
+            skip_typedef(buffer, header)
         else:
             type_def = decode_typedef(buffer, self, header=header)
             type_info = self._build_type_info_from_typedef(type_def)

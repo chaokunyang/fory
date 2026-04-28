@@ -86,22 +86,32 @@ impl<'a> ResolvedField<'a> {
             }
             FieldDispatch::Serializer { has_generics, .. } => {
                 let ty = self.value_ty;
-                let ref_mode = serializer_ref_mode_for_field(self.source.field);
-                quote! {
-                    let write_type_info = if context.is_compatible() {
-                        fory_core::type_id::need_to_write_type_for_field(
-                            <#ty as fory_core::Serializer>::fory_static_type_id()
-                        )
-                    } else {
-                        <#ty as fory_core::Serializer>::fory_is_polymorphic()
-                    };
-                    <#ty as fory_core::Serializer>::fory_write(
-                        &#access,
-                        context,
-                        #ref_mode,
-                        write_type_info,
-                        #has_generics
-                    )?;
+                if serializer_field_can_use_data_path(self.source.field) {
+                    quote! {
+                        <#ty as fory_core::Serializer>::fory_write_data_generic(
+                            &#access,
+                            context,
+                            #has_generics
+                        )?;
+                    }
+                } else {
+                    let ref_mode = serializer_ref_mode_for_field(self.source.field);
+                    quote! {
+                        let write_type_info = if context.is_compatible() {
+                            fory_core::type_id::need_to_write_type_for_field(
+                                <#ty as fory_core::Serializer>::fory_static_type_id()
+                            )
+                        } else {
+                            <#ty as fory_core::Serializer>::fory_is_polymorphic()
+                        };
+                        <#ty as fory_core::Serializer>::fory_write(
+                            &#access,
+                            context,
+                            #ref_mode,
+                            write_type_info,
+                            #has_generics
+                        )?;
+                    }
                 }
             }
         }
@@ -118,20 +128,26 @@ impl<'a> ResolvedField<'a> {
             }
             FieldDispatch::Serializer { .. } => {
                 let ty = self.value_ty;
-                let ref_mode = serializer_ref_mode_for_field(self.source.field);
-                quote! {
-                    let read_type_info = if context.is_compatible() {
-                        fory_core::serializer::util::field_need_read_type_info(
-                            <#ty as fory_core::Serializer>::fory_static_type_id() as u32
-                        )
-                    } else {
-                        <#ty as fory_core::Serializer>::fory_is_polymorphic()
-                    };
-                    let #var = <#ty as fory_core::Serializer>::fory_read(
-                        context,
-                        #ref_mode,
-                        read_type_info
-                    )?;
+                if serializer_field_can_use_data_path(self.source.field) {
+                    quote! {
+                        let #var = <#ty as fory_core::Serializer>::fory_read_data(context)?;
+                    }
+                } else {
+                    let ref_mode = serializer_ref_mode_for_field(self.source.field);
+                    quote! {
+                        let read_type_info = if context.is_compatible() {
+                            fory_core::serializer::util::field_need_read_type_info(
+                                <#ty as fory_core::Serializer>::fory_static_type_id() as u32
+                            )
+                        } else {
+                            <#ty as fory_core::Serializer>::fory_is_polymorphic()
+                        };
+                        let #var = <#ty as fory_core::Serializer>::fory_read(
+                            context,
+                            #ref_mode,
+                            read_type_info
+                        )?;
+                    }
                 }
             }
         }
@@ -889,10 +905,7 @@ fn serializer_field_type_expr(ty: &Type, nullable: bool, track_ref: bool) -> Tok
 }
 
 fn serializer_ref_mode_for_field(field: &syn::Field) -> TokenStream {
-    let meta = parse_field_meta(field).unwrap_or_default();
-    let type_class = classify_field_type(&field.ty);
-    let nullable = meta.effective_nullable(type_class) || is_option_type(&field.ty);
-    let track_ref = meta.effective_ref(type_class);
+    let (nullable, track_ref) = serializer_field_markers(field);
     if track_ref {
         quote! { fory_core::RefMode::Tracking }
     } else if nullable {
@@ -900,6 +913,19 @@ fn serializer_ref_mode_for_field(field: &syn::Field) -> TokenStream {
     } else {
         quote! { fory_core::RefMode::None }
     }
+}
+
+fn serializer_field_can_use_data_path(field: &syn::Field) -> bool {
+    let (nullable, track_ref) = serializer_field_markers(field);
+    !nullable && !track_ref
+}
+
+fn serializer_field_markers(field: &syn::Field) -> (bool, bool) {
+    let meta = parse_field_meta(field).unwrap_or_default();
+    let type_class = classify_field_type(&field.ty);
+    let nullable = meta.effective_nullable(type_class) || is_option_type(&field.ty);
+    let track_ref = meta.effective_ref(type_class);
+    (nullable, track_ref)
 }
 
 fn is_serializer_backed_collection(name: &str) -> bool {

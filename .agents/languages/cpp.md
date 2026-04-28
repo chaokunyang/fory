@@ -7,6 +7,7 @@ Load this file when changing `cpp/`, Cython build plumbing, or C++ xlang behavio
 - All commands must be executed within the `cpp/` directory.
 - Use C++17 in `cpp/`; do not introduce newer language features.
 - Bazel uses bzlmod via `MODULE.bazel`; prefer Bazel 8+.
+- C++ code must compile without compiler warnings. Treat warnings as blockers in Bazel, generated code, and native build plumbing.
 - For Bazel C++ tests, add `--config=x86_64` only on `x86_64` or `amd64`. Do not use it on `arm64` or `aarch64`.
 - Run `clang-format` on updated C++ files.
 - When invoking a method that returns `Result`, use `FORY_TRY` unless you are in control-flow logic that cannot use it cleanly.

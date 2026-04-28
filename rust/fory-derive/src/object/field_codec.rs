@@ -382,6 +382,7 @@ fn field_dispatch_for(
         && meta.map.is_none()
         && is_container_type(ty)
         && !contains_custom_trait_object(ty)
+        && !contains_exact_any_object(ty)
     {
         return Ok(FieldDispatch::Serializer {
             field_type: field_type_expr_for(ty, nullable, track_ref)?,
@@ -496,7 +497,11 @@ pub(crate) fn codec_type_for(
                     value_meta.effective_nullable(value_class) || is_option_type(value_ty),
                     value_meta.effective_ref(value_class),
                 )?;
-                if contains_custom_trait_object(key_ty) || contains_custom_trait_object(value_ty) {
+                if contains_custom_trait_object(key_ty)
+                    || contains_custom_trait_object(value_ty)
+                    || contains_exact_any_object(key_ty)
+                    || contains_exact_any_object(value_ty)
+                {
                     return Ok(quote! {
                         fory_core::serializer::codec::HashMapCodec<#key_ty, #value_ty, #key_codec, #value_codec, #nullable, #track_ref>
                     });
@@ -872,6 +877,28 @@ fn contains_custom_trait_object(ty: &Type) -> bool {
     args.iter().any(|arg| {
         if let GenericArgument::Type(ty) = arg {
             contains_custom_trait_object(ty)
+        } else {
+            false
+        }
+    })
+}
+
+fn contains_exact_any_object(ty: &Type) -> bool {
+    if is_exact_any(ty, "Box") || is_exact_any(ty, "Rc") || is_exact_any(ty, "Arc") {
+        return true;
+    }
+    if let Some(inner) = extract_option_inner_type(ty) {
+        return contains_exact_any_object(&inner);
+    }
+    if let Type::Array(array) = ty {
+        return contains_exact_any_object(array.elem.as_ref());
+    }
+    let Some((_, Some(args))) = type_name_and_args(ty) else {
+        return false;
+    };
+    args.iter().any(|arg| {
+        if let GenericArgument::Type(ty) = arg {
+            contains_exact_any_object(ty)
         } else {
             false
         }

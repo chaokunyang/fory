@@ -26,7 +26,7 @@ pub struct ForySerializer {
 
 impl ForySerializer {
     pub fn new() -> Self {
-        let mut fory = Fory::default().xlang(true).compatible(true);
+        let mut fory = Fory::builder().xlang(true).compatible(true).build();
         register_fory_types(&mut fory).expect("register benchmark types");
 
         Self { fory }

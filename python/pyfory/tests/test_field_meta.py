@@ -19,6 +19,7 @@
 Comprehensive tests for pyfory.field() field metadata support.
 """
 
+import decimal
 import pytest
 from dataclasses import dataclass, fields
 from typing import Optional, List, Dict
@@ -29,6 +30,8 @@ from pyfory.field import (
     ForyFieldMeta,
     extract_field_meta,
 )
+from pyfory.struct import _extract_field_infos
+from pyfory.types import TypeId
 
 
 class TestFieldFunction:
@@ -387,6 +390,22 @@ class TestFingerprint:
 
         # Fingerprints should be different due to different ref flags
         assert serializer1._hash != serializer2._hash
+
+    def test_decimal_field_uses_decimal_type_id(self):
+        """Test that decimal struct fields resolve to DECIMAL instead of UNKNOWN."""
+
+        @dataclass
+        class DecimalField:
+            amount: decimal.Decimal = pyfory.field(25)
+
+        fory = Fory(xlang=True, compatible=True)
+        field_infos, _ = _extract_field_infos(
+            fory.type_resolver, DecimalField, {"amount": decimal.Decimal}
+        )
+        field_info = field_infos[0]
+
+        assert field_info.type_id == TypeId.DECIMAL
+        assert field_info.serializer is not None
 
 
 class TestTypeDefEncoding:

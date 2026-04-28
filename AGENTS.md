@@ -101,6 +101,8 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 ## Shared Validation Expectations
 
 - Run the relevant tests for every touched language or subsystem before finishing.
+- Run applicable test commands in a subagent with a thinking budget one level lower than the main task budget, using medium when the current budget is unclear, unless the change is docs-only or the user explicitly asks to run them locally.
+- Reuse the same test subagent for repeated runs within one task and subsystem so it keeps failure context; create a fresh subagent when switching unrelated subsystems or when prior context may be stale or misleading.
 - Use `integration_tests/` for cross-language compatibility validation when behavior crosses runtimes.
 - If xlang behavior or type mapping changes, run `org.apache.fory.xlang.CPPXlangTest`, `org.apache.fory.xlang.CSharpXlangTest`, `org.apache.fory.xlang.RustXlangTest`, `org.apache.fory.xlang.GoXlangTest`, and `org.apache.fory.xlang.PythonXlangTest`.
 - If Swift xlang behavior changes, run `org.apache.fory.xlang.SwiftXlangTest` too.

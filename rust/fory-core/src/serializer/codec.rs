@@ -128,6 +128,34 @@ where
 }
 
 #[inline(always)]
+fn codec_static_field_type_id<T, C>() -> u32
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    let type_id = C::static_type_id() as u32;
+    if type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32 {
+        TypeId::UNION as u32
+    } else {
+        type_id
+    }
+}
+
+#[inline(always)]
+fn codec_read_type_info_static<T, C>(context: &ReadContext) -> bool
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    if context.is_compatible() {
+        let type_id = codec_static_field_type_id::<T, C>();
+        type_id == type_id::UNKNOWN || crate::serializer::util::field_need_read_type_info(type_id)
+    } else {
+        C::is_polymorphic()
+    }
+}
+
+#[inline(always)]
 fn codec_write_type_info<T, C>(context: &WriteContext) -> bool
 where
     T: 'static,
@@ -182,23 +210,8 @@ fn collection_type_with_fallback_generics(type_id: u32) -> bool {
 
 #[inline(always)]
 pub fn field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
-    if local == remote {
+    if local.compatible_fingerprint() == remote.compatible_fingerprint() {
         return true;
-    }
-    if same_numeric_family(local.type_id, remote.type_id) {
-        return local.generics.len() == remote.generics.len()
-            && local
-                .generics
-                .iter()
-                .zip(remote.generics.iter())
-                .all(|(local, remote)| field_types_compatible(local, remote));
-    }
-    if local.type_id == remote.type_id && local.generics.len() == remote.generics.len() {
-        return local
-            .generics
-            .iter()
-            .zip(remote.generics.iter())
-            .all(|(local, remote)| field_types_compatible(local, remote));
     }
     if local.type_id == remote.type_id
         && collection_type_with_fallback_generics(local.type_id)
@@ -241,13 +254,13 @@ fn field_type_for_serializer<T: Serializer>(
     } else if type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32 {
         type_id = TypeId::UNION as u32;
     }
-    Ok(FieldType {
+    Ok(FieldType::new_with_user_type_id(
         type_id,
         user_type_id,
         nullable,
         track_ref,
-        generics: Vec::new(),
-    })
+        Vec::new(),
+    ))
 }
 
 pub trait Codec<T: 'static>: 'static {
@@ -264,10 +277,10 @@ pub trait Codec<T: 'static>: 'static {
 
     fn read_compatible(
         context: &mut ReadContext,
+        local_field_type: &FieldType,
         remote_field_type: &FieldType,
     ) -> Result<Option<T>, Error> {
-        let local_field_type = Self::field_type(context.get_type_resolver())?;
-        if !field_types_compatible(&local_field_type, remote_field_type) {
+        if !field_types_compatible(local_field_type, remote_field_type) {
             return Ok(None);
         }
         Self::read_field_with_type(context, remote_field_type).map(Some)
@@ -506,13 +519,12 @@ where
 {
     #[inline(always)]
     fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
-        Ok(FieldType {
-            type_id: TYPE_ID as u32,
-            user_type_id: u32::MAX,
-            nullable: NULLABLE,
-            track_ref: TRACK_REF,
-            generics: vec![EC::field_type(type_resolver)?],
-        })
+        Ok(FieldType::new_with_ref(
+            TYPE_ID as u32,
+            NULLABLE,
+            TRACK_REF,
+            vec![EC::field_type(type_resolver)?],
+        ))
     }
 
     #[inline(always)]
@@ -632,16 +644,15 @@ where
 {
     #[inline(always)]
     fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
-        Ok(FieldType {
-            type_id: TypeId::MAP as u32,
-            user_type_id: u32::MAX,
-            nullable: NULLABLE,
-            track_ref: TRACK_REF,
-            generics: vec![
+        Ok(FieldType::new_with_ref(
+            TypeId::MAP as u32,
+            NULLABLE,
+            TRACK_REF,
+            vec![
                 KC::field_type(type_resolver)?,
                 VC::field_type(type_resolver)?,
             ],
-        })
+        ))
     }
 
     #[inline(always)]
@@ -783,7 +794,6 @@ where
 
     #[inline(always)]
     fn read_field(context: &mut ReadContext) -> Result<Option<T>, Error> {
-        let field_type = Self::field_type(context.get_type_resolver())?;
         Self::read_with_mode(
             context,
             if TRACK_REF {
@@ -791,7 +801,7 @@ where
             } else {
                 RefMode::NullOnly
             },
-            codec_read_type_info::<T, C>(context, &field_type),
+            codec_read_type_info_static::<T, C>(context),
         )
     }
 
@@ -1010,13 +1020,12 @@ macro_rules! signed_int_codec {
         {
             #[inline(always)]
             fn field_type(_: &TypeResolver) -> Result<FieldType, Error> {
-                Ok(FieldType {
-                    type_id: WIRE_TYPE_ID as u32,
-                    user_type_id: u32::MAX,
-                    nullable: NULLABLE,
-                    track_ref: TRACK_REF,
-                    generics: Vec::new(),
-                })
+                Ok(FieldType::new_with_ref(
+                    WIRE_TYPE_ID as u32,
+                    NULLABLE,
+                    TRACK_REF,
+                    Vec::new(),
+                ))
             }
 
             #[inline(always)]
@@ -1163,13 +1172,7 @@ macro_rules! signed_int_codec {
                 if !same_numeric_family($default_type, remote) {
                     return Err(Error::type_mismatch($default_type, remote));
                 }
-                Ok(FieldType {
-                    type_id: remote,
-                    user_type_id: u32::MAX,
-                    nullable: false,
-                    track_ref: false,
-                    generics: Vec::new(),
-                })
+                Ok(FieldType::new(remote, false, Vec::new()))
             }
 
             #[inline(always)]
@@ -1244,13 +1247,12 @@ where
     #[inline(always)]
     fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
         let element_type = C::field_type(type_resolver)?;
-        Ok(FieldType {
-            type_id: TypeId::LIST as u32,
-            user_type_id: u32::MAX,
-            nullable: NULLABLE,
-            track_ref: TRACK_REF,
-            generics: vec![element_type],
-        })
+        Ok(FieldType::new_with_ref(
+            TypeId::LIST as u32,
+            NULLABLE,
+            TRACK_REF,
+            vec![element_type],
+        ))
     }
 
     #[inline(always)]
@@ -1649,16 +1651,15 @@ where
 {
     #[inline(always)]
     fn field_type(type_resolver: &TypeResolver) -> Result<FieldType, Error> {
-        Ok(FieldType {
-            type_id: TypeId::MAP as u32,
-            user_type_id: u32::MAX,
-            nullable: NULLABLE,
-            track_ref: TRACK_REF,
-            generics: vec![
+        Ok(FieldType::new_with_ref(
+            TypeId::MAP as u32,
+            NULLABLE,
+            TRACK_REF,
+            vec![
                 KC::field_type(type_resolver)?,
                 VC::field_type(type_resolver)?,
             ],
-        })
+        ))
     }
 
     #[inline(always)]
@@ -1786,8 +1787,26 @@ where
     }
 
     fn read_data(context: &mut ReadContext) -> Result<HashMap<K, V>, Error> {
-        let field_type = Self::field_type(context.get_type_resolver())?;
-        Self::read_data_with_type(context, &field_type)
+        let len = context.reader.read_var_u32()?;
+        if len == 0 {
+            return Ok(HashMap::new());
+        }
+        let max = context.max_collection_size();
+        if len > max {
+            return Err(Error::size_limit_exceeded(format!(
+                "Map size {} exceeds limit {}",
+                len, max
+            )));
+        }
+        if KC::is_polymorphic()
+            || KC::is_shared_ref()
+            || VC::is_polymorphic()
+            || VC::is_shared_ref()
+        {
+            let field_type = Self::field_type(context.get_type_resolver())?;
+            return read_map_dynamic::<K, V, KC, VC>(context, len, &field_type);
+        }
+        read_map_static::<K, V, KC, VC>(context, len)
     }
 
     fn read_data_with_type(
@@ -1949,6 +1968,111 @@ where
 struct MapEntryReadType {
     field_type: Option<FieldType>,
     type_info: Option<std::rc::Rc<crate::TypeInfo>>,
+}
+
+fn read_map_static<K, V, KC, VC>(
+    context: &mut ReadContext,
+    len: u32,
+) -> Result<HashMap<K, V>, Error>
+where
+    K: Eq + Hash + 'static,
+    V: 'static,
+    KC: Codec<K>,
+    VC: Codec<V>,
+{
+    let mut map = HashMap::with_capacity(len as usize);
+    let mut len_counter = 0u32;
+    while len_counter < len {
+        let header = context.reader.read_u8()?;
+        if header & KEY_NULL != 0 && header & VALUE_NULL != 0 {
+            map.insert(KC::default_value(), VC::default_value());
+            len_counter += 1;
+            continue;
+        }
+        let key_declared = (header & DECL_KEY_TYPE) != 0;
+        let value_declared = (header & DECL_VALUE_TYPE) != 0;
+        let track_key_ref = (header & TRACKING_KEY_REF) != 0;
+        let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
+
+        if header & KEY_NULL != 0 {
+            let value_type =
+                read_map_static_entry_type::<V, VC>(context, value_declared, track_value_ref)?;
+            let value =
+                read_map_static_entry_data::<V, VC>(context, value_type.as_ref(), track_value_ref)?;
+            map.insert(KC::default_value(), value);
+            len_counter += 1;
+            continue;
+        }
+        if header & VALUE_NULL != 0 {
+            let key_type =
+                read_map_static_entry_type::<K, KC>(context, key_declared, track_key_ref)?;
+            let key =
+                read_map_static_entry_data::<K, KC>(context, key_type.as_ref(), track_key_ref)?;
+            map.insert(key, VC::default_value());
+            len_counter += 1;
+            continue;
+        }
+
+        let chunk_size = context.reader.read_u8()?;
+        let key_type = read_map_static_entry_type::<K, KC>(context, key_declared, track_key_ref)?;
+        let value_type =
+            read_map_static_entry_type::<V, VC>(context, value_declared, track_value_ref)?;
+        let cur_len = len_counter + chunk_size as u32;
+        if cur_len > len {
+            return Err(Error::invalid_data(format!(
+                "current length {} exceeds total length {}",
+                cur_len, len
+            )));
+        }
+        for _ in 0..chunk_size {
+            let key =
+                read_map_static_entry_data::<K, KC>(context, key_type.as_ref(), track_key_ref)?;
+            let value =
+                read_map_static_entry_data::<V, VC>(context, value_type.as_ref(), track_value_ref)?;
+            map.insert(key, value);
+        }
+        len_counter = cur_len;
+    }
+    Ok(map)
+}
+
+#[inline(always)]
+fn read_map_static_entry_type<T, C>(
+    context: &mut ReadContext,
+    declared: bool,
+    track_ref: bool,
+) -> Result<Option<FieldType>, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    if declared {
+        Ok(None)
+    } else if track_ref {
+        C::read_type_info(context)?;
+        Ok(None)
+    } else {
+        C::read_type_info_as_field_type(context).map(Some)
+    }
+}
+
+#[inline(always)]
+fn read_map_static_entry_data<T, C>(
+    context: &mut ReadContext,
+    entry_type: Option<&FieldType>,
+    track_ref: bool,
+) -> Result<T, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    if track_ref {
+        C::read_with_mode(context, RefMode::Tracking, false)
+    } else if let Some(entry_type) = entry_type {
+        C::read_data_with_type(context, entry_type)
+    } else {
+        C::read_data(context)
+    }
 }
 
 fn read_map_dynamic<K, V, KC, VC>(
@@ -2272,12 +2396,17 @@ where
 
 #[inline(always)]
 fn any_field_type<const NULLABLE: bool, const TRACK_REF: bool>() -> FieldType {
-    FieldType {
-        type_id: TypeId::UNKNOWN as u32,
-        user_type_id: u32::MAX,
-        nullable: NULLABLE,
-        track_ref: TRACK_REF,
-        generics: Vec::new(),
+    FieldType::new_with_ref(TypeId::UNKNOWN as u32, NULLABLE, TRACK_REF, Vec::new())
+}
+
+#[inline(always)]
+fn any_ref_mode<const NULLABLE: bool, const TRACK_REF: bool>() -> RefMode {
+    if TRACK_REF {
+        RefMode::Tracking
+    } else if NULLABLE {
+        RefMode::NullOnly
+    } else {
+        RefMode::None
     }
 }
 
@@ -2303,7 +2432,7 @@ macro_rules! any_codec {
                 <$ty as Serializer>::fory_write(
                     value,
                     context,
-                    field_ref_mode(&any_field_type::<NULLABLE, TRACK_REF>()),
+                    any_ref_mode::<NULLABLE, TRACK_REF>(),
                     field_write_type_info::<$ty>(context),
                     false,
                 )
@@ -2311,7 +2440,11 @@ macro_rules! any_codec {
 
             #[inline(always)]
             fn read_field(context: &mut ReadContext) -> Result<$ty, Error> {
-                Self::read_field_with_type(context, &any_field_type::<NULLABLE, TRACK_REF>())
+                <$ty as Serializer>::fory_read(
+                    context,
+                    any_ref_mode::<NULLABLE, TRACK_REF>(),
+                    codec_read_type_info_static::<$ty, Self>(context),
+                )
             }
 
             #[inline(always)]

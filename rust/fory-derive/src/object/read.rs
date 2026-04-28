@@ -272,9 +272,13 @@ pub(crate) fn gen_read_compatible_with_construction(
             // Fields that don't match get field_id = -1; codec incompatibility is
             // handled inside the arm by reading or skipping the remote payload.
             let field_id = sorted_idx as i16;
+            let field_index = sorted_idx;
             let body = binding.read_compatible();
             quote! {
                 #field_id => {
+                    let local_field_type = unsafe {
+                        &(*local_fields_ptr.add(#field_index)).field_type
+                    };
                     #body
                 }
             }
@@ -339,49 +343,54 @@ pub(crate) fn gen_read_compatible_with_construction(
 
     let variant_field_remap = if let Some(variant) = variant_ident {
         let variant_name = variant.to_string();
+        let enum_name = get_struct_name().expect("enum context not set");
+        let meta_type_ident = Ident::new(
+            &format!("{}_{}VariantMeta", enum_name, variant),
+            proc_macro2::Span::call_site(),
+        );
+        let variant_name_lit = syn::LitStr::new(&variant_name, proc_macro2::Span::call_site());
         quote! {
-            if let Ok(variants_info) =
-                <Self as fory_core::StructSerializer>::fory_variants_fields_info(
-                    context.get_type_resolver(),
-                )
-            {
-                if let Some((_, _, local_fields)) =
-                    variants_info.iter().find(|(name, _, _)| name == #variant_name)
-                {
-                    let field_index_by_name: std::collections::HashMap<_, _> = local_fields
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, f)| !f.field_name.is_empty())
-                        .map(|(i, f)| (f.field_name.clone(), (i, f)))
-                        .collect();
+            let local_variant_type_info = context
+                .get_type_resolver()
+                .get_type_info(&std::any::TypeId::of::<#meta_type_ident>())
+                .map_err(|_| fory_core::Error::type_error(
+                    concat!("Local enum variant metadata not found for ", #variant_name_lit)
+                ))?;
+            let local_variant_type_meta = local_variant_type_info.get_type_meta();
+            let local_fields = local_variant_type_meta.get_field_infos();
 
-                    let field_index_by_id: std::collections::HashMap<_, _> = local_fields
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, f)| f.field_id >= 0)
-                        .map(|(i, f)| (f.field_id, (i, f)))
-                        .collect();
+            let field_index_by_name: std::collections::HashMap<_, _> = local_fields
+                .iter()
+                .enumerate()
+                .filter(|(_, f)| !f.field_name.is_empty())
+                .map(|(i, f)| (f.field_name.clone(), (i, f)))
+                .collect();
 
-                    for field in fields.iter_mut() {
-                        let local_match = if field.field_id >= 0 && field.field_name.is_empty() {
-                            field_index_by_id.get(&field.field_id).copied()
-                        } else {
-                            let snake_case_name =
-                                fory_core::util::to_snake_case(&field.field_name);
-                            field_index_by_name.get(&snake_case_name).copied()
-                        };
+            let field_index_by_id: std::collections::HashMap<_, _> = local_fields
+                .iter()
+                .enumerate()
+                .filter(|(_, f)| f.field_id >= 0)
+                .map(|(i, f)| (f.field_id, (i, f)))
+                .collect();
 
-                        match local_match {
-                            Some((sorted_index, local_info)) => {
-                                if field.field_name.is_empty() {
-                                    field.field_name = local_info.field_name.clone();
-                                }
-                                field.field_id = sorted_index as i16;
-                            }
-                            None => {
-                                field.field_id = -1;
-                            }
+            for field in fields.iter_mut() {
+                let local_match = if field.field_id >= 0 && field.field_name.is_empty() {
+                    field_index_by_id.get(&field.field_id).copied()
+                } else {
+                    let snake_case_name =
+                        fory_core::util::to_snake_case(&field.field_name);
+                    field_index_by_name.get(&snake_case_name).copied()
+                };
+
+                match local_match {
+                    Some((sorted_index, local_info)) => {
+                        if field.field_name.is_empty() {
+                            field.field_name = local_info.field_name.clone();
                         }
+                        field.field_id = sorted_index as i16;
+                    }
+                    None => {
+                        field.field_id = -1;
                     }
                 }
             }
@@ -394,9 +403,11 @@ pub(crate) fn gen_read_compatible_with_construction(
         quote! {
             let mut fields = remote_meta.get_field_infos().clone();
             #variant_field_remap
+            let local_fields_ptr = local_fields.as_ptr();
         }
     } else {
         quote! {
+            let local_fields_ptr = meta.get_field_infos().as_ptr();
             let fields = remote_meta.get_field_infos();
         }
     };

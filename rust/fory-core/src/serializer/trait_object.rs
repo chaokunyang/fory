@@ -355,13 +355,12 @@ macro_rules! generate_smart_pointer_codec {
                 fn field_type(
                     _type_resolver: &fory_core::resolver::TypeResolver,
                 ) -> Result<fory_core::meta::FieldType, fory_core::Error> {
-                    Ok(fory_core::meta::FieldType {
-                        type_id: fory_core::type_id::TypeId::UNKNOWN as u32,
-                        user_type_id: u32::MAX,
-                        nullable: NULLABLE,
-                        track_ref: TRACK_REF,
-                        generics: Vec::new(),
-                    })
+                    Ok(fory_core::meta::FieldType::new_with_ref(
+                        fory_core::type_id::TypeId::UNKNOWN as u32,
+                        NULLABLE,
+                        TRACK_REF,
+                        Vec::new(),
+                    ))
                 }
 
                 #[inline(always)]
@@ -541,13 +540,12 @@ macro_rules! generate_box_trait_codec {
                 fn field_type(
                     _type_resolver: &fory_core::resolver::TypeResolver,
                 ) -> Result<fory_core::meta::FieldType, fory_core::Error> {
-                    Ok(fory_core::meta::FieldType {
-                        type_id: fory_core::type_id::TypeId::UNKNOWN as u32,
-                        user_type_id: u32::MAX,
-                        nullable: NULLABLE,
-                        track_ref: TRACK_REF,
-                        generics: Vec::new(),
-                    })
+                    Ok(fory_core::meta::FieldType::new_with_ref(
+                        fory_core::type_id::TypeId::UNKNOWN as u32,
+                        NULLABLE,
+                        TRACK_REF,
+                        Vec::new(),
+                    ))
                 }
 
                 #[inline(always)]

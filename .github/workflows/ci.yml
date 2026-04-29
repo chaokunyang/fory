@@ -760,6 +760,13 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
+      - name: Cache C++ IDL CMake build
+        uses: actions/cache@v4
+        with:
+          path: integration_tests/idl_tests/cpp/build
+          key: cpp-idl-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('integration_tests/idl_tests/cpp/**', 'integration_tests/idl_tests/*.fdl', 'integration_tests/idl_tests/generate_idl.py', 'compiler/**', 'cpp/**') }}
+          restore-keys: |
+            cpp-idl-cmake-${{ runner.os }}-${{ runner.arch }}-
       - name: Install Java artifacts for IDL tests
         run: |
           cd java

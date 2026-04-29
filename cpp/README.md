@@ -150,27 +150,7 @@ auto fory = apache::fory::ForyBuilder().build();
 fory->register_struct<thirdparty::Foo>(1);
 ```
 
-### 1.2 Field Configuration
-
-`FORY_STRUCT` accepts bare fields or configured `(field, fory::F(...))` entries.
-Use `fory::F()` for name-mode fields and `fory::F(id)` when stable field ids are
-required. A struct must use one identity mode consistently.
-
-```cpp
-namespace T = fory::T;
-
-struct Event {
-  uint32_t id;
-  uint64_t timestamp;
-  std::map<uint32_t, std::vector<int64_t>> values;
-};
-
-FORY_STRUCT(Event, (id, fory::F(0).varint()),
-            (timestamp, fory::F(1).tagged()),
-            (values, fory::F(2).map(T::fixed(), T::list(T::tagged()))));
-```
-
-### 1.3 Inherited Fields
+### 1.2 Inherited Fields
 
 To include base-class fields in a derived type, use `FORY_BASE(Base)` inside
 `FORY_STRUCT`. The base must define its own `FORY_STRUCT` so its fields can be

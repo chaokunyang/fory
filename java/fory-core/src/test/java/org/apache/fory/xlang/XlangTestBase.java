@@ -1023,7 +1023,7 @@ public abstract class XlangTestBase extends ForyTestBase {
         values;
   }
 
-  public void testNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
+  protected void testNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
       throws java.io.IOException {
     String caseName = "test_nested_annotated_container_schema_consistent";
     Fory fory =
@@ -1056,7 +1056,7 @@ public abstract class XlangTestBase extends ForyTestBase {
         values;
   }
 
-  public void testNestedAnnotatedContainerCompatible(boolean enableCodegen)
+  protected void testNestedAnnotatedContainerCompatible(boolean enableCodegen)
       throws java.io.IOException {
     String caseName = "test_nested_annotated_container_compatible";
     Fory fory =

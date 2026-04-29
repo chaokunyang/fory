@@ -35,7 +35,7 @@ Reference tracking enables:
 
 ```java
 Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
+    .withXlang(true)
     .withRefTracking(true)
     .build();
 ```
@@ -103,7 +103,7 @@ Key behavior:
 ```java
 // Reference tracking enabled, but non-nullable fields still skip ref flags
 Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
+    .withXlang(true)
     .withRefTracking(true)
     .build();
 ```

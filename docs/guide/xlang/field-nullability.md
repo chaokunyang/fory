@@ -107,7 +107,7 @@ public class Person {
 }
 
 Fory fory = Fory.builder()
-    .withLanguage(Language.XLANG)
+    .withXlang(true)
     .build();
 fory.register(Person.class, "example.Person");
 ```

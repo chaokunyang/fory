@@ -29,8 +29,6 @@ import java.util.Set;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
-import org.apache.fory.config.CompatibleMode;
-import org.apache.fory.config.Language;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.testng.Assert;
@@ -278,16 +276,16 @@ public class RecordXlangTest {
   public void testRecordNullableFieldSchemaConsistentNotNull(boolean enableCodegen) {
     Fory fory =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withXlang(true)
+            .withCompatible(false)
             .withCodegen(enableCodegen)
             .build();
     fory.register(NullableRecordSchemaConsistent.class, 0);
 
     Fory foryXlang =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withXlang(true)
+            .withCompatible(false)
             .withCodegen(enableCodegen)
             .build();
     foryXlang.register(NullablePojoSchemaConsistentXlang.class, 0);
@@ -363,16 +361,16 @@ public class RecordXlangTest {
   public void testRecordNullableFieldSchemaConsistentNull(boolean enableCodegen) {
     Fory fory =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withXlang(true)
+            .withCompatible(false)
             .withCodegen(enableCodegen)
             .build();
     fory.register(NullableRecordSchemaConsistent.class, 0);
 
     Fory foryXlang =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withXlang(true)
+            .withCompatible(false)
             .withCodegen(enableCodegen)
             .build();
     foryXlang.register(NullablePojoSchemaConsistentXlang.class, 0);
@@ -452,8 +450,8 @@ public class RecordXlangTest {
   public void testRecordNullableFieldCompatibleNotNull(boolean enableCodegen) {
     Fory fory =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withXlang(true)
+            .withCompatible(true)
             .withCodegen(enableCodegen)
             .withMetaCompressor(new DeflaterMetaCompressor())
             .build();
@@ -461,8 +459,8 @@ public class RecordXlangTest {
 
     Fory foryXlang =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withXlang(true)
+            .withCompatible(true)
             .withCodegen(enableCodegen)
             .withMetaCompressor(new DeflaterMetaCompressor())
             .build();
@@ -549,8 +547,8 @@ public class RecordXlangTest {
   public void testRecordNullableFieldCompatibleNull(boolean enableCodegen) {
     Fory fory =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withXlang(true)
+            .withCompatible(true)
             .withCodegen(enableCodegen)
             .withMetaCompressor(new DeflaterMetaCompressor())
             .build();
@@ -558,8 +556,8 @@ public class RecordXlangTest {
 
     Fory foryXlang =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withXlang(true)
+            .withCompatible(true)
             .withCodegen(enableCodegen)
             .withMetaCompressor(new DeflaterMetaCompressor())
             .build();
@@ -708,8 +706,8 @@ public class RecordXlangTest {
   public void testRecordRefSchemaConsistent(boolean enableCodegen) {
     Fory fory =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.SCHEMA_CONSISTENT)
+            .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .withCodegen(enableCodegen)
             .build();
@@ -743,8 +741,8 @@ public class RecordXlangTest {
   public void testRecordRefCompatible(boolean enableCodegen) {
     Fory fory =
         Fory.builder()
-            .withLanguage(Language.XLANG)
-            .withCompatibleMode(CompatibleMode.COMPATIBLE)
+            .withXlang(true)
+            .withCompatible(true)
             .withRefTracking(true)
             .withCodegen(enableCodegen)
             .withMetaCompressor(new DeflaterMetaCompressor())

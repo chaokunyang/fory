@@ -95,8 +95,6 @@ import org.apache.fory.collection.Uint16List;
 import org.apache.fory.collection.Uint32List;
 import org.apache.fory.collection.Uint64List;
 import org.apache.fory.collection.Uint8List;
-import org.apache.fory.config.CompatibleMode;
-import org.apache.fory.config.Language;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -629,17 +627,15 @@ public class IdlRoundTripTest {
 
   private Fory buildFory(boolean compatible) {
     return Fory.builder()
-        .withLanguage(Language.XLANG)
-        .withCompatibleMode(
-            compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+        .withXlang(true)
+        .withCompatible(compatible)
         .build();
   }
 
   private Fory buildRefFory(boolean compatible) {
     return Fory.builder()
-        .withLanguage(Language.XLANG)
-        .withCompatibleMode(
-            compatible ? CompatibleMode.COMPATIBLE : CompatibleMode.SCHEMA_CONSISTENT)
+        .withXlang(true)
+        .withCompatible(compatible)
         .withRefTracking(true)
         .build();
   }

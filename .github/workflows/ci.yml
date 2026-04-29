@@ -301,10 +301,6 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.11
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -340,6 +336,28 @@ jobs:
           mvn -T16 --no-transfer-progress clean install -DskipTests -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.SwiftXlangTest
+
+  swift_idl:
+    name: Swift IDL Tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: 21
+          distribution: "temurin"
+      - name: Cache Maven local repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
       - name: Generate Swift IDL test code
         run: python ./integration_tests/idl_tests/generate_idl.py --lang swift
       - name: Cache Swift IDL package build artifacts
@@ -361,6 +379,10 @@ jobs:
         run: |
           cd integration_tests/idl_tests/swift/idl_package
           swift test --disable-automatic-resolution --skip-build
+      - name: Install Java artifacts for IDL tests
+        run: |
+          cd java
+          mvn -T16 --no-transfer-progress clean install -DskipTests -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
       - name: Run Java IDL tests against Swift peer
         env:
           IDL_PEER_LANG: "swift"

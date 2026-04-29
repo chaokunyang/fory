@@ -95,6 +95,14 @@ struct IdModeStruct {
               (values, fory::F(1).map(T::varint(), T::list(T::tagged()))));
 };
 
+struct NamespaceConfigStruct {
+  uint32_t id;
+  uint64_t timestamp;
+};
+
+FORY_STRUCT(NamespaceConfigStruct, (id, fory::F(3).varint()),
+            (timestamp, fory::F(4).tagged()));
+
 TEST(FieldConfig, NameModeEntries) {
   static_assert(detail::has_field_config_v<NameModeStruct>);
   static_assert(!detail::GetFieldConfigEntry<NameModeStruct, 0>::has_id);
@@ -113,6 +121,21 @@ TEST(FieldConfig, IdModeEntries) {
   static_assert(detail::GetFieldConfigEntry<IdModeStruct, 1>::id == 1);
   static_assert(detail::GetFieldConfigEntry<IdModeStruct, 1>::spec.kind_[0] ==
                 FieldNodeKind::Map);
+}
+
+TEST(FieldConfig, NamespaceScopeEntries) {
+  static_assert(detail::has_field_config_v<NamespaceConfigStruct>);
+  static_assert(
+      detail::GetFieldConfigEntry<NamespaceConfigStruct, 0>::has_entry);
+  static_assert(detail::GetFieldConfigEntry<NamespaceConfigStruct, 0>::has_id);
+  static_assert(detail::GetFieldConfigEntry<NamespaceConfigStruct, 0>::id == 3);
+  static_assert(
+      detail::GetFieldConfigEntry<NamespaceConfigStruct, 0>::encoding ==
+      Encoding::Varint);
+  static_assert(detail::GetFieldConfigEntry<NamespaceConfigStruct, 1>::has_id);
+  static_assert(detail::GetFieldConfigEntry<NamespaceConfigStruct, 1>::id == 4);
+  static_assert(detail::GetFieldConfigEntry<NamespaceConfigStruct, 1>::spec
+                    .encoding_[0] == Encoding::Tagged);
 }
 
 } // namespace fory::test

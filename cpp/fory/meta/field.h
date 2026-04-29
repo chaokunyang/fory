@@ -70,11 +70,22 @@ template <typename T>
 using MemberFieldConfigDescriptor =
     decltype(T::fory_field_config(std::declval<meta::Identity<T>>()));
 
+template <typename T>
+using AdlFieldConfigDescriptor =
+    decltype(fory_field_config(std::declval<meta::Identity<T>>()));
+
 template <typename T, typename = void>
 struct HasMemberFieldConfig : std::false_type {};
 
 template <typename T>
 struct HasMemberFieldConfig<T, std::void_t<MemberFieldConfigDescriptor<T>>>
+    : std::true_type {};
+
+template <typename T, typename = void>
+struct HasAdlFieldConfig : std::false_type {};
+
+template <typename T>
+struct HasAdlFieldConfig<T, std::void_t<AdlFieldConfigDescriptor<T>>>
     : std::true_type {};
 
 template <typename T, typename Enable = void> struct FieldConfigInfo {
@@ -86,6 +97,15 @@ template <typename T, typename Enable = void> struct FieldConfigInfo {
 template <typename T>
 struct FieldConfigInfo<T, std::enable_if_t<HasMemberFieldConfig<T>::value>> {
   using Descriptor = MemberFieldConfigDescriptor<T>;
+  static constexpr bool has_config = Descriptor::has_config;
+  static constexpr size_t field_count = Descriptor::field_count;
+  static inline constexpr auto entries = Descriptor::entries;
+};
+
+template <typename T>
+struct FieldConfigInfo<T, std::enable_if_t<!HasMemberFieldConfig<T>::value &&
+                                           HasAdlFieldConfig<T>::value>> {
+  using Descriptor = AdlFieldConfigDescriptor<T>;
   static constexpr bool has_config = Descriptor::has_config;
   static constexpr size_t field_count = Descriptor::field_count;
   static inline constexpr auto entries = Descriptor::entries;

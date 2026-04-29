@@ -275,19 +275,11 @@ public class RecordXlangTest {
   @Test(dataProvider = "enableCodegen")
   public void testRecordNullableFieldSchemaConsistentNotNull(boolean enableCodegen) {
     Fory fory =
-        Fory.builder()
-            .withXlang(true)
-            .withCompatible(false)
-            .withCodegen(enableCodegen)
-            .build();
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
     fory.register(NullableRecordSchemaConsistent.class, 0);
 
     Fory foryXlang =
-        Fory.builder()
-            .withXlang(true)
-            .withCompatible(false)
-            .withCodegen(enableCodegen)
-            .build();
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
     foryXlang.register(NullablePojoSchemaConsistentXlang.class, 0);
 
     // Create record with all nullable fields having values
@@ -360,19 +352,11 @@ public class RecordXlangTest {
   @Test(dataProvider = "enableCodegen")
   public void testRecordNullableFieldSchemaConsistentNull(boolean enableCodegen) {
     Fory fory =
-        Fory.builder()
-            .withXlang(true)
-            .withCompatible(false)
-            .withCodegen(enableCodegen)
-            .build();
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
     fory.register(NullableRecordSchemaConsistent.class, 0);
 
     Fory foryXlang =
-        Fory.builder()
-            .withXlang(true)
-            .withCompatible(false)
-            .withCodegen(enableCodegen)
-            .build();
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
     foryXlang.register(NullablePojoSchemaConsistentXlang.class, 0);
 
     // Create record with all nullable fields as null

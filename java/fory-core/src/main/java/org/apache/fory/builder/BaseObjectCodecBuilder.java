@@ -571,16 +571,16 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
             boxedNumericValue(inputObject, descriptor), "shortValue", PRIMITIVE_SHORT_TYPE);
   }
 
-  private Expression primitiveIntValue(Expression inputObject, Descriptor descriptor) {
-    return inputObject.type().isPrimitive()
-        ? cast(inputObject, PRIMITIVE_INT_TYPE)
-        : new Invoke(boxedNumericValue(inputObject, descriptor), "intValue", PRIMITIVE_INT_TYPE);
-  }
-
   private Expression primitiveShortValue(Expression inputObject, TypeRef<?> typeRef) {
     return inputObject.type().isPrimitive()
         ? cast(inputObject, PRIMITIVE_SHORT_TYPE)
         : new Invoke(boxedNumericValue(inputObject, typeRef), "shortValue", PRIMITIVE_SHORT_TYPE);
+  }
+
+  private Expression primitiveIntValue(Expression inputObject, Descriptor descriptor) {
+    return inputObject.type().isPrimitive()
+        ? cast(inputObject, PRIMITIVE_INT_TYPE)
+        : new Invoke(boxedNumericValue(inputObject, descriptor), "intValue", PRIMITIVE_INT_TYPE);
   }
 
   private Expression primitiveIntValue(Expression inputObject, TypeRef<?> typeRef) {

@@ -35,8 +35,7 @@ public class Object2ObjectOpenHashMapTest extends TestBase {
 
   @Test(dataProvider = "enableCodegen")
   public void testObject2ObjectOpenHashMap(boolean enableCodegen) {
-    Fory fory =
-        builder().withCompatible(true).withCodegen(enableCodegen).build();
+    Fory fory = builder().withCompatible(true).withCodegen(enableCodegen).build();
 
     TestObject2ObjectOpenHashMap o = new TestObject2ObjectOpenHashMap();
     byte[] bytes = fory.serialize(o);

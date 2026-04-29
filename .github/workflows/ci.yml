@@ -53,6 +53,8 @@ jobs:
       rust: ${{ steps.filter.outputs.rust }}
       swift: ${{ steps.filter.outputs.swift }}
       javascript: ${{ steps.filter.outputs.javascript }}
+      kotlin: ${{ steps.filter.outputs.kotlin }}
+      scala: ${{ steps.filter.outputs.scala }}
     steps:
       - uses: actions/checkout@v5
       - name: Detect changed paths
@@ -69,6 +71,8 @@ jobs:
             echo "rust=true" >> "$GITHUB_OUTPUT"
             echo "swift=true" >> "$GITHUB_OUTPUT"
             echo "javascript=true" >> "$GITHUB_OUTPUT"
+            echo "kotlin=true" >> "$GITHUB_OUTPUT"
+            echo "scala=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -115,6 +119,18 @@ jobs:
             echo "javascript=true" >> "$GITHUB_OUTPUT"
           else
             echo "javascript=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(java/|kotlin/)' <<< "$changed_files"; then
+            echo "kotlin=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "kotlin=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(java/|scala/)' <<< "$changed_files"; then
+            echo "scala=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "scala=false" >> "$GITHUB_OUTPUT"
           fi
 
   compiler:
@@ -455,6 +471,8 @@ jobs:
 
   kotlin:
     name: Kotlin CI
+    needs: changes
+    if: needs.changes.outputs.kotlin == 'true'
     runs-on: ubuntu-latest
     env:
       MY_VAR: "PATH"
@@ -486,6 +504,8 @@ jobs:
 
   scala:
     name: Scala CI
+    needs: changes
+    if: needs.changes.outputs.scala == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

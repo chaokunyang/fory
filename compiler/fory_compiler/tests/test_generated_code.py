@@ -86,9 +86,9 @@ def assert_language_outputs_equal(
             baseline_label = label
             baseline_files = files
             continue
-        assert files == baseline_files, (
-            f"{generator_cls.language_name} output mismatch for {label} vs {baseline_label}"
-        )
+        assert (
+            files == baseline_files
+        ), f"{generator_cls.language_name} output mismatch for {label} vs {baseline_label}"
 
 
 def assert_all_languages_equal(schemas: Dict[str, Schema]) -> None:
@@ -596,6 +596,26 @@ def test_java_nested_integer_annotations_in_generic_containers():
     )
 
 
+def test_cpp_nested_integer_specs_in_generic_containers():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message NestedIntegerSpecs {
+                map<fixed_uint32, list<optional tagged_uint64>> values = 1;
+            }
+            """
+        )
+    )
+    cpp_output = render_files(generate_files(schema, CppGenerator))
+    assert (
+        "FORY_STRUCT(NestedIntegerSpecs, "
+        "(values_, fory::F(1).map(fory::T::uint32().fixed(), "
+        "fory::T::list(fory::T::inner(fory::T::uint64().tagged())))));" in cpp_output
+    )
+
+
 def test_cpp_generator_supports_decimal_fields_and_unions():
     schema = parse_fdl(
         dedent(
@@ -618,7 +638,7 @@ def test_cpp_generator_supports_decimal_fields_and_unions():
     assert '#include "fory/serialization/decimal_serializers.h"' in cpp_output
     assert "const fory::serialization::Decimal& amount() const" in cpp_output
     assert "std::variant<fory::serialization::Decimal, Money> value_" in cpp_output
-    assert "(fory::serialization::Decimal, amount, fory::F(1))" in cpp_output
+    assert "(amount, fory::serialization::Decimal, fory::F(1))" in cpp_output
 
 
 def test_java_enum_generation_uses_fory_enum_ids():

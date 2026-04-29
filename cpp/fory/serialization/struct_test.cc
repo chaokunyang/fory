@@ -88,23 +88,9 @@ struct FieldConfigTaggedStruct {
   bool operator==(const FieldConfigTaggedStruct &other) const {
     return a == other.a && b == other.b && c == other.c;
   }
-  FORY_STRUCT(FieldConfigTaggedStruct, a, b, c);
+  FORY_STRUCT(FieldConfigTaggedStruct, (a, fory::F(1)), (b, fory::F(2)),
+              (c, fory::F(3)));
 };
-
-struct FieldTagsTaggedStruct {
-  int32_t a;
-  int64_t b;
-  std::string c;
-
-  bool operator==(const FieldTagsTaggedStruct &other) const {
-    return a == other.a && b == other.b && c == other.c;
-  }
-  FORY_STRUCT(FieldTagsTaggedStruct, a, b, c);
-};
-
-FORY_FIELD_CONFIG(FieldConfigTaggedStruct, (a, fory::F().id(1)),
-                  (b, fory::F().id(2)), (c, fory::F().id(3)));
-FORY_FIELD_TAGS(FieldTagsTaggedStruct, (a, 1), (b, 2), (c, 3));
 
 class PrivateFieldsStruct {
 public:
@@ -242,6 +228,15 @@ struct VectorStruct {
   FORY_STRUCT(VectorStruct, numbers, strings, points);
 };
 
+struct VectorBoolStruct {
+  std::vector<bool> flags;
+
+  bool operator==(const VectorBoolStruct &other) const {
+    return flags == other.flags;
+  }
+  FORY_STRUCT(VectorBoolStruct, flags);
+};
+
 struct NamedItem {
   int32_t id;
   std::string name;
@@ -272,6 +267,41 @@ struct NestedContainerStruct {
     return matrix == other.matrix && grouped_numbers == other.grouped_numbers;
   }
   FORY_STRUCT(NestedContainerStruct, matrix, grouped_numbers);
+};
+
+namespace T = fory::T;
+
+struct NestedAnnotatedStruct {
+  std::map<uint32_t, std::vector<int64_t>> map;
+
+  bool operator==(const NestedAnnotatedStruct &other) const {
+    return map == other.map;
+  }
+  FORY_STRUCT(NestedAnnotatedStruct,
+              (map,
+               fory::F().map().key(T::varint()).value(T::list(T::tagged()))));
+};
+
+struct PartialMapAnnotatedStruct {
+  std::map<uint32_t, std::vector<int64_t>> key_only;
+  std::map<uint32_t, std::vector<int64_t>> value_only;
+
+  bool operator==(const PartialMapAnnotatedStruct &other) const {
+    return key_only == other.key_only && value_only == other.value_only;
+  }
+  FORY_STRUCT(PartialMapAnnotatedStruct,
+              (key_only, fory::F().map().key(T::varint())),
+              (value_only, fory::F().map().value(T::list(T::tagged()))));
+};
+
+struct OptionalNestedAnnotatedStruct {
+  std::optional<std::vector<uint32_t>> values;
+
+  bool operator==(const OptionalNestedAnnotatedStruct &other) const {
+    return values == other.values;
+  }
+  FORY_STRUCT(OptionalNestedAnnotatedStruct,
+              (values, fory::F().inner(T::list(T::varint()))));
 };
 
 // Optional fields
@@ -439,8 +469,12 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<BoundingBox>(type_id++);
   fory.register_struct<Scene>(type_id++);
   fory.register_struct<VectorStruct>(type_id++);
+  fory.register_struct<VectorBoolStruct>(type_id++);
   fory.register_struct<MapStruct>(type_id++);
   fory.register_struct<NestedContainerStruct>(type_id++);
+  fory.register_struct<NestedAnnotatedStruct>(type_id++);
+  fory.register_struct<PartialMapAnnotatedStruct>(type_id++);
+  fory.register_struct<OptionalNestedAnnotatedStruct>(type_id++);
   fory.register_struct<OptionalFieldsStruct>(type_id++);
   fory.register_struct<EnumStruct>(type_id++);
   fory.register_struct<UserProfile>(type_id++);
@@ -498,28 +532,6 @@ TEST(StructComprehensiveTest, ManyFieldsStruct) {
                                   "Hello, World!"});
   test_roundtrip(ManyFieldsStruct{false, -128, -32768, INT32_MIN,
                                   -9223372036854775807LL - 1, -1.0f, -1.0, ""});
-}
-
-TEST(StructComprehensiveTest, FieldTagsMatchFieldConfigSize) {
-  FieldConfigTaggedStruct config_obj{1, 2, "config"};
-  FieldTagsTaggedStruct tags_obj{1, 2, "config"};
-
-  auto fory_config =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-  auto fory_tags =
-      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
-
-  ASSERT_TRUE(fory_config.register_struct<FieldConfigTaggedStruct>(101).ok());
-  ASSERT_TRUE(fory_tags.register_struct<FieldTagsTaggedStruct>(101).ok());
-
-  auto config_bytes = fory_config.serialize(config_obj);
-  ASSERT_TRUE(config_bytes.ok())
-      << "Serialization failed: " << config_bytes.error().to_string();
-  auto tags_bytes = fory_tags.serialize(tags_obj);
-  ASSERT_TRUE(tags_bytes.ok())
-      << "Serialization failed: " << tags_bytes.error().to_string();
-
-  EXPECT_EQ(config_bytes->size(), tags_bytes->size());
 }
 
 TEST(StructComprehensiveTest, PrivateFieldsStruct) {
@@ -582,6 +594,10 @@ TEST(StructComprehensiveTest, VectorStructMultiple) {
   test_roundtrip(VectorStruct{{1, 2, 3}, {"foo", "bar"}, {{0, 0}, {10, 10}}});
 }
 
+TEST(StructComprehensiveTest, VectorBoolStruct) {
+  test_roundtrip(VectorBoolStruct{{true, false, false, true}});
+}
+
 TEST(StructComprehensiveTest, NamedStructElementTypeInfo) {
   std::vector<NamedItem> items{{1, "alpha"}, {2, "beta"}};
 
@@ -613,6 +629,84 @@ TEST(StructComprehensiveTest, MapStructMultiple) {
 
 TEST(StructComprehensiveTest, NestedContainers) {
   test_roundtrip(NestedContainerStruct{{{1, 2}, {3, 4}}, {{"a", {10, 20}}}});
+}
+
+TEST(StructComprehensiveTest, NestedAnnotatedContainers) {
+  NestedAnnotatedStruct obj{{{1, {10, -20, 30}}, {2, {40, 50}}}};
+  test_roundtrip(obj);
+
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<NestedAnnotatedStruct>(601).ok());
+  ASSERT_TRUE(fory.serialize(obj).ok());
+  TypeMeta meta =
+      fory.type_resolver().clone_struct_meta<NestedAnnotatedStruct>();
+  const auto &fields = meta.get_field_infos();
+  ASSERT_EQ(fields.size(), 1);
+  const auto &field_type = fields[0].field_type;
+  ASSERT_EQ(field_type.type_id, static_cast<uint32_t>(TypeId::MAP));
+  ASSERT_EQ(field_type.generics.size(), 2);
+  EXPECT_EQ(field_type.generics[0].type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
+  ASSERT_EQ(field_type.generics[1].type_id,
+            static_cast<uint32_t>(TypeId::LIST));
+  ASSERT_EQ(field_type.generics[1].generics.size(), 1);
+  EXPECT_EQ(field_type.generics[1].generics[0].type_id,
+            static_cast<uint32_t>(TypeId::TAGGED_INT64));
+}
+
+TEST(StructComprehensiveTest, PartialMapAnnotations) {
+  PartialMapAnnotatedStruct obj{
+      {{1, {10, 20}}, {2, {30}}},
+      {{3, {40, -50}}, {4, {60}}},
+  };
+  test_roundtrip(obj);
+
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<PartialMapAnnotatedStruct>(602).ok());
+  ASSERT_TRUE(fory.serialize(obj).ok());
+  TypeMeta meta =
+      fory.type_resolver().clone_struct_meta<PartialMapAnnotatedStruct>();
+  const auto &fields = meta.get_field_infos();
+  ASSERT_EQ(fields.size(), 2);
+  const FieldInfo *key_only = nullptr;
+  const FieldInfo *value_only = nullptr;
+  for (const auto &field : fields) {
+    if (field.field_name == "key_only") {
+      key_only = &field;
+    } else if (field.field_name == "value_only") {
+      value_only = &field;
+    }
+  }
+  ASSERT_NE(key_only, nullptr);
+  ASSERT_NE(value_only, nullptr);
+  EXPECT_EQ(key_only->field_type.generics[0].type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
+  EXPECT_EQ(value_only->field_type.generics[1].generics[0].type_id,
+            static_cast<uint32_t>(TypeId::TAGGED_INT64));
+}
+
+TEST(StructComprehensiveTest, OptionalNestedAnnotation) {
+  test_roundtrip(
+      OptionalNestedAnnotatedStruct{{std::vector<uint32_t>{1, 2, 3}}});
+  test_roundtrip(OptionalNestedAnnotatedStruct{std::nullopt});
+
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<OptionalNestedAnnotatedStruct>(603).ok());
+  ASSERT_TRUE(
+      fory.serialize(OptionalNestedAnnotatedStruct{{std::vector<uint32_t>{1}}})
+          .ok());
+  TypeMeta meta =
+      fory.type_resolver().clone_struct_meta<OptionalNestedAnnotatedStruct>();
+  const auto &fields = meta.get_field_infos();
+  ASSERT_EQ(fields.size(), 1);
+  EXPECT_TRUE(fields[0].field_type.nullable);
+  ASSERT_EQ(fields[0].field_type.type_id, static_cast<uint32_t>(TypeId::LIST));
+  ASSERT_EQ(fields[0].field_type.generics.size(), 1);
+  EXPECT_EQ(fields[0].field_type.generics[0].type_id,
+            static_cast<uint32_t>(TypeId::VAR_UINT32));
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {

@@ -358,6 +358,12 @@ struct Person {
 };
 FORY_STRUCT(Person, name, age);
 
+struct Event {
+    uint32_t id;
+    uint64_t timestamp;
+};
+FORY_STRUCT(Event, (id, fory::F(0).varint()), (timestamp, fory::F(1).tagged()));
+
 int main() {
     // Create Fory instance - should be reused across serializations
     auto fory = Fory::builder().build();

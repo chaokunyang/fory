@@ -1208,7 +1208,6 @@ std::string TypeMeta::compute_struct_fingerprint(
     }
     fingerprint.append(std::to_string(effective_type_id));
     fingerprint.push_back(',');
-    // Use field-level ref tracking flag from FORY_FIELD_TAGS or fory::field<>
     fingerprint.push_back(fi.field_type.track_ref ? '1' : '0');
     fingerprint.push_back(',');
     fingerprint.append(fi.field_type.nullable ? "1;" : "0;");

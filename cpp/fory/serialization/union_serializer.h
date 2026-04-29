@@ -947,7 +947,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
               return;
             }
             ctx.write_uint8(static_cast<uint8_t>(field_type_id));
-            if constexpr (configured) {
+            if constexpr (detail::union_node_has_override<SpecProvider, 0>()) {
               detail::write_union_configured_value<CaseT, SpecProvider, 0>(
                   value, ctx, RefMode::None, false, true);
             } else {
@@ -1051,7 +1051,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
           return;
         }
         CaseT value = [&]() {
-          if constexpr (configured) {
+          if constexpr (detail::union_node_has_override<SpecProvider, 0>()) {
             return detail::read_union_configured_value<CaseT, SpecProvider, 0>(
                 ctx, RefMode::None, false);
           } else {

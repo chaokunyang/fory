@@ -153,7 +153,10 @@ public class FieldTypes {
     }
     // For xlang: ref tracking is false by default (no shared ownership like Rust's Rc/Arc)
     // For native: use the type's default tracking behavior
-    boolean trackingRef = !isXlang && genericType.trackingRef(resolver);
+    boolean trackingRef =
+        isXlang
+            ? typeExtMeta != null && typeExtMeta.trackingRef()
+            : genericType.trackingRef(resolver);
     // For xlang: nullable is false by default for top-level fields.
     // Nested element types are nullable by default to align with cross-language collection
     // semantics.

@@ -761,17 +761,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
       - name: Cache C++ IDL CMake build
+        id: cpp-idl-cmake-cache
         uses: actions/cache@v4
         with:
           path: integration_tests/idl_tests/cpp/build
           key: cpp-idl-cmake-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('integration_tests/idl_tests/cpp/**', 'integration_tests/idl_tests/*.fdl', 'integration_tests/idl_tests/generate_idl.py', 'compiler/**', 'cpp/**') }}
           restore-keys: |
             cpp-idl-cmake-${{ runner.os }}-${{ runner.arch }}-
+          save-always: true
       - name: Install Java artifacts for IDL tests
         run: |
           cd java
           mvn -T16 --no-transfer-progress clean install -DskipTests -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
       - name: Run C++ IDL Tests
+        env:
+          FORY_CPP_IDL_SKIP_BUILD: ${{ steps.cpp-idl-cmake-cache.outputs.cache-hit == 'true' && '1' || '' }}
         run: ./integration_tests/idl_tests/run_cpp_tests.sh
 
   cpp_examples:

@@ -141,7 +141,7 @@ public class Document {
 }
 ```
 
-#### C++: fory::field Wrapper
+#### C++: FORY_STRUCT Field Config
 
 ```cpp
 struct Document {
@@ -151,10 +151,14 @@ struct Document {
     std::shared_ptr<Author> author;
     fory::serialization::SharedWeak<Data> data;
 
-    // Explicitly mark ref tracking when using field wrappers (optional)
-    fory::field<std::shared_ptr<Tag>, 1, fory::ref> tag_owner;
+    std::shared_ptr<Tag> tag_owner;
 };
-FORY_STRUCT(Document, title, author, data, tag_owner);
+FORY_STRUCT(Document,
+    title,
+    author,
+    data,
+    (tag_owner, fory::F().ref())
+);
 ```
 
 To disable reference tracking for C++ entirely, set

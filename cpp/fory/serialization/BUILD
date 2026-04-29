@@ -147,15 +147,6 @@ cc_test(
 )
 
 cc_test(
-    name = "field_serializer_test",
-    srcs = ["field_serializer_test.cc"],
-    deps = [
-        ":fory_serialization",
-        "@googletest//:gtest",
-    ],
-)
-
-cc_test(
     name = "namespace_macro_test",
     srcs = ["namespace_macro_test.cc"],
     deps = [

@@ -999,7 +999,7 @@ jobs:
   python:
     name: Python CI
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.cpp == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -1039,7 +1039,7 @@ jobs:
   python_windows:
     name: Python CI (${{ matrix.python-version }}, windows-2022)
     needs: changes
-    if: needs.changes.outputs.python == 'true'
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.cpp == 'true'
     runs-on: windows-2022
     strategy:
       matrix:

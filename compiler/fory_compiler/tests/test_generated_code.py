@@ -86,9 +86,9 @@ def assert_language_outputs_equal(
             baseline_label = label
             baseline_files = files
             continue
-        assert (
-            files == baseline_files
-        ), f"{generator_cls.language_name} output mismatch for {label} vs {baseline_label}"
+        assert files == baseline_files, (
+            f"{generator_cls.language_name} output mismatch for {label} vs {baseline_label}"
+        )
 
 
 def assert_all_languages_equal(schemas: Dict[str, Schema]) -> None:

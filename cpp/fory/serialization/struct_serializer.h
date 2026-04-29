@@ -562,6 +562,143 @@ constexpr int8_t configured_node_child() {
   }
 }
 
+template <typename ValueType, typename StructT, size_t Index, int8_t NodeIndex>
+constexpr bool configured_vector_primitive_array_spec() {
+  if constexpr (!is_vector_v<ValueType>) {
+    return false;
+  } else {
+    using Element = element_type_t<ValueType>;
+    if constexpr (!std::is_same_v<decay_t<Element>, int8_t> &&
+                  !std::is_same_v<decay_t<Element>, uint8_t>) {
+      return false;
+    } else {
+      constexpr FieldNodeKind kind =
+          configured_node_kind<StructT, Index, NodeIndex>();
+      constexpr int8_t child =
+          configured_node_child<StructT, Index, NodeIndex, 0>();
+      if constexpr (kind != FieldNodeKind::List || child < 0) {
+        return false;
+      } else if constexpr (configured_node_kind<StructT, Index, child>() !=
+                               FieldNodeKind::Scalar ||
+                           configured_node_encoding<StructT, Index, child>() !=
+                               Encoding::Default) {
+        return false;
+      } else if constexpr (std::is_same_v<decay_t<Element>, int8_t>) {
+        return configured_node_scalar<StructT, Index, child>() ==
+               FieldScalarKind::Int8;
+      } else {
+        return configured_node_scalar<StructT, Index, child>() ==
+               FieldScalarKind::UInt8;
+      }
+    }
+  }
+}
+
+template <typename ValueType, typename StructT, size_t Index, int8_t NodeIndex>
+constexpr uint32_t configured_vector_primitive_array_type_id() {
+  if constexpr (!configured_vector_primitive_array_spec<ValueType, StructT,
+                                                        Index, NodeIndex>()) {
+    return 0;
+  } else {
+    using Element = element_type_t<ValueType>;
+    if constexpr (std::is_same_v<decay_t<Element>, int8_t>) {
+      return static_cast<uint32_t>(TypeId::INT8_ARRAY);
+    } else {
+      return static_cast<uint32_t>(TypeId::UINT8_ARRAY);
+    }
+  }
+}
+
+template <typename FieldType, typename StructT, size_t Index, int8_t NodeIndex>
+constexpr uint32_t configured_scalar_type_id() {
+  constexpr Encoding enc =
+      configured_node_encoding<StructT, Index, NodeIndex>();
+  using Decayed = decay_t<FieldType>;
+  if constexpr (std::is_same_v<Decayed, bool>) {
+    return static_cast<uint32_t>(TypeId::BOOL);
+  } else if constexpr (std::is_same_v<Decayed, int8_t>) {
+    return static_cast<uint32_t>(TypeId::INT8);
+  } else if constexpr (std::is_same_v<Decayed, uint8_t>) {
+    return static_cast<uint32_t>(TypeId::UINT8);
+  } else if constexpr (std::is_same_v<Decayed, int16_t>) {
+    return static_cast<uint32_t>(TypeId::INT16);
+  } else if constexpr (std::is_same_v<Decayed, uint16_t>) {
+    return static_cast<uint32_t>(TypeId::UINT16);
+  } else if constexpr (std::is_same_v<Decayed, int32_t> ||
+                       std::is_same_v<Decayed, int>) {
+    if constexpr (enc == Encoding::Fixed) {
+      return static_cast<uint32_t>(TypeId::INT32);
+    }
+    return static_cast<uint32_t>(TypeId::VARINT32);
+  } else if constexpr (std::is_same_v<Decayed, uint32_t> ||
+                       std::is_same_v<Decayed, unsigned int>) {
+    if constexpr (enc == Encoding::Varint) {
+      return static_cast<uint32_t>(TypeId::VAR_UINT32);
+    }
+    return static_cast<uint32_t>(TypeId::UINT32);
+  } else if constexpr (std::is_same_v<Decayed, int64_t> ||
+                       std::is_same_v<Decayed, long long>) {
+    if constexpr (enc == Encoding::Fixed) {
+      return static_cast<uint32_t>(TypeId::INT64);
+    } else if constexpr (enc == Encoding::Tagged) {
+      return static_cast<uint32_t>(TypeId::TAGGED_INT64);
+    }
+    return static_cast<uint32_t>(TypeId::VARINT64);
+  } else if constexpr (std::is_same_v<Decayed, uint64_t> ||
+                       std::is_same_v<Decayed, unsigned long long>) {
+    if constexpr (enc == Encoding::Varint) {
+      return static_cast<uint32_t>(TypeId::VAR_UINT64);
+    } else if constexpr (enc == Encoding::Tagged) {
+      return static_cast<uint32_t>(TypeId::TAGGED_UINT64);
+    }
+    return static_cast<uint32_t>(TypeId::UINT64);
+  } else if constexpr (std::is_same_v<Decayed, float16_t>) {
+    return static_cast<uint32_t>(TypeId::FLOAT16);
+  } else if constexpr (std::is_same_v<Decayed, bfloat16_t>) {
+    return static_cast<uint32_t>(TypeId::BFLOAT16);
+  } else if constexpr (std::is_same_v<Decayed, float>) {
+    return static_cast<uint32_t>(TypeId::FLOAT32);
+  } else if constexpr (std::is_same_v<Decayed, double>) {
+    return static_cast<uint32_t>(TypeId::FLOAT64);
+  } else if constexpr (std::is_same_v<Decayed, std::string>) {
+    return static_cast<uint32_t>(TypeId::STRING);
+  }
+  return 0;
+}
+
+template <typename FieldType, typename StructT, size_t Index, int8_t NodeIndex>
+constexpr uint32_t configured_effective_type_id() {
+  constexpr FieldNodeKind kind =
+      configured_node_kind<StructT, Index, NodeIndex>();
+  if constexpr (is_optional_v<FieldType>) {
+    using Inner = typename decay_t<FieldType>::value_type;
+    constexpr int8_t child =
+        kind == FieldNodeKind::Inner
+            ? configured_node_child<StructT, Index, NodeIndex, 0>()
+            : NodeIndex;
+    return configured_effective_type_id<Inner, StructT, Index, child>();
+  } else {
+    constexpr uint32_t vector_array_tid =
+        configured_vector_primitive_array_type_id<FieldType, StructT, Index,
+                                                  NodeIndex>();
+    if constexpr (vector_array_tid != 0) {
+      return vector_array_tid;
+    } else if constexpr (kind == FieldNodeKind::List) {
+      return static_cast<uint32_t>(TypeId::LIST);
+    } else if constexpr (kind == FieldNodeKind::Set) {
+      return static_cast<uint32_t>(TypeId::SET);
+    } else if constexpr (kind == FieldNodeKind::Map) {
+      return static_cast<uint32_t>(TypeId::MAP);
+    } else if constexpr (kind == FieldNodeKind::Scalar ||
+                         configured_node_encoding<StructT, Index,
+                                                  NodeIndex>() !=
+                             Encoding::Default) {
+      return configured_scalar_type_id<FieldType, StructT, Index, NodeIndex>();
+    }
+    return 0;
+  }
+}
+
 template <typename FieldType, typename StructT, size_t Index, int8_t NodeIndex>
 FORY_ALWAYS_INLINE void write_configured_scalar(const FieldType &value,
                                                 WriteContext &ctx) {
@@ -835,11 +972,16 @@ void write_configured_value(const ValueType &value, WriteContext &ctx,
                         is_deque_v<ValueType> || is_set_like_v<ValueType>) &&
                        (kind == FieldNodeKind::List ||
                         kind == FieldNodeKind::Set)) {
-    write_not_null_ref_flag(ctx, ref_mode);
-    constexpr int8_t child =
-        configured_node_child<StructT, Index, NodeIndex, 0>();
-    write_configured_list_data<ValueType, StructT, Index, NodeIndex, child>(
-        value, ctx);
+    if constexpr (configured_vector_primitive_array_spec<ValueType, StructT,
+                                                         Index, NodeIndex>()) {
+      Serializer<ValueType>::write(value, ctx, ref_mode, false, has_generics);
+    } else {
+      write_not_null_ref_flag(ctx, ref_mode);
+      constexpr int8_t child =
+          configured_node_child<StructT, Index, NodeIndex, 0>();
+      write_configured_list_data<ValueType, StructT, Index, NodeIndex, child>(
+          value, ctx);
+    }
   } else if constexpr (is_map_like_v<ValueType> && kind == FieldNodeKind::Map) {
     write_not_null_ref_flag(ctx, ref_mode);
     constexpr int8_t key_child =
@@ -884,13 +1026,18 @@ ValueType read_configured_value(ReadContext &ctx, RefMode ref_mode,
                         is_deque_v<ValueType> || is_set_like_v<ValueType>) &&
                        (kind == FieldNodeKind::List ||
                         kind == FieldNodeKind::Set)) {
-    if (!read_null_only_flag(ctx, ref_mode)) {
-      return ValueType{};
+    if constexpr (configured_vector_primitive_array_spec<ValueType, StructT,
+                                                         Index, NodeIndex>()) {
+      return Serializer<ValueType>::read(ctx, ref_mode, false);
+    } else {
+      if (!read_null_only_flag(ctx, ref_mode)) {
+        return ValueType{};
+      }
+      constexpr int8_t child =
+          configured_node_child<StructT, Index, NodeIndex, 0>();
+      return read_configured_list_data<ValueType, StructT, Index, NodeIndex,
+                                       child>(ctx);
     }
-    constexpr int8_t child =
-        configured_node_child<StructT, Index, NodeIndex, 0>();
-    return read_configured_list_data<ValueType, StructT, Index, NodeIndex,
-                                     child>(ctx);
   } else if constexpr (is_map_like_v<ValueType> && kind == FieldNodeKind::Map) {
     if (!read_null_only_flag(ctx, ref_mode)) {
       return ValueType{};
@@ -982,6 +1129,11 @@ template <typename T> struct CompileTimeFieldHelpers {
       using FieldType = unwrap_field_t<RawFieldType>;
 
       if constexpr (::fory::detail::has_field_config_v<T>) {
+        constexpr uint32_t effective_tid =
+            configured_effective_type_id<FieldType, T, Index, 0>();
+        if constexpr (effective_tid != 0) {
+          return effective_tid;
+        }
         constexpr uint32_t unsigned_tid =
             compute_unsigned_type_id<FieldType, T, Index>();
         if constexpr (unsigned_tid != 0) {

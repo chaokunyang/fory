@@ -22,6 +22,7 @@
 #include "fory/meta/preprocessor.h"
 #include "fory/meta/type_traits.h"
 #include <array>
+#include <cstdint>
 #include <string_view>
 #include <tuple>
 #include <type_traits>

@@ -1542,11 +1542,11 @@ class CppGenerator(BaseGenerator):
             if field.optional or field.ref:
                 meta += f".inner({spec})"
             elif spec.startswith("fory::T::list("):
-                meta += f".list({spec[len('fory::T::list('):-1]})"
+                meta += f".list({spec[len('fory::T::list(') : -1]})"
             elif spec.startswith("fory::T::set("):
-                meta += f".set({spec[len('fory::T::set('):-1]})"
+                meta += f".set({spec[len('fory::T::set(') : -1]})"
             elif spec.startswith("fory::T::map("):
-                meta += f".map({spec[len('fory::T::map('):-1]})"
+                meta += f".map({spec[len('fory::T::map(') : -1]})"
             elif spec.endswith(".fixed()"):
                 meta += ".fixed()"
             elif spec.endswith(".varint()"):
@@ -1571,11 +1571,11 @@ class CppGenerator(BaseGenerator):
             if field.optional or field.ref:
                 meta += f".inner({spec})"
             elif spec.startswith("fory::T::list("):
-                meta += f".list({spec[len('fory::T::list('):-1]})"
+                meta += f".list({spec[len('fory::T::list(') : -1]})"
             elif spec.startswith("fory::T::set("):
-                meta += f".set({spec[len('fory::T::set('):-1]})"
+                meta += f".set({spec[len('fory::T::set(') : -1]})"
             elif spec.startswith("fory::T::map("):
-                meta += f".map({spec[len('fory::T::map('):-1]})"
+                meta += f".map({spec[len('fory::T::map(') : -1]})"
             elif spec.endswith(".fixed()"):
                 meta += ".fixed()"
             elif spec.endswith(".varint()"):
@@ -1602,26 +1602,38 @@ class CppGenerator(BaseGenerator):
         if isinstance(field_type, PrimitiveType):
             spec = self.get_primitive_type_spec(field_type.kind)
         elif isinstance(field_type, ListType):
-            element = self.get_type_spec(
-                field_type.element_type,
-                field_type.element_optional,
-                field_type.element_ref,
-            )
-            if not element:
-                element = "fory::FieldNodeSpec{}"
-            spec = f"fory::T::list({element})"
+            if (
+                isinstance(field_type.element_type, PrimitiveType)
+                and not field_type.element_optional
+                and not field_type.element_ref
+                and field_type.element_type.kind
+                not in (PrimitiveKind.INT8, PrimitiveKind.UINT8)
+            ):
+                spec = ""
+            else:
+                element = self.get_type_spec(
+                    field_type.element_type,
+                    field_type.element_optional,
+                    field_type.element_ref,
+                )
+                if not element:
+                    element = "fory::FieldNodeSpec{}"
+                spec = f"fory::T::list({element})"
         elif isinstance(field_type, MapType):
             key = self.get_type_spec(field_type.key_type)
-            value = self.get_type_spec(
+            element = self.get_type_spec(
                 field_type.value_type,
                 field_type.value_optional,
                 field_type.value_ref,
             )
-            if not key:
-                key = "fory::FieldNodeSpec{}"
-            if not value:
-                value = "fory::FieldNodeSpec{}"
-            spec = f"fory::T::map({key}, {value})"
+            if key or element:
+                if not key:
+                    key = "fory::FieldNodeSpec{}"
+                if not element:
+                    element = "fory::FieldNodeSpec{}"
+                spec = f"fory::T::map({key}, {element})"
+            else:
+                spec = ""
         else:
             spec = ""
 

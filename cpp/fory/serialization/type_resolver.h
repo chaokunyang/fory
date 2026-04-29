@@ -524,6 +524,29 @@ inline bool field_node_has_override(const FieldNodeSpec &spec,
           spec.scalar_[node_index] != FieldScalarKind::Inferred);
 }
 
+template <typename Element>
+TypeId vector_type_id_for_spec(const FieldNodeSpec &spec, int8_t node_index,
+                               TypeId default_type_id) {
+  if (node_index < 0 || spec.kind_[node_index] != FieldNodeKind::List) {
+    return default_type_id;
+  }
+  const int8_t child = spec.child0_[node_index];
+  if (child < 0 || spec.kind_[child] != FieldNodeKind::Scalar ||
+      spec.encoding_[child] != Encoding::Default) {
+    return TypeId::LIST;
+  }
+  if constexpr (std::is_same_v<decay_t<Element>, int8_t>) {
+    if (spec.scalar_[child] == FieldScalarKind::Int8) {
+      return TypeId::INT8_ARRAY;
+    }
+  } else if constexpr (std::is_same_v<decay_t<Element>, uint8_t>) {
+    if (spec.scalar_[child] == FieldScalarKind::UInt8) {
+      return TypeId::UINT8_ARRAY;
+    }
+  }
+  return TypeId::LIST;
+}
+
 template <typename FieldT>
 void apply_integer_encoding(FieldType &ft, const FieldNodeSpec &spec,
                             int8_t node_index) {
@@ -614,7 +637,8 @@ FieldType build_field_type_with_spec(bool nullable, const FieldNodeSpec &spec,
     using Element = element_type_t<Decayed>;
     constexpr TypeId default_type_id = Serializer<Decayed>::type_id;
     const bool force_list = node_kind == FieldNodeKind::List;
-    const TypeId type_id = force_list ? TypeId::LIST : default_type_id;
+    const TypeId type_id =
+        vector_type_id_for_spec<Element>(spec, node_index, default_type_id);
     if (type_id == TypeId::LIST) {
       const int8_t child = force_list ? spec.child0_[node_index] : -1;
       FieldType elem =
@@ -879,7 +903,8 @@ build_field_type_with_resolver_and_spec(TypeResolver &resolver, bool nullable,
     using Element = element_type_t<Decayed>;
     constexpr TypeId default_type_id = Serializer<Decayed>::type_id;
     const bool force_list = node_kind == FieldNodeKind::List;
-    const TypeId type_id = force_list ? TypeId::LIST : default_type_id;
+    const TypeId type_id =
+        vector_type_id_for_spec<Element>(spec, node_index, default_type_id);
     if (type_id == TypeId::LIST) {
       const int8_t child = force_list ? spec.child0_[node_index] : -1;
       FORY_TRY(elem, (field_node_has_override(spec, child)

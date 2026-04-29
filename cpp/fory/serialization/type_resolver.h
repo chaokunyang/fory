@@ -42,8 +42,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
-
 #include "fory/meta/field.h"
 #include "fory/meta/field_info.h"
 #include "fory/meta/type_traits.h"
@@ -51,6 +49,7 @@
 #include "fory/serialization/serializer.h"
 #include "fory/serialization/serializer_traits.h"
 #include "fory/serialization/type_info.h"
+#include "fory/thirdparty/flat_hash_map.h"
 #include "fory/type/type.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
@@ -1194,11 +1193,11 @@ private:
   util::U64PtrMap<TypeInfo> type_info_by_ctid_{256};
   util::U32PtrMap<TypeInfo> type_info_by_id_{256};
   util::U64PtrMap<TypeInfo> user_type_info_by_id_{256};
-  absl::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
+  fory::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
   util::U64PtrMap<TypeInfo> partial_type_infos_{256};
 
   // For runtime polymorphic lookups (smart pointers) - uses std::type_index
-  absl::flat_hash_map<std::type_index, TypeInfo *> type_info_by_runtime_type_;
+  fory::flat_hash_map<std::type_index, TypeInfo *> type_info_by_runtime_type_;
 };
 
 // Alias for backward compatibility (already defined above as top-level)
@@ -1579,11 +1578,11 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
   entry->sorted_indices.clear();
   entry->sorted_indices.reserve(field_count);
   for (const auto &sorted_field : sorted_fields) {
-    auto it = entry->name_to_index.find(sorted_field.field_name);
-    FORY_CHECK(it != entry->name_to_index.end())
+    auto *name_entry = entry->name_to_index.find(sorted_field.field_name);
+    FORY_CHECK(name_entry != nullptr)
         << "Sorted field name '" << sorted_field.field_name
         << "' not found in original struct definition";
-    entry->sorted_indices.push_back(it->second);
+    entry->sorted_indices.push_back(name_entry->second);
   }
 
   entry->harness = make_struct_harness<T>();
@@ -1889,8 +1888,8 @@ TypeResolver::register_type_internal(uint64_t ctid,
 
   if (raw_ptr->register_by_name) {
     name_key = make_name_key(raw_ptr->namespace_name, raw_ptr->type_name);
-    auto it = type_info_by_name_.find(name_key);
-    if (it != type_info_by_name_.end()) {
+    auto *entry = type_info_by_name_.find(name_key);
+    if (entry != nullptr) {
       return Unexpected(Error::invalid(
           "Type already registered for namespace '" + raw_ptr->namespace_name +
           "' and name '" + raw_ptr->type_name + "'"));
@@ -1949,9 +1948,9 @@ inline Result<const TypeInfo *, Error>
 TypeResolver::get_type_info_by_name(const std::string &ns,
                                     const std::string &type_name) const {
   auto key = make_name_key(ns, type_name);
-  auto it = type_info_by_name_.find(key);
-  if (it != type_info_by_name_.end()) {
-    return it->second;
+  auto *entry = type_info_by_name_.find(key);
+  if (entry != nullptr) {
+    return entry->second;
   }
   return Unexpected(Error::type_error("TypeInfo not found for type: " + ns +
                                       "." + type_name));

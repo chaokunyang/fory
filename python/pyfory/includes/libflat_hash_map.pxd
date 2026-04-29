@@ -14,23 +14,25 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+#
 
-@PACKAGE_INIT@
+from libcpp.utility cimport pair
 
-include(CMakeFindDependencyMacro)
-
-include("${CMAKE_CURRENT_LIST_DIR}/ForyTargets.cmake")
-
-# Provide convenient component targets
-# Users can use:
-#   find_package(Fory REQUIRED)
-#   target_link_libraries(myapp fory::serialization)  # For serialization only
-#   target_link_libraries(myapp fory::row_format)     # For row format
-#   target_link_libraries(myapp fory::fory)           # For everything
-
-check_required_components(Fory)
-
-# Print found message
-if(NOT Fory_FIND_QUIETLY)
-    message(STATUS "Found Fory: ${CMAKE_CURRENT_LIST_DIR}")
-endif()
+cdef extern from "fory/thirdparty/flat_hash_map.h" namespace "fory" nogil:
+    cdef cppclass flat_hash_map[T, U]:
+        ctypedef T key_type
+        ctypedef U mapped_type
+        ctypedef pair[T, U] value_type
+        flat_hash_map() except +
+        flat_hash_map(flat_hash_map&) except +
+        U& operator[](const T&)
+        void clear()
+        bint empty()
+        pair[T, U]* find(const T&)
+        size_t size()
+        void swap(flat_hash_map&)
+        void max_load_factor(float)
+        float max_load_factor()
+        void rehash(size_t)
+        void reserve(size_t)
+        size_t bucket_count()

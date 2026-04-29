@@ -1324,11 +1324,11 @@ encode_meta_string(const std::string &value, bool is_namespace) {
 Result<const TypeInfo *, Error>
 TypeResolver::get_type_info(const std::type_index &type_index) const {
   // For runtime polymorphic lookups (e.g., smart pointers with dynamic types)
-  auto it = type_info_by_runtime_type_.find(type_index);
-  if (it == type_info_by_runtime_type_.end()) {
+  auto *entry = type_info_by_runtime_type_.find(type_index);
+  if (entry == nullptr) {
     return Unexpected(Error::type_error("TypeInfo not found for type_index"));
   }
-  return it->second;
+  return entry->second;
 }
 
 Result<std::unique_ptr<TypeResolver>, Error>
@@ -1343,7 +1343,7 @@ TypeResolver::build_final_type_resolver() {
   final_resolver->finalized_ = true;
 
   // Build mapping from old pointers to new pointers for rebuilding lookup maps
-  absl::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
+  fory::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
 
   // Deep clone all existing TypeInfo objects
   for (const auto &info : type_infos_) {
@@ -1352,26 +1352,31 @@ TypeResolver::build_final_type_resolver() {
     ptr_map[info.get()] = new_ptr;
     final_resolver->type_infos_.push_back(std::move(cloned));
   }
+  auto remap_type_info = [&ptr_map](const TypeInfo *old_ptr) {
+    auto *entry = ptr_map.find(old_ptr);
+    FORY_CHECK(entry != nullptr);
+    return entry->second;
+  };
 
   // Rebuild lookup maps with new pointers
   for (const auto &[key, old_ptr] : type_info_by_ctid_) {
-    final_resolver->type_info_by_ctid_.put(key, ptr_map[old_ptr]);
+    final_resolver->type_info_by_ctid_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_id_) {
-    final_resolver->type_info_by_id_.put(key, ptr_map[old_ptr]);
+    final_resolver->type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : user_type_info_by_id_) {
-    final_resolver->user_type_info_by_id_.put(key, ptr_map[old_ptr]);
+    final_resolver->user_type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_name_) {
-    final_resolver->type_info_by_name_[key] = ptr_map[old_ptr];
+    final_resolver->type_info_by_name_[key] = remap_type_info(old_ptr);
   }
   for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
-    final_resolver->type_info_by_runtime_type_[key] = ptr_map[old_ptr];
+    final_resolver->type_info_by_runtime_type_[key] = remap_type_info(old_ptr);
   }
 
   for (const auto &[key, old_ptr] : partial_type_infos_) {
-    final_resolver->partial_type_infos_.put(key, ptr_map[old_ptr]);
+    final_resolver->partial_type_infos_.put(key, remap_type_info(old_ptr));
   }
 
   // Process all partial type infos to build complete type metadata
@@ -1418,7 +1423,7 @@ std::unique_ptr<TypeResolver> TypeResolver::clone() const {
   cloned->finalized_ = finalized_;
 
   // Build mapping from old pointers to new pointers
-  absl::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
+  fory::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
 
   // Deep clone all TypeInfo objects
   for (const auto &info : type_infos_) {
@@ -1427,22 +1432,27 @@ std::unique_ptr<TypeResolver> TypeResolver::clone() const {
     ptr_map[info.get()] = new_ptr;
     cloned->type_infos_.push_back(std::move(cloned_info));
   }
+  auto remap_type_info = [&ptr_map](const TypeInfo *old_ptr) {
+    auto *entry = ptr_map.find(old_ptr);
+    FORY_CHECK(entry != nullptr);
+    return entry->second;
+  };
 
   // Rebuild lookup maps with new pointers
   for (const auto &[key, old_ptr] : type_info_by_ctid_) {
-    cloned->type_info_by_ctid_.put(key, ptr_map[old_ptr]);
+    cloned->type_info_by_ctid_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_id_) {
-    cloned->type_info_by_id_.put(key, ptr_map[old_ptr]);
+    cloned->type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : user_type_info_by_id_) {
-    cloned->user_type_info_by_id_.put(key, ptr_map[old_ptr]);
+    cloned->user_type_info_by_id_.put(key, remap_type_info(old_ptr));
   }
   for (const auto &[key, old_ptr] : type_info_by_name_) {
-    cloned->type_info_by_name_[key] = ptr_map[old_ptr];
+    cloned->type_info_by_name_[key] = remap_type_info(old_ptr);
   }
   for (const auto &[key, old_ptr] : type_info_by_runtime_type_) {
-    cloned->type_info_by_runtime_type_[key] = ptr_map[old_ptr];
+    cloned->type_info_by_runtime_type_[key] = remap_type_info(old_ptr);
   }
   // Note: Don't copy partial_type_infos_ - clone should only be used on
   // finalized resolvers

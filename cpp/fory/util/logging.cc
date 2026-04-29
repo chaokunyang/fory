@@ -24,7 +24,9 @@
 #include <execinfo.h>
 #endif
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdlib>
 #include <sstream>
 #include <unordered_map>

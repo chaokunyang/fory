@@ -1179,7 +1179,9 @@ class JavaGenerator(BaseGenerator):
                         return self.PRIMITIVE_LIST_MAP[kind]
                     if kind in self.PRIMITIVE_ARRAY_MAP:
                         return self.PRIMITIVE_ARRAY_MAP[kind]
-            element_type = self.generate_type(field_type.element_type, True, type_use=True)
+            element_type = self.generate_type(
+                field_type.element_type, True, type_use=True
+            )
             if self.is_ref_target_type(field_type.element_type):
                 ref_annotation = "@Ref" if child_ref else "@Ref(enable=false)"
                 element_type = f"{ref_annotation} {element_type}"

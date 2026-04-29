@@ -40,17 +40,12 @@ public class StructBenchmark {
   private static byte[] foryKVCompatibleBytes;
   private static byte[] pbBytes;
 
-  private static final Fory fory =
-      Fory.builder().withCompatible(true).build();
+  private static final Fory fory = Fory.builder().withCompatible(true).build();
 
-  private static final Fory foryStrict =
-      Fory.builder().withCompatible(false).build();
+  private static final Fory foryStrict = Fory.builder().withCompatible(false).build();
 
   private static final Fory foryKVCompatible =
-      Fory.builder()
-          .withCompatible(true)
-          .withScopedMetaShare(false)
-          .build();
+      Fory.builder().withCompatible(true).withScopedMetaShare(false).build();
 
   static {
     try {

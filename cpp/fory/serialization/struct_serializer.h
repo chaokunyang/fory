@@ -3004,11 +3004,10 @@ void read_single_field_by_index(T &obj, ReadContext &ctx) {
 
 /// Helper to read a single field by index in compatible mode using
 /// remote field metadata to decide reference flag presence.
-/// @param remote_type_id The type_id from the remote schema (for encoding)
+/// @param remote_field_type The field type tree from the remote schema.
 template <size_t Index, typename T>
 void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
-                                           RefMode remote_ref_mode,
-                                           uint32_t remote_type_id) {
+                                           const FieldType &remote_field_type) {
   using Helpers = CompileTimeFieldHelpers<T>;
   const auto field_info = fory_field_info(obj);
   const auto &field_ptrs = decltype(field_info)::ptrs_ref();
@@ -3016,6 +3015,8 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
   using RawFieldType =
       typename meta::RemoveMemberPointerCVRefT<decltype(field_ptr)>;
   using FieldType = unwrap_field_t<RawFieldType>;
+  const RefMode remote_ref_mode = remote_field_type.ref_mode;
+  const uint32_t remote_type_id = remote_field_type.type_id;
 
   constexpr TypeId field_type_id = Serializer<FieldType>::type_id;
   // Check if field is a struct type - use type_id to handle shared_ptr<Struct>
@@ -3158,11 +3159,13 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
 /// Helper to dispatch field reading by field_id in compatible mode.
 /// Uses fold expression with short-circuit to avoid lambda overhead.
 /// Sets handled=true if field was matched.
-/// @param remote_type_id The type_id from the remote schema (for encoding)
+/// @param remote_field_type The field type tree from the remote schema.
 template <typename T, size_t... Indices>
-FORY_ALWAYS_INLINE void dispatch_compatible_field_read_impl(
-    T &obj, ReadContext &ctx, int16_t field_id, RefMode remote_ref_mode,
-    uint32_t remote_type_id, bool &handled, std::index_sequence<Indices...>) {
+FORY_ALWAYS_INLINE void
+dispatch_compatible_field_read_impl(T &obj, ReadContext &ctx, int16_t field_id,
+                                    const FieldType &remote_field_type,
+                                    bool &handled,
+                                    std::index_sequence<Indices...>) {
   using Helpers = CompileTimeFieldHelpers<T>;
 
   // Short-circuit fold: stops at first match
@@ -3170,8 +3173,8 @@ FORY_ALWAYS_INLINE void dispatch_compatible_field_read_impl(
   (void)((static_cast<int16_t>(Indices) == field_id
               ? (handled = true,
                  read_single_field_by_index_compatible<
-                     Helpers::sorted_indices[Indices]>(
-                     obj, ctx, remote_ref_mode, remote_type_id),
+                     Helpers::sorted_indices[Indices]>(obj, ctx,
+                                                       remote_field_type),
                  true)
               : false) ||
          ...);
@@ -3544,11 +3547,11 @@ void read_struct_fields_compatible(T &obj, ReadContext &ctx,
 
     // Dispatch to the correct local field by field_id
     // Uses fold expression with short-circuit - no lambda overhead
-    // Pass remote type_id for correct encoding in compatible mode
+    // Pass remote field type for correct encoding and ref metadata.
     bool handled = false;
-    dispatch_compatible_field_read_impl<T>(
-        obj, ctx, field_id, remote_ref_mode, remote_field.field_type.type_id,
-        handled, std::index_sequence<Indices...>{});
+    dispatch_compatible_field_read_impl<T>(obj, ctx, field_id,
+                                           remote_field.field_type, handled,
+                                           std::index_sequence<Indices...>{});
 
     if (!handled) {
       // Shouldn't happen if TypeMeta::assign_field_ids worked correctly

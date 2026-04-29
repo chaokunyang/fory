@@ -489,6 +489,19 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_enum<Status>(type_id++);
 }
 
+inline FieldType make_test_field_type(TypeId type_id,
+                                      std::vector<FieldType> generics = {}) {
+  return FieldType(static_cast<uint32_t>(type_id), false, false,
+                   std::move(generics));
+}
+
+inline FieldInfo make_test_field_info(std::string name, int16_t field_id,
+                                      FieldType field_type) {
+  FieldInfo info(std::move(name), std::move(field_type));
+  info.field_id = field_id;
+  return info;
+}
+
 template <typename T> void test_roundtrip(const T &original) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
   register_all_test_types(fory);
@@ -707,6 +720,71 @@ TEST(StructComprehensiveTest, OptionalNestedAnnotation) {
   ASSERT_EQ(fields[0].field_type.generics.size(), 1);
   EXPECT_EQ(fields[0].field_type.generics[0].type_id,
             static_cast<uint32_t>(TypeId::VAR_UINT32));
+}
+
+TEST(StructComprehensiveTest,
+     FieldTypeCompatibleFingerprintNormalizesEncoding) {
+  FieldType fixed_i32 = make_test_field_type(TypeId::INT32);
+  FieldType var_i32 = make_test_field_type(TypeId::VARINT32);
+  EXPECT_TRUE(field_types_compatible(fixed_i32, var_i32));
+  EXPECT_EQ(fixed_i32.compatible_fingerprint, var_i32.compatible_fingerprint);
+
+  FieldType fixed_list =
+      make_test_field_type(TypeId::LIST, {make_test_field_type(TypeId::INT32)});
+  FieldType var_list = make_test_field_type(
+      TypeId::LIST, {make_test_field_type(TypeId::VARINT32)});
+  EXPECT_TRUE(field_types_compatible(fixed_list, var_list));
+
+  FieldType int64_list = make_test_field_type(
+      TypeId::LIST, {make_test_field_type(TypeId::VARINT64)});
+  EXPECT_FALSE(field_types_compatible(fixed_list, int64_list));
+
+  EXPECT_TRUE(
+      field_types_compatible(make_test_field_type(TypeId::BINARY),
+                             make_test_field_type(TypeId::UINT8_ARRAY)));
+}
+
+TEST(StructComprehensiveTest,
+     AssignFieldIdsRejectsIncompatibleTaggedNestedTypes) {
+  TypeMeta local_type;
+  local_type.field_infos = {make_test_field_info(
+      "items", 7,
+      make_test_field_type(TypeId::LIST,
+                           {make_test_field_type(TypeId::VAR_UINT32)}))};
+
+  std::vector<FieldInfo> incompatible_remote = {make_test_field_info(
+      "items", 7,
+      make_test_field_type(TypeId::MAP,
+                           {make_test_field_type(TypeId::VAR_UINT32),
+                            make_test_field_type(TypeId::VAR_UINT32)}))};
+  TypeMeta::assign_field_ids(&local_type, incompatible_remote);
+  EXPECT_EQ(incompatible_remote[0].field_id, -1);
+
+  std::vector<FieldInfo> compatible_remote = {make_test_field_info(
+      "items", 7,
+      make_test_field_type(TypeId::LIST,
+                           {make_test_field_type(TypeId::UINT32)}))};
+  TypeMeta::assign_field_ids(&local_type, compatible_remote);
+  EXPECT_EQ(compatible_remote[0].field_id, 0);
+
+  TypeMeta name_mode_local;
+  name_mode_local.field_infos = {make_test_field_info(
+      "items", -1,
+      make_test_field_type(TypeId::LIST,
+                           {make_test_field_type(TypeId::VAR_UINT32)}))};
+  std::vector<FieldInfo> mixed_mode_remote = {make_test_field_info(
+      "items", 7,
+      make_test_field_type(TypeId::LIST,
+                           {make_test_field_type(TypeId::UINT32)}))};
+  TypeMeta::assign_field_ids(&name_mode_local, mixed_mode_remote);
+  EXPECT_EQ(mixed_mode_remote[0].field_id, -1);
+
+  std::vector<FieldInfo> name_remote = {make_test_field_info(
+      "items", -1,
+      make_test_field_type(TypeId::LIST,
+                           {make_test_field_type(TypeId::UINT32)}))};
+  TypeMeta::assign_field_ids(&local_type, name_remote);
+  EXPECT_EQ(name_remote[0].field_id, -1);
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {

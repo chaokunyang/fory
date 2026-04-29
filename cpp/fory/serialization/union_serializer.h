@@ -1103,7 +1103,7 @@ struct Serializer<T, std::enable_if_t<detail::is_union_type_v<T>>> {
         return default_value();
       }
       FieldType field_type;
-      field_type.type_id = type_info->type_id;
+      field_type.set_type_id(type_info->type_id);
       field_type.nullable = false;
       skip_field_value(ctx, field_type, RefMode::None);
       ctx.set_error(Error::invalid_data("Unknown union case id"));

@@ -24,7 +24,6 @@
 #include <array>
 #include <cstdint>
 #include <deque>
-#include <functional>
 #include <list>
 #include <map>
 #include <memory>
@@ -110,17 +109,40 @@ public:
   bool track_ref;
   RefMode ref_mode; // Precomputed from nullable and track_ref
   std::vector<FieldType> generics;
+  uint64_t compatible_fingerprint;
+
+  static uint64_t
+  compute_compatible_fingerprint(uint32_t tid,
+                                 const std::vector<FieldType> &generic_types);
 
   FieldType()
       : type_id(0), user_type_id(kInvalidUserTypeId), nullable(false),
-        track_ref(false), ref_mode(RefMode::None) {}
+        track_ref(false), ref_mode(RefMode::None), generics(),
+        compatible_fingerprint(
+            compute_compatible_fingerprint(type_id, generics)) {}
 
   FieldType(uint32_t tid, bool null, bool ref_track = false,
             std::vector<FieldType> gens = {},
             uint32_t user_tid = kInvalidUserTypeId)
       : type_id(tid), user_type_id(user_tid), nullable(null),
         track_ref(ref_track), ref_mode(make_ref_mode(null, ref_track)),
-        generics(std::move(gens)) {}
+        generics(std::move(gens)),
+        compatible_fingerprint(
+            compute_compatible_fingerprint(type_id, generics)) {}
+
+  void refresh_compatible_fingerprint() {
+    compatible_fingerprint = compute_compatible_fingerprint(type_id, generics);
+  }
+
+  void set_type_id(uint32_t tid) {
+    type_id = tid;
+    refresh_compatible_fingerprint();
+  }
+
+  void add_generic(FieldType generic) {
+    generics.push_back(std::move(generic));
+    refresh_compatible_fingerprint();
+  }
 
   /// write field type to buffer
   /// @param buffer Target buffer
@@ -146,6 +168,70 @@ public:
 
   bool operator!=(const FieldType &other) const { return !(*this == other); }
 };
+
+inline uint32_t compatible_fingerprint_type_id(uint32_t type_id) {
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::STRUCT:
+  case TypeId::COMPATIBLE_STRUCT:
+  case TypeId::NAMED_STRUCT:
+  case TypeId::NAMED_COMPATIBLE_STRUCT:
+  case TypeId::UNKNOWN:
+    return static_cast<uint32_t>(TypeId::STRUCT);
+  case TypeId::ENUM:
+  case TypeId::NAMED_ENUM:
+    return static_cast<uint32_t>(TypeId::ENUM);
+  case TypeId::EXT:
+  case TypeId::NAMED_EXT:
+    return static_cast<uint32_t>(TypeId::EXT);
+  case TypeId::BINARY:
+  case TypeId::INT8_ARRAY:
+  case TypeId::UINT8_ARRAY:
+    return static_cast<uint32_t>(TypeId::BINARY);
+  case TypeId::INT32:
+  case TypeId::VARINT32:
+    return static_cast<uint32_t>(TypeId::VARINT32);
+  case TypeId::INT64:
+  case TypeId::VARINT64:
+  case TypeId::TAGGED_INT64:
+    return static_cast<uint32_t>(TypeId::VARINT64);
+  case TypeId::UINT32:
+  case TypeId::VAR_UINT32:
+    return static_cast<uint32_t>(TypeId::VAR_UINT32);
+  case TypeId::UINT64:
+  case TypeId::VAR_UINT64:
+  case TypeId::TAGGED_UINT64:
+    return static_cast<uint32_t>(TypeId::VAR_UINT64);
+  default:
+    return type_id;
+  }
+}
+
+inline uint64_t FieldType::compute_compatible_fingerprint(
+    uint32_t tid, const std::vector<FieldType> &generic_types) {
+  uint64_t hash = 14695981039346656037ULL;
+  hash = fnv1a_64_combine(hash, compatible_fingerprint_type_id(tid));
+  hash = fnv1a_64_combine(hash, static_cast<uint64_t>(generic_types.size()));
+  for (const auto &generic : generic_types) {
+    hash = fnv1a_64_combine(hash, generic.compatible_fingerprint);
+  }
+  return hash;
+}
+
+inline bool collection_type_allows_empty_generic_fallback(uint32_t type_id) {
+  return type_id == static_cast<uint32_t>(TypeId::LIST) ||
+         type_id == static_cast<uint32_t>(TypeId::SET) ||
+         type_id == static_cast<uint32_t>(TypeId::MAP);
+}
+
+inline bool field_types_compatible(const FieldType &local,
+                                   const FieldType &remote) {
+  if (local.compatible_fingerprint == remote.compatible_fingerprint) {
+    return true;
+  }
+  return local.type_id == remote.type_id &&
+         collection_type_allows_empty_generic_fallback(local.type_id) &&
+         (local.generics.empty() || remote.generics.empty());
+}
 
 // ============================================================================
 // FieldInfo - Field metadata (name, type, id)
@@ -377,7 +463,7 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_vector_v<decay_t<T>>>> {
     if constexpr (vec_type_id == TypeId::LIST) {
       FieldType elem = FieldTypeBuilder<Element>::build(false);
       FieldType ft(to_type_id(vec_type_id), nullable);
-      ft.generics.push_back(std::move(elem));
+      ft.add_generic(std::move(elem));
       return ft;
     } else {
       return FieldType(to_type_id(vec_type_id), nullable);
@@ -392,7 +478,7 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_list_v<decay_t<T>>>> {
   static FieldType build(bool nullable) {
     FieldType elem = FieldTypeBuilder<Element>::build(false);
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   }
 };
@@ -404,7 +490,7 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_deque_v<decay_t<T>>>> {
   static FieldType build(bool nullable) {
     FieldType elem = FieldTypeBuilder<Element>::build(false);
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   }
 };
@@ -416,7 +502,7 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_forward_list_v<decay_t<T>>>> {
   static FieldType build(bool nullable) {
     FieldType elem = FieldTypeBuilder<Element>::build(false);
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   }
 };
@@ -428,7 +514,7 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_set_like_v<decay_t<T>>>> {
   static FieldType build(bool nullable) {
     FieldType elem = FieldTypeBuilder<Element>::build(false);
     FieldType ft(to_type_id(Serializer<Set>::type_id), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   }
 };
@@ -442,8 +528,8 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_map_like_v<decay_t<T>>>> {
     FieldType key_ft = FieldTypeBuilder<Key>::build(false);
     FieldType value_ft = FieldTypeBuilder<Value>::build(false);
     FieldType ft(to_type_id(Serializer<Map>::type_id), nullable);
-    ft.generics.push_back(std::move(key_ft));
-    ft.generics.push_back(std::move(value_ft));
+    ft.add_generic(std::move(key_ft));
+    ft.add_generic(std::move(value_ft));
     return ft;
   }
 };
@@ -463,7 +549,7 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_tuple_v<decay_t<T>>>> {
 
   template <size_t... Is>
   static void add_element_types(FieldType &ft, std::index_sequence<Is...>) {
-    (ft.generics.push_back(
+    (ft.add_generic(
          FieldTypeBuilder<std::tuple_element_t<Is, Tuple>>::build(false)),
      ...);
   }
@@ -475,8 +561,7 @@ struct FieldTypeBuilder<T, std::enable_if_t<is_tuple_v<decay_t<T>>>> {
       add_element_types(ft, std::make_index_sequence<tuple_size>{});
     } else {
       // Empty tuple: use UNKNOWN as stub element type for schema encoding
-      ft.generics.push_back(
-          FieldType(static_cast<uint32_t>(TypeId::UNKNOWN), false));
+      ft.add_generic(FieldType(static_cast<uint32_t>(TypeId::UNKNOWN), false));
     }
     return ft;
   }
@@ -509,8 +594,6 @@ struct FieldTypeBuilder<
     return FieldType(to_type_id(Serializer<Decayed>::type_id), nullable);
   }
 };
-
-inline bool field_type_needs_user_type_id(uint32_t) { return false; }
 
 template <typename T>
 Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
@@ -557,28 +640,28 @@ void apply_integer_encoding(FieldType &ft, const FieldNodeSpec &spec,
     return;
   }
   if constexpr (std::is_same_v<Decayed, uint8_t>) {
-    ft.type_id = static_cast<uint32_t>(TypeId::UINT8);
+    ft.set_type_id(static_cast<uint32_t>(TypeId::UINT8));
   } else if constexpr (std::is_same_v<Decayed, uint16_t>) {
-    ft.type_id = static_cast<uint32_t>(TypeId::UINT16);
+    ft.set_type_id(static_cast<uint32_t>(TypeId::UINT16));
   } else if constexpr (std::is_same_v<Decayed, uint32_t>) {
-    ft.type_id = static_cast<uint32_t>(
-        enc == Encoding::Varint ? TypeId::VAR_UINT32 : TypeId::UINT32);
+    ft.set_type_id(static_cast<uint32_t>(
+        enc == Encoding::Varint ? TypeId::VAR_UINT32 : TypeId::UINT32));
   } else if constexpr (std::is_same_v<Decayed, uint64_t>) {
-    ft.type_id = static_cast<uint32_t>(enc == Encoding::Varint
-                                           ? TypeId::VAR_UINT64
-                                           : (enc == Encoding::Tagged
-                                                  ? TypeId::TAGGED_UINT64
-                                                  : TypeId::UINT64));
+    ft.set_type_id(static_cast<uint32_t>(enc == Encoding::Varint
+                                             ? TypeId::VAR_UINT64
+                                             : (enc == Encoding::Tagged
+                                                    ? TypeId::TAGGED_UINT64
+                                                    : TypeId::UINT64)));
   } else if constexpr (std::is_same_v<Decayed, int32_t> ||
                        std::is_same_v<Decayed, int>) {
-    ft.type_id = static_cast<uint32_t>(
-        enc == Encoding::Fixed ? TypeId::INT32 : TypeId::VARINT32);
+    ft.set_type_id(static_cast<uint32_t>(
+        enc == Encoding::Fixed ? TypeId::INT32 : TypeId::VARINT32));
   } else if constexpr (std::is_same_v<Decayed, int64_t> ||
                        std::is_same_v<Decayed, long long>) {
-    ft.type_id = static_cast<uint32_t>(
+    ft.set_type_id(static_cast<uint32_t>(
         enc == Encoding::Fixed ? TypeId::INT64
                                : (enc == Encoding::Tagged ? TypeId::TAGGED_INT64
-                                                          : TypeId::VARINT64));
+                                                          : TypeId::VARINT64)));
   }
 }
 
@@ -646,7 +729,7 @@ FieldType build_field_type_with_spec(bool nullable, const FieldNodeSpec &spec,
               ? build_field_type_with_spec<Element>(false, spec, child)
               : FieldTypeBuilder<Element>::build(false);
       FieldType ft(to_type_id(TypeId::LIST), nullable);
-      ft.generics.push_back(std::move(elem));
+      ft.add_generic(std::move(elem));
       return ft;
     }
     return FieldType(to_type_id(type_id), nullable);
@@ -660,7 +743,7 @@ FieldType build_field_type_with_spec(bool nullable, const FieldNodeSpec &spec,
             ? build_field_type_with_spec<Element>(false, spec, child)
             : FieldTypeBuilder<Element>::build(false);
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_set_like_v<Decayed>) {
     using Element = element_type_t<Decayed>;
@@ -671,7 +754,7 @@ FieldType build_field_type_with_spec(bool nullable, const FieldNodeSpec &spec,
             ? build_field_type_with_spec<Element>(false, spec, child)
             : FieldTypeBuilder<Element>::build(false);
     FieldType ft(to_type_id(Serializer<Decayed>::type_id), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_map_like_v<Decayed>) {
     using Key = key_type_t<Decayed>;
@@ -689,8 +772,8 @@ FieldType build_field_type_with_spec(bool nullable, const FieldNodeSpec &spec,
             ? build_field_type_with_spec<Value>(false, spec, value_child)
             : FieldTypeBuilder<Value>::build(false);
     FieldType ft(to_type_id(Serializer<Decayed>::type_id), nullable);
-    ft.generics.push_back(std::move(key_ft));
-    ft.generics.push_back(std::move(value_ft));
+    ft.add_generic(std::move(key_ft));
+    ft.add_generic(std::move(value_ft));
     return ft;
   } else {
     FieldType ft = FieldTypeBuilder<Decayed>::build(nullable);
@@ -705,7 +788,7 @@ Result<void, Error> add_tuple_element_types(TypeResolver &resolver,
   if constexpr (Index < std::tuple_size_v<Tuple>) {
     using Elem = std::tuple_element_t<Index, Tuple>;
     FORY_TRY(elem_ft, build_field_type_with_resolver<Elem>(resolver, false));
-    ft.generics.push_back(std::move(elem_ft));
+    ft.add_generic(std::move(elem_ft));
     return add_tuple_element_types<Tuple, Index + 1>(resolver, ft);
   } else {
     return Result<void, Error>();
@@ -755,7 +838,7 @@ Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
     if constexpr (vec_type_id == TypeId::LIST) {
       FORY_TRY(elem, build_field_type_with_resolver<Element>(resolver, false));
       FieldType ft(to_type_id(vec_type_id), nullable);
-      ft.generics.push_back(std::move(elem));
+      ft.add_generic(std::move(elem));
       return ft;
     } else {
       return FieldType(to_type_id(vec_type_id), nullable);
@@ -764,26 +847,26 @@ Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
     using Element = typename Decayed::value_type;
     FORY_TRY(elem, build_field_type_with_resolver<Element>(resolver, false));
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_deque_v<Decayed>) {
     using Element = typename Decayed::value_type;
     FORY_TRY(elem, build_field_type_with_resolver<Element>(resolver, false));
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_forward_list_v<Decayed>) {
     using Element = typename Decayed::value_type;
     FORY_TRY(elem, build_field_type_with_resolver<Element>(resolver, false));
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_set_like_v<Decayed>) {
     using Set = Decayed;
     using Element = element_type_t<Set>;
     FORY_TRY(elem, build_field_type_with_resolver<Element>(resolver, false));
     FieldType ft(to_type_id(Serializer<Set>::type_id), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_map_like_v<Decayed>) {
     using Map = Decayed;
@@ -792,8 +875,8 @@ Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
     FORY_TRY(key_ft, build_field_type_with_resolver<Key>(resolver, false));
     FORY_TRY(val_ft, build_field_type_with_resolver<Value>(resolver, false));
     FieldType ft(to_type_id(Serializer<Map>::type_id), nullable);
-    ft.generics.push_back(std::move(key_ft));
-    ft.generics.push_back(std::move(val_ft));
+    ft.add_generic(std::move(key_ft));
+    ft.add_generic(std::move(val_ft));
     return ft;
   } else if constexpr (is_string_view_v<Decayed>) {
     using StringT = std::basic_string<typename Decayed::value_type,
@@ -805,8 +888,7 @@ Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
     if constexpr (tuple_size > 0) {
       FORY_RETURN_IF_ERROR((add_tuple_element_types<Decayed, 0>(resolver, ft)));
     } else {
-      ft.generics.push_back(
-          FieldType(static_cast<uint32_t>(TypeId::UNKNOWN), false));
+      ft.add_generic(FieldType(static_cast<uint32_t>(TypeId::UNKNOWN), false));
     }
     return ft;
   } else {
@@ -819,7 +901,7 @@ Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
           if (resolved_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM)) {
             resolved_type_id = static_cast<uint32_t>(TypeId::ENUM);
           }
-          ft.type_id = resolved_type_id;
+          ft.set_type_id(resolved_type_id);
         }
       } else {
         FORY_TRY(info, get_type_info_with_resolver<Decayed>(resolver));
@@ -835,7 +917,7 @@ Result<FieldType, Error> build_field_type_with_resolver(TypeResolver &resolver,
         default:
           break;
         }
-        ft.type_id = resolved_type_id;
+        ft.set_type_id(resolved_type_id);
       }
     }
     return ft;
@@ -913,7 +995,7 @@ build_field_type_with_resolver_and_spec(TypeResolver &resolver, bool nullable,
                           : build_field_type_with_resolver<Element>(resolver,
                                                                     false)));
       FieldType ft(to_type_id(TypeId::LIST), nullable);
-      ft.generics.push_back(std::move(elem));
+      ft.add_generic(std::move(elem));
       return ft;
     }
     return FieldType(to_type_id(type_id), nullable);
@@ -928,7 +1010,7 @@ build_field_type_with_resolver_and_spec(TypeResolver &resolver, bool nullable,
                         resolver, false, spec, child)
                   : build_field_type_with_resolver<Element>(resolver, false)));
     FieldType ft(to_type_id(TypeId::LIST), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_set_like_v<Decayed>) {
     using Element = element_type_t<Decayed>;
@@ -940,7 +1022,7 @@ build_field_type_with_resolver_and_spec(TypeResolver &resolver, bool nullable,
                         resolver, false, spec, child)
                   : build_field_type_with_resolver<Element>(resolver, false)));
     FieldType ft(to_type_id(Serializer<Decayed>::type_id), nullable);
-    ft.generics.push_back(std::move(elem));
+    ft.add_generic(std::move(elem));
     return ft;
   } else if constexpr (is_map_like_v<Decayed>) {
     using Key = key_type_t<Decayed>;
@@ -960,8 +1042,8 @@ build_field_type_with_resolver_and_spec(TypeResolver &resolver, bool nullable,
                         resolver, false, spec, value_child)
                   : build_field_type_with_resolver<Value>(resolver, false)));
     FieldType ft(to_type_id(Serializer<Decayed>::type_id), nullable);
-    ft.generics.push_back(std::move(key_ft));
-    ft.generics.push_back(std::move(value_ft));
+    ft.add_generic(std::move(key_ft));
+    ft.add_generic(std::move(value_ft));
     return ft;
   } else {
     FORY_TRY(ft, (build_field_type_with_resolver<Decayed>(resolver, nullable)));

@@ -1494,11 +1494,15 @@ public abstract class TypeResolver {
   }
 
   private int getPrimitiveFieldSize(Descriptor descriptor) {
+    int typeId = Types.getDescriptorTypeId(this, descriptor);
+    if (Types.isPrimitiveType(typeId)) {
+      return Types.getPrimitiveTypeSize(typeId);
+    }
     Class<?> rawType = descriptor.getRawType();
     if (TypeUtils.isPrimitive(rawType) || TypeUtils.isBoxed(rawType)) {
       return TypeUtils.getSizeOfPrimitiveType(TypeUtils.unwrap(rawType));
     }
-    return Types.getPrimitiveTypeSize(Types.getDescriptorTypeId(this, descriptor));
+    return Types.getPrimitiveTypeSize(typeId);
   }
 
   /**

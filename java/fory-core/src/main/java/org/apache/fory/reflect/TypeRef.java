@@ -1151,6 +1151,9 @@ public class TypeRef<T> {
   public boolean equals(Object o) {
     if (o instanceof TypeRef) {
       final TypeRef<?> that = (TypeRef<?>) o;
+      if (!hasTypeExtMeta && !that.hasTypeExtMeta) {
+        return type.equals(that.type);
+      }
       return type.equals(that.type)
           && Objects.equals(typeExtMeta, that.typeExtMeta)
           && Objects.equals(typeArguments, that.typeArguments)
@@ -1161,6 +1164,9 @@ public class TypeRef<T> {
 
   @Override
   public int hashCode() {
+    if (!hasTypeExtMeta) {
+      return type.hashCode();
+    }
     return Objects.hash(type, typeExtMeta, typeArguments, componentType);
   }
 

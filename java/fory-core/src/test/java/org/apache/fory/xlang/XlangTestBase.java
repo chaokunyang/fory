@@ -1023,7 +1023,6 @@ public abstract class XlangTestBase extends ForyTestBase {
         values;
   }
 
-  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
       throws java.io.IOException {
     String caseName = "test_nested_annotated_container_schema_consistent";
@@ -1057,7 +1056,6 @@ public abstract class XlangTestBase extends ForyTestBase {
         values;
   }
 
-  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testNestedAnnotatedContainerCompatible(boolean enableCodegen)
       throws java.io.IOException {
     String caseName = "test_nested_annotated_container_compatible";

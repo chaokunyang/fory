@@ -290,12 +290,12 @@ def test_javascript_primitive_types():
     assert "fBool: boolean;" in output
     assert "fInt32: number;" in output
     assert "fInt64: bigint | number;" in output
-    assert "fUInt32: number;" in output
-    assert "fUInt64: bigint | number;" in output
+    assert "fUint32: number;" in output
+    assert "fUint64: bigint | number;" in output
     assert "fFloat: number;" in output
     assert "fDouble: number;" in output
     assert "fString: string;" in output
-    assert "fBytes: UInt8Array;" in output
+    assert "fBytes: Uint8Array;" in output
 
 
 def test_javascript_file_structure():

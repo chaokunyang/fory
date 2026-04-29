@@ -23,20 +23,12 @@ cdef extern from "fory/thirdparty/flat_hash_map.h" namespace "fory" nogil:
         ctypedef T key_type
         ctypedef U mapped_type
         ctypedef pair[T, U] value_type
-        cppclass iterator:
-            pair[T, U]& operator*()
-            iterator operator++()
-            bint operator==(iterator)
-            bint operator!=(iterator)
         flat_hash_map() except +
         flat_hash_map(flat_hash_map&) except +
         U& operator[](const T&)
-        iterator begin()
         void clear()
         bint empty()
-        iterator end()
-        iterator find(const T&)
-        pair[iterator, bint] insert(pair[T, U])
+        pair[T, U]* find(const T&)
         size_t size()
         void swap(flat_hash_map&)
         void max_load_factor(float)

@@ -41,6 +41,12 @@
 #include <utility>
 #include <vector>
 
+#if defined(_MSC_VER)
+#define FORY_FLAT_HASH_MAP_ALWAYS_INLINE __forceinline
+#else
+#define FORY_FLAT_HASH_MAP_ALWAYS_INLINE inline __attribute__((always_inline))
+#endif
+
 #if defined(__SSE2__) || defined(_M_X64) ||                                    \
     (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
 #include <emmintrin.h>
@@ -66,13 +72,11 @@ constexpr ctrl_t kEmpty = static_cast<ctrl_t>(-128);
 constexpr ctrl_t kDeleted = static_cast<ctrl_t>(-2);
 constexpr float kMaxLoadFactor = 0.875f;
 
-inline size_t mix_hash(size_t hash) {
+FORY_FLAT_HASH_MAP_ALWAYS_INLINE size_t mix_hash(size_t hash) {
   uint64_t x = static_cast<uint64_t>(hash);
-  x ^= x >> 33;
-  x *= 0xff51afd7ed558ccdULL;
-  x ^= x >> 33;
-  x *= 0xc4ceb9fe1a85ec53ULL;
-  x ^= x >> 33;
+  x ^= x >> 32;
+  x *= 0xd6e8feb86659fd93ULL;
+  x ^= x >> 32;
   if constexpr (sizeof(size_t) < sizeof(uint64_t)) {
     return static_cast<size_t>(x ^ (x >> 32));
   } else {
@@ -80,13 +84,17 @@ inline size_t mix_hash(size_t hash) {
   }
 }
 
-inline uint8_t h2(size_t hash) {
+FORY_FLAT_HASH_MAP_ALWAYS_INLINE uint8_t h2(size_t hash) {
   return static_cast<uint8_t>(hash >> (sizeof(size_t) * 8 - 7));
 }
 
-inline bool is_full(ctrl_t ctrl) { return ctrl >= 0; }
-inline bool is_empty(ctrl_t ctrl) { return ctrl == kEmpty; }
-inline bool is_deleted(ctrl_t ctrl) { return ctrl == kDeleted; }
+FORY_FLAT_HASH_MAP_ALWAYS_INLINE bool is_full(ctrl_t ctrl) { return ctrl >= 0; }
+FORY_FLAT_HASH_MAP_ALWAYS_INLINE bool is_empty(ctrl_t ctrl) {
+  return ctrl == kEmpty;
+}
+FORY_FLAT_HASH_MAP_ALWAYS_INLINE bool is_deleted(ctrl_t ctrl) {
+  return ctrl == kDeleted;
+}
 
 inline size_t next_capacity(size_t requested) {
   size_t capacity = 16;
@@ -106,22 +114,36 @@ inline uint32_t trailing_zeros(uint32_t value) {
 #endif
 }
 
-inline uint32_t lowest_bit(uint32_t mask) { return trailing_zeros(mask); }
+inline uint32_t trailing_zeros(uint64_t value) {
+#if defined(_MSC_VER) && defined(_M_X64)
+  unsigned long index = 0;
+  _BitScanForward64(&index, value);
+  return static_cast<uint32_t>(index);
+#elif defined(_MSC_VER)
+  uint32_t low = static_cast<uint32_t>(value);
+  if (low != 0) {
+    return trailing_zeros(low);
+  }
+  return 32 + trailing_zeros(static_cast<uint32_t>(value >> 32));
+#else
+  return static_cast<uint32_t>(__builtin_ctzll(value));
+#endif
+}
 
 inline uint32_t clear_lowest_bit(uint32_t mask) { return mask & (mask - 1); }
 
+inline uint64_t clear_lowest_bit(uint64_t mask) { return mask & (mask - 1); }
+
 template <typename T, typename = void> struct default_hash {
-  size_t operator()(const T &value) const {
-    return mix_hash(std::hash<T>{}(value));
-  }
+  size_t operator()(const T &value) const { return std::hash<T>{}(value); }
 };
 
 template <typename A, typename B> struct default_hash<std::pair<A, B>> {
   size_t operator()(const std::pair<A, B> &value) const {
     size_t first = default_hash<A>{}(value.first);
     size_t second = default_hash<B>{}(value.second);
-    return mix_hash(
-        first ^ (second + 0x9e3779b97f4a7c15ULL + (first << 6) + (first >> 2)));
+    return first ^
+           (second + 0x9e3779b97f4a7c15ULL + (first << 6) + (first >> 2));
   }
 };
 
@@ -148,6 +170,7 @@ private:
 class group_sse2 {
 public:
   static constexpr size_t kWidth = 16;
+  using mask_type = uint32_t;
 
   explicit group_sse2(const ctrl_t *control)
       : control_(_mm_loadu_si128(reinterpret_cast<const __m128i *>(control))) {}
@@ -170,45 +193,54 @@ public:
         _mm_movemask_epi8(_mm_cmpgt_epi8(sentinel, control_)));
   }
 
+  static uint32_t lowest_bit(mask_type mask) { return trailing_zeros(mask); }
+
+  static mask_type clear_lowest_bit(mask_type mask) {
+    return flat_hash_map_internal::clear_lowest_bit(mask);
+  }
+
 private:
   __m128i control_;
 };
 #endif
 
 #if defined(FORY_FLAT_HASH_MAP_HAVE_NEON)
-inline uint32_t byte_msb_mask_to_bits(uint64_t mask, size_t width) {
-  uint32_t bits = 0;
-  for (size_t i = 0; i < width; ++i) {
-    bits |= static_cast<uint32_t>((mask >> (i * 8 + 7)) & 1) << i;
-  }
-  return bits;
-}
+constexpr uint64_t kMsbs8Bytes = 0x8080808080808080ULL;
 
 class group_neon {
 public:
   static constexpr size_t kWidth = 8;
+  using mask_type = uint64_t;
 
   explicit group_neon(const ctrl_t *control)
       : control_(vld1_u8(reinterpret_cast<const uint8_t *>(control))) {}
 
-  uint32_t match(uint8_t tag) const {
+  mask_type match(uint8_t tag) const {
     const uint8x8_t result = vceq_u8(control_, vdup_n_u8(tag));
     uint64_t raw = vget_lane_u64(vreinterpret_u64_u8(result), 0);
-    return byte_msb_mask_to_bits(raw, kWidth);
+    return raw & kMsbs8Bytes;
   }
 
-  uint32_t mask_empty() const {
+  mask_type mask_empty() const {
     const uint8x8_t result =
         vceq_s8(vreinterpret_s8_u8(control_), vdup_n_s8(kEmpty));
     uint64_t raw = vget_lane_u64(vreinterpret_u64_u8(result), 0);
-    return byte_msb_mask_to_bits(raw, kWidth);
+    return raw & kMsbs8Bytes;
   }
 
-  uint32_t mask_empty_or_deleted() const {
+  mask_type mask_empty_or_deleted() const {
     const uint8x8_t result = vcgt_s8(vdup_n_s8(static_cast<int8_t>(-1)),
                                      vreinterpret_s8_u8(control_));
     uint64_t raw = vget_lane_u64(vreinterpret_u64_u8(result), 0);
-    return byte_msb_mask_to_bits(raw, kWidth);
+    return raw & kMsbs8Bytes;
+  }
+
+  static uint32_t lowest_bit(mask_type mask) {
+    return trailing_zeros(mask) >> 3;
+  }
+
+  static mask_type clear_lowest_bit(mask_type mask) {
+    return flat_hash_map_internal::clear_lowest_bit(mask);
   }
 
 private:
@@ -219,6 +251,7 @@ private:
 class group_portable {
 public:
   static constexpr size_t kWidth = 8;
+  using mask_type = uint32_t;
 
   explicit group_portable(const ctrl_t *control) : control_(control) {}
 
@@ -245,6 +278,12 @@ public:
       mask |= static_cast<uint32_t>(control_[i] < static_cast<ctrl_t>(-1)) << i;
     }
     return mask;
+  }
+
+  static uint32_t lowest_bit(mask_type mask) { return trailing_zeros(mask); }
+
+  static mask_type clear_lowest_bit(mask_type mask) {
+    return flat_hash_map_internal::clear_lowest_bit(mask);
   }
 
 private:
@@ -296,6 +335,9 @@ private:
   };
 
 public:
+  // Iteration is retained for copy/rebuild/diagnostic paths. It scans control
+  // bytes and is not the optimized serialization fast path; hot lookup/insert
+  // code should use find()'s nullable pointer result and insert/emplace.
   template <bool IsConst> class iterator_base {
     using map_pointer =
         std::conditional_t<IsConst, const flat_hash_map *, flat_hash_map *>;
@@ -483,14 +525,17 @@ public:
     swap(replacement);
   }
 
-  iterator find(const K &key) {
+  // Hot-path lookup API: returns nullptr on miss and avoids iterator objects.
+  // Iterators remain available for maintenance paths that need range traversal.
+  value_type *find(const K &key) {
     size_t index = find_index(key);
-    return index == npos() ? end() : iterator(this, index);
+    return index == npos() ? nullptr : slots_[index].value();
   }
 
-  const_iterator find(const K &key) const {
+  // Hot-path lookup API: returns nullptr on miss and avoids iterator objects.
+  const value_type *find(const K &key) const {
     size_t index = find_index(key);
-    return index == npos() ? end() : const_iterator(this, index);
+    return index == npos() ? nullptr : slots_[index].value();
   }
 
   size_t count(const K &key) const { return find_index(key) == npos() ? 0 : 1; }
@@ -513,30 +558,16 @@ public:
     return slots_[index].value()->second;
   }
 
-  V &operator[](const K &key) {
-    auto result = emplace(key, V{});
-    return result.first->second;
-  }
+  V &operator[](const K &key) { return try_emplace_default(key); }
 
-  V &operator[](K &&key) {
-    auto result = emplace(std::move(key), V{});
-    return result.first->second;
-  }
+  V &operator[](K &&key) { return try_emplace_default(std::move(key)); }
 
-  std::pair<iterator, bool> insert(const value_type &value) {
+  std::pair<value_type *, bool> insert(const value_type &value) {
     return emplace(value.first, value.second);
   }
 
-  std::pair<iterator, bool> insert(value_type &&value) {
+  std::pair<value_type *, bool> insert(value_type &&value) {
     return emplace(std::move(value.first), std::move(value.second));
-  }
-
-  iterator insert(const_iterator, const value_type &value) {
-    return insert(value).first;
-  }
-
-  iterator insert(const_iterator, value_type &&value) {
-    return insert(std::move(value)).first;
   }
 
   template <typename InputIt> void insert(InputIt first, InputIt last) {
@@ -546,8 +577,16 @@ public:
   }
 
   template <typename... Args>
-  std::pair<iterator, bool> emplace(Args &&...args) {
+  std::pair<value_type *, bool> emplace(Args &&...args) {
     return emplace_value(value_type(std::forward<Args>(args)...));
+  }
+
+  template <
+      typename KeyArg, typename MappedArg,
+      typename = std::enable_if_t<std::is_same<std::decay_t<KeyArg>, K>::value>>
+  std::pair<value_type *, bool> emplace(KeyArg &&key, MappedArg &&mapped) {
+    return emplace_key_value(std::forward<KeyArg>(key),
+                             std::forward<MappedArg>(mapped));
   }
 
   void swap(flat_hash_map &other) noexcept {
@@ -567,12 +606,6 @@ public:
     }
     erase_at(index);
     return 1;
-  }
-
-  void erase(iterator it) {
-    if (it.map_ == this && it.index_ < capacity_) {
-      erase_at(it.index_);
-    }
   }
 
 private:
@@ -611,22 +644,23 @@ private:
     return detail::flat_hash_map_internal::next_capacity(needed);
   }
 
-  size_t hash_key(const K &key) const {
+  FORY_FLAT_HASH_MAP_ALWAYS_INLINE size_t hash_key(const K &key) const {
     return detail::flat_hash_map_internal::mix_hash(hash_(key));
   }
 
-  void set_ctrl(size_t index, ctrl_t value) {
+  FORY_FLAT_HASH_MAP_ALWAYS_INLINE void set_ctrl(size_t index, ctrl_t value) {
     ctrl_[index] = value;
     if (index < group::kWidth) {
       ctrl_[capacity_ + index] = value;
     }
   }
 
-  size_t slot_index(size_t group_offset, size_t group_index) const {
+  FORY_FLAT_HASH_MAP_ALWAYS_INLINE size_t slot_index(size_t group_offset,
+                                                     size_t group_index) const {
     return (group_offset + group_index) & (capacity_ - 1);
   }
 
-  size_t find_index(const K &key) const {
+  FORY_FLAT_HASH_MAP_ALWAYS_INLINE size_t find_index(const K &key) const {
     size_t hash = hash_key(key);
     uint8_t tag = detail::flat_hash_map_internal::h2(hash);
     detail::flat_hash_map_internal::probe_seq<group::kWidth> seq(hash,
@@ -634,17 +668,14 @@ private:
 
     while (seq.index() < capacity_) {
       group current(ctrl_.data() + seq.offset());
-      uint32_t candidates = current.match(tag);
+      typename group::mask_type candidates = current.match(tag);
       while (candidates != 0) {
-        uint32_t group_index =
-            detail::flat_hash_map_internal::lowest_bit(candidates);
+        uint32_t group_index = group::lowest_bit(candidates);
         size_t index = slot_index(seq.offset(), group_index);
-        if (ctrl_[index] == static_cast<ctrl_t>(tag) &&
-            eq_(slots_[index].value()->first, key)) {
+        if (eq_(slots_[index].value()->first, key)) {
           return index;
         }
-        candidates =
-            detail::flat_hash_map_internal::clear_lowest_bit(candidates);
+        candidates = group::clear_lowest_bit(candidates);
       }
       if (current.mask_empty() != 0) {
         return npos();
@@ -654,7 +685,9 @@ private:
     return npos();
   }
 
-  size_t find_insert_index(const K &key, size_t hash, bool &found) const {
+  FORY_FLAT_HASH_MAP_ALWAYS_INLINE size_t find_insert_index(const K &key,
+                                                            size_t hash,
+                                                            bool &found) const {
     uint8_t tag = detail::flat_hash_map_internal::h2(hash);
     detail::flat_hash_map_internal::probe_seq<group::kWidth> seq(hash,
                                                                  capacity_ - 1);
@@ -662,24 +695,20 @@ private:
 
     while (seq.index() < capacity_) {
       group current(ctrl_.data() + seq.offset());
-      uint32_t candidates = current.match(tag);
+      typename group::mask_type candidates = current.match(tag);
       while (candidates != 0) {
-        uint32_t group_index =
-            detail::flat_hash_map_internal::lowest_bit(candidates);
+        uint32_t group_index = group::lowest_bit(candidates);
         size_t index = slot_index(seq.offset(), group_index);
-        if (ctrl_[index] == static_cast<ctrl_t>(tag) &&
-            eq_(slots_[index].value()->first, key)) {
+        if (eq_(slots_[index].value()->first, key)) {
           found = true;
           return index;
         }
-        candidates =
-            detail::flat_hash_map_internal::clear_lowest_bit(candidates);
+        candidates = group::clear_lowest_bit(candidates);
       }
 
-      uint32_t non_full = current.mask_empty_or_deleted();
+      typename group::mask_type non_full = current.mask_empty_or_deleted();
       while (non_full != 0) {
-        uint32_t group_index =
-            detail::flat_hash_map_internal::lowest_bit(non_full);
+        uint32_t group_index = group::lowest_bit(non_full);
         size_t index = slot_index(seq.offset(), group_index);
         if (detail::flat_hash_map_internal::is_deleted(ctrl_[index])) {
           if (first_deleted == npos()) {
@@ -689,7 +718,7 @@ private:
           found = false;
           return first_deleted == npos() ? index : first_deleted;
         }
-        non_full = detail::flat_hash_map_internal::clear_lowest_bit(non_full);
+        non_full = group::clear_lowest_bit(non_full);
       }
       seq.next();
     }
@@ -698,7 +727,7 @@ private:
     return first_deleted;
   }
 
-  std::pair<iterator, bool> emplace_value(value_type value) {
+  std::pair<value_type *, bool> emplace_value(value_type value) {
     if (growth_left_ == 0) {
       rehash(capacity_ * 2);
     }
@@ -706,7 +735,7 @@ private:
     bool found = false;
     size_t index = find_insert_index(value.first, hash, found);
     if (found) {
-      return {iterator(this, index), false};
+      return {slots_[index].value(), false};
     }
     if (index == npos()) {
       rehash(capacity_ * 2);
@@ -721,7 +750,68 @@ private:
     if (!detail::flat_hash_map_internal::is_deleted(previous)) {
       --growth_left_;
     }
-    return {iterator(this, index), true};
+    return {slots_[index].value(), true};
+  }
+
+  template <typename KeyArg> V &try_emplace_default(KeyArg &&key) {
+    if (growth_left_ == 0) {
+      rehash(capacity_ * 2);
+    }
+    size_t hash = hash_key(key);
+    bool found = false;
+    size_t index = find_insert_index(key, hash, found);
+    if (found) {
+      return slots_[index].value()->second;
+    }
+    if (index == npos()) {
+      rehash(capacity_ * 2);
+      hash = hash_key(key);
+      index = find_insert_index(key, hash, found);
+      if (found) {
+        return slots_[index].value()->second;
+      }
+    }
+    ctrl_t previous = ctrl_[index];
+    new (slots_[index].value()) value_type(std::forward<KeyArg>(key), V{});
+    set_ctrl(index,
+             static_cast<ctrl_t>(detail::flat_hash_map_internal::h2(hash)));
+    ++size_;
+    if (!detail::flat_hash_map_internal::is_deleted(previous)) {
+      --growth_left_;
+    }
+    return slots_[index].value()->second;
+  }
+
+  template <typename KeyArg, typename MappedArg>
+  std::pair<value_type *, bool> emplace_key_value(KeyArg &&key,
+                                                  MappedArg &&mapped) {
+    if (growth_left_ == 0) {
+      rehash(capacity_ * 2);
+    }
+    size_t hash = hash_key(key);
+    bool found = false;
+    size_t index = find_insert_index(key, hash, found);
+    if (found) {
+      return {slots_[index].value(), false};
+    }
+    if (index == npos()) {
+      rehash(capacity_ * 2);
+      hash = hash_key(key);
+      index = find_insert_index(key, hash, found);
+      if (found) {
+        return {slots_[index].value(), false};
+      }
+    }
+    ctrl_t previous = ctrl_[index];
+    new (slots_[index].value())
+        value_type(std::forward<KeyArg>(key), std::forward<MappedArg>(mapped));
+    set_ctrl(index,
+             static_cast<ctrl_t>(detail::flat_hash_map_internal::h2(hash)));
+    ++size_;
+    if (!detail::flat_hash_map_internal::is_deleted(previous)) {
+      --growth_left_;
+    }
+    return {slots_[index].value(), true};
   }
 
   void insert_existing(value_type value) {
@@ -760,3 +850,4 @@ void swap(flat_hash_map<K, V, Hash, Eq, Alloc> &left,
 
 #undef FORY_FLAT_HASH_MAP_HAVE_SSE2
 #undef FORY_FLAT_HASH_MAP_HAVE_NEON
+#undef FORY_FLAT_HASH_MAP_ALWAYS_INLINE

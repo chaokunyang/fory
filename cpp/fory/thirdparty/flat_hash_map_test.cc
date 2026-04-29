@@ -39,8 +39,8 @@ TEST(FlatHashMapTest, RequiredApiCoverage) {
 
   map[2] = "two";
   EXPECT_EQ(map.size(), 2);
-  EXPECT_NE(map.find(1), map.end());
-  EXPECT_EQ(map.find(42), map.end());
+  EXPECT_NE(map.find(1), nullptr);
+  EXPECT_EQ(map.find(42), nullptr);
 
   size_t old_bucket_count = map.bucket_count();
   map.reserve(256);
@@ -105,9 +105,9 @@ TEST(FlatHashMapTest, HandlesGroupProbingAndDeletedSlots) {
   EXPECT_EQ(map.size(), 2048);
 
   for (uint64_t i = 1; i < 4096; i += 2) {
-    auto it = map.find(i);
-    ASSERT_NE(it, map.end());
-    EXPECT_EQ(it->second, i * 3);
+    auto *entry = map.find(i);
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->second, i * 3);
   }
 
   for (uint64_t i = 4096; i < 6144; ++i) {
@@ -116,9 +116,9 @@ TEST(FlatHashMapTest, HandlesGroupProbingAndDeletedSlots) {
   EXPECT_EQ(map.size(), 4096);
 
   for (uint64_t i = 4096; i < 6144; ++i) {
-    auto it = map.find(i);
-    ASSERT_NE(it, map.end());
-    EXPECT_EQ(it->second, i * 5);
+    auto *entry = map.find(i);
+    ASSERT_NE(entry, nullptr);
+    EXPECT_EQ(entry->second, i * 5);
   }
 }
 

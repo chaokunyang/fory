@@ -65,10 +65,10 @@ public:
     }
 
     auto address = reinterpret_cast<uintptr_t>(ptr.get());
-    auto it = ptr_to_id_.find(address);
-    if (it != ptr_to_id_.end()) {
+    auto *entry = ptr_to_id_.find(address);
+    if (entry != nullptr) {
       writer.write_int8(static_cast<int8_t>(RefFlag::Ref));
-      writer.write_var_uint32(it->second);
+      writer.write_var_uint32(entry->second);
       return true;
     }
 

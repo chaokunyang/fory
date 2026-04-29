@@ -1578,11 +1578,11 @@ TypeResolver::build_struct_type_info(uint32_t type_id, uint32_t user_type_id,
   entry->sorted_indices.clear();
   entry->sorted_indices.reserve(field_count);
   for (const auto &sorted_field : sorted_fields) {
-    auto it = entry->name_to_index.find(sorted_field.field_name);
-    FORY_CHECK(it != entry->name_to_index.end())
+    auto *name_entry = entry->name_to_index.find(sorted_field.field_name);
+    FORY_CHECK(name_entry != nullptr)
         << "Sorted field name '" << sorted_field.field_name
         << "' not found in original struct definition";
-    entry->sorted_indices.push_back(it->second);
+    entry->sorted_indices.push_back(name_entry->second);
   }
 
   entry->harness = make_struct_harness<T>();
@@ -1888,8 +1888,8 @@ TypeResolver::register_type_internal(uint64_t ctid,
 
   if (raw_ptr->register_by_name) {
     name_key = make_name_key(raw_ptr->namespace_name, raw_ptr->type_name);
-    auto it = type_info_by_name_.find(name_key);
-    if (it != type_info_by_name_.end()) {
+    auto *entry = type_info_by_name_.find(name_key);
+    if (entry != nullptr) {
       return Unexpected(Error::invalid(
           "Type already registered for namespace '" + raw_ptr->namespace_name +
           "' and name '" + raw_ptr->type_name + "'"));
@@ -1948,9 +1948,9 @@ inline Result<const TypeInfo *, Error>
 TypeResolver::get_type_info_by_name(const std::string &ns,
                                     const std::string &type_name) const {
   auto key = make_name_key(ns, type_name);
-  auto it = type_info_by_name_.find(key);
-  if (it != type_info_by_name_.end()) {
-    return it->second;
+  auto *entry = type_info_by_name_.find(key);
+  if (entry != nullptr) {
+    return entry->second;
   }
   return Unexpected(Error::type_error("TypeInfo not found for type: " + ns +
                                       "." + type_name));

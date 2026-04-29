@@ -34,7 +34,7 @@ from cpython.dict cimport PyDict_Next
 from cpython.list cimport PyList_New, PyList_SET_ITEM
 from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.ref cimport Py_INCREF, Py_XDECREF
-from pyfory.includes.libabsl cimport flat_hash_map
+from pyfory.includes.libflat_hash_map cimport flat_hash_map
 from pyfory.includes.libutil cimport FlatIntMap
 from pyfory._fory import (
     NO_USER_TYPE_ID,

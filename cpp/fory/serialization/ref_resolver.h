@@ -22,7 +22,7 @@
 #include "fory/util/error.h"
 #include "fory/util/result.h"
 
-#include "absl/container/flat_hash_map.h"
+#include "fory/thirdparty/flat_hash_map.h"
 
 #include <any>
 #include <cstdint>
@@ -91,7 +91,7 @@ public:
   }
 
 private:
-  absl::flat_hash_map<uintptr_t, uint32_t> ptr_to_id_;
+  fory::flat_hash_map<uintptr_t, uint32_t> ptr_to_id_;
   uint32_t next_id_;
 };
 

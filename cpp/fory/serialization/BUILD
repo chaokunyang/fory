@@ -38,10 +38,10 @@ cc_library(
     strip_include_prefix = "/cpp",
     deps = [
         "//cpp/fory/meta:fory_meta",
+        "//cpp/fory/thirdparty:flat_hash_map",
         "//cpp/fory/thirdparty:libmmh3",
         "//cpp/fory/type:fory_type",
         "//cpp/fory/util:fory_util",
-        "@abseil-cpp//absl/container:flat_hash_map",
     ],
     visibility = ["//visibility:public"],
 )

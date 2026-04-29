@@ -1343,7 +1343,7 @@ TypeResolver::build_final_type_resolver() {
   final_resolver->finalized_ = true;
 
   // Build mapping from old pointers to new pointers for rebuilding lookup maps
-  absl::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
+  fory::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
 
   // Deep clone all existing TypeInfo objects
   for (const auto &info : type_infos_) {
@@ -1418,7 +1418,7 @@ std::unique_ptr<TypeResolver> TypeResolver::clone() const {
   cloned->finalized_ = finalized_;
 
   // Build mapping from old pointers to new pointers
-  absl::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
+  fory::flat_hash_map<const TypeInfo *, TypeInfo *> ptr_map;
 
   // Deep clone all TypeInfo objects
   for (const auto &info : type_infos_) {

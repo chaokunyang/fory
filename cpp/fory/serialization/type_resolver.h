@@ -42,8 +42,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
-
 #include "fory/meta/field.h"
 #include "fory/meta/field_info.h"
 #include "fory/meta/type_traits.h"
@@ -51,6 +49,7 @@
 #include "fory/serialization/serializer.h"
 #include "fory/serialization/serializer_traits.h"
 #include "fory/serialization/type_info.h"
+#include "fory/thirdparty/flat_hash_map.h"
 #include "fory/type/type.h"
 #include "fory/util/buffer.h"
 #include "fory/util/error.h"
@@ -1194,11 +1193,11 @@ private:
   util::U64PtrMap<TypeInfo> type_info_by_ctid_{256};
   util::U32PtrMap<TypeInfo> type_info_by_id_{256};
   util::U64PtrMap<TypeInfo> user_type_info_by_id_{256};
-  absl::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
+  fory::flat_hash_map<std::string, TypeInfo *> type_info_by_name_;
   util::U64PtrMap<TypeInfo> partial_type_infos_{256};
 
   // For runtime polymorphic lookups (smart pointers) - uses std::type_index
-  absl::flat_hash_map<std::type_index, TypeInfo *> type_info_by_runtime_type_;
+  fory::flat_hash_map<std::type_index, TypeInfo *> type_info_by_runtime_type_;
 };
 
 // Alias for backward compatibility (already defined above as top-level)

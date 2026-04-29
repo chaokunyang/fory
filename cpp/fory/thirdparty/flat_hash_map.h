@@ -17,21 +17,23 @@
  * under the License.
  */
 
-// This file is a compact Fory-owned SwissTable-style flat hash map derived
-// from Abseil's flat_hash_map/raw_hash_set design. It intentionally exposes
-// only the API surface used by Fory's C++ and Cython runtimes.
+// This file is a compact Fory-owned SwissTable flat hash map derived from
+// Abseil's flat_hash_map/raw_hash_set design. It keeps the performance-critical
+// pieces Fory relies on: separate control bytes, H1/H2 hash splitting,
+// triangular group probing, and SIMD group matching on SSE2/AArch64 NEON.
 
 #pragma once
 
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <initializer_list>
 #include <iterator>
 #include <limits>
 #include <memory>
-#include <optional>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -39,12 +41,29 @@
 #include <utility>
 #include <vector>
 
+#if defined(__SSE2__) || defined(_M_X64) ||                                    \
+    (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+#define FORY_FLAT_HASH_MAP_HAVE_SSE2 1
+#endif
+
+#if defined(_MSC_VER)
+#include <intrin.h>
+#endif
+
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#define FORY_FLAT_HASH_MAP_HAVE_NEON 1
+#endif
+
 namespace fory {
 namespace detail {
 namespace flat_hash_map_internal {
 
-constexpr uint8_t kEmpty = 0x80;
-constexpr uint8_t kDeleted = 0xFE;
+using ctrl_t = int8_t;
+
+constexpr ctrl_t kEmpty = static_cast<ctrl_t>(-128);
+constexpr ctrl_t kDeleted = static_cast<ctrl_t>(-2);
 constexpr float kMaxLoadFactor = 0.875f;
 
 inline size_t mix_hash(size_t hash) {
@@ -61,13 +80,35 @@ inline size_t mix_hash(size_t hash) {
   }
 }
 
+inline uint8_t h2(size_t hash) {
+  return static_cast<uint8_t>(hash >> (sizeof(size_t) * 8 - 7));
+}
+
+inline bool is_full(ctrl_t ctrl) { return ctrl >= 0; }
+inline bool is_empty(ctrl_t ctrl) { return ctrl == kEmpty; }
+inline bool is_deleted(ctrl_t ctrl) { return ctrl == kDeleted; }
+
 inline size_t next_capacity(size_t requested) {
-  size_t capacity = 8;
+  size_t capacity = 16;
   while (capacity < requested) {
     capacity <<= 1;
   }
   return capacity;
 }
+
+inline uint32_t trailing_zeros(uint32_t value) {
+#if defined(_MSC_VER)
+  unsigned long index = 0;
+  _BitScanForward(&index, value);
+  return static_cast<uint32_t>(index);
+#else
+  return static_cast<uint32_t>(__builtin_ctz(value));
+#endif
+}
+
+inline uint32_t lowest_bit(uint32_t mask) { return trailing_zeros(mask); }
+
+inline uint32_t clear_lowest_bit(uint32_t mask) { return mask & (mask - 1); }
 
 template <typename T, typename = void> struct default_hash {
   size_t operator()(const T &value) const {
@@ -84,10 +125,139 @@ template <typename A, typename B> struct default_hash<std::pair<A, B>> {
   }
 };
 
-inline uint8_t h2(size_t hash) {
-  uint8_t value = static_cast<uint8_t>((hash >> 7) & 0x7F);
-  return value == 0 ? 1 : value;
+template <size_t Width> class probe_seq {
+public:
+  probe_seq(size_t hash, size_t mask) : mask_(mask), offset_(hash & mask) {}
+
+  size_t offset() const { return offset_; }
+
+  void next() {
+    index_ += Width;
+    offset_ = (offset_ + index_) & mask_;
+  }
+
+  size_t index() const { return index_; }
+
+private:
+  size_t mask_;
+  size_t offset_;
+  size_t index_ = 0;
+};
+
+#if defined(FORY_FLAT_HASH_MAP_HAVE_SSE2)
+class group_sse2 {
+public:
+  static constexpr size_t kWidth = 16;
+
+  explicit group_sse2(const ctrl_t *control)
+      : control_(_mm_loadu_si128(reinterpret_cast<const __m128i *>(control))) {}
+
+  uint32_t match(uint8_t tag) const {
+    const __m128i match = _mm_set1_epi8(static_cast<char>(tag));
+    return static_cast<uint32_t>(
+        _mm_movemask_epi8(_mm_cmpeq_epi8(match, control_)));
+  }
+
+  uint32_t mask_empty() const {
+    const __m128i match = _mm_set1_epi8(static_cast<char>(kEmpty));
+    return static_cast<uint32_t>(
+        _mm_movemask_epi8(_mm_cmpeq_epi8(match, control_)));
+  }
+
+  uint32_t mask_empty_or_deleted() const {
+    const __m128i sentinel = _mm_set1_epi8(static_cast<char>(-1));
+    return static_cast<uint32_t>(
+        _mm_movemask_epi8(_mm_cmpgt_epi8(sentinel, control_)));
+  }
+
+private:
+  __m128i control_;
+};
+#endif
+
+#if defined(FORY_FLAT_HASH_MAP_HAVE_NEON)
+inline uint32_t byte_msb_mask_to_bits(uint64_t mask, size_t width) {
+  uint32_t bits = 0;
+  for (size_t i = 0; i < width; ++i) {
+    bits |= static_cast<uint32_t>((mask >> (i * 8 + 7)) & 1) << i;
+  }
+  return bits;
 }
+
+class group_neon {
+public:
+  static constexpr size_t kWidth = 8;
+
+  explicit group_neon(const ctrl_t *control)
+      : control_(vld1_u8(reinterpret_cast<const uint8_t *>(control))) {}
+
+  uint32_t match(uint8_t tag) const {
+    const uint8x8_t result = vceq_u8(control_, vdup_n_u8(tag));
+    uint64_t raw = vget_lane_u64(vreinterpret_u64_u8(result), 0);
+    return byte_msb_mask_to_bits(raw, kWidth);
+  }
+
+  uint32_t mask_empty() const {
+    const uint8x8_t result =
+        vceq_s8(vreinterpret_s8_u8(control_), vdup_n_s8(kEmpty));
+    uint64_t raw = vget_lane_u64(vreinterpret_u64_u8(result), 0);
+    return byte_msb_mask_to_bits(raw, kWidth);
+  }
+
+  uint32_t mask_empty_or_deleted() const {
+    const uint8x8_t result = vcgt_s8(vdup_n_s8(static_cast<int8_t>(-1)),
+                                     vreinterpret_s8_u8(control_));
+    uint64_t raw = vget_lane_u64(vreinterpret_u64_u8(result), 0);
+    return byte_msb_mask_to_bits(raw, kWidth);
+  }
+
+private:
+  uint8x8_t control_;
+};
+#endif
+
+class group_portable {
+public:
+  static constexpr size_t kWidth = 8;
+
+  explicit group_portable(const ctrl_t *control) : control_(control) {}
+
+  uint32_t match(uint8_t tag) const {
+    uint32_t mask = 0;
+    for (size_t i = 0; i < kWidth; ++i) {
+      mask |= static_cast<uint32_t>(control_[i] == static_cast<ctrl_t>(tag))
+              << i;
+    }
+    return mask;
+  }
+
+  uint32_t mask_empty() const {
+    uint32_t mask = 0;
+    for (size_t i = 0; i < kWidth; ++i) {
+      mask |= static_cast<uint32_t>(is_empty(control_[i])) << i;
+    }
+    return mask;
+  }
+
+  uint32_t mask_empty_or_deleted() const {
+    uint32_t mask = 0;
+    for (size_t i = 0; i < kWidth; ++i) {
+      mask |= static_cast<uint32_t>(control_[i] < static_cast<ctrl_t>(-1)) << i;
+    }
+    return mask;
+  }
+
+private:
+  const ctrl_t *control_;
+};
+
+#if defined(FORY_FLAT_HASH_MAP_HAVE_SSE2)
+using group = group_sse2;
+#elif defined(FORY_FLAT_HASH_MAP_HAVE_NEON)
+using group = group_neon;
+#else
+using group = group_portable;
+#endif
 
 } // namespace flat_hash_map_internal
 } // namespace detail
@@ -112,19 +282,23 @@ public:
   using const_pointer = const value_type *;
 
 private:
-  struct slot_type {
-    uint8_t control = detail::flat_hash_map_internal::kEmpty;
-    std::optional<value_type> value;
+  using ctrl_t = detail::flat_hash_map_internal::ctrl_t;
+  using group = detail::flat_hash_map_internal::group;
 
-    bool full() const {
-      return control != detail::flat_hash_map_internal::kEmpty &&
-             control != detail::flat_hash_map_internal::kDeleted;
+  struct slot_type {
+    alignas(value_type) unsigned char storage[sizeof(value_type)];
+
+    value_type *value() { return reinterpret_cast<value_type *>(storage); }
+
+    const value_type *value() const {
+      return reinterpret_cast<const value_type *>(storage);
     }
   };
 
+public:
   template <bool IsConst> class iterator_base {
-    using slot_pointer =
-        std::conditional_t<IsConst, const slot_type *, slot_type *>;
+    using map_pointer =
+        std::conditional_t<IsConst, const flat_hash_map *, flat_hash_map *>;
 
   public:
     using iterator_category = std::forward_iterator_tag;
@@ -135,23 +309,22 @@ private:
     using pointer =
         std::conditional_t<IsConst, const value_type *, value_type *>;
 
-    iterator_base() : current_(nullptr), end_(nullptr) {}
+    iterator_base() : map_(nullptr), index_(0) {}
 
-    iterator_base(slot_pointer current, slot_pointer end)
-        : current_(current), end_(end) {
+    iterator_base(map_pointer map, size_t index) : map_(map), index_(index) {
       skip_empty();
     }
 
     template <bool B = IsConst, typename = std::enable_if_t<B>>
     iterator_base(const iterator_base<false> &other)
-        : current_(other.current_), end_(other.end_) {}
+        : map_(other.map_), index_(other.index_) {}
 
-    reference operator*() const { return *current_->value; }
+    reference operator*() const { return *map_->slots_[index_].value(); }
 
-    pointer operator->() const { return std::addressof(*current_->value); }
+    pointer operator->() const { return map_->slots_[index_].value(); }
 
     iterator_base &operator++() {
-      ++current_;
+      ++index_;
       skip_empty();
       return *this;
     }
@@ -165,7 +338,7 @@ private:
     iterator_base &operator--() = delete;
 
     bool operator==(const iterator_base &other) const {
-      return current_ == other.current_;
+      return map_ == other.map_ && index_ == other.index_;
     }
 
     bool operator!=(const iterator_base &other) const {
@@ -177,16 +350,16 @@ private:
     template <bool> friend class iterator_base;
 
     void skip_empty() {
-      while (current_ != end_ && !current_->full()) {
-        ++current_;
+      while (map_ != nullptr && index_ < map_->capacity_ &&
+             !detail::flat_hash_map_internal::is_full(map_->ctrl_[index_])) {
+        ++index_;
       }
     }
 
-    slot_pointer current_;
-    slot_pointer end_;
+    map_pointer map_;
+    size_t index_;
   };
 
-public:
   using iterator = iterator_base<false>;
   using const_iterator = iterator_base<true>;
 
@@ -201,29 +374,62 @@ public:
     }
   }
 
-  flat_hash_map(const flat_hash_map &) = default;
-  flat_hash_map(flat_hash_map &&) noexcept = default;
-  flat_hash_map &operator=(const flat_hash_map &) = default;
-  flat_hash_map &operator=(flat_hash_map &&) noexcept = default;
-  ~flat_hash_map() = default;
-
-  iterator begin() {
-    return iterator(slots_.data(), slots_.data() + capacity_);
+  flat_hash_map(const flat_hash_map &other)
+      : hash_(other.hash_), eq_(other.eq_) {
+    initialize(other.size_);
+    for (const auto &value : other) {
+      emplace(value.first, value.second);
+    }
   }
 
-  const_iterator begin() const {
-    return const_iterator(slots_.data(), slots_.data() + capacity_);
+  flat_hash_map(flat_hash_map &&other) noexcept
+      : ctrl_(std::move(other.ctrl_)), slots_(std::move(other.slots_)),
+        size_(other.size_), capacity_(other.capacity_),
+        growth_left_(other.growth_left_), hash_(std::move(other.hash_)),
+        eq_(std::move(other.eq_)) {
+    other.size_ = 0;
+    other.capacity_ = 0;
+    other.growth_left_ = 0;
   }
+
+  flat_hash_map &operator=(const flat_hash_map &other) {
+    if (this == &other) {
+      return *this;
+    }
+    flat_hash_map copy(other);
+    swap(copy);
+    return *this;
+  }
+
+  flat_hash_map &operator=(flat_hash_map &&other) noexcept {
+    if (this == &other) {
+      return *this;
+    }
+    destroy_values();
+    ctrl_ = std::move(other.ctrl_);
+    slots_ = std::move(other.slots_);
+    size_ = other.size_;
+    capacity_ = other.capacity_;
+    growth_left_ = other.growth_left_;
+    hash_ = std::move(other.hash_);
+    eq_ = std::move(other.eq_);
+    other.size_ = 0;
+    other.capacity_ = 0;
+    other.growth_left_ = 0;
+    return *this;
+  }
+
+  ~flat_hash_map() { destroy_values(); }
+
+  iterator begin() { return iterator(this, 0); }
+
+  const_iterator begin() const { return const_iterator(this, 0); }
 
   const_iterator cbegin() const { return begin(); }
 
-  iterator end() {
-    return iterator(slots_.data() + capacity_, slots_.data() + capacity_);
-  }
+  iterator end() { return iterator(this, capacity_); }
 
-  const_iterator end() const {
-    return const_iterator(slots_.data() + capacity_, slots_.data() + capacity_);
-  }
+  const_iterator end() const { return const_iterator(this, capacity_); }
 
   const_iterator cend() const { return end(); }
 
@@ -242,10 +448,9 @@ public:
   void max_load_factor(float) {}
 
   void clear() {
-    for (auto &slot : slots_) {
-      slot.value.reset();
-      slot.control = detail::flat_hash_map_internal::kEmpty;
-    }
+    destroy_values();
+    std::fill(ctrl_.begin(), ctrl_.end(),
+              detail::flat_hash_map_internal::kEmpty);
     size_ = 0;
     growth_left_ = max_load_for_capacity(capacity_);
   }
@@ -263,27 +468,29 @@ public:
     if (target == capacity_) {
       return;
     }
-    std::vector<slot_type> old_slots = std::move(slots_);
-    initialize(target);
-    for (auto &slot : old_slots) {
-      if (slot.full()) {
-        insert_existing(std::move(*slot.value));
+
+    flat_hash_map replacement(target);
+    replacement.hash_ = hash_;
+    replacement.eq_ = eq_;
+    for (size_t i = 0; i < capacity_; ++i) {
+      if (detail::flat_hash_map_internal::is_full(ctrl_[i])) {
+        replacement.insert_existing(std::move(*slots_[i].value()));
+        slots_[i].value()->~value_type();
+        set_ctrl(i, detail::flat_hash_map_internal::kEmpty);
       }
     }
+    size_ = 0;
+    swap(replacement);
   }
 
   iterator find(const K &key) {
     size_t index = find_index(key);
-    return index == npos()
-               ? end()
-               : iterator(slots_.data() + index, slots_.data() + capacity_);
+    return index == npos() ? end() : iterator(this, index);
   }
 
   const_iterator find(const K &key) const {
     size_t index = find_index(key);
-    return index == npos() ? end()
-                           : const_iterator(slots_.data() + index,
-                                            slots_.data() + capacity_);
+    return index == npos() ? end() : const_iterator(this, index);
   }
 
   size_t count(const K &key) const { return find_index(key) == npos() ? 0 : 1; }
@@ -295,7 +502,7 @@ public:
     if (index == npos()) {
       throw std::out_of_range("fory::flat_hash_map::at");
     }
-    return slots_[index].value->second;
+    return slots_[index].value()->second;
   }
 
   const V &at(const K &key) const {
@@ -303,7 +510,7 @@ public:
     if (index == npos()) {
       throw std::out_of_range("fory::flat_hash_map::at");
     }
-    return slots_[index].value->second;
+    return slots_[index].value()->second;
   }
 
   V &operator[](const K &key) {
@@ -344,6 +551,7 @@ public:
   }
 
   void swap(flat_hash_map &other) noexcept {
+    ctrl_.swap(other.ctrl_);
     slots_.swap(other.slots_);
     std::swap(size_, other.size_);
     std::swap(capacity_, other.capacity_);
@@ -362,8 +570,8 @@ public:
   }
 
   void erase(iterator it) {
-    if (it.current_ != slots_.data() + capacity_) {
-      erase_at(static_cast<size_t>(it.current_ - slots_.data()));
+    if (it.map_ == this && it.index_ < capacity_) {
+      erase_at(it.index_);
     }
   }
 
@@ -372,11 +580,21 @@ private:
 
   void initialize(size_t requested_capacity) {
     capacity_ = detail::flat_hash_map_internal::next_capacity(
-        std::max<size_t>(requested_capacity, 8));
+        std::max<size_t>(requested_capacity, group::kWidth));
+    ctrl_.assign(capacity_ + group::kWidth,
+                 detail::flat_hash_map_internal::kEmpty);
     slots_.clear();
     slots_.resize(capacity_);
     size_ = 0;
     growth_left_ = max_load_for_capacity(capacity_);
+  }
+
+  void destroy_values() {
+    for (size_t i = 0; i < capacity_; ++i) {
+      if (detail::flat_hash_map_internal::is_full(ctrl_[i])) {
+        slots_[i].value()->~value_type();
+      }
+    }
   }
 
   static size_t max_load_for_capacity(size_t capacity) {
@@ -397,53 +615,85 @@ private:
     return detail::flat_hash_map_internal::mix_hash(hash_(key));
   }
 
-  size_t find_index(const K &key) const {
-    if (capacity_ == 0) {
-      return npos();
+  void set_ctrl(size_t index, ctrl_t value) {
+    ctrl_[index] = value;
+    if (index < group::kWidth) {
+      ctrl_[capacity_ + index] = value;
     }
+  }
+
+  size_t slot_index(size_t group_offset, size_t group_index) const {
+    return (group_offset + group_index) & (capacity_ - 1);
+  }
+
+  size_t find_index(const K &key) const {
     size_t hash = hash_key(key);
     uint8_t tag = detail::flat_hash_map_internal::h2(hash);
-    size_t mask = capacity_ - 1;
-    size_t index = hash & mask;
-    size_t probes = 0;
-    while (probes < capacity_) {
-      const slot_type &slot = slots_[index];
-      if (slot.control == detail::flat_hash_map_internal::kEmpty) {
+    detail::flat_hash_map_internal::probe_seq<group::kWidth> seq(hash,
+                                                                 capacity_ - 1);
+
+    while (seq.index() < capacity_) {
+      group current(ctrl_.data() + seq.offset());
+      uint32_t candidates = current.match(tag);
+      while (candidates != 0) {
+        uint32_t group_index =
+            detail::flat_hash_map_internal::lowest_bit(candidates);
+        size_t index = slot_index(seq.offset(), group_index);
+        if (ctrl_[index] == static_cast<ctrl_t>(tag) &&
+            eq_(slots_[index].value()->first, key)) {
+          return index;
+        }
+        candidates =
+            detail::flat_hash_map_internal::clear_lowest_bit(candidates);
+      }
+      if (current.mask_empty() != 0) {
         return npos();
       }
-      if (slot.control == tag && slot.value && eq_(slot.value->first, key)) {
-        return index;
-      }
-      index = (index + 1) & mask;
-      ++probes;
+      seq.next();
     }
     return npos();
   }
 
   size_t find_insert_index(const K &key, size_t hash, bool &found) const {
     uint8_t tag = detail::flat_hash_map_internal::h2(hash);
-    size_t mask = capacity_ - 1;
-    size_t index = hash & mask;
+    detail::flat_hash_map_internal::probe_seq<group::kWidth> seq(hash,
+                                                                 capacity_ - 1);
     size_t first_deleted = npos();
-    size_t probes = 0;
-    while (probes < capacity_) {
-      const slot_type &slot = slots_[index];
-      if (slot.control == detail::flat_hash_map_internal::kEmpty) {
-        found = false;
-        return first_deleted == npos() ? index : first_deleted;
-      }
-      if (slot.control == detail::flat_hash_map_internal::kDeleted) {
-        if (first_deleted == npos()) {
-          first_deleted = index;
+
+    while (seq.index() < capacity_) {
+      group current(ctrl_.data() + seq.offset());
+      uint32_t candidates = current.match(tag);
+      while (candidates != 0) {
+        uint32_t group_index =
+            detail::flat_hash_map_internal::lowest_bit(candidates);
+        size_t index = slot_index(seq.offset(), group_index);
+        if (ctrl_[index] == static_cast<ctrl_t>(tag) &&
+            eq_(slots_[index].value()->first, key)) {
+          found = true;
+          return index;
         }
-      } else if (slot.control == tag && slot.value &&
-                 eq_(slot.value->first, key)) {
-        found = true;
-        return index;
+        candidates =
+            detail::flat_hash_map_internal::clear_lowest_bit(candidates);
       }
-      index = (index + 1) & mask;
-      ++probes;
+
+      uint32_t non_full = current.mask_empty_or_deleted();
+      while (non_full != 0) {
+        uint32_t group_index =
+            detail::flat_hash_map_internal::lowest_bit(non_full);
+        size_t index = slot_index(seq.offset(), group_index);
+        if (detail::flat_hash_map_internal::is_deleted(ctrl_[index])) {
+          if (first_deleted == npos()) {
+            first_deleted = index;
+          }
+        } else if (detail::flat_hash_map_internal::is_empty(ctrl_[index])) {
+          found = false;
+          return first_deleted == npos() ? index : first_deleted;
+        }
+        non_full = detail::flat_hash_map_internal::clear_lowest_bit(non_full);
+      }
+      seq.next();
     }
+
     found = false;
     return first_deleted;
   }
@@ -456,43 +706,42 @@ private:
     bool found = false;
     size_t index = find_insert_index(value.first, hash, found);
     if (found) {
-      return {iterator(slots_.data() + index, slots_.data() + capacity_),
-              false};
+      return {iterator(this, index), false};
     }
     if (index == npos()) {
       rehash(capacity_ * 2);
       hash = hash_key(value.first);
       index = find_insert_index(value.first, hash, found);
     }
-    slot_type &slot = slots_[index];
-    bool reused_deleted =
-        slot.control == detail::flat_hash_map_internal::kDeleted;
-    slot.control = detail::flat_hash_map_internal::h2(hash);
-    slot.value.emplace(std::move(value));
+    ctrl_t previous = ctrl_[index];
+    new (slots_[index].value()) value_type(std::move(value));
+    set_ctrl(index,
+             static_cast<ctrl_t>(detail::flat_hash_map_internal::h2(hash)));
     ++size_;
-    if (!reused_deleted) {
+    if (!detail::flat_hash_map_internal::is_deleted(previous)) {
       --growth_left_;
     }
-    return {iterator(slots_.data() + index, slots_.data() + capacity_), true};
+    return {iterator(this, index), true};
   }
 
   void insert_existing(value_type value) {
     size_t hash = hash_key(value.first);
     bool found = false;
     size_t index = find_insert_index(value.first, hash, found);
-    slot_type &slot = slots_[index];
-    slot.control = detail::flat_hash_map_internal::h2(hash);
-    slot.value.emplace(std::move(value));
+    new (slots_[index].value()) value_type(std::move(value));
+    set_ctrl(index,
+             static_cast<ctrl_t>(detail::flat_hash_map_internal::h2(hash)));
     ++size_;
     --growth_left_;
   }
 
   void erase_at(size_t index) {
-    slots_[index].value.reset();
-    slots_[index].control = detail::flat_hash_map_internal::kDeleted;
+    slots_[index].value()->~value_type();
+    set_ctrl(index, detail::flat_hash_map_internal::kDeleted);
     --size_;
   }
 
+  std::vector<ctrl_t> ctrl_;
   std::vector<slot_type> slots_;
   size_t size_ = 0;
   size_t capacity_ = 0;
@@ -508,3 +757,6 @@ void swap(flat_hash_map<K, V, Hash, Eq, Alloc> &left,
 }
 
 } // namespace fory
+
+#undef FORY_FLAT_HASH_MAP_HAVE_SSE2
+#undef FORY_FLAT_HASH_MAP_HAVE_NEON

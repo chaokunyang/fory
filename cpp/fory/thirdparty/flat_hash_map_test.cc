@@ -92,4 +92,34 @@ TEST(FlatHashMapTest, SupportsRequiredKeyShapes) {
   EXPECT_EQ(pair_map.find(std::make_pair<int64_t, int64_t>(7, 9))->second, 5);
 }
 
+TEST(FlatHashMapTest, HandlesGroupProbingAndDeletedSlots) {
+  flat_hash_map<uint64_t, uint64_t> map;
+  for (uint64_t i = 0; i < 4096; ++i) {
+    map.emplace(i, i * 3);
+  }
+  EXPECT_EQ(map.size(), 4096);
+
+  for (uint64_t i = 0; i < 4096; i += 2) {
+    EXPECT_EQ(map.erase(i), 1);
+  }
+  EXPECT_EQ(map.size(), 2048);
+
+  for (uint64_t i = 1; i < 4096; i += 2) {
+    auto it = map.find(i);
+    ASSERT_NE(it, map.end());
+    EXPECT_EQ(it->second, i * 3);
+  }
+
+  for (uint64_t i = 4096; i < 6144; ++i) {
+    map.emplace(i, i * 5);
+  }
+  EXPECT_EQ(map.size(), 4096);
+
+  for (uint64_t i = 4096; i < 6144; ++i) {
+    auto it = map.find(i);
+    ASSERT_NE(it, map.end());
+    EXPECT_EQ(it->second, i * 5);
+  }
+}
+
 } // namespace fory

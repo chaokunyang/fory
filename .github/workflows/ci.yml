@@ -1025,12 +1025,16 @@ jobs:
           bazel clean --expunge || true
       - name: Run Python CI
         shell: bash
-        run: python ./ci/run_ci.py python
-      - name: Run Python CI (ENABLE_FORY_CYTHON_SERIALIZATION=1)
-        shell: bash
         env:
           ENABLE_FORY_CYTHON_SERIALIZATION: "1"
         run: python ./ci/run_ci.py python
+      - name: Run Python tests (ENABLE_FORY_CYTHON_SERIALIZATION=0)
+        shell: bash
+        env:
+          ENABLE_FORY_CYTHON_SERIALIZATION: "0"
+        run: |
+          cd python
+          pytest -v -s --durations=60 pyfory/tests
 
   python_windows:
     name: Python CI (${{ matrix.python-version }}, windows-2022)
@@ -1061,12 +1065,16 @@ jobs:
           bazel clean --expunge || true
       - name: Run Python CI
         shell: bash
-        run: python ./ci/run_ci.py python
-      - name: Run Python CI (ENABLE_FORY_CYTHON_SERIALIZATION=1)
-        shell: bash
         env:
           ENABLE_FORY_CYTHON_SERIALIZATION: "1"
         run: python ./ci/run_ci.py python
+      - name: Run Python tests (ENABLE_FORY_CYTHON_SERIALIZATION=0)
+        shell: bash
+        env:
+          ENABLE_FORY_CYTHON_SERIALIZATION: "0"
+        run: |
+          cd python
+          pytest -v -s --durations=60 pyfory/tests
 
   python_xlang:
     name: Python Xlang Test

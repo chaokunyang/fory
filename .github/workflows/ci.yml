@@ -47,6 +47,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       cpp: ${{ steps.filter.outputs.cpp }}
+      cpp_code: ${{ steps.filter.outputs.cpp_code }}
       python: ${{ steps.filter.outputs.python }}
       graalvm: ${{ steps.filter.outputs.graalvm }}
       rust: ${{ steps.filter.outputs.rust }}
@@ -62,6 +63,7 @@ jobs:
         run: |
           if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
             echo "cpp=true" >> "$GITHUB_OUTPUT"
+            echo "cpp_code=true" >> "$GITHUB_OUTPUT"
             echo "python=true" >> "$GITHUB_OUTPUT"
             echo "graalvm=true" >> "$GITHUB_OUTPUT"
             echo "rust=true" >> "$GITHUB_OUTPUT"
@@ -79,7 +81,13 @@ jobs:
             echo "cpp=false" >> "$GITHUB_OUTPUT"
           fi
 
-          if grep -Eq '^(cpp/|python/|bazel/|BUILD$|WORKSPACE$|MODULE\.bazel$|\.bazelrc$)' <<< "$changed_files"; then
+          if grep -Eq '^(cpp/)' <<< "$changed_files"; then
+            echo "cpp_code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cpp_code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(python/)' <<< "$changed_files"; then
             echo "python=true" >> "$GITHUB_OUTPUT"
           else
             echo "python=false" >> "$GITHUB_OUTPUT"
@@ -776,6 +784,8 @@ jobs:
 
   cpp_sanitizers:
     name: C++ Sanitizer (${{ matrix.sanitizer }})
+    needs: changes
+    if: needs.changes.outputs.cpp_code == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -955,6 +965,8 @@ jobs:
 
   python:
     name: Python CI
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:

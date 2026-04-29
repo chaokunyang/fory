@@ -48,6 +48,7 @@ jobs:
     outputs:
       cpp: ${{ steps.filter.outputs.cpp }}
       cpp_code: ${{ steps.filter.outputs.cpp_code }}
+      java_code: ${{ steps.filter.outputs.java_code }}
       python: ${{ steps.filter.outputs.python }}
       graalvm: ${{ steps.filter.outputs.graalvm }}
       rust: ${{ steps.filter.outputs.rust }}
@@ -66,6 +67,7 @@ jobs:
           if [[ "$GITHUB_EVENT_NAME" != "pull_request" ]]; then
             echo "cpp=true" >> "$GITHUB_OUTPUT"
             echo "cpp_code=true" >> "$GITHUB_OUTPUT"
+            echo "java_code=true" >> "$GITHUB_OUTPUT"
             echo "python=true" >> "$GITHUB_OUTPUT"
             echo "graalvm=true" >> "$GITHUB_OUTPUT"
             echo "rust=true" >> "$GITHUB_OUTPUT"
@@ -89,6 +91,12 @@ jobs:
             echo "cpp_code=true" >> "$GITHUB_OUTPUT"
           else
             echo "cpp_code=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if grep -Eq '^(java/)' <<< "$changed_files"; then
+            echo "java_code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "java_code=false" >> "$GITHUB_OUTPUT"
           fi
 
           if grep -Eq '^(python/)' <<< "$changed_files"; then
@@ -152,12 +160,13 @@ jobs:
 
   java:
     name: Java CI
+    needs: changes
     runs-on: ubuntu-latest
     env:
       MY_VAR: "PATH"
     strategy:
       matrix:
-        java-version: ["8", "11", "17", "21", "25"]
+        java-version: ${{ fromJSON(needs.changes.outputs.java_code == 'true' && '["8","11","17","21","25"]' || '["8"]') }}
     steps:
       - uses: actions/checkout@v5
       - name: Set up JDK ${{ matrix.java-version }}
@@ -190,6 +199,8 @@ jobs:
 
   openj9:
     name: Openj9 Java CI
+    needs: changes
+    if: needs.changes.outputs.java_code == 'true'
     runs-on: ubuntu-latest
     env:
       MY_VAR: "PATH"
@@ -221,6 +232,8 @@ jobs:
 
   java21_windows:
     name: Windows Java 21 CI
+    needs: changes
+    if: needs.changes.outputs.java_code == 'true'
     runs-on: windows-2022
     env:
       MY_VAR: "PATH"

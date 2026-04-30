@@ -184,6 +184,28 @@ func getUnsignedSchemaConsistentSimple(obj any) UnsignedSchemaConsistentSimple {
 	}
 }
 
+func getNestedAnnotatedContainerSchemaConsistent(obj any) NestedAnnotatedContainerSchemaConsistent {
+	switch v := obj.(type) {
+	case NestedAnnotatedContainerSchemaConsistent:
+		return v
+	case *NestedAnnotatedContainerSchemaConsistent:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected NestedAnnotatedContainerSchemaConsistent, got %T", obj))
+	}
+}
+
+func getNestedAnnotatedContainerCompatible(obj any) NestedAnnotatedContainerCompatible {
+	switch v := obj.(type) {
+	case NestedAnnotatedContainerCompatible:
+		return v
+	case *NestedAnnotatedContainerCompatible:
+		return *v
+	default:
+		panic(fmt.Sprintf("expected NestedAnnotatedContainerCompatible, got %T", obj))
+	}
+}
+
 func assertEqualFloat32(expected, actual float32, name string) {
 	diff := expected - actual
 	if diff < 0 {
@@ -311,19 +333,27 @@ type RefOverrideElement struct {
 }
 
 type RefOverrideContainer struct {
-	ListField []*RefOverrideElement
-	MapField  map[string]*RefOverrideElement
+	ListField []*RefOverrideElement          `fory:"type=list(element=_(ref=false))"`
+	MapField  map[string]*RefOverrideElement `fory:"type=map(value=_(ref=false))"`
+}
+
+type NestedAnnotatedContainerSchemaConsistent struct {
+	Values map[uint32][]*uint64 `fory:"type=map(key=uint32(encoding=fixed),value=list(element=uint64(encoding=tagged)))"`
+}
+
+type NestedAnnotatedContainerCompatible struct {
+	Values map[uint32][]*uint64 `fory:"type=map(key=uint32(encoding=fixed),value=list(element=uint64(encoding=tagged)))"`
 }
 
 type MyExt struct {
-	Id int32 `fory:"id"`
+	Id int32
 }
 
 type EmptyWrapper struct {
 }
 
 type MyStruct struct {
-	Id int32 `fory:"id"`
+	Id int32
 }
 
 type VersionCheckStruct struct {
@@ -2293,20 +2323,106 @@ func testCollectionElementRefOverride() {
 	}
 
 	result := getRefOverrideContainer(obj)
-	if len(result.ListField) < 1 {
+	if len(result.ListField) < 2 {
 		panic("ListField is empty")
 	}
-
-	shared := result.ListField[0]
-	outer := &RefOverrideContainer{
-		ListField: []*RefOverrideElement{shared, shared},
-		MapField: map[string]*RefOverrideElement{
-			"k1": shared,
-			"k2": shared,
-		},
+	if result.ListField[0] == result.ListField[1] {
+		panic("ListField elements unexpectedly share references")
+	}
+	if result.MapField["k1"] == result.MapField["k2"] {
+		panic("MapField values unexpectedly share references")
+	}
+	if result.MapField["k1"] == result.ListField[0] {
+		panic("MapField value unexpectedly shares reference with ListField[0]")
 	}
 
-	serialized, err := f.Serialize(outer)
+	serialized, err := f.Serialize(&result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func uint64Ptr(v uint64) *uint64 {
+	return &v
+}
+
+func assertNestedAnnotatedContainerValues(values map[uint32][]*uint64, name string) {
+	if len(values) != 2 {
+		panic(fmt.Sprintf("%s length mismatch: expected 2, got %d", name, len(values)))
+	}
+	first, ok := values[4000000000]
+	if !ok {
+		panic(fmt.Sprintf("%s missing key 4000000000", name))
+	}
+	if len(first) != 2 || first[0] == nil || first[1] == nil {
+		panic(fmt.Sprintf("%s[4000000000] mismatch: got %v", name, first))
+	}
+	assertEqual(uint64(7), *first[0], name+"[4000000000][0]")
+	assertEqual(uint64(1000000000), *first[1], name+"[4000000000][1]")
+
+	second, ok := values[3]
+	if !ok {
+		panic(fmt.Sprintf("%s missing key 3", name))
+	}
+	if len(second) != 1 || second[0] == nil {
+		panic(fmt.Sprintf("%s[3] mismatch: got %v", name, second))
+	}
+	assertEqual(uint64(42), *second[0], name+"[3][0]")
+}
+
+func testNestedAnnotatedContainerSchemaConsistent() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
+	f.RegisterStruct(NestedAnnotatedContainerSchemaConsistent{}, 801)
+
+	var obj any
+	err := f.Deserialize(data, &obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getNestedAnnotatedContainerSchemaConsistent(obj)
+	assertNestedAnnotatedContainerValues(result.Values, "Values")
+
+	serialized, err := f.Serialize(&NestedAnnotatedContainerSchemaConsistent{
+		Values: map[uint32][]*uint64{
+			4000000000: []*uint64{uint64Ptr(7), uint64Ptr(1000000000)},
+			3:          []*uint64{uint64Ptr(42)},
+		},
+	})
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testNestedAnnotatedContainerCompatible() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterStruct(NestedAnnotatedContainerCompatible{}, 802)
+
+	var obj any
+	err := f.Deserialize(data, &obj)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to deserialize: %v", err))
+	}
+
+	result := getNestedAnnotatedContainerCompatible(obj)
+	assertNestedAnnotatedContainerValues(result.Values, "Values")
+
+	serialized, err := f.Serialize(&NestedAnnotatedContainerCompatible{
+		Values: map[uint32][]*uint64{
+			4000000000: []*uint64{uint64Ptr(7), uint64Ptr(1000000000)},
+			3:          []*uint64{uint64Ptr(42)},
+		},
+	})
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -2412,8 +2528,8 @@ type UnsignedSchemaConsistent struct {
 	// Primitive unsigned fields (non-nullable, use Field suffix to avoid reserved keywords)
 	U8Field        uint8  // UINT8 - fixed 8-bit
 	U16Field       uint16 // UINT16 - fixed 16-bit
-	U32VarField    uint32 `fory:"compress=true"`   // VAR_UINT32 - variable-length
-	U32FixedField  uint32 `fory:"compress=false"`  // UINT32 - fixed 4-byte
+	U32VarField    uint32 `fory:"encoding=varint"` // VAR_UINT32 - variable-length
+	U32FixedField  uint32 `fory:"encoding=fixed"`  // UINT32 - fixed 4-byte
 	U64VarField    uint64 `fory:"encoding=varint"` // VAR_UINT64 - variable-length
 	U64FixedField  uint64 `fory:"encoding=fixed"`  // UINT64 - fixed 8-byte
 	U64TaggedField uint64 `fory:"encoding=tagged"` // TAGGED_UINT64 - tagged encoding
@@ -2421,8 +2537,8 @@ type UnsignedSchemaConsistent struct {
 	// Nullable unsigned fields (pointers)
 	U8NullableField        *uint8  `fory:"nullable"`
 	U16NullableField       *uint16 `fory:"nullable"`
-	U32VarNullableField    *uint32 `fory:"nullable,compress=true"`
-	U32FixedNullableField  *uint32 `fory:"nullable,compress=false"`
+	U32VarNullableField    *uint32 `fory:"nullable,encoding=varint"`
+	U32FixedNullableField  *uint32 `fory:"nullable,encoding=fixed"`
 	U64VarNullableField    *uint64 `fory:"nullable,encoding=varint"`
 	U64FixedNullableField  *uint64 `fory:"nullable,encoding=fixed"`
 	U64TaggedNullableField *uint64 `fory:"nullable,encoding=tagged"`
@@ -2436,8 +2552,8 @@ type UnsignedSchemaCompatible struct {
 	// Group 1: Nullable in Go (pointers), non-nullable in Java
 	U8Field1        *uint8  `fory:"nullable"`
 	U16Field1       *uint16 `fory:"nullable"`
-	U32VarField1    *uint32 `fory:"nullable,compress=true"`
-	U32FixedField1  *uint32 `fory:"nullable,compress=false"`
+	U32VarField1    *uint32 `fory:"nullable,encoding=varint"`
+	U32FixedField1  *uint32 `fory:"nullable,encoding=fixed"`
 	U64VarField1    *uint64 `fory:"nullable,encoding=varint"`
 	U64FixedField1  *uint64 `fory:"nullable,encoding=fixed"`
 	U64TaggedField1 *uint64 `fory:"nullable,encoding=tagged"`
@@ -2445,8 +2561,8 @@ type UnsignedSchemaCompatible struct {
 	// Group 2: Non-nullable in Go, nullable in Java
 	U8Field2        uint8
 	U16Field2       uint16
-	U32VarField2    uint32 `fory:"compress=true"`
-	U32FixedField2  uint32 `fory:"compress=false"`
+	U32VarField2    uint32 `fory:"encoding=varint"`
+	U32FixedField2  uint32 `fory:"encoding=fixed"`
 	U64VarField2    uint64 `fory:"encoding=varint"`
 	U64FixedField2  uint64 `fory:"encoding=fixed"`
 	U64TaggedField2 uint64 `fory:"encoding=tagged"`
@@ -2723,6 +2839,10 @@ func main() {
 		testUnsignedSchemaConsistent()
 	case "test_unsigned_schema_compatible":
 		testUnsignedSchemaCompatible()
+	case "test_nested_annotated_container_schema_consistent":
+		testNestedAnnotatedContainerSchemaConsistent()
+	case "test_nested_annotated_container_compatible":
+		testNestedAnnotatedContainerCompatible()
 	default:
 		panic(fmt.Sprintf("Unknown test case: %s", *caseName))
 	}

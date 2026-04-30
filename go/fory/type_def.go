@@ -124,7 +124,7 @@ func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
 	for fieldKey, fd := range remoteFields {
 		if _, exists := localFields[fieldKey]; !exists {
 			diff.WriteString(fmt.Sprintf("  field '%s': only in remote, type=%s, nullable=%v\n",
-				fieldLabel(fd), fieldTypeToString(fd.fieldType), fd.nullable))
+				fieldLabel(fd), fieldTypeToString(fd.typeSpec), fd.nullable))
 		}
 	}
 
@@ -132,7 +132,7 @@ func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
 	for fieldKey, fd := range localFields {
 		if _, exists := remoteFields[fieldKey]; !exists {
 			diff.WriteString(fmt.Sprintf("  field '%s': only in local, type=%s, nullable=%v\n",
-				fieldLabel(fd), fieldTypeToString(fd.fieldType), fd.nullable))
+				fieldLabel(fd), fieldTypeToString(fd.typeSpec), fd.nullable))
 		}
 	}
 
@@ -140,8 +140,8 @@ func (td *TypeDef) ComputeDiff(localDef *TypeDef) string {
 	for fieldKey, remoteField := range remoteFields {
 		if localField, exists := localFields[fieldKey]; exists {
 			// Compare field types
-			remoteTypeStr := fieldTypeToString(remoteField.fieldType)
-			localTypeStr := fieldTypeToString(localField.fieldType)
+			remoteTypeStr := fieldTypeToString(remoteField.typeSpec)
+			localTypeStr := fieldTypeToString(localField.typeSpec)
 			if remoteTypeStr != localTypeStr {
 				diff.WriteString(fmt.Sprintf("  field '%s': type mismatch, remote=%s, local=%s\n",
 					fieldLabel(remoteField), remoteTypeStr, localTypeStr))
@@ -392,56 +392,49 @@ func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
 FieldDef contains definition of a single field in a struct
 field def layout as following:
   - first 1 byte: header (2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag)
-  - next variable bytes: FieldType info
+  - next variable bytes: TypeSpec info
   - next variable bytes: field name or tag id
 */
 type FieldDef struct {
 	name         string
 	nameEncoding meta.Encoding
 	nullable     bool
-	trackingRef  bool
-	fieldType    FieldType
+	trackRef     bool
+	typeSpec     *TypeSpec
 	tagID        int // -1 = use field name, >=0 = use tag ID
 }
 
 // String returns a string representation of FieldDef for debugging
 func (fd FieldDef) String() string {
-	var fieldTypeStr string
-	if fd.fieldType != nil {
-		fieldTypeStr = fd.fieldType.String()
+	var typeSpecStr string
+	if fd.typeSpec != nil {
+		typeSpecStr = fd.typeSpec.String()
 	} else {
-		fieldTypeStr = "nil"
+		typeSpecStr = "nil"
 	}
 	if fd.tagID >= 0 {
-		return fmt.Sprintf("FieldDef{tagID=%d, nullable=%v, trackingRef=%v, fieldType=%s}",
-			fd.tagID, fd.nullable, fd.trackingRef, fieldTypeStr)
+		return fmt.Sprintf("FieldDef{tagID=%d, nullable=%v, trackRef=%v, typeSpec=%s}",
+			fd.tagID, fd.nullable, fd.trackRef, typeSpecStr)
 	}
-	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, trackingRef=%v, fieldType=%s}",
-		fd.name, fd.nullable, fd.trackingRef, fieldTypeStr)
+	return fmt.Sprintf("FieldDef{name=%s, nullable=%v, trackRef=%v, typeSpec=%s}",
+		fd.name, fd.nullable, fd.trackRef, typeSpecStr)
 }
 
-// fieldTypeToString returns a detailed string representation of a FieldType
-func fieldTypeToString(ft FieldType) string {
-	if ft == nil {
+func fieldTypeToString(spec *TypeSpec) string {
+	if spec == nil {
 		return "nil"
 	}
-	switch t := ft.(type) {
-	case *CollectionFieldType:
-		return fmt.Sprintf("CollectionFieldType{typeId=%d, elementType=%s}", t.TypeId(), fieldTypeToString(t.elementType))
-	case *MapFieldType:
-		return fmt.Sprintf("MapFieldType{typeId=%d, keyType=%s, valueType=%s}", t.TypeId(), fieldTypeToString(t.keyType), fieldTypeToString(t.valueType))
-	case *SimpleFieldType:
-		return fmt.Sprintf("SimpleFieldType{typeId=%d}", t.TypeId())
-	case *DynamicFieldType:
-		return fmt.Sprintf("DynamicFieldType{typeId=%d}", t.TypeId())
-	default:
-		return fmt.Sprintf("FieldType{typeId=%d}", ft.TypeId())
-	}
+	return spec.String()
 }
 
 // buildFieldDefs extracts field definitions from a struct value
 func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
-	var fieldDefs []FieldDef
+	type fieldDefEntry struct {
+		fieldDef   FieldDef
+		serializer Serializer
+	}
+
+	var entries []fieldDefEntry
 
 	type_ := value.Type()
 	for i := 0; i < type_.NumField(); i++ {
@@ -452,150 +445,34 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 			continue
 		}
 
-		// Parse fory struct tag and check for ignore
-		foryTag := parseForyTag(field)
-		if foryTag.Ignore {
+		fieldSpec, err := parseFieldSpec(field, fory.config.IsXlang, fory.config.TrackRef)
+		if err != nil {
+			return nil, err
+		}
+		fieldSpec.Type = bindResolvedTypeSpec(fory.typeResolver, field.Type, fieldSpec.Type)
+		if fieldSpec.Ignore {
 			continue // skip ignored fields
 		}
 
-		fieldValue := value.Field(i)
-		fieldName := SnakeCase(field.Name)
-
-		nameEncoding := fory.typeResolver.typeNameEncoder.ComputeEncodingWith(fieldName, fieldNameEncodings)
-
-		fieldType := field.Type
-		optionalInfo, isOptional := getOptionalInfo(fieldType)
-		baseType := fieldType
-		if isOptional {
-			baseType = optionalInfo.valueType
-		}
-
-		ft, err := buildFieldType(fory, fieldValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build field type for field %s: %w", fieldName, err)
-		}
-
-		// Apply encoding override from struct tags if set
-		// This works for both direct types and pointer-wrapped types
-		baseKind := baseType.Kind()
-		// Handle pointer types - get the element kind
-		if baseKind == reflect.Ptr {
-			baseKind = baseType.Elem().Kind()
-		}
-
-		// Check if we need to override the TypeID based on compress/encoding tags
-		var overrideTypeId TypeId = 0
-		switch baseKind {
-		case reflect.Uint32:
-			if foryTag.CompressSet {
-				if foryTag.Compress {
-					overrideTypeId = VAR_UINT32
-				} else {
-					overrideTypeId = UINT32
-				}
-			}
-		case reflect.Int32:
-			if foryTag.CompressSet {
-				if foryTag.Compress {
-					overrideTypeId = VARINT32
-				} else {
-					overrideTypeId = INT32
-				}
-			}
-		case reflect.Uint64:
-			if foryTag.EncodingSet {
-				switch foryTag.Encoding {
-				case "fixed":
-					overrideTypeId = UINT64
-				case "varint":
-					overrideTypeId = VAR_UINT64
-				case "tagged":
-					overrideTypeId = TAGGED_UINT64
-				default:
-					return nil, fmt.Errorf("field %s: invalid encoding value %q for uint64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
-				}
-			}
-		case reflect.Int64:
-			if foryTag.EncodingSet {
-				switch foryTag.Encoding {
-				case "fixed":
-					overrideTypeId = INT64
-				case "varint":
-					overrideTypeId = VARINT64
-				case "tagged":
-					overrideTypeId = TAGGED_INT64
-				default:
-					return nil, fmt.Errorf("field %s: invalid encoding value %q for int64, must be 'fixed', 'varint', or 'tagged'", fieldName, foryTag.Encoding)
-				}
-			}
-		}
-
-		// Apply the override if one was determined
-		if overrideTypeId != 0 {
-			ft = NewSimpleFieldType(overrideTypeId)
-		}
-		if foryTag.TypeIDSet && foryTag.TypeIDValid {
-			ft = NewSimpleFieldType(foryTag.TypeID)
-		}
-
-		// Determine nullable based on mode:
-		// - In xlang mode: Per xlang spec, fields are NON-NULLABLE by default.
-		//   Only pointer types are nullable by default.
-		// - In native mode: Go's natural semantics apply - slice/map/interface can be nil,
-		//   so they are nullable by default.
-		// Can be overridden by explicit fory tag `fory:"nullable"`
-		typeId := ft.TypeId()
-		isEnumField := typeId == ENUM
-		// Determine nullable based on mode
-		// In xlang mode: only pointer types are nullable by default (per xlang spec)
-		// In native mode: Go's natural semantics - all nil-able types are nullable
-		// This ensures proper interoperability with Java/other languages in xlang mode.
-		var nullableFlag bool
-		if fory.config.IsXlang {
-			// xlang mode: only pointer types are nullable by default per xlang spec
-			// Slices and maps are NOT nullable - they serialize as empty when nil
-			nullableFlag = isOptional || field.Type.Kind() == reflect.Ptr
-		} else {
-			// Native mode: Go's natural semantics - all nil-able types are nullable
-			nullableFlag = isOptional || field.Type.Kind() == reflect.Ptr ||
-				field.Type.Kind() == reflect.Slice ||
-				field.Type.Kind() == reflect.Map ||
-				field.Type.Kind() == reflect.Interface
-		}
-		// Override nullable flag if explicitly set in fory tag
-		if foryTag.NullableSet && !isOptional {
-			nullableFlag = foryTag.Nullable
-		}
-		// Primitives are never nullable, regardless of tag
-		if isNonNullablePrimitiveKind(field.Type.Kind()) && !isEnumField {
-			nullableFlag = false
-		}
-
-		// Calculate ref tracking - use tag override if explicitly set
-		// In xlang mode, registered types (primitives, strings) don't use ref tracking
-		// because they are value types, not reference types.
-		trackingRef := fory.config.TrackRef
-		if foryTag.RefSet {
-			trackingRef = foryTag.Ref
-		}
-		if trackingRef && !NeedWriteRef(ft.TypeId()) {
-			trackingRef = false
-		}
-		// Disable ref tracking for simple types (primitives, strings) in xlang mode.
-		// Collection fields only write ref flags when explicitly tagged.
-		if fory.config.IsXlang && trackingRef && isCollectionType(ft.TypeId()) && !foryTag.RefSet {
-			trackingRef = false
-		}
-
-		fieldInfo := FieldDef{
-			name:         fieldName,
+		nameEncoding := fory.typeResolver.typeNameEncoder.ComputeEncodingWith(fieldSpec.Name, fieldNameEncodings)
+		fieldDef := FieldDef{
+			name:         fieldSpec.Name,
 			nameEncoding: nameEncoding,
-			nullable:     nullableFlag,
-			trackingRef:  trackingRef,
-			fieldType:    ft,
-			tagID:        foryTag.ID,
+			nullable:     fieldDeclaredNullable(fieldSpec),
+			trackRef:     fieldDeclaredTrackRef(fieldSpec, fory.config.IsXlang, fory.config.TrackRef),
+			typeSpec:     fieldSpec.Type.typeDefProjection(false),
+			tagID:        fieldSpec.TagID,
 		}
-		fieldDefs = append(fieldDefs, fieldInfo)
+		serializer, serErr := serializerForTypeSpec(fory.typeResolver, field.Type, fieldSpec.Type)
+		if serErr != nil {
+			serializer = nil
+		}
+		entries = append(entries, fieldDefEntry{fieldDef: fieldDef, serializer: serializer})
+	}
+
+	fieldDefs := make([]FieldDef, len(entries))
+	for i, entry := range entries {
+		fieldDefs[i] = entry.fieldDef
 	}
 
 	// Sort field definitions
@@ -606,18 +483,12 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 		typeIds := make([]TypeId, len(fieldDefs))
 		nullables := make([]bool, len(fieldDefs))
 		tagIDs := make([]int, len(fieldDefs))
-		for i, fieldDef := range fieldDefs {
-			serializer, err := getFieldTypeSerializer(fory, fieldDef.fieldType)
-			if err != nil {
-				// If we can't get serializer, use nil (will be handled by sortFields)
-				serializers[i] = nil
-			} else {
-				serializers[i] = serializer
-			}
-			fieldNames[i] = fieldDef.name
-			typeIds[i] = fieldDef.fieldType.TypeId()
-			nullables[i] = fieldDef.nullable
-			tagIDs[i] = fieldDef.tagID
+		for i, entry := range entries {
+			serializers[i] = entry.serializer
+			fieldNames[i] = entry.fieldDef.name
+			typeIds[i] = entry.fieldDef.typeSpec.TypeId()
+			nullables[i] = entry.fieldDef.nullable
+			tagIDs[i] = entry.fieldDef.tagID
 		}
 
 		// Use sortFields to match Java's field ordering
@@ -641,108 +512,42 @@ func buildFieldDefs(fory *Fory, value reflect.Value) ([]FieldDef, error) {
 	return fieldDefs, nil
 }
 
-// FieldType interface represents different field types, including object, collection, and map types
-type FieldType interface {
-	TypeId() TypeId
-	UserTypeId() uint32
-	String() string
-	write(*ByteBuffer)
-	writeWithFlags(*ByteBuffer, bool, bool)                  // writeWithFlags writes typeId with nullable/trackingRef flags
-	getTypeInfo(*Fory) (TypeInfo, error)                     // some serializer need typeinfo as well
-	getTypeInfoWithResolver(*TypeResolver) (TypeInfo, error) // version that uses typeResolver directly
-}
-
-// BaseFieldType provides common functionality for field types
-type BaseFieldType struct {
-	typeId     TypeId
-	userTypeId uint32
-}
-
-func (b *BaseFieldType) TypeId() TypeId     { return b.typeId }
-func (b *BaseFieldType) UserTypeId() uint32 { return b.userTypeId }
-func (b *BaseFieldType) String() string {
-	return fmt.Sprintf("FieldType{typeId=%d}", b.typeId)
-}
-func (b *BaseFieldType) write(buffer *ByteBuffer) {
-	buffer.WriteUint8(uint8(b.typeId))
-}
-
-// writeWithFlags writes the typeId with nullable and trackingRef flags packed into the value.
-// The format is: (typeId << 2) | (nullable ? 0b10 : 0) | (trackingRef ? 0b01 : 0)
-func (b *BaseFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
-	value := uint32(b.typeId) << 2
-	if nullable {
-		value |= 0b10
-	}
-	if trackingRef {
-		value |= 0b01
-	}
-	buffer.WriteVarUint32Small7(value)
-}
-
-func getFieldTypeSerializer(fory *Fory, ft FieldType) (Serializer, error) {
-	typeInfo, err := ft.getTypeInfo(fory)
+func getFieldTypeSerializer(fory *Fory, spec *TypeSpec) (Serializer, error) {
+	typeInfo, err := spec.getTypeInfo(fory)
 	if err != nil {
 		return nil, err
 	}
 	return typeInfo.Serializer, nil
 }
 
-func getFieldTypeSerializerWithResolver(resolver *TypeResolver, ft FieldType) (Serializer, error) {
-	typeInfo, err := ft.getTypeInfoWithResolver(resolver)
+func getFieldTypeSerializerWithResolver(resolver *TypeResolver, spec *TypeSpec) (Serializer, error) {
+	typeInfo, err := spec.getTypeInfoWithResolver(resolver)
 	if err != nil {
 		return nil, err
 	}
 	return typeInfo.Serializer, nil
 }
 
-func (b *BaseFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
-	if isUserDefinedType(b.typeId) {
-		return TypeInfo{}, nil
-	}
-	info, err := fory.typeResolver.getTypeInfoById(uint32(b.typeId))
-	if err != nil {
-		return TypeInfo{}, err
-	}
-	if info == nil {
-		return TypeInfo{}, nil
-	}
-	return *info, nil
-}
-
-func (b *BaseFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
-	if isUserDefinedType(b.typeId) {
-		return TypeInfo{}, nil
-	}
-	info, err := resolver.getTypeInfoById(uint32(b.typeId))
-	if err != nil {
-		return TypeInfo{}, err
-	}
-	if info == nil {
-		return TypeInfo{}, nil
-	}
-	return *info, nil
-}
-
-// readFieldType reads field type info from the buffer according to the TypeId
-// This is called for top-level field types where flags are NOT embedded in the type ID
-func readFieldType(buffer *ByteBuffer, depth int, maxDepth int, err *Error) (FieldType, error) {
+// readFieldType reads recursive TypeSpec metadata from the buffer according to the TypeId.
+// Top-level field types do not carry nullable/ref bits in the encoded type id.
+func readFieldType(buffer *ByteBuffer, depth int, maxDepth int, err *Error) (*TypeSpec, error) {
 	if depth > maxDepth {
 		return nil, fmt.Errorf("schema type definition exceeds maximum nesting depth")
 	}
-	typeId := buffer.ReadUint8(err)
-	internalTypeId := TypeId(typeId)
-
-	switch internalTypeId {
+	typeID := TypeId(buffer.ReadUint8(err))
+	spec, specErr := newTypeSpecForTypeID(typeID)
+	if specErr != nil {
+		return nil, specErr
+	}
+	switch typeID {
 	case LIST, SET:
-		// For nested types, flags ARE embedded in the type ID
 		elementType, etErr := readFieldTypeWithFlags(buffer, depth+1, maxDepth, err)
 		if etErr != nil {
 			return nil, fmt.Errorf("failed to read element type: %w", etErr)
 		}
-		return NewCollectionFieldType(TypeId(typeId), elementType), nil
+		spec.Element = elementType
+		spec.elementType = elementType
 	case MAP:
-		// For nested types, flags ARE embedded in the type ID
 		keyType, ktErr := readFieldTypeWithFlags(buffer, depth+1, maxDepth, err)
 		if ktErr != nil {
 			return nil, fmt.Errorf("failed to read key type: %w", ktErr)
@@ -751,35 +556,36 @@ func readFieldType(buffer *ByteBuffer, depth int, maxDepth int, err *Error) (Fie
 		if vtErr != nil {
 			return nil, fmt.Errorf("failed to read value type: %w", vtErr)
 		}
-		return NewMapFieldType(TypeId(typeId), keyType, valueType), nil
-	case UNKNOWN, EXT, STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT:
-		ft := NewDynamicFieldType(TypeId(typeId))
-		return ft, nil
+		spec.Key = keyType
+		spec.keyType = keyType
+		spec.Value = valueType
+		spec.valueType = valueType
 	}
-	ft := NewSimpleFieldType(TypeId(typeId))
-	return ft, nil
+	return spec, nil
 }
 
-// readFieldTypeWithFlags reads field type info where flags are embedded in the type ID
-// Format: (typeId << 2) | (nullable ? 0b10 : 0) | (trackingRef ? 0b1 : 0)
-func readFieldTypeWithFlags(buffer *ByteBuffer, depth int, maxDepth int, err *Error) (FieldType, error) {
+// readFieldTypeWithFlags reads field type info where flags are embedded in the type ID.
+// Format: (type_id << 2) | (nullable << 1) | tracking_ref.
+func readFieldTypeWithFlags(buffer *ByteBuffer, depth int, maxDepth int, err *Error) (*TypeSpec, error) {
 	if depth > maxDepth {
 		return nil, fmt.Errorf("schema type definition exceeds maximum nesting depth")
 	}
 	rawValue := buffer.ReadVarUint32Small7(err)
-	// Extract flags (lower 2 bits)
-	// trackingRef := (rawValue & 0b1) != 0  // Not used currently
-	// nullable := (rawValue & 0b10) != 0    // Not used currently
-	typeId := rawValue >> 2
-	internalTypeId := TypeId(typeId)
-
-	switch internalTypeId {
+	typeID := TypeId(rawValue >> 2)
+	spec, readErr := newTypeSpecForTypeID(typeID)
+	if readErr != nil {
+		return nil, readErr
+	}
+	spec.Nullable = (rawValue & 0b10) != 0
+	spec.TrackRef = (rawValue & 0b1) != 0
+	switch typeID {
 	case LIST, SET:
 		elementType, etErr := readFieldTypeWithFlags(buffer, depth+1, maxDepth, err)
 		if etErr != nil {
 			return nil, fmt.Errorf("failed to read element type: %w", etErr)
 		}
-		return NewCollectionFieldType(TypeId(typeId), elementType), nil
+		spec.Element = elementType
+		spec.elementType = elementType
 	case MAP:
 		keyType, ktErr := readFieldTypeWithFlags(buffer, depth+1, maxDepth, err)
 		if ktErr != nil {
@@ -789,365 +595,23 @@ func readFieldTypeWithFlags(buffer *ByteBuffer, depth int, maxDepth int, err *Er
 		if vtErr != nil {
 			return nil, fmt.Errorf("failed to read value type: %w", vtErr)
 		}
-		return NewMapFieldType(TypeId(typeId), keyType, valueType), nil
-	case UNKNOWN, EXT, STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT:
-		ft := NewDynamicFieldType(TypeId(typeId))
-		return ft, nil
+		spec.Key = keyType
+		spec.keyType = keyType
+		spec.Value = valueType
+		spec.valueType = valueType
 	}
-	ft := NewSimpleFieldType(TypeId(typeId))
-	return ft, nil
+	return spec, nil
 }
 
-// CollectionFieldType represents collection types like List, Slice
-type CollectionFieldType struct {
-	BaseFieldType
-	elementType FieldType
-}
-
-func NewCollectionFieldType(typeId TypeId, elementType FieldType) *CollectionFieldType {
-	return &CollectionFieldType{
-		BaseFieldType: BaseFieldType{typeId: typeId, userTypeId: invalidUserTypeID},
-		elementType:   elementType,
+func newTypeSpecForTypeID(typeID TypeId) (*TypeSpec, error) {
+	switch typeID {
+	case LIST, SET:
+		return NewCollectionTypeSpec(typeID, nil), nil
+	case MAP:
+		return NewMapTypeSpec(typeID, nil, nil), nil
+	default:
+		return NewSimpleTypeSpec(typeID), nil
 	}
-}
-
-func (c *CollectionFieldType) String() string {
-	return fmt.Sprintf("CollectionFieldType{typeId=%d, elementType=%s}", c.typeId, c.elementType.String())
-}
-
-func (c *CollectionFieldType) write(buffer *ByteBuffer) {
-	c.BaseFieldType.write(buffer)
-	// Element types in collections are written with flags (nullable=true, trackingRef=false)
-	// This matches Java's CollectionFieldType behavior
-	c.elementType.writeWithFlags(buffer, true, false)
-}
-
-func (c *CollectionFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
-	c.BaseFieldType.writeWithFlags(buffer, nullable, trackingRef)
-	// Element types in collections are written with flags (nullable=true, trackingRef=false)
-	c.elementType.writeWithFlags(buffer, true, false)
-}
-
-func (c *CollectionFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
-	elemInfo, err := c.elementType.getTypeInfo(f)
-	if err != nil {
-		return TypeInfo{}, err
-	}
-
-	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
-	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
-		setSerializer, serErr := f.GetTypeResolver().GetSetSerializer(setType)
-		if serErr != nil {
-			return TypeInfo{}, serErr
-		}
-		return TypeInfo{Type: setType, Serializer: setSerializer}, nil
-	}
-
-	// For LIST type, use slice
-	collectionType := reflect.SliceOf(elemInfo.Type)
-	// Use TypeResolver helper to get the appropriate slice serializer
-	sliceSerializer, serErr := f.GetTypeResolver().GetSliceSerializer(collectionType)
-	if serErr != nil {
-		return TypeInfo{}, serErr
-	}
-	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
-}
-
-func (c *CollectionFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
-	elemInfo, err := c.elementType.getTypeInfoWithResolver(resolver)
-	if err != nil {
-		return TypeInfo{}, err
-	}
-
-	// For SET type, fory.Set[T] is defined as map[T]struct{} (empty struct value type)
-	if c.typeId == SET {
-		setType := reflect.MapOf(elemInfo.Type, reflect.TypeOf(struct{}{}))
-		setSerializer, serErr := resolver.GetSetSerializer(setType)
-		if serErr != nil {
-			return TypeInfo{}, serErr
-		}
-		return TypeInfo{Type: setType, Serializer: setSerializer}, nil
-	}
-
-	// For LIST type, use slice
-	collectionType := reflect.SliceOf(elemInfo.Type)
-	// Use TypeResolver helper to get the appropriate slice serializer
-	sliceSerializer, serErr := resolver.GetSliceSerializer(collectionType)
-	if serErr != nil {
-		return TypeInfo{}, serErr
-	}
-	return TypeInfo{Type: collectionType, Serializer: sliceSerializer}, nil
-}
-
-// MapFieldType represents map types
-type MapFieldType struct {
-	BaseFieldType
-	keyType   FieldType
-	valueType FieldType
-}
-
-func NewMapFieldType(typeId TypeId, keyType, valueType FieldType) *MapFieldType {
-	return &MapFieldType{
-		BaseFieldType: BaseFieldType{typeId: typeId, userTypeId: invalidUserTypeID},
-		keyType:       keyType,
-		valueType:     valueType,
-	}
-}
-
-func (m *MapFieldType) String() string {
-	return fmt.Sprintf("MapFieldType{typeId=%d, keyType=%s, valueType=%s}", m.typeId, m.keyType.String(), m.valueType.String())
-}
-
-func (m *MapFieldType) write(buffer *ByteBuffer) {
-	m.BaseFieldType.write(buffer)
-	// Key and value types in maps are written with flags (nullable=true, trackingRef=false)
-	// This matches Java's MapFieldType behavior
-	m.keyType.writeWithFlags(buffer, true, false)
-	m.valueType.writeWithFlags(buffer, true, false)
-}
-
-func (m *MapFieldType) writeWithFlags(buffer *ByteBuffer, nullable bool, trackingRef bool) {
-	m.BaseFieldType.writeWithFlags(buffer, nullable, trackingRef)
-	// Key and value types in maps are written with flags (nullable=true, trackingRef=false)
-	m.keyType.writeWithFlags(buffer, true, false)
-	m.valueType.writeWithFlags(buffer, true, false)
-}
-
-func (m *MapFieldType) getTypeInfo(f *Fory) (TypeInfo, error) {
-	keyInfo, err := m.keyType.getTypeInfo(f)
-	if err != nil {
-		return TypeInfo{}, err
-	}
-	valueInfo, err := m.valueType.getTypeInfo(f)
-	if err != nil {
-		return TypeInfo{}, err
-	}
-	var mapType reflect.Type
-	if keyInfo.Type != nil && valueInfo.Type != nil {
-		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
-	}
-	keyReferencable := true
-	if keyInfo.Type != nil {
-		keyReferencable = isRefType(keyInfo.Type, f.config.IsXlang)
-	}
-	valueReferencable := true
-	if valueInfo.Type != nil {
-		valueReferencable = isRefType(valueInfo.Type, f.config.IsXlang)
-	}
-	mapSerializer := &mapSerializer{
-		keySerializer:     keyInfo.Serializer,
-		valueSerializer:   valueInfo.Serializer,
-		keyReferencable:   keyReferencable,
-		valueReferencable: valueReferencable,
-		hasGenerics:       true,
-	}
-	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
-}
-
-func (m *MapFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
-	keyInfo, err := m.keyType.getTypeInfoWithResolver(resolver)
-	if err != nil {
-		return TypeInfo{}, err
-	}
-	valueInfo, err := m.valueType.getTypeInfoWithResolver(resolver)
-	if err != nil {
-		return TypeInfo{}, err
-	}
-	var mapType reflect.Type
-	if keyInfo.Type != nil && valueInfo.Type != nil {
-		mapType = reflect.MapOf(keyInfo.Type, valueInfo.Type)
-	}
-	keyReferencable := true
-	if keyInfo.Type != nil {
-		keyReferencable = isRefType(keyInfo.Type, resolver.isXlang)
-	}
-	valueReferencable := true
-	if valueInfo.Type != nil {
-		valueReferencable = isRefType(valueInfo.Type, resolver.isXlang)
-	}
-	mapSerializer := &mapSerializer{
-		keySerializer:     keyInfo.Serializer,
-		valueSerializer:   valueInfo.Serializer,
-		keyReferencable:   keyReferencable,
-		valueReferencable: valueReferencable,
-		hasGenerics:       true,
-	}
-	return TypeInfo{Type: mapType, Serializer: mapSerializer}, nil
-}
-
-// SimpleFieldType represents object field types that aren't collection/map types
-type SimpleFieldType struct {
-	BaseFieldType
-}
-
-func NewSimpleFieldType(typeId TypeId) *SimpleFieldType {
-	return &SimpleFieldType{
-		BaseFieldType: BaseFieldType{
-			typeId:     typeId,
-			userTypeId: invalidUserTypeID,
-		},
-	}
-}
-
-func (s *SimpleFieldType) String() string {
-	return fmt.Sprintf("SimpleFieldType{typeId=%d}", s.typeId)
-}
-
-// DynamicFieldType represents a field type that is determined at runtime, like EXT or STRUCT
-type DynamicFieldType struct {
-	BaseFieldType
-}
-
-func NewDynamicFieldType(typeId TypeId) *DynamicFieldType {
-	return &DynamicFieldType{
-		BaseFieldType: BaseFieldType{
-			typeId:     typeId,
-			userTypeId: invalidUserTypeID,
-		},
-	}
-}
-
-func (d *DynamicFieldType) String() string {
-	return fmt.Sprintf("DynamicFieldType{typeId=%d}", d.typeId)
-}
-
-func (d *DynamicFieldType) getTypeInfo(fory *Fory) (TypeInfo, error) {
-	// leave empty for runtime resolution, we not know the actual type here
-	return TypeInfo{Type: reflect.TypeOf((*any)(nil)).Elem(), Serializer: nil}, nil
-}
-
-func (d *DynamicFieldType) getTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, error) {
-	// Try to resolve the actual type from the resolver
-	typeId := d.typeId
-
-	// First try direct lookup
-	info, err := resolver.getTypeInfoById(uint32(typeId))
-	if err == nil && info != nil {
-		return *info, nil
-	}
-
-	// Fallback to any for unknown types
-	return TypeInfo{Type: reflect.TypeOf((*any)(nil)).Elem(), Serializer: nil}, nil
-}
-
-// buildFieldType builds field type from reflect.Type, handling collection, map recursively
-func buildFieldType(fory *Fory, fieldValue reflect.Value) (FieldType, error) {
-	fieldType := fieldValue.Type()
-	if info, ok := getOptionalInfo(fieldType); ok {
-		fieldType = info.valueType
-		fieldValue = reflect.Zero(fieldType)
-	}
-	if isUnionType(fieldType) {
-		return NewSimpleFieldType(UNION), nil
-	}
-	// Handle Interface type, we can't determine the actual type here, so leave it as dynamic type
-	if fieldType.Kind() == reflect.Interface {
-		return NewDynamicFieldType(UNKNOWN), nil
-	}
-
-	// Handle slice and array types BEFORE getTypeInfo to avoid anonymous type errors
-	// For primitive element types, use primitive array type IDs (INT16_ARRAY, etc.)
-	// For non-primitive elements, use collection format (LIST with element type)
-	if fieldType.Kind() == reflect.Slice || fieldType.Kind() == reflect.Array {
-		elemType := fieldType.Elem()
-
-		// Check if element is a primitive type that maps to a primitive array type ID
-		// Both slices and fixed-size arrays with primitive elements use primitive array format
-		// This matches typeIdFromKind in field_info.go for consistent field sorting
-		switch elemType.Kind() {
-		case reflect.Bool:
-			return NewSimpleFieldType(BOOL_ARRAY), nil
-		case reflect.Int8:
-			return NewSimpleFieldType(INT8_ARRAY), nil
-		case reflect.Uint8:
-			return NewSimpleFieldType(BINARY), nil
-		case reflect.Int16:
-			return NewSimpleFieldType(INT16_ARRAY), nil
-		case reflect.Uint16:
-			return NewSimpleFieldType(UINT16_ARRAY), nil
-		case reflect.Int32:
-			return NewSimpleFieldType(INT32_ARRAY), nil
-		case reflect.Uint32:
-			return NewSimpleFieldType(UINT32_ARRAY), nil
-		case reflect.Int64, reflect.Int:
-			return NewSimpleFieldType(INT64_ARRAY), nil
-		case reflect.Uint64, reflect.Uint:
-			return NewSimpleFieldType(UINT64_ARRAY), nil
-		case reflect.Float32:
-			return NewSimpleFieldType(FLOAT32_ARRAY), nil
-		case reflect.Float64:
-			return NewSimpleFieldType(FLOAT64_ARRAY), nil
-		}
-
-		// For non-primitive elements, use collection format (LIST with element type)
-		elemValue := reflect.Zero(elemType)
-		elementFieldType, err := buildFieldType(fory, elemValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build element field type: %w", err)
-		}
-
-		return NewCollectionFieldType(LIST, elementFieldType), nil
-	}
-
-	// Handle map types BEFORE getTypeInfo to avoid anonymous type errors
-	if fieldType.Kind() == reflect.Map {
-		keyType := fieldType.Key()
-
-		// fory.Set[T] is defined as map[T]struct{} (empty struct value type)
-		if isSetReflectType(fieldType) {
-			keyValue := reflect.Zero(keyType)
-			keyFieldType, err := buildFieldType(fory, keyValue)
-			if err != nil {
-				return nil, fmt.Errorf("failed to build element field type for set: %w", err)
-			}
-			return NewCollectionFieldType(SET, keyFieldType), nil
-		}
-
-		// Regular map type
-		valueType := fieldType.Elem()
-		keyValue := reflect.Zero(keyType)
-		valueValue := reflect.Zero(valueType)
-
-		keyFieldType, err := buildFieldType(fory, keyValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build key field type: %w", err)
-		}
-
-		valueFieldType, err := buildFieldType(fory, valueValue)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build value field type: %w", err)
-		}
-
-		return NewMapFieldType(MAP, keyFieldType, valueFieldType), nil
-	}
-
-	// Now get type info for other types (primitives, structs, etc.)
-	var typeId TypeId
-	typeInfo, err := fory.typeResolver.getTypeInfo(fieldValue, true)
-	if err != nil {
-		return nil, err
-	}
-	typeId = TypeId(typeInfo.TypeID)
-	if typeId == NAMED_ENUM {
-		typeId = ENUM
-	}
-	if typeId == NAMED_UNION || typeId == TYPED_UNION {
-		typeId = UNION
-	}
-
-	if isUserDefinedType(typeId) {
-		switch typeId {
-		case UNION, ENUM:
-			ft := NewSimpleFieldType(typeId)
-			return ft, nil
-		}
-		ft := NewDynamicFieldType(typeId)
-		return ft, nil
-	}
-
-	ft := NewSimpleFieldType(typeId)
-	return ft, nil
 }
 
 const (
@@ -1372,7 +836,7 @@ func writeMetaHeader(buffer *ByteBuffer, typeDef *TypeDef) error {
 // writeFieldDefs writes field definitions according to the specification
 // field def layout as following:
 //   - first 1 byte: header (2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag)
-//   - next variable bytes: FieldType info
+//   - next variable bytes: TypeSpec info
 //   - next variable bytes: field name or tag id
 func writeFieldDefs(typeResolver *TypeResolver, buffer *ByteBuffer, fieldDefs []FieldDef) error {
 	for _, field := range fieldDefs {
@@ -1392,7 +856,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 		return err
 	}
 	var header uint8
-	if field.trackingRef {
+	if field.trackRef {
 		header |= 0b1
 	}
 	if field.nullable {
@@ -1417,7 +881,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 		}
 
 		// Write field type
-		field.fieldType.write(buffer)
+		field.typeSpec.write(buffer)
 	} else {
 		// Use field name encoding
 		encodingFlag := byte(getFieldNameEncodingIndex(field.nameEncoding))
@@ -1436,7 +900,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 		buffer.PutUint8(offset, header)
 
 		// Write field type
-		field.fieldType.write(buffer)
+		field.typeSpec.write(buffer)
 
 		// Write field name
 		if _, err := buffer.Write(metaString.GetEncodedBytes()); err != nil {
@@ -1683,7 +1147,7 @@ func decompressMeta(encoded []byte) ([]byte, error) {
 readFieldDef reads a single field's definition from the buffer
 field def layout as following:
   - first 1 byte: header (2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag)
-  - next variable bytes: FieldType info
+  - next variable bytes: TypeSpec info
   - next variable bytes: field name or tag id
 */
 func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, error) {
@@ -1722,9 +1186,9 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 		return FieldDef{
 			name:         "", // No field name when using tag ID
 			nameEncoding: meta.UTF_8,
-			fieldType:    ft,
+			typeSpec:     ft,
 			nullable:     isNullable,
-			trackingRef:  refTracking,
+			trackRef:     refTracking,
 			tagID:        tagID,
 		}, nil
 	}
@@ -1754,9 +1218,9 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 	return FieldDef{
 		name:         fieldName,
 		nameEncoding: nameEncoding,
-		fieldType:    ft,
+		typeSpec:     ft,
 		nullable:     isNullable,
-		trackingRef:  refTracking,
+		trackRef:     refTracking,
 		tagID:        TagIDUseFieldName, // -1 indicates using field name
 	}, nil
 }

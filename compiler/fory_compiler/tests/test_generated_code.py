@@ -505,6 +505,12 @@ def test_generated_code_tree_ref_options_equivalent():
 
     cpp_output = render_files(generate_files(schemas["fdl"], CppGenerator))
     assert "SharedWeak<TreeNode>" in cpp_output
+    go_output = render_files(generate_files(schemas["fdl"], GoGenerator))
+    assert (
+        'Children []*TreeNode `fory:"id=3,nullable=false,type=list(element=_(nullable=false,ref=true))"`'
+        in go_output
+    )
+    assert 'Parent *TreeNode `fory:"id=4,nullable=false,ref"`' in go_output
 
 
 def test_java_float16_equals_hash_contract_generation():
@@ -593,6 +599,12 @@ def test_java_nested_integer_annotations_in_generic_containers():
         "private Map<@UInt32Type(encoding = Int32Encoding.FIXED) Long, "
         "List<@UInt64Type(encoding = Int64Encoding.TAGGED) Long>> values;"
         in java_output
+    )
+    go_output = render_files(generate_files(schema, GoGenerator))
+    assert (
+        'Values map[uint32][]*uint64 `fory:"id=1,type=map(key=uint32(encoding=fixed),'
+        'value=list(nullable=false,ref=false,element=uint64(encoding=tagged)))"`'
+        in go_output
     )
 
 

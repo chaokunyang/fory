@@ -145,13 +145,13 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 	switch internalID {
 	case LIST, SET:
 		fieldDef = FieldDef{
-			fieldType: NewCollectionFieldType(TypeId(typeID), NewSimpleFieldType(UNKNOWN)),
-			nullable:  true,
+			typeSpec: NewCollectionTypeSpec(TypeId(typeID), NewSimpleTypeSpec(UNKNOWN)),
+			nullable: true,
 		}
 	case MAP:
 		fieldDef = FieldDef{
-			fieldType: NewMapFieldType(TypeId(typeID), NewSimpleFieldType(UNKNOWN), NewSimpleFieldType(UNKNOWN)),
-			nullable:  true,
+			typeSpec: NewMapTypeSpec(TypeId(typeID), NewSimpleTypeSpec(UNKNOWN), NewSimpleTypeSpec(UNKNOWN)),
+			nullable: true,
 		}
 	case NAMED_UNION:
 		resolver := ctx.TypeResolver()
@@ -164,8 +164,8 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 			return
 		}
 		fieldDef = FieldDef{
-			fieldType: NewSimpleFieldType(TypeId(typeID)),
-			nullable:  true,
+			typeSpec: NewSimpleTypeSpec(TypeId(typeID)),
+			nullable: true,
 		}
 	case COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT, STRUCT, NAMED_STRUCT, EXT, TYPED_UNION:
 		// Read type info using the shared meta reader when enabled.
@@ -174,8 +174,8 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 			return
 		}
 		fieldDef = FieldDef{
-			fieldType: NewSimpleFieldType(TypeId(typeID)),
-			nullable:  true,
+			typeSpec: NewSimpleTypeSpec(TypeId(typeID)),
+			nullable: true,
 		}
 	default:
 		if internalID == ENUM || internalID == STRUCT ||
@@ -186,8 +186,8 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 			}
 		}
 		fieldDef = FieldDef{
-			fieldType: NewSimpleFieldType(TypeId(typeID)),
-			nullable:  true,
+			typeSpec: NewSimpleTypeSpec(TypeId(typeID)),
+			nullable: true,
 		}
 	}
 
@@ -195,8 +195,8 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 	skipValue(ctx, fieldDef, false, false, typeInfo)
 }
 
-// readTypeInfoForSkip reads type info from buffer for struct types during skip.
-// For DynamicFieldType fields, the buffer contains: typeID + meta info (meta index or namespace/typename).
+// readTypeInfoForSkip reads type info from buffer for struct-like fields during skip.
+// Dynamic fields store typeID + meta info (meta index or namespace/typename) in the buffer.
 // Uses context error state for deferred error checking.
 func readTypeInfoForSkip(ctx *ReadContext, fieldTypeId TypeId) *TypeInfo {
 	err := ctx.Err()
@@ -225,7 +225,7 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 
 	hasNull := (header & CollectionHasNull) != 0
 	isSameType := (header & CollectionIsSameType) != 0
-	trackingRef := (header & CollectionTrackingRef) != 0
+	trackRef := (header & CollectionTrackingRef) != 0
 	isDeclared := (header & CollectionIsDeclElementType) != 0
 
 	var elemDef FieldDef
@@ -238,28 +238,28 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 		}
 		elemTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
 		elemDef = FieldDef{
-			fieldType: NewSimpleFieldType(TypeId(elemTypeInfo.TypeID)),
-			nullable:  hasNull,
+			typeSpec: NewSimpleTypeSpec(TypeId(elemTypeInfo.TypeID)),
+			nullable: hasNull,
 		}
 	} else if isDeclared {
 		// Use declared element type from the collection's field type
-		if collType, ok := fieldDef.fieldType.(*CollectionFieldType); ok && collType.elementType != nil {
+		if fieldDef.typeSpec != nil && fieldDef.typeSpec.elementType != nil {
 			elemDef = FieldDef{
-				fieldType: collType.elementType,
-				nullable:  hasNull,
+				typeSpec: fieldDef.typeSpec.elementType,
+				nullable: hasNull,
 			}
 		} else {
 			// Fallback: use unknown type
 			elemDef = FieldDef{
-				fieldType: NewSimpleFieldType(UNKNOWN),
-				nullable:  true,
+				typeSpec: NewSimpleTypeSpec(UNKNOWN),
+				nullable: true,
 			}
 		}
 	} else {
 		// Not same type - each element has its own type info, use unknown
 		elemDef = FieldDef{
-			fieldType: NewSimpleFieldType(UNKNOWN),
-			nullable:  true,
+			typeSpec: NewSimpleTypeSpec(UNKNOWN),
+			nullable: true,
 		}
 	}
 
@@ -272,7 +272,7 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 
 	for i := uint32(0); i < length; i++ {
 		// Read ref flag if collection has ref tracking enabled
-		skipValue(ctx, elemDef, trackingRef, false, elemTypeInfo)
+		skipValue(ctx, elemDef, trackRef, false, elemTypeInfo)
 		if ctx.HasError() {
 			return
 		}
@@ -288,28 +288,28 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 		return
 	}
 
-	// Extract key/value types from MapFieldType if available
+	// Extract key/value specs from the declared map type when available.
 	// When KEY_DECL_TYPE/VALUE_DECL_TYPE flags are set, the type info is NOT written
 	// to the buffer, so we must use the declared types from the FieldDef
 	var declaredKeyDef, declaredValueDef FieldDef
-	if mapFieldType, ok := fieldDef.fieldType.(*MapFieldType); ok {
+	if fieldDef.typeSpec != nil && fieldDef.typeSpec.keyType != nil && fieldDef.typeSpec.valueType != nil {
 		declaredKeyDef = FieldDef{
-			fieldType: mapFieldType.keyType,
-			nullable:  true,
+			typeSpec: fieldDef.typeSpec.keyType,
+			nullable: true,
 		}
 		declaredValueDef = FieldDef{
-			fieldType: mapFieldType.valueType,
-			nullable:  true,
+			typeSpec: fieldDef.typeSpec.valueType,
+			nullable: true,
 		}
 	} else {
-		// Fallback to unknown types if MapFieldType is not available
+		// Fallback to unknown types when no declared map key/value specs exist.
 		declaredKeyDef = FieldDef{
-			fieldType: NewSimpleFieldType(UNKNOWN),
-			nullable:  true,
+			typeSpec: NewSimpleTypeSpec(UNKNOWN),
+			nullable: true,
 		}
 		declaredValueDef = FieldDef{
-			fieldType: NewSimpleFieldType(UNKNOWN),
-			nullable:  true,
+			typeSpec: NewSimpleTypeSpec(UNKNOWN),
+			nullable: true,
 		}
 	}
 
@@ -338,8 +338,8 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 				}
 				valueTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
 				valueDef = FieldDef{
-					fieldType: NewSimpleFieldType(TypeId(valueTypeInfo.TypeID)),
-					nullable:  true,
+					typeSpec: NewSimpleTypeSpec(TypeId(valueTypeInfo.TypeID)),
+					nullable: true,
 				}
 			} else {
 				valueDef = declaredValueDef
@@ -370,8 +370,8 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 				}
 				keyTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
 				keyDef = FieldDef{
-					fieldType: NewSimpleFieldType(TypeId(keyTypeInfo.TypeID)),
-					nullable:  true,
+					typeSpec: NewSimpleTypeSpec(TypeId(keyTypeInfo.TypeID)),
+					nullable: true,
 				}
 			} else {
 				keyDef = declaredKeyDef
@@ -408,8 +408,8 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 			}
 			keyTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
 			keyDef = FieldDef{
-				fieldType: NewSimpleFieldType(TypeId(keyTypeInfo.TypeID)),
-				nullable:  true,
+				typeSpec: NewSimpleTypeSpec(TypeId(keyTypeInfo.TypeID)),
+				nullable: true,
 			}
 		} else {
 			keyDef = declaredKeyDef
@@ -422,16 +422,16 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 			}
 			valueTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
 			valueDef = FieldDef{
-				fieldType: NewSimpleFieldType(TypeId(valueTypeInfo.TypeID)),
-				nullable:  true,
+				typeSpec: NewSimpleTypeSpec(TypeId(valueTypeInfo.TypeID)),
+				nullable: true,
 			}
 		} else {
 			valueDef = declaredValueDef
 		}
 
 		// Check if ref tracking is enabled for keys and values
-		keyTrackingRef := (header & TRACKING_KEY_REF) != 0
-		valueTrackingRef := (header & TRACKING_VALUE_REF) != 0
+		keyTrackRef := (header & TRACKING_KEY_REF) != 0
+		valueTrackRef := (header & TRACKING_VALUE_REF) != 0
 
 		ctx.depth++
 		if ctx.depth > ctx.maxDepth {
@@ -439,12 +439,12 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 			return
 		}
 		for i := byte(0); i < chunkSize; i++ {
-			skipValue(ctx, keyDef, keyTrackingRef, false, keyTypeInfo)
+			skipValue(ctx, keyDef, keyTrackRef, false, keyTypeInfo)
 			if ctx.HasError() {
 				ctx.decDepth()
 				return
 			}
-			skipValue(ctx, valueDef, valueTrackingRef, false, valueTypeInfo)
+			skipValue(ctx, valueDef, valueTrackRef, false, valueTypeInfo)
 			if ctx.HasError() {
 				ctx.decDepth()
 				return
@@ -490,11 +490,11 @@ func skipStruct(ctx *ReadContext, info *TypeInfo) {
 	defer ctx.decDepth()
 
 	for _, fieldDef := range fieldDefs {
-		// Use FieldDef's trackingRef and nullable to determine if ref flag was written by Java
+		// Use FieldDef's trackRef and nullable to determine if ref flag was written by Java
 		// Java writes ref flag based on its FieldDef, not based on type rules
-		readRefFlag := fieldDef.trackingRef || fieldDef.nullable
+		readRefFlag := fieldDef.trackRef || fieldDef.nullable
 		// For struct-like fields (struct, ext), type info is written in the buffer
-		readTypeInfo := isStructFieldType(fieldDef.fieldType)
+		readTypeInfo := isStructFieldType(fieldDef.typeSpec)
 		SkipFieldValueWithTypeFlag(ctx, fieldDef, readRefFlag, readTypeInfo)
 		if ctx.HasError() {
 			return
@@ -522,7 +522,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 		// RefValueFlag (0) or NotNullValueFlag (-1) means we need to read the actual object
 	}
 
-	typeIDNum := uint32(fieldDef.fieldType.TypeId())
+	typeIDNum := uint32(fieldDef.typeSpec.TypeId())
 
 	internalID := TypeId(typeIDNum)
 	// Handle struct-like types
@@ -664,7 +664,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 			skipStruct(ctx, typeInfo)
 			return
 		}
-		// For DynamicFieldType fields, type info is written in the buffer - read it first
+		// Dynamic fields write type info into the buffer, so read it first.
 		ti := readTypeInfoForSkip(ctx, TypeId(typeIDNum))
 		if ctx.HasError() {
 			return

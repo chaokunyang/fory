@@ -49,9 +49,11 @@ type FieldMeta struct {
 	Name       string
 	Type       reflect.Type
 	TypeId     TypeId // Fory type ID for the serializer
+	TypeSpec   *TypeSpec
 	Nullable   bool
 	FieldIndex int      // -1 if field doesn't exist in current struct (for compatible mode)
 	FieldDef   FieldDef // original FieldDef from remote TypeDef (for compatible mode skip)
+	Spec       *FieldSpec
 
 	// Optional fields (fory/optional.Optional[T]) - only valid when FieldKindOptional
 	OptionalInfo optionalInfo
@@ -63,14 +65,6 @@ type FieldMeta struct {
 	WriteType      bool // whether to write type info (true for struct fields in compatible mode)
 	CachedTypeInfo *TypeInfo
 	HasGenerics    bool // whether element types are known from TypeDef (for container fields)
-
-	// Tag-based configuration (from fory struct tags)
-	TagID          int  // -1 = use field name, >=0 = use tag ID
-	HasForyTag     bool // Whether field has explicit fory tag
-	TagRefSet      bool // Whether ref was explicitly set via fory tag
-	TagRef         bool // The ref value from fory tag (only valid if TagRefSet is true)
-	TagNullableSet bool // Whether nullable was explicitly set via fory tag
-	TagNullable    bool // The nullable value from fory tag (only valid if TagNullableSet is true)
 }
 
 // FieldInfo stores field metadata computed ENTIRELY at init time.
@@ -511,15 +505,15 @@ func isSetReflectType(t reflect.Type) bool {
 	return elemType.Kind() == reflect.Struct && elemType.NumField() == 0
 }
 
-// isStructFieldType checks if a FieldType represents a type that needs type info written
+// isStructFieldType checks if a TypeSpec represents a type that needs type info written
 // This is used to determine if type info was written for the field in compatible mode
 // In compatible mode, Java writes type info for struct and ext types, but NOT for enum types
 // Enum fields only have null flag + ordinal, no type ID
-func isStructFieldType(ft FieldType) bool {
-	if ft == nil {
+func isStructFieldType(spec *TypeSpec) bool {
+	if spec == nil {
 		return false
 	}
-	typeId := ft.TypeId()
+	typeId := spec.TypeId()
 	// Check base type IDs that need type info (struct and ext, NOT enum)
 	switch TypeId(typeId) {
 	case STRUCT, NAMED_STRUCT, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT,
@@ -634,8 +628,17 @@ func (t triple) getSortKey() string {
 // If TagID >= 0, returns the tag ID as string (for tag-based sorting).
 // Otherwise returns the field name (which is already snake_case).
 func getFieldSortKey(f *FieldInfo) string {
-	if f.Meta.TagID >= 0 {
-		return fmt.Sprintf("%d", f.Meta.TagID)
+	tagID := TagIDUseFieldName
+	if f.Meta != nil {
+		switch {
+		case f.Meta.Spec != nil:
+			tagID = f.Meta.Spec.TagID
+		case f.Meta.FieldDef.tagID >= 0:
+			tagID = f.Meta.FieldDef.tagID
+		}
+	}
+	if tagID >= 0 {
+		return fmt.Sprintf("%d", tagID)
 	}
 	return f.Meta.Name
 }
@@ -860,6 +863,15 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 	if isIntUintWidthCompatible(actual.Kind(), expected.Kind()) {
 		return true
 	}
+	if actual.Kind() == expected.Kind() {
+		switch actual.Kind() {
+		case reflect.Slice, reflect.Array:
+			return elementTypesCompatible(actual.Elem(), expected.Elem())
+		case reflect.Map:
+			return elementTypesCompatible(actual.Key(), expected.Key()) &&
+				elementTypesCompatible(actual.Elem(), expected.Elem())
+		}
+	}
 	if actual.Kind() == reflect.Ptr && expected.Kind() == reflect.Ptr {
 		return elementTypesCompatible(actual.Elem(), expected.Elem())
 	}
@@ -868,6 +880,10 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 	}
 	if expected.Kind() == reflect.Ptr && actual.Kind() != reflect.Ptr {
 		return elementTypesCompatible(actual, expected.Elem())
+	}
+	if (actual.Kind() == reflect.Array && expected.Kind() == reflect.Slice) ||
+		(actual.Kind() == reflect.Slice && expected.Kind() == reflect.Array) {
+		return elementTypesCompatible(actual.Elem(), expected.Elem())
 	}
 	return false
 }

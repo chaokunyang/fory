@@ -597,8 +597,8 @@ Messages generate structs with `fory` tags and byte helpers:
 ```go
 type Person struct {
     Name   string               `fory:"id=1"`
-    Id     int32                `fory:"id=2,compress=true"`
-    Phones []Person_PhoneNumber `fory:"id=7"`
+    Id     int32                `fory:"id=2"`
+    Phones []Person_PhoneNumber `fory:"id=7,type=list"`
     Pet    Animal               `fory:"id=8"`
 }
 

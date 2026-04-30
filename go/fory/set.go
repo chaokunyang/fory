@@ -73,10 +73,13 @@ func (s Set[T]) Clear() {
 var emptyStructVal = reflect.ValueOf(struct{}{})
 
 type setSerializer struct {
+	elemSerializer   Serializer
+	elemReferencable bool
+	hasGenerics      bool
 }
 
 func (s setSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
-	s.writeDataWithGenerics(ctx, value, false)
+	s.writeDataWithGenerics(ctx, value, s.hasGenerics)
 }
 
 func (s setSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect.Value, hasGenerics bool) {
@@ -122,7 +125,7 @@ func (s setSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool,
 	if writeType {
 		ctx.buffer.WriteUint8(uint8(SET))
 	}
-	s.writeDataWithGenerics(ctx, value, hasGenerics)
+	s.writeDataWithGenerics(ctx, value, hasGenerics || s.hasGenerics)
 }
 
 // writeHeader prepares and writes collection metadata including:
@@ -135,6 +138,7 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 	var elemTypeInfo *TypeInfo
 	hasNull := false
 	hasSameType := true
+	declaredGenerics := hasGenerics && s.elemSerializer != nil
 
 	// Check elements to detect types
 	// Initialize element type information from first non-null element
@@ -142,6 +146,8 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 		firstElem := UnwrapReflectValue(keys[0])
 		if isNull(firstElem) {
 			hasNull = true
+		} else if declaredGenerics {
+			elemTypeInfo = &TypeInfo{Type: firstElem.Type(), Serializer: s.elemSerializer}
 		} else {
 			// Get type info for first element to use as reference
 			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(firstElem, true)
@@ -157,6 +163,9 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 		}
 
 		// Compare each element's type with the reference type
+		if declaredGenerics {
+			continue
+		}
 		currentTypeInfo, _ := ctx.TypeResolver().getTypeInfo(key, true)
 		var elemTypeID, currentTypeID uint32
 		if elemTypeInfo != nil {
@@ -179,12 +188,13 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 	}
 	// When hasGenerics is true, element type is declared from schema (known at compile time)
 	// so we don't need to write the element type ID
-	if hasGenerics {
+	if declaredGenerics {
 		collectFlag |= CollectionIsDeclElementType
+		collectFlag |= CollectionIsSameType
 	}
 
 	// Enable reference tracking if configured
-	if ctx.TrackRef() {
+	if ctx.TrackRef() && (!declaredGenerics || s.elemReferencable) {
 		collectFlag |= CollectionTrackingRef
 	}
 
@@ -195,7 +205,7 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 	// WriteData element type ID only if:
 	// 1. All elements have same type (IS_SAME_TYPE is set)
 	// 2. Element type is NOT declared from schema (IS_DECL_ELEMENT_TYPE is NOT set)
-	if hasSameType && !hasGenerics && elemTypeInfo != nil {
+	if hasSameType && !declaredGenerics && elemTypeInfo != nil {
 		ctx.TypeResolver().WriteTypeInfo(buf, elemTypeInfo, ctx.Err())
 	}
 
@@ -204,11 +214,15 @@ func (s setSerializer) writeHeader(ctx *WriteContext, buf *ByteBuffer, keys []re
 
 // writeSameType efficiently serializes a collection where all elements share the same type
 func (s setSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, keys []reflect.Value, typeInfo *TypeInfo, flag byte) {
-	if typeInfo == nil {
+	if typeInfo == nil && s.elemSerializer == nil {
 		return
 	}
-	serializer := typeInfo.Serializer
+	serializer := s.elemSerializer
+	if serializer == nil {
+		serializer = typeInfo.Serializer
+	}
 	trackRefs := (flag & CollectionTrackingRef) != 0 // Check if reference tracking is enabled
+	declaredGenerics := (flag & CollectionIsDeclElementType) != 0
 
 	for _, key := range keys {
 		key = UnwrapReflectValue(key)
@@ -226,14 +240,14 @@ func (s setSerializer) writeSameType(ctx *WriteContext, buf *ByteBuffer, keys []
 			}
 			if !refWritten {
 				// WriteData actual value if not a reference
-				serializer.WriteData(ctx, key)
+				writeSerializerData(ctx, serializer, declaredGenerics, key)
 				if ctx.HasError() {
 					return
 				}
 			}
 		} else {
 			// Directly write value without reference tracking
-			serializer.WriteData(ctx, key)
+			writeSerializerData(ctx, serializer, declaredGenerics, key)
 			if ctx.HasError() {
 				return
 			}
@@ -308,10 +322,10 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 
 	// If all elements are same type, get element type info
 	if (collectFlag & CollectionIsSameType) != 0 {
-		if (collectFlag & CollectionIsDeclElementType) != 0 {
+		if (collectFlag&CollectionIsDeclElementType) != 0 && s.elemSerializer != nil {
 			// Element type is declared in schema, derive from Go type's key type
 			keyType := type_.Key()
-			elemTypeInfo, _ = ctx.TypeResolver().getTypeInfo(reflect.New(keyType).Elem(), true)
+			elemTypeInfo = &TypeInfo{Type: keyType, Serializer: s.elemSerializer}
 		} else {
 			// Element type is not declared, read from buffer
 			elemTypeInfo = ctx.TypeResolver().ReadTypeInfo(buf, err)
@@ -337,6 +351,7 @@ func (s setSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value reflect.Value, typeInfo *TypeInfo, flag int8, length int) {
 	// Determine if reference tracking is enabled
 	trackRefs := (flag & CollectionTrackingRef) != 0
+	declaredGenerics := (flag & CollectionIsDeclElementType) != 0
 	serializer := typeInfo.Serializer
 
 	for i := 0; i < length; i++ {
@@ -354,7 +369,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 
 		// Create new element and deserialize from buffer
 		elem := reflect.New(typeInfo.Type).Elem()
-		serializer.ReadData(ctx, elem)
+		readSerializerData(ctx, serializer, declaredGenerics, elem)
 		if ctx.HasError() {
 			return
 		}

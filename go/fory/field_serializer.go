@@ -23,7 +23,7 @@ import (
 )
 
 func writeSerializerData(ctx *WriteContext, serializer Serializer, hasGenerics bool, value reflect.Value) {
-	if hasGenerics {
+	if hasGenerics && serializerNeedsGenericDispatch(serializer) {
 		serializer.Write(ctx, RefModeNone, false, true, value)
 		return
 	}
@@ -31,11 +31,32 @@ func writeSerializerData(ctx *WriteContext, serializer Serializer, hasGenerics b
 }
 
 func readSerializerData(ctx *ReadContext, serializer Serializer, hasGenerics bool, value reflect.Value) {
-	if hasGenerics {
+	if hasGenerics && serializerNeedsGenericDispatch(serializer) {
 		serializer.Read(ctx, RefModeNone, false, true, value)
 		return
 	}
 	serializer.ReadData(ctx, value)
+}
+
+func serializerNeedsGenericDispatch(serializer Serializer) bool {
+	switch serializer.(type) {
+	case *sliceSerializer,
+		sliceDynSerializer,
+		setSerializer,
+		mapSerializer,
+		stringSliceSerializer,
+		stringStringMapSerializer,
+		stringInt64MapSerializer,
+		stringIntMapSerializer,
+		stringFloat64MapSerializer,
+		stringBoolMapSerializer,
+		int32Int32MapSerializer,
+		int64Int64MapSerializer,
+		intIntMapSerializer:
+		return true
+	default:
+		return false
+	}
 }
 
 func newDeclaredSliceSerializer(type_ reflect.Type, elemSerializer Serializer, referencable bool) (*sliceSerializer, error) {

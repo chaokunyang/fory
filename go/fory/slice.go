@@ -204,7 +204,7 @@ func (s *sliceSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect
 	}
 
 	// Serialize elements with ref tracking or nulls handling
-	declaredGenerics := hasGenerics
+	declaredGenericDispatch := hasGenerics && serializerNeedsGenericDispatch(s.elemSerializer)
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
 
@@ -222,14 +222,22 @@ func (s *sliceSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect
 		if trackRefs {
 			// Use Write with ref tracking enabled
 			// The element serializer will handle writing ref flags
-			s.elemSerializer.Write(ctx, elemRefMode, false, declaredGenerics, elem)
+			s.elemSerializer.Write(ctx, elemRefMode, false, declaredGenericDispatch, elem)
 		} else if hasNull {
 			// When hasNull is set but trackRefs is not, write NotNullValueFlag before data
 			buf.WriteInt8(NotNullValueFlag)
-			writeSerializerData(ctx, s.elemSerializer, declaredGenerics, elem)
+			if declaredGenericDispatch {
+				s.elemSerializer.Write(ctx, RefModeNone, false, true, elem)
+			} else {
+				s.elemSerializer.WriteData(ctx, elem)
+			}
 		} else {
 			// No ref tracking and no nulls: directly write data
-			writeSerializerData(ctx, s.elemSerializer, declaredGenerics, elem)
+			if declaredGenericDispatch {
+				s.elemSerializer.Write(ctx, RefModeNone, false, true, elem)
+			} else {
+				s.elemSerializer.WriteData(ctx, elem)
+			}
 		}
 		if ctx.HasError() {
 			return
@@ -293,7 +301,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// comment during cleanup or refactors.
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
 	hasNull := (collectFlag & CollectionHasNull) != 0
-	declaredGenerics := (collectFlag & CollectionIsDeclElementType) != 0
+	declaredGenericDispatch := (collectFlag&CollectionIsDeclElementType) != 0 && serializerNeedsGenericDispatch(s.elemSerializer)
 
 	// Handle slice vs array allocation
 	if isArrayType {
@@ -324,7 +332,7 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		if trackRefs {
 			// When trackRefs is true, elemSerializer will read the ref flag via TryPreserveRefId
 			// For pointer types, elemSerializer will handle allocation and reference tracking
-			s.elemSerializer.Read(ctx, elemRefMode, false, declaredGenerics, elem)
+			s.elemSerializer.Read(ctx, elemRefMode, false, declaredGenericDispatch, elem)
 		} else if hasNull {
 			// When hasNull is set, read a flag byte for each element:
 			// - NullFlag (-3) for null elements
@@ -335,10 +343,18 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 				continue
 			}
 			// refFlag should be NotNullValueFlag, now read the actual data
-			readSerializerData(ctx, s.elemSerializer, declaredGenerics, elem)
+			if declaredGenericDispatch {
+				s.elemSerializer.Read(ctx, RefModeNone, false, true, elem)
+			} else {
+				s.elemSerializer.ReadData(ctx, elem)
+			}
 		} else {
 			// No ref tracking and no nulls: directly read data
-			readSerializerData(ctx, s.elemSerializer, declaredGenerics, elem)
+			if declaredGenericDispatch {
+				s.elemSerializer.Read(ctx, RefModeNone, false, true, elem)
+			} else {
+				s.elemSerializer.ReadData(ctx, elem)
+			}
 		}
 		if ctx.HasError() {
 			return

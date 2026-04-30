@@ -335,7 +335,7 @@ void _runCollectionElementRefRemoteTracking() {
   registerXlangType(fory, RefOverrideContainer, id: 702);
 
   final shared = RefOverrideElement()
-    ..id = 7
+    ..id = Int32(7)
     ..name = 'shared_element';
   // IMPORTANT: this peer intentionally writes a shared-reference payload with
   // its default local ref-tracked schema. The Java reader uses ref-disabled

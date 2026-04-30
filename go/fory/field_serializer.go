@@ -53,6 +53,44 @@ func newDeclaredSliceSerializer(type_ reflect.Type, elemSerializer Serializer, r
 	}, nil
 }
 
+type encodedByteSliceSerializer struct {
+	typeID TypeId
+}
+
+func (s encodedByteSliceSerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	byteSliceSerializer{}.WriteData(ctx, value)
+}
+
+func (s encodedByteSliceSerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	done := writeSliceRefAndType(ctx, refMode, writeType, value, s.typeID)
+	if done || ctx.HasError() {
+		return
+	}
+	s.WriteData(ctx, value)
+}
+
+func (s encodedByteSliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	byteSliceSerializer{}.ReadData(ctx, value)
+}
+
+func (s encodedByteSliceSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	_ = hasGenerics
+	done, typeID := readSliceRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
+	}
+	if readType && typeID != uint32(BINARY) && typeID != uint32(UINT8_ARRAY) {
+		ctx.SetError(DeserializationErrorf("slice type mismatch: expected BINARY (%d) or UINT8_ARRAY (%d), got %d", BINARY, UINT8_ARRAY, typeID))
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s encodedByteSliceSerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
+}
+
 type encodedInt32Serializer struct {
 	typeID TypeId
 }
@@ -282,6 +320,9 @@ func (s encodedUint64Serializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefM
 }
 
 func serializerForEncodedScalar(goType reflect.Type, typeID TypeId) (Serializer, bool, error) {
+	if goType == byteSliceType && (typeID == BINARY || typeID == UINT8_ARRAY) {
+		return encodedByteSliceSerializer{typeID: typeID}, true, nil
+	}
 	switch typeID {
 	case INT32, VARINT32:
 		return encodedInt32Serializer{typeID: typeID}, true, nil

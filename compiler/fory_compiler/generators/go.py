@@ -897,6 +897,11 @@ class GoGenerator(BaseGenerator):
     def get_type_hint_tag(
         self, field: Field, parent_stack: Optional[List[Message]]
     ) -> Optional[str]:
+        if (
+            isinstance(field.field_type, PrimitiveType)
+            and field.field_type.kind == PrimitiveKind.BYTES
+        ):
+            return "type=bytes"
         hint = self.build_root_type_hint(field, parent_stack)
         if hint is None:
             return None

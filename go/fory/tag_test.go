@@ -119,6 +119,8 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 		PackedFixed []int32  `fory:"id=1,type=_(element=int32(encoding=fixed))"`
 		Explicit    []int32  `fory:"id=2,type=list(element=int32(encoding=fixed))"`
 		Ptrs        []*int32 `fory:"id=3"`
+		U8Packed    []uint8  `fory:"id=4"`
+		Bytes       []byte   `fory:"id=5,type=bytes"`
 	}
 
 	f := New(WithXlang(true))
@@ -145,6 +147,18 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, &sliceSerializer{}, ptrsSerializer)
 	require.EqualValues(t, LIST, ptrsSpec.Type.TypeId())
+
+	u8PackedSpec := mustParseFieldSpec(t, typ.Field(4))
+	u8PackedSerializer, err := serializerForTypeSpec(f.typeResolver, typ.Field(4).Type, u8PackedSpec.Type)
+	require.NoError(t, err)
+	require.IsType(t, encodedByteSliceSerializer{}, u8PackedSerializer)
+	require.EqualValues(t, UINT8_ARRAY, u8PackedSpec.Type.TypeId())
+
+	bytesSpec := mustParseFieldSpec(t, typ.Field(5))
+	bytesSerializer, err := serializerForTypeSpec(f.typeResolver, typ.Field(5).Type, bytesSpec.Type)
+	require.NoError(t, err)
+	require.IsType(t, encodedByteSliceSerializer{}, bytesSerializer)
+	require.EqualValues(t, BINARY, bytesSpec.Type.TypeId())
 }
 
 func TestParseFieldSpecRejectsInvalidTags(t *testing.T) {

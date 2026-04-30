@@ -658,7 +658,7 @@ func finalizeResolvedTypeSpec(goType reflect.Type, spec *TypeSpec) (*TypeSpec, e
 			spec.Element = child
 			spec.elementType = child
 		}
-		if spec.TypeID == LIST {
+		if spec.TypeID == LIST || spec.TypeID == BINARY {
 			return spec, nil
 		}
 		if typeID, ok := inferPackedArrayTypeID(baseType, spec.Element); ok {
@@ -900,6 +900,10 @@ func inferPackedCarrierElementTypeSpec(goType reflect.Type, xlang bool, trackRef
 	return inferNestedTypeSpec(goType, xlang, trackRef)
 }
 
+func isByteElementType(goType reflect.Type) bool {
+	return goType != nil && goType.Kind() == reflect.Uint8
+}
+
 func inferPackedElementTypeSpec(goType reflect.Type) (*TypeSpec, bool) {
 	if info, ok := getOptionalInfo(goType); ok {
 		_ = info
@@ -1011,7 +1015,7 @@ func inferPackedArrayTypeID(goType reflect.Type, elemSpec *TypeSpec) (TypeId, bo
 		if elemSpec.TypeID != UINT8 {
 			return UNKNOWN, false
 		}
-		return BINARY, true
+		return UINT8_ARRAY, true
 	case reflect.Int16:
 		if elemSpec.TypeID != INT16 {
 			return UNKNOWN, false
@@ -1376,6 +1380,17 @@ func applyTypeHint(goType reflect.Type, inferred *TypeSpec, hint *parsedTypeHint
 	}
 	switch hint.kind {
 	case TypeSpecScalar:
+		if (baseType.Kind() == reflect.Slice || baseType.Kind() == reflect.Array) && hint.name == "bytes" && isByteElementType(baseType.Elem()) {
+			typeID, err := typeIDFromHintName(baseType, hint.name, hint.encoding)
+			if err != nil {
+				return nil, err
+			}
+			spec := NewSimpleTypeSpec(typeID)
+			spec.GoType = goType
+			spec.Nullable = inferred.Nullable
+			spec.TrackRef = inferred.TrackRef
+			return applyHintModifiers(goType, spec, hint, xlang, trackRef, isRoot)
+		}
 		if baseType.Kind() == reflect.Slice || baseType.Kind() == reflect.Array || baseType.Kind() == reflect.Map {
 			return nil, fmt.Errorf("type hint %q is incompatible with %s", hint.name, goType)
 		}
@@ -1741,6 +1756,9 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 			hasGenerics:       true,
 		}, nil
 	}
+	if serializer, ok, err := serializerForEncodedScalar(goType, spec.TypeID); ok || err != nil {
+		return serializer, err
+	}
 	if isPrimitiveArrayType(spec.TypeID) || spec.TypeID == BINARY {
 		switch goType.Kind() {
 		case reflect.Slice:
@@ -1748,9 +1766,6 @@ func serializerForTypeSpec(resolver *TypeResolver, goType reflect.Type, spec *Ty
 		case reflect.Array:
 			return resolver.GetArraySerializer(goType)
 		}
-	}
-	if serializer, ok, err := serializerForEncodedScalar(goType, spec.TypeID); ok || err != nil {
-		return serializer, err
 	}
 	return resolver.getSerializerByType(goType, true)
 }

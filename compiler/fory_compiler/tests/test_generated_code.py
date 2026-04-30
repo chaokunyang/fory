@@ -707,3 +707,21 @@ def test_go_bfloat16_generation():
         in content
     )
     assert "\tListVal []bfloat16.BFloat16" in content
+
+
+def test_go_generator_distinguishes_bytes_from_uint8_lists():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message ByteSemantics {
+                bytes payload = 1;
+                list<uint8> values = 2;
+            }
+            """
+        )
+    )
+    go_output = render_files(generate_files(schema, GoGenerator))
+    assert 'Payload []byte `fory:"id=1,type=bytes"`' in go_output
+    assert 'Values []uint8 `fory:"id=2"`' in go_output

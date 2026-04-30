@@ -353,6 +353,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 	trackRefs := (flag & CollectionTrackingRef) != 0
 	declaredGenerics := (flag & CollectionIsDeclElementType) != 0
 	serializer := typeInfo.Serializer
+	keyType := value.Type().Key()
 
 	for i := 0; i < length; i++ {
 		var refID int32
@@ -362,7 +363,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 			if refID < int32(NotNullValueFlag) {
 				// Use existing reference if available
 				elem := ctx.RefResolver().GetReadObject(refID)
-				value.SetMapIndex(reflect.ValueOf(elem), emptyStructVal)
+				setMapKey(value, elem, keyType)
 				continue
 			}
 		}
@@ -378,7 +379,7 @@ func (s setSerializer) readSameType(ctx *ReadContext, buf *ByteBuffer, value ref
 			ctx.RefResolver().SetReadObject(refID, elem)
 		}
 		// Add element to set
-		value.SetMapIndex(elem, emptyStructVal)
+		setMapKey(value, elem, keyType)
 	}
 }
 

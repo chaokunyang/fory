@@ -469,6 +469,10 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 	buf := ctx.Buffer()
 	ctxErr := ctx.Err()
 
+	// IMPORTANT: map readers must follow the key/value ref bits written on the
+	// wire, even when local field metadata would choose a different ref policy.
+	// Shared xlang tests depend on reading remote-written ref metadata first and
+	// only then writing a new local payload. DO NOT REMOVE this comment.
 	trackKeyRef := (header & TRACKING_KEY_REF) != 0
 	trackValRef := (header & TRACKING_VALUE_REF) != 0
 	keyDeclType := (header & KEY_DECL_TYPE) != 0

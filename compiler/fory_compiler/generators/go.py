@@ -832,7 +832,6 @@ class GoGenerator(BaseGenerator):
         tags = []
         is_list = isinstance(field.field_type, ListType)
         is_map = isinstance(field.field_type, MapType)
-        is_collection = is_list or is_map
         is_any = (
             isinstance(field.field_type, PrimitiveType)
             and field.field_type.kind == PrimitiveKind.ANY
@@ -843,10 +842,13 @@ class GoGenerator(BaseGenerator):
             tags.append(f"id={field.tag_id}")
         if field.optional or is_any:
             nullable_tag = True
-        elif field.ref or (
-            is_list and (field.element_optional or field.element_ref)
-        ) or (
-            is_map and (field.field_type.value_optional or field.field_type.value_ref)
+        elif (
+            field.ref
+            or (is_list and (field.element_optional or field.element_ref))
+            or (
+                is_map
+                and (field.field_type.value_optional or field.field_type.value_ref)
+            )
         ):
             nullable_tag = False
 
@@ -910,10 +912,9 @@ class GoGenerator(BaseGenerator):
                 field.element_ref,
                 parent_stack,
             )
-            params = []
-            if element_hint is not None:
-                params.append(f"element={element_hint}")
-            return self.render_type_hint("list", params)
+            if element_hint is None:
+                return None
+            return self.render_type_hint("list", [f"element={element_hint}"])
         if isinstance(field.field_type, MapType):
             key_hint = self.build_node_type_hint(
                 field.field_type.key_type, False, False, parent_stack
@@ -985,7 +986,9 @@ class GoGenerator(BaseGenerator):
         parent_stack: Optional[List[Message]],
     ) -> Optional[str]:
         if field_type.kind == PrimitiveKind.ANY:
-            return self.build_placeholder_type_hint(field_type, nullable, ref, parent_stack)
+            return self.build_placeholder_type_hint(
+                field_type, nullable, ref, parent_stack
+            )
         params = self.build_node_modifiers(field_type, nullable, ref, parent_stack)
         encoding = self.get_type_hint_encoding(field_type)
         if encoding is not None:

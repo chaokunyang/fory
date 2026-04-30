@@ -217,7 +217,7 @@ class TwoEnumFieldStruct:
 # ============================================================================
 
 
-@dataclass
+@dataclass(eq=False)
 class RefOverrideElement:
     id: pyfory.int32 = 0
     name: str = ""
@@ -226,6 +226,7 @@ class RefOverrideElement:
 @dataclass
 class RefOverrideContainer:
     list_field: List[Ref[RefOverrideElement]] = None
+    set_field: Set[Ref[RefOverrideElement]] = None
     map_field: Dict[str, Ref[RefOverrideElement]] = None
 
 
@@ -1377,16 +1378,50 @@ def test_collection_element_ref_override():
     debug_print(f"Deserialized: {outer}")
 
     assert outer.list_field, "list_field should not be empty"
+    if not outer.set_field or len(outer.set_field) != 1:
+        raise AssertionError("set_field should contain exactly one element")
+    set_value = next(iter(outer.set_field))
+    if outer.list_field[1] is outer.list_field[0]:
+        raise AssertionError("list_field should honor remote ref=false metadata")
+    if set_value is outer.list_field[0]:
+        raise AssertionError("set_field should honor remote ref=false metadata")
+    if outer.map_field["k1"] is outer.list_field[0] or outer.map_field["k2"] is outer.list_field[0]:
+        raise AssertionError("map_field should honor remote ref=false metadata")
+    if outer.map_field["k1"] is set_value or outer.map_field["k2"] is set_value:
+        raise AssertionError("map_field should honor remote ref=false metadata")
     shared = outer.list_field[0]
 
     new_outer = RefOverrideContainer(
         list_field=[shared, shared],
+        set_field={shared},
         map_field={"k1": shared, "k2": shared},
     )
 
     new_bytes = fory.serialize(new_outer)
     with open(data_file, "wb") as f:
         f.write(new_bytes)
+
+
+def test_collection_element_ref_remote_tracking():
+    data_file = get_data_file()
+
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
+    fory.register_type(RefOverrideElement, type_id=701)
+    fory.register_type(RefOverrideContainer, type_id=702)
+
+    shared = RefOverrideElement(id=7, name="shared_element")
+    # IMPORTANT: this peer intentionally writes a shared-reference payload with
+    # its default local ref-tracked schema. The Java reader uses ref-disabled
+    # element annotations and must still honor the wire metadata. DO NOT REMOVE
+    # this comment.
+    outer = RefOverrideContainer(
+        list_field=[shared, shared],
+        set_field={shared},
+        map_field={"k1": shared, "k2": shared},
+    )
+
+    with open(data_file, "wb") as f:
+        f.write(fory.serialize(outer))
 
 
 # ============================================================================

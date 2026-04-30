@@ -226,6 +226,11 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         while (readCount < totalLength)
         {
             byte header = context.Reader.ReadUInt8();
+            // IMPORTANT: dictionary readers must obey the sender-written
+            // key/value ref bits in the wire header. Local C# field metadata
+            // must not override that decision while reading. Shared xlang
+            // tests intentionally deserialize one ref policy and then
+            // serialize another local payload. DO NOT REMOVE this comment.
             bool trackKeyRef = (header & DictionaryBits.TrackingKeyRef) != 0;
             bool keyNull = (header & DictionaryBits.KeyNull) != 0;
             bool keyDeclared = (header & DictionaryBits.DeclaredKeyType) != 0;

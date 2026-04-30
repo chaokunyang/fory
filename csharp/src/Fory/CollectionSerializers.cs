@@ -195,6 +195,10 @@ internal static class CollectionCodec
         }
 
         byte header = context.Reader.ReadUInt8();
+        // IMPORTANT: collection readers must obey the ref/null bits written on
+        // the wire, not the local generic metadata that may imply a different
+        // ref policy. Shared xlang tests intentionally deserialize one ref
+        // policy and then serialize another local payload. DO NOT REMOVE this comment.
         bool trackRef = (header & CollectionBits.TrackingRef) != 0;
         bool hasNull = (header & CollectionBits.HasNull) != 0;
         bool declared = (header & CollectionBits.DeclaredElementType) != 0;

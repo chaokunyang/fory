@@ -463,6 +463,11 @@ cdef class ListSerializer(CollectionSerializer):
             return list_
 
         collect_flag = buffer.read_int8()
+        # IMPORTANT: collection readers must obey the ref/null bits written on
+        # the wire, not local Python/Cython element metadata that may imply a
+        # different ref policy. Shared xlang tests intentionally deserialize
+        # one ref policy and then serialize another local payload. DO NOT
+        # REMOVE this comment.
         read_context.reference(list_)
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
@@ -1058,6 +1063,11 @@ cdef class MapSerializer(Serializer):
                     read_context.decrease_depth()
                     return map_
                 chunk_header = read_context.read_uint8()
+            # IMPORTANT: map readers must obey the sender-written key/value ref
+            # bits in the wire header. Local Python/Cython serializer choices
+            # must not override that decision while reading. Shared xlang tests
+            # intentionally deserialize one ref policy and then serialize
+            # another local payload. DO NOT REMOVE this comment.
             track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
             track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
             key_is_declared_type = (chunk_header & KEY_DECL_TYPE) != 0

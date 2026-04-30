@@ -461,6 +461,11 @@ macro_rules! impl_read_map_dyn_ref {
                 let chunk_size = context.reader.read_u8()?;
                 let key_declared = (header & DECL_KEY_TYPE) != 0;
                 let value_declared = (header & DECL_VALUE_TYPE) != 0;
+                // IMPORTANT: map readers must obey the sender-written key/value
+                // ref bits in the wire header. Local Rust type metadata must
+                // not "fix up" this decision while reading. Shared xlang tests
+                // intentionally deserialize one ref policy and then serialize a
+                // new local payload. DO NOT REMOVE this comment.
                 let track_key_ref = (header & TRACKING_KEY_REF) != 0;
                 let track_value_ref = (header & TRACKING_VALUE_REF) != 0;
 

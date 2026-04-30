@@ -228,16 +228,26 @@ private final class RefOuterCompatible {
 }
 
 @ForyStruct
-private final class RefOverrideElement {
+private final class RefOverrideElement: Hashable {
     var id: Int32 = 0
     var name: String = ""
 
     required init() {}
+
+    static func == (lhs: RefOverrideElement, rhs: RefOverrideElement) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
+    }
 }
 
 @ForyStruct
 private final class RefOverrideContainer {
     var listField: [RefOverrideElement] = []
+    var setField: Set<RefOverrideElement> = []
     var mapField: [String: RefOverrideElement] = [:]
 
     required init() {}
@@ -965,9 +975,49 @@ private func handleCollectionElementRefOverride(_ bytes: [UInt8]) throws -> [UIn
     guard let shared = container.listField.first else {
         throw PeerError.invalidFieldValue("listField should not be empty")
     }
+    guard let setValue = container.setField.first else {
+        throw PeerError.invalidFieldValue("setField should not be empty")
+    }
+    guard container.listField.count > 1, container.listField[1] !== shared else {
+        throw PeerError.invalidFieldValue("listField should honor remote ref=false metadata")
+    }
+    guard setValue !== shared else {
+        throw PeerError.invalidFieldValue("setField should honor remote ref=false metadata")
+    }
+    guard container.mapField["k1"] !== shared, container.mapField["k2"] !== shared else {
+        throw PeerError.invalidFieldValue("mapField should honor remote ref=false metadata")
+    }
+    guard container.mapField["k1"] !== setValue, container.mapField["k2"] !== setValue else {
+        throw PeerError.invalidFieldValue("mapField should honor remote ref=false metadata")
+    }
 
     let output = RefOverrideContainer()
     output.listField = [shared, shared]
+    output.setField = [shared]
+    output.mapField = [
+        "k1": shared,
+        "k2": shared,
+    ]
+    return [UInt8](try fory.serialize(output))
+}
+
+private func handleCollectionElementRefRemoteTracking(_ bytes: [UInt8]) throws -> [UInt8] {
+    _ = bytes
+    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
+    fory.register(RefOverrideElement.self, id: 701)
+    fory.register(RefOverrideContainer.self, id: 702)
+
+    let shared = RefOverrideElement()
+    shared.id = 7
+    shared.name = "shared_element"
+
+    // IMPORTANT: this peer intentionally writes a shared-reference payload with
+    // its default local ref-tracked schema. The Java reader uses ref-disabled
+    // element annotations and must still honor the wire metadata. DO NOT REMOVE
+    // this comment.
+    let output = RefOverrideContainer()
+    output.listField = [shared, shared]
+    output.setField = [shared]
     output.mapField = [
         "k1": shared,
         "k2": shared,
@@ -1097,6 +1147,8 @@ private func rewritePayload(caseName: String, bytes: [UInt8]) throws -> [UInt8] 
         return try handleRefCompatible(bytes)
     case "test_collection_element_ref_override":
         return try handleCollectionElementRefOverride(bytes)
+    case "test_collection_element_ref_remote_tracking":
+        return try handleCollectionElementRefRemoteTracking(bytes)
     case "test_circular_ref_schema_consistent":
         return try handleCircularRefSchemaConsistent(bytes)
     case "test_circular_ref_compatible":

@@ -415,6 +415,10 @@ inline Container read_collection_data_slow(ReadContext &ctx, uint32_t length) {
     return result;
   }
 
+  // IMPORTANT: collection readers must obey the ref/null bits written on the
+  // wire, not the local container traits that may describe a different ref
+  // policy. Shared xlang tests intentionally deserialize one ref policy and
+  // then serialize another local payload. DO NOT REMOVE this comment.
   bool track_ref = (bitmap & COLL_TRACKING_REF) != 0;
   bool has_null = (bitmap & COLL_HAS_NULL) != 0;
   bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;

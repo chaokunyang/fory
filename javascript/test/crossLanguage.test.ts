@@ -28,30 +28,33 @@ import Fory, {
 } from "../packages/core/index";
 import { describe, expect, test } from "@jest/globals";
 import * as fs from "node:fs";
-import * as beautify from 'js-beautify';
+import * as beautify from "js-beautify";
 import { TypeId } from "../packages/core/lib/type";
 
 const Byte = {
   MAX_VALUE: 127,
   MIN_VALUE: -128,
-}
+};
 
 const Short = {
   MAX_VALUE: 32767,
   MIN_VALUE: -32768,
-}
+};
 
 const Integer = {
   MAX_VALUE: 2147483647,
   MIN_VALUE: -2147483648,
-}
+};
 
 const Long = {
   MAX_VALUE: BigInt("9223372036854775807"),
   MIN_VALUE: BigInt("-9223372036854775808"),
-}
+};
 
-function decimal(unscaledValue: string | bigint | number, scale: number): Decimal {
+function decimal(
+  unscaledValue: string | bigint | number,
+  scale: number,
+): Decimal {
   return new Decimal(unscaledValue, scale);
 }
 
@@ -94,7 +97,7 @@ describe("bool", () => {
     buffer.writeFloat32(-1.1);
     buffer.writeFloat64(-1.1);
     buffer.writeVarUInt32(100);
-    const bytes = ['a'.charCodeAt(0), 'b'.charCodeAt(0)];
+    const bytes = ["a".charCodeAt(0), "b".charCodeAt(0)];
     buffer.writeInt32(bytes.length);
     buffer.buffer(new Uint8Array(bytes));
     writeToFile(buffer.dump() as Buffer);
@@ -217,17 +220,18 @@ describe("bool", () => {
   });
   test("test_string_serializer", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
     // Deserialize strings from Java
     const deserializedStrings = [];
     let cursor = 0;
-    for (let i = 0; i < 7; i++) { // 7 test strings
+    for (let i = 0; i < 7; i++) {
+      // 7 test strings
       const deserializedString = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedStrings.push(deserializedString);
     }
-    const bfs = []
+    const bfs = [];
     // Serialize each deserialized string back
     for (const testString of deserializedStrings) {
       const serializedData = fory.serialize(testString);
@@ -238,7 +242,7 @@ describe("bool", () => {
   });
   test("test_cross_language_serializer", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define and register Color enum
@@ -252,30 +256,48 @@ describe("bool", () => {
     // Deserialize various data types from Java
     const deserializedData = [];
     let cursor = 0;
-    for (let i = 0; i < 27; i++) { // 28 serialized items from Java
+    for (let i = 0; i < 27; i++) {
+      // 28 serialized items from Java
       const deserializedItem = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedData.push(deserializedItem);
     }
 
-
-    const bfs = []
+    const bfs = [];
     // Serialize each deserialized item back
     for (let index = 0; index < deserializedData.length; index++) {
       const item = deserializedData[index];
       let serializedData;
       if (index === 11) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.FLOAT32));
+        serializedData = fory.serialize(
+          item,
+          fory.typeResolver.getSerializerById(TypeId.FLOAT32),
+        );
       } else if (index === 12) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.FLOAT64));
+        serializedData = fory.serialize(
+          item,
+          fory.typeResolver.getSerializerById(TypeId.FLOAT64),
+        );
       } else if (index === 14) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.DATE));
+        serializedData = fory.serialize(
+          item,
+          fory.typeResolver.getSerializerById(TypeId.DATE),
+        );
       } else if (index === 15) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.TIMESTAMP));
+        serializedData = fory.serialize(
+          item,
+          fory.typeResolver.getSerializerById(TypeId.TIMESTAMP),
+        );
       } else if (index === 16) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.BOOL_ARRAY));
+        serializedData = fory.serialize(
+          item,
+          fory.typeResolver.getSerializerById(TypeId.BOOL_ARRAY),
+        );
       } else if (index === 17) {
-        serializedData = fory.serialize(item, fory.typeResolver.getSerializerById(TypeId.BINARY));
+        serializedData = fory.serialize(
+          item,
+          fory.typeResolver.getSerializerById(TypeId.BINARY),
+        );
       } else if (index === 26) {
         serializedData = colorSerialize(item);
       } else {
@@ -291,9 +313,13 @@ describe("bool", () => {
       compatible: true,
       hooks: {
         afterCodeGenerated: (code) => {
-          return beautify.js(code, { indent_size: 2, space_in_empty_paren: true, indent_empty_lines: true });
-        }
-      }
+          return beautify.js(code, {
+            indent_size: 2,
+            space_in_empty_paren: true,
+            indent_empty_lines: true,
+          });
+        },
+      },
     });
 
     // Define Color enum
@@ -307,7 +333,7 @@ describe("bool", () => {
 
     // Define Item class with field type registration
     @Type.struct(102, {
-      name: Type.string()
+      name: Type.string(),
     })
     class Item {
       name: string = "";
@@ -324,15 +350,18 @@ describe("bool", () => {
       f6: Type.array(Type.string()),
       f7: Type.varInt32(),
       f8: Type.varInt32(),
-      last: Type.varInt32()
+      last: Type.varInt32(),
     })
     class SimpleStruct {
       f2: number = 0;
       f3: Item | null = null;
       f4: string = "";
       f5: number = 0; // Color enum value
-      f1 = new Map([[1, 1.0], [2, 2.0]])
-      f6 = ["f6"]
+      f1 = new Map([
+        [1, 1.0],
+        [2, 2.0],
+      ]);
+      f6 = ["f6"];
       f7: number = 0;
       f8: number = 0;
       last: number = 0;
@@ -353,7 +382,7 @@ describe("bool", () => {
   test("test_named_simple_struct", () => {
     // Same as test_simple_struct but with named registration
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define Color enum
@@ -363,29 +392,35 @@ describe("bool", () => {
       Blue: 2,
       White: 3,
     };
-    fory.register(Type.enum({ namespace: 'demo', typeName: "color" }, Color));
+    fory.register(Type.enum({ namespace: "demo", typeName: "color" }, Color));
 
     // Define Item class with field type registration
-    @Type.struct({ namespace: "demo", typeName: "item" }, {
-      name: Type.string()
-    })
+    @Type.struct(
+      { namespace: "demo", typeName: "item" },
+      {
+        name: Type.string(),
+      },
+    )
     class Item {
       name: string = "";
     }
     fory.register(Item);
 
     // Define SimpleStruct class with field type registration
-    @Type.struct({ namespace: "demo", typeName: "simple_struct" }, {
-      f1: Type.map(Type.varInt32(), Type.float64()),
-      f2: Type.varInt32(),
-      f3: Type.struct({ namespace: "demo", typeName: "item" }),
-      f4: Type.string(),
-      f5: Type.enum({ namespace: 'demo', typeName: "color" }, Color),
-      f6: Type.array(Type.string()),
-      f7: Type.varInt32(),
-      f8: Type.varInt32(),
-      last: Type.varInt32()
-    })
+    @Type.struct(
+      { namespace: "demo", typeName: "simple_struct" },
+      {
+        f1: Type.map(Type.varInt32(), Type.float64()),
+        f2: Type.varInt32(),
+        f3: Type.struct({ namespace: "demo", typeName: "item" }),
+        f4: Type.string(),
+        f5: Type.enum({ namespace: "demo", typeName: "color" }, Color),
+        f6: Type.array(Type.string()),
+        f7: Type.varInt32(),
+        f8: Type.varInt32(),
+        last: Type.varInt32(),
+      },
+    )
     class SimpleStruct {
       f1: Map<number, number> = new Map();
       f2: number = 0;
@@ -408,20 +443,26 @@ describe("bool", () => {
 
   test("test_struct_evolving_override", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
-    @Type.struct({ namespace: "test", typeName: "evolving_yes" }, {
-      f1: Type.string()
-    })
+    @Type.struct(
+      { namespace: "test", typeName: "evolving_yes" },
+      {
+        f1: Type.string(),
+      },
+    )
     class EvolvingOverrideStruct {
       f1: string = "";
     }
     fory.register(EvolvingOverrideStruct);
 
-    @Type.struct({ namespace: "test", typeName: "evolving_off", evolving: false }, {
-      f1: Type.string()
-    })
+    @Type.struct(
+      { namespace: "test", typeName: "evolving_off", evolving: false },
+      {
+        f1: Type.string(),
+      },
+    )
     class FixedOverrideStruct {
       f1: string = "";
     }
@@ -445,22 +486,22 @@ describe("bool", () => {
 
   test("test_list", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(102, {
-      name: Type.string()
+      name: Type.string(),
     })
     class Item {
       name: string = "";
     }
     fory.register(Item);
 
-
     // Deserialize all lists from Java
     const deserializedLists = [];
     let cursor = 0;
-    for (let i = 0; i < 4; i++) { // 4 lists
+    for (let i = 0; i < 4; i++) {
+      // 4 lists
       const deserializedList = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedLists.push(deserializedList);
@@ -471,18 +512,18 @@ describe("bool", () => {
     // Serialize each deserialized list back
     for (const list of deserializedLists) {
       const serializedData = fory.serialize(list);
-      bfs.push(serializedData)
+      bfs.push(serializedData);
     }
     writeToFile(Buffer.concat(bfs));
   });
 
   test("test_map", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(102, {
-      name: Type.string()
+      name: Type.string(),
     })
     class Item {
       name: string = "";
@@ -493,13 +534,14 @@ describe("bool", () => {
     // Deserialize maps from Java
     const deserializedMaps = [];
     let cursor = 0;
-    for (let i = 0; i < 2; i++) { // 2 maps
+    for (let i = 0; i < 2; i++) {
+      // 2 maps
       const deserializedMap = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedMaps.push(deserializedMap);
     }
 
-    const bfs = []
+    const bfs = [];
     // Serialize each deserialized map back
     for (const map of deserializedMaps) {
       const serializedData = fory.serialize(map);
@@ -512,7 +554,7 @@ describe("bool", () => {
 
   test("test_integer", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(101, {
@@ -521,7 +563,7 @@ describe("bool", () => {
       f3: Type.varInt32(),
       f4: Type.varInt32(),
       f5: Type.varInt32(),
-      f6: Type.varInt32()
+      f6: Type.varInt32(),
     })
     class Item1 {
       f1: number = 0;
@@ -534,17 +576,17 @@ describe("bool", () => {
 
     fory.register(Item1);
 
-
     // Deserialize item and individual integers from Java
     const deserializedData = [];
     let cursor = 0;
-    for (let i = 0; i < 7; i++) { // 1 item + 6 integers
+    for (let i = 0; i < 7; i++) {
+      // 1 item + 6 integers
       const deserializedItem = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedData.push(deserializedItem);
     }
 
-    const bfs = []
+    const bfs = [];
     // Serialize each deserialized item back
     for (const item of deserializedData) {
       const serializedData = fory.serialize(item);
@@ -579,11 +621,11 @@ describe("bool", () => {
 
   test("test_item", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(102, {
-      name: Type.string()
+      name: Type.string(),
     })
     class Item {
       name: string = "";
@@ -596,13 +638,14 @@ describe("bool", () => {
     // Deserialize items from Java
     const deserializedItems = [];
     let cursor = 0;
-    for (let i = 0; i < 3; i++) { // 3 items
+    for (let i = 0; i < 3; i++) {
+      // 3 items
       const deserializedItem = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedItems.push(deserializedItem);
     }
 
-    const bfs = []
+    const bfs = [];
     // Serialize each deserialized item back
     for (const item of deserializedItems) {
       const serializedData = fory.serialize(item);
@@ -614,7 +657,7 @@ describe("bool", () => {
 
   test("test_color", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define and register Color enum
@@ -632,7 +675,8 @@ describe("bool", () => {
     // Deserialize colors from Java
     const deserializedColors = [];
     let cursor = 0;
-    for (let i = 0; i < 4; i++) { // 4 colors
+    for (let i = 0; i < 4; i++) {
+      // 4 colors
       const deserializedColor = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedColors.push(deserializedColor);
@@ -651,11 +695,11 @@ describe("bool", () => {
   });
   test("test_struct_with_list", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(201, {
-      items: Type.array(Type.string())
+      items: Type.array(Type.string()),
     })
     class StructWithList {
       items: (string | null)[] = [];
@@ -668,7 +712,8 @@ describe("bool", () => {
     // Deserialize structs from Java
     const deserializedStructs = [];
     let cursor = 0;
-    for (let i = 0; i < 2; i++) { // 2 structs
+    for (let i = 0; i < 2; i++) {
+      // 2 structs
       const deserializedStruct = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedStructs.push(deserializedStruct);
@@ -688,11 +733,11 @@ describe("bool", () => {
 
   test("test_struct_with_map", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(202, {
-      data: Type.map(Type.string(), Type.string())
+      data: Type.map(Type.string(), Type.string()),
     })
     class StructWithMap {
       data: Map<string | null, string | null> = new Map();
@@ -705,7 +750,8 @@ describe("bool", () => {
     // Deserialize structs from Java
     const deserializedStructs = [];
     let cursor = 0;
-    for (let i = 0; i < 2; i++) { // 2 structs
+    for (let i = 0; i < 2; i++) {
+      // 2 structs
       const deserializedStruct = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedStructs.push(deserializedStruct);
@@ -729,14 +775,18 @@ describe("bool", () => {
       ref: true,
       hooks: {
         afterCodeGenerated: (code) => {
-          return beautify.js(code, { indent_size: 2, space_in_empty_paren: true, indent_empty_lines: true });
-        }
-      }
+          return beautify.js(code, {
+            indent_size: 2,
+            space_in_empty_paren: true,
+            indent_empty_lines: true,
+          });
+        },
+      },
     });
 
     const Type701 = Type.struct(701, {
       id: Type.varInt32(),
-      name: Type.string()
+      name: Type.string(),
     });
 
     @Type701
@@ -747,10 +797,12 @@ describe("bool", () => {
 
     @Type.struct(702, {
       list_field: Type.array(Type701.setTrackingRef(true)),
-      map_field: Type.map(Type.string(), Type701.setTrackingRef(true))
+      set_field: Type.set(Type701.setTrackingRef(true)),
+      map_field: Type.map(Type.string(), Type701.setTrackingRef(true)),
     })
     class RefOverrideContainer {
       list_field: RefOverrideElement[] = [];
+      set_field: Set<RefOverrideElement> = new Set();
       map_field: Map<string, RefOverrideElement> = new Map();
     }
 
@@ -763,20 +815,89 @@ describe("bool", () => {
     expect(outer.list_field).toBeTruthy();
     expect(outer.list_field.length).toBeGreaterThan(0);
     const shared = outer.list_field[0];
+    const setShared = outer.set_field.values().next()
+      .value as RefOverrideElement;
+    expect(outer.list_field[1]).not.toBe(shared);
+    expect(setShared).not.toBe(shared);
+    expect(outer.map_field.get("k1")).not.toBe(shared);
+    expect(outer.map_field.get("k2")).not.toBe(shared);
+    expect(outer.map_field.get("k1")).not.toBe(setShared);
+    expect(outer.map_field.get("k2")).not.toBe(setShared);
     const newOuter = new RefOverrideContainer();
     newOuter.list_field = [shared, shared];
+    newOuter.set_field = new Set([shared]);
     newOuter.map_field = new Map([
       ["k1", shared],
-      ["k2", shared]
+      ["k2", shared],
     ]);
 
     const newBytes = fory.serialize(newOuter);
-    writeToFile(newBytes as Buffer)
+    writeToFile(newBytes as Buffer);
+  });
+
+  test("test_collection_element_ref_remote_tracking", () => {
+    const fory = new Fory({
+      compatible: false,
+      ref: true,
+      hooks: {
+        afterCodeGenerated: (code) => {
+          return beautify.js(code, {
+            indent_size: 2,
+            space_in_empty_paren: true,
+            indent_empty_lines: true,
+          });
+        },
+      },
+    });
+
+    const Type701 = Type.struct(701, {
+      id: Type.varInt32(),
+      name: Type.string(),
+    });
+
+    @Type701
+    class RefOverrideElement {
+      id: number = 0;
+      name: string = "";
+    }
+
+    @Type.struct(702, {
+      list_field: Type.array(Type701.setTrackingRef(true)),
+      set_field: Type.set(Type701.setTrackingRef(true)),
+      map_field: Type.map(Type.string(), Type701.setTrackingRef(true)),
+    })
+    class RefOverrideContainer {
+      list_field: RefOverrideElement[] = [];
+      set_field: Set<RefOverrideElement> = new Set();
+      map_field: Map<string, RefOverrideElement> = new Map();
+    }
+
+    fory.register(RefOverrideElement);
+    fory.register(RefOverrideContainer);
+
+    const shared = new RefOverrideElement();
+    shared.id = 7;
+    shared.name = "shared_element";
+
+    // IMPORTANT: this peer intentionally writes a shared-reference payload with
+    // its default local ref-tracked schema. The Java reader uses ref-disabled
+    // element annotations and must still honor the wire metadata. DO NOT REMOVE
+    // this comment.
+    const outer = new RefOverrideContainer();
+    outer.list_field = [shared, shared];
+    outer.set_field = new Set([shared]);
+    outer.map_field = new Map([
+      ["k1", shared],
+      ["k2", shared],
+    ]);
+
+    const newBytes = fory.serialize(outer);
+    writeToFile(newBytes as Buffer);
   });
 
   test("test_skip_id_custom", () => {
     const fory1 = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.ext(103)
@@ -789,16 +910,16 @@ describe("bool", () => {
       },
       read: (readContext: ReadContext, result: MyExt) => {
         result.id = readContext.readVarInt32();
-      }
+      },
     });
 
     // Define empty wrapper for deserialization
     @Type.struct(104)
-    class Empty { }
+    class Empty {}
     fory1.register(Empty);
 
     const fory2 = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define Color enum
@@ -811,7 +932,7 @@ describe("bool", () => {
     fory2.register(Type.enum(101, Color));
 
     @Type.struct(102, {
-      id: Type.varInt32()
+      id: Type.varInt32(),
     })
     class MyStruct {
       id: number = 0;
@@ -824,13 +945,13 @@ describe("bool", () => {
       },
       read: (readContext: ReadContext, result: MyExt) => {
         result.id = readContext.readVarInt32();
-      }
+      },
     });
 
     @Type.struct(104, {
       color: Type.enum(101, Color),
       myStruct: Type.struct(102),
-      myExt: Type.ext(103)
+      myExt: Type.ext(103),
     })
     class MyWrapper {
       color: number = 0;
@@ -838,7 +959,6 @@ describe("bool", () => {
       myExt: MyExt = new MyExt();
     }
     fory2.register(MyWrapper);
-
 
     // Deserialize empty from Java
     let cursor = 0;
@@ -861,7 +981,7 @@ describe("bool", () => {
 
   test("test_skip_name_custom", () => {
     const fory1 = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.ext("my_ext")
@@ -874,16 +994,16 @@ describe("bool", () => {
       },
       read: (readContext: ReadContext, result: MyExt) => {
         result.id = readContext.readVarInt32();
-      }
+      },
     });
 
     // Define empty wrapper for deserialization
     @Type.struct("my_wrapper")
-    class Empty { }
+    class Empty {}
     fory1.register(Empty);
 
     const fory2 = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define Color enum
@@ -896,7 +1016,7 @@ describe("bool", () => {
     fory2.register(Type.enum("color", Color));
 
     @Type.struct("my_struct", {
-      id: Type.varInt32()
+      id: Type.varInt32(),
     })
     class MyStruct {
       id: number = 0;
@@ -909,13 +1029,13 @@ describe("bool", () => {
       },
       read: (readContext: ReadContext, result: MyExt) => {
         result.id = readContext.readVarInt32();
-      }
+      },
     });
 
     @Type.struct("my_wrapper", {
       color: Type.enum("color", Color),
       myStruct: Type.struct("my_struct"),
-      myExt: Type.ext("my_ext")
+      myExt: Type.ext("my_ext"),
     })
     class MyWrapper {
       color: number = 0;
@@ -923,7 +1043,6 @@ describe("bool", () => {
       myExt: MyExt = new MyExt();
     }
     fory2.register(MyWrapper);
-
 
     // Deserialize empty from Java
     let cursor = 0;
@@ -956,11 +1075,16 @@ describe("bool", () => {
       Blue: 2,
       White: 3,
     };
-    const { serialize: enumSerialize } = fory.register(Type.enum({ namespace: "", typeName: "color" }, Color));
+    const { serialize: enumSerialize } = fory.register(
+      Type.enum({ namespace: "", typeName: "color" }, Color),
+    );
 
-    @Type.struct({ namespace: "", typeName: "my_struct" }, {
-      id: Type.varInt32()
-    })
+    @Type.struct(
+      { namespace: "", typeName: "my_struct" },
+      {
+        id: Type.varInt32(),
+      },
+    )
     class MyStruct {
       id: number = 0;
     }
@@ -976,13 +1100,14 @@ describe("bool", () => {
       },
       read: (readContext: ReadContext, result: MyExt) => {
         result.id = readContext.readVarInt32();
-      }
+      },
     });
 
     // Deserialize multiple instances from Java
     const deserializedData = [];
     let cursor = 0;
-    for (let i = 0; i < 9; i++) { // 3 colors + 3 structs + 3 exts
+    for (let i = 0; i < 9; i++) {
+      // 3 colors + 3 structs + 3 exts
       const deserializedItem = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedData.push(deserializedItem);
@@ -1013,7 +1138,7 @@ describe("bool", () => {
     @Type.struct(201, {
       f1: Type.varInt32(),
       f2: Type.string().setNullable(true),
-      f3: Type.float64()
+      f3: Type.float64(),
     })
     class VersionCheckStruct {
       f1: number = 0;
@@ -1037,13 +1162,13 @@ describe("bool", () => {
 
   test("test_polymorphic_list", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define Animal interface implementations
     @Type.struct(302, {
       age: Type.varInt32(),
-      name: Type.string().setNullable(true)
+      name: Type.string().setNullable(true),
     })
     class Dog {
       age: number = 0;
@@ -1053,7 +1178,7 @@ describe("bool", () => {
 
     @Type.struct(303, {
       age: Type.varInt32(),
-      lives: Type.varInt32()
+      lives: Type.varInt32(),
     })
     class Cat {
       age: number = 0;
@@ -1062,7 +1187,7 @@ describe("bool", () => {
     fory.register(Cat);
 
     @Type.struct(304, {
-      animals: Type.array(Type.any()) // Polymorphic array
+      animals: Type.array(Type.any()), // Polymorphic array
     })
     class AnimalListHolder {
       animals: (Dog | Cat)[] = [];
@@ -1075,7 +1200,8 @@ describe("bool", () => {
     // Deserialize polymorphic data from Java
     const deserializedData = [];
     let cursor = 0;
-    for (let i = 0; i < 2; i++) { // animals array + holder
+    for (let i = 0; i < 2; i++) {
+      // animals array + holder
       const deserializedItem = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedData.push(deserializedItem);
@@ -1087,7 +1213,7 @@ describe("bool", () => {
     // Serialize each deserialized item back
     for (const item of deserializedData) {
       const serializedData = fory.serialize(item);
-      const s = fory.deserialize(serializedData)
+      const s = fory.deserialize(serializedData);
       writer.buffer(serializedData);
     }
 
@@ -1096,13 +1222,13 @@ describe("bool", () => {
 
   test("test_polymorphic_map", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define Animal interface implementations
     @Type.struct(302, {
       age: Type.varInt32(),
-      name: Type.string().setNullable(true)
+      name: Type.string().setNullable(true),
     })
     class Dog {
       age: number = 0;
@@ -1112,7 +1238,7 @@ describe("bool", () => {
 
     @Type.struct(303, {
       age: Type.varInt32(),
-      lives: Type.varInt32()
+      lives: Type.varInt32(),
     })
     class Cat {
       age: number = 0;
@@ -1121,7 +1247,7 @@ describe("bool", () => {
     fory.register(Cat);
 
     @Type.struct(305, {
-      animal_map: Type.map(Type.string(), Type.any()) // Polymorphic map
+      animal_map: Type.map(Type.string(), Type.any()), // Polymorphic map
     })
     class AnimalMapHolder {
       animal_map: Map<string, Dog | Cat> = new Map();
@@ -1134,7 +1260,8 @@ describe("bool", () => {
     // Deserialize polymorphic data from Java
     const deserializedData = [];
     let cursor = 0;
-    for (let i = 0; i < 2; i++) { // animal map + holder
+    for (let i = 0; i < 2; i++) {
+      // animal map + holder
       const deserializedItem = fory.deserialize(content.subarray(cursor));
       cursor += fory.readContext.reader.readGetCursor();
       deserializedData.push(deserializedItem);
@@ -1153,14 +1280,14 @@ describe("bool", () => {
   });
   test("test_one_string_field_schema", () => {
     const fory = new Fory({
-      compatible: false
+      compatible: false,
     });
 
     @Type.struct(200, {
-      f1: Type.string()
+      f1: Type.string(),
     })
     class OneStringFieldStruct {
-      @Type.string().setNullable(true)
+      @(Type.string().setNullable(true))
       f1: string | null = null;
     }
     fory.register(OneStringFieldStruct);
@@ -1176,11 +1303,11 @@ describe("bool", () => {
   });
   test("test_one_string_field_compatible", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(200, {
-      f1: Type.string().setNullable(true)
+      f1: Type.string().setNullable(true),
     })
     class OneStringFieldStruct {
       f1: string | null = null;
@@ -1202,12 +1329,12 @@ describe("bool", () => {
 
   test("test_two_string_field_compatible", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(201, {
       f1: Type.string(),
-      f2: Type.string()
+      f2: Type.string(),
     })
     class TwoStringFieldStruct {
       f1: string = "";
@@ -1227,7 +1354,7 @@ describe("bool", () => {
 
   test("test_schema_evolution_compatible_reverse", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(200)
@@ -1251,11 +1378,11 @@ describe("bool", () => {
 
   test("test_schema_evolution_compatible", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(200)
-    class EmptyStruct { }
+    class EmptyStruct {}
     fory.register(EmptyStruct);
 
     // Deserialize empty struct from Java
@@ -1269,7 +1396,7 @@ describe("bool", () => {
   });
   test("test_one_enum_field_schema", () => {
     const fory = new Fory({
-      compatible: false
+      compatible: false,
     });
 
     // Define and register TestEnum
@@ -1281,7 +1408,7 @@ describe("bool", () => {
     fory.register(Type.enum(210, TestEnum));
 
     @Type.struct(211, {
-      f1: Type.enum(210, TestEnum)
+      f1: Type.enum(210, TestEnum),
     })
     class OneEnumFieldStruct {
       f1: number = 0; // enum value
@@ -1303,7 +1430,7 @@ describe("bool", () => {
 
   test("test_one_enum_field_compatible", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define and register TestEnum
@@ -1315,7 +1442,7 @@ describe("bool", () => {
     fory.register(Type.enum(210, TestEnum));
 
     @Type.struct(211, {
-      f1: Type.enum(210, TestEnum)
+      f1: Type.enum(210, TestEnum),
     })
     class OneEnumFieldStruct {
       f1: number = 0; // enum value
@@ -1334,7 +1461,7 @@ describe("bool", () => {
 
   test("test_two_enum_field_compatible", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define and register TestEnum
@@ -1347,7 +1474,7 @@ describe("bool", () => {
 
     @Type.struct(212, {
       f1: Type.enum(210, TestEnum),
-      f2: Type.enum(210, TestEnum)
+      f2: Type.enum(210, TestEnum),
     })
     class TwoEnumFieldStruct {
       f1: number = 0; // enum value
@@ -1367,7 +1494,7 @@ describe("bool", () => {
 
   test("test_enum_schema_evolution_compatible_reverse", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Define and register TestEnum
@@ -1380,7 +1507,7 @@ describe("bool", () => {
 
     @Type.struct(211, {
       f1: Type.enum(210, TestEnum),
-      f2: Type.enum(210, TestEnum)
+      f2: Type.enum(210, TestEnum),
     })
     class TwoEnumFieldStruct {
       f1: number = 0; // enum value
@@ -1398,10 +1525,9 @@ describe("bool", () => {
     writeToFile(serializedData as Buffer);
   });
 
-
   test("test_enum_schema_evolution_compatible", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     // Register TestEnum
@@ -1413,7 +1539,7 @@ describe("bool", () => {
     fory.register(Type.enum(210, TestEnum));
 
     @Type.struct(211)
-    class EmptyStruct { }
+    class EmptyStruct {}
     fory.register(EmptyStruct);
 
     // Deserialize empty struct from Java
@@ -1459,7 +1585,7 @@ describe("bool", () => {
 
       // Base non-nullable reference fields
       @Type.string()
-      stringField: string = '';
+      stringField: string = "";
       @Type.array(Type.string())
       listField: string[] = [];
       @Type.set(Type.string())
@@ -1497,7 +1623,7 @@ describe("bool", () => {
       nullableMap2: Map<string, string> | null = null;
     }
     return NullableComprehensiveCompatible;
-  }
+  };
 
   const buildClassConsistent = (id = 401) => {
     @Type.struct({ typeId: id })
@@ -1520,7 +1646,7 @@ describe("bool", () => {
 
       // Base non-nullable reference fields
       @Type.string()
-      stringField: string = '';
+      stringField: string = "";
       @Type.array(Type.string())
       listField: string[] = [];
       @Type.set(Type.string())
@@ -1557,13 +1683,12 @@ describe("bool", () => {
       @(Type.map(Type.string(), Type.string()).setNullable(true))
       nullableMap: Map<string, string> | null = null;
     }
-    return NullableComprehensiveConsistent
-
-  }
+    return NullableComprehensiveConsistent;
+  };
 
   test("test_nullable_field_schema_consistent_not_null", () => {
     const fory = new Fory({
-      compatible: false
+      compatible: false,
     });
 
     fory.register(buildClassConsistent(401));
@@ -1578,10 +1703,9 @@ describe("bool", () => {
     writeToFile(serializedData as Buffer);
   });
 
-
   test("test_nullable_field_schema_consistent_null", () => {
     const fory = new Fory({
-      compatible: false
+      compatible: false,
     });
     fory.register(buildClassConsistent());
 
@@ -1598,10 +1722,9 @@ describe("bool", () => {
     writeToFile(serializedData as Buffer);
   });
 
-
   test("test_nullable_field_compatible_not_null", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     fory.register(buildClass());
@@ -1618,7 +1741,7 @@ describe("bool", () => {
 
   test("test_nullable_field_compatible_null", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     fory.register(buildClass());
@@ -1628,7 +1751,9 @@ describe("bool", () => {
 
     // Deserialize struct from Java
     let cursor = 0;
-    const deserializedStruct: InstanceType<ReturnType<typeof buildClass>> | null = fory.deserialize(content.subarray(cursor));
+    const deserializedStruct: InstanceType<
+      ReturnType<typeof buildClass>
+    > | null = fory.deserialize(content.subarray(cursor));
     cursor += fory.readContext.reader.readGetCursor();
 
     if (deserializedStruct === null) {
@@ -1647,7 +1772,7 @@ describe("bool", () => {
 
     @Type.struct(501, {
       id: Type.varInt32(),
-      name: Type.string()
+      name: Type.string(),
     })
     class RefInner {
       id: number = 0;
@@ -1656,8 +1781,14 @@ describe("bool", () => {
     fory.register(RefInner);
 
     @Type.struct(502, {
-      inner1: Type.struct(501).setTrackingRef(true).setNullable(true).setDynamic(Dynamic.FALSE),
-      inner2: Type.struct(501).setTrackingRef(true).setNullable(true).setDynamic(Dynamic.FALSE),
+      inner1: Type.struct(501)
+        .setTrackingRef(true)
+        .setNullable(true)
+        .setDynamic(Dynamic.FALSE),
+      inner2: Type.struct(501)
+        .setTrackingRef(true)
+        .setNullable(true)
+        .setDynamic(Dynamic.FALSE),
     })
     class RefOuter {
       inner1: RefInner | null = null;
@@ -1684,7 +1815,7 @@ describe("bool", () => {
 
     @Type.struct(503, {
       id: Type.varInt32(),
-      name: Type.string()
+      name: Type.string(),
     })
     class RefInner {
       id: number = 0;
@@ -1701,7 +1832,6 @@ describe("bool", () => {
       inner2: RefInner | null = null;
     }
     fory.register(RefOuter);
-
 
     // Deserialize outer struct from Java
     let cursor = 0;
@@ -1721,7 +1851,7 @@ describe("bool", () => {
 
     @Type.struct(601, {
       name: Type.string(),
-      selfRef: Type.struct(601).setNullable(true).setTrackingRef(true)
+      selfRef: Type.struct(601).setNullable(true).setTrackingRef(true),
     })
     class CircularRefStruct {
       name: string = "";
@@ -1750,7 +1880,7 @@ describe("bool", () => {
 
     @Type.struct(602, {
       name: Type.string(),
-      selfRef: Type.struct(602).setNullable(true).setTrackingRef(true)
+      selfRef: Type.struct(602).setNullable(true).setTrackingRef(true),
     })
     class CircularRefStruct {
       name: string = "";
@@ -1770,12 +1900,12 @@ describe("bool", () => {
 
   test("test_unsigned_schema_consistent_simple", () => {
     const fory = new Fory({
-      compatible: false
+      compatible: false,
     });
 
     @Type.struct(1, {
       u64Tagged: Type.taggedUInt64(),
-      u64TaggedNullable: Type.taggedUInt64().setNullable(true)
+      u64TaggedNullable: Type.taggedUInt64().setNullable(true),
     })
     class UnsignedSchemaConsistentSimple {
       u64Tagged: bigint = 0n;
@@ -1796,7 +1926,7 @@ describe("bool", () => {
 
   test("test_unsigned_schema_consistent", () => {
     const fory = new Fory({
-      compatible: false
+      compatible: false,
     });
 
     @Type.struct(501, {
@@ -1852,7 +1982,7 @@ describe("bool", () => {
 
   test("test_unsigned_schema_compatible", () => {
     const fory = new Fory({
-      compatible: true
+      compatible: true,
     });
 
     @Type.struct(502, {

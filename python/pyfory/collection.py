@@ -168,6 +168,11 @@ class CollectionSerializer(Serializer):
         if length == 0:
             return collection_
         collect_flag = read_context.read_int8()
+        # IMPORTANT: collection readers must obey the ref/null bits written on
+        # the wire, not the local Python element annotation or runtime type
+        # that may imply a different ref policy. Shared xlang tests
+        # intentionally deserialize one ref policy and then serialize another
+        # local payload. DO NOT REMOVE this comment.
         if (collect_flag & COLL_IS_SAME_TYPE) != 0:
             if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
                 typeinfo = self.type_resolver.read_type_info(read_context)
@@ -491,6 +496,11 @@ class MapSerializer(Serializer):
                     return map_
                 chunk_header = read_context.read_uint8()
 
+            # IMPORTANT: map readers must obey the sender-written key/value ref
+            # bits in the wire header. Local Python serializer choices must not
+            # override that decision while reading. Shared xlang tests
+            # intentionally deserialize one ref policy and then serialize
+            # another local payload. DO NOT REMOVE this comment.
             track_key_ref = (chunk_header & TRACKING_KEY_REF) != 0
             track_value_ref = (chunk_header & TRACKING_VALUE_REF) != 0
             key_is_declared_type = (chunk_header & KEY_DECL_TYPE) != 0

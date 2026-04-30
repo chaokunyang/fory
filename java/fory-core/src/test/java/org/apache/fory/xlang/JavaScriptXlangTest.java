@@ -369,6 +369,12 @@ public class JavaScriptXlangTest extends XlangTestBase {
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCollectionElementRefRemoteTracking(boolean enableCodegen)
+      throws java.io.IOException {
+    super.testCollectionElementRefRemoteTracking(enableCodegen);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testOneStringFieldSchemaConsistent(boolean enableCodegen) throws java.io.IOException {
     super.testOneStringFieldSchemaConsistent(enableCodegen);
   }

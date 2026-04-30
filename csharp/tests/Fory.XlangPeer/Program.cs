@@ -232,6 +232,7 @@ internal static class Program
             "test_ref_schema_consistent" => CaseRefSchemaConsistent(input),
             "test_ref_compatible" => CaseRefCompatible(input),
             "test_collection_element_ref_override" => CaseCollectionElementRefOverride(input),
+            "test_collection_element_ref_remote_tracking" => CaseCollectionElementRefRemoteTracking(input),
             "test_circular_ref_schema_consistent" => CaseCircularRefSchemaConsistent(input),
             "test_circular_ref_compatible" => CaseCircularRefCompatible(input),
             "test_unsigned_schema_consistent_simple" => CaseUnsignedSchemaConsistentSimple(input),
@@ -933,23 +934,61 @@ internal static class Program
             RefOverrideElement? shared = container.ListField[0];
             if (shared is not null)
             {
+                foreach (RefOverrideElement? setValue in container.SetField)
+                {
+                    Ensure(!ReferenceEquals(setValue, shared), "SetField should honor remote ref=false metadata");
+                    break;
+                }
+
                 if (container.ListField.Count > 1)
                 {
+                    Ensure(!ReferenceEquals(container.ListField[1], shared), "ListField should honor remote ref=false metadata");
                     container.ListField[1] = shared;
                 }
 
                 if (container.MapField.ContainsKey("k1"))
                 {
+                    Ensure(!ReferenceEquals(container.MapField["k1"], shared), "MapField[k1] should honor remote ref=false metadata");
                     container.MapField["k1"] = shared;
                 }
 
                 if (container.MapField.ContainsKey("k2"))
                 {
+                    Ensure(!ReferenceEquals(container.MapField["k2"], shared), "MapField[k2] should honor remote ref=false metadata");
                     container.MapField["k2"] = shared;
                 }
+
+                container.SetField.Clear();
+                container.SetField.Add(shared);
             }
         }
 
+        return fory.Serialize<object?>(container);
+    }
+
+    private static byte[] CaseCollectionElementRefRemoteTracking(byte[] input)
+    {
+        _ = input;
+        ForyRuntime fory = BuildFory(compatible: false, trackRef: true);
+        fory.Register<RefOverrideElement>(701);
+        fory.Register<RefOverrideContainer>(702);
+
+        RefOverrideElement shared = new()
+        {
+            Id = 7,
+            Name = "shared_element",
+        };
+
+        // IMPORTANT: this peer intentionally writes a shared-reference payload
+        // with its default local ref-tracked schema. The Java reader uses
+        // ref-disabled element annotations and must still honor the wire
+        // metadata. DO NOT REMOVE this comment.
+        RefOverrideContainer container = new()
+        {
+            ListField = [shared, shared],
+            SetField = [shared],
+            MapField = new Dictionary<string, RefOverrideElement?> { ["k1"] = shared, ["k2"] = shared },
+        };
         return fory.Serialize<object?>(container);
     }
 
@@ -1361,6 +1400,7 @@ public sealed class RefOverrideElement
 public sealed class RefOverrideContainer
 {
     public List<RefOverrideElement?> ListField { get; set; } = [];
+    public HashSet<RefOverrideElement?> SetField { get; set; } = [];
     public Dictionary<string, RefOverrideElement?> MapField { get; set; } = [];
 }
 

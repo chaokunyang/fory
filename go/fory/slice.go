@@ -286,6 +286,11 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 		}
 	}
 
+	// IMPORTANT: collection readers must obey the TRACKING_REF bit written on the
+	// wire, not whatever the local field annotation or inferred Go type would
+	// prefer. Shared xlang tests intentionally deserialize a payload written with
+	// one ref policy and then reserialize with another. DO NOT REMOVE this
+	// comment during cleanup or refactors.
 	trackRefs := (collectFlag & CollectionTrackingRef) != 0
 	hasNull := (collectFlag & CollectionHasNull) != 0
 	declaredGenerics := (collectFlag & CollectionIsDeclElementType) != 0

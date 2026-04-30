@@ -194,6 +194,12 @@ public class GoXlangTest extends XlangTestBase {
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCollectionElementRefRemoteTracking(boolean enableCodegen)
+      throws java.io.IOException {
+    super.testCollectionElementRefRemoteTracking(enableCodegen);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testSkipIdCustom(boolean enableCodegen) throws java.io.IOException {
     super.testSkipIdCustom(enableCodegen);
   }

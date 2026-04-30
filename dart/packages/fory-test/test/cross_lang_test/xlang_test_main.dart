@@ -307,8 +307,43 @@ void _runCollectionElementRefOverride() {
 
   final container = fory.deserialize<RefOverrideContainer>(_readFile());
   final shared = container.listField.first;
+  final setValue = container.setField.first;
+  if (identical(container.listField[1], shared)) {
+    throw StateError('listField should honor remote ref=false metadata');
+  }
+  if (identical(setValue, shared)) {
+    throw StateError('setField should honor remote ref=false metadata');
+  }
+  if (identical(container.mapField['k1'], shared) ||
+      identical(container.mapField['k2'], shared)) {
+    throw StateError('mapField should honor remote ref=false metadata');
+  }
+  if (identical(container.mapField['k1'], setValue) ||
+      identical(container.mapField['k2'], setValue)) {
+    throw StateError('mapField should honor remote ref=false metadata');
+  }
   final output = RefOverrideContainer()
     ..listField = <RefOverrideElement>[shared, shared]
+    ..setField = <RefOverrideElement>{shared}
+    ..mapField = <String, RefOverrideElement>{'k1': shared, 'k2': shared};
+  _writeFile(fory.serialize(output, trackRef: true));
+}
+
+void _runCollectionElementRefRemoteTracking() {
+  final fory = _newFory();
+  registerXlangType(fory, RefOverrideElement, id: 701);
+  registerXlangType(fory, RefOverrideContainer, id: 702);
+
+  final shared = RefOverrideElement()
+    ..id = 7
+    ..name = 'shared_element';
+  // IMPORTANT: this peer intentionally writes a shared-reference payload with
+  // its default local ref-tracked schema. The Java reader uses ref-disabled
+  // element annotations and must still honor the wire metadata. DO NOT REMOVE
+  // this comment.
+  final output = RefOverrideContainer()
+    ..listField = <RefOverrideElement>[shared, shared]
+    ..setField = <RefOverrideElement>{shared}
     ..mapField = <String, RefOverrideElement>{'k1': shared, 'k2': shared};
   _writeFile(fory.serialize(output, trackRef: true));
 }
@@ -541,6 +576,9 @@ void _runCase(String caseName) {
       return;
     case 'test_collection_element_ref_override':
       _runCollectionElementRefOverride();
+      return;
+    case 'test_collection_element_ref_remote_tracking':
+      _runCollectionElementRefRemoteTracking();
       return;
     case 'test_circular_ref_schema_consistent':
       _runCircularRoundTrip(compatible: false, id: 601);

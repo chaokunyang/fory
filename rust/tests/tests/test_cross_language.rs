@@ -1936,7 +1936,7 @@ struct RefOuterCompatible {
 
 /// Element struct for collection element ref override test
 /// Matches Java RefOverrideElement with type ID 701
-#[derive(ForyStruct, Debug, PartialEq, Clone)]
+#[derive(ForyStruct, Debug, PartialEq, Eq, Hash, Clone)]
 struct RefOverrideElement {
     id: i32,
     name: String,
@@ -1947,6 +1947,7 @@ struct RefOverrideElement {
 #[derive(ForyStruct, Debug, PartialEq)]
 struct RefOverrideContainer {
     list_field: Vec<Rc<RefOverrideElement>>,
+    set_field: HashSet<Rc<RefOverrideElement>>,
     map_field: HashMap<String, Rc<RefOverrideElement>>,
 }
 
@@ -2066,17 +2067,79 @@ fn test_collection_element_ref_override() {
         !outer.list_field.is_empty(),
         "list_field should not be empty"
     );
+    assert_eq!(
+        outer.set_field.len(),
+        1,
+        "set_field should contain exactly one element"
+    );
+    let set_value = outer.set_field.iter().next().unwrap().clone();
+    assert!(
+        !Rc::ptr_eq(&outer.list_field[0], &outer.list_field[1]),
+        "list_field should honor remote ref=false metadata"
+    );
+    assert!(
+        !Rc::ptr_eq(&outer.list_field[0], &set_value),
+        "set_field should honor remote ref=false metadata"
+    );
+    assert!(
+        !Rc::ptr_eq(&outer.map_field["k1"], &outer.map_field["k2"]),
+        "map_field should honor remote ref=false metadata"
+    );
+    assert!(
+        !Rc::ptr_eq(&outer.map_field["k1"], &set_value)
+            && !Rc::ptr_eq(&outer.map_field["k2"], &set_value),
+        "map_field should honor remote ref=false metadata"
+    );
 
     let shared = outer.list_field[0].clone();
+    let mut set = HashSet::new();
+    set.insert(shared.clone());
     let mut map = HashMap::new();
     map.insert("k1".to_string(), shared.clone());
     map.insert("k2".to_string(), shared.clone());
     let new_outer = RefOverrideContainer {
         list_field: vec![shared.clone(), shared],
+        set_field: set,
         map_field: map,
     };
 
     let new_bytes = fory.serialize(&new_outer).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_collection_element_ref_remote_tracking() {
+    let data_file_path = get_data_file();
+
+    let mut fory = Fory::builder()
+        .compatible(false)
+        .xlang(true)
+        .track_ref(true)
+        .build();
+    fory.register::<RefOverrideElement>(701).unwrap();
+    fory.register::<RefOverrideContainer>(702).unwrap();
+
+    let shared = Rc::new(RefOverrideElement {
+        id: 7,
+        name: "shared_element".to_string(),
+    });
+    // IMPORTANT: this peer intentionally writes a shared-reference payload with
+    // its default local ref-tracked schema. The Java reader uses ref-disabled
+    // element annotations and must still honor the wire metadata. DO NOT REMOVE
+    // this comment.
+    let mut map = HashMap::new();
+    map.insert("k1".to_string(), shared.clone());
+    map.insert("k2".to_string(), shared.clone());
+    let mut set = HashSet::new();
+    set.insert(shared.clone());
+    let outer = RefOverrideContainer {
+        list_field: vec![shared.clone(), shared],
+        set_field: set,
+        map_field: map,
+    };
+
+    let new_bytes = fory.serialize(&outer).unwrap();
     fs::write(&data_file_path, new_bytes).unwrap();
 }
 

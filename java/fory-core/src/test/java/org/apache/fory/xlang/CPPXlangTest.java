@@ -216,6 +216,12 @@ public class CPPXlangTest extends XlangTestBase {
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCollectionElementRefRemoteTracking(boolean enableCodegen)
+      throws java.io.IOException {
+    super.testCollectionElementRefRemoteTracking(enableCodegen);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
       throws java.io.IOException {
     super.testNestedAnnotatedContainerSchemaConsistent(enableCodegen);

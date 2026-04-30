@@ -333,8 +333,9 @@ type RefOverrideElement struct {
 }
 
 type RefOverrideContainer struct {
-	ListField []*RefOverrideElement          `fory:"type=list(element=_(ref=false))"`
-	MapField  map[string]*RefOverrideElement `fory:"type=map(value=_(ref=false))"`
+	ListField []*RefOverrideElement
+	SetField  fory.Set[*RefOverrideElement]
+	MapField  map[string]*RefOverrideElement
 }
 
 type NestedAnnotatedContainerSchemaConsistent struct {
@@ -2179,6 +2180,16 @@ func getRefOverrideContainer(obj any) RefOverrideContainer {
 	}
 }
 
+func getOnlyRefOverrideSetElement(values fory.Set[*RefOverrideElement]) *RefOverrideElement {
+	if len(values) != 1 {
+		panic(fmt.Sprintf("expected SetField to contain exactly 1 element, got %d", len(values)))
+	}
+	for value := range values {
+		return value
+	}
+	panic("SetField unexpectedly empty")
+}
+
 // ============================================================================
 // Circular Reference Test Types
 // ============================================================================
@@ -2326,17 +2337,88 @@ func testCollectionElementRefOverride() {
 	if len(result.ListField) < 2 {
 		panic("ListField is empty")
 	}
+	setValue := getOnlyRefOverrideSetElement(result.SetField)
+	// The Java writer disables element ref tracking for this field. The Go reader must honor the
+	// wire metadata and materialize distinct objects here even though the local Go schema uses the
+	// default ref-tracked pointer element type.
 	if result.ListField[0] == result.ListField[1] {
-		panic("ListField elements unexpectedly share references")
+		panic("ListField elements unexpectedly share references after reading remote ref=false metadata")
+	}
+	if result.ListField[0] == setValue {
+		panic("SetField element unexpectedly shares reference with ListField[0] after reading remote ref=false metadata")
 	}
 	if result.MapField["k1"] == result.MapField["k2"] {
-		panic("MapField values unexpectedly share references")
+		panic("MapField values unexpectedly share references after reading remote ref=false metadata")
 	}
 	if result.MapField["k1"] == result.ListField[0] {
-		panic("MapField value unexpectedly shares reference with ListField[0]")
+		panic("MapField value unexpectedly shares reference with ListField[0] after reading remote ref=false metadata")
+	}
+	if result.MapField["k1"] == setValue || result.MapField["k2"] == setValue {
+		panic("MapField value unexpectedly shares reference with SetField after reading remote ref=false metadata")
+	}
+	if result.ListField[0] == nil || result.ListField[1] == nil || setValue == nil || result.MapField["k1"] == nil || result.MapField["k2"] == nil {
+		panic("RefOverrideContainer elements should not be nil")
+	}
+	if result.ListField[0].Id != 7 || result.ListField[0].Name != "shared_element" {
+		panic(fmt.Sprintf("unexpected first list element: %+v", result.ListField[0]))
+	}
+	if result.ListField[1].Id != 7 || result.ListField[1].Name != "shared_element" {
+		panic(fmt.Sprintf("unexpected second list element: %+v", result.ListField[1]))
+	}
+	if result.MapField["k1"].Id != 7 || result.MapField["k1"].Name != "shared_element" {
+		panic(fmt.Sprintf("unexpected map value k1: %+v", result.MapField["k1"]))
+	}
+	if result.MapField["k2"].Id != 7 || result.MapField["k2"].Name != "shared_element" {
+		panic(fmt.Sprintf("unexpected map value k2: %+v", result.MapField["k2"]))
+	}
+	if setValue.Id != 7 || setValue.Name != "shared_element" {
+		panic(fmt.Sprintf("unexpected set element: %+v", setValue))
 	}
 
-	serialized, err := f.Serialize(&result)
+	// Serialize a new container that intentionally reuses one shared object. The Java reader should
+	// reconstruct shared identity across list, set, and map from this payload based on the metadata
+	// written by Go.
+	shared := result.ListField[0]
+	output := RefOverrideContainer{
+		ListField: []*RefOverrideElement{shared, shared},
+		SetField:  fory.Set[*RefOverrideElement]{shared: {}},
+		MapField: map[string]*RefOverrideElement{
+			"k1": shared,
+			"k2": shared,
+		},
+	}
+
+	serialized, err := f.Serialize(&output)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testCollectionElementRefRemoteTracking() {
+	dataFile := getDataFile()
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false), fory.WithRefTracking(true))
+	f.RegisterStruct(RefOverrideElement{}, 701)
+	f.RegisterStruct(RefOverrideContainer{}, 702)
+
+	shared := &RefOverrideElement{Id: 7, Name: "shared_element"}
+	// IMPORTANT: this peer intentionally writes a shared-reference payload with
+	// the default local ref-tracked schema. The Java reader uses `ref=false` on
+	// the collection elements and must still reconstruct the shared identity
+	// from the wire metadata instead of forcing its local annotation. DO NOT
+	// remove this comment.
+	output := RefOverrideContainer{
+		ListField: []*RefOverrideElement{shared, shared},
+		SetField:  fory.Set[*RefOverrideElement]{shared: {}},
+		MapField: map[string]*RefOverrideElement{
+			"k1": shared,
+			"k2": shared,
+		},
+	}
+
+	serialized, err := f.Serialize(&output)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to serialize: %v", err))
 	}
@@ -2829,6 +2911,8 @@ func main() {
 		testRefCompatible()
 	case "test_collection_element_ref_override":
 		testCollectionElementRefOverride()
+	case "test_collection_element_ref_remote_tracking":
+		testCollectionElementRefRemoteTracking()
 	case "test_circular_ref_schema_consistent":
 		testCircularRefSchemaConsistent()
 	case "test_circular_ref_compatible":

@@ -339,6 +339,10 @@ where
     T: Serializer + ForyDefault,
 {
     let header = context.reader.read_u8()?;
+    // IMPORTANT: collection readers must honor the ref/null bits written on
+    // the wire, not the local element type shape that may imply a different
+    // ref policy. Shared xlang tests intentionally deserialize one ref policy
+    // and then serialize another local payload. DO NOT REMOVE this comment.
     let is_track_ref = (header & TRACKING_REF) != 0;
     let is_same_type = (header & IS_SAME_TYPE) != 0;
     let has_null = (header & HAS_NULL) != 0;
@@ -395,6 +399,9 @@ where
 {
     // Read header
     let header = context.reader.read_u8()?;
+    // IMPORTANT: dynamic/shared-ref collection reads still obey the wire
+    // header first. Local Rust type information must not override whether the
+    // sender wrote ref flags for this payload. DO NOT REMOVE this comment.
     let is_track_ref = (header & TRACKING_REF) != 0;
     let is_same_type = (header & IS_SAME_TYPE) != 0;
     let has_null = (header & HAS_NULL) != 0;

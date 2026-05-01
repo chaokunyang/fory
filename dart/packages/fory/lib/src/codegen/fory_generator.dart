@@ -63,6 +63,9 @@ final class ForyGenerator extends Generator {
   static final TypeChecker _mapFieldChecker = TypeChecker.fromRuntime(
     MapField,
   );
+  static final TypeChecker _typeSpecChecker = TypeChecker.fromRuntime(
+    TypeSpec,
+  );
   static final TypeChecker _foryUnionChecker = TypeChecker.fromRuntime(
     ForyUnion,
   );
@@ -2015,6 +2018,18 @@ GeneratedFieldType(
   }
 
   DartObject? _fieldAnnotationOf(FieldElement field) {
+    for (final metadata in field.metadata) {
+      final annotation = metadata.computeConstantValue();
+      final annotationType = annotation?.type;
+      if (annotationType != null &&
+          _typeSpecChecker.isAssignableFromType(annotationType)) {
+        throw InvalidGenerationSourceError(
+          'Standalone type-spec annotations like @${annotationType.element?.displayName ?? 'TypeSpec'}() '
+          'are not supported. Use @ForyField(type: ...) or container field sugar instead.',
+          element: field,
+        );
+      }
+    }
     final annotations = <DartObject?>[
       _foryFieldChecker.firstAnnotationOf(field),
       _listFieldChecker.firstAnnotationOf(field),

@@ -19,46 +19,48 @@
 
 @pragma('vm:prefer-inline')
 int checkedInt8(int value) {
-  RangeError.checkValueInInterval(value, -128, 127, 'value');
+  if (value < -128 || value > 127) {
+    throw RangeError.range(value, -128, 127, 'value');
+  }
   return value;
 }
 
 @pragma('vm:prefer-inline')
 int checkedInt16(int value) {
-  RangeError.checkValueInInterval(value, -32768, 32767, 'value');
+  if (value < -32768 || value > 32767) {
+    throw RangeError.range(value, -32768, 32767, 'value');
+  }
   return value;
 }
 
 @pragma('vm:prefer-inline')
 int checkedInt32(int value) {
-  RangeError.checkValueInInterval(
-    value,
-    -2147483648,
-    2147483647,
-    'value',
-  );
+  if (value < -2147483648 || value > 2147483647) {
+    throw RangeError.range(value, -2147483648, 2147483647, 'value');
+  }
   return value;
 }
 
 @pragma('vm:prefer-inline')
 int checkedUint8(int value) {
-  RangeError.checkValueInInterval(value, 0, 255, 'value');
+  if (value < 0 || value > 255) {
+    throw RangeError.range(value, 0, 255, 'value');
+  }
   return value;
 }
 
 @pragma('vm:prefer-inline')
 int checkedUint16(int value) {
-  RangeError.checkValueInInterval(value, 0, 65535, 'value');
+  if (value < 0 || value > 65535) {
+    throw RangeError.range(value, 0, 65535, 'value');
+  }
   return value;
 }
 
 @pragma('vm:prefer-inline')
 int checkedUint32(int value) {
-  RangeError.checkValueInInterval(
-    value,
-    0,
-    4294967295,
-    'value',
-  );
+  if (value < 0 || value > 4294967295) {
+    throw RangeError.range(value, 0, 4294967295, 'value');
+  }
   return value;
 }

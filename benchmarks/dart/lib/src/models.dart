@@ -50,29 +50,21 @@ class NumericStruct {
     required this.f8,
   });
 
-  @ForyField(id: 1)
-  @Int32Type()
+  @ForyField(id: 1, type: Int32Type())
   final int f1;
-  @ForyField(id: 2)
-  @Int32Type()
+  @ForyField(id: 2, type: Int32Type())
   final int f2;
-  @ForyField(id: 3)
-  @Int32Type()
+  @ForyField(id: 3, type: Int32Type())
   final int f3;
-  @ForyField(id: 4)
-  @Int32Type()
+  @ForyField(id: 4, type: Int32Type())
   final int f4;
-  @ForyField(id: 5)
-  @Int32Type()
+  @ForyField(id: 5, type: Int32Type())
   final int f5;
-  @ForyField(id: 6)
-  @Int32Type()
+  @ForyField(id: 6, type: Int32Type())
   final int f6;
-  @ForyField(id: 7)
-  @Int32Type()
+  @ForyField(id: 7, type: Int32Type())
   final int f7;
-  @ForyField(id: 8)
-  @Int32Type()
+  @ForyField(id: 8, type: Int32Type())
   final int f8;
 }
 
@@ -103,39 +95,31 @@ class Sample {
     required this.string,
   });
 
-  @ForyField(id: 1)
-  @Int32Type()
+  @ForyField(id: 1, type: Int32Type())
   final int intValue;
-  @ForyField(id: 2)
-  @Int64Type()
+  @ForyField(id: 2, type: Int64Type())
   final int longValue;
   @ForyField(id: 3)
   final Float32 floatValue;
   @ForyField(id: 4)
   final double doubleValue;
-  @ForyField(id: 5)
-  @Int32Type()
+  @ForyField(id: 5, type: Int32Type())
   final int shortValue;
-  @ForyField(id: 6)
-  @Int32Type()
+  @ForyField(id: 6, type: Int32Type())
   final int charValue;
   @ForyField(id: 7)
   final bool booleanValue;
-  @ForyField(id: 8)
-  @Int32Type()
+  @ForyField(id: 8, type: Int32Type())
   final int intValueBoxed;
-  @ForyField(id: 9)
-  @Int64Type()
+  @ForyField(id: 9, type: Int64Type())
   final int longValueBoxed;
   @ForyField(id: 10)
   final Float32 floatValueBoxed;
   @ForyField(id: 11)
   final double doubleValueBoxed;
-  @ForyField(id: 12)
-  @Int32Type()
+  @ForyField(id: 12, type: Int32Type())
   final int shortValueBoxed;
-  @ForyField(id: 13)
-  @Int32Type()
+  @ForyField(id: 13, type: Int32Type())
   final int charValueBoxed;
   @ForyField(id: 14)
   final bool booleanValueBoxed;
@@ -178,22 +162,17 @@ class Media {
   final String uri;
   @ForyField(id: 2)
   final String title;
-  @ForyField(id: 3)
-  @Int32Type()
+  @ForyField(id: 3, type: Int32Type())
   final int width;
-  @ForyField(id: 4)
-  @Int32Type()
+  @ForyField(id: 4, type: Int32Type())
   final int height;
   @ForyField(id: 5)
   final String format;
-  @ForyField(id: 6)
-  @Int64Type()
+  @ForyField(id: 6, type: Int64Type())
   final int duration;
-  @ForyField(id: 7)
-  @Int64Type()
+  @ForyField(id: 7, type: Int64Type())
   final int size;
-  @ForyField(id: 8)
-  @Int32Type()
+  @ForyField(id: 8, type: Int32Type())
   final int bitrate;
   @ForyField(id: 9)
   final bool hasBitrate;
@@ -219,11 +198,9 @@ class Image {
   final String uri;
   @ForyField(id: 2)
   final String title;
-  @ForyField(id: 3)
-  @Int32Type()
+  @ForyField(id: 3, type: Int32Type())
   final int width;
-  @ForyField(id: 4)
-  @Int32Type()
+  @ForyField(id: 4, type: Int32Type())
   final int height;
   @ForyField(id: 5)
   final MediaSize size;

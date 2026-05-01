@@ -638,18 +638,18 @@ fn type_name_and_args(
     Some((seg.ident.to_string(), Some(&args.args)))
 }
 
-fn single_type_arg<'a>(
-    args: &'a syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>,
-) -> Option<&'a Type> {
+fn single_type_arg(
+    args: &syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>,
+) -> Option<&Type> {
     args.iter().find_map(|arg| match arg {
         GenericArgument::Type(ty) => Some(ty),
         _ => None,
     })
 }
 
-fn two_type_args<'a>(
-    args: &'a syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>,
-) -> Option<(&'a Type, &'a Type)> {
+fn two_type_args(
+    args: &syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>,
+) -> Option<(&Type, &Type)> {
     let mut iter = args.iter().filter_map(|arg| match arg {
         GenericArgument::Type(ty) => Some(ty),
         _ => None,
@@ -701,59 +701,47 @@ fn build_type_fingerprint(
     };
 
     match name.as_str() {
-        "Vec" | "VecDeque" | "LinkedList" => {
-            if type_id == TypeId::LIST as u32 {
-                if let Some(args) = args {
-                    if let Some(elem_ty) = single_type_arg(args) {
-                        fingerprint.push('[');
-                        fingerprint.push_str(&build_type_fingerprint(
-                            elem_ty,
-                            &meta.element_meta(),
-                            false,
-                            false,
-                        ));
-                        fingerprint.push(']');
-                    }
-                }
+        "Vec" | "VecDeque" | "LinkedList" if type_id == TypeId::LIST as u32 => {
+            if let Some(elem_ty) = args.and_then(single_type_arg) {
+                fingerprint.push('[');
+                fingerprint.push_str(&build_type_fingerprint(
+                    elem_ty,
+                    &meta.element_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push(']');
             }
         }
-        "HashSet" | "BTreeSet" | "BinaryHeap" => {
-            if type_id == TypeId::SET as u32 {
-                if let Some(args) = args {
-                    if let Some(elem_ty) = single_type_arg(args) {
-                        fingerprint.push('[');
-                        fingerprint.push_str(&build_type_fingerprint(
-                            elem_ty,
-                            &meta.element_meta(),
-                            false,
-                            false,
-                        ));
-                        fingerprint.push(']');
-                    }
-                }
+        "HashSet" | "BTreeSet" | "BinaryHeap" if type_id == TypeId::SET as u32 => {
+            if let Some(elem_ty) = args.and_then(single_type_arg) {
+                fingerprint.push('[');
+                fingerprint.push_str(&build_type_fingerprint(
+                    elem_ty,
+                    &meta.element_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push(']');
             }
         }
-        "HashMap" | "BTreeMap" => {
-            if type_id == TypeId::MAP as u32 {
-                if let Some(args) = args {
-                    if let Some((key_ty, value_ty)) = two_type_args(args) {
-                        fingerprint.push('[');
-                        fingerprint.push_str(&build_type_fingerprint(
-                            key_ty,
-                            &meta.map_key_meta(),
-                            false,
-                            false,
-                        ));
-                        fingerprint.push('|');
-                        fingerprint.push_str(&build_type_fingerprint(
-                            value_ty,
-                            &meta.map_value_meta(),
-                            false,
-                            false,
-                        ));
-                        fingerprint.push(']');
-                    }
-                }
+        "HashMap" | "BTreeMap" if type_id == TypeId::MAP as u32 => {
+            if let Some((key_ty, value_ty)) = args.and_then(two_type_args) {
+                fingerprint.push('[');
+                fingerprint.push_str(&build_type_fingerprint(
+                    key_ty,
+                    &meta.map_key_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push('|');
+                fingerprint.push_str(&build_type_fingerprint(
+                    value_ty,
+                    &meta.map_value_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push(']');
             }
         }
         _ => {}

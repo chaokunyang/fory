@@ -230,6 +230,26 @@ class RefOverrideContainer:
     map_field: Dict[str, Ref[RefOverrideElement]] = None
 
 
+@dataclass
+class SignedNestedAnnotatedContainerSchemaConsistent:
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]] = None
+
+
+@dataclass
+class SignedNestedAnnotatedContainerCompatible:
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]] = None
+
+
+@dataclass
+class NestedAnnotatedContainerSchemaConsistent:
+    values: Dict[pyfory.fixed_uint32, List[pyfory.tagged_uint64]] = None
+
+
+@dataclass
+class NestedAnnotatedContainerCompatible:
+    values: Dict[pyfory.fixed_uint32, List[pyfory.tagged_uint64]] = None
+
+
 # ============================================================================
 # Nullable Field Test Types
 # ============================================================================
@@ -1422,6 +1442,61 @@ def test_collection_element_ref_remote_tracking():
 
     with open(data_file, "wb") as f:
         f.write(fory.serialize(outer))
+
+
+def _test_nested_annotated_container(cls, type_id: int, expected, compatible: bool):
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    kwargs = {"xlang": True, "compatible": compatible}
+    if compatible:
+        kwargs["meta_compressor"] = NoOpMetaCompressor()
+    fory = pyfory.Fory(**kwargs)
+    fory.register_type(cls, type_id=type_id)
+
+    obj = fory.deserialize(data_bytes)
+    debug_print(f"Deserialized nested annotated container: {obj}")
+    assert obj == expected, f"Mismatch: {obj} != {expected}"
+
+    with open(data_file, "wb") as f:
+        f.write(fory.serialize(obj))
+
+
+def test_signed_nested_annotated_container_schema_consistent():
+    _test_nested_annotated_container(
+        SignedNestedAnnotatedContainerSchemaConsistent,
+        803,
+        SignedNestedAnnotatedContainerSchemaConsistent(values={-7: [7, -1000000000], 3: [42]}),
+        compatible=False,
+    )
+
+
+def test_signed_nested_annotated_container_compatible():
+    _test_nested_annotated_container(
+        SignedNestedAnnotatedContainerCompatible,
+        804,
+        SignedNestedAnnotatedContainerCompatible(values={-7: [7, -1000000000], 3: [42]}),
+        compatible=True,
+    )
+
+
+def test_nested_annotated_container_schema_consistent():
+    _test_nested_annotated_container(
+        NestedAnnotatedContainerSchemaConsistent,
+        801,
+        NestedAnnotatedContainerSchemaConsistent(values={4000000000: [7, 1000000000], 3: [42]}),
+        compatible=False,
+    )
+
+
+def test_nested_annotated_container_compatible():
+    _test_nested_annotated_container(
+        NestedAnnotatedContainerCompatible,
+        802,
+        NestedAnnotatedContainerCompatible(values={4000000000: [7, 1000000000], 3: [42]}),
+        compatible=True,
+    )
 
 
 # ============================================================================

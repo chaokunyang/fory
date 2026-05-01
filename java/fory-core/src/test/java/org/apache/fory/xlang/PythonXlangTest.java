@@ -234,6 +234,33 @@ public class PythonXlangTest extends XlangTestBase {
 
   @Override
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testSignedNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
+      throws IOException {
+    super.testSignedNestedAnnotatedContainerSchemaConsistent(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testSignedNestedAnnotatedContainerCompatible(boolean enableCodegen)
+      throws IOException {
+    super.testSignedNestedAnnotatedContainerCompatible(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
+      throws IOException {
+    super.testNestedAnnotatedContainerSchemaConsistent(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testNestedAnnotatedContainerCompatible(boolean enableCodegen) throws IOException {
+    super.testNestedAnnotatedContainerCompatible(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen) throws IOException {
     super.testNullableFieldSchemaConsistentNotNull(enableCodegen);
   }

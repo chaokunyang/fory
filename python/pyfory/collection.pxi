@@ -947,29 +947,79 @@ cdef class MapSerializer(Serializer):
                 if not key_write_ref or not ref_writer.write_ref_or_null(c_buffer, key):
                     if key_cls is str:
                         write_context.write_string(key)
-                    elif key_serializer_type is Int64Serializer:
+                    elif key_serializer_type is Int64Serializer or key_serializer_type is Varint64Serializer:
                         write_context.write_varint64(key)
+                    elif key_serializer_type is FixedInt64Serializer:
+                        write_context.write_int64(key)
+                    elif key_serializer_type is TaggedInt64Serializer:
+                        write_context.write_tagged_int64(key)
                     elif key_serializer_type is Float64Serializer:
                         write_context.write_double(key)
-                    elif key_serializer_type is Int32Serializer:
+                    elif key_serializer_type is Int32Serializer or key_serializer_type is Varint32Serializer:
                         write_context.write_varint32(key)
+                    elif key_serializer_type is FixedInt32Serializer:
+                        write_context.write_int32(key)
                     elif key_serializer_type is Float32Serializer:
                         write_context.write_float(key)
+                    elif key_serializer_type is BooleanSerializer:
+                        write_context.write_bool(key)
+                    elif key_serializer_type is ByteSerializer:
+                        write_context.write_int8(key)
+                    elif key_serializer_type is Int16Serializer:
+                        write_context.write_int16(key)
+                    elif key_serializer_type is Uint8Serializer:
+                        write_context.write_uint8(key)
+                    elif key_serializer_type is Uint16Serializer:
+                        write_context.write_uint16(key)
+                    elif key_serializer_type is Uint32Serializer:
+                        write_context.write_uint32(key)
+                    elif key_serializer_type is VarUint32Serializer:
+                        write_context.write_var_uint32(key)
+                    elif key_serializer_type is Uint64Serializer:
+                        write_context.write_uint64(key)
+                    elif key_serializer_type is VarUint64Serializer:
+                        write_context.write_var_uint64(key)
+                    elif key_serializer_type is TaggedUint64Serializer:
+                        write_context.write_tagged_uint64(key)
                     else:
                         key_serializer.write(write_context, key)
                 if not value_write_ref or not ref_writer.write_ref_or_null(c_buffer, value):
                     if value_cls is str:
                         write_context.write_string(value)
-                    elif value_serializer_type is Int64Serializer:
+                    elif value_serializer_type is Int64Serializer or value_serializer_type is Varint64Serializer:
                         write_context.write_varint64(value)
+                    elif value_serializer_type is FixedInt64Serializer:
+                        write_context.write_int64(value)
+                    elif value_serializer_type is TaggedInt64Serializer:
+                        write_context.write_tagged_int64(value)
                     elif value_serializer_type is Float64Serializer:
                         write_context.write_double(value)
-                    elif value_serializer_type is Int32Serializer:
+                    elif value_serializer_type is Int32Serializer or value_serializer_type is Varint32Serializer:
                         write_context.write_varint32(value)
+                    elif value_serializer_type is FixedInt32Serializer:
+                        write_context.write_int32(value)
                     elif value_serializer_type is Float32Serializer:
                         write_context.write_float(value)
                     elif value_serializer_type is BooleanSerializer:
                         write_context.write_bool(value)
+                    elif value_serializer_type is ByteSerializer:
+                        write_context.write_int8(value)
+                    elif value_serializer_type is Int16Serializer:
+                        write_context.write_int16(value)
+                    elif value_serializer_type is Uint8Serializer:
+                        write_context.write_uint8(value)
+                    elif value_serializer_type is Uint16Serializer:
+                        write_context.write_uint16(value)
+                    elif value_serializer_type is Uint32Serializer:
+                        write_context.write_uint32(value)
+                    elif value_serializer_type is VarUint32Serializer:
+                        write_context.write_var_uint32(value)
+                    elif value_serializer_type is Uint64Serializer:
+                        write_context.write_uint64(value)
+                    elif value_serializer_type is VarUint64Serializer:
+                        write_context.write_var_uint64(value)
+                    elif value_serializer_type is TaggedUint64Serializer:
+                        write_context.write_tagged_uint64(value)
                     else:
                         value_serializer.write(write_context, value)
                 chunk_size += 1
@@ -1092,14 +1142,40 @@ cdef class MapSerializer(Serializer):
                 else:
                     if key_serializer_type is StringSerializer:
                         key = read_context.read_string()
-                    elif key_serializer_type is Int64Serializer:
+                    elif key_serializer_type is Int64Serializer or key_serializer_type is Varint64Serializer:
                         key = read_context.read_varint64()
+                    elif key_serializer_type is FixedInt64Serializer:
+                        key = read_context.read_int64()
+                    elif key_serializer_type is TaggedInt64Serializer:
+                        key = read_context.read_tagged_int64()
                     elif key_serializer_type is Float64Serializer:
                         key = read_context.read_double()
-                    elif key_serializer_type is Int32Serializer:
+                    elif key_serializer_type is Int32Serializer or key_serializer_type is Varint32Serializer:
                         key = read_context.read_varint32()
+                    elif key_serializer_type is FixedInt32Serializer:
+                        key = read_context.read_int32()
                     elif key_serializer_type is Float32Serializer:
                         key = read_context.read_float()
+                    elif key_serializer_type is BooleanSerializer:
+                        key = read_context.read_bool()
+                    elif key_serializer_type is ByteSerializer:
+                        key = read_context.read_int8()
+                    elif key_serializer_type is Int16Serializer:
+                        key = read_context.read_int16()
+                    elif key_serializer_type is Uint8Serializer:
+                        key = read_context.read_uint8()
+                    elif key_serializer_type is Uint16Serializer:
+                        key = read_context.read_uint16()
+                    elif key_serializer_type is Uint32Serializer:
+                        key = read_context.read_uint32()
+                    elif key_serializer_type is VarUint32Serializer:
+                        key = read_context.read_var_uint32()
+                    elif key_serializer_type is Uint64Serializer:
+                        key = read_context.read_uint64()
+                    elif key_serializer_type is VarUint64Serializer:
+                        key = read_context.read_var_uint64()
+                    elif key_serializer_type is TaggedUint64Serializer:
+                        key = read_context.read_tagged_uint64()
                     else:
                         key = read_context.read_non_ref(key_serializer)
                 if track_value_ref:
@@ -1114,16 +1190,40 @@ cdef class MapSerializer(Serializer):
                 else:
                     if value_serializer_type is StringSerializer:
                         value = read_context.read_string()
-                    elif value_serializer_type is Int64Serializer:
+                    elif value_serializer_type is Int64Serializer or value_serializer_type is Varint64Serializer:
                         value = read_context.read_varint64()
+                    elif value_serializer_type is FixedInt64Serializer:
+                        value = read_context.read_int64()
+                    elif value_serializer_type is TaggedInt64Serializer:
+                        value = read_context.read_tagged_int64()
                     elif value_serializer_type is Float64Serializer:
                         value = read_context.read_double()
-                    elif value_serializer_type is Int32Serializer:
+                    elif value_serializer_type is Int32Serializer or value_serializer_type is Varint32Serializer:
                         value = read_context.read_varint32()
+                    elif value_serializer_type is FixedInt32Serializer:
+                        value = read_context.read_int32()
                     elif value_serializer_type is Float32Serializer:
                         value = read_context.read_float()
                     elif value_serializer_type is BooleanSerializer:
                         value = read_context.read_bool()
+                    elif value_serializer_type is ByteSerializer:
+                        value = read_context.read_int8()
+                    elif value_serializer_type is Int16Serializer:
+                        value = read_context.read_int16()
+                    elif value_serializer_type is Uint8Serializer:
+                        value = read_context.read_uint8()
+                    elif value_serializer_type is Uint16Serializer:
+                        value = read_context.read_uint16()
+                    elif value_serializer_type is Uint32Serializer:
+                        value = read_context.read_uint32()
+                    elif value_serializer_type is VarUint32Serializer:
+                        value = read_context.read_var_uint32()
+                    elif value_serializer_type is Uint64Serializer:
+                        value = read_context.read_uint64()
+                    elif value_serializer_type is VarUint64Serializer:
+                        value = read_context.read_var_uint64()
+                    elif value_serializer_type is TaggedUint64Serializer:
+                        value = read_context.read_tagged_uint64()
                     else:
                         value = read_context.read_non_ref(value_serializer)
                 map_[key] = value

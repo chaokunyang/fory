@@ -608,6 +608,30 @@ def test_java_nested_integer_annotations_in_generic_containers():
     )
 
 
+def test_python_nested_integer_schema_aliases_in_generic_containers():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message NestedIntegerSchemaAliases {
+                map<fixed_int32, list<tagged_int64>> signed_values = 1;
+                map<fixed_uint32, list<tagged_uint64>> unsigned_values = 2;
+            }
+            """
+        )
+    )
+    python_output = render_files(generate_files(schema, PythonGenerator))
+    assert (
+        "signed_values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]"
+        in python_output
+    )
+    assert (
+        "unsigned_values: Dict[pyfory.fixed_uint32, List[pyfory.tagged_uint64]]"
+        in python_output
+    )
+
+
 def test_cpp_nested_integer_specs_in_generic_containers():
     schema = parse_fdl(
         dedent(

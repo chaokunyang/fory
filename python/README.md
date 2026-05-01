@@ -454,6 +454,7 @@ Serialize data in Python and deserialize it in Java, Go, Rust, or other supporte
 **Python (Serializer)**
 
 ```python
+from dataclasses import dataclass
 import pyfory
 
 # Cross-language mode for interoperability
@@ -471,6 +472,10 @@ person = Person("Charlie", 35)
 binary_data = f.serialize(person)
 # binary_data can now be sent to Java, Go, etc.
 ```
+
+Nested collection aliases are declared schema. For example,
+`Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]` writes map keys with fixed int32 encoding and
+nested list elements with tagged int64 encoding in both pure Python and Cython modes.
 
 **Java (Deserializer)**
 

@@ -49,12 +49,22 @@ inline constexpr bool Fory_CanUsePrimitiveCollectionFastpath(uint8_t type_id) {
   switch (static_cast<TypeId>(type_id)) {
   case TypeId::STRING:
   case TypeId::VARINT64:
+  case TypeId::INT64:
+  case TypeId::TAGGED_INT64:
   case TypeId::VARINT32:
-  case TypeId::BOOL:
-  case TypeId::FLOAT64:
-  case TypeId::INT8:
-  case TypeId::INT16:
   case TypeId::INT32:
+  case TypeId::VAR_UINT64:
+  case TypeId::UINT64:
+  case TypeId::TAGGED_UINT64:
+  case TypeId::VAR_UINT32:
+  case TypeId::UINT32:
+  case TypeId::BOOL:
+  case TypeId::FLOAT32:
+  case TypeId::FLOAT64:
+  case TypeId::UINT8:
+  case TypeId::INT8:
+  case TypeId::UINT16:
+  case TypeId::INT16:
     return true;
   default:
     return false;

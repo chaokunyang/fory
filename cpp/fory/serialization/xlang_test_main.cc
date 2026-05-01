@@ -2727,17 +2727,23 @@ void run_test_collection_element_ref_override(const std::string &data_file) {
     fail("RefOverrideContainer: set_field should contain exactly one element");
   }
   auto set_value = *outer.set_field.begin();
-  if (outer.list_field.size() > 1 && outer.list_field.front() == outer.list_field[1]) {
-    fail("RefOverrideContainer: list_field unexpectedly shared references after remote ref=false metadata");
+  if (outer.list_field.size() > 1 &&
+      outer.list_field.front() == outer.list_field[1]) {
+    fail("RefOverrideContainer: list_field unexpectedly shared references "
+         "after remote ref=false metadata");
   }
   if (outer.list_field.front() == set_value) {
-    fail("RefOverrideContainer: set_field unexpectedly shared reference with list_field after remote ref=false metadata");
+    fail("RefOverrideContainer: set_field unexpectedly shared reference with "
+         "list_field after remote ref=false metadata");
   }
   if (outer.map_field["k1"] == outer.map_field["k2"]) {
-    fail("RefOverrideContainer: map_field unexpectedly shared references after remote ref=false metadata");
+    fail("RefOverrideContainer: map_field unexpectedly shared references after "
+         "remote ref=false metadata");
   }
-  if (outer.map_field["k1"] == set_value || outer.map_field["k2"] == set_value) {
-    fail("RefOverrideContainer: map_field unexpectedly shared reference with set_field after remote ref=false metadata");
+  if (outer.map_field["k1"] == set_value ||
+      outer.map_field["k2"] == set_value) {
+    fail("RefOverrideContainer: map_field unexpectedly shared reference with "
+         "set_field after remote ref=false metadata");
   }
 
   auto shared = outer.list_field.front();

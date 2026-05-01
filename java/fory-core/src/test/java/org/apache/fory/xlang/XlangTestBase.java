@@ -2586,7 +2586,9 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertSame(
         result.listField.get(1), first, "After xlang round-trip: list elements should share ref");
     Assert.assertSame(
-        setElement, first, "After xlang round-trip: set element should share ref with list element");
+        setElement,
+        first,
+        "After xlang round-trip: set element should share ref with list element");
     Assert.assertSame(
         result.mapField.get("k1"),
         first,

@@ -88,32 +88,47 @@ Controls whether Fory writes the concrete runtime type of the field value into t
 Object? payload;  // can hold any registered type at runtime
 ```
 
-## Numeric Field Annotations
+## Numeric Field Types
 
-Dart `int` is a 64-bit value at runtime. When exchanging messages with Java, Go, or C#, the receiving side may expect a narrower integer. Use a numeric annotation to pin the exact wire format:
+Dart `int` is a 64-bit value at runtime. When exchanging messages with Java, Go, or C#, the receiving side may expect a narrower integer. Use `@ForyField(type: ...)` to pin the exact wire format:
 
 ```dart
 @ForyStruct()
 class Sample {
   Sample();
 
-  @Int32Type(compress: false)   // always writes 4 bytes
+  @ForyField(type: Int32Type(encoding: Encoding.fixed))
   int fixedWidthInt = 0;
 
-  @Int64Type(encoding: LongEncoding.tagged)  // variable-length encoding
-  int compactLong = 0;
+  @ForyField(type: Int64Type(encoding: Encoding.tagged))
+  Int64 compactLong = Int64(0);
 
-  @Uint32Type(compress: true)   // variable-length unsigned
+  @ForyField(type: Uint32Type())
   int smallUnsigned = 0;
 }
 ```
 
-Available annotations: `@Int32Type`, `@Int64Type`, `@Uint8Type`, `@Uint16Type`, `@Uint32Type`, `@Uint64Type`.
+Available scalar type nodes include `Int8Type`, `Int16Type`, `Int32Type`,
+`Int64Type`, `Uint8Type`, `Uint16Type`, `Uint32Type`, `Uint64Type`,
+`Float16Type`, `Bfloat16Type`, and `Float32Type`.
 
-Alternatively, use explicit wrapper types such as `Int32`, `Int64`, `Uint32`,
-and `Uint64` as described in [Supported Types](supported-types.md). Wrappers use
-compact varint encodings by default; use annotations or generated field
-metadata when a fixed-width or tagged encoding is required.
+For nested containers, use `ListField`, `SetField`, `MapField`, or a full
+`ForyField(type: ...)` tree:
+
+```dart
+@MapField(
+  value: ListType(
+    element: Int32Type(encoding: Encoding.fixed),
+  ),
+)
+Map<String, List<int?>> metrics = <String, List<int?>>{};
+```
+
+Generic `List<int>` still uses the `list` wire type even with primitive element
+specs. Packed `*_array` wire kinds come from dedicated carriers such as
+`Int32List`, `Uint32List`, `Int64List`, and `Uint64List`. If you annotate a
+generic `List<int>` with a non-null fixed-width primitive element spec, code
+generation rejects it and tells you to use the matching typed list carrier.
 
 ## Aligning Fields Across Languages
 

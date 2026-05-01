@@ -889,8 +889,8 @@ final class Person {
   @ForyField(id: 1)
   String name = '';
 
-  @ForyField(id: 2)
-  Int32 id = Int32(0);
+  @ForyField(id: 2, type: Int32Type())
+  int id = 0;
 
   @ForyField(id: 7)
   List<Person_PhoneNumber> phones = <Person_PhoneNumber>[];
@@ -956,14 +956,14 @@ Nested types use flat underscore naming (e.g., `Person_PhoneNumber`, `Person_Pho
 
 Non-optional, non-ref lists of primitive types use typed arrays for zero-copy performance (e.g., `list<int32>` → `Int32List`).
 
-Reference tracking on list elements or map values uses `@ListType` / `@MapType` annotations:
+Reference tracking on list elements or map values uses the container sugar annotations:
 
 ```dart
-@ListType(element: ValueType.ref())
+@ListField(element: DeclaredType(ref: true))
 @ForyField(id: 3)
 List<Node> children = <Node>[];
 
-@MapType(value: ValueType.ref())
+@MapField(value: DeclaredType(ref: true))
 @ForyField(id: 2)
 Map<String, Node> byName = <String, Node>{};
 ```
@@ -1007,7 +1007,7 @@ void main() {
 
   final person = Person()
     ..name = 'Alice'
-    ..id = Int32(1);
+    ..id = 1;
 
   final bytes = fory.serialize(person);
   final roundTrip = fory.deserialize<Person>(bytes);

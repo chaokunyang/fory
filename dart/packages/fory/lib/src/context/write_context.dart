@@ -220,6 +220,28 @@ final class WriteContext {
     writeResolvedValue(resolved, value, null);
   }
 
+  @internal
+  void writeRootBuiltinValue(
+    Object value, {
+    required int wireTypeId,
+    required bool trackRef,
+  }) {
+    final resolved = _typeResolver.resolveBuiltinWireType(wireTypeId);
+    final effectiveTrackRef = trackRef && resolved.supportsRef;
+    if (_refWriter.writeRefOrNull(
+      _buffer,
+      value,
+      trackRef: effectiveTrackRef,
+    )) {
+      return;
+    }
+    if (!effectiveTrackRef && resolved.supportsRef) {
+      _refWriter.reference(value);
+    }
+    _writeTypeMeta(resolved, value);
+    writeResolvedValue(resolved, value, null);
+  }
+
   void _writeRef(Object? value, {required bool trackRef}) {
     final resolved = value == null ? null : _typeResolver.resolveValue(value);
     final effectiveTrackRef =

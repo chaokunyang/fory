@@ -194,7 +194,7 @@ void main() {
       maxCollectionSize: 1024,
       maxBinarySize: 4096,
     );
-    final bytes = fory.serialize(Int32(42));
-    expect(fory.deserialize<Int32>(bytes), equals(Int32(42)));
+    final bytes = fory.serialize((42));
+    expect(fory.deserialize<int>(bytes), equals((42)));
   });
 }

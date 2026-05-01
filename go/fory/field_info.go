@@ -529,6 +529,8 @@ type FieldFingerprintInfo struct {
 	FieldID int
 	// FieldName is the snake_case field name (used when FieldID < 0)
 	FieldName string
+	// TypeSpec is the effective nested field type specification when available.
+	TypeSpec *TypeSpec
 	// TypeID is the Fory type ID for the field
 	TypeID TypeId
 	// Ref is true if reference tracking is enabled for this field
@@ -541,7 +543,8 @@ type FieldFingerprintInfo struct {
 //
 // Fingerprint Format:
 //
-//	Each field contributes: "<field_id_or_name>,<type_id>,<ref>,<nullable>;"
+//	Each field contributes:
+//	"<field_id_or_name>,<type_id>,<ref>,<nullable>[<nested_type_fingerprint>];"
 //	Fields are sorted by field_id_or_name (lexicographically as strings)
 //
 // Field Components:
@@ -583,25 +586,78 @@ func ComputeStructFingerprint(fields []FieldFingerprintInfo) string {
 		// Field identifier
 		sb.WriteString(fw.sortKey)
 		sb.WriteString(",")
-		// Type ID
-		sb.WriteString(fmt.Sprintf("%d", fw.field.TypeID))
-		sb.WriteString(",")
-		// Ref flag
-		if fw.field.Ref {
-			sb.WriteString("1")
-		} else {
-			sb.WriteString("0")
-		}
-		sb.WriteString(",")
-		// Nullable flag
-		if fw.field.Nullable {
-			sb.WriteString("1")
-		} else {
-			sb.WriteString("0")
-		}
+		appendFieldTypeFingerprint(&sb, fw.field)
 		sb.WriteString(";")
 	}
 	return sb.String()
+}
+
+func appendFieldTypeFingerprint(sb *strings.Builder, field FieldFingerprintInfo) {
+	if field.TypeSpec != nil {
+		appendTypeSpecFingerprint(sb, field.TypeSpec, true, true)
+		return
+	}
+	sb.WriteString(fmt.Sprintf("%d", field.TypeID))
+	sb.WriteString(",")
+	if field.Ref {
+		sb.WriteString("1")
+	} else {
+		sb.WriteString("0")
+	}
+	sb.WriteString(",")
+	if field.Nullable {
+		sb.WriteString("1")
+	} else {
+		sb.WriteString("0")
+	}
+}
+
+func appendTypeSpecFingerprint(sb *strings.Builder, spec *TypeSpec, includeRef bool, includeNullable bool) {
+	if spec == nil {
+		if includeNullable {
+			sb.WriteString(fmt.Sprintf("%d,0,1", UNKNOWN))
+		} else {
+			sb.WriteString(fmt.Sprintf("%d,0,0", UNKNOWN))
+		}
+		return
+	}
+	sb.WriteString(fmt.Sprintf("%d", fingerprintTypeID(spec.TypeId())))
+	sb.WriteString(",")
+	if includeRef && spec.TrackRef {
+		sb.WriteString("1")
+	} else {
+		sb.WriteString("0")
+	}
+	sb.WriteString(",")
+	if includeNullable && spec.Nullable {
+		sb.WriteString("1")
+	} else {
+		sb.WriteString("0")
+	}
+	switch spec.TypeId() {
+	case LIST, SET:
+		sb.WriteString("[")
+		appendTypeSpecFingerprint(sb, spec.Element, false, false)
+		sb.WriteString("]")
+	case MAP:
+		sb.WriteString("[")
+		appendTypeSpecFingerprint(sb, spec.Key, false, false)
+		sb.WriteString("|")
+		appendTypeSpecFingerprint(sb, spec.Value, false, false)
+		sb.WriteString("]")
+	}
+}
+
+func fingerprintTypeID(typeID TypeId) TypeId {
+	switch typeID {
+	case ENUM, NAMED_ENUM,
+		STRUCT, COMPATIBLE_STRUCT, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT,
+		EXT, NAMED_EXT,
+		UNION, TYPED_UNION, NAMED_UNION:
+		return UNKNOWN
+	default:
+		return typeID
+	}
 }
 
 // Field sorting helpers

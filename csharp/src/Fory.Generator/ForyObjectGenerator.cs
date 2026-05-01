@@ -16,6 +16,7 @@
 // under the License.
 
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -1660,18 +1661,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         bool first = true;
         foreach (MemberModel member in ordered)
         {
-            uint fingerprintTypeId = (member.Classification.IsPrimitive || member.Classification.IsBuiltIn)
-                ? member.Classification.TypeId
-                : 0;
-            string trackRefExpr = member.DynamicAnyKind switch
-            {
-                DynamicAnyKind.AnyValue => "(trackRef ? 1 : 0)",
-                _ => member.Classification.IsBuiltIn || !member.IsRefType
-                    ? "0"
-                    : "(trackRef ? 1 : 0)",
-            };
-            string nullable = member.IsNullable ? "1" : "0";
-            string piece = $"\"{EscapeString(member.FieldIdentifier)},{fingerprintTypeId},\" + {trackRefExpr} + \",{nullable};\"";
+            string piece =
+                $"\"{EscapeString(member.FieldIdentifier)},\" + {BuildSchemaFieldTypeFingerprintExpression(member.TypeMeta, "trackRef", includeNullable: true)} + \";\"";
             if (!first)
             {
                 sb.Append(" + ");
@@ -1682,6 +1673,92 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         }
 
         return sb.ToString().Replace("b_float16", "bfloat16");
+    }
+
+    private static string BuildSchemaFieldTypeFingerprintExpression(
+        TypeMetaFieldTypeModel model,
+        string trackRefExpr,
+        bool includeNullable)
+    {
+        string localTrackRefExpr = model.TrackRefByContext
+            ? $"({trackRefExpr} ? 1 : 0)"
+            : "0";
+        string prefix =
+            $"\"{NormalizeSchemaFingerprintTypeId(model.TypeIdExpr).ToString(CultureInfo.InvariantCulture)},\" + {localTrackRefExpr} + \","
+            + (includeNullable && model.Nullable ? "1" : "0")
+            + "\"";
+        if (model.Generics.Length == 0)
+        {
+            return prefix;
+        }
+
+        if (model.Generics.Length == 1)
+        {
+            string child = BuildSchemaFieldTypeFingerprintExpression(model.Generics[0], "false", includeNullable: false);
+            return $"{prefix} + \"[\" + {child} + \"]\"";
+        }
+
+        if (model.Generics.Length == 2)
+        {
+            string key = BuildSchemaFieldTypeFingerprintExpression(model.Generics[0], "false", includeNullable: false);
+            string value = BuildSchemaFieldTypeFingerprintExpression(model.Generics[1], "false", includeNullable: false);
+            return $"{prefix} + \"[\" + {key} + \"|\" + {value} + \"]\"";
+        }
+
+        throw new InvalidOperationException("schema fingerprint supports only list/set/map generic arity");
+    }
+
+    private static uint NormalizeSchemaFingerprintTypeId(string typeIdExpr)
+    {
+        if (!TryParseSchemaFingerprintTypeId(typeIdExpr, out uint typeId))
+        {
+            throw new InvalidOperationException($"unsupported schema fingerprint type id expression {typeIdExpr}");
+        }
+
+        return typeId switch
+        {
+            0 or 25 or 26 or 27 or 28 or 29 or 30 or 31 or 32 or 33 or 34 or 35 => 0,
+            _ => typeId,
+        };
+    }
+
+    private static bool TryParseSchemaFingerprintTypeId(string typeIdExpr, out uint typeId)
+    {
+        string normalized = typeIdExpr.Replace(" ", string.Empty);
+        if (normalized.StartsWith("(uint)", StringComparison.Ordinal))
+        {
+            normalized = normalized.Substring(6);
+        }
+
+        if (uint.TryParse(normalized, NumberStyles.None, CultureInfo.InvariantCulture, out typeId))
+        {
+            return true;
+        }
+
+        switch (normalized)
+        {
+            case "global::Apache.Fory.TypeId.Unknown":
+                typeId = 0;
+                return true;
+            case "global::Apache.Fory.TypeId.List":
+                typeId = 22;
+                return true;
+            case "global::Apache.Fory.TypeId.Set":
+                typeId = 23;
+                return true;
+            case "global::Apache.Fory.TypeId.Map":
+                typeId = 24;
+                return true;
+            case "global::Apache.Fory.TypeId.Enum":
+                typeId = 25;
+                return true;
+            case "global::Apache.Fory.TypeId.Union":
+                typeId = 33;
+                return true;
+            default:
+                typeId = 0;
+                return false;
+        }
     }
 
     private static string BuildTypeMetaExpression(TypeMetaFieldTypeModel model, string trackRefExpr)

@@ -71,7 +71,7 @@ If you add field IDs after payloads are already in production, existing stored m
 **Unsafe changes** (may break existing messages):
 
 - Reuse an existing field ID for a different field.
-- Change a field's type to an incompatible type (e.g., `Int32` → `String`).
+- Change a field's type to an incompatible type (e.g., `@ForyField(type: Int32Type()) int` → `String`).
 - Change the registration identity (`id`, `namespace`, or `typeName`) of a type after messages are in production.
 - Change a field's logical meaning without changing its ID.
 

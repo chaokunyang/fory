@@ -1333,7 +1333,8 @@ jobs:
             Person();
 
             String name = '';
-            Int32 age = Int32(0);
+            @ForyField(type: Int32Type())
+            int age = 0;
           }
           EOF
           cat <<'EOF' | sed 's/^          //' > "$FLUTTER_SMOKE_DIR/lib/main.dart"
@@ -1363,13 +1364,13 @@ jobs:
 
               final person = Person()
                 ..name = 'Ada'
-                ..age = Int32(36);
+                ..age = 36;
 
               final bytes = fory.serialize(person);
               final roundTrip = fory.deserialize<Person>(bytes);
 
               expect(roundTrip.name, 'Ada');
-              expect(roundTrip.age, Int32(36));
+              expect(roundTrip.age, 36);
             });
           }
           EOF

@@ -93,6 +93,27 @@ final class Fory {
     return Uint8List.fromList(_buffer.toBytes());
   }
 
+  /// Serializes a non-null builtin [value] using the explicit xlang
+  /// [wireTypeId].
+  ///
+  /// This is the advanced escape hatch for root values whose wire type must
+  /// stay narrower than their Dart carrier type, such as writing a Dart `int`
+  /// as xlang `VAR_INT32`. [wireTypeId] must identify a builtin xlang type.
+  Uint8List serializeBuiltin(
+    Object value, {
+    required int wireTypeId,
+    bool trackRef = false,
+  }) {
+    _buffer.clear();
+    serializeBuiltinTo(
+      value,
+      _buffer,
+      wireTypeId: wireTypeId,
+      trackRef: trackRef,
+    );
+    return Uint8List.fromList(_buffer.toBytes());
+  }
+
   /// Serializes [value] into [buffer].
   ///
   /// The target [buffer] is cleared before bytes are written. [trackRef] has
@@ -107,6 +128,31 @@ final class Fory {
       }
       buffer.writeUint8(_xlangHeaderFlag);
       _writeContext.writeRootValue(value, trackRef: trackRef);
+    } finally {
+      _writeContext.reset();
+    }
+  }
+
+  /// Serializes a non-null builtin [value] into [buffer] using the explicit
+  /// xlang [wireTypeId].
+  ///
+  /// The target [buffer] is cleared before bytes are written. [wireTypeId]
+  /// must identify a builtin xlang type.
+  void serializeBuiltinTo(
+    Object value,
+    Buffer buffer, {
+    required int wireTypeId,
+    bool trackRef = false,
+  }) {
+    buffer.clear();
+    _writeContext.prepare(buffer, trackRef: trackRef);
+    try {
+      buffer.writeUint8(_xlangHeaderFlag);
+      _writeContext.writeRootBuiltinValue(
+        value,
+        wireTypeId: wireTypeId,
+        trackRef: trackRef,
+      );
     } finally {
       _writeContext.reset();
     }

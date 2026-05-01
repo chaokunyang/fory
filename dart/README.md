@@ -21,32 +21,36 @@ including getting started, API reference, and code examples.
 
 ## Type Mapping
 
-| Fory xlang type | Dart type                |
-| --------------- | ------------------------ |
-| bool            | `bool`                   |
-| int8            | `fory.Int8` (wrapper)    |
-| int16           | `fory.Int16` (wrapper)   |
-| int32           | `fory.Int32` (wrapper)   |
-| int64           | `int`                    |
-| float16         | `fory.Float16` (wrapper) |
-| float32         | `fory.Float32` (wrapper) |
-| float64         | `double`                 |
-| string          | `String`                 |
-| binary          | `Uint8List`              |
-| local_date      | `LocalDate`              |
-| timestamp       | `Timestamp`              |
-| list            | `List`                   |
-| set             | `Set`                    |
-| map             | `Map`                    |
-| enum            | `enum`                   |
-| named_struct    | `class`                  |
-| bool_array      | `List<bool>`             |
-| int8_array      | `Int8List`               |
-| int16_array     | `Int16List`              |
-| int32_array     | `Int32List`              |
-| int64_array     | `Int64List`              |
-| float32_array   | `Float32List`            |
-| float64_array   | `Float64List`            |
+| Fory xlang type | Dart type                                |
+| --------------- | ---------------------------------------- |
+| bool            | `bool`                                   |
+| int8            | `int` + `@ForyField(type: Int8Type())`   |
+| int16           | `int` + `@ForyField(type: Int16Type())`  |
+| int32           | `int` + `@ForyField(type: Int32Type())`  |
+| int64           | `int` or `Int64`                         |
+| uint8           | `int` + `@ForyField(type: Uint8Type())`  |
+| uint16          | `int` + `@ForyField(type: Uint16Type())` |
+| uint32          | `int` + `@ForyField(type: Uint32Type())` |
+| uint64          | `int` or `Uint64`                        |
+| float16         | `fory.Float16` (wrapper)                 |
+| float32         | `fory.Float32` (wrapper)                 |
+| float64         | `double`                                 |
+| string          | `String`                                 |
+| binary          | `Uint8List`                              |
+| local_date      | `LocalDate`                              |
+| timestamp       | `Timestamp`                              |
+| list            | `List`                                   |
+| set             | `Set`                                    |
+| map             | `Map`                                    |
+| enum            | `enum`                                   |
+| named_struct    | `class`                                  |
+| bool_array      | `List<bool>`                             |
+| int8_array      | `Int8List`                               |
+| int16_array     | `Int16List`                              |
+| int32_array     | `Int32List`                              |
+| int64_array     | `Int64List`                              |
+| float32_array   | `Float32List`                            |
+| float64_array   | `Float64List`                            |
 
 ## Quick Start
 
@@ -62,7 +66,9 @@ class Person {
   Person();
 
   String name = '';
-  Int32 age = Int32(0);
+
+  @ForyField(type: Int32Type())
+  int age = 0;
 }
 ```
 
@@ -76,7 +82,7 @@ Serialize and deserialize:
 final fory = Fory();
 PersonFory.register(fory, Person, namespace: 'example', typeName: 'Person');
 
-final bytes = fory.serialize(Person()..name = 'Ada'..age = Int32(36));
+final bytes = fory.serialize(Person()..name = 'Ada'..age = 36);
 final roundTrip = fory.deserialize<Person>(bytes);
 ```
 

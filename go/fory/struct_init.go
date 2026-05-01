@@ -881,7 +881,16 @@ func (s *structSerializer) computeHash() int32 {
 		fields = append(fields, FieldFingerprintInfo{
 			FieldID:   tagID,
 			FieldName: SnakeCase(field.Meta.Name),
-			TypeID:    typeId,
+			TypeSpec: func() *TypeSpec {
+				if field.Meta.Spec == nil || field.Meta.Spec.Type == nil {
+					return nil
+				}
+				projected := field.Meta.Spec.Type.Clone()
+				projected.Nullable = nullable
+				projected.TrackRef = explicitRef
+				return projected
+			}(),
+			TypeID: typeId,
 			// Ref is based on explicit tag annotation only, NOT runtime ref_tracking config
 			// This allows fingerprint to be computed at compile time for C++/Rust
 			Ref:      explicitRef,

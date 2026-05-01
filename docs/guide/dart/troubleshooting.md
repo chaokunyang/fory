@@ -74,7 +74,7 @@ Checklist:
 
 1. Same registration identity on both sides (same numeric ID **or** same `namespace + typeName`).
 2. Stable `@ForyField(id: ...)` assigned before the first payload was produced.
-3. Compatible numeric widths — use `Int32` in Dart when the peer field is `int` (Java), `int32` (Go), or `int` (C#).
+3. Compatible numeric widths — use `@ForyField(type: Int32Type())` in Dart when the peer field is `int` (Java), `int32` (Go), or `int` (C#).
 4. `Timestamp` / `LocalDate` instead of raw `DateTime` for date/time fields.
 5. `compatible: true` on **both** sides if using schema evolution.
 
@@ -114,9 +114,9 @@ class FileBlock {
 }
 ```
 
-`@Int64Type` changes the wire encoding for a Dart `int` field, but it does not
-remove the web integer precision limit. Use `Int64` for full-range signed
-values and `Uint64` for full-range unsigned values. See
+`@ForyField(type: Int64Type(...))` changes the wire encoding for a Dart `int`
+field, but it does not remove the web integer precision limit. Use `Int64` for
+full-range signed values and `Uint64` for full-range unsigned values. See
 [Web Platform Support](web-platform-support.md) for the full browser support
 matrix and migration guidance.
 

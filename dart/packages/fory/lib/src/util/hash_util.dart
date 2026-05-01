@@ -19,7 +19,7 @@
 
 import 'dart:convert';
 
-import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/meta/type_def.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/types/int64.dart';
@@ -175,27 +175,79 @@ Int64 typeDefHeader(
 }
 
 int schemaHash(TypeDef typeDef) {
+  return _murmurHash3X64_128Bits(utf8.encode(schemaFingerprint(typeDef)))
+      .$1
+      .low32;
+}
+
+String schemaFingerprint(TypeDef typeDef) {
   final parts = typeDef.fields
       .map(
         (field) => StringBuffer()
           ..write(field.identifier)
           ..write(',')
-          ..write(_fingerprintTypeId(field))
-          ..write(',')
-          ..write(field.fieldType.ref ? '1' : '0')
-          ..write(',')
-          ..write(field.fieldType.nullable ? '1' : '0')
+          ..write(
+            _fieldTypeFingerprint(
+              field.fieldType,
+              includeRef: true,
+              includeNullable: true,
+            ),
+          )
           ..write(';'),
       )
       .map((buffer) => buffer.toString())
       .toList(growable: false)
     ..sort();
-  return _murmurHash3X64_128Bits(utf8.encode(parts.join())).$1.low32;
+  return parts.join();
 }
 
-int _fingerprintTypeId(FieldInfo field) {
-  final typeId = field.fieldType.typeId;
-  if (field.fieldType.isDynamic || typeId == TypeIds.unknown) {
+String _fieldTypeFingerprint(
+  FieldType fieldType, {
+  required bool includeRef,
+  required bool includeNullable,
+}) {
+  final buffer = StringBuffer()
+    ..write(_fingerprintTypeId(fieldType))
+    ..write(',')
+    ..write(includeRef && fieldType.ref ? '1' : '0')
+    ..write(',')
+    ..write(includeNullable && fieldType.nullable ? '1' : '0');
+  if (fieldType.arguments.isNotEmpty) {
+    buffer.write('[');
+    if (fieldType.typeId == TypeIds.map) {
+      buffer
+        ..write(
+          _fieldTypeFingerprint(
+            fieldType.arguments[0],
+            includeRef: false,
+            includeNullable: false,
+          ),
+        )
+        ..write('|')
+        ..write(
+          _fieldTypeFingerprint(
+            fieldType.arguments[1],
+            includeRef: false,
+            includeNullable: false,
+          ),
+        );
+    } else {
+      buffer.write(
+        _fieldTypeFingerprint(
+          fieldType.arguments.single,
+          includeRef: false,
+          includeNullable: false,
+        ),
+      );
+    }
+    buffer.write(']');
+  }
+  return buffer.toString();
+}
+
+int _fingerprintTypeId(FieldType fieldType) {
+  final typeId = fieldType.typeId;
+  if (fieldType.isDynamic || typeId == TypeIds.unknown) {
     return TypeIds.unknown;
   }
   switch (typeId) {

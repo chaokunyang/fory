@@ -26,14 +26,8 @@ import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/types/float32.dart';
-import 'package:fory/src/types/int16.dart';
-import 'package:fory/src/types/int32.dart';
 import 'package:fory/src/types/int64.dart';
-import 'package:fory/src/types/int8.dart';
-import 'package:fory/src/types/uint16.dart';
-import 'package:fory/src/types/uint32.dart';
 import 'package:fory/src/types/uint64.dart';
-import 'package:fory/src/types/uint8.dart';
 
 final class DeferredReadRef {
   final int id;
@@ -58,26 +52,12 @@ bool fieldUsesDeclaredType(
 Object convertPrimitiveFieldValue(Object value, FieldType fieldType) {
   if (fieldType.type == int) {
     switch (fieldType.typeId) {
-      case TypeIds.int8:
-        return (value as Int8).value;
-      case TypeIds.int16:
-        return (value as Int16).value;
-      case TypeIds.int32:
-      case TypeIds.varInt32:
-        return (value as Int32).value;
       case TypeIds.int64:
       case TypeIds.varInt64:
       case TypeIds.taggedInt64:
         return _declares64BitWrapper(fieldType)
             ? value
             : (value as Int64).toInt();
-      case TypeIds.uint8:
-        return (value as Uint8).value;
-      case TypeIds.uint16:
-        return (value as Uint16).value;
-      case TypeIds.uint32:
-      case TypeIds.varUint32:
-        return (value as Uint32).value;
       case TypeIds.uint64:
       case TypeIds.varUint64:
       case TypeIds.taggedUint64:
@@ -122,24 +102,10 @@ Object convertResolvedPrimitiveValue(
   }
   if (resolved.type == int) {
     switch (resolved.typeId) {
-      case TypeIds.int8:
-        return (value as Int8).value;
-      case TypeIds.int16:
-        return (value as Int16).value;
-      case TypeIds.int32:
-      case TypeIds.varInt32:
-        return (value as Int32).value;
       case TypeIds.int64:
       case TypeIds.varInt64:
       case TypeIds.taggedInt64:
         return (value as Int64).toInt();
-      case TypeIds.uint8:
-        return (value as Uint8).value;
-      case TypeIds.uint16:
-        return (value as Uint16).value;
-      case TypeIds.uint32:
-      case TypeIds.varUint32:
-        return (value as Uint32).value;
       case TypeIds.uint64:
       case TypeIds.varUint64:
       case TypeIds.taggedUint64:

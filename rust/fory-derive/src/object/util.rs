@@ -585,16 +585,10 @@ pub(super) fn get_sort_fields_ts(fields: &[&Field]) -> TokenStream {
 
 /// Field metadata for fingerprint computation.
 struct FieldFingerprintInfo {
-    /// Field name (snake_case) or field ID as string
+    /// Field name (snake_case) or field ID as string.
     name_or_id: String,
-    /// Whether the field has explicit nullable=true/false set via #[fory(nullable)]
-    explicit_nullable: Option<bool>,
-    /// Whether reference tracking is enabled
-    track_ref: bool,
-    /// The type ID (UNKNOWN for user-defined types including enums/unions)
-    type_id: u32,
-    /// Whether the field type is `Option<T>`
-    is_option_type: bool,
+    /// Recursive field type fingerprint.
+    type_fingerprint: String,
 }
 
 /// Adjusts integer type IDs based on semantic `encoding` attributes.
@@ -616,12 +610,152 @@ fn adjust_type_id_for_encoding(base_type_id: u32, meta: &super::field_meta::Fory
     }
 }
 
+fn fingerprint_type_id(type_id: u32) -> u32 {
+    if type_id == TypeId::UNKNOWN as u32
+        || type_id == TypeId::UNION as u32
+        || type_id == TypeId::TYPED_UNION as u32
+        || type_id == TypeId::NAMED_UNION as u32
+    {
+        TypeId::UNKNOWN as u32
+    } else {
+        type_id
+    }
+}
+
+fn type_name_and_args(
+    ty: &Type,
+) -> Option<(
+    String,
+    Option<&syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>>,
+)> {
+    let Type::Path(type_path) = ty else {
+        return None;
+    };
+    let seg = type_path.path.segments.last()?;
+    let PathArguments::AngleBracketed(args) = &seg.arguments else {
+        return Some((seg.ident.to_string(), None));
+    };
+    Some((seg.ident.to_string(), Some(&args.args)))
+}
+
+fn single_type_arg(
+    args: &syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>,
+) -> Option<&Type> {
+    args.iter().find_map(|arg| match arg {
+        GenericArgument::Type(ty) => Some(ty),
+        _ => None,
+    })
+}
+
+fn two_type_args(
+    args: &syn::punctuated::Punctuated<GenericArgument, syn::token::Comma>,
+) -> Option<(&Type, &Type)> {
+    let mut iter = args.iter().filter_map(|arg| match arg {
+        GenericArgument::Type(ty) => Some(ty),
+        _ => None,
+    });
+    Some((iter.next()?, iter.next()?))
+}
+
+fn build_type_fingerprint(
+    ty: &Type,
+    meta: &super::field_meta::ForyFieldMeta,
+    include_ref: bool,
+    include_nullable: bool,
+) -> String {
+    use super::field_meta::{classify_field_type, extract_option_inner_type, is_option_type};
+
+    let type_class = classify_field_type(ty);
+    let nullable = meta.effective_nullable(type_class) || is_option_type(ty);
+    let track_ref = include_ref && meta.effective_ref(type_class);
+    let type_id = fingerprint_type_id(adjust_type_id_for_encoding(
+        get_type_id_by_type_ast(ty),
+        meta,
+    ));
+
+    let mut fingerprint = format!(
+        "{},{},{}",
+        type_id,
+        if track_ref { 1 } else { 0 },
+        if include_nullable && nullable { 1 } else { 0 }
+    );
+
+    let container_ty = extract_option_inner_type(ty).unwrap_or_else(|| ty.clone());
+
+    if let Type::Array(array) = &container_ty {
+        if type_id == TypeId::LIST as u32 {
+            fingerprint.push('[');
+            fingerprint.push_str(&build_type_fingerprint(
+                array.elem.as_ref(),
+                &meta.element_meta(),
+                false,
+                false,
+            ));
+            fingerprint.push(']');
+        }
+        return fingerprint;
+    }
+
+    let Some((name, args)) = type_name_and_args(&container_ty) else {
+        return fingerprint;
+    };
+
+    match name.as_str() {
+        "Vec" | "VecDeque" | "LinkedList" if type_id == TypeId::LIST as u32 => {
+            if let Some(elem_ty) = args.and_then(single_type_arg) {
+                fingerprint.push('[');
+                fingerprint.push_str(&build_type_fingerprint(
+                    elem_ty,
+                    &meta.element_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push(']');
+            }
+        }
+        "HashSet" | "BTreeSet" | "BinaryHeap" if type_id == TypeId::SET as u32 => {
+            if let Some(elem_ty) = args.and_then(single_type_arg) {
+                fingerprint.push('[');
+                fingerprint.push_str(&build_type_fingerprint(
+                    elem_ty,
+                    &meta.element_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push(']');
+            }
+        }
+        "HashMap" | "BTreeMap" if type_id == TypeId::MAP as u32 => {
+            if let Some((key_ty, value_ty)) = args.and_then(two_type_args) {
+                fingerprint.push('[');
+                fingerprint.push_str(&build_type_fingerprint(
+                    key_ty,
+                    &meta.map_key_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push('|');
+                fingerprint.push_str(&build_type_fingerprint(
+                    value_ty,
+                    &meta.map_value_meta(),
+                    false,
+                    false,
+                ));
+                fingerprint.push(']');
+            }
+        }
+        _ => {}
+    }
+
+    fingerprint
+}
+
 /// Computes struct fingerprint string at compile time (during proc-macro execution).
 ///
-/// **Fingerprint Format:** `<field_name_or_id>,<type_id>,<ref>,<nullable>;`
+/// **Fingerprint Format:** `<field_name_or_id>,<type_id>,<ref>,<nullable>[<child...>];`
 /// Fields are sorted by name lexicographically.
 fn compute_struct_fingerprint(fields: &[&Field]) -> String {
-    use super::field_meta::{classify_field_type, parse_field_meta};
+    use super::field_meta::parse_field_meta;
 
     let mut field_infos: Vec<FieldFingerprintInfo> = Vec::with_capacity(fields.len());
 
@@ -639,30 +773,9 @@ fn compute_struct_fingerprint(fields: &[&Field]) -> String {
             to_snake_case(&name)
         };
 
-        let type_class = classify_field_type(&field.ty);
-        let track_ref = meta.effective_ref(type_class);
-        let explicit_nullable = meta.nullable;
-
-        // Get compile-time TypeId, considering encoding attributes for u32/u64 fields
-        let base_type_id = get_type_id_by_type_ast(&field.ty);
-        let type_id = adjust_type_id_for_encoding(base_type_id, &meta);
-
-        // Check if field type is Option<T>
-        let ty_str: String = field
-            .ty
-            .to_token_stream()
-            .to_string()
-            .chars()
-            .filter(|c| !c.is_whitespace())
-            .collect();
-        let is_option_type = ty_str.starts_with("Option<");
-
         field_infos.push(FieldFingerprintInfo {
             name_or_id,
-            explicit_nullable,
-            track_ref,
-            type_id,
-            is_option_type,
+            type_fingerprint: build_type_fingerprint(&field.ty, &meta, true, true),
         });
     }
 
@@ -672,32 +785,9 @@ fn compute_struct_fingerprint(fields: &[&Field]) -> String {
     // Build fingerprint string
     let mut fingerprint = String::new();
     for info in &field_infos {
-        let ref_flag = if info.track_ref { "1" } else { "0" };
-        let nullable = match info.explicit_nullable {
-            Some(true) => true,
-            Some(false) => false,
-            None => info.is_option_type,
-        };
-        let nullable_flag = if nullable { "1" } else { "0" };
-
-        // User-defined types (UNKNOWN) and unions use 0 in fingerprint, matching Java behavior
-        let effective_type_id = if info.type_id == TypeId::UNKNOWN as u32
-            || info.type_id == TypeId::UNION as u32
-            || info.type_id == TypeId::TYPED_UNION as u32
-            || info.type_id == TypeId::NAMED_UNION as u32
-        {
-            0
-        } else {
-            info.type_id
-        };
-
         fingerprint.push_str(&info.name_or_id);
         fingerprint.push(',');
-        fingerprint.push_str(&effective_type_id.to_string());
-        fingerprint.push(',');
-        fingerprint.push_str(ref_flag);
-        fingerprint.push(',');
-        fingerprint.push_str(nullable_flag);
+        fingerprint.push_str(&info.type_fingerprint);
         fingerprint.push(';');
     }
 

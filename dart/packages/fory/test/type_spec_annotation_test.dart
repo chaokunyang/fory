@@ -21,158 +21,103 @@ import 'package:fory/fory.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('TypeOption', () {
-    test('RefOption defaults tracked to true', () {
-      const ref = RefOption();
-      expect(ref.tracked, isTrue);
+  group('scalar type specs', () {
+    test('DeclaredType stores leaf overrides without changing leaf kind', () {
+      const declared = DeclaredType(nullable: true, ref: true, dynamic: false);
+      expect(declared.nullable, isTrue);
+      expect(declared.ref, isTrue);
+      expect(declared.dynamic, isFalse);
     });
 
-    test('RefOption accepts explicit false', () {
-      const ref = RefOption(false);
-      expect(ref.tracked, isFalse);
+    test('Int32Type keeps encoding and node-local overrides separate', () {
+      const spec = Int32Type(
+        encoding: Encoding.fixed,
+        nullable: true,
+        ref: false,
+        dynamic: false,
+      );
+      expect(spec.encoding, equals(Encoding.fixed));
+      expect(spec.nullable, isTrue);
+      expect(spec.ref, isFalse);
+      expect(spec.dynamic, isFalse);
     });
 
-    test('NullableOption defaults value to true', () {
-      const nullable = NullableOption();
-      expect(nullable.value, isTrue);
-    });
-
-    test('NullableOption accepts explicit false', () {
-      const nullable = NullableOption(false);
-      expect(nullable.value, isFalse);
-    });
-
-    test('TypeOption.ref factory creates RefOption', () {
-      const option = TypeOption.ref();
-      expect(option, isA<RefOption>());
-      expect((option as RefOption).tracked, isTrue);
-    });
-
-    test('TypeOption.nullable factory creates NullableOption', () {
-      const option = TypeOption.nullable();
-      expect(option, isA<NullableOption>());
-      expect((option as NullableOption).value, isTrue);
+    test('Uint64Type supports tagged encoding', () {
+      const spec = Uint64Type(encoding: Encoding.tagged);
+      expect(spec.encoding, equals(Encoding.tagged));
+      expect(spec.nullable, isNull);
+      expect(spec.ref, isNull);
+      expect(spec.dynamic, isNull);
     });
   });
 
-  group('ValueType', () {
-    test('default constructor has empty options', () {
-      const vt = ValueType();
-      expect(vt.options, isEmpty);
-    });
-
-    test('ValueType.ref() sets ref option', () {
-      const vt = ValueType.ref();
-      expect(vt.options, hasLength(1));
-      expect(vt.options.first, isA<RefOption>());
-      expect((vt.options.first as RefOption).tracked, isTrue);
-    });
-
-    test('ValueType.noRef() sets ref(false)', () {
-      const vt = ValueType.noRef();
-      expect(vt.options, hasLength(1));
-      expect((vt.options.first as RefOption).tracked, isFalse);
-    });
-
-    test('ValueType.nullable() sets nullable option', () {
-      const vt = ValueType.nullable();
-      expect(vt.options, hasLength(1));
-      expect((vt.options.first as NullableOption).value, isTrue);
-    });
-
-    test('ValueType.nonNullable() sets nullable(false)', () {
-      const vt = ValueType.nonNullable();
-      expect(vt.options, hasLength(1));
-      expect((vt.options.first as NullableOption).value, isFalse);
-    });
-
-    test('ValueType.refNullable() sets both ref and nullable', () {
-      const vt = ValueType.refNullable();
-      expect(vt.options, hasLength(2));
-      expect(vt.options[0], isA<RefOption>());
-      expect(vt.options[1], isA<NullableOption>());
-    });
-  });
-
-  group('ListType', () {
-    test('default constructor has empty options and default element', () {
-      const lt = ListType();
-      expect(lt.options, isEmpty);
-      expect(lt.element, isA<ValueType>());
-      expect(lt.element.options, isEmpty);
-    });
-
-    test('ListType.ref() sets ref option', () {
-      const lt = ListType.ref();
-      expect(lt.options, hasLength(1));
-      expect((lt.options.first as RefOption).tracked, isTrue);
-    });
-
-    test('ListType.noRef() sets ref(false)', () {
-      const lt = ListType.noRef();
-      expect(lt.options, hasLength(1));
-      expect((lt.options.first as RefOption).tracked, isFalse);
-    });
-
-    test('ListType.nullable() sets nullable option', () {
-      const lt = ListType.nullable();
-      expect(lt.options, hasLength(1));
-      expect((lt.options.first as NullableOption).value, isTrue);
-    });
-
-    test('accepts custom element TypeSpec', () {
-      const lt = ListType(element: ValueType.ref());
-      expect(lt.element.options, hasLength(1));
-      expect((lt.element.options.first as RefOption).tracked, isTrue);
-    });
-
-    test('nested MapType element', () {
+  group('container type specs', () {
+    test('ListType stores nested element specs', () {
       const lt = ListType(
-        options: [TypeOption.ref()],
         element: MapType(
-          value: ValueType.ref(),
+          value: DeclaredType(ref: true),
+        ),
+        nullable: true,
+      );
+      expect(lt.nullable, isTrue);
+      final mapElement = lt.element as MapType;
+      final declaredValue = mapElement.value as DeclaredType;
+      expect(declaredValue.ref, isTrue);
+    });
+
+    test('MapType stores explicit key and value trees', () {
+      const mt = MapType(
+        key: StringType(),
+        value: ListType(
+          element: Int32Type(
+            nullable: true,
+            encoding: Encoding.fixed,
+          ),
+        ),
+        ref: true,
+      );
+      expect(mt.ref, isTrue);
+      expect(mt.key, isA<StringType>());
+      final value = mt.value as ListType;
+      final element = value.element as Int32Type;
+      expect(element.nullable, isTrue);
+      expect(element.encoding, equals(Encoding.fixed));
+    });
+  });
+
+  group('field annotations', () {
+    test('ForyField stores canonical root type overrides', () {
+      const field = ForyField(
+        id: 3,
+        nullable: true,
+        ref: false,
+        dynamic: true,
+        type: MapType(
+          key: StringType(),
+          value: ListType(
+            element: Int32Type(encoding: Encoding.fixed),
+          ),
         ),
       );
-      expect(lt.options, hasLength(1));
-      final mapElement = lt.element as MapType;
-      expect(mapElement.value.options, hasLength(1));
-      expect((mapElement.value.options.first as RefOption).tracked, isTrue);
-    });
-  });
-
-  group('MapType', () {
-    test('default constructor has empty options and default key/value', () {
-      const mt = MapType();
-      expect(mt.options, isEmpty);
-      expect(mt.key, isA<ValueType>());
-      expect(mt.value, isA<ValueType>());
+      expect(field.id, equals(3));
+      expect(field.nullable, isTrue);
+      expect(field.dynamic, isTrue);
+      expect(field.type, isA<MapType>());
     });
 
-    test('MapType.ref() sets ref option', () {
-      const mt = MapType.ref();
-      expect(mt.options, hasLength(1));
-      expect((mt.options.first as RefOption).tracked, isTrue);
-    });
-
-    test('MapType.noRef() sets ref(false)', () {
-      const mt = MapType.noRef();
-      expect(mt.options, hasLength(1));
-      expect((mt.options.first as RefOption).tracked, isFalse);
-    });
-
-    test('MapType.nullable() sets nullable option', () {
-      const mt = MapType.nullable();
-      expect(mt.options, hasLength(1));
-      expect((mt.options.first as NullableOption).value, isTrue);
-    });
-
-    test('accepts custom key and value TypeSpecs', () {
-      const mt = MapType(
-        key: ValueType.ref(),
-        value: ValueType.refNullable(),
+    test('container sugar stores nested element and value overrides', () {
+      const listField = ListField(
+        element: DeclaredType(ref: true),
       );
-      expect(mt.key.options, hasLength(1));
-      expect(mt.value.options, hasLength(2));
+      const mapField = MapField(
+        value: ListType(
+          element: Int32Type(encoding: Encoding.fixed),
+        ),
+      );
+      expect((listField.element as DeclaredType).ref, isTrue);
+      final nestedList = mapField.value as ListType;
+      final nestedElement = nestedList.element as Int32Type;
+      expect(nestedElement.encoding, equals(Encoding.fixed));
     });
   });
 }

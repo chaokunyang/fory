@@ -51,14 +51,17 @@ void main() {
 
     test('deserializes BFLOAT16 and BFLOAT16_ARRAY wire values', () {
       final fory = Fory();
-      final scalarBytes = Uint8List.fromList(fory.serialize(Uint16(0xbf60)));
-      scalarBytes[2] = TypeIds.bfloat16;
+      final scalarBytes =
+          Uint8List.fromList(fory.serialize(Bfloat16.fromBits(0xbf60)));
       final arrayBytes = Uint8List.fromList(
         fory.serialize(
-          Uint16List.fromList(<int>[0x3f80, 0xbf80, 0x7fc1]),
+          Bfloat16List.fromList(<Bfloat16>[
+            Bfloat16.fromBits(0x3f80),
+            Bfloat16.fromBits(0xbf80),
+            Bfloat16.fromBits(0x7fc1),
+          ]),
         ),
       );
-      arrayBytes[2] = TypeIds.bfloat16Array;
 
       expect(fory.deserialize<Bfloat16>(scalarBytes).toBits(), equals(0xbf60));
       expect(
@@ -68,6 +71,16 @@ void main() {
             .toList(),
         orderedEquals(<int>[0x3f80, 0xbf80, 0x7fc1]),
       );
+    });
+
+    test('serializes root builtins with an explicit wire type', () {
+      final fory = Fory();
+      final bytes = fory.serializeBuiltin(7, wireTypeId: TypeIds.varInt32);
+
+      expect(bytes[0], equals(0x02));
+      expect(bytes[1], equals(0xff));
+      expect(bytes[2], equals(TypeIds.varInt32));
+      expect(fory.deserialize<int>(bytes), equals(7));
     });
 
     test('rejects out-of-band xlang payload headers', () {

@@ -75,6 +75,25 @@ void _roundTripFory(Fory fory, {bool trackRef = false}) {
   _writeFile(output.takeBytes());
 }
 
+void _runIntegerCase() {
+  final fory = _newFory(compatible: true);
+  registerXlangType(fory, Item1, id: 101);
+
+  final input = Buffer.wrap(_readFile());
+  final output = BytesBuilder(copy: false);
+
+  output.add(fory.serialize(fory.deserializeFrom<Item1>(input)));
+  for (var i = 0; i < 6; i += 1) {
+    final value = fory.deserializeFrom<int>(input);
+    output.add(fory.serializeBuiltin(value, wireTypeId: TypeIds.varInt32));
+  }
+
+  if (input.readableBytes != 0) {
+    throw StateError('Unexpected trailing bytes after integer payload.');
+  }
+  _writeFile(output.takeBytes());
+}
+
 void _verifyBufferCase() {
   final input = Buffer.wrap(_readFile());
   final output = Buffer();
@@ -335,7 +354,7 @@ void _runCollectionElementRefRemoteTracking() {
   registerXlangType(fory, RefOverrideContainer, id: 702);
 
   final shared = RefOverrideElement()
-    ..id = Int32(7)
+    ..id = 7
     ..name = 'shared_element';
   // IMPORTANT: this peer intentionally writes a shared-reference payload with
   // its default local ref-tracked schema. The Java reader uses ref-disabled
@@ -424,9 +443,7 @@ void _runCase(String caseName) {
       _roundTripFory(fory);
       return;
     case 'test_integer':
-      final fory = _newFory(compatible: true);
-      registerXlangType(fory, Item1, id: 101);
-      _roundTripFory(fory);
+      _runIntegerCase();
       return;
     case 'test_decimal':
       _verifyDecimalCase();
@@ -450,6 +467,17 @@ void _runCase(String caseName) {
     case 'test_struct_with_map':
       final fory = _newFory(compatible: true);
       registerXlangType(fory, StructWithMap, id: 202);
+      _roundTripFory(fory);
+      return;
+    case 'test_nested_annotated_container_schema_consistent':
+      final fory = _newFory();
+      registerXlangType(fory, NestedAnnotatedContainerSchemaConsistent,
+          id: 801);
+      _roundTripFory(fory);
+      return;
+    case 'test_nested_annotated_container_compatible':
+      final fory = _newFory(compatible: true);
+      registerXlangType(fory, NestedAnnotatedContainerCompatible, id: 802);
       _roundTripFory(fory);
       return;
     case 'test_skip_id_custom':

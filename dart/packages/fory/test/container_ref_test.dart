@@ -29,16 +29,16 @@ class Node {
   String name = '';
 }
 
-/// Struct with @ListType that enables ref tracking on list elements.
+/// Struct with @ListField that enables ref tracking on list elements.
 @ForyStruct()
 class RefListContainer {
   RefListContainer();
 
-  @ListType(element: ValueType.ref())
+  @ListField(element: DeclaredType(ref: true))
   List<Node> items = <Node>[];
 }
 
-/// Struct with no @ListType annotation — list elements are NOT ref-tracked.
+/// Struct with no @ListField annotation — list elements are NOT ref-tracked.
 @ForyStruct()
 class NoRefListContainer {
   NoRefListContainer();
@@ -46,16 +46,16 @@ class NoRefListContainer {
   List<Node> items = <Node>[];
 }
 
-/// Struct with @MapType that enables ref tracking on map values.
+/// Struct with @MapField that enables ref tracking on map values.
 @ForyStruct()
 class RefMapValueContainer {
   RefMapValueContainer();
 
-  @MapType(value: ValueType.ref())
+  @MapField(value: DeclaredType(ref: true))
   Map<String, Node> entries = <String, Node>{};
 }
 
-/// Struct with no @MapType — map values are NOT ref-tracked.
+/// Struct with no @MapField — map values are NOT ref-tracked.
 @ForyStruct()
 class NoRefMapContainer {
   NoRefMapContainer();
@@ -63,12 +63,12 @@ class NoRefMapContainer {
   Map<String, Node> entries = <String, Node>{};
 }
 
-/// Struct with @MapType that enables ref tracking on map keys.
+/// Struct with @MapField that enables ref tracking on map keys.
 @ForyStruct()
 class RefMapKeyContainer {
   RefMapKeyContainer();
 
-  @MapType(key: ValueType.ref())
+  @MapField(key: DeclaredType(ref: true))
   Map<Node, String> entries = <Node, String>{};
 }
 
@@ -77,8 +77,8 @@ class RefMapKeyContainer {
 class NestedListOfMapContainer {
   NestedListOfMapContainer();
 
-  @ListType(
-    element: MapType(value: ValueType.ref()),
+  @ListField(
+    element: MapType(value: DeclaredType(ref: true)),
   )
   List<Map<String, Node>> groups = <Map<String, Node>>[];
 }
@@ -88,8 +88,8 @@ class NestedListOfMapContainer {
 class NestedMapOfListContainer {
   NestedMapOfListContainer();
 
-  @MapType(
-    value: ListType(element: ValueType.ref()),
+  @MapField(
+    value: ListType(element: DeclaredType(ref: true)),
   )
   Map<String, List<Node>> groups = <String, List<Node>>{};
 }
@@ -121,7 +121,7 @@ void main() {
     _registerAll(fory);
   });
 
-  group('list element ref via @ListType annotation', () {
+  group('list element ref via @ListField annotation', () {
     test('shared list elements preserve identity with element ref enabled', () {
       final shared = Node()..name = 'shared';
       final container = RefListContainer()
@@ -150,7 +150,7 @@ void main() {
     });
   });
 
-  group('map value ref via @MapType annotation', () {
+  group('map value ref via @MapField annotation', () {
     test('shared map values preserve identity with value ref enabled', () {
       final shared = Node()..name = 'val';
       final container = RefMapValueContainer()
@@ -177,7 +177,7 @@ void main() {
     });
   });
 
-  group('map key ref via @MapType annotation', () {
+  group('map key ref via @MapField annotation', () {
     test('shared map keys preserve identity with key ref enabled', () {
       final shared = Node()..name = 'key';
       final container = RefMapKeyContainer()
@@ -191,7 +191,7 @@ void main() {
     });
   });
 
-  group('nested container ref via @ListType/@MapType annotation', () {
+  group('nested container ref via @ListField/@MapField annotation', () {
     test('list of maps with ref-tracked values preserves identity across maps',
         () {
       final shared = Node()..name = 'deep';
@@ -208,7 +208,8 @@ void main() {
       expect(identical(result.groups[0]['x'], result.groups[1]['y']), isTrue);
     });
 
-    test('map of lists with ref-tracked elements preserves identity across lists',
+    test(
+        'map of lists with ref-tracked elements preserves identity across lists',
         () {
       final shared = Node()..name = 'maplist';
       final container = NestedMapOfListContainer()

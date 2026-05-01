@@ -132,11 +132,11 @@ public class Document {
     String title;
 
     // Enable ref tracking for this field
-    @ForyField(trackingRef = true)
+    @ForyField(ref = true)
     Author author;
 
     // Shared across documents, track refs to avoid duplicates
-    @ForyField(trackingRef = true)
+    @ForyField(ref = true)
     List<Tag> tags;
 }
 ```

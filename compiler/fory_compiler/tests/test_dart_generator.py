@@ -56,9 +56,17 @@ def test_dart_generator_emits_annotated_structs_and_generated_part_registration(
     assert "part 'demo.fory.dart';" in file.content
     assert "@ForyStruct()" in file.content
     assert "final class Scalar {" in file.content
-    assert "@Int32Type(compress: false)" in file.content
-    assert "@Uint64Type(encoding: LongEncoding.tagged)" in file.content
-    assert "@ForyField(id: 1)" in file.content
+    assert (
+        "@ForyField(type: Int32Type(encoding: Encoding.fixed), id: 1)" in file.content
+    )
+    assert (
+        "@ForyField(type: Int32Type(encoding: Encoding.varint), id: 2)" in file.content
+    )
+    assert (
+        "@ForyField(type: Uint64Type(encoding: Encoding.tagged), id: 3)" in file.content
+    )
+    assert "int fixedValue = 0;" in file.content
+    assert "Uint64 taggedValue = Uint64(0);" in file.content
     assert (
         "DemoFory.register(fory, Scalar, id: registrationMode.id, namespace: registrationMode.namespace, typeName: registrationMode.typeName);"
         in file.content
@@ -138,7 +146,11 @@ def test_dart_generator_uses_typed_lists_for_non_nullable_primitive_lists():
     )
 
     assert "Int32List ints = Int32List(0);" in file.content
-    assert "List<Int32?> nullableInts = <Int32?>[];" in file.content
+    assert (
+        "@ForyField(type: ListType(element: Int32Type(encoding: Encoding.varint)), id: 2)"
+        in file.content
+    )
+    assert "List<int?> nullableInts = <int?>[];" in file.content
     assert "Int32List? maybeInts = null;" in file.content
     assert "factory ValueUnion.values(Uint32List value)" in file.content
 
@@ -176,10 +188,14 @@ def test_dart_generator_emits_container_ref_annotations_for_builder_metadata():
         """
     )
 
-    assert "@ForyField(id: 1)" in file.content
-    assert "@ListType(element: ValueType.ref())" in file.content
-    assert "@ForyField(id: 2)" in file.content
-    assert "@MapType(value: ValueType.ref())" in file.content
+    assert (
+        "@ForyField(type: ListType(element: DeclaredType(ref: true)), id: 1)"
+        in file.content
+    )
+    assert (
+        "@ForyField(type: MapType(value: DeclaredType(ref: true)), id: 2)"
+        in file.content
+    )
     assert "@ForyField(id: 3, ref: true)" in file.content
 
 
@@ -194,8 +210,10 @@ def test_dart_generator_marks_map_value_ref_messages_as_ref_capable():
         """
     )
 
-    assert "@ForyField(id: 1)" in file.content
-    assert "@MapType(value: ValueType.ref())" in file.content
+    assert (
+        "@ForyField(type: MapType(value: DeclaredType(ref: true)), id: 1)"
+        in file.content
+    )
     assert "Map<String, Node> byName = <String, Node>{};" in file.content
 
 

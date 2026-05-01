@@ -282,12 +282,12 @@ void main() {
       final bytes = fory.serialize('value');
 
       expect(
-        () => fory.deserialize<Int32>(bytes),
+        () => fory.deserialize<int>(bytes),
         throwsA(
           isA<StateError>().having(
             (error) => error.toString(),
             'message',
-            contains('expected Int32'),
+            contains('expected int'),
           ),
         ),
       );

@@ -46,16 +46,10 @@ import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/decimal.dart';
 import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
-import 'package:fory/src/types/int16.dart';
-import 'package:fory/src/types/int32.dart';
 import 'package:fory/src/types/int64.dart';
-import 'package:fory/src/types/int8.dart';
 import 'package:fory/src/types/local_date.dart';
 import 'package:fory/src/types/timestamp.dart';
-import 'package:fory/src/types/uint16.dart';
-import 'package:fory/src/types/uint32.dart';
 import 'package:fory/src/types/uint64.dart';
-import 'package:fory/src/types/uint8.dart';
 import 'package:fory/src/util/hash_util.dart';
 
 enum RegistrationKind { builtin, struct, enumType, ext, union }
@@ -315,15 +309,6 @@ final class TypeResolver {
     if (value is bool) {
       return _builtin(bool, TypeIds.boolType);
     }
-    if (value is Int8) {
-      return _builtin(Int8, TypeIds.int8);
-    }
-    if (value is Int16) {
-      return _builtin(Int16, TypeIds.int16);
-    }
-    if (value is Int32) {
-      return _builtin(Int32, TypeIds.varInt32);
-    }
     // Native Int64 is represented as `int`; web still needs this branch to
     // keep explicit wrapper values on the Int64 API while using varint64 wire
     // format by default, the same as plain Dart int.
@@ -333,15 +318,6 @@ final class TypeResolver {
     }
     if (value is int) {
       return _builtin(int, TypeIds.varInt64);
-    }
-    if (value is Uint8) {
-      return _builtin(Uint8, TypeIds.uint8);
-    }
-    if (value is Uint16) {
-      return _builtin(Uint16, TypeIds.uint16);
-    }
-    if (value is Uint32) {
-      return _builtin(Uint32, TypeIds.varUint32);
     }
     if (value is Uint64) {
       return _builtin(Uint64, TypeIds.varUint64);
@@ -1030,13 +1006,13 @@ final class TypeResolver {
       case TypeIds.boolType:
         return _builtin(bool, TypeIds.boolType);
       case TypeIds.int8:
-        return _builtin(Int8, TypeIds.int8);
+        return _builtin(int, TypeIds.int8);
       case TypeIds.int16:
-        return _builtin(Int16, TypeIds.int16);
+        return _builtin(int, TypeIds.int16);
       case TypeIds.int32:
-        return _builtin(Int32, TypeIds.int32);
+        return _builtin(int, TypeIds.int32);
       case TypeIds.varInt32:
-        return _builtin(Int32, TypeIds.varInt32);
+        return _builtin(int, TypeIds.varInt32);
       case TypeIds.int64:
         return _builtin(Int64, TypeIds.int64);
       case TypeIds.varInt64:
@@ -1044,13 +1020,13 @@ final class TypeResolver {
       case TypeIds.taggedInt64:
         return _builtin(Int64, TypeIds.taggedInt64);
       case TypeIds.uint8:
-        return _builtin(Uint8, TypeIds.uint8);
+        return _builtin(int, TypeIds.uint8);
       case TypeIds.uint16:
-        return _builtin(Uint16, TypeIds.uint16);
+        return _builtin(int, TypeIds.uint16);
       case TypeIds.uint32:
-        return _builtin(Uint32, TypeIds.uint32);
+        return _builtin(int, TypeIds.uint32);
       case TypeIds.varUint32:
-        return _builtin(Uint32, TypeIds.varUint32);
+        return _builtin(int, TypeIds.varUint32);
       case TypeIds.uint64:
         return _builtin(Uint64, TypeIds.uint64);
       case TypeIds.varUint64:
@@ -1256,29 +1232,14 @@ final class TypeResolver {
     if (type == bool) {
       return TypeIds.boolType;
     }
-    if (type == Int8) {
-      return TypeIds.int8;
-    }
-    if (type == Int16) {
-      return TypeIds.int16;
-    }
-    if (type == Int32) {
-      return TypeIds.varInt32;
+    if (type == int) {
+      return TypeIds.varInt64;
     }
     if (type == Int64) {
       return TypeIds.varInt64;
     }
     if (type == Int64List) {
       return TypeIds.int64Array;
-    }
-    if (type == Uint8) {
-      return TypeIds.uint8;
-    }
-    if (type == Uint16) {
-      return TypeIds.uint16;
-    }
-    if (type == Uint32) {
-      return TypeIds.varUint32;
     }
     if (type == Uint64) {
       return TypeIds.varUint64;

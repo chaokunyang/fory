@@ -24,6 +24,7 @@
 #include "fory/type/type.h"
 #include <algorithm>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <unordered_map>
 
@@ -1123,10 +1124,8 @@ std::string TypeMeta::compute_struct_fingerprint(
   // Field Components:
   //   - field_id_or_name: tag ID as string if configured, otherwise snake_case
   //   field name
-  //   - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
-  //   - ref: "1" if reference tracking enabled, "0" otherwise (always "0" in
-  //   C++)
-  //   - nullable: "1" if null flag is written, "0" otherwise
+  //   - field_type_fingerprint:
+  //     <type_id>,<ref>,<nullable>[<nested_type_fingerprint>]
   //
   // Example fingerprints:
   //   - With tag IDs: "0,4,0,0;1,12,0,1;"
@@ -1149,30 +1148,58 @@ std::string TypeMeta::compute_struct_fingerprint(
   // reserve a rough estimate to avoid reallocations
   fingerprint.reserve(sorted_fields.size() * 24);
 
+  auto fingerprint_type_id = [](uint32_t type_id) -> uint32_t {
+    if (type_id == static_cast<uint32_t>(TypeId::ENUM) ||
+        type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM) ||
+        type_id == static_cast<uint32_t>(TypeId::STRUCT) ||
+        type_id == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
+        type_id == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
+        type_id == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT) ||
+        type_id == static_cast<uint32_t>(TypeId::EXT) ||
+        type_id == static_cast<uint32_t>(TypeId::NAMED_EXT) ||
+        type_id == static_cast<uint32_t>(TypeId::UNION) ||
+        type_id == static_cast<uint32_t>(TypeId::TYPED_UNION) ||
+        type_id == static_cast<uint32_t>(TypeId::NAMED_UNION)) {
+      return static_cast<uint32_t>(TypeId::UNKNOWN);
+    }
+    return type_id;
+  };
+  std::function<void(std::string &, const FieldType &, bool, bool)>
+      append_field_type = [&](std::string &out, const FieldType &field_type,
+                              bool include_ref, bool include_nullable) {
+        out.append(std::to_string(fingerprint_type_id(field_type.type_id)));
+        out.push_back(',');
+        out.push_back(include_ref && field_type.track_ref ? '1' : '0');
+        out.push_back(',');
+        out.push_back(include_nullable && field_type.nullable ? '1' : '0');
+        if (field_type.type_id == static_cast<uint32_t>(TypeId::LIST) ||
+            field_type.type_id == static_cast<uint32_t>(TypeId::SET)) {
+          out.push_back('[');
+          if (!field_type.generics.empty()) {
+            append_field_type(out, field_type.generics.front(), false, false);
+          }
+          out.push_back(']');
+        } else if (field_type.type_id == static_cast<uint32_t>(TypeId::MAP)) {
+          out.push_back('[');
+          if (!field_type.generics.empty()) {
+            append_field_type(out, field_type.generics.front(), false, false);
+          }
+          out.push_back('|');
+          if (field_type.generics.size() > 1) {
+            append_field_type(out, field_type.generics[1], false, false);
+          }
+          out.push_back(']');
+        }
+      };
+
   for (const auto &fi : sorted_fields) {
     std::string field_id_or_name = fi.field_id >= 0
                                        ? std::to_string(fi.field_id)
                                        : normalize_field_name(fi.field_name);
     fingerprint.append(field_id_or_name);
     fingerprint.push_back(',');
-
-    // Java's ObjectSerializer.get_type_id returns Types.UNKNOWN (0) for:
-    // - abstract classes, interfaces, and enum types
-    // - user-defined struct types (in xlang mode)
-    // This aligns the hash computation with Java's behavior.
-    uint32_t effective_type_id = fi.field_type.type_id;
-    if (effective_type_id == static_cast<uint32_t>(TypeId::ENUM) ||
-        effective_type_id == static_cast<uint32_t>(TypeId::NAMED_ENUM) ||
-        effective_type_id == static_cast<uint32_t>(TypeId::STRUCT) ||
-        effective_type_id == static_cast<uint32_t>(TypeId::NAMED_STRUCT) ||
-        effective_type_id == static_cast<uint32_t>(TypeId::UNION)) {
-      effective_type_id = static_cast<uint32_t>(TypeId::UNKNOWN);
-    }
-    fingerprint.append(std::to_string(effective_type_id));
-    fingerprint.push_back(',');
-    fingerprint.push_back(fi.field_type.track_ref ? '1' : '0');
-    fingerprint.push_back(',');
-    fingerprint.append(fi.field_type.nullable ? "1;" : "0;");
+    append_field_type(fingerprint, fi.field_type, true, true);
+    fingerprint.push_back(';');
   }
 
   return fingerprint;

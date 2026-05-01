@@ -64,7 +64,7 @@ public struct ForyStructMacro: MemberMacro, ExtensionMacro {
         \(raw: accessPrefix)static var isRefType: Bool { true }
         """ : nil
 
-        let schemaHashDecl: DeclSyntax = DeclSyntax(stringLiteral: buildSchemaHashDecl(fields: parsed.fields))
+        let schemaHashDecl: DeclSyntax = DeclSyntax(stringLiteral: try buildSchemaHashDecl(fields: parsed.fields))
         let compatibleTypeMetaDecl: DeclSyntax = DeclSyntax(
             stringLiteral: buildCompatibleTypeMetaFieldsDecl(sortedFields: sortedFields, accessPrefix: accessPrefix)
         )
@@ -273,6 +273,7 @@ enum DynamicAnyCodecKind {
 struct ParsedField {
     let name: String
     let typeText: String
+    fileprivate let typeHint: FieldTypeHint?
     let originalIndex: Int
 
     let isOptional: Bool
@@ -735,6 +736,7 @@ private func parseFields(_ declaration: some DeclGroupSyntax) throws -> ParsedDe
                 ParsedField(
                     name: name,
                     typeText: rawType,
+                    typeHint: fieldTypeHint,
                     originalIndex: originalIndex,
                     isOptional: isOptional,
                     isCollection: classification.isCollection || classification.isMap,
@@ -1912,9 +1914,9 @@ private func sortFields(_ fields: [ParsedField]) -> [ParsedField] {
     }
 }
 
-private func buildSchemaHashDecl(fields: [ParsedField]) -> String {
-    let fingerprintTrackRefDisabled = buildSchemaFingerprint(fields: fields, trackRefExpression: "false")
-    let fingerprintTrackRefEnabled = buildSchemaFingerprint(fields: fields, trackRefExpression: "true")
+private func buildSchemaHashDecl(fields: [ParsedField]) throws -> String {
+    let fingerprintTrackRefDisabled = try buildSchemaFingerprint(fields: fields, trackRefExpression: "false")
+    let fingerprintTrackRefEnabled = try buildSchemaFingerprint(fields: fields, trackRefExpression: "true")
     return """
     private static func __foryNormalizeSchemaFingerprintTypeID(_ typeID: UInt32) -> UInt32 {
         switch typeID {
@@ -1968,18 +1970,18 @@ private func compatibleFieldIDExpr(_ field: ParsedField) -> String {
     return "nil"
 }
 
-private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: String) -> String {
-    let entries = fields
+private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: String) throws -> String {
+    let sortedFields = fields
         .sorted { lhs, rhs in
             if lhs.schemaIdentifier != rhs.schemaIdentifier {
                 return lhs.schemaIdentifier < rhs.schemaIdentifier
             }
             return lhs.originalIndex < rhs.originalIndex
         }
-        .map { field -> String in
-            let typeFingerprint = buildSchemaFieldTypeFingerprint(field, trackRefExpression: trackRefExpression)
-            return "\"\(field.schemaIdentifier),\" + \(typeFingerprint) + \";\""
-        }
+    let entries = try sortedFields.map { field -> String in
+        let typeFingerprint = try buildSchemaFieldTypeFingerprint(field, trackRefExpression: trackRefExpression)
+        return "\"\(field.schemaIdentifier),\" + \(typeFingerprint) + \";\""
+    }
     if entries.isEmpty {
         return "\"\""
     }
@@ -1989,7 +1991,7 @@ private func buildSchemaFingerprint(fields: [ParsedField], trackRefExpression: S
 private func buildSchemaFieldTypeFingerprint(
     _ field: ParsedField,
     trackRefExpression: String
-) -> String {
+) throws -> String {
     let fieldTrackRefExpression: String
     if let dynamicAnyCodec = field.dynamicAnyCodec {
         fieldTrackRefExpression = dynamicAnyUsesContextTrackRef(dynamicAnyCodec) ? trackRefExpression : "false"
@@ -1999,8 +2001,9 @@ private func buildSchemaFieldTypeFingerprint(
         fieldTrackRefExpression = "\(trackRefExpression) && \(field.typeText).isRefType"
     }
 
-    return buildSchemaTypeFingerprint(
+    return try buildSchemaTypeFingerprint(
         typeText: field.typeText,
+        hint: field.typeHint,
         nullableExpression: field.isOptional ? "true" : "false",
         trackRefExpression: fieldTrackRefExpression,
         explicitTypeIDExpression: field.customCodecType != nil ? "\(field.typeID)" : nil
@@ -2009,11 +2012,12 @@ private func buildSchemaFieldTypeFingerprint(
 
 private func buildSchemaTypeFingerprint(
     typeText: String,
+    hint: FieldTypeHint?,
     nullableExpression: String,
     trackRefExpression: String,
     includeNullable: Bool = true,
     explicitTypeIDExpression: String? = nil
-) -> String {
+) throws -> String {
     let normalized = trimType(typeText)
     let optional = unwrapOptional(normalized)
     let concreteType = optional.type
@@ -2021,10 +2025,84 @@ private func buildSchemaTypeFingerprint(
     let nullableLiteral = includeNullable && nullableExpression == "true" ? "1" : "0"
     let trackFlagExpr = trackRefExpression == "false" ? "0" : "((\(trackRefExpression)) ? 1 : 0)"
 
+    if let hint {
+        switch hint {
+        case .list(let elementHint):
+            let listClassification = try classification(for: concreteType, hint: hint)
+            if listClassification.typeID != 22 {
+                let typeIDExpr = explicitTypeIDExpression ?? "\(listClassification.typeID)"
+                return "\"\\(__foryNormalizeSchemaFingerprintTypeID(\(typeIDExpr))),\\(\(trackFlagExpr)),\(nullableLiteral)\""
+            }
+            let elementType = parseArrayElement(concreteType) ?? hintedValueTypeName(elementHint)
+            guard let elementType else {
+                throw MacroExpansionErrorMessage(
+                    "list field hint requires an Array/List Swift type or a full element type hint"
+                )
+            }
+            let elementNullable = compatibleGenericNullableExpression(elementType)
+            let elementExpr = try buildSchemaTypeFingerprint(
+                typeText: elementType,
+                hint: elementHint,
+                nullableExpression: elementNullable,
+                trackRefExpression: "false",
+                includeNullable: false
+            )
+            let prefix = "\"\\(__foryNormalizeSchemaFingerprintTypeID(UInt32(TypeId.list.rawValue))),\\(\(trackFlagExpr)),\(nullableLiteral)\""
+            return "\(prefix) + \"[\" + \(elementExpr) + \"]\""
+        case .set(let elementHint):
+            let elementType = parseSetElement(concreteType) ?? hintedValueTypeName(elementHint)
+            guard let elementType else {
+                throw MacroExpansionErrorMessage(
+                    "set field hint requires a Set Swift type or a full element type hint"
+                )
+            }
+            let elementNullable = compatibleGenericNullableExpression(elementType)
+            let elementExpr = try buildSchemaTypeFingerprint(
+                typeText: elementType,
+                hint: elementHint,
+                nullableExpression: elementNullable,
+                trackRefExpression: "false",
+                includeNullable: false
+            )
+            let prefix = "\"\\(__foryNormalizeSchemaFingerprintTypeID(UInt32(TypeId.set.rawValue))),\\(\(trackFlagExpr)),\(nullableLiteral)\""
+            return "\(prefix) + \"[\" + \(elementExpr) + \"]\""
+        case .map(let keyHint, let valueHint):
+            let parsedMap = parseDictionary(concreteType)
+            let keyType = parsedMap?.0 ?? keyHint.flatMap(hintedValueTypeName)
+            let valueType = parsedMap?.1 ?? valueHint.flatMap(hintedValueTypeName)
+            guard let keyType, let valueType else {
+                throw MacroExpansionErrorMessage(
+                    "map field hint requires a Dictionary/Map Swift type or full key/value hints"
+                )
+            }
+            let keyNullable = compatibleGenericNullableExpression(keyType)
+            let valueNullable = compatibleGenericNullableExpression(valueType)
+            let keyExpr = try buildSchemaTypeFingerprint(
+                typeText: keyType,
+                hint: keyHint,
+                nullableExpression: keyNullable,
+                trackRefExpression: "false",
+                includeNullable: false
+            )
+            let valueExpr = try buildSchemaTypeFingerprint(
+                typeText: valueType,
+                hint: valueHint,
+                nullableExpression: valueNullable,
+                trackRefExpression: "false",
+                includeNullable: false
+            )
+            let prefix = "\"\\(__foryNormalizeSchemaFingerprintTypeID(UInt32(TypeId.map.rawValue))),\\(\(trackFlagExpr)),\(nullableLiteral)\""
+            return "\(prefix) + \"[\" + \(keyExpr) + \"|\" + \(valueExpr) + \"]\""
+        case .inferredEncoding, .scalar:
+            break
+        }
+    }
+
     if outerClassification.typeID == 22, let elementType = parseArrayElement(concreteType) {
         let elementNullable = compatibleGenericNullableExpression(elementType)
-        let elementExpr = buildSchemaTypeFingerprint(
+        let elementExpr = try buildSchemaTypeFingerprint(
             typeText: elementType,
+            hint: nil,
             nullableExpression: elementNullable,
             trackRefExpression: "false",
             includeNullable: false
@@ -2035,8 +2113,9 @@ private func buildSchemaTypeFingerprint(
 
     if outerClassification.typeID == 23, let elementType = parseSetElement(concreteType) {
         let elementNullable = compatibleGenericNullableExpression(elementType)
-        let elementExpr = buildSchemaTypeFingerprint(
+        let elementExpr = try buildSchemaTypeFingerprint(
             typeText: elementType,
+            hint: nil,
             nullableExpression: elementNullable,
             trackRefExpression: "false",
             includeNullable: false
@@ -2048,14 +2127,16 @@ private func buildSchemaTypeFingerprint(
     if outerClassification.typeID == 24, let (keyType, valueType) = parseDictionary(concreteType) {
         let keyNullable = compatibleGenericNullableExpression(keyType)
         let valueNullable = compatibleGenericNullableExpression(valueType)
-        let keyExpr = buildSchemaTypeFingerprint(
+        let keyExpr = try buildSchemaTypeFingerprint(
             typeText: keyType,
+            hint: nil,
             nullableExpression: keyNullable,
             trackRefExpression: "false",
             includeNullable: false
         )
-        let valueExpr = buildSchemaTypeFingerprint(
+        let valueExpr = try buildSchemaTypeFingerprint(
             typeText: valueType,
+            hint: nil,
             nullableExpression: valueNullable,
             trackRefExpression: "false",
             includeNullable: false
@@ -2067,6 +2148,8 @@ private func buildSchemaTypeFingerprint(
     let typeIDExpr: String
     if let explicitTypeIDExpression {
         typeIDExpr = explicitTypeIDExpression
+    } else if let hint {
+        typeIDExpr = "\(try classification(for: concreteType, hint: hint).typeID)"
     } else if isDynamicAnyConcreteType(concreteType) {
         typeIDExpr = "UInt32(TypeId.unknown.rawValue)"
     } else {

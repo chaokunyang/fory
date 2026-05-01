@@ -929,9 +929,7 @@ def _leaf_schema_fingerprint_type_id(type_resolver, type_hint):
     return _normalize_schema_fingerprint_type_id(typeinfo.type_id)
 
 
-def _build_schema_fingerprint_type(
-    type_resolver, type_hint, nullable, track_ref, include_ref, include_nullable=True
-):
+def _build_schema_fingerprint_type(type_resolver, type_hint, nullable, track_ref, include_ref, include_nullable=True):
     type_hint, ref_override = unwrap_ref(type_hint)
     if include_ref and ref_override is not None:
         track_ref = ref_override

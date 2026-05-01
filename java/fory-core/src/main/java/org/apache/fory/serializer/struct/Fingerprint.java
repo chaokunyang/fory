@@ -23,7 +23,6 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
-import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float32List;
 import org.apache.fory.collection.Float64List;
@@ -37,6 +36,7 @@ import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -53,8 +53,8 @@ public class Fingerprint {
    *
    * <p><b>Fingerprint Format:</b>
    *
-   * <p>Each field contributes:
-   * {@code <field_id_or_name>,<type_id>,<ref>,<nullable>[<nested_type_fingerprint>];}
+   * <p>Each field contributes: {@code
+   * <field_id_or_name>,<type_id>,<ref>,<nullable>[<nested_type_fingerprint>];}
    *
    * <p>Fields are sorted by their identifier (field ID or name) lexicographically as strings.
    *
@@ -136,12 +136,7 @@ public class Fingerprint {
       }
 
       StringBuilder fieldFingerprint =
-          new StringBuilder()
-              .append(typeId)
-              .append(',')
-              .append(ref)
-              .append(',')
-              .append(nullable);
+          new StringBuilder().append(typeId).append(',').append(ref).append(',').append(nullable);
       if (fieldType != null) {
         appendNestedFingerprint(fieldFingerprint, fieldType);
       }

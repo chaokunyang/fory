@@ -102,6 +102,12 @@ private struct RemoteNestedFixedMapV1: Equatable {
 }
 
 @ForyStruct
+private struct SchemaHashNestedAnnotatedContainer: Equatable {
+    @MapField(key: .uint32(encoding: .fixed), value: .list(element: .uint64(encoding: .tagged)))
+    var values: [UInt32?: [UInt64?]?] = [:]
+}
+
+@ForyStruct
 private struct LocalNestedVarintMapV2: Equatable {
     @ForyField(id: 1)
     var data: [String: [Int32?]] = [:]
@@ -240,6 +246,31 @@ func schemaHashMatchesJavaFingerprintForTaggedUnsignedFields() {
     #expect(
         SchemaHash.structHash32("u64_tagged,15,0,0;u64_tagged_nullable,15,0,1;") ==
             UInt32(2_653_134_377)
+    )
+}
+
+@Test
+func schemaHashUsesNestedAnnotatedContainerTypeIDs() throws {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false, checkClassVersion: true))
+    fory.register(SchemaHashNestedAnnotatedContainer.self, id: 9912)
+
+    let bytes = try fory.serialize(
+        SchemaHashNestedAnnotatedContainer(
+            values: [
+                UInt32(7): [UInt64(11), nil]
+            ]
+        )
+    )
+    let buffer = ByteBuffer(data: bytes)
+    _ = try fory.readHead(buffer: buffer)
+    _ = try buffer.readInt8()
+    _ = try buffer.readVarUInt32()
+    _ = try buffer.readVarUInt32()
+    let schemaHash = UInt32(bitPattern: try buffer.readInt32())
+
+    #expect(
+        schemaHash ==
+            SchemaHash.structHash32("values,24,0,0[11,0,0|22,0,0[15,0,0]];")
     )
 }
 

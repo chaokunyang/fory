@@ -1164,11 +1164,9 @@ std::string TypeMeta::compute_struct_fingerprint(
     }
     return type_id;
   };
-  std::function<void(std::string &, const FieldType &, bool, bool)> append_field_type =
-      [&](std::string &out,
-          const FieldType &field_type,
-          bool include_ref,
-          bool include_nullable) {
+  std::function<void(std::string &, const FieldType &, bool, bool)>
+      append_field_type = [&](std::string &out, const FieldType &field_type,
+                              bool include_ref, bool include_nullable) {
         out.append(std::to_string(fingerprint_type_id(field_type.type_id)));
         out.push_back(',');
         out.push_back(include_ref && field_type.track_ref ? '1' : '0');

@@ -519,6 +519,7 @@ def test_struct_hash(data_file_path):
         serializer._field_names,
         serializer._serializers,
         serializer._nullable_fields,
+        serializer._field_infos,
     )[0]
     assert read_hash == v, (read_hash, v)
 

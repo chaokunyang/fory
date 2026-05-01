@@ -56,9 +56,15 @@ def test_dart_generator_emits_annotated_structs_and_generated_part_registration(
     assert "part 'demo.fory.dart';" in file.content
     assert "@ForyStruct()" in file.content
     assert "final class Scalar {" in file.content
-    assert "@ForyField(type: Int32Type(encoding: Encoding.fixed), id: 1)" in file.content
-    assert "@ForyField(type: Int32Type(encoding: Encoding.varint), id: 2)" in file.content
-    assert "@ForyField(type: Uint64Type(encoding: Encoding.tagged), id: 3)" in file.content
+    assert (
+        "@ForyField(type: Int32Type(encoding: Encoding.fixed), id: 1)" in file.content
+    )
+    assert (
+        "@ForyField(type: Int32Type(encoding: Encoding.varint), id: 2)" in file.content
+    )
+    assert (
+        "@ForyField(type: Uint64Type(encoding: Encoding.tagged), id: 3)" in file.content
+    )
     assert "int fixedValue = 0;" in file.content
     assert "Uint64 taggedValue = Uint64(0);" in file.content
     assert (

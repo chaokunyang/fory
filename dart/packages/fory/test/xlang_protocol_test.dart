@@ -73,6 +73,16 @@ void main() {
       );
     });
 
+    test('serializes root builtins with an explicit wire type', () {
+      final fory = Fory();
+      final bytes = fory.serializeBuiltin(7, wireTypeId: TypeIds.varInt32);
+
+      expect(bytes[0], equals(0x02));
+      expect(bytes[1], equals(0xff));
+      expect(bytes[2], equals(TypeIds.varInt32));
+      expect(fory.deserialize<int>(bytes), equals(7));
+    });
+
     test('rejects out-of-band xlang payload headers', () {
       final fory = Fory();
       final bytes = Uint8List.fromList(fory.serialize('value'));

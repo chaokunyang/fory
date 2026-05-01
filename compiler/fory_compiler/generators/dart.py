@@ -625,9 +625,7 @@ class DartGenerator(BaseGenerator):
             )
         if isinstance(t, MapType):
             key_type = self.dart_type(t.key_type, parent_stack=parent_stack)
-            value_type = self.dart_type(
-                t.value_type, t.value_optional, parent_stack
-            )
+            value_type = self.dart_type(t.value_type, t.value_optional, parent_stack)
             return f"<{key_type}, {value_type}>{{}}"
         if isinstance(t, NamedType):
             resolved = self.resolve_type(t.name, parent_stack)

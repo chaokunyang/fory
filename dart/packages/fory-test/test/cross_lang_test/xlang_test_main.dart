@@ -22,12 +22,6 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/config.dart';
-import 'package:fory/src/context/meta_string_writer.dart';
-import 'package:fory/src/context/ref_writer.dart';
-import 'package:fory/src/context/write_context.dart';
-import 'package:fory/src/meta/type_ids.dart';
-import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/util/hash_util.dart';
 import 'package:fory_test/entity/xlang_test_models.dart';
 
@@ -71,34 +65,6 @@ Fory _newFory({bool compatible = false}) {
   return Fory(compatible: compatible, checkStructVersion: !compatible);
 }
 
-const int _xlangHeaderFlag = 0x02;
-
-Uint8List _serializeBuiltinValue(
-  Object value, {
-  required int typeId,
-}) {
-  final config = Config();
-  final typeResolver = TypeResolver(config);
-  final context = WriteContext(
-    config,
-    typeResolver,
-    RefWriter(),
-    MetaStringWriter(),
-  );
-  final buffer = Buffer();
-  context.prepare(buffer, trackRef: false);
-  try {
-    buffer.writeUint8(_xlangHeaderFlag);
-    context.refWriter.writeRefOrNull(buffer, value, trackRef: false);
-    final resolved = typeResolver.resolveBuiltinWireType(typeId);
-    context.writeTypeMetaValue(resolved, value);
-    context.writeResolvedValue(resolved, value, null);
-    return Uint8List.fromList(buffer.toBytes());
-  } finally {
-    context.reset();
-  }
-}
-
 void _roundTripFory(Fory fory, {bool trackRef = false}) {
   final input = Buffer.wrap(_readFile());
   final output = BytesBuilder(copy: false);
@@ -119,7 +85,7 @@ void _runIntegerCase() {
   output.add(fory.serialize(fory.deserializeFrom<Item1>(input)));
   for (var i = 0; i < 6; i += 1) {
     final value = fory.deserializeFrom<int>(input);
-    output.add(_serializeBuiltinValue(value, typeId: TypeIds.varInt32));
+    output.add(fory.serializeBuiltin(value, wireTypeId: TypeIds.varInt32));
   }
 
   if (input.readableBytes != 0) {
@@ -505,7 +471,8 @@ void _runCase(String caseName) {
       return;
     case 'test_nested_annotated_container_schema_consistent':
       final fory = _newFory();
-      registerXlangType(fory, NestedAnnotatedContainerSchemaConsistent, id: 801);
+      registerXlangType(fory, NestedAnnotatedContainerSchemaConsistent,
+          id: 801);
       _roundTripFory(fory);
       return;
     case 'test_nested_annotated_container_compatible':

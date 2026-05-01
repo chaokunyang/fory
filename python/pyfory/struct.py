@@ -455,6 +455,7 @@ class DataClassSerializer(Serializer):
             getattr(self._field_infos[index], "validation_field_type", None) if index < len(self._field_infos) else None
             for index in range(len(self._field_names))
         ]
+        self._has_validation_fields = any(field_type is not None for field_type in self._validation_field_types)
         self._assigned_field_names = {
             field_name
             for index, field_name in enumerate(self._field_names)
@@ -625,16 +626,46 @@ class DataClassSerializer(Serializer):
                     self._read_missing_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
                     continue
                 field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
-                self._assign_read_field_value(obj, obj_dict, field_name, field_value, self._validation_field_types[index])
+                validation_field_type = self._validation_field_types[index]
+                if validation_field_type is None:
+                    interned_name = self._field_name_interned[field_name]
+                    if obj_dict is not None:
+                        obj_dict[interned_name] = field_value
+                    else:
+                        setattr(obj, interned_name, field_value)
+                else:
+                    self._assign_read_field_value(obj, obj_dict, field_name, field_value, validation_field_type)
         else:
-            for index, field_name in enumerate(self._field_names):
-                serializer = self._serializers[index]
-                is_nullable = self._nullable_fields.get(field_name, False)
-                is_dynamic = self._dynamic_fields.get(field_name, False)
-                is_tracking_ref = self._ref_fields.get(field_name, False)
-                is_basic = self._basic_field_flags[index]
-                field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
-                self._assign_read_field_value(obj, obj_dict, field_name, field_value, self._validation_field_types[index])
+            if not self._has_validation_fields:
+                for index, field_name in enumerate(self._field_names):
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
+                    interned_name = self._field_name_interned[field_name]
+                    if obj_dict is not None:
+                        obj_dict[interned_name] = field_value
+                    else:
+                        setattr(obj, interned_name, field_value)
+            else:
+                for index, field_name in enumerate(self._field_names):
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
+                    validation_field_type = self._validation_field_types[index]
+                    if validation_field_type is None:
+                        interned_name = self._field_name_interned[field_name]
+                        if obj_dict is not None:
+                            obj_dict[interned_name] = field_value
+                        else:
+                            setattr(obj, interned_name, field_value)
+                    else:
+                        self._assign_read_field_value(obj, obj_dict, field_name, field_value, validation_field_type)
 
         if self._missing_field_defaults:
             for field_name, default_factory in self._missing_field_defaults:

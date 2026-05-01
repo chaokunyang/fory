@@ -668,7 +668,10 @@ fn build_type_fingerprint(
     let type_class = classify_field_type(ty);
     let nullable = meta.effective_nullable(type_class) || is_option_type(ty);
     let track_ref = include_ref && meta.effective_ref(type_class);
-    let type_id = fingerprint_type_id(adjust_type_id_for_encoding(get_type_id_by_type_ast(ty), meta));
+    let type_id = fingerprint_type_id(adjust_type_id_for_encoding(
+        get_type_id_by_type_ast(ty),
+        meta,
+    ));
 
     let mut fingerprint = format!(
         "{},{},{}",

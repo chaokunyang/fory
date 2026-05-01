@@ -669,7 +669,11 @@ class DartGenerator(BaseGenerator):
         parent_stack: Optional[List[Message]] = None,
     ) -> List[str]:
         args: List[str] = []
-        type_spec = self.type_spec_expression(field.field_type, parent_stack)
+        type_spec = self.type_spec_expression(
+            field.field_type,
+            parent_stack,
+            element_ref_override=field.element_ref,
+        )
         if type_spec is not None:
             args.append(f"type: {type_spec}")
         if field.tag_id is not None:
@@ -686,6 +690,7 @@ class DartGenerator(BaseGenerator):
         parent_stack: Optional[List[Message]] = None,
         *,
         ref_override: bool = False,
+        element_ref_override: bool = False,
     ) -> Optional[str]:
         if isinstance(field_type, PrimitiveType):
             primitive = {
@@ -717,10 +722,11 @@ class DartGenerator(BaseGenerator):
                 return "DeclaredType(ref: true)"
             return None
         if isinstance(field_type, ListType):
+            element_ref = field_type.element_ref or element_ref_override
             element_spec = self.type_spec_expression(
                 field_type.element_type,
                 parent_stack,
-                ref_override=field_type.element_ref,
+                ref_override=element_ref,
             )
             if element_spec is None:
                 return None

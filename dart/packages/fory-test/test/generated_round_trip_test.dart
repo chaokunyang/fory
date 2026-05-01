@@ -44,23 +44,23 @@ void main() {
 
       final person = Person()
         ..name = 'Ada'
-        ..age = Int32(36)
+        ..age = (36)
         ..favoriteColor = Color.blue
         ..tags = <String?>['engineer', null]
-        ..scores = <String, Int32>{
-          'math': Int32(100),
-          'logic': Int32(99),
+        ..scores = <String, int>{
+          'math': (100),
+          'logic': (99),
         };
 
       final bytes = fory.serialize(person);
       final roundTrip = fory.deserialize<Person>(bytes);
 
       expect(roundTrip.name, equals('Ada'));
-      expect(roundTrip.age, equals(Int32(36)));
+      expect(roundTrip.age, equals((36)));
       expect(roundTrip.favoriteColor, equals(Color.blue));
       expect(roundTrip.tags, equals(<String?>['engineer', null]));
-      expect(roundTrip.scores['math'], equals(Int32(100)));
-      expect(roundTrip.scores['logic'], equals(Int32(99)));
+      expect(roundTrip.scores['math'], equals((100)));
+      expect(roundTrip.scores['logic'], equals((99)));
     });
 
     test('supports root trackRef for top-level graphs', () {
@@ -171,14 +171,14 @@ void main() {
 
       final person = Person()
         ..name = 'Ada'
-        ..age = Int32(36)
+        ..age = (36)
         ..favoriteColor = Color.blue;
 
       final bytes = fory.serialize(person);
       final roundTrip = fory.deserialize<Person>(bytes);
 
       expect(roundTrip.name, equals('Ada'));
-      expect(roundTrip.age, equals(Int32(36)));
+      expect(roundTrip.age, equals((36)));
       expect(roundTrip.favoriteColor, equals(Color.blue));
     });
   });

@@ -14,9 +14,8 @@ cases.
 - Compatible mode for schema evolution
 - Optional reference tracking for shared and circular object graphs
 - Manual serializers for external types, custom payloads, and unions
-- Explicit xlang value class such as `Int32`, `Int64`, `Uint32`, `Uint64`,
-  `Float16`, `Bfloat16`, `Float32`, `LocalDate`, and `Timestamp`, plus `Duration`
-  support
+- Explicit exact-width value classes for `Int64`, `Uint64`, `Float16`,
+  `Bfloat16`, `Float32`, `LocalDate`, and `Timestamp`, plus `Duration` support
 
 ## Getting Started
 
@@ -50,7 +49,9 @@ class Person {
   Person();
 
   String name = '';
-  Int32 age = Int32(0);
+
+  @ForyField(type: Int32Type())
+  int age = 0;
   Color favoriteColor = Color.red;
   List<String> tags = <String>[];
 }
@@ -73,7 +74,7 @@ void main() {
 
   final person = Person()
     ..name = 'Ada'
-    ..age = Int32(36)
+    ..age = 36
     ..favoriteColor = Color.blue
     ..tags = <String>['engineer', 'mathematician'];
 
@@ -172,6 +173,17 @@ class NodeList {
 | `ref`      | Enable reference tracking for this field         |
 | `dynamic`  | Control whether runtime type metadata is written |
 
+`type:` is the canonical override surface for nested field semantics:
+
+```dart
+@MapField(
+  value: ListType(
+    element: Int32Type(encoding: Encoding.fixed),
+  ),
+)
+Map<String, List<int?>> nested = <String, List<int?>>{};
+```
+
 ## Customized Serializers
 
 Use `Serializer<T>` when a type cannot use generated struct support or when you
@@ -222,49 +234,49 @@ void main() {
 ## Type Mapping
 
 Dart has no native fixed-width 8/16/32-bit integer, unsigned 64-bit integer,
-or single-precision float types. Fory Dart provides thin wrapper types
-(`Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`,
-`Float16`, `Bfloat16`, `Float32`) imported from `package:fory/fory.dart` to
-represent these xlang wire types. For 16-bit floating-point arrays, Dart exposes
-`Float16List` and `Bfloat16List` as contiguous fixed-length buffers.
+or single-precision float types. Fory Dart uses plain Dart `int` plus field
+annotations for 8/16/32-bit integer fields, keeps `Int64` and `Uint64` for
+full-range 64-bit values, and uses wrapper value types for reduced-width
+floating point. For 16-bit floating-point arrays, Dart exposes `Float16List`
+and `Bfloat16List` as contiguous fixed-length buffers.
 
-| Fory xlang type | Dart type                 |
-| --------------- | ------------------------- |
-| bool            | `bool`                    |
-| int8            | `fory.Int8` (wrapper)     |
-| int16           | `fory.Int16` (wrapper)    |
-| int32           | `fory.Int32` (wrapper)    |
-| int64           | `int` or `fory.Int64`     |
-| uint8           | `fory.Uint8` (wrapper)    |
-| uint16          | `fory.Uint16` (wrapper)   |
-| uint32          | `fory.Uint32` (wrapper)   |
-| uint64          | `fory.Uint64` (wrapper)   |
-| float16         | `fory.Float16` (wrapper)  |
-| bfloat16        | `fory.Bfloat16` (wrapper) |
-| float32         | `fory.Float32` (wrapper)  |
-| float64         | `double`                  |
-| string          | `String`                  |
-| binary          | `Uint8List`               |
-| duration        | `Duration`                |
-| local_date      | `LocalDate`               |
-| timestamp       | `Timestamp`               |
-| list            | `List`                    |
-| set             | `Set`                     |
-| map             | `Map`                     |
-| enum            | `enum`                    |
-| named_struct    | `class`                   |
-| bool_array      | `List<bool>`              |
-| int8_array      | `Int8List`                |
-| int16_array     | `Int16List`               |
-| int32_array     | `Int32List`               |
-| int64_array     | `Int64List`               |
-| uint16_array    | `Uint16List`              |
-| uint32_array    | `Uint32List`              |
-| uint64_array    | `Uint64List`              |
-| float16_array   | `Float16List`             |
-| bfloat16_array  | `Bfloat16List`            |
-| float32_array   | `Float32List`             |
-| float64_array   | `Float64List`             |
+| Fory xlang type | Dart type                                |
+| --------------- | ---------------------------------------- |
+| bool            | `bool`                                   |
+| int8            | `int` + `@ForyField(type: Int8Type())`   |
+| int16           | `int` + `@ForyField(type: Int16Type())`  |
+| int32           | `int` + `@ForyField(type: Int32Type())`  |
+| int64           | `int` or `fory.Int64`                    |
+| uint8           | `int` + `@ForyField(type: Uint8Type())`  |
+| uint16          | `int` + `@ForyField(type: Uint16Type())` |
+| uint32          | `int` + `@ForyField(type: Uint32Type())` |
+| uint64          | `fory.Uint64` (wrapper)                  |
+| float16         | `fory.Float16` (wrapper)                 |
+| bfloat16        | `fory.Bfloat16` (wrapper)                |
+| float32         | `fory.Float32` (wrapper)                 |
+| float64         | `double`                                 |
+| string          | `String`                                 |
+| binary          | `Uint8List`                              |
+| duration        | `Duration`                               |
+| local_date      | `LocalDate`                              |
+| timestamp       | `Timestamp`                              |
+| list            | `List`                                   |
+| set             | `Set`                                    |
+| map             | `Map`                                    |
+| enum            | `enum`                                   |
+| named_struct    | `class`                                  |
+| bool_array      | `List<bool>`                             |
+| int8_array      | `Int8List`                               |
+| int16_array     | `Int16List`                              |
+| int32_array     | `Int32List`                              |
+| int64_array     | `Int64List`                              |
+| uint16_array    | `Uint16List`                             |
+| uint32_array    | `Uint32List`                             |
+| uint64_array    | `Uint64List`                             |
+| float16_array   | `Float16List`                            |
+| bfloat16_array  | `Bfloat16List`                           |
+| float32_array   | `Float32List`                            |
+| float64_array   | `Float64List`                            |
 
 ## Public API
 
@@ -272,16 +284,16 @@ The main exported API includes:
 
 - `Fory` — main serialization facade
 - `Config` — runtime configuration
-- `ForyStruct`, `ForyField` — struct annotations
+- `ForyStruct`, `ForyField`, `ListField`, `SetField`, `MapField` — struct annotations
 - `ForyUnion` — union type annotation
 - `Serializer`, `UnionSerializer`, `EnumSerializer` — serializer base classes
 - `Buffer`, `WriteContext`, `ReadContext` — low-level I/O
-- `TypeSpec`, `ListType`, `MapType`, `ValueType` — nested container type
+- `TypeSpec`, `DeclaredType`, `ListType`, `SetType`, `MapType` — nested type
   annotations
-- `Int32Type`, `Int64Type`, `Uint32Type`, `Uint64Type` — numeric encoding
-  overrides
-- Numeric wrappers: `Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`,
-  `Uint32`, `Uint64`, `Float16`, `Bfloat16`, `Float32`
+- `Int8Type`, `Int16Type`, `Int32Type`, `Int64Type`, `Uint8Type`, `Uint16Type`,
+  `Uint32Type`, `Uint64Type`, `Float16Type`, `Bfloat16Type`, `Float32Type` —
+  scalar wire-type overrides
+- Numeric value wrappers: `Int64`, `Uint64`, `Float16`, `Bfloat16`, `Float32`
 - Temporal types: `LocalDate`, `Timestamp`, `Duration`
 
 ## Cross-Language Notes
@@ -290,8 +302,8 @@ The main exported API includes:
 - Register user-defined types before serialization or deserialization.
 - Keep numeric IDs or `namespace + typeName` mappings consistent across
   languages.
-- Use wrappers or numeric field annotations when the exact xlang wire type
-  matters.
+- Use Dart `int` plus `@ForyField(type: ...)` for 8/16/32-bit integer fields,
+  and `Int64` / `Uint64` when full-range 64-bit values matter.
 
 For the xlang wire format and type mapping details, see the
 [Apache Fory specification](https://github.com/apache/fory/tree/main/docs/specification).

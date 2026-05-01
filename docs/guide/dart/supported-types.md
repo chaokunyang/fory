@@ -25,17 +25,17 @@ This page lists the Dart types you can use in Fory messages, and flags where you
 
 The following Dart types serialize directly without any special handling:
 
-| Dart type            | Cross-language notes                                                                                        |
-| -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `bool`               | Direct mapping                                                                                              |
-| `int`                | Serialized as 64-bit by default. Use wrappers or `@Int32Type` etc. when the peer expects a narrower integer |
-| `double`             | Maps to 64-bit float. Use `Float32` wrapper when the peer expects 32-bit                                    |
-| `String`             | Direct mapping                                                                                              |
-| `Uint8List`          | Binary blob                                                                                                 |
-| `List`, `Set`, `Map` | Supported; element types must also be supported                                                             |
-| `DateTime`           | Use `Timestamp` or `LocalDate` wrappers for explicit semantics                                              |
+| Dart type            | Cross-language notes                                                                                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bool`               | Direct mapping                                                                                                                                                 |
+| `int`                | Serialized as 64-bit by default. Use `@ForyField(type: Int8Type/Int16Type/Int32Type/Uint8Type/Uint16Type/Uint32Type)` when the peer expects a narrower integer |
+| `double`             | Maps to 64-bit float. Use `Float32` wrapper when the peer expects 32-bit                                                                                       |
+| `String`             | Direct mapping                                                                                                                                                 |
+| `Uint8List`          | Binary blob                                                                                                                                                    |
+| `List`, `Set`, `Map` | Supported; element types must also be supported                                                                                                                |
+| `DateTime`           | Use `Timestamp` or `LocalDate` wrappers for explicit semantics                                                                                                 |
 
-## Integer Wrappers
+## Integer Fields
 
 Dart VM/native `int` can represent signed 64-bit values, while Dart web `int`
 is limited to JavaScript-safe integer precision. If the peer language expects a
@@ -43,23 +43,31 @@ is limited to JavaScript-safe integer precision. If the peer language expects a
 the deserialization may fail or silently truncate. For browser and Flutter web
 precision rules, see [Web Platform Support](web-platform-support.md).
 
-Use an integer wrapper or field annotation to select the wire type explicitly:
+Use field metadata to select the wire type explicitly for 8/16/32-bit fields:
 
 ```dart
-final Int8 tiny = Int8(-1);        // 8-bit signed
-final Int16 shortValue = Int16(7); // 16-bit signed
-final Int32 age = Int32(36);       // 32-bit signed, varint by default
-final Int64 seq = Int64(0);        // signed 64-bit, varint by default
-final Uint8 flags = Uint8(255);    // 8-bit unsigned
-final Uint16 port = Uint16(65535); // 16-bit unsigned
-final Uint32 count = Uint32(4000000000); // 32-bit unsigned, varint by default
-final Uint64 offset = Uint64(0);   // unsigned 64-bit, varint by default
+@ForyStruct()
+class Metrics {
+  Metrics();
+
+  @ForyField(type: Int8Type())
+  int tiny = 0;
+
+  @ForyField(type: Int32Type(encoding: Encoding.fixed))
+  int age = 0;
+
+  @ForyField(type: Uint32Type())
+  int count = 0;
+
+  Int64 sequence = Int64(0);
+  Uint64 offset = Uint64(0);
+}
 ```
 
-Each wrapper clamps or normalizes the stored value to the target bit width.
-Root `Int32`, `Int64`, `Uint32`, and `Uint64` values use compact varint wire
-types by default. Use `@Int64Type`, `@Uint32Type`, `@Uint64Type`, or generated
-field metadata when a fixed-width or tagged encoding is required.
+Generated serializers range-check annotated `int` values before writing them.
+Use `Int64` and `Uint64` when you need full-range 64-bit values, especially on
+web. A plain root `int` value serializes as xlang `int64`; exact 8/16/32-bit
+wire widths are selected through field metadata or low-level `Buffer` APIs.
 
 On Dart VM, `Int64` and `Uint64` are extension types over `int`. Once a value is
 passed through an `Object`-typed dynamic/root boundary, the VM cannot recover
@@ -115,7 +123,9 @@ class User {
   User();
 
   String name = '';
-  Int32 age = Int32(0); // use Int32 when peers expect a 32-bit integer
+
+  @ForyField(type: Int32Type())
+  int age = 0; // use explicit field metadata when peers expect a 32-bit integer
 }
 ```
 
@@ -123,11 +133,22 @@ See [Code Generation](code-generation.md).
 
 ## Collections
 
-Fory supports `List<T>`, `Set<T>`, and `Map<K, V>`. Element and key types must also be serializable types. Avoid using mutable objects as map keys.
+Fory supports `List<T>`, `Set<T>`, and `Map<K, V>`. Element and key types must
+also be serializable types. Avoid using mutable objects as map keys.
+
+Generic `List<int>` with primitive element metadata still uses the `list` wire
+type. Dedicated array wire kinds come from dedicated carriers:
+
+- `List<bool>` for `bool_array`
+- `Int8List`, `Int16List`, `Int32List`, `Int64List`
+- `Uint8List`, `Uint16List`, `Uint32List`, `Uint64List`
+- `Float16List`, `Bfloat16List`, `Float32List`, `Float64List`
 
 ## Compatibility Tip
 
-When in doubt about whether a Dart type will match what the peer expects, use the explicit wrapper types. Guessing the wrong numeric width is one of the most common cross-language bugs.
+When in doubt about whether a Dart type will match what the peer expects, make
+the width explicit with `@ForyField(type: ...)`. Guessing the wrong numeric
+width is one of the most common cross-language bugs.
 
 ## Related Topics
 

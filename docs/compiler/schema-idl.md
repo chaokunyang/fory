@@ -969,12 +969,12 @@ apply to elements. `repeated` is accepted as an alias for `list`.
 
 **List modifier mapping:**
 
-| Fory IDL                | Java                                           | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                 |
-| ----------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ---------------------------------------------------- |
-| `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                      |
-| `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                      |
-| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`               |
-| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListType(element: ValueType.ref())` |
+| Fory IDL                | Java                                           | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                          |
+| ----------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------- |
+| `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                               |
+| `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                               |
+| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`                        |
+| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` |
 
 Use `ref(thread_safe=false)` in Fory IDL (or `[(fory).thread_safe_pointer = false]` in protobuf)
 to generate `Rc` instead of `Arc` in Rust.
@@ -1062,10 +1062,10 @@ Fory IDL provides fixed-width signed integers (varint encoding for 32/64-bit by 
 
 | Fory IDL | Java    | Python         | Go      | Rust  | C++       | JavaScript         | Dart    |
 | -------- | ------- | -------------- | ------- | ----- | --------- | ------------------ | ------- |
-| `int8`   | `byte`  | `pyfory.int8`  | `int8`  | `i8`  | `int8_t`  | `number`           | `Int8`  |
-| `int16`  | `short` | `pyfory.int16` | `int16` | `i16` | `int16_t` | `number`           | `Int16` |
-| `int32`  | `int`   | `pyfory.int32` | `int32` | `i32` | `int32_t` | `number`           | `Int32` |
-| `int64`  | `long`  | `pyfory.int64` | `int64` | `i64` | `int64_t` | `bigint \| number` | `int`   |
+| `int8`   | `byte`  | `pyfory.int8`  | `int8`  | `i8`  | `int8_t`  | `number`           | `int`   |
+| `int16`  | `short` | `pyfory.int16` | `int16` | `i16` | `int16_t` | `number`           | `int`   |
+| `int32`  | `int`   | `pyfory.int32` | `int32` | `i32` | `int32_t` | `number`           | `int`   |
+| `int64`  | `long`  | `pyfory.int64` | `int64` | `i64` | `int64_t` | `bigint \| number` | `Int64` |
 
 Fory IDL provides fixed-width unsigned integers (varint encoding for 32/64-bit by default):
 
@@ -1080,10 +1080,10 @@ Fory IDL provides fixed-width unsigned integers (varint encoding for 32/64-bit b
 
 | Fory IDL | Java    | Python          | Go       | Rust  | C++        | JavaScript         | Dart     |
 | -------- | ------- | --------------- | -------- | ----- | ---------- | ------------------ | -------- |
-| `uint8`  | `short` | `pyfory.uint8`  | `uint8`  | `u8`  | `uint8_t`  | `number`           | `UInt8`  |
-| `uint16` | `int`   | `pyfory.uint16` | `uint16` | `u16` | `uint16_t` | `number`           | `UInt16` |
-| `uint32` | `long`  | `pyfory.uint32` | `uint32` | `u32` | `uint32_t` | `number`           | `UInt32` |
-| `uint64` | `long`  | `pyfory.uint64` | `uint64` | `u64` | `uint64_t` | `bigint \| number` | `int`    |
+| `uint8`  | `short` | `pyfory.uint8`  | `uint8`  | `u8`  | `uint8_t`  | `number`           | `int`    |
+| `uint16` | `int`   | `pyfory.uint16` | `uint16` | `u16` | `uint16_t` | `number`           | `int`    |
+| `uint32` | `long`  | `pyfory.uint32` | `uint32` | `u32` | `uint32_t` | `number`           | `int`    |
+| `uint64` | `long`  | `pyfory.uint64` | `uint64` | `u64` | `uint64_t` | `bigint \| number` | `Uint64` |
 
 #### Integer Encoding Variants
 
@@ -1257,10 +1257,10 @@ message Config {
 
 **Language Mapping:**
 
-| Fory IDL             | Java                   | Python            | Go                 | Rust                    | C++                              | JavaScript            | Dart                 |
-| -------------------- | ---------------------- | ----------------- | ------------------ | ----------------------- | -------------------------------- | --------------------- | -------------------- |
-| `map<string, int32>` | `Map<String, Integer>` | `Dict[str, int]`  | `map[string]int32` | `HashMap<String, i32>`  | `std::map<std::string, int32_t>` | `Map<string, number>` | `Map<String, Int32>` |
-| `map<string, User>`  | `Map<String, User>`    | `Dict[str, User]` | `map[string]User`  | `HashMap<String, User>` | `std::map<std::string, User>`    | `Map<string, User>`   | `Map<String, User>`  |
+| Fory IDL             | Java                   | Python            | Go                 | Rust                    | C++                              | JavaScript            | Dart                |
+| -------------------- | ---------------------- | ----------------- | ------------------ | ----------------------- | -------------------------------- | --------------------- | ------------------- |
+| `map<string, int32>` | `Map<String, Integer>` | `Dict[str, int]`  | `map[string]int32` | `HashMap<String, i32>`  | `std::map<std::string, int32_t>` | `Map<string, number>` | `Map<String, int>`  |
+| `map<string, User>`  | `Map<String, User>`    | `Dict[str, User]` | `map[string]User`  | `HashMap<String, User>` | `std::map<std::string, User>`    | `Map<string, User>`   | `Map<String, User>` |
 
 **Key Type Restrictions:**
 

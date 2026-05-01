@@ -45,22 +45,22 @@ class DartGenerator(BaseGenerator):
 
     PRIMITIVE_MAP = {
         PrimitiveKind.BOOL: "bool",
-        PrimitiveKind.INT8: "Int8",
-        PrimitiveKind.INT16: "Int16",
-        PrimitiveKind.INT32: "Int32",
-        PrimitiveKind.VARINT32: "Int32",
-        PrimitiveKind.INT64: "int",
-        PrimitiveKind.VARINT64: "int",
-        PrimitiveKind.TAGGED_INT64: "int",
-        PrimitiveKind.UINT8: "UInt8",
-        PrimitiveKind.UINT16: "UInt16",
-        PrimitiveKind.UINT32: "UInt32",
-        PrimitiveKind.VAR_UINT32: "UInt32",
-        PrimitiveKind.UINT64: "int",
-        PrimitiveKind.VAR_UINT64: "int",
-        PrimitiveKind.TAGGED_UINT64: "int",
+        PrimitiveKind.INT8: "int",
+        PrimitiveKind.INT16: "int",
+        PrimitiveKind.INT32: "int",
+        PrimitiveKind.VARINT32: "int",
+        PrimitiveKind.INT64: "Int64",
+        PrimitiveKind.VARINT64: "Int64",
+        PrimitiveKind.TAGGED_INT64: "Int64",
+        PrimitiveKind.UINT8: "int",
+        PrimitiveKind.UINT16: "int",
+        PrimitiveKind.UINT32: "int",
+        PrimitiveKind.VAR_UINT32: "int",
+        PrimitiveKind.UINT64: "Uint64",
+        PrimitiveKind.VAR_UINT64: "Uint64",
+        PrimitiveKind.TAGGED_UINT64: "Uint64",
         PrimitiveKind.FLOAT16: "Float16",
-        PrimitiveKind.BFLOAT16: "Float16",
+        PrimitiveKind.BFLOAT16: "Bfloat16",
         PrimitiveKind.FLOAT32: "Float32",
         PrimitiveKind.FLOAT64: "double",
         PrimitiveKind.STRING: "String",
@@ -506,7 +506,7 @@ class DartGenerator(BaseGenerator):
             converted_value = self._conversion_expression(
                 field_type.value_type,
                 "mapValue",
-                False,
+                field_type.value_optional,
                 parent_stack,
             )
             return f"Map<{key_type}, {value_type}>.of((({value_expr} as Map)).map((key, mapValue) => MapEntry({converted_key}, {converted_value})))"
@@ -526,7 +526,7 @@ class DartGenerator(BaseGenerator):
         elif isinstance(field_type, MapType):
             base = (
                 f"Map<{self.dart_type(field_type.key_type, parent_stack=parent_stack)}, "
-                f"{self.dart_type(field_type.value_type, parent_stack=parent_stack)}>"
+                f"{self.dart_type(field_type.value_type, field_type.value_optional, parent_stack)}>"
             )
         elif isinstance(field_type, NamedType):
             resolved = self.resolve_type(field_type.name, parent_stack)
@@ -568,6 +568,8 @@ class DartGenerator(BaseGenerator):
                 PrimitiveKind.UINT64: "Uint64List",
                 PrimitiveKind.VAR_UINT64: "Uint64List",
                 PrimitiveKind.TAGGED_UINT64: "Uint64List",
+                PrimitiveKind.FLOAT16: "Float16List",
+                PrimitiveKind.BFLOAT16: "Bfloat16List",
                 PrimitiveKind.FLOAT32: "Float32List",
                 PrimitiveKind.FLOAT64: "Float64List",
             }
@@ -589,22 +591,22 @@ class DartGenerator(BaseGenerator):
         if isinstance(t, PrimitiveType):
             return {
                 PrimitiveKind.BOOL: "false",
-                PrimitiveKind.INT8: "Int8(0)",
-                PrimitiveKind.INT16: "Int16(0)",
-                PrimitiveKind.INT32: "Int32(0)",
-                PrimitiveKind.VARINT32: "Int32(0)",
-                PrimitiveKind.INT64: "0",
-                PrimitiveKind.VARINT64: "0",
-                PrimitiveKind.TAGGED_INT64: "0",
-                PrimitiveKind.UINT8: "UInt8(0)",
-                PrimitiveKind.UINT16: "UInt16(0)",
-                PrimitiveKind.UINT32: "UInt32(0)",
-                PrimitiveKind.VAR_UINT32: "UInt32(0)",
-                PrimitiveKind.UINT64: "0",
-                PrimitiveKind.VAR_UINT64: "0",
-                PrimitiveKind.TAGGED_UINT64: "0",
-                PrimitiveKind.FLOAT16: "Float16.zero",
-                PrimitiveKind.BFLOAT16: "Float16.zero",
+                PrimitiveKind.INT8: "0",
+                PrimitiveKind.INT16: "0",
+                PrimitiveKind.INT32: "0",
+                PrimitiveKind.VARINT32: "0",
+                PrimitiveKind.INT64: "Int64(0)",
+                PrimitiveKind.VARINT64: "Int64(0)",
+                PrimitiveKind.TAGGED_INT64: "Int64(0)",
+                PrimitiveKind.UINT8: "0",
+                PrimitiveKind.UINT16: "0",
+                PrimitiveKind.UINT32: "0",
+                PrimitiveKind.VAR_UINT32: "0",
+                PrimitiveKind.UINT64: "Uint64(0)",
+                PrimitiveKind.VAR_UINT64: "Uint64(0)",
+                PrimitiveKind.TAGGED_UINT64: "Uint64(0)",
+                PrimitiveKind.FLOAT16: "Float16(0)",
+                PrimitiveKind.BFLOAT16: "Bfloat16(0)",
                 PrimitiveKind.FLOAT32: "Float32(0)",
                 PrimitiveKind.FLOAT64: "0.0",
                 PrimitiveKind.STRING: "''",
@@ -623,7 +625,9 @@ class DartGenerator(BaseGenerator):
             )
         if isinstance(t, MapType):
             key_type = self.dart_type(t.key_type, parent_stack=parent_stack)
-            value_type = self.dart_type(t.value_type, parent_stack=parent_stack)
+            value_type = self.dart_type(
+                t.value_type, t.value_optional, parent_stack
+            )
             return f"<{key_type}, {value_type}>{{}}"
         if isinstance(t, NamedType):
             resolved = self.resolve_type(t.name, parent_stack)
@@ -664,38 +668,79 @@ class DartGenerator(BaseGenerator):
         field: Field,
         parent_stack: Optional[List[Message]] = None,
     ) -> List[str]:
-        annotations: List[str] = []
-        numeric_annotation = self.numeric_annotation(field.field_type)
-        if numeric_annotation is not None:
-            annotations.append(numeric_annotation)
         args: List[str] = []
+        type_spec = self.type_spec_expression(field.field_type, parent_stack)
+        if type_spec is not None:
+            args.append(f"type: {type_spec}")
         if field.tag_id is not None:
             args.append(f"id: {field.tag_id}")
         if field.ref:
             args.append("ref: true")
         if args:
-            annotations.append(f"@ForyField({', '.join(args)})")
-        # Emit container TypeSpec annotations for nested ref tracking.
-        if isinstance(field.field_type, ListType) and (
-            field.element_ref or field.field_type.element_ref
-        ):
-            annotations.append("@ListType(element: ValueType.ref())")
-        if isinstance(field.field_type, MapType) and field.field_type.value_ref:
-            annotations.append("@MapType(value: ValueType.ref())")
-        return annotations
+            return [f"@ForyField({', '.join(args)})"]
+        return []
 
-    def numeric_annotation(self, field_type: FieldType) -> Optional[str]:
-        if not isinstance(field_type, PrimitiveType):
+    def type_spec_expression(
+        self,
+        field_type: FieldType,
+        parent_stack: Optional[List[Message]] = None,
+        *,
+        ref_override: bool = False,
+    ) -> Optional[str]:
+        if isinstance(field_type, PrimitiveType):
+            primitive = {
+                PrimitiveKind.INT8: "Int8Type()",
+                PrimitiveKind.INT16: "Int16Type()",
+                PrimitiveKind.INT32: "Int32Type(encoding: Encoding.fixed)",
+                PrimitiveKind.VARINT32: "Int32Type(encoding: Encoding.varint)",
+                PrimitiveKind.INT64: "Int64Type(encoding: Encoding.fixed)",
+                PrimitiveKind.VARINT64: "Int64Type(encoding: Encoding.varint)",
+                PrimitiveKind.TAGGED_INT64: "Int64Type(encoding: Encoding.tagged)",
+                PrimitiveKind.UINT8: "Uint8Type()",
+                PrimitiveKind.UINT16: "Uint16Type()",
+                PrimitiveKind.UINT32: "Uint32Type(encoding: Encoding.fixed)",
+                PrimitiveKind.VAR_UINT32: "Uint32Type(encoding: Encoding.varint)",
+                PrimitiveKind.UINT64: "Uint64Type(encoding: Encoding.fixed)",
+                PrimitiveKind.VAR_UINT64: "Uint64Type(encoding: Encoding.varint)",
+                PrimitiveKind.TAGGED_UINT64: "Uint64Type(encoding: Encoding.tagged)",
+                PrimitiveKind.FLOAT16: "Float16Type()",
+                PrimitiveKind.BFLOAT16: "Bfloat16Type()",
+                PrimitiveKind.FLOAT32: "Float32Type()",
+            }.get(field_type.kind)
+            if primitive is not None:
+                return primitive
+            if ref_override:
+                return "DeclaredType(ref: true)"
             return None
-        return {
-            PrimitiveKind.INT32: "@Int32Type(compress: false)",
-            PrimitiveKind.INT64: "@Int64Type(encoding: LongEncoding.fixed)",
-            PrimitiveKind.TAGGED_INT64: "@Int64Type(encoding: LongEncoding.tagged)",
-            PrimitiveKind.VAR_UINT32: "@Uint32Type()",
-            PrimitiveKind.UINT64: "@Uint64Type(encoding: LongEncoding.fixed)",
-            PrimitiveKind.VAR_UINT64: "@Uint64Type()",
-            PrimitiveKind.TAGGED_UINT64: "@Uint64Type(encoding: LongEncoding.tagged)",
-        }.get(field_type.kind)
+        if isinstance(field_type, NamedType):
+            if ref_override:
+                return "DeclaredType(ref: true)"
+            return None
+        if isinstance(field_type, ListType):
+            element_spec = self.type_spec_expression(
+                field_type.element_type,
+                parent_stack,
+                ref_override=field_type.element_ref,
+            )
+            if element_spec is None:
+                return None
+            return f"ListType(element: {element_spec})"
+        if isinstance(field_type, MapType):
+            key_spec = self.type_spec_expression(field_type.key_type, parent_stack)
+            value_spec = self.type_spec_expression(
+                field_type.value_type,
+                parent_stack,
+                ref_override=field_type.value_ref,
+            )
+            args: List[str] = []
+            if key_spec is not None:
+                args.append(f"key: {key_spec}")
+            if value_spec is not None:
+                args.append(f"value: {value_spec}")
+            if not args:
+                return None
+            return f"MapType({', '.join(args)})"
+        return None
 
     def enum_case_name(self, enum: Enum, value: EnumValue) -> str:
         name = value.name
@@ -985,7 +1030,7 @@ class DartGenerator(BaseGenerator):
             args.append(
                 self._field_type_literal_from_type(
                     field_type.value_type,
-                    False,
+                    field_type.value_optional,
                     field_type.value_ref,
                     indent + 2,
                     parent_stack,
@@ -1030,22 +1075,22 @@ class DartGenerator(BaseGenerator):
         if isinstance(field_type, PrimitiveType):
             return {
                 PrimitiveKind.BOOL: ("bool", "TypeIds.boolType"),
-                PrimitiveKind.INT8: ("Int8", "TypeIds.int8"),
-                PrimitiveKind.INT16: ("Int16", "TypeIds.int16"),
-                PrimitiveKind.INT32: ("Int32", "TypeIds.int32"),
-                PrimitiveKind.VARINT32: ("Int32", "TypeIds.varInt32"),
-                PrimitiveKind.INT64: ("int", "TypeIds.int64"),
-                PrimitiveKind.VARINT64: ("int", "TypeIds.varInt64"),
-                PrimitiveKind.TAGGED_INT64: ("int", "TypeIds.taggedInt64"),
-                PrimitiveKind.UINT8: ("UInt8", "TypeIds.uint8"),
-                PrimitiveKind.UINT16: ("UInt16", "TypeIds.uint16"),
-                PrimitiveKind.UINT32: ("UInt32", "TypeIds.uint32"),
-                PrimitiveKind.VAR_UINT32: ("UInt32", "TypeIds.varUint32"),
-                PrimitiveKind.UINT64: ("int", "TypeIds.uint64"),
-                PrimitiveKind.VAR_UINT64: ("int", "TypeIds.varUint64"),
-                PrimitiveKind.TAGGED_UINT64: ("int", "TypeIds.taggedUint64"),
+                PrimitiveKind.INT8: ("int", "TypeIds.int8"),
+                PrimitiveKind.INT16: ("int", "TypeIds.int16"),
+                PrimitiveKind.INT32: ("int", "TypeIds.int32"),
+                PrimitiveKind.VARINT32: ("int", "TypeIds.varInt32"),
+                PrimitiveKind.INT64: ("Int64", "TypeIds.int64"),
+                PrimitiveKind.VARINT64: ("Int64", "TypeIds.varInt64"),
+                PrimitiveKind.TAGGED_INT64: ("Int64", "TypeIds.taggedInt64"),
+                PrimitiveKind.UINT8: ("int", "TypeIds.uint8"),
+                PrimitiveKind.UINT16: ("int", "TypeIds.uint16"),
+                PrimitiveKind.UINT32: ("int", "TypeIds.uint32"),
+                PrimitiveKind.VAR_UINT32: ("int", "TypeIds.varUint32"),
+                PrimitiveKind.UINT64: ("Uint64", "TypeIds.uint64"),
+                PrimitiveKind.VAR_UINT64: ("Uint64", "TypeIds.varUint64"),
+                PrimitiveKind.TAGGED_UINT64: ("Uint64", "TypeIds.taggedUint64"),
                 PrimitiveKind.FLOAT16: ("Float16", "TypeIds.float16"),
-                PrimitiveKind.BFLOAT16: ("Float16", "TypeIds.float16"),
+                PrimitiveKind.BFLOAT16: ("Bfloat16", "TypeIds.bfloat16"),
                 PrimitiveKind.FLOAT32: ("Float32", "TypeIds.float32"),
                 PrimitiveKind.FLOAT64: ("double", "TypeIds.float64"),
                 PrimitiveKind.STRING: ("String", "TypeIds.string"),
@@ -1070,6 +1115,8 @@ class DartGenerator(BaseGenerator):
                     "Uint16List": "TypeIds.uint16Array",
                     "Uint32List": "TypeIds.uint32Array",
                     "Uint64List": "TypeIds.uint64Array",
+                    "Float16List": "TypeIds.float16Array",
+                    "Bfloat16List": "TypeIds.bfloat16Array",
                     "Float32List": "TypeIds.float32Array",
                     "Float64List": "TypeIds.float64Array",
                 }[arr]

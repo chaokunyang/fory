@@ -51,14 +51,17 @@ void main() {
 
     test('deserializes BFLOAT16 and BFLOAT16_ARRAY wire values', () {
       final fory = Fory();
-      final scalarBytes = Uint8List.fromList(fory.serialize(Uint16(0xbf60)));
-      scalarBytes[2] = TypeIds.bfloat16;
+      final scalarBytes =
+          Uint8List.fromList(fory.serialize(Bfloat16.fromBits(0xbf60)));
       final arrayBytes = Uint8List.fromList(
         fory.serialize(
-          Uint16List.fromList(<int>[0x3f80, 0xbf80, 0x7fc1]),
+          Bfloat16List.fromList(<Bfloat16>[
+            Bfloat16.fromBits(0x3f80),
+            Bfloat16.fromBits(0xbf80),
+            Bfloat16.fromBits(0x7fc1),
+          ]),
         ),
       );
-      arrayBytes[2] = TypeIds.bfloat16Array;
 
       expect(fory.deserialize<Bfloat16>(scalarBytes).toBits(), equals(0xbf60));
       expect(

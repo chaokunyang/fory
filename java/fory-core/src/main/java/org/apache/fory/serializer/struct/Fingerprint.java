@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float32List;
 import org.apache.fory.collection.Float64List;
@@ -52,7 +53,8 @@ public class Fingerprint {
    *
    * <p><b>Fingerprint Format:</b>
    *
-   * <p>Each field contributes: {@code <field_id_or_name>,<type_id>,<ref>,<nullable>;}
+   * <p>Each field contributes:
+   * {@code <field_id_or_name>,<type_id>,<ref>,<nullable>[<nested_type_fingerprint>];}
    *
    * <p>Fields are sorted by their identifier (field ID or name) lexicographically as strings.
    *
@@ -91,7 +93,12 @@ public class Fingerprint {
     List<String[]> fieldInfos = new ArrayList<>(descriptors.size());
     for (Descriptor descriptor : descriptors) {
       Class<?> rawType = descriptor.getTypeRef().getRawType();
-      int typeId = getTypeId(resolver, descriptor);
+      FieldTypes.FieldType fieldType =
+          descriptor.getField() == null
+              ? null
+              : FieldTypes.buildFieldType(resolver, descriptor.getField());
+      int typeId =
+          fieldType != null ? fingerprintTypeId(fieldType) : getTypeId(resolver, descriptor);
 
       // Get field identifier: tag ID if configured, otherwise snake_case name
       String fieldIdentifier;
@@ -128,10 +135,17 @@ public class Fingerprint {
         nullable = descriptor.isNullable() ? '1' : '0';
       }
 
-      fieldInfos.add(
-          new String[] {
-            fieldIdentifier, String.valueOf(typeId), String.valueOf(ref), String.valueOf(nullable)
-          });
+      StringBuilder fieldFingerprint =
+          new StringBuilder()
+              .append(typeId)
+              .append(',')
+              .append(ref)
+              .append(',')
+              .append(nullable);
+      if (fieldType != null) {
+        appendNestedFingerprint(fieldFingerprint, fieldType);
+      }
+      fieldInfos.add(new String[] {fieldIdentifier, fieldFingerprint.toString()});
     }
 
     // Sort by field identifier (lexicographically as strings)
@@ -140,15 +154,7 @@ public class Fingerprint {
     // Build fingerprint string
     StringBuilder builder = new StringBuilder();
     for (String[] info : fieldInfos) {
-      builder
-          .append(info[0])
-          .append(',')
-          .append(info[1])
-          .append(',')
-          .append(info[2])
-          .append(',')
-          .append(info[3])
-          .append(';');
+      builder.append(info[0]).append(',').append(info[1]).append(';');
     }
     String fingerprint = builder.toString();
     if (Utils.DEBUG_OUTPUT_ENABLED) {
@@ -156,6 +162,59 @@ public class Fingerprint {
           "Fingerprint string for {} is: {}", Descriptor.getDeclareClass(descriptors), fingerprint);
     }
     return fingerprint;
+  }
+
+  private static void appendNestedFingerprint(
+      StringBuilder builder, FieldTypes.FieldType fieldType) {
+    if (fieldType instanceof FieldTypes.CollectionFieldType) {
+      FieldTypes.CollectionFieldType collectionFieldType =
+          (FieldTypes.CollectionFieldType) fieldType;
+      builder.append('[');
+      appendFieldTypeFingerprint(builder, collectionFieldType.getElementType(), false, false);
+      builder.append(']');
+      return;
+    }
+    if (fieldType instanceof FieldTypes.MapFieldType) {
+      FieldTypes.MapFieldType mapFieldType = (FieldTypes.MapFieldType) fieldType;
+      builder.append('[');
+      appendFieldTypeFingerprint(builder, mapFieldType.getKeyType(), false, false);
+      builder.append('|');
+      appendFieldTypeFingerprint(builder, mapFieldType.getValueType(), false, false);
+      builder.append(']');
+    }
+  }
+
+  private static void appendFieldTypeFingerprint(
+      StringBuilder builder,
+      FieldTypes.FieldType fieldType,
+      boolean includeRef,
+      boolean includeNullable) {
+    builder
+        .append(fingerprintTypeId(fieldType))
+        .append(',')
+        .append(includeRef && fieldType.trackingRef() ? '1' : '0')
+        .append(',')
+        .append(includeNullable && fieldType.nullable() ? '1' : '0');
+    appendNestedFingerprint(builder, fieldType);
+  }
+
+  private static int fingerprintTypeId(FieldTypes.FieldType fieldType) {
+    int typeId = fieldType.getTypeId();
+    if (typeId == Types.UNKNOWN) {
+      return Types.UNKNOWN;
+    }
+    if (Types.isUnionType(typeId)
+        || typeId == Types.ENUM
+        || typeId == Types.NAMED_ENUM
+        || typeId == Types.STRUCT
+        || typeId == Types.COMPATIBLE_STRUCT
+        || typeId == Types.NAMED_STRUCT
+        || typeId == Types.NAMED_COMPATIBLE_STRUCT
+        || typeId == Types.EXT
+        || typeId == Types.NAMED_EXT) {
+      return Types.UNKNOWN;
+    }
+    return typeId;
   }
 
   private static int getTypeId(TypeResolver resolver, Descriptor descriptor) {

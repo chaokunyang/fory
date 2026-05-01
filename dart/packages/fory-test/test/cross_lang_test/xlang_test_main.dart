@@ -22,6 +22,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/config.dart';
+import 'package:fory/src/context/meta_string_writer.dart';
+import 'package:fory/src/context/ref_writer.dart';
+import 'package:fory/src/context/write_context.dart';
+import 'package:fory/src/meta/type_ids.dart';
+import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/util/hash_util.dart';
 import 'package:fory_test/entity/xlang_test_models.dart';
 
@@ -65,12 +71,59 @@ Fory _newFory({bool compatible = false}) {
   return Fory(compatible: compatible, checkStructVersion: !compatible);
 }
 
+const int _xlangHeaderFlag = 0x02;
+
+Uint8List _serializeBuiltinValue(
+  Object value, {
+  required int typeId,
+}) {
+  final config = Config();
+  final typeResolver = TypeResolver(config);
+  final context = WriteContext(
+    config,
+    typeResolver,
+    RefWriter(),
+    MetaStringWriter(),
+  );
+  final buffer = Buffer();
+  context.prepare(buffer, trackRef: false);
+  try {
+    buffer.writeUint8(_xlangHeaderFlag);
+    context.refWriter.writeRefOrNull(buffer, value, trackRef: false);
+    final resolved = typeResolver.resolveBuiltinWireType(typeId);
+    context.writeTypeMetaValue(resolved, value);
+    context.writeResolvedValue(resolved, value, null);
+    return Uint8List.fromList(buffer.toBytes());
+  } finally {
+    context.reset();
+  }
+}
+
 void _roundTripFory(Fory fory, {bool trackRef = false}) {
   final input = Buffer.wrap(_readFile());
   final output = BytesBuilder(copy: false);
   while (input.readableBytes > 0) {
     final value = fory.deserializeFrom<Object?>(input);
     output.add(fory.serialize(value, trackRef: trackRef));
+  }
+  _writeFile(output.takeBytes());
+}
+
+void _runIntegerCase() {
+  final fory = _newFory(compatible: true);
+  registerXlangType(fory, Item1, id: 101);
+
+  final input = Buffer.wrap(_readFile());
+  final output = BytesBuilder(copy: false);
+
+  output.add(fory.serialize(fory.deserializeFrom<Item1>(input)));
+  for (var i = 0; i < 6; i += 1) {
+    final value = fory.deserializeFrom<int>(input);
+    output.add(_serializeBuiltinValue(value, typeId: TypeIds.varInt32));
+  }
+
+  if (input.readableBytes != 0) {
+    throw StateError('Unexpected trailing bytes after integer payload.');
   }
   _writeFile(output.takeBytes());
 }
@@ -335,7 +388,7 @@ void _runCollectionElementRefRemoteTracking() {
   registerXlangType(fory, RefOverrideContainer, id: 702);
 
   final shared = RefOverrideElement()
-    ..id = Int32(7)
+    ..id = (7)
     ..name = 'shared_element';
   // IMPORTANT: this peer intentionally writes a shared-reference payload with
   // its default local ref-tracked schema. The Java reader uses ref-disabled
@@ -424,9 +477,7 @@ void _runCase(String caseName) {
       _roundTripFory(fory);
       return;
     case 'test_integer':
-      final fory = _newFory(compatible: true);
-      registerXlangType(fory, Item1, id: 101);
-      _roundTripFory(fory);
+      _runIntegerCase();
       return;
     case 'test_decimal':
       _verifyDecimalCase();
@@ -450,6 +501,16 @@ void _runCase(String caseName) {
     case 'test_struct_with_map':
       final fory = _newFory(compatible: true);
       registerXlangType(fory, StructWithMap, id: 202);
+      _roundTripFory(fory);
+      return;
+    case 'test_nested_annotated_container_schema_consistent':
+      final fory = _newFory();
+      registerXlangType(fory, NestedAnnotatedContainerSchemaConsistent, id: 801);
+      _roundTripFory(fory);
+      return;
+    case 'test_nested_annotated_container_compatible':
+      final fory = _newFory(compatible: true);
+      registerXlangType(fory, NestedAnnotatedContainerCompatible, id: 802);
       _roundTripFory(fory);
       return;
     case 'test_skip_id_custom':

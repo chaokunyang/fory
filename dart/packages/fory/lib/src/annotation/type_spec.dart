@@ -17,95 +17,173 @@
  * under the License.
  */
 
-/// Type-level annotations for configuring nested container elements.
-///
-/// Use [ListType] and [MapType] on fields to override default ref-tracking
-/// and nullability for container elements, keys, and values.
 library;
 
-/// Option that modifies a type's serialization behavior.
-abstract class TypeOption {
-  const TypeOption();
+enum Encoding { fixed, varint, tagged }
 
-  const factory TypeOption.ref([bool tracked]) = RefOption;
-  const factory TypeOption.nullable([bool value]) = NullableOption;
-}
-
-/// Enables or disables reference tracking for a type.
-final class RefOption extends TypeOption {
-  final bool tracked;
-  const RefOption([this.tracked = true]);
-}
-
-/// Overrides nullability for a type.
-final class NullableOption extends TypeOption {
-  final bool value;
-  const NullableOption([this.value = true]);
-}
-
-/// Base class for type specifications that carry [TypeOption]s.
 abstract class TypeSpec {
-  final List<TypeOption> options;
-  const TypeSpec([this.options = const []]);
+  final bool? nullable;
+  final bool? ref;
+  final bool? dynamic;
+
+  const TypeSpec({
+    this.nullable,
+    this.ref,
+    this.dynamic,
+  });
 }
 
-/// Specifies options for a scalar or object value type.
-final class ValueType extends TypeSpec {
-  const ValueType([super.options]);
-
-  const ValueType.ref() : super(const [TypeOption.ref()]);
-  const ValueType.noRef() : super(const [TypeOption.ref(false)]);
-  const ValueType.nullable() : super(const [TypeOption.nullable()]);
-  const ValueType.nonNullable() : super(const [TypeOption.nullable(false)]);
-  const ValueType.refNullable()
-      : super(const [TypeOption.ref(), TypeOption.nullable()]);
+abstract class ScalarTypeSpec extends TypeSpec {
+  const ScalarTypeSpec({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
 }
 
-/// Specifies options for a list or set field, including its element type.
+final class DeclaredType extends TypeSpec {
+  const DeclaredType({
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class BoolType extends ScalarTypeSpec {
+  const BoolType({super.nullable, super.ref, super.dynamic});
+}
+
+final class Int8Type extends ScalarTypeSpec {
+  const Int8Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class Int16Type extends ScalarTypeSpec {
+  const Int16Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class Int32Type extends ScalarTypeSpec {
+  final Encoding encoding;
+
+  const Int32Type({
+    this.encoding = Encoding.varint,
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class Int64Type extends ScalarTypeSpec {
+  final Encoding encoding;
+
+  const Int64Type({
+    this.encoding = Encoding.varint,
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class Uint8Type extends ScalarTypeSpec {
+  const Uint8Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class Uint16Type extends ScalarTypeSpec {
+  const Uint16Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class Uint32Type extends ScalarTypeSpec {
+  final Encoding encoding;
+
+  const Uint32Type({
+    this.encoding = Encoding.varint,
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class Uint64Type extends ScalarTypeSpec {
+  final Encoding encoding;
+
+  const Uint64Type({
+    this.encoding = Encoding.varint,
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
+final class Float16Type extends ScalarTypeSpec {
+  const Float16Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class Bfloat16Type extends ScalarTypeSpec {
+  const Bfloat16Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class Float32Type extends ScalarTypeSpec {
+  const Float32Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class Float64Type extends ScalarTypeSpec {
+  const Float64Type({super.nullable, super.ref, super.dynamic});
+}
+
+final class StringType extends ScalarTypeSpec {
+  const StringType({super.nullable, super.ref, super.dynamic});
+}
+
+final class DecimalType extends ScalarTypeSpec {
+  const DecimalType({super.nullable, super.ref, super.dynamic});
+}
+
+final class TimestampType extends ScalarTypeSpec {
+  const TimestampType({super.nullable, super.ref, super.dynamic});
+}
+
+final class DateType extends ScalarTypeSpec {
+  const DateType({super.nullable, super.ref, super.dynamic});
+}
+
+final class DurationType extends ScalarTypeSpec {
+  const DurationType({super.nullable, super.ref, super.dynamic});
+}
+
+final class BinaryType extends ScalarTypeSpec {
+  const BinaryType({super.nullable, super.ref, super.dynamic});
+}
+
 final class ListType extends TypeSpec {
-  final TypeSpec element;
+  final TypeSpec? element;
 
   const ListType({
-    this.element = const ValueType(),
-    List<TypeOption> options = const [],
-  }) : super(options);
-
-  const ListType.ref({
-    this.element = const ValueType(),
-  }) : super(const [TypeOption.ref()]);
-
-  const ListType.noRef({
-    this.element = const ValueType(),
-  }) : super(const [TypeOption.ref(false)]);
-
-  const ListType.nullable({
-    this.element = const ValueType(),
-  }) : super(const [TypeOption.nullable()]);
+    this.element,
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
 }
 
-/// Specifies options for a map field, including its key and value types.
+final class SetType extends TypeSpec {
+  final TypeSpec? element;
+
+  const SetType({
+    this.element,
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
+}
+
 final class MapType extends TypeSpec {
-  final TypeSpec key;
-  final TypeSpec value;
+  final TypeSpec? key;
+  final TypeSpec? value;
 
   const MapType({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-    List<TypeOption> options = const [],
-  }) : super(options);
-
-  const MapType.ref({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-  }) : super(const [TypeOption.ref()]);
-
-  const MapType.noRef({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-  }) : super(const [TypeOption.ref(false)]);
-
-  const MapType.nullable({
-    this.key = const ValueType(),
-    this.value = const ValueType(),
-  }) : super(const [TypeOption.nullable()]);
+    this.key,
+    this.value,
+    super.nullable,
+    super.ref,
+    super.dynamic,
+  });
 }

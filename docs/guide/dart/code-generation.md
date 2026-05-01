@@ -43,7 +43,9 @@ class User {
   User();
 
   String name = '';
-  Int32 age = Int32(0);
+
+  @ForyField(type: Int32Type())
+  int age = 0;
   Address address = Address();
 }
 ```

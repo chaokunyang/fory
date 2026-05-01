@@ -1437,9 +1437,14 @@ Object value layout:
 The schema hash is written only when class-version checking is enabled. It is the low 32 bits of a
 MurmurHash3 x64_128 of the struct fingerprint string:
 
-- For each field, build `<field_id_or_name>,<type_id>,<ref>,<nullable>;`.
+- For each field, build `<field_id_or_name>,<field_type_fingerprint>;`.
 - Field identifier is the tag ID if present, otherwise the snake_case field name.
 - Sort by field identifier lexicographically before concatenation.
+- `field_type_fingerprint` is recursive:
+  - Leaf: `<type_id>,<ref>,<nullable>`
+  - `LIST` / `SET`: `<type_id>,<ref>,<nullable>[<element_fingerprint>]`
+  - `MAP`: `<type_id>,<ref>,<nullable>[<key_fingerprint>|<value_fingerprint>]`
+- Nested container element/key/value fingerprints include nested type ID, container shape, and effective integer encoding, but nested `nullable` and `ref` policy are always hashed as `0`. Only the root field `nullable` and `ref` bits participate in schema hash, because nested reads honor the wire null/ref flags directly.
 
 Field values are serialized in Fory order. Primitive fields are written as raw values (nullable
 primitives include a null flag). Non-primitive fields write ref/null flags as needed and then the

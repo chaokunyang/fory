@@ -93,21 +93,22 @@ by JavaScript numbers and are precise only in the JS-safe integer range:
 
 Use this rule when choosing field types:
 
-| Logical value                            | Recommended Dart field type on web                                   | Notes                                                                |
-| ---------------------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Signed 64-bit value within JS-safe range | `int`                                                                | Works with default `int64` mapping and `@Int64Type` encodings.       |
-| Full signed 64-bit range                 | `Int64`                                                              | Preserves values outside the JS-safe range.                          |
-| Unsigned 64-bit value                    | `Uint64`                                                             | Required for values that do not fit in signed or JS-safe Dart `int`. |
-| 8/16/32-bit integer                      | `Int8`, `Int16`, `Int32`, `Uint8`, `Uint16`, `Uint32` or annotations | Use wrappers or numeric annotations to match peer runtimes exactly.  |
+| Logical value                            | Recommended Dart field type on web | Notes                                                                                |
+| ---------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------ |
+| Signed 64-bit value within JS-safe range | `int`                              | Works with default `int64` mapping and `@ForyField(type: Int64Type(...))` encodings. |
+| Full signed 64-bit range                 | `Int64`                            | Preserves values outside the JS-safe range.                                          |
+| Unsigned 64-bit value                    | `Uint64`                           | Required for values that do not fit in signed or JS-safe Dart `int`.                 |
+| 8/16/32-bit integer                      | `int` + `@ForyField(type: ...)`    | Use explicit field metadata to match peer runtimes exactly.                          |
 
-`@Int64Type` controls the wire encoding of a Dart `int` field:
+`@ForyField(type: Int64Type(...))` controls the wire encoding of a Dart `int`
+field:
 
 ```dart
 @ForyStruct()
 class SafeCounter {
   SafeCounter();
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Int64Type(encoding: Encoding.tagged))
   int count = 0; // keep web values inside the JS-safe range
 }
 ```

@@ -441,7 +441,9 @@ class Person {
   Person();
 
   String name = '';
-  Int32 age = Int32(0);
+
+  @ForyField(type: Int32Type())
+  int age = 0;
 }
 
 void main() {
@@ -455,7 +457,7 @@ void main() {
 
   final person = Person()
     ..name = 'chaokunyang'
-    ..age = Int32(28);
+    ..age = 28;
 
   final bytes = fory.serialize(person);
   final result = fory.deserialize<Person>(bytes);

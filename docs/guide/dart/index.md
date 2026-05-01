@@ -68,7 +68,9 @@ class Person {
   Person();
 
   String name = '';
-  Int32 age = Int32(0);
+
+  @ForyField(type: Int32Type())
+  int age = 0;
   Color favoriteColor = Color.red;
   List<String> tags = <String>[];
 }
@@ -90,7 +92,7 @@ void main() {
 
   final person = Person()
     ..name = 'Ada'
-    ..age = Int32(36)
+    ..age = 36
     ..favoriteColor = Color.blue
     ..tags = <String>['engineer', 'mathematician'];
 
@@ -114,8 +116,9 @@ dart run build_runner build --delete-conflicting-outputs
 - `fory.serialize(value)` — returns `Uint8List` bytes
 - `fory.deserialize<T>(bytes)` — returns a `T`
 - `@ForyStruct()` — marks a class for code generation
-- `@ForyField(...)` — per-field options (skip, ID, nullability, references)
-- Integer wrappers: `Int8`, `Int16`, `Int32`, `Int64`, `Uint8`, `Uint16`, `Uint32`, `Uint64`
+- `@ForyField(...)` — per-field options and canonical `type:` overrides
+- `@ListField(...)`, `@SetField(...)`, `@MapField(...)` — container sugar for nested `type:` trees
+- Exact-value wrappers: `Int64`, `Uint64`, `Float16`, `Bfloat16`, `Float32`
 - Float wrappers: `Float16`, `Bfloat16`, `Float32`
 - 16-bit float arrays: `Float16List`, `Bfloat16List`
 - Time types: `LocalDate`, `Timestamp`, `Duration`

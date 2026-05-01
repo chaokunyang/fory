@@ -57,11 +57,14 @@ from pyfory.types import (
 )
 from pyfory.type_util import (
     TypeVisitor,
+    _get_args,
+    _get_origin,
     infer_field,
     get_homogeneous_tuple_elem_type,
     is_subclass,
     get_type_hints,
     unwrap_optional,
+    unwrap_ref,
 )
 from pyfory.serialization import Buffer
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
@@ -825,7 +828,7 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
     Computes the fingerprint string for a struct type used in schema versioning.
 
     Fingerprint Format:
-        Each field contributes: <field_id_or_name>,<type_id>,<ref>,<nullable>;
+        Each field contributes: <field_id_or_name>,<type_id>,<ref>,<nullable>[<child...>];
         Fields are sorted by tag ID (if >=0) or field name (if id=-1).
 
     Field Components:
@@ -844,7 +847,7 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
     if nullable_map is None:
         nullable_map = {}
 
-    # Build field info list for fingerprint: (sort_key, field_id_or_name, type_id, ref_flag, nullable_flag)
+    # Build field info list for fingerprint: (sort_key, field_id_or_name, type_fingerprint)
     fp_fields = []
 
     # Build a lookup for field_infos by name if available
@@ -858,29 +861,16 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
         # Get field metadata if available
         fi = field_info_map.get(field_name)
         tag_id = fi.tag_id if fi else -1
-        ref_flag = "1" if (fi and fi.ref) else "0"
-
-        if serializer is None:
-            type_id = TypeId.UNKNOWN
-            # For unknown serializers, use nullable from map (defaults to False for xlang)
-            nullable_flag = "1" if nullable_map.get(field_name, False) else "0"
-        else:
-            type_id = type_resolver.get_type_info(serializer.type_).type_id
-            if is_union_type(type_id):
-                # customized types can't be detected at compile time for some languages
-                type_id = TypeId.UNKNOWN
-            is_nullable = nullable_map.get(field_name, False)
-
-            # For polymorphic or enum types, set type_id to UNKNOWN but preserve nullable from map
-            if is_polymorphic_type(type_id) or type_id in {
-                TypeId.ENUM,
-                TypeId.NAMED_ENUM,
-            }:
-                type_id = TypeId.UNKNOWN
-
-            # Use nullable from map - for xlang, this is already computed correctly
-            # (False by default except for Optional[T] or explicit annotation)
-            nullable_flag = "1" if is_nullable else "0"
+        nullable = fi.nullable if fi else nullable_map.get(field_name, False)
+        ref = fi.ref if fi else False
+        type_hint = fi.type_hint if fi else (serializer.type_ if serializer is not None else typing.Any)
+        type_fingerprint = _build_schema_fingerprint_type(
+            type_resolver,
+            type_hint,
+            nullable=nullable,
+            track_ref=ref,
+            include_ref=True,
+        )
 
         # Determine field identifier for fingerprint
         if tag_id >= 0:
@@ -892,17 +882,132 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
             # Sort by field name (lexicographic) for name-based fields
             sort_key = (1, field_name, "")  # 1 = name fields come after
 
-        fp_fields.append((sort_key, field_id_or_name, type_id, ref_flag, nullable_flag))
+        fp_fields.append((sort_key, field_id_or_name, type_fingerprint))
 
     # Sort fields: tag ID fields first (by ID), then name fields (lexicographically)
     fp_fields.sort(key=lambda x: x[0])
 
     # Build fingerprint string
     hash_parts = []
-    for _, field_id_or_name, type_id, ref_flag, nullable_flag in fp_fields:
-        hash_parts.append(f"{field_id_or_name},{type_id},{ref_flag},{nullable_flag};")
+    for _, field_id_or_name, type_fingerprint in fp_fields:
+        hash_parts.append(f"{field_id_or_name},{type_fingerprint};")
 
     return "".join(hash_parts)
+
+
+def _normalize_schema_fingerprint_type_id(type_id):
+    if type_id in {
+        TypeId.UNKNOWN,
+        TypeId.ENUM,
+        TypeId.NAMED_ENUM,
+        TypeId.STRUCT,
+        TypeId.COMPATIBLE_STRUCT,
+        TypeId.NAMED_STRUCT,
+        TypeId.NAMED_COMPATIBLE_STRUCT,
+        TypeId.EXT,
+        TypeId.NAMED_EXT,
+        TypeId.UNION,
+        TypeId.TYPED_UNION,
+        TypeId.NAMED_UNION,
+    }:
+        return TypeId.UNKNOWN
+    return type_id
+
+
+def _leaf_schema_fingerprint_type_id(type_resolver, type_hint):
+    if type_hint is typing.Any or type_hint is object:
+        return TypeId.UNKNOWN
+    if is_primitive_array_type(type_hint):
+        return type_resolver.get_type_info(type_hint).type_id
+    if is_subclass(type_hint, enum.Enum):
+        return _normalize_schema_fingerprint_type_id(type_resolver.get_type_info(type_hint).type_id)
+    if type_hint in basic_types:
+        return _normalize_schema_fingerprint_type_id(type_resolver.get_type_info(type_hint).type_id)
+    typeinfo = type_resolver.get_type_info(type_hint, create=False)
+    if typeinfo is None:
+        return TypeId.UNKNOWN
+    return _normalize_schema_fingerprint_type_id(typeinfo.type_id)
+
+
+def _build_schema_fingerprint_type(
+    type_resolver, type_hint, nullable, track_ref, include_ref, include_nullable=True
+):
+    type_hint, ref_override = unwrap_ref(type_hint)
+    if include_ref and ref_override is not None:
+        track_ref = ref_override
+    if not include_ref:
+        track_ref = False
+
+    unwrapped_type, is_optional = unwrap_optional(type_hint)
+    nullable = nullable or is_optional
+    origin = _get_origin(unwrapped_type) or getattr(unwrapped_type, "__origin__", unwrapped_type)
+    args = _get_args(unwrapped_type)
+
+    ref_flag = "1" if track_ref else "0"
+    nullable_flag = "1" if include_nullable and nullable else "0"
+
+    if args:
+        if origin is list or origin == typing.List:
+            elem_type = args[0]
+            child = _build_schema_fingerprint_type(
+                type_resolver,
+                elem_type,
+                nullable=True,
+                track_ref=False,
+                include_ref=False,
+                include_nullable=False,
+            )
+            return f"{TypeId.LIST},{ref_flag},{nullable_flag}[{child}]"
+        if origin is set or origin == typing.Set:
+            elem_type = args[0]
+            child = _build_schema_fingerprint_type(
+                type_resolver,
+                elem_type,
+                nullable=True,
+                track_ref=False,
+                include_ref=False,
+                include_nullable=False,
+            )
+            return f"{TypeId.SET},{ref_flag},{nullable_flag}[{child}]"
+        if origin is tuple or origin == typing.Tuple:
+            elem_type = get_homogeneous_tuple_elem_type(args)
+            if elem_type is None:
+                child = f"{TypeId.UNKNOWN},0,0"
+            else:
+                child = _build_schema_fingerprint_type(
+                    type_resolver,
+                    elem_type,
+                    nullable=True,
+                    track_ref=False,
+                    include_ref=False,
+                    include_nullable=False,
+                )
+            return f"{TypeId.LIST},{ref_flag},{nullable_flag}[{child}]"
+        if origin is dict or origin == typing.Dict:
+            key_type, value_type = args
+            key = _build_schema_fingerprint_type(
+                type_resolver,
+                key_type,
+                nullable=True,
+                track_ref=False,
+                include_ref=False,
+                include_nullable=False,
+            )
+            value = _build_schema_fingerprint_type(
+                type_resolver,
+                value_type,
+                nullable=True,
+                track_ref=False,
+                include_ref=False,
+                include_nullable=False,
+            )
+            return f"{TypeId.MAP},{ref_flag},{nullable_flag}[{key}|{value}]"
+        if origin is typing.Union:
+            type_id = TypeId.UNKNOWN
+            return f"{type_id},{ref_flag},{nullable_flag}"
+
+    type_id = _leaf_schema_fingerprint_type_id(type_resolver, unwrapped_type)
+    return f"{type_id},{ref_flag},{nullable_flag}"
 
 
 def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=None, field_infos_list=None):

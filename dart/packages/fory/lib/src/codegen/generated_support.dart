@@ -37,6 +37,7 @@ import 'package:fory/src/serializer/struct_serializer.dart';
 import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
+import 'package:fory/src/util/int_validation.dart';
 
 @internal
 final class GeneratedFieldType {
@@ -246,6 +247,30 @@ void writeGeneratedBinaryValue(WriteContext context, Uint8List value) {
 Uint8List readGeneratedBinaryValue(ReadContext context) {
   return BinarySerializer.readPayload(context);
 }
+
+@internal
+@pragma('vm:prefer-inline')
+int generatedCheckedInt8(int value) => checkedInt8(value);
+
+@internal
+@pragma('vm:prefer-inline')
+int generatedCheckedInt16(int value) => checkedInt16(value);
+
+@internal
+@pragma('vm:prefer-inline')
+int generatedCheckedInt32(int value) => checkedInt32(value);
+
+@internal
+@pragma('vm:prefer-inline')
+int generatedCheckedUint8(int value) => checkedUint8(value);
+
+@internal
+@pragma('vm:prefer-inline')
+int generatedCheckedUint16(int value) => checkedUint16(value);
+
+@internal
+@pragma('vm:prefer-inline')
+int generatedCheckedUint32(int value) => checkedUint32(value);
 
 @internal
 void writeGeneratedBoolArrayValue(WriteContext context, List<bool> value) {

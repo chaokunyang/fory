@@ -33,10 +33,13 @@ class Person {
   Person();
 
   String name = '';
-  Int32 age = Int32(0);
+  @ForyField(type: Int32Type())
+  int age = 0;
   Color favoriteColor = Color.red;
   List<String?> tags = <String?>[];
-  Map<String, Int32> scores = <String, Int32>{};
+
+  @MapField(value: Int32Type())
+  Map<String, int> scores = <String, int>{};
 }
 
 @ForyStruct()

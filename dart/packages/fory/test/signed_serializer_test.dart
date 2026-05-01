@@ -35,45 +35,45 @@ class SignedFields {
 
   int plainInt = 0;
 
-  @Int32Type(compress: true)
+  @ForyField(type: Int32Type(encoding: Encoding.varint))
   int i32Var = 0;
 
-  @Int32Type(compress: false)
+  @ForyField(type: Int32Type(encoding: Encoding.fixed))
   int i32Fixed = 0;
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Int64Type(encoding: Encoding.varint))
   int i64VarInt = 0;
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Int64Type(encoding: Encoding.fixed))
   int i64FixedInt = 0;
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Int64Type(encoding: Encoding.tagged))
   int i64TaggedInt = 0;
 
   Int64 i64Default = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Int64Type(encoding: Encoding.varint))
   Int64 i64Var = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Int64Type(encoding: Encoding.fixed))
   Int64 i64Fixed = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Int64Type(encoding: Encoding.tagged))
   Int64 i64Tagged = Int64(0);
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Int64Type(encoding: Encoding.varint))
   int? optionalI64VarInt;
 
-  @Int32Type(compress: true)
+  @ForyField(type: Int32Type(encoding: Encoding.varint))
   int? optionalI32Var;
 
-  @Int32Type(compress: false)
+  @ForyField(type: Int32Type(encoding: Encoding.fixed))
   int? optionalI32Fixed;
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Int64Type(encoding: Encoding.fixed))
   Int64? optionalI64Fixed;
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Int64Type(encoding: Encoding.tagged))
   Int64? optionalI64Tagged;
 }
 
@@ -88,13 +88,13 @@ class SignedMetadataReader {
 class SignedIntFieldsReader {
   SignedIntFieldsReader();
 
-  @Int64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Int64Type(encoding: Encoding.varint))
   int i64Var = 0;
 
-  @Int64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Int64Type(encoding: Encoding.fixed))
   int i64Fixed = 0;
 
-  @Int64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Int64Type(encoding: Encoding.tagged))
   int i64Tagged = 0;
 }
 
@@ -272,7 +272,7 @@ void main() {
       }
     });
 
-    test('compatible mode round trips Int32 and Int64 encoding edge cases', () {
+    test('compatible mode round trips int and Int64 encoding edge cases', () {
       final fory = Fory(compatible: true);
       _registerSignedFields(fory);
 
@@ -370,6 +370,39 @@ void main() {
       expect(_remoteFieldNullable(roundTrip, 'optional_i64_var_int'), isTrue);
       expect(_remoteFieldNullable(roundTrip, 'optional_i64_fixed'), isTrue);
       expect(_remoteFieldNullable(roundTrip, 'optional_i64_tagged'), isTrue);
+    });
+
+    test('rejects out-of-range annotated int32 fields', () {
+      final cases = <({String name, SignedFields value})>[
+        (
+          name: 'i32Var',
+          value: _smallSignedFields()..i32Var = -0x80000001,
+        ),
+        (
+          name: 'i32Fixed',
+          value: _smallSignedFields()..i32Fixed = 0x80000000,
+        ),
+        (
+          name: 'optionalI32Var',
+          value: _smallSignedFields()..optionalI32Var = 0x80000000,
+        ),
+        (
+          name: 'optionalI32Fixed',
+          value: _smallSignedFields()..optionalI32Fixed = -0x80000001,
+        ),
+      ];
+
+      for (final testCase in cases) {
+        for (final compatible in <bool>[false, true]) {
+          final fory = Fory(compatible: compatible);
+          _registerSignedFields(fory);
+          expect(
+            () => fory.serialize(testCase.value),
+            throwsA(isA<RangeError>()),
+            reason: '${testCase.name}, compatible=$compatible',
+          );
+        }
+      }
     });
 
     test('web rejects JS-unsafe Dart int fields instead of corrupting bytes',

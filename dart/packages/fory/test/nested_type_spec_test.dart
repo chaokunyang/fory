@@ -1,0 +1,274 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+import 'package:fory/fory.dart';
+import 'package:fory/src/serializer/compatible_struct_metadata.dart';
+import 'package:test/test.dart';
+
+part 'nested_type_spec_test.fory.dart';
+
+@ForyStruct()
+class NestedFixedContainer {
+  NestedFixedContainer();
+
+  @MapField(
+    value: ListType(
+      element: Int32Type(encoding: Encoding.fixed),
+    ),
+  )
+  Map<String, List<int?>> nested = <String, List<int?>>{};
+}
+
+@ForyStruct()
+class NestedVarintContainer {
+  NestedVarintContainer();
+
+  @MapField(
+    value: ListType(
+      element: Int32Type(encoding: Encoding.varint),
+    ),
+  )
+  Map<String, List<int?>> nested = <String, List<int?>>{};
+}
+
+@ForyStruct()
+class NestedRefNode {
+  NestedRefNode();
+
+  String name = '';
+}
+
+@ForyStruct()
+class NestedRefWriterContainer {
+  NestedRefWriterContainer();
+
+  @ListField(element: DeclaredType(ref: true))
+  List<NestedRefNode> items = <NestedRefNode>[];
+}
+
+@ForyStruct()
+class NestedRefReaderContainer {
+  NestedRefReaderContainer();
+
+  List<NestedRefNode> items = <NestedRefNode>[];
+}
+
+@ForyStruct()
+class NestedNullableWriterContainer {
+  NestedNullableWriterContainer();
+
+  @ListField(element: StringType(nullable: true))
+  List<String?> items = <String?>[];
+}
+
+@ForyStruct()
+class NestedNullableReaderContainer {
+  NestedNullableReaderContainer();
+
+  List<String> items = <String>[];
+}
+
+void _registerFixedCompatible(Fory fory) {
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedFixedContainer,
+    namespace: 'nested',
+    typeName: 'NestedIntContainer',
+  );
+}
+
+void _registerVarintConsistent(Fory fory) {
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedVarintContainer,
+    namespace: 'nested',
+    typeName: 'NestedIntContainer',
+  );
+}
+
+void _registerRefWriter(Fory fory) {
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedRefNode,
+    namespace: 'nested',
+    typeName: 'NestedRefNode',
+  );
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedRefWriterContainer,
+    namespace: 'nested',
+    typeName: 'NestedRefContainer',
+  );
+}
+
+void _registerRefReader(Fory fory) {
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedRefNode,
+    namespace: 'nested',
+    typeName: 'NestedRefNode',
+  );
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedRefReaderContainer,
+    namespace: 'nested',
+    typeName: 'NestedRefContainer',
+  );
+}
+
+void _registerNullableWriter(Fory fory) {
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedNullableWriterContainer,
+    namespace: 'nested',
+    typeName: 'NestedNullableContainer',
+  );
+}
+
+void _registerNullableReader(Fory fory) {
+  NestedTypeSpecTestFory.register(
+    fory,
+    NestedNullableReaderContainer,
+    namespace: 'nested',
+    typeName: 'NestedNullableContainer',
+  );
+}
+
+void main() {
+  group('nested type specs', () {
+    test(
+        'compatible mode reads nested overridden fixed int32 list values from remote meta',
+        () {
+      final writer = Fory(compatible: true);
+      final reader = Fory(compatible: true);
+      _registerFixedCompatible(writer);
+      _registerVarintConsistent(reader);
+
+      final result = reader.deserialize<NestedVarintContainer>(
+        writer.serialize(
+          NestedFixedContainer()
+            ..nested = <String, List<int?>>{
+              'a': <int?>[1, null, -7],
+            },
+        ),
+      );
+
+      expect(result.nested['a'], orderedEquals(<int?>[1, null, -7]));
+
+      final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(result);
+      expect(remoteTypeDef, isNotNull);
+      final nestedField = remoteTypeDef!.fields.single;
+      expect(nestedField.fieldType.typeId, equals(TypeIds.map));
+      expect(nestedField.fieldType.arguments[0].typeId, equals(TypeIds.string));
+      final remoteList = nestedField.fieldType.arguments[1];
+      expect(remoteList.typeId, equals(TypeIds.list));
+      final remoteElement = remoteList.arguments.single;
+      expect(remoteElement.typeId, equals(TypeIds.int32));
+      expect(remoteElement.nullable, isTrue);
+    });
+
+    test('schema-consistent mode rejects nested encoding hash mismatches', () {
+      final writer = Fory();
+      final reader = Fory();
+      _registerFixedCompatible(writer);
+      _registerVarintConsistent(reader);
+
+      final bytes = writer.serialize(
+        NestedFixedContainer()
+          ..nested = <String, List<int?>>{
+            'a': <int?>[1, null, -7],
+          },
+      );
+
+      expect(
+        () => reader.deserialize<NestedVarintContainer>(bytes),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Struct schema version mismatch'),
+          ),
+        ),
+      );
+    });
+
+    test(
+        'nested ref metadata stays out of schema hash but survives remote meta',
+        () {
+      final writer = Fory(compatible: true);
+      final reader = Fory(compatible: true);
+      _registerRefWriter(writer);
+      _registerRefReader(reader);
+
+      final shared = NestedRefNode()..name = 'shared';
+      final result = reader.deserialize<NestedRefReaderContainer>(
+        writer.serialize(
+          NestedRefWriterContainer()..items = <NestedRefNode>[shared, shared],
+          trackRef: true,
+        ),
+      );
+
+      expect(result.items, hasLength(2));
+      expect(result.items[0].name, equals('shared'));
+      expect(identical(result.items[0], result.items[1]), isTrue);
+
+      final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(result);
+      expect(remoteTypeDef, isNotNull);
+      final remoteElement =
+          remoteTypeDef!.fields.single.fieldType.arguments.single;
+      expect(remoteElement.ref, isTrue);
+    });
+
+    test('schema-consistent mode ignores nested ref-only schema differences',
+        () {
+      final writer = Fory();
+      final reader = Fory();
+      _registerRefWriter(writer);
+      _registerRefReader(reader);
+
+      final shared = NestedRefNode()..name = 'shared';
+      final result = reader.deserialize<NestedRefReaderContainer>(
+        writer.serialize(
+          NestedRefWriterContainer()..items = <NestedRefNode>[shared, shared],
+          trackRef: true,
+        ),
+      );
+
+      expect(result.items, hasLength(2));
+      expect(identical(result.items[0], result.items[1]), isTrue);
+    });
+
+    test(
+        'schema-consistent mode ignores nested nullable-only schema differences',
+        () {
+      final writer = Fory();
+      final reader = Fory();
+      _registerNullableWriter(writer);
+      _registerNullableReader(reader);
+
+      final result = reader.deserialize<NestedNullableReaderContainer>(
+        writer.serialize(
+          NestedNullableWriterContainer()..items = <String?>['a', 'b'],
+        ),
+      );
+
+      expect(result.items, orderedEquals(<String>['a', 'b']));
+    });
+  });
+}

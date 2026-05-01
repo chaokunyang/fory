@@ -43,7 +43,9 @@ class Person {
   Person();
 
   String name = '';
-  Int32 age = Int32(0);
+
+  @ForyField(type: Int32Type())
+  int age = 0;
 }
 
 void main() {
@@ -57,7 +59,7 @@ void main() {
 
   final person = Person()
     ..name = 'Ada'
-    ..age = Int32(36);
+    ..age = 36;
 
   final bytes = fory.serialize(person);
   final roundTrip = fory.deserialize<Person>(bytes);
@@ -85,7 +87,7 @@ You can serialize collection values directly:
 final fory = Fory();
 final bytes = fory.serialize(<Object?>[
   'hello',
-  Int32(42),
+  42,
   true,
 ]);
 final value = fory.deserialize<List<Object?>>(bytes);
@@ -117,8 +119,8 @@ If you want to avoid allocating a new `Uint8List` on every call, use `serializeT
 final fory = Fory();
 final buffer = Buffer();
 
-fory.serializeTo(Int32(42), buffer);
-final value = fory.deserializeFrom<Int32>(buffer);
+fory.serializeTo('Ada', buffer);
+final value = fory.deserializeFrom<String>(buffer);
 ```
 
 This is an optimization. For most applications the default `serialize`/`deserialize` pair is fine.

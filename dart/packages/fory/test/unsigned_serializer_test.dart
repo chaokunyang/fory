@@ -33,58 +33,58 @@ final Uint64 _uint64Max = Uint64.parseHex('ffffffffffffffff');
 class UnsignedFields {
   UnsignedFields();
 
-  @Uint8Type()
+  @ForyField(type: Uint8Type())
   int u8 = 0;
 
-  @Uint16Type()
+  @ForyField(type: Uint16Type())
   int u16 = 0;
 
-  @Uint32Type(compress: true)
+  @ForyField(type: Uint32Type(encoding: Encoding.varint))
   int u32Var = 0;
 
-  @Uint32Type(compress: false)
+  @ForyField(type: Uint32Type(encoding: Encoding.fixed))
   int u32Fixed = 0;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   Uint64 u64Var = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   Uint64 u64Fixed = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   Uint64 u64Tagged = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   int u64VarInt = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   int u64FixedInt = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   int u64TaggedInt = 0;
 
-  @Uint8Type()
+  @ForyField(type: Uint8Type())
   int? u8Nullable;
 
-  @Uint16Type()
+  @ForyField(type: Uint16Type())
   int? u16Nullable;
 
-  @Uint32Type(compress: true)
+  @ForyField(type: Uint32Type(encoding: Encoding.varint))
   int? u32VarNullable;
 
-  @Uint32Type(compress: false)
+  @ForyField(type: Uint32Type(encoding: Encoding.fixed))
   int? u32FixedNullable;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   Uint64? u64VarNullable;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   Uint64? u64FixedNullable;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   Uint64? u64TaggedNullable;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   int? u64VarIntNullable;
 }
 
@@ -92,7 +92,7 @@ class UnsignedFields {
 class UnsignedMetadataReader {
   UnsignedMetadataReader();
 
-  @Uint8Type()
+  @ForyField(type: Uint8Type())
   int u8 = 0;
 
   int extra = 42;
@@ -102,13 +102,13 @@ class UnsignedMetadataReader {
 class UnsignedIntFieldsReader {
   UnsignedIntFieldsReader();
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   int u64Var = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   int u64Fixed = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   int u64Tagged = 0;
 }
 
@@ -116,13 +116,13 @@ class UnsignedIntFieldsReader {
 class UnsignedWrapperFields {
   UnsignedWrapperFields();
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   Uint64 u64Var = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   Uint64 u64Fixed = Uint64(0);
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   Uint64 u64Tagged = Uint64(0);
 }
 
@@ -130,13 +130,13 @@ class UnsignedWrapperFields {
 class UnsignedWrapperAsIntFields {
   UnsignedWrapperAsIntFields();
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   int u64Var = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   int u64Fixed = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   int u64Tagged = 0;
 }
 
@@ -422,7 +422,9 @@ void main() {
       expect(_remoteFieldTypeId(roundTrip, 'u8'), equals(TypeIds.uint8));
       expect(_remoteFieldTypeId(roundTrip, 'u16'), equals(TypeIds.uint16));
       expect(
-          _remoteFieldTypeId(roundTrip, 'u32_var'), equals(TypeIds.varUint32));
+        _remoteFieldTypeId(roundTrip, 'u32_var'),
+        equals(TypeIds.varUint32),
+      );
       expect(
           _remoteFieldTypeId(roundTrip, 'u32_fixed'), equals(TypeIds.uint32));
       expect(
@@ -456,6 +458,39 @@ void main() {
       expect(_remoteFieldNullable(roundTrip, 'u64_fixed_nullable'), isTrue);
       expect(_remoteFieldNullable(roundTrip, 'u64_tagged_nullable'), isTrue);
       expect(_remoteFieldNullable(roundTrip, 'u64_var_int_nullable'), isTrue);
+    });
+
+    test('rejects out-of-range annotated unsigned fields', () {
+      final cases = <({String name, UnsignedFields value})>[
+        (
+          name: 'u8',
+          value: _smallUnsignedFields()..u8 = 0x100,
+        ),
+        (
+          name: 'u16',
+          value: _smallUnsignedFields()..u16 = 0x10000,
+        ),
+        (
+          name: 'u32Var',
+          value: _smallUnsignedFields()..u32Var = -1,
+        ),
+        (
+          name: 'u32FixedNullable',
+          value: _smallUnsignedFields()..u32FixedNullable = 0x100000000,
+        ),
+      ];
+
+      for (final testCase in cases) {
+        for (final compatible in <bool>[false, true]) {
+          final fory = Fory(compatible: compatible);
+          _registerUnsignedFields(fory);
+          expect(
+            () => fory.serialize(testCase.value),
+            throwsA(isA<RangeError>()),
+            reason: '${testCase.name}, compatible=$compatible',
+          );
+        }
+      }
     });
 
     test('web rejects JS-unsafe uint64 Dart int fields', () {

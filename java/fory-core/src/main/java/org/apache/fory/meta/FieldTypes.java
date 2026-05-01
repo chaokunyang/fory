@@ -84,7 +84,7 @@ public class FieldTypes {
   }
 
   /** Build field type from generics, nested generics will be extracted too. */
-  static FieldType buildFieldType(TypeResolver resolver, Field field) {
+  public static FieldType buildFieldType(TypeResolver resolver, Field field) {
     Preconditions.checkNotNull(field);
     GenericType genericType = resolver.buildGenericType(TypeRef.of(field.getAnnotatedType()));
     return buildFieldType(resolver, field, genericType);
@@ -297,6 +297,10 @@ public class FieldTypes {
 
     public boolean nullable() {
       return nullable;
+    }
+
+    public int getTypeId() {
+      return typeId;
     }
 
     private int typeKind() {

@@ -84,15 +84,24 @@ class Item {
 class SimpleStruct {
   SimpleStruct();
 
-  Map<Int32?, double?> f1 = <Int32?, double?>{};
-  Int32 f2 = Int32(0);
+  @MapField(key: Int32Type())
+  Map<int?, double?> f1 = <int?, double?>{};
+
+  @ForyField(type: Int32Type())
+  int f2 = 0;
   Item f3 = Item();
   String f4 = '';
   Color f5 = Color.green;
-  List<String> f6 = <String>[];
-  Int32 f7 = Int32(0);
-  Int32 f8 = Int32(0);
-  Int32 last = Int32(0);
+  List<String?> f6 = <String?>[];
+
+  @ForyField(type: Int32Type())
+  int f7 = 0;
+
+  @ForyField(type: Int32Type())
+  int f8 = 0;
+
+  @ForyField(type: Int32Type())
+  int last = 0;
 }
 
 @ForyStruct()
@@ -113,12 +122,23 @@ class FixedOverrideStruct {
 class Item1 {
   Item1();
 
-  Int32 f1 = Int32(0);
-  Int32 f2 = Int32(0);
-  Int32 f3 = Int32(0);
-  Int32 f4 = Int32(0);
-  Int32 f5 = Int32(0);
-  Int32 f6 = Int32(0);
+  @ForyField(type: Int32Type())
+  int f1 = 0;
+
+  @ForyField(type: Int32Type())
+  int f2 = 0;
+
+  @ForyField(type: Int32Type())
+  int f3 = 0;
+
+  @ForyField(type: Int32Type())
+  int f4 = 0;
+
+  @ForyField(type: Int32Type())
+  int f5 = 0;
+
+  @ForyField(type: Int32Type())
+  int f6 = 0;
 }
 
 final class Union2 {
@@ -168,10 +188,38 @@ class StructWithMap {
 }
 
 @ForyStruct()
+class NestedAnnotatedContainerSchemaConsistent {
+  NestedAnnotatedContainerSchemaConsistent();
+
+  @MapField(
+    key: Uint32Type(nullable: true, encoding: Encoding.fixed),
+    value: ListType(
+      nullable: true,
+      element: Uint64Type(nullable: true, encoding: Encoding.tagged),
+    ),
+  )
+  Map<int?, List<int?>?> values = <int?, List<int?>?>{};
+}
+
+@ForyStruct()
+class NestedAnnotatedContainerCompatible {
+  NestedAnnotatedContainerCompatible();
+
+  @MapField(
+    key: Uint32Type(nullable: true, encoding: Encoding.fixed),
+    value: ListType(
+      nullable: true,
+      element: Uint64Type(nullable: true, encoding: Encoding.tagged),
+    ),
+  )
+  Map<int?, List<int?>?> values = <int?, List<int?>?>{};
+}
+
+@ForyStruct()
 class MyStruct {
   MyStruct();
 
-  @Int32Type()
+  @ForyField(type: Int32Type())
   int id = 0;
 }
 
@@ -206,7 +254,7 @@ class EmptyWrapper {
 class VersionCheckStruct {
   VersionCheckStruct();
 
-  @Int32Type()
+  @ForyField(type: Int32Type())
   int f1 = 0;
 
   @ForyField(nullable: true)
@@ -224,7 +272,7 @@ class Dog implements Animal {
   Dog();
 
   @override
-  @Int32Type()
+  @ForyField(type: Int32Type())
   int age = 0;
 
   @ForyField(nullable: true)
@@ -235,11 +283,11 @@ class Dog implements Animal {
 class Cat implements Animal {
   Cat();
 
-  @Int32Type()
+  @ForyField(type: Int32Type())
   @override
   int age = 0;
 
-  @Int32Type()
+  @ForyField(type: Int32Type())
   int lives = 0;
 }
 
@@ -247,14 +295,14 @@ class Cat implements Animal {
 class AnimalListHolder {
   AnimalListHolder();
 
-  List<Animal> animals = <Animal>[];
+  List<Animal?> animals = <Animal?>[];
 }
 
 @ForyStruct()
 class AnimalMapHolder {
   AnimalMapHolder();
 
-  Map<String, Animal> animalMap = <String, Animal>{};
+  Map<String?, Animal?> animalMap = <String?, Animal?>{};
 }
 
 @ForyStruct()
@@ -307,20 +355,25 @@ class TwoEnumFieldStruct {
 class NullableComprehensiveSchemaConsistent {
   NullableComprehensiveSchemaConsistent();
 
-  Int8 byteField = Int8(0);
-  Int16 shortField = Int16(0);
-  Int32 intField = Int32(0);
+  @ForyField(type: Int8Type())
+  int byteField = 0;
+
+  @ForyField(type: Int16Type())
+  int shortField = 0;
+
+  @ForyField(type: Int32Type())
+  int intField = 0;
   int longField = 0;
   Float32 floatField = Float32(0);
   double doubleField = 0;
   bool boolField = false;
   String stringField = '';
-  List<String> listField = <String>[];
-  Set<String> setField = <String>{};
-  Map<String, String> mapField = <String, String>{};
+  List<String?> listField = <String?>[];
+  Set<String?> setField = <String?>{};
+  Map<String?, String?> mapField = <String?, String?>{};
 
-  @ForyField(nullable: true)
-  Int32? nullableInt;
+  @ForyField(nullable: true, type: Int32Type())
+  int? nullableInt;
 
   @ForyField(nullable: true)
   int? nullableLong;
@@ -338,54 +391,61 @@ class NullableComprehensiveSchemaConsistent {
   String? nullableString;
 
   @ForyField(nullable: true)
-  List<String>? nullableList;
+  List<String?>? nullableList;
 
   @ForyField(nullable: true)
-  Set<String>? nullableSet;
+  Set<String?>? nullableSet;
 
   @ForyField(nullable: true)
-  Map<String, String>? nullableMap;
+  Map<String?, String?>? nullableMap;
 }
 
 @ForyStruct()
 class NullableComprehensiveCompatible {
   NullableComprehensiveCompatible();
 
-  Int8 byteField = Int8(0);
-  Int16 shortField = Int16(0);
-  Int32 intField = Int32(0);
+  @ForyField(type: Int8Type())
+  int byteField = 0;
+
+  @ForyField(type: Int16Type())
+  int shortField = 0;
+
+  @ForyField(type: Int32Type())
+  int intField = 0;
   int longField = 0;
   Float32 floatField = Float32(0);
   double doubleField = 0;
   bool boolField = false;
 
-  Int32 boxedInt = Int32(0);
+  @ForyField(type: Int32Type())
+  int boxedInt = 0;
   int boxedLong = 0;
   Float32 boxedFloat = Float32(0);
   double boxedDouble = 0;
   bool boxedBool = false;
 
   String stringField = '';
-  List<String> listField = <String>[];
-  Set<String> setField = <String>{};
-  Map<String, String> mapField = <String, String>{};
+  List<String?> listField = <String?>[];
+  Set<String?> setField = <String?>{};
+  Map<String?, String?> mapField = <String?, String?>{};
 
-  Int32 nullableInt1 = Int32(0);
+  @ForyField(type: Int32Type())
+  int nullableInt1 = 0;
   int nullableLong1 = 0;
   Float32 nullableFloat1 = Float32(0);
   double nullableDouble1 = 0;
   bool nullableBool1 = false;
   String nullableString2 = '';
-  List<String> nullableList2 = <String>[];
-  Set<String> nullableSet2 = <String>{};
-  Map<String, String> nullableMap2 = <String, String>{};
+  List<String?> nullableList2 = <String?>[];
+  Set<String?> nullableSet2 = <String?>{};
+  Map<String?, String?> nullableMap2 = <String?, String?>{};
 }
 
 @ForyStruct()
 class RefInnerSchemaConsistent {
   RefInnerSchemaConsistent();
 
-  @Int32Type()
+  @ForyField(type: Int32Type())
   int id = 0;
   String name = '';
 }
@@ -405,7 +465,7 @@ class RefOuterSchemaConsistent {
 class RefInnerCompatible {
   RefInnerCompatible();
 
-  @Int32Type()
+  @ForyField(type: Int32Type())
   int id = 0;
   String name = '';
 }
@@ -425,7 +485,8 @@ class RefOuterCompatible {
 class RefOverrideElement {
   RefOverrideElement();
 
-  Int32 id = Int32(0);
+  @ForyField(type: Int32Type())
+  int id = 0;
   String name = '';
 }
 
@@ -451,48 +512,46 @@ class CircularRefStruct {
 class UnsignedSchemaConsistent {
   UnsignedSchemaConsistent();
 
-  Uint8 u8Field = Uint8(0);
-  Uint16 u16Field = Uint16(0);
+  @ForyField(type: Uint8Type())
+  int u8Field = 0;
 
-  @Uint32Type(compress: true)
-  Uint32 u32VarField = Uint32(0);
+  @ForyField(type: Uint16Type())
+  int u16Field = 0;
 
-  @Uint32Type(compress: false)
-  Uint32 u32FixedField = Uint32(0);
+  @ForyField(type: Uint32Type(encoding: Encoding.varint))
+  int u32VarField = 0;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint32Type(encoding: Encoding.fixed))
+  int u32FixedField = 0;
+
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   int u64VarField = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   int u64FixedField = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   int u64TaggedField = 0;
 
-  @ForyField(nullable: true)
-  Uint8? u8NullableField;
+  @ForyField(nullable: true, type: Uint8Type())
+  int? u8NullableField;
 
-  @ForyField(nullable: true)
-  Uint16? u16NullableField;
+  @ForyField(nullable: true, type: Uint16Type())
+  int? u16NullableField;
 
-  @ForyField(nullable: true)
-  @Uint32Type(compress: true)
-  Uint32? u32VarNullableField;
+  @ForyField(nullable: true, type: Uint32Type(encoding: Encoding.varint))
+  int? u32VarNullableField;
 
-  @ForyField(nullable: true)
-  @Uint32Type(compress: false)
-  Uint32? u32FixedNullableField;
+  @ForyField(nullable: true, type: Uint32Type(encoding: Encoding.fixed))
+  int? u32FixedNullableField;
 
-  @ForyField(nullable: true)
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(nullable: true, type: Uint64Type(encoding: Encoding.varint))
   int? u64VarNullableField;
 
-  @ForyField(nullable: true)
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(nullable: true, type: Uint64Type(encoding: Encoding.fixed))
   int? u64FixedNullableField;
 
-  @ForyField(nullable: true)
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(nullable: true, type: Uint64Type(encoding: Encoding.tagged))
   int? u64TaggedNullableField;
 }
 
@@ -500,11 +559,10 @@ class UnsignedSchemaConsistent {
 class UnsignedSchemaConsistentSimple {
   UnsignedSchemaConsistentSimple();
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   int u64Tagged = 0;
 
-  @ForyField(nullable: true)
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(nullable: true, type: Uint64Type(encoding: Encoding.tagged))
   int? u64TaggedNullable;
 }
 
@@ -512,47 +570,45 @@ class UnsignedSchemaConsistentSimple {
 class UnsignedSchemaCompatible {
   UnsignedSchemaCompatible();
 
-  @ForyField(nullable: true)
-  Uint8? u8Field1;
+  @ForyField(nullable: true, type: Uint8Type())
+  int? u8Field1;
 
-  @ForyField(nullable: true)
-  Uint16? u16Field1;
+  @ForyField(nullable: true, type: Uint16Type())
+  int? u16Field1;
 
-  @ForyField(nullable: true)
-  @Uint32Type(compress: true)
-  Uint32? u32VarField1;
+  @ForyField(nullable: true, type: Uint32Type(encoding: Encoding.varint))
+  int? u32VarField1;
 
-  @ForyField(nullable: true)
-  @Uint32Type(compress: false)
-  Uint32? u32FixedField1;
+  @ForyField(nullable: true, type: Uint32Type(encoding: Encoding.fixed))
+  int? u32FixedField1;
 
-  @ForyField(nullable: true)
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(nullable: true, type: Uint64Type(encoding: Encoding.varint))
   int? u64VarField1;
 
-  @ForyField(nullable: true)
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(nullable: true, type: Uint64Type(encoding: Encoding.fixed))
   int? u64FixedField1;
 
-  @ForyField(nullable: true)
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(nullable: true, type: Uint64Type(encoding: Encoding.tagged))
   int? u64TaggedField1;
 
-  Uint8 u8Field2 = Uint8(0);
-  Uint16 u16Field2 = Uint16(0);
+  @ForyField(type: Uint8Type())
+  int u8Field2 = 0;
 
-  @Uint32Type(compress: true)
-  Uint32 u32VarField2 = Uint32(0);
+  @ForyField(type: Uint16Type())
+  int u16Field2 = 0;
 
-  @Uint32Type(compress: false)
-  Uint32 u32FixedField2 = Uint32(0);
+  @ForyField(type: Uint32Type(encoding: Encoding.varint))
+  int u32VarField2 = 0;
 
-  @Uint64Type(encoding: LongEncoding.varint)
+  @ForyField(type: Uint32Type(encoding: Encoding.fixed))
+  int u32FixedField2 = 0;
+
+  @ForyField(type: Uint64Type(encoding: Encoding.varint))
   int u64VarField2 = 0;
 
-  @Uint64Type(encoding: LongEncoding.fixed)
+  @ForyField(type: Uint64Type(encoding: Encoding.fixed))
   int u64FixedField2 = 0;
 
-  @Uint64Type(encoding: LongEncoding.tagged)
+  @ForyField(type: Uint64Type(encoding: Encoding.tagged))
   int u64TaggedField2 = 0;
 }

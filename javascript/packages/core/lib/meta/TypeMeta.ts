@@ -236,27 +236,41 @@ export class TypeMeta {
   computeStructFingerprint(fields: FieldInfo[]) {
     let fieldInfos = [];
     for (const field of fields) {
-      let typeId = field.getTypeId();
-      if (TypeId.userDefinedType(typeId)) {
-        typeId = TypeId.UNKNOWN;
-      }
       let fieldIdentifier = "";
       if (field.hasFieldId()) {
         fieldIdentifier = `${field.getFieldId()}`;
       } else {
         fieldIdentifier = TypeMeta.toSnakeCase(field.getFieldName());
       }
-      const ref = field.trackingRef ? "1" : "0";
-      const nullable = field.nullable ? "1" : "0";
-      fieldInfos.push([fieldIdentifier, `${typeId}`, ref, nullable]);
+      fieldInfos.push([fieldIdentifier, this.computeFieldTypeFingerprint(field, true, true)]);
     }
     fieldInfos = fieldInfos.sort((a, b) => a[0].localeCompare(b[0]));
     let result = "";
     for (const fieldInfo of fieldInfos) {
-      result += [fieldInfo[0], fieldInfo[1], fieldInfo[2], fieldInfo[3]].join(",");
-      result += ";";
+      result += `${fieldInfo[0]},${fieldInfo[1]};`;
     }
     return result;
+  }
+
+  private computeFieldTypeFingerprint(field: InnerFieldInfo, includeRef: boolean, includeNullable: boolean) {
+    const ref = includeRef && field.trackingRef ? "1" : "0";
+    const nullable = includeNullable && field.nullable ? "1" : "0";
+    let result = `${this.fingerprintTypeId(field.typeId)},${ref},${nullable}`;
+    if (field.typeId === TypeId.LIST) {
+      result += `[${this.computeFieldTypeFingerprint(field.options!.inner!, false, false)}]`;
+    } else if (field.typeId === TypeId.SET) {
+      result += `[${this.computeFieldTypeFingerprint(field.options!.key!, false, false)}]`;
+    } else if (field.typeId === TypeId.MAP) {
+      result += `[${this.computeFieldTypeFingerprint(field.options!.key!, false, false)}|${this.computeFieldTypeFingerprint(field.options!.value!, false, false)}]`;
+    }
+    return result;
+  }
+
+  private fingerprintTypeId(typeId: number) {
+    if (TypeId.userDefinedType(typeId) || typeId === TypeId.UNION || typeId === TypeId.TYPED_UNION || typeId === TypeId.NAMED_UNION) {
+      return TypeId.UNKNOWN;
+    }
+    return typeId;
   }
 
   computeStructHash() {

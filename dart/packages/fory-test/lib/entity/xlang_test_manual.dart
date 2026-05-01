@@ -126,6 +126,19 @@ const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
     ),
   ),
   GeneratedFieldInfo(
+    name: 'setField',
+    identifier: 'set_field',
+    id: null,
+    fieldType: GeneratedFieldType(
+      type: Set,
+      typeId: TypeIds.set,
+      nullable: false,
+      ref: false,
+      dynamic: null,
+      arguments: <GeneratedFieldType>[_refOverrideElementFieldType],
+    ),
+  ),
+  GeneratedFieldInfo(
     name: 'mapField',
     identifier: 'map_field',
     id: null,
@@ -156,6 +169,7 @@ final GeneratedStructRegistration<RefOverrideContainer>
   fieldWritersBySlot: <GeneratedStructFieldInfoWriter<RefOverrideContainer>>[
     _writeRefOverrideContainerField0,
     _writeRefOverrideContainerField1,
+    _writeRefOverrideContainerField2,
   ],
   type: RefOverrideContainer,
   serializerFactory: _RefOverrideContainerForySerializer.new,
@@ -172,6 +186,14 @@ void _writeRefOverrideContainerField0(
 }
 
 void _writeRefOverrideContainerField1(
+  WriteContext context,
+  GeneratedStructFieldInfo field,
+  RefOverrideContainer value,
+) {
+  writeGeneratedStructFieldInfoValue(context, field, value.setField);
+}
+
+void _writeRefOverrideContainerField2(
   WriteContext context,
   GeneratedStructFieldInfo field,
   RefOverrideContainer value,
@@ -205,7 +227,8 @@ final class _RefOverrideContainerForySerializer
     if (slots == null) {
       final fields = _writeFields(context);
       writeGeneratedStructFieldInfoValue(context, fields[0], value.listField);
-      writeGeneratedStructFieldInfoValue(context, fields[1], value.mapField);
+      writeGeneratedStructFieldInfoValue(context, fields[1], value.setField);
+      writeGeneratedStructFieldInfoValue(context, fields[2], value.mapField);
       return;
     }
     final writers = _refOverrideContainerForyRegistration.fieldWritersBySlot;
@@ -225,8 +248,12 @@ final class _RefOverrideContainerForySerializer
         readGeneratedStructFieldInfoValue(context, fields[0], value.listField),
         value.listField,
       );
+      value.setField = _readRefOverrideContainerSetField(
+        readGeneratedStructFieldInfoValue(context, fields[1], value.setField),
+        value.setField,
+      );
       value.mapField = _readRefOverrideContainerMapField(
-        readGeneratedStructFieldInfoValue(context, fields[1], value.mapField),
+        readGeneratedStructFieldInfoValue(context, fields[2], value.mapField),
         value.mapField,
       );
       return value;
@@ -242,10 +269,19 @@ final class _RefOverrideContainerForySerializer
     }
     if (slots.containsSlot(1)) {
       final rawRefOverrideContainer1 = slots.valueForSlot(1);
-      value.mapField = _readRefOverrideContainerMapField(
+      value.setField = _readRefOverrideContainerSetField(
         rawRefOverrideContainer1 is DeferredReadRef
             ? context.getReadRef(rawRefOverrideContainer1.id)
             : rawRefOverrideContainer1,
+        value.setField,
+      );
+    }
+    if (slots.containsSlot(2)) {
+      final rawRefOverrideContainer2 = slots.valueForSlot(2);
+      value.mapField = _readRefOverrideContainerMapField(
+        rawRefOverrideContainer2 is DeferredReadRef
+            ? context.getReadRef(rawRefOverrideContainer2.id)
+            : rawRefOverrideContainer2,
         value.mapField,
       );
     }
@@ -268,6 +304,26 @@ List<RefOverrideElement> _readRefOverrideContainerListField(
             (item) => item == null
                 ? (throw StateError(
                     'Received null for non-nullable list item.'))
+                : item as RefOverrideElement,
+          ),
+        );
+}
+
+Set<RefOverrideElement> _readRefOverrideContainerSetField(
+  Object? value, [
+  Object? fallback,
+]) {
+  return value == null
+      ? (fallback != null
+          ? fallback as Set<RefOverrideElement>
+          : (throw StateError(
+              'Received null for non-nullable field setField.',
+            )))
+      : Set<RefOverrideElement>.of(
+          (value as Set).map(
+            (item) => item == null
+                ? (throw StateError(
+                    'Received null for non-nullable set item.'))
                 : item as RefOverrideElement,
           ),
         );

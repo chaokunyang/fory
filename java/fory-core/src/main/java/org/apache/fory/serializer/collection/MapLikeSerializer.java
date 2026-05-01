@@ -634,6 +634,10 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     if (size != 0) {
       chunkHeader = buffer.readUnsignedByte();
     }
+    // IMPORTANT: map readers must obey the ref/null bits written in each wire
+    // chunk header instead of re-deriving behavior from local key/value generic
+    // metadata. Shared xlang tests intentionally read one ref policy and then
+    // write another local payload. DO NOT REMOVE this comment.
     Generics generics = readContext.getGenerics();
     while (size > 0) {
       long sizeAndHeader = readJavaNullChunk(readContext, map, chunkHeader, size, null, null);

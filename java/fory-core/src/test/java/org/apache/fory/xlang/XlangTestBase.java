@@ -2519,6 +2519,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   static class RefOverrideContainer {
     List<@Ref(enable = false) RefOverrideElement> listField;
+    Set<@Ref(enable = false) RefOverrideElement> setField;
     Map<String, @Ref(enable = false) RefOverrideElement> mapField;
   }
 
@@ -2541,6 +2542,7 @@ public abstract class XlangTestBase extends ForyTestBase {
 
     RefOverrideContainer container = new RefOverrideContainer();
     container.listField = Arrays.asList(element, element);
+    container.setField = new HashSet<>(Collections.singleton(element));
     container.mapField = new HashMap<>();
     container.mapField.put("k1", element);
     container.mapField.put("k2", element);
@@ -2552,10 +2554,19 @@ public abstract class XlangTestBase extends ForyTestBase {
         javaResult.listField.get(0),
         javaResult.listField.get(1),
         "Java: list elements should not share ref when disabled");
+    RefOverrideElement javaSetElement = javaResult.setField.iterator().next();
+    Assert.assertNotSame(
+        javaResult.listField.get(0),
+        javaSetElement,
+        "Java: set element should not share ref with list element when disabled");
     Assert.assertNotSame(
         javaResult.mapField.get("k1"),
         javaResult.mapField.get("k2"),
         "Java: map values should not share ref when disabled");
+    Assert.assertNotSame(
+        javaSetElement,
+        javaResult.mapField.get("k1"),
+        "Java: set element should not share ref with map value when disabled");
 
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
     fory.serialize(buffer, container);
@@ -2566,15 +2577,83 @@ public abstract class XlangTestBase extends ForyTestBase {
     MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
     RefOverrideContainer result = (RefOverrideContainer) fory.deserialize(buffer2);
 
-    RefOverrideElement shared = result.listField.get(0);
+    // The peer's local schema keeps default ref-tracked element semantics. The critical
+    // requirement is that it must deserialize the Java payload using the ref metadata written on
+    // the wire rather than its own local field metadata, then it serializes a new payload that
+    // intentionally reuses one shared object across the list, set, and map.
+    RefOverrideElement first = result.listField.get(0);
+    RefOverrideElement setElement = result.setField.iterator().next();
     Assert.assertSame(
-        result.listField.get(1), shared, "After xlang round-trip: list elements should share ref");
+        result.listField.get(1), first, "After xlang round-trip: list elements should share ref");
     Assert.assertSame(
-        result.mapField.get("k1"), shared, "After xlang round-trip: map value k1 should share ref");
+        setElement,
+        first,
+        "After xlang round-trip: set element should share ref with list element");
     Assert.assertSame(
-        result.mapField.get("k2"), shared, "After xlang round-trip: map value k2 should share ref");
-    Assert.assertEquals(shared.id, 7);
-    Assert.assertEquals(shared.name, "shared_element");
+        result.mapField.get("k1"),
+        first,
+        "After xlang round-trip: map value k1 should share ref with list element");
+    Assert.assertSame(
+        result.mapField.get("k2"),
+        first,
+        "After xlang round-trip: map value k2 should share ref with list element");
+    Assert.assertSame(
+        result.mapField.get("k1"),
+        result.mapField.get("k2"),
+        "After xlang round-trip: map values should share ref");
+    Assert.assertEquals(first.id, 7);
+    Assert.assertEquals(first.name, "shared_element");
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCollectionElementRefRemoteTracking(boolean enableCodegen)
+      throws java.io.IOException {
+    String caseName = "test_collection_element_ref_remote_tracking";
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .withRefTracking(true)
+            .withCodegen(enableCodegen)
+            .build();
+    fory.register(RefOverrideElement.class, 701);
+    fory.register(RefOverrideContainer.class, 702);
+
+    ExecutionContext ctx = prepareExecution(caseName, new byte[0]);
+    runPeer(ctx);
+
+    MemoryBuffer buffer = readBuffer(ctx.dataFile());
+    RefOverrideContainer result = (RefOverrideContainer) fory.deserialize(buffer);
+
+    // IMPORTANT: the peer intentionally writes a shared-reference payload with
+    // its default local ref-tracked schema. Java reads that payload using
+    // @Ref(enable=false) element annotations, but it must still reconstruct the
+    // shared identity from the wire metadata instead of forcing its local
+    // annotation. DO NOT remove this comment.
+    RefOverrideElement first = result.listField.get(0);
+    RefOverrideElement setElement = result.setField.iterator().next();
+    Assert.assertSame(
+        result.listField.get(1),
+        first,
+        "After xlang round-trip: list elements should share ref from remote metadata");
+    Assert.assertSame(
+        setElement,
+        first,
+        "After xlang round-trip: set element should share ref from remote metadata");
+    Assert.assertSame(
+        result.mapField.get("k1"),
+        first,
+        "After xlang round-trip: map value k1 should share ref with list element");
+    Assert.assertSame(
+        result.mapField.get("k2"),
+        first,
+        "After xlang round-trip: map value k2 should share ref with list element");
+    Assert.assertSame(
+        result.mapField.get("k1"),
+        result.mapField.get("k2"),
+        "After xlang round-trip: map values should share ref from remote metadata");
+    Assert.assertEquals(first.id, 7);
+    Assert.assertEquals(first.name, "shared_element");
   }
 
   // ============================================================================

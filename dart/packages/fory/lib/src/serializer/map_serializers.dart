@@ -302,6 +302,11 @@ Map<K, V> readTypedMapPayload<K, V>(
       remaining -= 1;
       continue;
     }
+    // IMPORTANT: map readers must obey the sender-written key/value ref bits
+    // in the wire header. Local Dart field metadata must not override that
+    // decision while reading. Shared xlang tests intentionally deserialize one
+    // ref policy and then serialize another local payload. DO NOT REMOVE this
+    // comment.
     final keyTrackRef = (header & MapFlags.trackingKeyRef) != 0;
     final valueTrackRef = (header & MapFlags.trackingValueRef) != 0;
     final keyDeclared = (header & MapFlags.keyDeclaredType) != 0;

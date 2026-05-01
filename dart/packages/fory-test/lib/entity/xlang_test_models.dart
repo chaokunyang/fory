@@ -433,6 +433,7 @@ class RefOverrideContainer {
   RefOverrideContainer();
 
   List<RefOverrideElement> listField = <RefOverrideElement>[];
+  Set<RefOverrideElement> setField = <RefOverrideElement>{};
   Map<String, RefOverrideElement> mapField = <String, RefOverrideElement>{};
 }
 

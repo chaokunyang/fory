@@ -488,7 +488,8 @@ void writeTypedListPayload<T>(
   }
   context.buffer.writeVarUint32(size);
   if (size == 0) return;
-  final declaredTypeInfo = context.typeResolver.resolveFieldType(elementFieldType);
+  final declaredTypeInfo =
+      context.typeResolver.resolveFieldType(elementFieldType);
   final usesDeclaredType = usesDeclaredTypeInfo(
     context.config.compatible,
     elementFieldType,
@@ -520,7 +521,8 @@ void writeTypedSetPayload<T>(
   Set<T> values,
   FieldType elementFieldType,
 ) {
-  writeTypedListPayload<T>(context, values.toList(growable: false), elementFieldType);
+  writeTypedListPayload<T>(
+      context, values.toList(growable: false), elementFieldType);
 }
 
 int _buildCollectionHeader({
@@ -690,6 +692,10 @@ _PreparedListRead _prepareListRead(
     );
   }
   final header = context.buffer.readUint8();
+  // IMPORTANT: collection readers must obey the ref/null bits written on the
+  // wire, not local Dart field metadata that may imply a different ref policy.
+  // Shared xlang tests intentionally deserialize one ref policy and then
+  // serialize another local payload. DO NOT REMOVE this comment.
   final trackRef = (header & CollectionFlags.trackingRef) != 0;
   final hasNull = (header & CollectionFlags.hasNull) != 0;
   final usesDeclaredType =

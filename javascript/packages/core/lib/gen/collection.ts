@@ -41,9 +41,10 @@ export const CollectionFlags = {
 };
 
 class CollectionAnySerializer {
-  constructor(private writeContext: WriteContext, private readContext: ReadContext) {
-
-  }
+  constructor(
+    private writeContext: WriteContext,
+    private readContext: ReadContext,
+  ) {}
 
   private readSerializerWithDepth(serializer: Serializer, fromRef: boolean) {
     this.readContext.incReadDepth();
@@ -60,7 +61,7 @@ class CollectionAnySerializer {
     let trackingRef = false;
 
     for (const item of arr) {
-      if ((item === undefined || item === null)) {
+      if (item === undefined || item === null) {
         includeNone = true;
         continue;
       }
@@ -72,7 +73,11 @@ class CollectionAnySerializer {
         trackingRef = current.needToWriteRef();
       }
       if (isSame) {
-        if (serializer !== null && serializer !== undefined && current !== serializer) {
+        if (
+          serializer !== null
+          && serializer !== undefined
+          && current !== serializer
+        ) {
           isSame = false;
         } else {
           serializer = current;
@@ -104,7 +109,8 @@ class CollectionAnySerializer {
     if (size === 0) {
       return;
     }
-    const { serializer, isSame, includeNone, trackingRef } = this.writeElementsHeader(value);
+    const { serializer, isSame, includeNone, trackingRef }
+      = this.writeElementsHeader(value);
     if (isSame) {
       serializer!.writeTypeInfo(value);
       if (trackingRef) {
@@ -130,7 +136,8 @@ class CollectionAnySerializer {
     } else {
       if (trackingRef) {
         for (const item of value) {
-          const serializer = this.writeContext.typeResolver.getSerializerByData(item);
+          const serializer
+            = this.writeContext.typeResolver.getSerializerByData(item);
           serializer?.writeRef(item);
         }
       } else if (includeNone) {
@@ -138,21 +145,27 @@ class CollectionAnySerializer {
           if (item === null || item === undefined) {
             this.writeContext.writer.writeInt8(RefFlags.NullFlag);
           } else {
-            const serializer = this.writeContext.typeResolver.getSerializerByData(item);
+            const serializer
+              = this.writeContext.typeResolver.getSerializerByData(item);
             this.writeContext.writer.writeInt8(RefFlags.NotNullValueFlag);
             serializer!.writeNoRef(item);
           }
         }
       } else {
         for (const item of value) {
-          const serializer = this.writeContext.typeResolver.getSerializerByData(item);
+          const serializer
+            = this.writeContext.typeResolver.getSerializerByData(item);
           serializer!.writeNoRef(item);
         }
       }
     }
   }
 
-  read(accessor: (result: any, index: number, v: any) => void, createCollection: (len: number) => any, fromRef: boolean): any {
+  read(
+    accessor: (result: any, index: number, v: any) => void,
+    createCollection: (len: number) => any,
+    fromRef: boolean,
+  ): any {
     void fromRef;
     const len = this.readContext.reader.readVarUint32Small7();
     const result = createCollection(len);
@@ -161,6 +174,10 @@ class CollectionAnySerializer {
     }
     this.readContext.checkCollectionSize(len);
     const flags = this.readContext.reader.readUint8();
+    // IMPORTANT: collection readers must obey the ref/null bits written on the
+    // wire, not local TypeScript metadata that may imply a different ref
+    // policy. Shared xlang tests intentionally deserialize one ref policy and
+    // then serialize another local payload. DO NOT REMOVE this comment.
     const isSame = flags & CollectionFlags.SAME_TYPE;
     const includeNone = flags & CollectionFlags.HAS_NULL;
     const refTracking = flags & CollectionFlags.TRACKING_REF;
@@ -175,7 +192,11 @@ class CollectionAnySerializer {
             const refId = this.readContext.reader.readVarUInt32();
             accessor(result, i, this.readContext.getReadRef(refId));
           } else if (refFlag === RefFlags.RefValueFlag) {
-            accessor(result, i, this.readSerializerWithDepth(serializer!, true));
+            accessor(
+              result,
+              i,
+              this.readSerializerWithDepth(serializer!, true),
+            );
           } else {
             accessor(result, i, null);
           }
@@ -186,7 +207,11 @@ class CollectionAnySerializer {
           if (flag === RefFlags.NullFlag) {
             accessor(result, i, null);
           } else {
-            accessor(result, i, this.readSerializerWithDepth(serializer!, false));
+            accessor(
+              result,
+              i,
+              this.readSerializerWithDepth(serializer!, false),
+            );
           }
         }
       } else {
@@ -207,13 +232,21 @@ class CollectionAnySerializer {
             accessor(result, i, null);
           } else {
             const itemSerializer = AnyHelper.detectSerializer(this.readContext);
-            accessor(result, i, this.readSerializerWithDepth(itemSerializer!, false));
+            accessor(
+              result,
+              i,
+              this.readSerializerWithDepth(itemSerializer!, false),
+            );
           }
         }
       } else {
         for (let i = 0; i < len; i++) {
           const itemSerializer = AnyHelper.detectSerializer(this.readContext);
-          accessor(result, i, this.readSerializerWithDepth(itemSerializer!, false));
+          accessor(
+            result,
+            i,
+            this.readSerializerWithDepth(itemSerializer!, false),
+          );
         }
       }
     }
@@ -229,7 +262,11 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     super(typeInfo, builder, scope);
     this.typeInfo = typeInfo;
     const inner = this.genericTypeDescriptin()!;
-    this.innerGenerator = CodegenRegistry.newGeneratorByTypeInfo(inner, this.builder, this.scope);
+    this.innerGenerator = CodegenRegistry.newGeneratorByTypeInfo(
+      inner,
+      this.builder,
+      this.scope,
+    );
   }
 
   abstract genericTypeDescriptin(): TypeInfo | undefined;
@@ -246,18 +283,19 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
 
   private isDeclaredElementType() {
     const innerTypeId = this.innerGenerator.getTypeId();
-    return innerTypeId !== TypeId.STRUCT
+    return (
+      innerTypeId !== TypeId.STRUCT
       && innerTypeId !== TypeId.COMPATIBLE_STRUCT
       && innerTypeId !== TypeId.NAMED_STRUCT
       && innerTypeId !== TypeId.NAMED_COMPATIBLE_STRUCT
       && innerTypeId !== TypeId.EXT
-      && innerTypeId !== TypeId.NAMED_EXT;
+      && innerTypeId !== TypeId.NAMED_EXT
+    );
   }
 
   protected writeElementsHeader(accessor: string, flagAccessor: string) {
     const item = this.scope.uniqueName("item");
-    const stmts = [
-    ];
+    const stmts = [];
     stmts.push(`
         for (const ${item} of ${accessor}) {
             if (${item} === null || ${item} === undefined) {
@@ -320,7 +358,10 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
         `;
   }
 
-  readSpecificType(accessor: (expr: string) => string, refState: string): string {
+  readSpecificType(
+    accessor: (expr: string) => string,
+    refState: string,
+  ): string {
     const result = this.scope.uniqueName("result");
     const len = this.scope.uniqueName("len");
     const flags = this.scope.uniqueName("flags");
@@ -331,7 +372,10 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const readContextName = this.builder.getReadContextName();
     // Skip depth tracking for leaf element types (primitives, string, enum, time, typed arrays).
     const innerIsLeaf = TypeId.isLeafTypeId(this.innerGenerator.getTypeId()!);
-    const readInnerElement = (assignStmt: (x: any) => string, refState: string) => {
+    const readInnerElement = (
+      assignStmt: (x: any) => string,
+      refState: string,
+    ) => {
       return innerIsLeaf
         ? this.innerGenerator.read(assignStmt, refState)
         : this.innerGenerator.readWithDepth(assignStmt, refState);

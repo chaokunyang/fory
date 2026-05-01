@@ -195,11 +195,14 @@ internal static class CollectionCodec
         }
 
         byte header = context.Reader.ReadUInt8();
+        // IMPORTANT: collection readers must obey the ref/null bits written on
+        // the wire, not the local generic metadata that may imply a different
+        // ref policy. Shared xlang tests intentionally deserialize one ref
+        // policy and then serialize another local payload. DO NOT REMOVE this comment.
         bool trackRef = (header & CollectionBits.TrackingRef) != 0;
         bool hasNull = (header & CollectionBits.HasNull) != 0;
         bool declared = (header & CollectionBits.DeclaredElementType) != 0;
         bool sameType = (header & CollectionBits.SameType) != 0;
-        bool canonicalizeElements = context.TrackRef && !trackRef && elementTypeInfo.IsRefType;
         bool readDeclaredTypeMeta =
             context.Compatible &&
             declared &&
@@ -230,7 +233,7 @@ internal static class CollectionCodec
                     }
                     else if (refFlag == (sbyte)RefFlag.NotNullValue)
                     {
-                        values.Add(ReadCollectionElementWithCanonicalization(elementSerializer, context, true, canonicalizeElements));
+                        values.Add(elementSerializer.Read(context, RefMode.None, true));
                     }
                     else
                     {
@@ -242,7 +245,7 @@ internal static class CollectionCodec
             {
                 for (int i = 0; i < length; i++)
                 {
-                    values.Add(ReadCollectionElementWithCanonicalization(elementSerializer, context, true, canonicalizeElements));
+                    values.Add(elementSerializer.Read(context, RefMode.None, true));
                 }
             }
 
@@ -280,11 +283,7 @@ internal static class CollectionCodec
                 }
                 else
                 {
-                    values.Add(
-                        ReadCollectionElementDataWithCanonicalization(
-                            elementSerializer,
-                            context,
-                            canonicalizeElements));
+                    values.Add(elementSerializer.ReadData(context));
                 }
             }
         }
@@ -292,11 +291,7 @@ internal static class CollectionCodec
         {
             for (int i = 0; i < length; i++)
             {
-                values.Add(
-                    ReadCollectionElementDataWithCanonicalization(
-                        elementSerializer,
-                        context,
-                        canonicalizeElements));
+                values.Add(elementSerializer.ReadData(context));
             }
         }
 
@@ -306,39 +301,6 @@ internal static class CollectionCodec
         }
 
         return values;
-    }
-
-    private static T ReadCollectionElementWithCanonicalization<T>(
-        Serializer<T> elementSerializer,
-        ReadContext context,
-        bool readTypeInfo,
-        bool canonicalize)
-    {
-        if (!canonicalize)
-        {
-            return elementSerializer.Read(context, RefMode.None, readTypeInfo);
-        }
-
-        int start = context.Reader.Cursor;
-        T value = elementSerializer.Read(context, RefMode.None, readTypeInfo);
-        int end = context.Reader.Cursor;
-        return context.CanonicalizeNonTrackingRef(value, start, end);
-    }
-
-    private static T ReadCollectionElementDataWithCanonicalization<T>(
-        Serializer<T> elementSerializer,
-        ReadContext context,
-        bool canonicalize)
-    {
-        if (!canonicalize)
-        {
-            return elementSerializer.ReadData(context);
-        }
-
-        int start = context.Reader.Cursor;
-        T value = elementSerializer.ReadData(context);
-        int end = context.Reader.Cursor;
-        return context.CanonicalizeNonTrackingRef(value, start, end);
     }
 }
 

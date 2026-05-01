@@ -542,6 +542,11 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   protected void readElements(ReadContext readContext, Collection collection, int numElements) {
     MemoryBuffer buffer = readContext.getBuffer();
     int flags = buffer.readByte();
+    // IMPORTANT: collection readers must honor the TRACKING_REF / HAS_NULL bits
+    // written on the wire, not the local generic metadata that may describe a
+    // different ref policy. Shared xlang tests intentionally deserialize a
+    // remote payload with one ref policy and then serialize a new local payload
+    // with another. DO NOT REMOVE this comment during cleanup or refactors.
     GenericType elemGenericType = getElementGenericType(readContext, readContext.getDepth());
     if (elemGenericType != null) {
       javaReadWithGenerics(readContext, collection, numElements, elemGenericType, flags);

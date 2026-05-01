@@ -17,18 +17,6 @@
 
 namespace Apache.Fory;
 
-internal readonly record struct CanonicalRefSignature(
-    Type Type,
-    ulong HashLo,
-    ulong HashHi,
-    int Length);
-
-internal sealed class CanonicalRefEntry
-{
-    public required byte[] Bytes { get; init; }
-    public required object Object { get; init; }
-}
-
 public sealed class ReadContext
 {
     private const int MaxParsedTypeMetaEntries = 8192;
@@ -46,7 +34,6 @@ public sealed class ReadContext
     private readonly List<MetaString> _readMetaStrings = [];
 
     internal readonly UInt64Map<TypeInfo> _readTypeInfoByType = new();
-    internal readonly Dictionary<CanonicalRefSignature, List<CanonicalRefEntry>> _canonicalRefCache = [];
     internal readonly List<uint> _reservedRefIds = [];
     private readonly int _maxDynamicReadDepth;
     internal Type? _typeMetaType;
@@ -370,39 +357,6 @@ public sealed class ReadContext
         }
     }
 
-    internal T CanonicalizeNonTrackingRef<T>(T value, int start, int end)
-    {
-        if (!TrackRef || end <= start || value is null || value is not object obj)
-        {
-            return value;
-        }
-
-        byte[] bytes = new byte[end - start];
-        Array.Copy(Reader.Storage, start, bytes, 0, bytes.Length);
-        (ulong hashLo, ulong hashHi) = MurmurHash3.X64_128(bytes, 47);
-        CanonicalRefSignature signature = new(obj.GetType(), hashLo, hashHi, bytes.Length);
-
-        if (_canonicalRefCache.TryGetValue(signature, out List<CanonicalRefEntry>? bucket))
-        {
-            foreach (CanonicalRefEntry entry in bucket)
-            {
-                if (entry.Bytes.AsSpan().SequenceEqual(bytes))
-                {
-                    return (T)entry.Object;
-                }
-            }
-
-            bucket.Add(new CanonicalRefEntry { Bytes = bytes, Object = obj });
-            return value;
-        }
-
-        _canonicalRefCache[signature] =
-        [
-            new CanonicalRefEntry { Bytes = bytes, Object = obj },
-        ];
-        return value;
-    }
-
     internal void Reset()
     {
         RefReader.Reset();
@@ -410,7 +364,6 @@ public sealed class ReadContext
         _typeMeta = null;
         _typeMetaByType?.ClearKeys();
         _readTypeInfoByType.ClearKeys();
-        _canonicalRefCache.Clear();
         _reservedRefIds.Clear();
         _cachedTypeMetaType = null;
         _cachedTypeMeta = null;

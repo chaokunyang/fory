@@ -227,6 +227,11 @@ public class PythonXlangTest extends XlangTestBase {
     super.testCollectionElementRefOverride(enableCodegen);
   }
 
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCollectionElementRefRemoteTracking(boolean enableCodegen) throws IOException {
+    super.testCollectionElementRefRemoteTracking(enableCodegen);
+  }
+
   @Override
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testNullableFieldSchemaConsistentNotNull(boolean enableCodegen) throws IOException {

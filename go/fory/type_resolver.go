@@ -522,8 +522,11 @@ func validateOptionalFields(type_ reflect.Type) error {
 		if field.PkgPath != "" {
 			continue
 		}
-		foryTag := parseForyTag(field)
-		if foryTag.Ignore {
+		parsed, err := parseFieldTag(field)
+		if err != nil {
+			return err
+		}
+		if parsed.ignore {
 			continue
 		}
 		optionalInfo, isOptional := getOptionalInfo(field.Type)
@@ -1924,6 +1927,9 @@ func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, e
 		return intSliceSerializer{}, nil
 	case reflect.Uint:
 		return uintSliceSerializer{}, nil
+	}
+	if isDynamicType(elemType) {
+		return mustNewSliceDynSerializer(elemType), nil
 	}
 	// For non-primitive element types, use sliceSerializer
 	elemSerializer, err := r.getSerializerByType(elemType, false)

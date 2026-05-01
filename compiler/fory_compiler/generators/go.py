@@ -832,7 +832,6 @@ class GoGenerator(BaseGenerator):
         tags = []
         is_list = isinstance(field.field_type, ListType)
         is_map = isinstance(field.field_type, MapType)
-        is_collection = is_list or is_map
         is_any = (
             isinstance(field.field_type, PrimitiveType)
             and field.field_type.kind == PrimitiveKind.ANY
@@ -843,8 +842,13 @@ class GoGenerator(BaseGenerator):
             tags.append(f"id={field.tag_id}")
         if field.optional or is_any:
             nullable_tag = True
-        elif is_collection and (
-            field.ref or (is_list and (field.element_optional or field.element_ref))
+        elif (
+            field.ref
+            or (is_list and (field.element_optional or field.element_ref))
+            or (
+                is_map
+                and (field.field_type.value_optional or field.field_type.value_ref)
+            )
         ):
             nullable_tag = False
 
@@ -865,13 +869,9 @@ class GoGenerator(BaseGenerator):
         if encoding_tag:
             tags.append(encoding_tag)
 
-        array_tag = self.get_array_type_tag(field)
-        if array_tag:
-            tags.append(array_tag)
-
-        nested_ref_tag = self.get_nested_ref_tag(field)
-        if nested_ref_tag:
-            tags.append(nested_ref_tag)
+        type_hint = self.get_type_hint_tag(field, parent_stack)
+        if type_hint:
+            tags.append(type_hint)
 
         if tags:
             tag_str = ",".join(tags)
@@ -887,50 +887,231 @@ class GoGenerator(BaseGenerator):
             return None
         kind = field_type.kind
         if kind in (PrimitiveKind.INT32, PrimitiveKind.UINT32):
-            return "compress=false"
-        if kind in (PrimitiveKind.VARINT32, PrimitiveKind.VAR_UINT32):
-            return "compress=true"
+            return "encoding=fixed"
         if kind in (PrimitiveKind.INT64, PrimitiveKind.UINT64):
             return "encoding=fixed"
-        if kind in (PrimitiveKind.VARINT64, PrimitiveKind.VAR_UINT64):
-            return "encoding=varint"
         if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
             return "encoding=tagged"
         return None
 
-    def get_array_type_tag(self, field: Field) -> Optional[str]:
-        """Return type override tag for uint8/int8 arrays."""
-        if not isinstance(field.field_type, ListType):
+    def get_type_hint_tag(
+        self, field: Field, parent_stack: Optional[List[Message]]
+    ) -> Optional[str]:
+        if (
+            isinstance(field.field_type, PrimitiveType)
+            and field.field_type.kind == PrimitiveKind.BYTES
+        ):
+            return "type=bytes"
+        hint = self.build_root_type_hint(field, parent_stack)
+        if hint is None:
             return None
-        if field.element_optional or field.element_ref:
-            return None
-        element_type = field.field_type.element_type
-        if not isinstance(element_type, PrimitiveType):
-            return None
-        if element_type.kind == PrimitiveKind.INT8:
-            return "type=int8_array"
-        if element_type.kind == PrimitiveKind.UINT8:
-            return "type=uint8_array"
-        return None
+        return f"type={hint}"
 
-    def get_nested_ref_tag(self, field: Field) -> Optional[str]:
+    def build_root_type_hint(
+        self, field: Field, parent_stack: Optional[List[Message]]
+    ) -> Optional[str]:
         if isinstance(field.field_type, ListType):
-            if not self.is_ref_target_type(field.field_type.element_type):
+            element_hint = self.build_node_type_hint(
+                field.field_type.element_type,
+                field.element_optional,
+                field.element_ref,
+                parent_stack,
+            )
+            if element_hint is None:
                 return None
-            entry = "[true]" if field.element_ref else "[]"
-            return f"nested_ref=[{entry}]"
+            return self.render_type_hint("list", [f"element={element_hint}"])
         if isinstance(field.field_type, MapType):
-            if not self.is_ref_target_type(field.field_type.value_type):
-                return None
-            value_entry = "[true]" if field.field_type.value_ref else "[]"
-            return f"nested_ref=[[],{value_entry}]"
+            key_hint = self.build_node_type_hint(
+                field.field_type.key_type, False, False, parent_stack
+            )
+            value_hint = self.build_node_type_hint(
+                field.field_type.value_type,
+                field.field_type.value_optional,
+                field.field_type.value_ref,
+                parent_stack,
+            )
+            params = []
+            if key_hint is not None:
+                params.append(f"key={key_hint}")
+            if value_hint is not None:
+                params.append(f"value={value_hint}")
+            if params:
+                return self.render_type_hint("map", params)
         return None
 
-    def is_ref_target_type(self, field_type: FieldType) -> bool:
+    def build_node_type_hint(
+        self,
+        field_type: FieldType,
+        nullable: bool,
+        ref: bool,
+        parent_stack: Optional[List[Message]],
+    ) -> Optional[str]:
+        if isinstance(field_type, ListType):
+            params = self.build_node_modifiers(field_type, nullable, ref, parent_stack)
+            element_hint = self.build_node_type_hint(
+                field_type.element_type,
+                field_type.element_optional,
+                field_type.element_ref,
+                parent_stack,
+            )
+            if element_hint is not None:
+                params.append(f"element={element_hint}")
+            return self.render_type_hint("list", params)
+        if isinstance(field_type, MapType):
+            params = self.build_node_modifiers(field_type, nullable, ref, parent_stack)
+            key_hint = self.build_node_type_hint(
+                field_type.key_type, False, False, parent_stack
+            )
+            value_hint = self.build_node_type_hint(
+                field_type.value_type,
+                field_type.value_optional,
+                field_type.value_ref,
+                parent_stack,
+            )
+            if key_hint is not None:
+                params.append(f"key={key_hint}")
+            if value_hint is not None:
+                params.append(f"value={value_hint}")
+            if params:
+                return self.render_type_hint("map", params)
+            return None
+        if isinstance(field_type, PrimitiveType):
+            return self.build_primitive_type_hint(
+                field_type, nullable, ref, parent_stack
+            )
+        if isinstance(field_type, NamedType):
+            return self.build_named_type_hint(field_type, nullable, ref, parent_stack)
+        return None
+
+    def build_primitive_type_hint(
+        self,
+        field_type: PrimitiveType,
+        nullable: bool,
+        ref: bool,
+        parent_stack: Optional[List[Message]],
+    ) -> Optional[str]:
+        if field_type.kind == PrimitiveKind.ANY:
+            return self.build_placeholder_type_hint(
+                field_type, nullable, ref, parent_stack
+            )
+        params = self.build_node_modifiers(field_type, nullable, ref, parent_stack)
+        encoding = self.get_type_hint_encoding(field_type)
+        if encoding is not None:
+            params.append(f"encoding={encoding}")
+        if not params:
+            return None
+        return self.render_type_hint(self.get_type_hint_name(field_type), params)
+
+    def build_named_type_hint(
+        self,
+        field_type: NamedType,
+        nullable: bool,
+        ref: bool,
+        parent_stack: Optional[List[Message]],
+    ) -> Optional[str]:
+        return self.build_placeholder_type_hint(field_type, nullable, ref, parent_stack)
+
+    def build_placeholder_type_hint(
+        self,
+        field_type: FieldType,
+        nullable: bool,
+        ref: bool,
+        parent_stack: Optional[List[Message]],
+    ) -> Optional[str]:
+        params = self.build_node_modifiers(field_type, nullable, ref, parent_stack)
+        if not params:
+            return None
+        return self.render_type_hint("_", params)
+
+    def build_node_modifiers(
+        self,
+        field_type: FieldType,
+        nullable: bool,
+        ref: bool,
+        parent_stack: Optional[List[Message]],
+    ) -> List[str]:
+        params: List[str] = []
+        if nullable != self.infers_nullable_from_go(field_type, nullable, ref):
+            params.append(f"nullable={str(nullable).lower()}")
+        if ref:
+            params.append("ref=true")
+        elif self.infers_ref_from_go(field_type, nullable, ref, parent_stack):
+            params.append("ref=false")
+        return params
+
+    def infers_nullable_from_go(
+        self, field_type: FieldType, nullable: bool, ref: bool
+    ) -> bool:
+        if isinstance(field_type, PrimitiveType):
+            if field_type.kind in (PrimitiveKind.ANY, PrimitiveKind.BYTES):
+                return True
+            return nullable
+        if isinstance(field_type, NamedType):
+            return nullable or ref
+        if isinstance(field_type, (ListType, MapType)):
+            return True
+        return nullable
+
+    def infers_ref_from_go(
+        self,
+        field_type: FieldType,
+        nullable: bool,
+        ref: bool,
+        parent_stack: Optional[List[Message]],
+    ) -> bool:
+        if isinstance(field_type, PrimitiveType):
+            return field_type.kind in (PrimitiveKind.ANY, PrimitiveKind.BYTES)
+        if isinstance(field_type, (ListType, MapType)):
+            return True
         if not isinstance(field_type, NamedType):
             return False
-        resolved = self.schema.get_type(field_type.name)
-        return isinstance(resolved, (Message, Union))
+        resolved = self.resolve_named_type(field_type.name, parent_stack)
+        return (nullable or ref) and isinstance(resolved, (Message, Union))
+
+    def get_type_hint_name(self, field_type: PrimitiveType) -> str:
+        kind = field_type.kind
+        names = {
+            PrimitiveKind.BOOL: "bool",
+            PrimitiveKind.INT8: "int8",
+            PrimitiveKind.INT16: "int16",
+            PrimitiveKind.INT32: "int32",
+            PrimitiveKind.VARINT32: "int32",
+            PrimitiveKind.INT64: "int64",
+            PrimitiveKind.VARINT64: "int64",
+            PrimitiveKind.TAGGED_INT64: "int64",
+            PrimitiveKind.UINT8: "uint8",
+            PrimitiveKind.UINT16: "uint16",
+            PrimitiveKind.UINT32: "uint32",
+            PrimitiveKind.VAR_UINT32: "uint32",
+            PrimitiveKind.UINT64: "uint64",
+            PrimitiveKind.VAR_UINT64: "uint64",
+            PrimitiveKind.TAGGED_UINT64: "uint64",
+            PrimitiveKind.FLOAT16: "float16",
+            PrimitiveKind.BFLOAT16: "bfloat16",
+            PrimitiveKind.FLOAT32: "float32",
+            PrimitiveKind.FLOAT64: "float64",
+            PrimitiveKind.STRING: "string",
+            PrimitiveKind.BYTES: "bytes",
+            PrimitiveKind.DATE: "date",
+            PrimitiveKind.TIMESTAMP: "timestamp",
+            PrimitiveKind.DECIMAL: "decimal",
+        }
+        return names[kind]
+
+    def get_type_hint_encoding(self, field_type: PrimitiveType) -> Optional[str]:
+        kind = field_type.kind
+        if kind in (PrimitiveKind.INT32, PrimitiveKind.UINT32):
+            return "fixed"
+        if kind in (PrimitiveKind.INT64, PrimitiveKind.UINT64):
+            return "fixed"
+        if kind in (PrimitiveKind.TAGGED_INT64, PrimitiveKind.TAGGED_UINT64):
+            return "tagged"
+        return None
+
+    def render_type_hint(self, name: str, params: List[str]) -> str:
+        if not params:
+            return name
+        return f"{name}({','.join(params)})"
 
     def field_uses_option(self, field: Field) -> bool:
         """Return True if field should use optional.Optional in generated Go code."""
@@ -995,10 +1176,12 @@ class GoGenerator(BaseGenerator):
             return type_name
 
         elif isinstance(field_type, ListType):
+            nested_element_optional = field_type.element_optional or element_optional
+            nested_element_ref = field_type.element_ref or element_ref
             element_type = self.generate_type(
                 field_type.element_type,
-                element_optional,
-                element_ref,
+                nested_element_optional,
+                nested_element_ref,
                 False,
                 False,
                 parent_stack,
@@ -1017,11 +1200,12 @@ class GoGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                False,
+                field_type.value_optional,
                 field_type.value_ref,
                 False,
                 False,
                 parent_stack,
+                use_option=False,
             )
             return f"map[{key_type}]{value_type}"
 

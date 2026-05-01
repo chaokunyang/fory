@@ -277,7 +277,6 @@ public sealed class Fory
         readContext._typeMeta = null;
         readContext._typeMetaByType?.ClearKeys();
         readContext._readTypeInfoByType.ClearKeys();
-        readContext._canonicalRefCache.Clear();
         readContext._reservedRefIds.Clear();
         readContext._cachedTypeMetaType = null;
         readContext._cachedTypeMeta = null;

@@ -33,8 +33,8 @@ func ptr[T any](v T) *T {
 
 func TestUnsignedTypeSerialization(t *testing.T) {
 	type TestStruct struct {
-		U32Var    uint32 `fory:"compress=true"`
-		U32Fixed  uint32 `fory:"compress=false"`
+		U32Var    uint32 `fory:"encoding=varint"`
+		U32Fixed  uint32 `fory:"encoding=fixed"`
 		U64Var    uint64 `fory:"encoding=varint"`
 		U64Fixed  uint64 `fory:"encoding=fixed"`
 		U64Tagged uint64 `fory:"encoding=tagged"`
@@ -624,8 +624,8 @@ func TestFloat16StructField(t *testing.T) {
 // the 8-byte bulk load does not read past the end of the backing array.
 func TestVarintFastPathTightBuffer(t *testing.T) {
 	type SingleVarintStruct struct {
-		// compress=true forces the varint fast path.
-		Value uint32 `fory:"compress=true"`
+		// encoding=varint forces the varint fast path.
+		Value uint32 `fory:"encoding=varint"`
 	}
 
 	f := New(WithXlang(false))

@@ -73,32 +73,6 @@ func (s *structSerializer) initialize(typeResolver *TypeResolver) error {
 	return nil
 }
 
-func computeLocalNullable(typeResolver *TypeResolver, field reflect.StructField, foryTag ForyTag) bool {
-	fieldType := field.Type
-	optionalInfo, isOptional := getOptionalInfo(fieldType)
-	if isOptional {
-		fieldType = optionalInfo.valueType
-	}
-	typeId := typeResolver.getTypeIdByType(fieldType)
-	isEnum := typeId == ENUM
-	var nullableFlag bool
-	if typeResolver.fory.config.IsXlang {
-		nullableFlag = isOptional || field.Type.Kind() == reflect.Ptr
-	} else {
-		nullableFlag = isOptional || field.Type.Kind() == reflect.Ptr ||
-			field.Type.Kind() == reflect.Slice ||
-			field.Type.Kind() == reflect.Map ||
-			field.Type.Kind() == reflect.Interface
-	}
-	if foryTag.NullableSet {
-		nullableFlag = foryTag.Nullable
-	}
-	if isNonNullablePrimitiveKind(fieldType.Kind()) && !isEnum && !isOptional {
-		nullableFlag = false
-	}
-	return nullableFlag
-}
-
 func primitiveTypeIdMatchesKind(typeId TypeId, kind reflect.Kind) bool {
 	switch typeId {
 	case BOOL:
@@ -130,70 +104,6 @@ func primitiveTypeIdMatchesKind(typeId TypeId, kind reflect.Kind) bool {
 	}
 }
 
-func applyNestedRefOverride(serializer Serializer, fieldType reflect.Type, foryTag ForyTag) Serializer {
-	if !foryTag.NestedRefSet || !foryTag.NestedRefValid {
-		return serializer
-	}
-	return applyNestedRefOverrideWithPath(serializer, fieldType, foryTag.NestedRef)
-}
-
-func applyNestedRefOverrideWithPath(serializer Serializer, fieldType reflect.Type, nestedRefs []bool) Serializer {
-	if serializer == nil || len(nestedRefs) == 0 {
-		return serializer
-	}
-	switch fieldType.Kind() {
-	case reflect.Slice:
-		if len(nestedRefs) < 1 {
-			return serializer
-		}
-		if sliceSer, ok := serializer.(*sliceSerializer); ok {
-			override := nestedRefs[0]
-			newSer := *sliceSer
-			newSer.referencable = newSer.referencable && override
-			if len(nestedRefs) > 1 && newSer.elemSerializer != nil {
-				newSer.elemSerializer = applyNestedRefOverrideWithPath(
-					newSer.elemSerializer,
-					fieldType.Elem(),
-					nestedRefs[1:],
-				)
-			}
-			return &newSer
-		}
-	case reflect.Map:
-		if len(nestedRefs) < 2 {
-			return serializer
-		}
-		keyOverride := nestedRefs[0]
-		valueOverride := nestedRefs[1]
-		if mapSer, ok := serializer.(*mapSerializer); ok {
-			newSer := *mapSer
-			newSer.keyReferencable = newSer.keyReferencable && keyOverride
-			newSer.valueReferencable = newSer.valueReferencable && valueOverride
-			if len(nestedRefs) > 2 && newSer.valueSerializer != nil {
-				newSer.valueSerializer = applyNestedRefOverrideWithPath(
-					newSer.valueSerializer,
-					fieldType.Elem(),
-					nestedRefs[2:],
-				)
-			}
-			return &newSer
-		}
-		if mapSer, ok := serializer.(mapSerializer); ok {
-			mapSer.keyReferencable = mapSer.keyReferencable && keyOverride
-			mapSer.valueReferencable = mapSer.valueReferencable && valueOverride
-			if len(nestedRefs) > 2 && mapSer.valueSerializer != nil {
-				mapSer.valueSerializer = applyNestedRefOverrideWithPath(
-					mapSer.valueSerializer,
-					fieldType.Elem(),
-					nestedRefs[2:],
-				)
-			}
-			return mapSer
-		}
-	}
-	return serializer
-}
-
 // initFields initializes fields from local struct type using TypeResolver
 func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 	// If we have fieldDefs from type_def (remote meta), use them
@@ -217,9 +127,12 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 			continue // skip unexported fields
 		}
 
-		// Parse fory struct tag and check for ignore
-		foryTag := parseForyTag(field)
-		if foryTag.Ignore {
+		fieldSpec, err := parseFieldSpec(field, typeResolver.fory.config.IsXlang, typeResolver.TrackRef())
+		if err != nil {
+			return err
+		}
+		fieldSpec.Type = bindResolvedTypeSpec(typeResolver, field.Type, fieldSpec.Type)
+		if fieldSpec.Ignore {
 			continue // skip ignored fields
 		}
 
@@ -238,141 +151,24 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 		} else if fieldType.Kind() == reflect.Ptr {
 			fieldKind = FieldKindPointer
 		}
-		var fieldSerializer Serializer
-		// For any fields, don't get a serializer - use WriteValue/ReadValue instead
-		// which will handle polymorphic types dynamically
-		if fieldType.Kind() != reflect.Interface {
-			// Get serializer for all non-interface field types
-			fieldSerializer, _ = typeResolver.getSerializerByType(fieldType, true)
+		fieldSerializer, err := serializerForTypeSpec(typeResolver, fieldType, fieldSpec.Type)
+		if err != nil && fieldType.Kind() != reflect.Interface {
+			return fmt.Errorf("field %s: %w", field.Name, err)
 		}
+		fieldTypeId := fieldSpec.Type.TypeId()
+		nullableFlag := fieldDeclaredNullable(fieldSpec)
+		trackRef := fieldDeclaredTrackRef(fieldSpec, typeResolver.fory.config.IsXlang, typeResolver.TrackRef())
 
-		// Use TypeResolver helper methods for arrays and slices
-		if fieldType.Kind() == reflect.Array && fieldType.Elem().Kind() != reflect.Interface {
-			fieldSerializer, _ = typeResolver.GetArraySerializer(fieldType)
-		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() != reflect.Interface {
-			fieldSerializer, _ = typeResolver.GetSliceSerializer(fieldType)
-		} else if fieldType.Kind() == reflect.Slice && fieldType.Elem().Kind() == reflect.Interface {
-			// For struct fields with interface element types, use sliceDynSerializer
-			fieldSerializer = mustNewSliceDynSerializer(fieldType.Elem())
-		}
-		fieldSerializer = applyNestedRefOverride(fieldSerializer, fieldType, foryTag)
-
-		// Get TypeId for the serializer, fallback to deriving from kind
-		fieldTypeId := typeResolver.getTypeIdByType(fieldType)
-		if fieldTypeId == 0 {
-			fieldTypeId = typeIdFromKind(fieldType)
-		}
-
-		// Override TypeId based on compress/encoding tags for integer types
-		// This matches the logic in type_def.go:buildFieldDefs
-		baseKind := baseType.Kind()
-		if baseKind == reflect.Ptr {
-			baseKind = baseType.Elem().Kind()
-		}
-		switch baseKind {
-		case reflect.Uint32:
-			if foryTag.CompressSet {
-				if foryTag.Compress {
-					fieldTypeId = VAR_UINT32
-				} else {
-					fieldTypeId = UINT32
-				}
-			}
-		case reflect.Int32:
-			if foryTag.CompressSet {
-				if foryTag.Compress {
-					fieldTypeId = VARINT32
-				} else {
-					fieldTypeId = INT32
-				}
-			}
-		case reflect.Uint64:
-			if foryTag.EncodingSet {
-				switch foryTag.Encoding {
-				case "fixed":
-					fieldTypeId = UINT64
-				case "varint":
-					fieldTypeId = VAR_UINT64
-				case "tagged":
-					fieldTypeId = TAGGED_UINT64
-				}
-			}
-		case reflect.Int64:
-			if foryTag.EncodingSet {
-				switch foryTag.Encoding {
-				case "fixed":
-					fieldTypeId = INT64
-				case "varint":
-					fieldTypeId = VARINT64
-				case "tagged":
-					fieldTypeId = TAGGED_INT64
-				}
-			}
-		}
-
-		if foryTag.TypeIDSet && foryTag.TypeIDValid {
-			fieldTypeId = foryTag.TypeID
-		}
-
-		// Calculate nullable flag for serialization (wire format):
-		// - In xlang mode: Per xlang spec, fields are NON-NULLABLE by default.
-		//   Only pointer types are nullable by default.
-		// - In native mode: Go's natural semantics apply - slice/map/interface can be nil,
-		//   so they are nullable by default.
-		// Can be overridden by explicit fory tag `fory:"nullable"`.
-		isEnum := fieldTypeId == ENUM
-
-		// Determine nullable based on mode
-		// In xlang mode: only pointer types are nullable by default (per xlang spec)
-		// In native mode: Go's natural semantics - all nil-able types are nullable
-		// This ensures proper interoperability with Java/other languages in xlang mode.
-		var nullableFlag bool
-		if typeResolver.fory.config.IsXlang {
-			// xlang mode: only pointer types are nullable by default per xlang spec
-			// Slices and maps are NOT nullable - they serialize as empty when nil
-			nullableFlag = isOptional || fieldType.Kind() == reflect.Ptr
-		} else {
-			// Native mode: Go's natural semantics - all nil-able types are nullable
-			nullableFlag = isOptional || fieldType.Kind() == reflect.Ptr ||
-				fieldType.Kind() == reflect.Slice ||
-				fieldType.Kind() == reflect.Map ||
-				fieldType.Kind() == reflect.Interface
-		}
-		if foryTag.NullableSet {
-			// Override nullable flag if explicitly set in fory tag
-			nullableFlag = foryTag.Nullable
-		}
-		// Primitives are never nullable, regardless of tag
-		if isNonNullablePrimitiveKind(fieldType.Kind()) && !isEnum {
-			nullableFlag = false
-		}
-
-		// Calculate ref tracking - use tag override if explicitly set
-		trackRef := typeResolver.TrackRef()
-		if foryTag.RefSet {
-			trackRef = foryTag.Ref
-		}
-		trackingRef := trackRef
-		if trackingRef && !NeedWriteRef(fieldTypeId) {
-			trackingRef = false
-		}
-		// Align trackingRef with xlang rules for field ref flags:
-		// - simple value types never write ref flags
-		// - collection fields only write ref flags when explicitly tagged
-		if typeResolver.fory.config.IsXlang && trackingRef && isCollectionType(fieldTypeId) && !foryTag.RefSet {
-			trackingRef = false
-		}
-
-		// Pre-compute RefMode based on trackingRef and nullable.
-		// When trackingRef is true, we must write ref flags even for non-nullable fields.
+		// Pre-compute RefMode based on TrackRef and nullable.
+		// When TrackRef is true, we must write ref flags even for non-nullable fields.
 		refMode := RefModeNone
-		if trackingRef {
+		if trackRef {
 			refMode = RefModeTracking
 		} else if nullableFlag {
 			refMode = RefModeNullOnly
 		}
 		// Pre-compute WriteType: true for struct fields in compatible mode
-		writeType := typeResolver.Compatible() && isStructField(baseType)
+		writeType := typeResolver.Compatible() && isStructFieldType(fieldSpec.Type)
 		var cachedTypeInfo *TypeInfo
 		if writeType {
 			cachedType := baseType
@@ -412,21 +208,17 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 			Kind:       fieldKind,
 			Serializer: fieldSerializer,
 			Meta: &FieldMeta{
-				Name:           SnakeCase(field.Name),
+				Name:           fieldSpec.Name,
 				Type:           fieldType,
 				TypeId:         fieldTypeId,
-				Nullable:       nullableFlag, // Use same logic as TypeDef's nullable flag for consistent ref handling
+				Nullable:       nullableFlag,
 				FieldIndex:     i,
 				WriteType:      writeType,
 				CachedTypeInfo: cachedTypeInfo,
-				HasGenerics:    isCollectionType(fieldTypeId), // Container fields have declared element types
+				HasGenerics:    isCollectionType(fieldTypeId),
 				OptionalInfo:   optionalInfo,
-				TagID:          foryTag.ID,
-				HasForyTag:     foryTag.HasTag,
-				TagRefSet:      foryTag.RefSet,
-				TagRef:         foryTag.Ref,
-				TagNullableSet: foryTag.NullableSet,
-				TagNullable:    foryTag.Nullable,
+				Spec:           &fieldSpec,
+				TypeSpec:       fieldSpec.Type,
 			},
 		}
 		fields = append(fields, fieldInfo)
@@ -434,7 +226,7 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 		serializers = append(serializers, fieldSerializer)
 		typeIds = append(typeIds, fieldTypeId)
 		nullables = append(nullables, nullableFlag)
-		tagIDs = append(tagIDs, foryTag.ID)
+		tagIDs = append(tagIDs, fieldSpec.TagID)
 	}
 
 	// Sort fields according to specification using nullable info and tag IDs for consistent ordering
@@ -473,31 +265,27 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 // initFieldsFromTypeDef initializes fields from remote fieldDefs using typeResolver
 func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) error {
 	type_ := s.type_
+	emptyInterfaceType := reflect.TypeOf((*any)(nil)).Elem()
 	if type_ == nil {
 		// Type is not known - we'll create an any placeholder
 		// This happens when deserializing unknown types in compatible mode
 		// For now, we'll create fields that discard all data
 		var fields []FieldInfo
 		for _, def := range s.fieldDefs {
-			fieldSerializer, _ := getFieldTypeSerializerWithResolver(typeResolver, def.fieldType)
-			remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
+			fieldSerializer, _ := getFieldTypeSerializerWithResolver(typeResolver, def.typeSpec)
+			remoteTypeInfo, _ := def.typeSpec.getTypeInfoWithResolver(typeResolver)
 			remoteType := remoteTypeInfo.Type
 			if remoteType == nil {
-				remoteType = reflect.TypeOf((*any)(nil)).Elem()
+				remoteType = emptyInterfaceType
 			}
-			// Get TypeId from FieldType's TypeId method
-			fieldTypeId := def.fieldType.TypeId()
-			// Pre-compute RefMode based on trackRef and FieldDef flags
+			fieldTypeId := def.typeSpec.TypeId()
 			refMode := RefModeNone
-			if def.trackingRef {
+			if def.trackRef {
 				refMode = RefModeTracking
 			} else if def.nullable {
 				refMode = RefModeNullOnly
 			}
-			// Pre-compute WriteType: true for struct fields in compatible mode
 			writeType := typeResolver.Compatible() && isStructField(remoteType)
-
-			// Pre-compute DispatchId, with special handling for enum fields
 			dispatchId := GetDispatchId(remoteType)
 			if fieldSerializer != nil {
 				if _, ok := fieldSerializer.(*enumSerializer); ok {
@@ -524,6 +312,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					FieldDef:    def,          // Save original FieldDef for skipping
 					WriteType:   writeType,
 					HasGenerics: isCollectionType(fieldTypeId), // Container fields have declared element types
+					TypeSpec:    def.typeSpec,
 				},
 			}
 			fields = append(fields, fieldInfo)
@@ -534,126 +323,113 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		return nil
 	}
 
-	// Build maps from field names and tag IDs to struct field indices
-	fieldNameToIndex := make(map[string]int)
-	fieldNameToOffset := make(map[string]uintptr)
-	fieldNameToType := make(map[string]reflect.Type)
+	type localFieldBinding struct {
+		index  int
+		offset uintptr
+		goType reflect.Type
+		name   string
+		spec   FieldSpec
+	}
+
+	fieldNameToBinding := make(map[string]localFieldBinding)
 	localNullableByIndex := make(map[int]bool)
-	fieldTagIDToIndex := make(map[int]int)         // tag ID -> struct field index
-	fieldTagIDToOffset := make(map[int]uintptr)    // tag ID -> field offset
-	fieldTagIDToType := make(map[int]reflect.Type) // tag ID -> field type
-	fieldTagIDToName := make(map[int]string)       // tag ID -> snake_case field name
+	localTrackRefByIndex := make(map[int]bool)
+	localSpecByIndex := make(map[int]*TypeSpec)
+	fieldTagIDToBinding := make(map[int]localFieldBinding)
 	for i := 0; i < type_.NumField(); i++ {
 		field := type_.Field(i)
-
-		// Parse fory tag and skip ignored fields
-		foryTag := parseForyTag(field)
-		if foryTag.Ignore {
+		if field.PkgPath != "" {
 			continue
 		}
-
-		name := SnakeCase(field.Name)
-		fieldNameToIndex[name] = i
-		fieldNameToOffset[name] = field.Offset
-		fieldNameToType[name] = field.Type
-		localNullableByIndex[i] = computeLocalNullable(typeResolver, field, foryTag)
-
-		// Also index by tag ID if present
-		if foryTag.ID >= 0 {
-			fieldTagIDToIndex[foryTag.ID] = i
-			fieldTagIDToOffset[foryTag.ID] = field.Offset
-			fieldTagIDToType[foryTag.ID] = field.Type
-			fieldTagIDToName[foryTag.ID] = name
+		fieldSpec, err := parseFieldSpec(field, typeResolver.fory.config.IsXlang, typeResolver.TrackRef())
+		if err != nil {
+			return err
+		}
+		fieldSpec.Type = bindResolvedTypeSpec(typeResolver, field.Type, fieldSpec.Type)
+		if fieldSpec.Ignore {
+			continue
+		}
+		binding := localFieldBinding{
+			index:  i,
+			offset: field.Offset,
+			goType: field.Type,
+			name:   fieldSpec.Name,
+			spec:   fieldSpec,
+		}
+		fieldNameToBinding[fieldSpec.Name] = binding
+		localNullableByIndex[i] = fieldDeclaredNullable(fieldSpec)
+		localTrackRefByIndex[i] = fieldDeclaredTrackRef(fieldSpec, typeResolver.fory.config.IsXlang, typeResolver.TrackRef())
+		localSpecByIndex[i] = fieldSpec.Type
+		if fieldSpec.TagID >= 0 {
+			fieldTagIDToBinding[fieldSpec.TagID] = binding
 		}
 	}
 
 	var fields []FieldInfo
 
 	for _, def := range s.fieldDefs {
-		fieldSerializer, err := getFieldTypeSerializerWithResolver(typeResolver, def.fieldType)
+		fieldSerializer, err := getFieldTypeSerializerWithResolver(typeResolver, def.typeSpec)
 		if err != nil || fieldSerializer == nil {
-			// If we can't get serializer from typeID, try to get it from the Go type
-			// This can happen when the type isn't registered in typeIDToTypeInfo
-			remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
+			remoteTypeInfo, _ := def.typeSpec.getTypeInfoWithResolver(typeResolver)
 			if remoteTypeInfo.Type != nil {
 				fieldSerializer, _ = typeResolver.getSerializerByType(remoteTypeInfo.Type, true)
 			}
 		}
 
-		// Get the remote type from fieldDef
-		remoteTypeInfo, _ := def.fieldType.getTypeInfoWithResolver(typeResolver)
+		remoteTypeInfo, _ := def.typeSpec.getTypeInfoWithResolver(typeResolver)
 		remoteType := remoteTypeInfo.Type
-		// Track if type lookup failed - we'll need to skip such fields
-		// Note: DynamicFieldType.getTypeInfoWithResolver returns any (not nil) when lookup fails
-		emptyInterfaceType := reflect.TypeOf((*any)(nil)).Elem()
 		typeLookupFailed := remoteType == nil || remoteType == emptyInterfaceType
 		if remoteType == nil {
 			remoteType = emptyInterfaceType
 		}
 
-		// For struct-like fields, even if TypeDef lookup fails, we can try to read
-		// the field because type resolution happens at read time from the buffer.
-		// The type name might map to a different local type.
-		isStructLikeField := isStructFieldType(def.fieldType)
+		isStructLikeField := isStructFieldType(def.typeSpec)
 
-		// Try to find corresponding local field
-		// First try to match by tag ID (if remote def uses tag ID)
-		// Then fall back to matching by field name
 		fieldIndex := -1
 		var offset uintptr
 		var fieldType reflect.Type
 		var localFieldName string
 		var localType reflect.Type
+		var localFieldSpec *FieldSpec
 		var exists bool
 
 		if def.tagID >= 0 {
-			// Try to match by tag ID
-			if idx, ok := fieldTagIDToIndex[def.tagID]; ok {
+			if binding, ok := fieldTagIDToBinding[def.tagID]; ok {
 				exists = true
-				fieldIndex = idx // Will be overwritten if types are compatible
-				localType = fieldTagIDToType[def.tagID]
-				offset = fieldTagIDToOffset[def.tagID]
-				localFieldName = fieldTagIDToName[def.tagID]
+				fieldIndex = binding.index
+				localType = binding.goType
+				offset = binding.offset
+				localFieldName = binding.name
+				bindingSpec := binding.spec
+				localFieldSpec = &bindingSpec
 			}
 		}
 
-		// Fall back to name-based matching if tag ID match failed
 		if !exists && def.name != "" {
-			if _, ok := fieldNameToIndex[def.name]; ok {
+			if binding, ok := fieldNameToBinding[def.name]; ok {
 				exists = true
-				localType = fieldNameToType[def.name]
-				offset = fieldNameToOffset[def.name]
-				localFieldName = def.name
+				fieldIndex = binding.index
+				localType = binding.goType
+				offset = binding.offset
+				localFieldName = binding.name
+				bindingSpec := binding.spec
+				localFieldSpec = &bindingSpec
 			}
 		}
 
 		if exists {
-			idx := fieldNameToIndex[localFieldName]
-			if def.tagID >= 0 {
-				idx = fieldTagIDToIndex[def.tagID]
-			}
-			// Check if types are compatible
-			// For primitive types: skip if types don't match
-			// For struct-like types: allow read even if TypeDef lookup failed,
-			// because runtime type resolution by name might work
 			shouldRead := false
-			isPolymorphicField := def.fieldType.TypeId() == UNKNOWN
-			defTypeId := def.fieldType.TypeId()
-			// Check if field is an enum - either by type ID or by serializer type
+			isPolymorphicField := def.typeSpec.TypeId() == UNKNOWN
+			defTypeId := def.typeSpec.TypeId()
 			internalDefTypeId := defTypeId
 			isEnumField := internalDefTypeId == ENUM
 			if !isEnumField && fieldSerializer != nil {
 				_, isEnumField = fieldSerializer.(*enumSerializer)
 			}
 			if isPolymorphicField && localType.Kind() == reflect.Interface {
-				// For polymorphic (UNKNOWN) fields with any local type,
-				// allow reading - the actual type will be determined at runtime
 				shouldRead = true
 				fieldType = localType
 			} else if typeLookupFailed && isEnumField {
-				// For enum fields with failed TypeDef lookup, check if local field is a numeric type
-				// (Go enums are int-based)
-				// Also handle pointer enum fields (*EnumType)
 				localKind := localType.Kind()
 				elemKind := localKind
 				if localKind == reflect.Ptr {
@@ -662,7 +438,6 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				if isNumericKind(elemKind) {
 					shouldRead = true
 					fieldType = localType
-					// Get the serializer for the base type (the enum type, not the pointer)
 					baseType := localType
 					if localKind == reflect.Ptr {
 						baseType = localType.Elem()
@@ -670,18 +445,15 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					fieldSerializer, _ = typeResolver.getSerializerByType(baseType, true)
 				}
 			} else if typeLookupFailed && isStructLikeField {
-				// For struct fields with failed TypeDef lookup, check if local field can hold a struct
 				localKind := localType.Kind()
 				if localKind == reflect.Ptr {
 					localKind = localType.Elem().Kind()
 				}
 				if localKind == reflect.Struct || localKind == reflect.Interface {
 					shouldRead = true
-					fieldType = localType // Use local type for struct fields
+					fieldType = localType
 				}
 			} else if typeLookupFailed && (internalDefTypeId == UNION || internalDefTypeId == TYPED_UNION || internalDefTypeId == NAMED_UNION) {
-				// For union fields with failed type lookup (named unions aren't in typeIDToTypeInfo),
-				// allow reading if the local type is a union.
 				if isUnionType(localType) {
 					shouldRead = true
 					fieldType = localType
@@ -699,16 +471,12 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					fieldType = localType
 				}
 			} else if typeLookupFailed && isPrimitiveArrayType(TypeId(internalDefTypeId)) {
-				// Primitive arrays/slices use array type IDs but may not be registered in typeIDToTypeInfo.
-				// Allow reading using the local slice/array type when the type IDs match.
 				localTypeId := typeIdFromKind(localType)
 				if TypeId(localTypeId&0xFF) == internalDefTypeId {
 					shouldRead = true
 					fieldType = localType
 				}
 			} else if typeLookupFailed && defTypeId == LIST {
-				// For list fields with failed type lookup (e.g., named struct element types),
-				// allow reading using the local slice type.
 				if localType.Kind() == reflect.Slice {
 					elemKind := localType.Elem().Kind()
 					if elemKind == reflect.Interface ||
@@ -719,8 +487,6 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					}
 				}
 			} else if typeLookupFailed && defTypeId == MAP {
-				// For map fields with failed type lookup (e.g., named struct key/value types),
-				// allow reading using the local map type.
 				if localType.Kind() == reflect.Map {
 					keyKind := localType.Key().Kind()
 					valueKind := localType.Elem().Kind()
@@ -740,7 +506,6 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					fieldType = localType
 				}
 			} else if defTypeId == SET && isSetReflectType(localType) {
-				// Both remote and local are Set types, allow reading
 				shouldRead = true
 				fieldType = localType
 			} else if !typeLookupFailed && typesCompatible(localType, remoteType) {
@@ -749,33 +514,29 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			}
 
 			if shouldRead {
-				fieldIndex = idx
-				// offset was already set above when matching by tag ID or field name
-				// For struct-like fields with failed type lookup, get the serializer for the local type
+				if localType != nil {
+					localSerializer, localErr := serializerForTypeSpec(typeResolver, localType, def.typeSpec)
+					if localErr == nil && localSerializer != nil {
+						fieldSerializer = localSerializer
+					}
+				}
 				if typeLookupFailed && isStructLikeField && fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
 				}
-				// For collection fields with interface element types, use sliceDynSerializer
 				if typeLookupFailed && (defTypeId == LIST || defTypeId == SET) && fieldSerializer == nil {
 					if localType.Kind() == reflect.Slice && localType.Elem().Kind() == reflect.Interface {
 						fieldSerializer = mustNewSliceDynSerializer(localType.Elem())
 					}
 				}
-				// If serializer is still nil, fall back to local type serializer.
 				if fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
 				}
-				// For Set fields (fory.Set[T] = map[T]struct{}), get the setSerializer
 				if defTypeId == SET && isSetReflectType(localType) && fieldSerializer == nil {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
 				}
-				// If local type is *T and remote type is T, we need the serializer for *T
-				// This handles Java's Integer/Long (nullable boxed types) mapping to Go's *int32/*int64
 				if localType.Kind() == reflect.Ptr && localType.Elem() == remoteType {
 					fieldSerializer, _ = typeResolver.getSerializerByType(localType, true)
 				}
-				// For pointer enum fields (*EnumType), get the serializer for the base enum type
-				// The struct read/write code will handle pointer dereferencing
 				if isEnumField && localType.Kind() == reflect.Ptr {
 					baseType := localType.Elem()
 					fieldSerializer, _ = typeResolver.getSerializerByType(baseType, true)
@@ -784,9 +545,6 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 							def.name, localType, baseType, fieldSerializer)
 					}
 				}
-				// For array fields, use array serializers (not slice serializers) even if typeID maps to slice serializer
-				// The typeID (INT16_ARRAY, etc.) is shared between arrays and slices, but we need the correct
-				// serializer based on the actual Go type
 				if localType.Kind() == reflect.Array {
 					elemType := localType.Elem()
 					switch elemType.Kind() {
@@ -815,13 +573,15 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 					}
 				}
 			} else {
-				// Types are incompatible or unknown - use remote type but mark field as not settable
 				fieldType = remoteType
 				fieldIndex = -1
-				offset = 0 // Don't set offset for incompatible fields
+				offset = 0
 			}
 		} else {
-			// Field doesn't exist locally, use type from fieldDef
+			fieldType = remoteType
+		}
+
+		if fieldType == nil {
 			fieldType = remoteType
 		}
 
@@ -840,21 +600,16 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			fieldKind = FieldKindPointer
 		}
 		if fieldKind == FieldKindOptional {
-			// Use the Optional serializer for local Optional[T] fields.
-			// The serializer resolved from remote type IDs is for the element type.
 			fieldSerializer, _ = typeResolver.getSerializerByType(fieldType, true)
 		}
 
-		// Get TypeId from FieldType's TypeId method
-		fieldTypeId := def.fieldType.TypeId()
-		// Pre-compute RefMode based on FieldDef flags (trackingRef and nullable)
+		fieldTypeId := def.typeSpec.TypeId()
 		refMode := RefModeNone
-		if def.trackingRef {
+		if def.trackRef {
 			refMode = RefModeTracking
 		} else if def.nullable {
 			refMode = RefModeNullOnly
 		}
-		// Pre-compute WriteType: true for struct fields in compatible mode
 		writeType := typeResolver.Compatible() && isStructField(baseType)
 		var cachedTypeInfo *TypeInfo
 		if writeType {
@@ -865,9 +620,6 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			cachedTypeInfo = typeResolver.getTypeInfoByType(cachedType)
 		}
 
-		// Pre-compute DispatchId, with special handling for pointer-to-numeric and enum fields
-		// IMPORTANT: For compatible mode reading, we must use the REMOTE nullable flag
-		// to determine DispatchId, because Java wrote data with its nullable semantics.
 		var dispatchId DispatchId
 		localKind := fieldType.Kind()
 		baseKind := localKind
@@ -879,10 +631,8 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 
 		if localIsPrimitive {
 			if def.nullable {
-				// Remote is nullable - use nullable DispatchId
 				dispatchId = getDispatchIdFromTypeId(fieldTypeId, true)
 			} else {
-				// Remote is NOT nullable - use primitive DispatchId
 				dispatchId = getDispatchIdFromTypeId(fieldTypeId, false)
 				if dispatchId == UnknownDispatchId {
 					dispatchType := baseType
@@ -909,10 +659,14 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			}
 		}
 
-		// Determine field name: use local field name if matched, otherwise use def.name
 		fieldName := def.name
 		if localFieldName != "" {
 			fieldName = localFieldName
+		}
+		var metaSpec *FieldSpec
+		if localFieldSpec != nil {
+			specCopy := *localFieldSpec
+			metaSpec = &specCopy
 		}
 
 		fieldInfo := FieldInfo{
@@ -932,8 +686,8 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				CachedTypeInfo: cachedTypeInfo,
 				HasGenerics:    isCollectionType(fieldTypeId), // Container fields have declared element types
 				OptionalInfo:   optionalInfo,
-				TagID:          def.tagID,
-				HasForyTag:     def.tagID >= 0,
+				Spec:           metaSpec,
+				TypeSpec:       def.typeSpec,
 			},
 		}
 		fields = append(fields, fieldInfo)
@@ -946,50 +700,35 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 	if DebugOutputEnabled && s.type_ != nil {
 		fmt.Printf("[Go] Remote TypeDef order (%d fields):\n", len(s.fieldDefs))
 		for i, def := range s.fieldDefs {
-			fmt.Printf("[Go]   [%d] %s -> typeId=%d, nullable=%v\n", i, def.name, def.fieldType.TypeId(), def.nullable)
+			fmt.Printf("[Go]   [%d] %s -> typeId=%d, nullable=%v\n", i, def.name, def.typeSpec.TypeId(), def.nullable)
 		}
 		s.fieldGroup.DebugPrint(s.type_.Name())
 	}
 
-	// Compute typeDefDiffers: true if any field doesn't exist locally, has type mismatch,
-	// or has nullable mismatch (which affects field ordering)
-	// When typeDefDiffers is false, we can use grouped reading for better performance
 	s.typeDefDiffers = false
 	for i, field := range fields {
 		if field.Meta.FieldIndex < 0 {
-			// Field exists in remote TypeDef but not locally
 			if DebugOutputEnabled && s.type_ != nil {
 				fmt.Printf("[Go][fory-debug] [%s] typeDefDiffers: missing local field for remote def idx=%d name=%q tagID=%d typeId=%d\n",
-					s.name, i, s.fieldDefs[i].name, s.fieldDefs[i].tagID, s.fieldDefs[i].fieldType.TypeId())
+					s.name, i, s.fieldDefs[i].name, s.fieldDefs[i].tagID, s.fieldDefs[i].typeSpec.TypeId())
 			}
 			s.typeDefDiffers = true
 			break
 		}
-		// Check if nullable flag differs between remote and local
-		// Remote nullable is stored in fieldDefs[i].nullable
-		// Local nullable is determined by whether the Go field is a pointer type
 		if i < len(s.fieldDefs) && field.Meta.FieldIndex >= 0 {
-			remoteNullable := s.fieldDefs[i].nullable
-			// Check if local Go field is nullable based on local field definitions
-			localNullable := localNullableByIndex[field.Meta.FieldIndex]
-			if remoteNullable != localNullable {
+			localSpec := localSpecByIndex[field.Meta.FieldIndex]
+			if !fieldSpecEqualForDiff(s.fieldDefs[i].typeSpec, s.fieldDefs[i].nullable, s.fieldDefs[i].trackRef, localSpec, localNullableByIndex[field.Meta.FieldIndex], localTrackRefByIndex[field.Meta.FieldIndex]) {
 				if DebugOutputEnabled && s.type_ != nil {
-					fmt.Printf("[Go][fory-debug] [%s] typeDefDiffers: nullable mismatch idx=%d name=%q tagID=%d remote=%v local=%v\n",
-						s.name, i, s.fieldDefs[i].name, s.fieldDefs[i].tagID, remoteNullable, localNullable)
+					fmt.Printf("[Go][fory-debug] [%s] typeDefDiffers: semantic mismatch idx=%d name=%q tagID=%d remote=%s local=%s\n",
+						s.name, i, s.fieldDefs[i].name, s.fieldDefs[i].tagID, s.fieldDefs[i].typeSpec, localSpec)
 				}
 				s.typeDefDiffers = true
 				break
 			}
-			remoteTypeId := TypeId(s.fieldDefs[i].fieldType.TypeId())
-			localTypeId := typeResolver.getTypeIdByType(field.Meta.Type)
-			if localTypeId == 0 {
-				localTypeId = typeIdFromKind(field.Meta.Type)
-			}
-			localTypeId = TypeId(localTypeId)
-			if !typeIdEqualForDiff(remoteTypeId, localTypeId) {
+			if s.fieldDefs[i].nullable != localNullableByIndex[field.Meta.FieldIndex] {
 				if DebugOutputEnabled && s.type_ != nil {
-					fmt.Printf("[Go][fory-debug] [%s] typeDefDiffers: type ID mismatch idx=%d name=%q tagID=%d remote=%d local=%d\n",
-						s.name, i, s.fieldDefs[i].name, s.fieldDefs[i].tagID, remoteTypeId, localTypeId)
+					fmt.Printf("[Go][fory-debug] [%s] typeDefDiffers: nullable mismatch idx=%d name=%q tagID=%d remote=%v local=%v\n",
+						s.name, i, s.fieldDefs[i].name, s.fieldDefs[i].tagID, s.fieldDefs[i].nullable, localNullableByIndex[field.Meta.FieldIndex])
 				}
 				s.typeDefDiffers = true
 				break
@@ -1002,6 +741,19 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 	}
 
 	return nil
+}
+
+func fieldSpecEqualForDiff(remoteSpec *TypeSpec, remoteNullable bool, remoteTrackRef bool, localSpec *TypeSpec, localNullable bool, localTrackRef bool) bool {
+	if remoteSpec == nil || localSpec == nil {
+		return remoteSpec == localSpec
+	}
+	remote := remoteSpec.Clone()
+	local := localSpec.typeDefProjection(false)
+	remote.Nullable = remoteNullable
+	remote.TrackRef = remoteTrackRef
+	local.Nullable = localNullable
+	local.TrackRef = localTrackRef
+	return remote.EqualForDiff(local)
 }
 
 func typeIdEqualForDiff(remoteTypeId TypeId, localTypeId TypeId) bool {
@@ -1102,9 +854,20 @@ func (s *structSerializer) computeHash() int32 {
 		// - Primitives are always non-nullable
 		// - Can be overridden by explicit fory tag
 		nullable := field.Kind == FieldKindOptional // Optional fields are nullable by default
-		if field.Meta.TagNullableSet {
-			// Use explicit tag value if set
-			nullable = field.Meta.TagNullable
+		tagID := TagIDUseFieldName
+		explicitRef := false
+		if field.Meta.Spec != nil {
+			tagID = field.Meta.Spec.TagID
+			if field.Meta.Spec.NullableSet && field.Kind != FieldKindOptional {
+				nullable = field.Meta.Spec.Nullable
+			}
+			explicitRef = field.Meta.Spec.RefSet && field.Meta.Spec.Ref
+		} else {
+			if field.Meta.FieldDef.tagID >= 0 {
+				tagID = field.Meta.FieldDef.tagID
+			}
+			nullable = field.Meta.FieldDef.nullable
+			explicitRef = field.Meta.FieldDef.trackRef
 		}
 		// Primitives are never nullable, regardless of tag
 		fieldTypeForNullable := field.Meta.Type
@@ -1116,12 +879,12 @@ func (s *structSerializer) computeHash() int32 {
 		}
 
 		fields = append(fields, FieldFingerprintInfo{
-			FieldID:   field.Meta.TagID,
+			FieldID:   tagID,
 			FieldName: SnakeCase(field.Meta.Name),
 			TypeID:    typeId,
 			// Ref is based on explicit tag annotation only, NOT runtime ref_tracking config
 			// This allows fingerprint to be computed at compile time for C++/Rust
-			Ref:      field.Meta.TagRefSet && field.Meta.TagRef,
+			Ref:      explicitRef,
 			Nullable: nullable,
 		})
 	}

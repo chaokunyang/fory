@@ -194,6 +194,12 @@ public class GoXlangTest extends XlangTestBase {
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testCollectionElementRefRemoteTracking(boolean enableCodegen)
+      throws java.io.IOException {
+    super.testCollectionElementRefRemoteTracking(enableCodegen);
+  }
+
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testSkipIdCustom(boolean enableCodegen) throws java.io.IOException {
     super.testSkipIdCustom(enableCodegen);
   }
@@ -497,5 +503,19 @@ public class GoXlangTest extends XlangTestBase {
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
   public void testUnsignedSchemaCompatible(boolean enableCodegen) throws java.io.IOException {
     super.testUnsignedSchemaCompatible(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
+      throws java.io.IOException {
+    super.testNestedAnnotatedContainerSchemaConsistent(enableCodegen);
+  }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testNestedAnnotatedContainerCompatible(boolean enableCodegen)
+      throws java.io.IOException {
+    super.testNestedAnnotatedContainerCompatible(enableCodegen);
   }
 }

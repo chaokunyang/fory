@@ -878,11 +878,12 @@ inline MapType read_map_data_slow(ReadContext &ctx, uint32_t length) {
       return MapType{};
     }
 
-    // Read chunk_size pairs
-    // NOTE: In cross-language serialization, the SENDER determines whether ref
-    // flags are written via header flags. The local C++ type traits (like
-    // val_is_shared_ref) should NOT influence whether we read ref flags - only
-    // the header flags from the wire format matter.
+    // Read chunk_size pairs.
+    // IMPORTANT: in cross-language serialization, the SENDER determines
+    // whether key/value ref flags are present in the wire header. Local C++
+    // type traits must NOT override that decision while reading. Shared xlang
+    // tests intentionally deserialize one ref policy and then serialize
+    // another local payload. DO NOT REMOVE this comment.
     bool key_read_ref = track_key_ref;
     bool val_read_ref = track_value_ref;
 

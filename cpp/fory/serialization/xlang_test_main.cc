@@ -582,11 +582,13 @@ struct RefOverrideElement {
 // Matches Java RefOverrideContainer with type ID 702
 struct RefOverrideContainer {
   std::vector<std::shared_ptr<RefOverrideElement>> list_field;
+  std::set<std::shared_ptr<RefOverrideElement>> set_field;
   std::map<std::string, std::shared_ptr<RefOverrideElement>> map_field;
   bool operator==(const RefOverrideContainer &other) const {
-    return list_field == other.list_field && map_field == other.map_field;
+    return list_field == other.list_field && set_field == other.set_field &&
+           map_field == other.map_field;
   }
-  FORY_STRUCT(RefOverrideContainer, list_field, map_field);
+  FORY_STRUCT(RefOverrideContainer, list_field, set_field, map_field);
 };
 
 // ============================================================================
@@ -963,6 +965,8 @@ void run_test_nullable_field_compatible_null(const std::string &data_file);
 void run_test_ref_schema_consistent(const std::string &data_file);
 void run_test_ref_compatible(const std::string &data_file);
 void run_test_collection_element_ref_override(const std::string &data_file);
+void run_test_collection_element_ref_remote_tracking(
+    const std::string &data_file);
 void run_test_circular_ref_schema_consistent(const std::string &data_file);
 void run_test_circular_ref_compatible(const std::string &data_file);
 void run_test_nested_annotated_container_schema_consistent(
@@ -1079,6 +1083,8 @@ int main(int argc, char **argv) {
       run_test_ref_compatible(data_file);
     } else if (case_name == "test_collection_element_ref_override") {
       run_test_collection_element_ref_override(data_file);
+    } else if (case_name == "test_collection_element_ref_remote_tracking") {
+      run_test_collection_element_ref_remote_tracking(data_file);
     } else if (case_name == "test_circular_ref_schema_consistent") {
       run_test_circular_ref_schema_consistent(data_file);
     } else if (case_name == "test_circular_ref_compatible") {
@@ -2717,10 +2723,59 @@ void run_test_collection_element_ref_override(const std::string &data_file) {
   if (outer.list_field.empty()) {
     fail("RefOverrideContainer: list_field should not be empty");
   }
+  if (outer.set_field.size() != 1) {
+    fail("RefOverrideContainer: set_field should contain exactly one element");
+  }
+  auto set_value = *outer.set_field.begin();
+  if (outer.list_field.size() > 1 &&
+      outer.list_field.front() == outer.list_field[1]) {
+    fail("RefOverrideContainer: list_field unexpectedly shared references "
+         "after remote ref=false metadata");
+  }
+  if (outer.list_field.front() == set_value) {
+    fail("RefOverrideContainer: set_field unexpectedly shared reference with "
+         "list_field after remote ref=false metadata");
+  }
+  if (outer.map_field["k1"] == outer.map_field["k2"]) {
+    fail("RefOverrideContainer: map_field unexpectedly shared references after "
+         "remote ref=false metadata");
+  }
+  if (outer.map_field["k1"] == set_value ||
+      outer.map_field["k2"] == set_value) {
+    fail("RefOverrideContainer: map_field unexpectedly shared reference with "
+         "set_field after remote ref=false metadata");
+  }
 
   auto shared = outer.list_field.front();
   RefOverrideContainer out_container;
   out_container.list_field = {shared, shared};
+  out_container.set_field = {shared};
+  out_container.map_field = {{"k1", shared}, {"k2", shared}};
+
+  std::vector<uint8_t> out;
+  append_serialized(fory, out_container, out);
+  write_file(data_file, out);
+}
+
+void run_test_collection_element_ref_remote_tracking(
+    const std::string &data_file) {
+  auto fory = build_fory(false, true, true, true);
+  ensure_ok(fory.register_struct<RefOverrideElement>(701),
+            "register RefOverrideElement");
+  ensure_ok(fory.register_struct<RefOverrideContainer>(702),
+            "register RefOverrideContainer");
+
+  auto shared = std::make_shared<RefOverrideElement>();
+  shared->id = 7;
+  shared->name = "shared_element";
+
+  // IMPORTANT: this peer intentionally writes a shared-reference payload with
+  // its default local ref-tracked schema. The Java reader uses ref-disabled
+  // element annotations and must still honor the wire metadata. DO NOT REMOVE
+  // this comment.
+  RefOverrideContainer out_container;
+  out_container.list_field = {shared, shared};
+  out_container.set_field = {shared};
   out_container.map_field = {{"k1", shared}, {"k2", shared}};
 
   std::vector<uint8_t> out;

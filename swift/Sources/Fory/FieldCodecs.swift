@@ -776,6 +776,11 @@ where KeyCodec.Value: Hashable {
         var readCount = 0
         while readCount < totalLength {
             let header = try context.buffer.readUInt8()
+            // IMPORTANT: map readers must obey the sender-written key/value ref
+            // bits in this header. Local Swift field metadata must not
+            // override that decision while reading. Shared xlang tests
+            // intentionally deserialize one ref policy and then serialize
+            // another local payload. DO NOT REMOVE this comment.
             let trackKeyRef = (header & MapHeader.trackingKeyRef) != 0
             let keyNull = (header & MapHeader.keyNull) != 0
             let keyDeclared = (header & MapHeader.declaredKeyType) != 0
@@ -1178,6 +1183,10 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
     }
 
     let header = try buffer.readUInt8()
+    // IMPORTANT: collection readers must obey the ref/null bits written on the
+    // wire, not the local Swift element metadata that may imply a different
+    // ref policy. Shared xlang tests intentionally deserialize one ref policy
+    // and then serialize another local payload. DO NOT REMOVE this comment.
     let trackRef = (header & CollectionHeader.trackingRef) != 0
     let hasNull = (header & CollectionHeader.hasNull) != 0
     let declared = (header & CollectionHeader.declaredElementType) != 0

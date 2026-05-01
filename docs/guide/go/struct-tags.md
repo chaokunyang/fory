@@ -152,16 +152,32 @@ type Metrics struct {
 - `fixed`: Best for values that use full range (e.g., timestamps, hashes)
 - `tagged`: When type information needs to be preserved
 
-**Shorthand for int32/uint32**:
+### Type Overrides
 
-Use `compress` as a convenience tag for int32/uint32 fields:
+Use `type=` to override inferred carrier semantics or nested value encoding:
 
 ```go
-type Data struct {
-    SmallValue int32  `fory:"compress"`        // Same as encoding=varint (default)
-    FixedValue uint32 `fory:"compress=false"`  // Same as encoding=fixed
+type Foo struct {
+    // Force general LIST protocol instead of inferred packed INT32_ARRAY
+    Values []int32 `fory:"type=list"`
+
+    // Override inner integer encoding for a general list
+    FixedValues []int32 `fory:"type=list(element=int32(encoding=fixed))"`
+
+    // Override nested map/list integer encoding
+    Nested map[string][]*uint64 `fory:"type=map(value=list(element=uint64(encoding=tagged)))"`
+
+    // Preserve the inferred packed inner carrier and only override descendants
+    Packed map[string][]int32 `fory:"type=map(value=_(element=int32(encoding=fixed)))"`
 }
 ```
+
+**Notes**:
+
+- `list(...)`, `set(...)`, and `map(...)` are explicit container overrides
+- `_` keeps the inferred Go branch at that position and only overrides nested descendants
+- There is no public `array(...)` tag. Packed primitive arrays are inferred from Go `[]T` / `[N]T` when the final element spec is packable
+- Explicit `type=list(...)` always stays general LIST protocol and never collapses into a packed primitive array
 
 ## Combining Tags
 
@@ -171,7 +187,7 @@ Multiple tags can be combined using comma separator:
 type Document struct {
     ID      int64  `fory:"id=0,encoding=fixed"`
     Content string `fory:"id=1"`
-    Author  *User  `fory:"id=2,ref"`
+    Author  *User  `fory:"id=2,nullable=false,ref"`
 }
 ```
 

@@ -220,12 +220,15 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         TDictionary map = CreateMap(totalLength);
         bool keyDynamicType = keyTypeInfo.IsDynamicType;
         bool valueDynamicType = valueTypeInfo.IsDynamicType;
-        bool canonicalizeValues = context.TrackRef && valueTypeInfo.IsRefType;
-
         int readCount = 0;
         while (readCount < totalLength)
         {
             byte header = context.Reader.ReadUInt8();
+            // IMPORTANT: dictionary readers must obey the sender-written
+            // key/value ref bits in the wire header. Local C# field metadata
+            // must not override that decision while reading. Shared xlang
+            // tests intentionally deserialize one ref policy and then
+            // serialize another local payload. DO NOT REMOVE this comment.
             bool trackKeyRef = (header & DictionaryBits.TrackingKeyRef) != 0;
             bool keyNull = (header & DictionaryBits.KeyNull) != 0;
             bool keyDeclared = (header & DictionaryBits.DeclaredKeyType) != 0;
@@ -247,7 +250,6 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                     context,
                     trackValueRef,
                     !valueDeclared,
-                    canonicalizeValues,
                     valueSerializer);
 
                 // Preserve stream/reference state by reading value payload, then skip null-key entry.
@@ -319,7 +321,6 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
                         context,
                         trackValueRef,
                         false,
-                        canonicalizeValues,
                         valueSerializer);
                     if (valueTypeInfoForRead is not null)
                     {
@@ -346,7 +347,7 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
             for (int i = 0; i < chunkSize; i++)
             {
                 TKey key = keySerializer.Read(context, trackKeyRef ? RefMode.Tracking : RefMode.None, false);
-                TValue value = ReadValueElement(context, trackValueRef, false, canonicalizeValues, valueSerializer);
+                TValue value = ReadValueElement(context, trackValueRef, false, valueSerializer);
                 SetValue(map, key, value);
             }
 
@@ -476,18 +477,9 @@ public abstract class DictionaryLikeSerializer<TDictionary, TKey, TValue> : Seri
         ReadContext context,
         bool trackValueRef,
         bool readTypeInfo,
-        bool canonicalizeValues,
         Serializer<TValue> valueSerializer)
     {
-        if (trackValueRef || !canonicalizeValues)
-        {
-            return valueSerializer.Read(context, trackValueRef ? RefMode.Tracking : RefMode.None, readTypeInfo);
-        }
-
-        int start = context.Reader.Cursor;
-        TValue value = valueSerializer.Read(context, RefMode.None, readTypeInfo);
-        int end = context.Reader.Cursor;
-        return context.CanonicalizeNonTrackingRef(value, start, end);
+        return valueSerializer.Read(context, trackValueRef ? RefMode.Tracking : RefMode.None, readTypeInfo);
     }
 }
 

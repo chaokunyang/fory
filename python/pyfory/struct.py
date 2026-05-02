@@ -269,10 +269,14 @@ def _extract_field_infos(
 
         # Compute effective dynamic based on type.
         # - Abstract classes: always True (type info must be written)
-        # - If explicitly set (not None): use that value
+        # - Compatible ref-tracked struct fields carry type info for xlang
+        #   parity with other runtimes
+        # - If explicitly set (not None): use that value for non-ref fields
         # - Otherwise: write type info for polymorphic types that are not registered by id
         is_abstract = _is_abstract_type(unwrapped_type)
-        if is_abstract:
+        if fory.compatible and runtime_ref and is_polymorphic_type(type_id):
+            effective_dynamic = True
+        elif is_abstract:
             # Abstract classes always need type info
             effective_dynamic = True
         elif meta.dynamic is not None:

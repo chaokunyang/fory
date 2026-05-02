@@ -727,7 +727,7 @@ def build_field_type_from_type_ids_with_ref(
                     elem_hint, elem_nullable = unwrap_optional(elem_hint)
         elem_tracking_ref = is_tracking_ref
         if elem_ref_override is not None:
-            elem_tracking_ref = elem_ref_override and is_tracking_ref
+            elem_tracking_ref = elem_ref_override and type_resolver.track_ref
         elem_type = build_field_type_from_type_ids_with_ref(
             type_resolver,
             field_name,
@@ -758,10 +758,10 @@ def build_field_type_from_type_ids_with_ref(
                     value_hint, value_nullable = unwrap_optional(value_hint)
         key_tracking_ref = is_tracking_ref
         if key_ref_override is not None:
-            key_tracking_ref = key_ref_override and is_tracking_ref
+            key_tracking_ref = key_ref_override and type_resolver.track_ref
         value_tracking_ref = is_tracking_ref
         if value_ref_override is not None:
-            value_tracking_ref = value_ref_override and is_tracking_ref
+            value_tracking_ref = value_ref_override and type_resolver.track_ref
         key_type = build_field_type_from_type_ids_with_ref(
             type_resolver,
             field_name,

@@ -310,6 +310,10 @@ result = fory.deserialize(data)
 print(result.name, result.age)  # Output: chaokunyang 28
 ```
 
+Python schema aliases also apply inside declared containers, such as
+`Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]`, so nested keys and values use the requested
+wire encoding in both pure Python and Cython modes.
+
 For detailed Python usage including type hints, compatibility modes, and advanced features, see [Python Guide](docs/guide/python).
 
 #### Rust Serialization

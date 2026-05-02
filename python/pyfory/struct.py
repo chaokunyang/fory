@@ -60,6 +60,7 @@ from pyfory.type_util import (
     _get_args,
     _get_origin,
     infer_field,
+    infer_field_types,
     get_homogeneous_tuple_elem_type,
     is_subclass,
     get_type_hints,
@@ -138,6 +139,9 @@ class FieldInfo:
     type_id: int  # Fory TypeId
     serializer: Serializer  # Field serializer
     unwrapped_type: type  # Type with Optional unwrapped
+    field_type: object = None  # Recursive TypeDef schema node for this field
+    assign: bool = True  # Whether a remote field value may be assigned locally
+    validation_field_type: object = None  # Local schema used for compatible-read validation
 
 
 def _is_abstract_type(type_hint: type) -> bool:
@@ -234,7 +238,10 @@ def _extract_field_infos(
 
     # Build FieldInfo list
     field_infos: List[FieldInfo] = []
-    visitor = StructFieldSerializerVisitor(fory)
+    from pyfory.meta.typedef import build_field_type_with_ref
+
+    visitor = StructTypeIdVisitor(fory, clz)
+    field_types = infer_field_types(clz, field_nullable=global_field_nullable)
     global_ref_tracking = fory.track_ref
 
     for index, (field_name, dc_field) in enumerate(active_fields):
@@ -248,21 +255,28 @@ def _extract_field_infos(
         # Compute runtime ref tracking: field.ref AND global config
         runtime_ref = meta.ref and global_ref_tracking
 
-        # Infer serializer
-        serializer = infer_field(field_name, unwrapped_type, visitor, types_path=[])
+        field_type = build_field_type_with_ref(
+            fory,
+            field_name,
+            unwrapped_type,
+            visitor,
+            effective_nullable,
+            runtime_ref,
+        )
+        serializer = field_type.create_serializer(fory, field_types.get(field_name, None))
 
-        # Get type_id from serializer
-        if serializer is not None:
-            type_id = fory.get_type_info(serializer.type_).type_id
-        else:
-            type_id = TypeId.UNKNOWN
+        type_id = field_type.type_id
 
         # Compute effective dynamic based on type.
         # - Abstract classes: always True (type info must be written)
-        # - If explicitly set (not None): use that value
+        # - Compatible ref-tracked struct fields carry type info for xlang
+        #   parity with other runtimes
+        # - If explicitly set (not None): use that value for non-ref fields
         # - Otherwise: write type info for polymorphic types that are not registered by id
         is_abstract = _is_abstract_type(unwrapped_type)
-        if is_abstract:
+        if fory.compatible and runtime_ref and is_polymorphic_type(type_id):
+            effective_dynamic = True
+        elif is_abstract:
             # Abstract classes always need type info
             effective_dynamic = True
         elif meta.dynamic is not None:
@@ -284,6 +298,7 @@ def _extract_field_infos(
             type_id=type_id,
             serializer=serializer,
             unwrapped_type=unwrapped_type,
+            field_type=field_type,
         )
         field_infos.append(field_info)
 
@@ -367,14 +382,24 @@ class DataClassSerializer(Serializer):
         nullable_fields: Dict[str, bool] = None,
         dynamic_fields: Dict[str, bool] = None,
         ref_fields: Dict[str, bool] = None,
+        field_infos: List[FieldInfo] = None,
+        fields_from_typedef: bool = False,
     ):
         super().__init__(type_resolver, clz)
 
         self._type_hints = get_type_hints(clz)
         self._has_slots = hasattr(clz, "__slots__")
 
-        self._fields_from_typedef = field_names is not None and serializers is not None
-        if self._fields_from_typedef:
+        self._fields_from_typedef = fields_from_typedef or (field_names is not None and serializers is not None)
+        if field_infos is not None:
+            self._field_infos = list(field_infos)
+            self._field_names = [fi.name for fi in self._field_infos]
+            self._serializers = [fi.serializer for fi in self._field_infos]
+            self._nullable_fields = {fi.name: fi.nullable for fi in self._field_infos}
+            self._ref_fields = {fi.name: fi.runtime_ref_tracking for fi in self._field_infos}
+            self._dynamic_fields = {fi.name: fi.dynamic for fi in self._field_infos}
+            self._field_metas = {}
+        elif self._fields_from_typedef:
             self._field_names = list(field_names)
             self._serializers = list(serializers)
             self._nullable_fields = nullable_fields or {}
@@ -426,7 +451,23 @@ class DataClassSerializer(Serializer):
 
         self._field_name_interned = {name: sys.intern(name) for name in self._field_names}
         self._current_class_field_names = set(self._get_field_names(self.type_))
-        self._has_missing_fields = any(field_name not in self._current_class_field_names for field_name in self._field_names)
+        self._assign_fields = [
+            bool(getattr(self._field_infos[index], "assign", True)) if index < len(self._field_infos) else True
+            for index in range(len(self._field_names))
+        ]
+        self._validation_field_types = [
+            getattr(self._field_infos[index], "validation_field_type", None) if index < len(self._field_infos) else None
+            for index in range(len(self._field_names))
+        ]
+        self._has_validation_fields = any(field_type is not None for field_type in self._validation_field_types)
+        self._assigned_field_names = {
+            field_name
+            for index, field_name in enumerate(self._field_names)
+            if self._assign_fields[index] and field_name in self._current_class_field_names
+        }
+        self._has_missing_fields = any(
+            field_name not in self._current_class_field_names or not self._assign_fields[index] for index, field_name in enumerate(self._field_names)
+        )
         self._default_values_factory = (
             build_default_values_factory(self.type_resolver, self._type_hints, dataclasses.fields(self.type_))
             if dataclasses.is_dataclass(self.type_)
@@ -456,7 +497,7 @@ class DataClassSerializer(Serializer):
     def _build_missing_field_defaults(self):
         if not self.type_resolver.compatible or not self._default_values_factory:
             return []
-        missing_fields = self._current_class_field_names - set(self._field_names)
+        missing_fields = self._current_class_field_names - self._assigned_field_names
         if not missing_fields:
             return []
         return [(field_name, default_factory) for field_name, default_factory in self._default_values_factory.items() if field_name in missing_fields]
@@ -499,6 +540,24 @@ class DataClassSerializer(Serializer):
         if is_dynamic:
             return read_context.read_no_ref()
         return read_context.read_no_ref(serializer=serializer)
+
+    def _default_field_value(self, field_name):
+        default_factory = self._default_values_factory.get(field_name)
+        if default_factory is None:
+            return None
+        return default_factory()
+
+    def _assign_read_field_value(self, obj, obj_dict, field_name, field_value, validation_field_type):
+        if validation_field_type is not None:
+            from pyfory.meta.typedef import is_value_assignable
+
+            if not is_value_assignable(field_value, validation_field_type):
+                field_value = self._default_field_value(field_name)
+        interned_name = self._field_name_interned[field_name]
+        if obj_dict is not None:
+            obj_dict[interned_name] = field_value
+        else:
+            setattr(obj, interned_name, field_value)
 
     def write(self, write_context: Buffer, value):
         if not self.type_resolver.compatible:
@@ -567,28 +626,50 @@ class DataClassSerializer(Serializer):
                 is_dynamic = self._dynamic_fields.get(field_name, False)
                 is_tracking_ref = self._ref_fields.get(field_name, False)
                 is_basic = self._basic_field_flags[index]
-                if field_name not in self._current_class_field_names:
+                if field_name not in self._current_class_field_names or not self._assign_fields[index]:
                     self._read_missing_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
                     continue
                 field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
-                interned_name = self._field_name_interned[field_name]
-                if obj_dict is not None:
-                    obj_dict[interned_name] = field_value
+                validation_field_type = self._validation_field_types[index]
+                if validation_field_type is None:
+                    interned_name = self._field_name_interned[field_name]
+                    if obj_dict is not None:
+                        obj_dict[interned_name] = field_value
+                    else:
+                        setattr(obj, interned_name, field_value)
                 else:
-                    setattr(obj, interned_name, field_value)
+                    self._assign_read_field_value(obj, obj_dict, field_name, field_value, validation_field_type)
         else:
-            for index, field_name in enumerate(self._field_names):
-                serializer = self._serializers[index]
-                is_nullable = self._nullable_fields.get(field_name, False)
-                is_dynamic = self._dynamic_fields.get(field_name, False)
-                is_tracking_ref = self._ref_fields.get(field_name, False)
-                is_basic = self._basic_field_flags[index]
-                field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
-                interned_name = self._field_name_interned[field_name]
-                if obj_dict is not None:
-                    obj_dict[interned_name] = field_value
-                else:
-                    setattr(obj, interned_name, field_value)
+            if not self._has_validation_fields:
+                for index, field_name in enumerate(self._field_names):
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
+                    interned_name = self._field_name_interned[field_name]
+                    if obj_dict is not None:
+                        obj_dict[interned_name] = field_value
+                    else:
+                        setattr(obj, interned_name, field_value)
+            else:
+                for index, field_name in enumerate(self._field_names):
+                    serializer = self._serializers[index]
+                    is_nullable = self._nullable_fields.get(field_name, False)
+                    is_dynamic = self._dynamic_fields.get(field_name, False)
+                    is_tracking_ref = self._ref_fields.get(field_name, False)
+                    is_basic = self._basic_field_flags[index]
+                    field_value = self._read_field_value(read_context, serializer, is_nullable, is_dynamic, is_basic, is_tracking_ref)
+                    validation_field_type = self._validation_field_types[index]
+                    if validation_field_type is None:
+                        interned_name = self._field_name_interned[field_name]
+                        if obj_dict is not None:
+                            obj_dict[interned_name] = field_value
+                        else:
+                            setattr(obj, interned_name, field_value)
+                    else:
+                        self._assign_read_field_value(obj, obj_dict, field_name, field_value, validation_field_type)
 
         if self._missing_field_defaults:
             for field_name, default_factory in self._missing_field_defaults:

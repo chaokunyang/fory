@@ -582,10 +582,19 @@ static bool can_use_list_sequence_fastpath(PyObject **items, Py_ssize_t size,
     }
     return true;
   case TypeId::VARINT64:
+  case TypeId::INT64:
+  case TypeId::TAGGED_INT64:
   case TypeId::VARINT32:
-  case TypeId::INT8:
-  case TypeId::INT16:
   case TypeId::INT32:
+  case TypeId::VAR_UINT64:
+  case TypeId::UINT64:
+  case TypeId::TAGGED_UINT64:
+  case TypeId::VAR_UINT32:
+  case TypeId::UINT32:
+  case TypeId::UINT8:
+  case TypeId::INT8:
+  case TypeId::UINT16:
+  case TypeId::INT16:
     for (Py_ssize_t i = 0; i < size; ++i) {
       if (!PyLong_CheckExact(items[i])) {
         return false;
@@ -599,6 +608,7 @@ static bool can_use_list_sequence_fastpath(PyObject **items, Py_ssize_t size,
       }
     }
     return true;
+  case TypeId::FLOAT32:
   case TypeId::FLOAT64:
     for (Py_ssize_t i = 0; i < size; ++i) {
       if (!PyFloat_CheckExact(items[i])) {
@@ -1086,9 +1096,13 @@ static int write_primitive_sequence(PyObject **items, Py_ssize_t size,
     return 0;
   }
   default:
-    PyErr_Format(PyExc_ValueError, "unsupported primitive fastpath type id: %u",
-                 static_cast<unsigned>(type_id));
-    return -1;
+    for (Py_ssize_t i = 0; i < size; ++i) {
+      if (FORY_PREDICT_FALSE(write_primitive_item(buffer, items[i], type_id) !=
+                             0)) {
+        return -1;
+      }
+    }
+    return 0;
   }
 }
 
@@ -1434,9 +1448,14 @@ static int read_primitive_sequence_indexed(Buffer *buffer, Py_ssize_t size,
     }
     return 0;
   default:
-    PyErr_Format(PyExc_ValueError, "unsupported primitive fastpath type id: %u",
-                 static_cast<unsigned>(type_id));
-    return -1;
+    for (Py_ssize_t i = 0; i < size; ++i) {
+      PyObject *item = read_primitive_item(buffer, type_id);
+      if (FORY_PREDICT_FALSE(item == nullptr)) {
+        return -1;
+      }
+      set_item(i, item);
+    }
+    return 0;
   }
 }
 

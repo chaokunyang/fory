@@ -36,6 +36,14 @@ def ser_de(fory, obj):
     return fory.deserialize(binary)
 
 
+def compat_ser_de(remote_cls, local_cls, value, type_id):
+    writer = Fory(xlang=True, compatible=True, ref=False)
+    reader = Fory(xlang=True, compatible=True, ref=False)
+    writer.register_type(remote_cls, type_id=type_id)
+    reader.register_type(local_cls, type_id=type_id)
+    return reader.deserialize(writer.serialize(value))
+
+
 @dataclass
 class SimpleObject:
     f1: Optional[Dict[pyfory.int32, pyfory.float64]] = None
@@ -85,6 +93,97 @@ def test_struct():
         assert ser_de(fory, ComplexObject(f5=2**32)) == ComplexObject(f5=2**32)
     with pytest.raises(OverflowError):
         assert ser_de(fory, ComplexObject(f6=2**64)) == ComplexObject(f6=2**64)
+
+
+@dataclass
+class NestedDeclaredEncodingObject:
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]] = dataclasses.field(default_factory=dict)
+    flags: Set[pyfory.fixed_uint32] = dataclasses.field(default_factory=set)
+
+
+def test_nested_declared_field_type_drives_local_roundtrip():
+    fory = Fory(xlang=True, compatible=True, ref=False)
+    fory.register_type(NestedDeclaredEncodingObject, type_id=701)
+    serializer = fory.type_resolver.get_serializer(NestedDeclaredEncodingObject)
+    field_infos = {field_info.name: field_info for field_info in serializer._field_infos}
+
+    values_type = field_infos["values"].field_type
+    assert values_type.type_id == TypeId.MAP
+    assert values_type.key_type.type_id == TypeId.INT32
+    assert values_type.value_type.type_id == TypeId.LIST
+    assert values_type.value_type.element_type.type_id == TypeId.TAGGED_INT64
+    assert field_infos["flags"].field_type.element_type.type_id == TypeId.UINT32
+
+    value = NestedDeclaredEncodingObject(values={1: [2, -3], -4: [5]}, flags={1, 2**32 - 1})
+    assert ser_de(fory, value) == value
+
+
+@dataclass
+class RemoteNestedFixedTagged:
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
+class LocalNestedVarint:
+    values: Dict[pyfory.int32, List[pyfory.int64]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
+class RemoteNestedWide:
+    values: Dict[pyfory.fixed_int64, List[pyfory.tagged_int64]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
+class LocalNestedNarrow:
+    values: Dict[pyfory.fixed_int32, List[pyfory.int32]] = dataclasses.field(default_factory=lambda: {7: [8]})
+
+
+@dataclass
+class RemoteNestedUnsigned:
+    values: Dict[pyfory.fixed_uint32, List[pyfory.tagged_uint64]] = dataclasses.field(default_factory=dict)
+
+
+@dataclass
+class LocalNestedSignedDefault:
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]] = dataclasses.field(default_factory=lambda: {-1: [-1]})
+
+
+def test_compatible_read_accepts_nested_same_domain_integer_encoding():
+    result = compat_ser_de(
+        RemoteNestedFixedTagged,
+        LocalNestedVarint,
+        RemoteNestedFixedTagged(values={1: [2, -3], -4: [5]}),
+        702,
+    )
+    assert result == LocalNestedVarint(values={1: [2, -3], -4: [5]})
+
+
+def test_compatible_read_validates_nested_integer_narrowing():
+    result = compat_ser_de(
+        RemoteNestedWide,
+        LocalNestedNarrow,
+        RemoteNestedWide(values={1: [2, -3]}),
+        703,
+    )
+    assert result == LocalNestedNarrow(values={1: [2, -3]})
+
+    result = compat_ser_de(
+        RemoteNestedWide,
+        LocalNestedNarrow,
+        RemoteNestedWide(values={1: [1 << 40]}),
+        704,
+    )
+    assert result == LocalNestedNarrow()
+
+
+def test_compatible_read_skips_nested_signed_unsigned_mismatch():
+    result = compat_ser_de(
+        RemoteNestedUnsigned,
+        LocalNestedSignedDefault,
+        RemoteNestedUnsigned(values={1: [2]}),
+        705,
+    )
+    assert result == LocalNestedSignedDefault()
 
 
 @dataclass

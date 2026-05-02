@@ -39,6 +39,8 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.Int32Type;
+import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
@@ -1013,6 +1015,78 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   static class StructWithMap {
     Map<String, String> data;
+  }
+
+  @Data
+  static class SignedNestedAnnotatedContainerSchemaConsistent {
+    Map<
+            @Int32Type(encoding = Int32Encoding.FIXED) Integer,
+            List<@Int64Type(encoding = Int64Encoding.TAGGED) Long>>
+        values;
+  }
+
+  protected void testSignedNestedAnnotatedContainerSchemaConsistent(boolean enableCodegen)
+      throws java.io.IOException {
+    String caseName = "test_signed_nested_annotated_container_schema_consistent";
+    Fory fory =
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
+    fory.register(SignedNestedAnnotatedContainerSchemaConsistent.class, 803);
+
+    SignedNestedAnnotatedContainerSchemaConsistent obj =
+        new SignedNestedAnnotatedContainerSchemaConsistent();
+    obj.values = new LinkedHashMap<>();
+    obj.values.put(-7, Arrays.asList(7L, -1000000000L));
+    obj.values.put(3, Collections.singletonList(42L));
+
+    serDeCheck(fory, obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, obj);
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    SignedNestedAnnotatedContainerSchemaConsistent result =
+        (SignedNestedAnnotatedContainerSchemaConsistent) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
+  }
+
+  @Data
+  static class SignedNestedAnnotatedContainerCompatible {
+    Map<
+            @Int32Type(encoding = Int32Encoding.FIXED) Integer,
+            List<@Int64Type(encoding = Int64Encoding.TAGGED) Long>>
+        values;
+  }
+
+  protected void testSignedNestedAnnotatedContainerCompatible(boolean enableCodegen)
+      throws java.io.IOException {
+    String caseName = "test_signed_nested_annotated_container_compatible";
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(true)
+            .withCodegen(enableCodegen)
+            .withMetaCompressor(new NoOpMetaCompressor())
+            .build();
+    fory.register(SignedNestedAnnotatedContainerCompatible.class, 804);
+
+    SignedNestedAnnotatedContainerCompatible obj = new SignedNestedAnnotatedContainerCompatible();
+    obj.values = new LinkedHashMap<>();
+    obj.values.put(-7, Arrays.asList(7L, -1000000000L));
+    obj.values.put(3, Collections.singletonList(42L));
+
+    serDeCheck(fory, obj);
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(512);
+    fory.serialize(buffer, obj);
+    ExecutionContext ctx = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+
+    MemoryBuffer buffer2 = readBuffer(ctx.dataFile());
+    SignedNestedAnnotatedContainerCompatible result =
+        (SignedNestedAnnotatedContainerCompatible) fory.deserialize(buffer2);
+    Assert.assertEquals(result, obj);
   }
 
   @Data

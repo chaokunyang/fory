@@ -278,6 +278,9 @@ class FloatingPoint:
 | `pyfory.int16`         | fixed    | 2 bytes    |
 | `pyfory.int32`         | varint   | 1-5 bytes  |
 | `pyfory.int64`         | varint   | 1-10 bytes |
+| `pyfory.fixed_int32`   | fixed    | 4 bytes    |
+| `pyfory.fixed_int64`   | fixed    | 8 bytes    |
+| `pyfory.tagged_int64`  | tagged   | 1-9 bytes  |
 | `pyfory.uint8`         | fixed    | 1 byte     |
 | `pyfory.uint16`        | fixed    | 2 bytes    |
 | `pyfory.uint32`        | varint   | 1-5 bytes  |
@@ -292,7 +295,32 @@ class FloatingPoint:
 
 - `varint`: Best for values that are often small (default for int32/int64/uint32/uint64)
 - `fixed`: Best for values that use full range (e.g., timestamps, hashes)
-- `tagged`: When type information needs to be preserved (uint64 only)
+- `tagged`: When type information needs to be preserved (int64/uint64 only)
+
+## Nested Container Type Annotations
+
+Integer encoding aliases can be used inside declared collection schemas. Fory uses the declared
+field schema for every nested element, key, and value in both pure Python and Cython modes:
+
+```python
+from dataclasses import dataclass, field
+from typing import Dict, List
+import pyfory
+
+
+@dataclass
+class Counters:
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]] = field(default_factory=dict)
+```
+
+For `values`, map keys are written as fixed-width int32 values and each nested list element is
+written as tagged int64. Runtime type inference is used only for dynamic or unknown container
+schemas.
+
+In compatible mode, readers consume field bytes using the remote schema metadata. Python assigns the
+decoded value only when it can safely satisfy the local declared schema. Different integer encodings
+in the same signedness and width domain are compatible, and same-signedness narrowing is assigned
+only after range validation.
 
 ## Complete Example
 
@@ -481,6 +509,8 @@ class User:
 | `pyfory.field(dynamic=False)`                | Skip type info (use declared type)   |
 | `Optional[T]`                                | Type hint for nullable fields        |
 | `pyfory.int32`, `pyfory.int64`               | Signed integers (varint encoding)    |
+| `pyfory.fixed_int32`, `pyfory.fixed_int64`   | Fixed-size signed                    |
+| `pyfory.tagged_int64`                        | Tagged encoding for int64            |
 | `pyfory.uint32`, `pyfory.uint64`             | Unsigned integers (varint encoding)  |
 | `pyfory.fixed_uint32`, `pyfory.fixed_uint64` | Fixed-size unsigned                  |
 | `pyfory.tagged_uint64`                       | Tagged encoding for uint64           |

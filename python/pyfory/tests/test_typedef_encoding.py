@@ -21,6 +21,7 @@ Tests for xlang TypeDef implementation.
 
 from dataclasses import dataclass
 from typing import List, Dict
+import pyfory
 from pyfory.serialization import Buffer
 from pyfory.meta.typedef import (
     TypeDef,
@@ -51,6 +52,13 @@ class SimpleTypeDef:
     """Simple test class."""
 
     value: int
+
+
+@dataclass
+class NestedEncodingTypeDef:
+    """TypeDef with nested primitive encoding overrides."""
+
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]
 
 
 def test_collection_field_type():
@@ -144,6 +152,25 @@ def test_encode_decode_typedef():
             assert field.name == typedef.fields[i].name
             assert field.field_type.type_id == typedef.fields[i].field_type.type_id
             assert field.field_type.is_nullable == typedef.fields[i].field_type.is_nullable
+
+
+def test_nested_container_typedef_preserves_declared_encoding():
+    fory = Fory(xlang=True)
+    fory.register(NestedEncodingTypeDef, namespace="example", typename="NestedEncodingTypeDef")
+
+    typedef = encode_typedef(fory.type_resolver, NestedEncodingTypeDef)
+    values_field = next(field for field in typedef.fields if field.name == "values")
+    assert values_field.field_type.type_id == TypeId.MAP
+    assert values_field.field_type.key_type.type_id == TypeId.INT32
+    assert values_field.field_type.value_type.type_id == TypeId.LIST
+    assert values_field.field_type.value_type.element_type.type_id == TypeId.TAGGED_INT64
+
+    decoded_typedef = decode_typedef(Buffer(typedef.encoded), fory.type_resolver)
+    decoded_values_field = next(field for field in decoded_typedef.fields if field.name == "values")
+    assert decoded_values_field.field_type.type_id == TypeId.MAP
+    assert decoded_values_field.field_type.key_type.type_id == TypeId.INT32
+    assert decoded_values_field.field_type.value_type.type_id == TypeId.LIST
+    assert decoded_values_field.field_type.value_type.element_type.type_id == TypeId.TAGGED_INT64
 
 
 if __name__ == "__main__":

@@ -99,15 +99,22 @@ Use pyfory type annotations for explicit cross-language type mapping:
 
 ```python
 from dataclasses import dataclass
+from typing import Dict, List
 import pyfory
 
 @dataclass
 class TypedData:
-    int_value: pyfory.int32      # 32-bit integer
-    long_value: pyfory.int64     # 64-bit integer
-    float_value: pyfory.float32  # 32-bit float
-    double_value: pyfory.float64 # 64-bit float
+    int_value: pyfory.int32       # 32-bit integer
+    long_value: pyfory.int64      # 64-bit integer
+    float_value: pyfory.float32   # 32-bit float
+    double_value: pyfory.float64  # 64-bit float
+    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]
 ```
+
+Nested collection annotations are part of the field schema. For example,
+`Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]` writes map keys as fixed int32 values and the
+nested list elements as tagged int64 values. Compatible-mode reads consume bytes with the remote
+schema metadata, then assign only when the decoded value safely satisfies the local schema.
 
 ## Reduced-Precision Types
 

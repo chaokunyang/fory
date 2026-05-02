@@ -30,8 +30,10 @@ cdef struct FieldRuntimeInfo:
     uint8_t track_ref
     uint8_t is_dynamic
     uint8_t field_exists
+    uint8_t assign
     PyObject *field_name
     PyObject *serializer
+    PyObject *validation_field_type
 
 
 @cython.final
@@ -42,6 +44,7 @@ cdef class DataClassSerializer(Serializer):
     cdef public bint _has_slots
     cdef public bint _fields_from_typedef
     cdef public bint _has_missing_fields
+    cdef bint _has_validation_fields
     cdef public list _field_names
     cdef public list _serializers
     cdef public dict _nullable_fields
@@ -53,8 +56,12 @@ cdef class DataClassSerializer(Serializer):
     cdef public int32_t _hash
     cdef public tuple _field_name_interned
     cdef tuple _serializer_owner
+    cdef tuple _validation_field_type_owner
     cdef public dict _default_values_factory
     cdef tuple _missing_field_defaults
+    cdef public object _assign_fields
+    cdef public object _assigned_field_names
+    cdef public object _value_assignable_checker
     cdef vector[FieldRuntimeInfo] _field_runtime_infos
 
     def __init__(
@@ -66,6 +73,8 @@ cdef class DataClassSerializer(Serializer):
         nullable_fields: dict = None,
         dynamic_fields: dict = None,
         ref_fields: dict = None,
+        field_infos: list = None,
+        fields_from_typedef: bint = False,
     ):
         super().__init__(type_resolver, clz)
 
@@ -83,8 +92,16 @@ cdef class DataClassSerializer(Serializer):
         self._type_hints = get_type_hints(clz)
         self._has_slots = hasattr(clz, "__slots__")
 
-        self._fields_from_typedef = field_names is not None and serializers is not None
-        if self._fields_from_typedef:
+        self._fields_from_typedef = fields_from_typedef or (field_names is not None and serializers is not None)
+        if field_infos is not None:
+            self._field_infos = list(field_infos)
+            self._field_names = [fi.name for fi in self._field_infos]
+            self._serializers = [fi.serializer for fi in self._field_infos]
+            self._nullable_fields = {fi.name: fi.nullable for fi in self._field_infos}
+            self._ref_fields = {fi.name: fi.runtime_ref_tracking for fi in self._field_infos}
+            self._dynamic_fields = {fi.name: fi.dynamic for fi in self._field_infos}
+            self._field_metas = {}
+        elif self._fields_from_typedef:
             self._field_names = list(field_names)
             self._serializers = list(serializers)
             self._nullable_fields = dict(nullable_fields) if nullable_fields is not None else {}
@@ -156,6 +173,13 @@ cdef class DataClassSerializer(Serializer):
             self._default_values_factory = {}
         self._build_fastpath_metadata()
         self._build_missing_field_defaults()
+
+        if self._has_validation_fields:
+            from pyfory.meta.typedef import is_value_assignable
+
+            self._value_assignable_checker = is_value_assignable
+        else:
+            self._value_assignable_checker = None
 
     cdef object _intern_field_name(self, str name):
         cdef bytes encoded = name.encode("utf-8")
@@ -233,12 +257,22 @@ cdef class DataClassSerializer(Serializer):
         cdef bint is_dynamic
         cdef bint is_nullable
         cdef bint is_tracking_ref
+        cdef bint assign
         cdef FieldRuntimeInfo runtime_info
+        cdef list validation_field_types
+        cdef object validation_field_type
 
         self._field_runtime_infos.clear()
         self._has_missing_fields = False
+        self._has_validation_fields = False
         current_fields = set(self._get_field_names(self.type_))
         self._field_runtime_infos.reserve(len(self._field_names))
+        self._assign_fields = [
+            bool(getattr(self._field_infos[i], "assign", True)) if i < len(self._field_infos) else True
+            for i in range(len(self._field_names))
+        ]
+        self._assigned_field_names = set()
+        validation_field_types = []
 
         for i in range(len(self._field_names)):
             field_name = self._field_names[i]
@@ -246,16 +280,30 @@ cdef class DataClassSerializer(Serializer):
             is_nullable = bool(self._nullable_fields.get(field_name, False))
             is_tracking_ref = bool(self._ref_fields.get(field_name, False))
             is_dynamic = bool(self._dynamic_fields.get(field_name, False))
+            assign = bool(self._assign_fields[i])
+            validation_field_type = (
+                getattr(self._field_infos[i], "validation_field_type", None)
+                if i < len(self._field_infos)
+                else None
+            )
+            validation_field_types.append(validation_field_type)
+            if validation_field_type is not None:
+                self._has_validation_fields = True
             runtime_info.basic_type_id = self._resolve_basic_type_id(serializer, is_dynamic)
             runtime_info.is_nullable = 1 if is_nullable else 0
             runtime_info.track_ref = 1 if is_tracking_ref else 0
             runtime_info.is_dynamic = 1 if is_dynamic else 0
             runtime_info.field_exists = 1 if field_name in current_fields else 0
-            if runtime_info.field_exists == 0:
+            runtime_info.assign = 1 if assign else 0
+            if runtime_info.field_exists == 0 or runtime_info.assign == 0:
                 self._has_missing_fields = True
+            if runtime_info.field_exists != 0 and runtime_info.assign != 0:
+                self._assigned_field_names.add(field_name)
             runtime_info.field_name = <PyObject *>self._field_name_interned[i]
             runtime_info.serializer = <PyObject *>serializer
+            runtime_info.validation_field_type = <PyObject *>validation_field_type if validation_field_type is not None else NULL
             self._field_runtime_infos.push_back(runtime_info)
+        self._validation_field_type_owner = tuple(validation_field_types)
 
     cdef void _build_missing_field_defaults(self):
         cdef object missing_fields
@@ -267,7 +315,7 @@ cdef class DataClassSerializer(Serializer):
         if not self.type_resolver.compatible or not self._default_values_factory:
             return
 
-        missing_fields = set(self._get_field_names(self.type_)) - set(self._field_names)
+        missing_fields = set(self._get_field_names(self.type_)) - self._assigned_field_names
         if not missing_fields:
             return
 
@@ -389,8 +437,29 @@ cdef class DataClassSerializer(Serializer):
         cdef FieldRuntimeInfo *field_info
 
         if not self._has_missing_fields:
+            if not self._has_validation_fields:
+                for i in range(field_count):
+                    field_info = &self._field_runtime_infos[i]
+                    field_value = self._read_field_value(read_context, field_info)
+                    field_name = <object>field_info.field_name
+                    obj_dict[field_name] = field_value
+                return
             for i in range(field_count):
                 field_info = &self._field_runtime_infos[i]
+                field_value = self._read_field_value(read_context, field_info)
+                field_name = <object>field_info.field_name
+                if field_info.validation_field_type == NULL:
+                    obj_dict[field_name] = field_value
+                else:
+                    obj_dict[field_name] = self._validate_or_default(field_name, field_value, field_info)
+            return
+
+        if not self._has_validation_fields:
+            for i in range(field_count):
+                field_info = &self._field_runtime_infos[i]
+                if field_info.field_exists == 0 or field_info.assign == 0:
+                    self._read_missing_field_value(read_context, field_info)
+                    continue
                 field_value = self._read_field_value(read_context, field_info)
                 field_name = <object>field_info.field_name
                 obj_dict[field_name] = field_value
@@ -398,12 +467,15 @@ cdef class DataClassSerializer(Serializer):
 
         for i in range(field_count):
             field_info = &self._field_runtime_infos[i]
-            if field_info.field_exists == 0:
+            if field_info.field_exists == 0 or field_info.assign == 0:
                 self._read_missing_field_value(read_context, field_info)
                 continue
             field_value = self._read_field_value(read_context, field_info)
             field_name = <object>field_info.field_name
-            obj_dict[field_name] = field_value
+            if field_info.validation_field_type == NULL:
+                obj_dict[field_name] = field_value
+            else:
+                obj_dict[field_name] = self._validate_or_default(field_name, field_value, field_info)
 
     cdef inline void _read_slots(self, ReadContext read_context, object obj):
         cdef Py_ssize_t i
@@ -413,8 +485,33 @@ cdef class DataClassSerializer(Serializer):
         cdef FieldRuntimeInfo *field_info
 
         if not self._has_missing_fields:
+            if not self._has_validation_fields:
+                for i in range(field_count):
+                    field_info = &self._field_runtime_infos[i]
+                    field_value = self._read_field_value(read_context, field_info)
+                    field_name = <object>field_info.field_name
+                    PyObject_SetAttr(obj, field_name, field_value)
+                return
             for i in range(field_count):
                 field_info = &self._field_runtime_infos[i]
+                field_value = self._read_field_value(read_context, field_info)
+                field_name = <object>field_info.field_name
+                if field_info.validation_field_type == NULL:
+                    PyObject_SetAttr(obj, field_name, field_value)
+                else:
+                    PyObject_SetAttr(
+                        obj,
+                        field_name,
+                        self._validate_or_default(field_name, field_value, field_info),
+                    )
+            return
+
+        if not self._has_validation_fields:
+            for i in range(field_count):
+                field_info = &self._field_runtime_infos[i]
+                if field_info.field_exists == 0 or field_info.assign == 0:
+                    self._read_missing_field_value(read_context, field_info)
+                    continue
                 field_value = self._read_field_value(read_context, field_info)
                 field_name = <object>field_info.field_name
                 PyObject_SetAttr(obj, field_name, field_value)
@@ -422,12 +519,19 @@ cdef class DataClassSerializer(Serializer):
 
         for i in range(field_count):
             field_info = &self._field_runtime_infos[i]
-            if field_info.field_exists == 0:
+            if field_info.field_exists == 0 or field_info.assign == 0:
                 self._read_missing_field_value(read_context, field_info)
                 continue
             field_value = self._read_field_value(read_context, field_info)
             field_name = <object>field_info.field_name
-            PyObject_SetAttr(obj, field_name, field_value)
+            if field_info.validation_field_type == NULL:
+                PyObject_SetAttr(obj, field_name, field_value)
+            else:
+                PyObject_SetAttr(
+                    obj,
+                    field_name,
+                    self._validate_or_default(field_name, field_value, field_info),
+                )
 
     cdef inline object _read_missing_field_value(self, ReadContext read_context, FieldRuntimeInfo *field_info):
         cdef object resolver = self.type_resolver.resolver
@@ -460,6 +564,18 @@ cdef class DataClassSerializer(Serializer):
         if is_dynamic:
             return read_context.read_no_ref()
         return read_context.read_non_ref(serializer)
+
+    cdef inline object _default_field_value(self, object field_name):
+        cdef object default_factory = self._default_values_factory.get(field_name)
+        if default_factory is None:
+            return None
+        return default_factory()
+
+    cdef inline object _validate_or_default(self, object field_name, object field_value, FieldRuntimeInfo *field_info):
+        if field_info.validation_field_type != NULL:
+            if not self._value_assignable_checker(field_value, <object>field_info.validation_field_type):
+                return self._default_field_value(field_name)
+        return field_value
 
     cdef inline void _apply_missing_defaults_dict(self, dict obj_dict):
         cdef object field_name

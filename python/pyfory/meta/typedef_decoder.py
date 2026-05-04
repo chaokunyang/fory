@@ -41,6 +41,7 @@ from pyfory.meta.typedef import (
 )
 from pyfory.types import TypeId
 from pyfory._fory import NO_USER_TYPE_ID
+from pyfory.meta.meta_compressor import DeflaterMetaCompressor
 from pyfory.meta.metastring import MetaStringDecoder, Encoding
 
 
@@ -53,6 +54,17 @@ _generated_class_count = 0
 NAMESPACE_DECODER = MetaStringDecoder(".", "_")
 TYPENAME_DECODER = MetaStringDecoder("$", "_")
 FIELD_NAME_DECODER = MetaStringDecoder("$", "_")
+
+
+def _decompress_typedef_meta(resolver, meta_data: bytes) -> bytes:
+    max_output_size = getattr(resolver, "max_binary_size", None)
+    compressor = resolver.get_meta_compressor()
+    if isinstance(compressor, DeflaterMetaCompressor):
+        return compressor.decompress(meta_data, max_output_size=max_output_size)
+    meta_data = compressor.decompress(meta_data)
+    if max_output_size is not None and len(meta_data) > max_output_size:
+        raise ValueError(f"Decompressed metadata size exceeds the configured limit of {max_output_size}")
+    return meta_data
 
 
 def skip_typedef(buffer: Buffer, header) -> None:
@@ -99,7 +111,7 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
 
     # Decompress if needed
     if is_compressed:
-        meta_data = resolver.get_meta_compressor().decompress(meta_data)
+        meta_data = _decompress_typedef_meta(resolver, meta_data)
 
     # Create a new buffer for meta data
     meta_buffer = Buffer(meta_data)

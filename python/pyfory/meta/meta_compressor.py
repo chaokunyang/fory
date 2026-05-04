@@ -42,7 +42,13 @@ class MetaCompressor(ABC):
         pass
 
     @abstractmethod
-    def decompress(self, data: bytes, offset: int = 0, size: Optional[int] = None) -> bytes:
+    def decompress(
+        self,
+        data: bytes,
+        offset: int = 0,
+        size: Optional[int] = None,
+        max_output_size: Optional[int] = None,
+    ) -> bytes:
         """
         Decompress the given data.
 
@@ -69,7 +75,13 @@ class NoOpMetaCompressor(MetaCompressor):
             size = len(data) - offset
         return data[offset : offset + size]
 
-    def decompress(self, data: bytes, offset: int = 0, size: Optional[int] = None) -> bytes:
+    def decompress(
+        self,
+        data: bytes,
+        offset: int = 0,
+        size: Optional[int] = None,
+        max_output_size: Optional[int] = None,
+    ) -> bytes:
         """Return the data unchanged."""
         if size is None:
             size = len(data) - offset
@@ -113,7 +125,13 @@ class DeflaterMetaCompressor(MetaCompressor):
         # Use zlib.compress which is equivalent to Java's Deflater
         return zlib.compress(data[offset : offset + size])
 
-    def decompress(self, data: bytes, offset: int = 0, size: Optional[int] = None) -> bytes:
+    def decompress(
+        self,
+        data: bytes,
+        offset: int = 0,
+        size: Optional[int] = None,
+        max_output_size: Optional[int] = None,
+    ) -> bytes:
         """
         Decompress the given data using zlib.
 
@@ -131,8 +149,20 @@ class DeflaterMetaCompressor(MetaCompressor):
         if size <= 0:
             return b""
 
-        # Use zlib.decompress which is equivalent to Java's Inflater
-        return zlib.decompress(data[offset : offset + size])
+        compressed = data[offset : offset + size]
+        if max_output_size is None:
+            # Use zlib.decompress which is equivalent to Java's Inflater.
+            return zlib.decompress(compressed)
+        if max_output_size < 0:
+            raise ValueError(f"max_output_size must be non-negative, got {max_output_size}")
+        decompressor = zlib.decompressobj()
+        output = decompressor.decompress(compressed, max_output_size + 1)
+        if len(output) > max_output_size:
+            raise ValueError(f"Decompressed metadata size exceeds the configured limit of {max_output_size}")
+        output += decompressor.flush(max_output_size + 1 - len(output))
+        if len(output) > max_output_size or not decompressor.eof:
+            raise ValueError(f"Decompressed metadata size exceeds the configured limit of {max_output_size}")
+        return output
 
     def __hash__(self) -> int:
         """Return hash code based on class type."""

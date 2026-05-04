@@ -571,7 +571,9 @@ cdef class TypeResolver:
         cdef pair[pair[int64_t, int64_t], PyObject *] *entry = self._c_meta_hash_to_type_info.find(hash_key)
         cdef TypeInfo typeinfo
         if entry != NULL and deref(entry).second != NULL:
-            return <TypeInfo>deref(entry).second
+            typeinfo = <TypeInfo>deref(entry).second
+            if typeinfo.namespace_bytes == ns_metabytes and typeinfo.typename_bytes == type_metabytes:
+                return typeinfo
         typeinfo = self.resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
         self._c_meta_hash_to_type_info[
             hash_key

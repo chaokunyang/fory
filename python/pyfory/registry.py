@@ -990,6 +990,9 @@ class TypeResolver:
         if typeinfo is not None:
             self._ns_type_to_type_info[(ns_metabytes, type_metabytes)] = typeinfo
             return typeinfo
+        if self.require_registration:
+            name = ns + "." + typename if ns else typename
+            raise TypeUnregisteredError(f"{name} not registered")
         cls = load_class(ns + "#" + typename, policy=self.policy)
         typeinfo = self.get_type_info(cls)
         self._ns_type_to_type_info[(ns_metabytes, type_metabytes)] = typeinfo

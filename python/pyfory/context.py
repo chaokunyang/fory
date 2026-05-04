@@ -173,6 +173,9 @@ class MetaStringReader:
         return encoded_meta_string
 
     def _read_big_meta_string(self, buffer, length: int):
+        max_binary_size = buffer.get_max_binary_size()
+        if length > max_binary_size:
+            raise ValueError(f"Binary size {length} exceeds the configured limit of {max_binary_size}")
         hashcode = buffer.read_int64()
         reader_index = buffer.get_reader_index()
         buffer.check_bound(reader_index, length)

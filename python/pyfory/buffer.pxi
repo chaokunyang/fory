@@ -257,6 +257,9 @@ cdef class Buffer:
     cpdef inline c_bool has_input_stream(self):
         return self.c_buffer.has_input_stream()
 
+    cpdef inline int32_t get_max_binary_size(self):
+        return self.max_binary_size
+
     cpdef c_bool own_data(self):
         return self.c_buffer.own_data()
 

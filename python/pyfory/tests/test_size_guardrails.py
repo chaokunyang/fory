@@ -24,18 +24,36 @@ Binary reads are guarded by max_binary_size on the Buffer.
 """
 
 from dataclasses import dataclass
+import importlib.abc
+import zlib
 from typing import List
 
 import pytest
 
 import pyfory
 from pyfory import Fory
+from pyfory.error import TypeUnregisteredError
+from pyfory.context import MetaStringReader as PyMetaStringReader
+from pyfory.registry import SharedRegistry
 from pyfory.serialization import Buffer
 from pyfory.types import TypeId
+from pyfory.meta.meta_compressor import DeflaterMetaCompressor
+from pyfory.meta.typedef_decoder import _decompress_typedef_meta
+
+if pyfory.ENABLE_FORY_CYTHON_SERIALIZATION:
+    from pyfory.serialization import MetaStringReader
+else:
+    MetaStringReader = PyMetaStringReader
 
 
 class ObjectPayload:
     pass
+
+
+def write_big_meta_string(buffer, data: bytes, hashcode: int):
+    buffer.write_var_uint32(len(data) << 1)
+    buffer.write_int64(hashcode)
+    buffer.write_bytes(data)
 
 
 def roundtrip(data, limit, xlang=False, ref=False):
@@ -201,3 +219,89 @@ class TestBinarySizeLimit:
         payload = bytes([2, 255, TypeId.NAMED_STRUCT, 3])
         with pytest.raises(ValueError, match="Invalid dynamic metastring id"):
             Fory(xlang=True, strict=False).deserialize(payload)
+
+    @pytest.mark.skipif(not pyfory.ENABLE_FORY_CYTHON_SERIALIZATION, reason="Cython dense vector guard")
+    def test_dense_array_exceeds_limit_fails(self):
+        payload = Fory(xlang=True).serialize(pyfory.Int32Array([1]))
+        with pytest.raises(ValueError, match="Binary size 4 exceeds"):
+            Fory(xlang=True, max_binary_size=3).deserialize(payload)
+
+    @pytest.mark.skipif(not pyfory.ENABLE_FORY_CYTHON_SERIALIZATION, reason="Cython dense vector guard")
+    def test_truncated_dense_array_fails_before_return(self):
+        payload = Fory(xlang=True).serialize(pyfory.Int32Array([1]))
+        with pytest.raises(Exception):
+            Fory(xlang=True).deserialize(payload[:-1])
+
+    def test_big_metastring_exceeds_limit_fails(self):
+        data = b"metadata-name-over-limit"
+        buffer = Buffer.allocate(64, max_binary_size=8)
+        write_big_meta_string(buffer, data, 0x123400)
+        buffer.set_reader_index(0)
+        reader = MetaStringReader(SharedRegistry())
+        with pytest.raises(ValueError, match="Binary size .* exceeds"):
+            reader.read_encoded_meta_string(buffer)
+
+    def test_big_metastring_hash_collision_keeps_bytes_distinct(self):
+        first = b"metadata-name-one"
+        second = b"metadata-name-two"
+        hashcode = 0x567800
+        buffer = Buffer.allocate(128)
+        write_big_meta_string(buffer, first, hashcode)
+        write_big_meta_string(buffer, second, hashcode)
+        buffer.set_reader_index(0)
+        reader = MetaStringReader(SharedRegistry())
+
+        first_meta = reader.read_encoded_meta_string(buffer)
+        second_meta = reader.read_encoded_meta_string(buffer)
+
+        assert first_meta.data == first
+        assert second_meta.data == second
+        assert first_meta is not second_meta
+
+    def test_strict_named_type_rejects_before_import(self):
+        @dataclass
+        class Payload:
+            value: pyfory.Int32
+
+        module_name = "pyfory_security_probe_missing"
+        writer = Fory(xlang=True)
+        writer.register_type(Payload, namespace=module_name, typename="Payload")
+        payload = writer.serialize(Payload(1))
+        imports = []
+
+        class RecordingFinder(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path=None, target=None):
+                if fullname == module_name:
+                    imports.append(fullname)
+                return None
+
+        finder = RecordingFinder()
+        import sys
+
+        sys.meta_path.insert(0, finder)
+        try:
+            with pytest.raises(TypeUnregisteredError):
+                Fory(xlang=True, strict=True).deserialize(payload)
+        finally:
+            sys.meta_path.remove(finder)
+
+        assert imports == []
+
+    def test_default_meta_decompressor_respects_output_limit(self):
+        compressed = zlib.compress(b"x" * 32)
+        with pytest.raises(ValueError, match="Decompressed metadata size exceeds"):
+            DeflaterMetaCompressor().decompress(compressed, max_output_size=8)
+
+    def test_custom_meta_decompressor_output_is_validated(self):
+        class ExpandingCompressor:
+            def decompress(self, data, offset=0, size=None):
+                return b"x" * 32
+
+        class Resolver:
+            max_binary_size = 8
+
+            def get_meta_compressor(self):
+                return ExpandingCompressor()
+
+        with pytest.raises(ValueError, match="Decompressed metadata size exceeds"):
+            _decompress_typedef_meta(Resolver(), b"x")

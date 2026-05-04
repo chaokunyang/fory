@@ -30,9 +30,9 @@ from fory_compiler.ir.ast import (
     PrimitiveType,
     NamedType,
     ListType,
+    ArrayType,
     MapType,
 )
-from fory_compiler.ir.types import PrimitiveKind
 
 
 class FDLEmitter:
@@ -155,7 +155,7 @@ class FDLEmitter:
 
     def _emit_type(self, field_type: FieldType) -> str:
         if isinstance(field_type, PrimitiveType):
-            return self._emit_primitive_name(field_type.kind)
+            return self._emit_primitive_name(field_type)
         if isinstance(field_type, NamedType):
             return field_type.name
         if isinstance(field_type, ListType):
@@ -166,6 +166,8 @@ class FDLEmitter:
                 parts.append(self._emit_ref_modifier(field_type.element_ref_options))
             parts.append(self._emit_type(field_type.element_type))
             return f"list<{' '.join(parts)}>"
+        if isinstance(field_type, ArrayType):
+            return f"array<{self._emit_type(field_type.element_type)}>"
         if isinstance(field_type, MapType):
             key = self._emit_type(field_type.key_type)
             value = self._emit_type(field_type.value_type)
@@ -190,23 +192,11 @@ class FDLEmitter:
         ]
         return f"ref({', '.join(parts)})"
 
-    def _emit_primitive_name(self, kind: PrimitiveKind) -> str:
-        if kind == PrimitiveKind.VARINT32:
-            return "int32"
-        if kind == PrimitiveKind.VARINT64:
-            return "int64"
-        if kind == PrimitiveKind.INT32:
-            return "fixed_int32"
-        if kind == PrimitiveKind.INT64:
-            return "fixed_int64"
-        if kind == PrimitiveKind.VAR_UINT32:
-            return "uint32"
-        if kind == PrimitiveKind.VAR_UINT64:
-            return "uint64"
-        if kind == PrimitiveKind.UINT32:
-            return "fixed_uint32"
-        if kind == PrimitiveKind.UINT64:
-            return "fixed_uint64"
+    def _emit_primitive_name(self, field_type: PrimitiveType) -> str:
+        kind = field_type.kind
+        modifier = field_type.encoding_modifier
+        if modifier:
+            return f"{modifier} {kind.value}"
         return kind.value
 
     def _emit_inline_options(self, options: Dict[str, object]) -> str:

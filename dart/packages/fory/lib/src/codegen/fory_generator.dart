@@ -57,6 +57,9 @@ final class ForyGenerator extends Generator {
   static final TypeChecker _listFieldChecker = TypeChecker.fromRuntime(
     ListField,
   );
+  static final TypeChecker _arrayFieldChecker = TypeChecker.fromRuntime(
+    ArrayField,
+  );
   static final TypeChecker _setFieldChecker = TypeChecker.fromRuntime(
     SetField,
   );
@@ -212,19 +215,52 @@ final class ForyGenerator extends Generator {
       final specDynamic = typeSpec.dynamic;
       if (specDynamic != null) dynamic = specDynamic;
     }
-    if (typeSpec == null && _isDefaultBoolArrayCarrier(type)) {
+    if (_isBoolList(type)) {
+      if (typeSpec?.typeId != null && typeSpec!.typeId != TypeIds.list) {
+        if (typeSpec.typeId != TypeIds.boolArray) {
+          throw InvalidGenerationSourceError(
+            'Type override ${_typeSpecName(typeSpec.typeId!)} does not match the declared BoolList carrier.',
+            element: errorElement,
+          );
+        }
+        return _GeneratedFieldTypeSpec(
+          typeLiteral: _typeReferenceLiteral(type),
+          declaredTypeName: _typeReferenceLiteral(type),
+          typeId: TypeIds.boolArray,
+          nullable: nullable,
+          ref: ref,
+          dynamic: dynamic,
+          arguments: const <_GeneratedFieldTypeSpec>[],
+        );
+      }
+      final child = _GeneratedFieldTypeSpec(
+        typeLiteral: 'bool',
+        declaredTypeName: 'bool',
+        typeId: TypeIds.boolType,
+        nullable: false,
+        ref: false,
+        dynamic: null,
+        arguments: const <_GeneratedFieldTypeSpec>[],
+      );
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         declaredTypeName: _typeReferenceLiteral(type),
-        typeId: TypeIds.boolArray,
+        typeId: TypeIds.list,
         nullable: nullable,
         ref: ref,
         dynamic: dynamic,
-        arguments: const <_GeneratedFieldTypeSpec>[],
+        arguments: <_GeneratedFieldTypeSpec>[child],
       );
     }
     if (_isList(type) || _isSet(type)) {
       final expectedTypeId = _isSet(type) ? TypeIds.set : TypeIds.list;
+      if (_isList(type) &&
+          typeSpec?.typeId != null &&
+          _isDenseArrayTypeId(typeSpec!.typeId!)) {
+        return _fieldTypeForArrayListCarrier(
+          errorElement,
+        );
+      }
       if (typeSpec?.typeId != null && typeSpec!.typeId != expectedTypeId) {
         throw InvalidGenerationSourceError(
           'Type override ${_typeSpecName(typeSpec.typeId!)} does not match '
@@ -242,7 +278,6 @@ final class ForyGenerator extends Generator {
         typeSpec: elementSpec,
         errorElement: errorElement,
       );
-      _validatePackedListCarrier(type, child, errorElement);
       return _GeneratedFieldTypeSpec(
         typeLiteral: _typeReferenceLiteral(type),
         declaredTypeName: _typeReferenceLiteral(type),
@@ -394,10 +429,10 @@ final class ForyGenerator extends Generator {
   void _writeEnum(StringBuffer output, _GeneratedEnumSpec enumSpec) {
     final serializerClassName = '_${enumSpec.name}ForySerializer';
     final writeExpression = enumSpec.usesRawValue
-        ? 'context.writeVarInt32(value.rawValue);'
+        ? 'context.writeVarUint32(value.rawValue);'
         : 'context.writeVarUint32(value.index);';
     final readExpression = enumSpec.usesRawValue
-        ? 'return ${enumSpec.name}.fromRawValue(context.readVarInt32());'
+        ? 'return ${enumSpec.name}.fromRawValue(context.readVarUint32());'
         : 'return ${enumSpec.name}.values[context.readVarUint32()];';
     output
       ..writeln(
@@ -1042,6 +1077,12 @@ GeneratedFieldType(
       );
       return 'List<${_typeCodeString(elementType)}>.of((($valueExpression as List)).map((item) => $convertedElement))';
     }
+    if (_isBoolList(type)) {
+      if (fieldType.typeId == TypeIds.boolArray) {
+        return '$valueExpression as BoolList';
+      }
+      return 'BoolList.fromList(($valueExpression as List).cast<bool>())';
+    }
     if (_isSet(type)) {
       if (fieldType.typeId != TypeIds.set) {
         return '$valueExpression as ${_typeCodeString(type)}';
@@ -1174,6 +1215,9 @@ GeneratedFieldType(
         field.fieldType.dynamic == true) {
       return false;
     }
+    if (_isBoolList(field.type)) {
+      return false;
+    }
     return field.fieldType.typeId == TypeIds.list ||
         field.fieldType.typeId == TypeIds.set ||
         field.fieldType.typeId == TypeIds.map;
@@ -1185,6 +1229,9 @@ GeneratedFieldType(
     if (field.fieldType.nullable ||
         field.fieldType.ref ||
         field.fieldType.dynamic == true) {
+      return false;
+    }
+    if (_isBoolList(field.type)) {
       return false;
     }
     final typeId = field.fieldType.typeId;
@@ -1890,7 +1937,7 @@ GeneratedFieldType(
     if (typeCompare != 0) {
       return typeCompare;
     }
-    final keyCompare = left.sortKey.compareTo(right.sortKey);
+    final keyCompare = _compareFieldIdentity(left, right);
     if (keyCompare != 0) {
       return keyCompare;
     }
@@ -1905,7 +1952,7 @@ GeneratedFieldType(
     if (typeCompare != 0) {
       return typeCompare;
     }
-    final keyCompare = left.sortKey.compareTo(right.sortKey);
+    final keyCompare = _compareFieldIdentity(left, right);
     if (keyCompare != 0) {
       return keyCompare;
     }
@@ -1913,11 +1960,30 @@ GeneratedFieldType(
   }
 
   int _compareOtherFields(_GeneratedFieldSpec left, _GeneratedFieldSpec right) {
-    final keyCompare = left.sortKey.compareTo(right.sortKey);
+    final keyCompare = _compareFieldIdentity(left, right);
     if (keyCompare != 0) {
       return keyCompare;
     }
     return left.name.compareTo(right.name);
+  }
+
+  int _compareFieldIdentity(
+    _GeneratedFieldSpec left,
+    _GeneratedFieldSpec right,
+  ) {
+    final leftId = left.id;
+    final rightId = right.id;
+    if (leftId != null && leftId >= 0 && rightId != null && rightId >= 0) {
+      final idCompare = leftId.compareTo(rightId);
+      if (idCompare != 0) {
+        return idCompare;
+      }
+    }
+    final keyCompare = left.identifier.compareTo(right.identifier);
+    if (keyCompare != 0) {
+      return keyCompare;
+    }
+    return 0;
   }
 
   int _primitiveSize(int typeId) {
@@ -1929,6 +1995,7 @@ GeneratedFieldType(
       case TypeIds.int16:
       case TypeIds.uint16:
       case TypeIds.float16:
+      case TypeIds.bfloat16:
         return 2;
       case TypeIds.int32:
       case TypeIds.varInt32:
@@ -2033,12 +2100,13 @@ GeneratedFieldType(
     final annotations = <DartObject?>[
       _foryFieldChecker.firstAnnotationOf(field),
       _listFieldChecker.firstAnnotationOf(field),
+      _arrayFieldChecker.firstAnnotationOf(field),
       _setFieldChecker.firstAnnotationOf(field),
       _mapFieldChecker.firstAnnotationOf(field),
     ].whereType<DartObject>().toList(growable: false);
     if (annotations.length > 1) {
       throw InvalidGenerationSourceError(
-        'Use only one of @ForyField, @ListField, @SetField, or @MapField on a field.',
+        'Use only one of @ForyField, @ListField, @ArrayField, @SetField, or @MapField on a field.',
         element: field,
       );
     }
@@ -2072,6 +2140,13 @@ GeneratedFieldType(
       );
     }
     if (annotationType != null &&
+        _arrayFieldChecker.isExactlyType(annotationType)) {
+      final element = _readRequiredTypeSpec(reader.peek('element'), field);
+      return _TypeSpecInfo(
+        typeId: _arrayTypeIdForElementSpec(element, field),
+      );
+    }
+    if (annotationType != null &&
         _setFieldChecker.isExactlyType(annotationType)) {
       return _TypeSpecInfo(
         typeId: TypeIds.set,
@@ -2096,6 +2171,16 @@ GeneratedFieldType(
     return _readTypeSpecObj(reader, field);
   }
 
+  _TypeSpecInfo _readRequiredTypeSpec(ConstantReader? reader, Element field) {
+    if (reader == null || reader.isNull) {
+      throw InvalidGenerationSourceError(
+        'ArrayType requires an element type spec.',
+        element: field,
+      );
+    }
+    return _readTypeSpecObj(reader, field);
+  }
+
   _TypeSpecInfo _readTypeSpecObj(ConstantReader reader, Element field) {
     final objType = reader.objectValue.type;
     final typeName = objType?.element?.displayName;
@@ -2116,6 +2201,14 @@ GeneratedFieldType(
           ref: ref,
           dynamic: dynamic,
           element: _readOptionalTypeSpec(reader.peek('element'), field),
+        );
+      case 'ArrayType':
+        final element = _readRequiredTypeSpec(reader.peek('element'), field);
+        return _TypeSpecInfo(
+          typeId: _arrayTypeIdForElementSpec(element, field),
+          nullable: nullable,
+          ref: ref,
+          dynamic: dynamic,
         );
       case 'SetType':
         return _TypeSpecInfo(
@@ -2166,6 +2259,7 @@ GeneratedFieldType(
           nullable: nullable,
           ref: ref,
           dynamic: dynamic,
+          hasExplicitScalarEncoding: _hasExplicitScalarEncoding(reader),
         );
       case 'Int64Type':
         return _TypeSpecInfo(
@@ -2179,6 +2273,7 @@ GeneratedFieldType(
           nullable: nullable,
           ref: ref,
           dynamic: dynamic,
+          hasExplicitScalarEncoding: _hasExplicitScalarEncoding(reader),
         );
       case 'Uint8Type':
         return _TypeSpecInfo(
@@ -2205,6 +2300,7 @@ GeneratedFieldType(
           nullable: nullable,
           ref: ref,
           dynamic: dynamic,
+          hasExplicitScalarEncoding: _hasExplicitScalarEncoding(reader),
         );
       case 'Uint64Type':
         return _TypeSpecInfo(
@@ -2218,6 +2314,7 @@ GeneratedFieldType(
           nullable: nullable,
           ref: ref,
           dynamic: dynamic,
+          hasExplicitScalarEncoding: _hasExplicitScalarEncoding(reader),
         );
       case 'Float16Type':
         return _TypeSpecInfo(
@@ -2304,6 +2401,11 @@ GeneratedFieldType(
     return reader.boolValue;
   }
 
+  bool _hasExplicitScalarEncoding(ConstantReader reader) {
+    final encodingReader = reader.peek('encoding');
+    return encodingReader != null && !encodingReader.isNull;
+  }
+
   int _encodingTypeId(
     ConstantReader reader, {
     required int fixed,
@@ -2363,49 +2465,49 @@ GeneratedFieldType(
     }
   }
 
-  bool _isDefaultBoolArrayCarrier(DartType type) {
-    if (!_isList(type) || _isNullable(type)) {
-      return false;
+  bool _isDenseArrayTypeId(int typeId) =>
+      typeId >= TypeIds.boolArray && typeId <= TypeIds.float64Array;
+
+  int _arrayTypeIdForElementSpec(_TypeSpecInfo element, Element field) {
+    if (element.typeId == null) {
+      throw InvalidGenerationSourceError(
+        'ArrayType requires a concrete numeric or bool scalar element type.',
+        element: field,
+      );
     }
-    final argument = (type as InterfaceType).typeArguments.single;
-    return !_isNullable(argument) &&
-        _withoutNullability(argument).isDartCoreBool;
+    if (element.hasExplicitScalarEncoding ||
+        element.nullable == true ||
+        element.ref == true ||
+        element.dynamic == true) {
+      throw InvalidGenerationSourceError(
+        'ArrayType elements cannot use scalar encoding modifiers, nullable, ref-tracked, or dynamic.',
+        element: field,
+      );
+    }
+    return switch (element.typeId!) {
+      TypeIds.boolType => TypeIds.boolArray,
+      TypeIds.int8 => TypeIds.int8Array,
+      TypeIds.int16 => TypeIds.int16Array,
+      TypeIds.varInt32 => TypeIds.int32Array,
+      TypeIds.varInt64 => TypeIds.int64Array,
+      TypeIds.uint8 => TypeIds.uint8Array,
+      TypeIds.uint16 => TypeIds.uint16Array,
+      TypeIds.varUint32 => TypeIds.uint32Array,
+      TypeIds.varUint64 => TypeIds.uint64Array,
+      TypeIds.float16 => TypeIds.float16Array,
+      TypeIds.bfloat16 => TypeIds.bfloat16Array,
+      TypeIds.float32 => TypeIds.float32Array,
+      TypeIds.float64 => TypeIds.float64Array,
+      _ => throw InvalidGenerationSourceError(
+          'ArrayType requires a numeric or bool scalar element type without fixed/tagged encoding.',
+          element: field,
+        ),
+    };
   }
 
-  void _validatePackedListCarrier(
-    DartType listOrSetType,
-    _GeneratedFieldTypeSpec elementType,
-    Element errorElement,
-  ) {
-    if (!_isList(listOrSetType)) {
-      return;
-    }
-    if (elementType.nullable ||
-        elementType.ref ||
-        elementType.dynamic == true) {
-      return;
-    }
-    final suggestedCarrier = switch (elementType.typeId) {
-      TypeIds.int8 => 'Int8List',
-      TypeIds.int16 => 'Int16List',
-      TypeIds.int32 => 'Int32List',
-      TypeIds.int64 => 'Int64List',
-      TypeIds.uint8 => 'Uint8List',
-      TypeIds.uint16 => 'Uint16List',
-      TypeIds.uint32 => 'Uint32List',
-      TypeIds.uint64 => 'Uint64List',
-      TypeIds.float16 => 'Float16List',
-      TypeIds.bfloat16 => 'Bfloat16List',
-      TypeIds.float32 => 'Float32List',
-      TypeIds.float64 => 'Float64List',
-      _ => null,
-    };
-    if (suggestedCarrier == null) {
-      return;
-    }
+  Never _fieldTypeForArrayListCarrier(Element errorElement) {
     throw InvalidGenerationSourceError(
-      'Generic List fields with non-null fixed-width ${_typeSpecName(elementType.typeId)} '
-      'elements must use $suggestedCarrier instead.',
+      'ArrayType(BoolType) requires a BoolList carrier. List<bool> maps to list<bool>.',
       element: errorElement,
     );
   }
@@ -2448,6 +2550,7 @@ GeneratedFieldType(
       'Timestamp' || 'DateTime' => typeId == TypeIds.timestamp,
       'LocalDate' => typeId == TypeIds.date,
       'Duration' => typeId == TypeIds.duration,
+      'BoolList' => typeId == TypeIds.boolArray || typeId == TypeIds.list,
       'Uint8List' => typeId == TypeIds.binary || typeId == TypeIds.uint8Array,
       'Int8List' => typeId == TypeIds.int8Array,
       'Int16List' => typeId == TypeIds.int16Array,
@@ -2571,6 +2674,32 @@ GeneratedFieldType(
         return 'SetType';
       case TypeIds.map:
         return 'MapType';
+      case TypeIds.boolArray:
+        return 'ArrayType(element: BoolType())';
+      case TypeIds.int8Array:
+        return 'ArrayType(element: Int8Type())';
+      case TypeIds.int16Array:
+        return 'ArrayType(element: Int16Type())';
+      case TypeIds.int32Array:
+        return 'ArrayType(element: Int32Type())';
+      case TypeIds.int64Array:
+        return 'ArrayType(element: Int64Type())';
+      case TypeIds.uint8Array:
+        return 'ArrayType(element: Uint8Type())';
+      case TypeIds.uint16Array:
+        return 'ArrayType(element: Uint16Type())';
+      case TypeIds.uint32Array:
+        return 'ArrayType(element: Uint32Type())';
+      case TypeIds.uint64Array:
+        return 'ArrayType(element: Uint64Type())';
+      case TypeIds.float16Array:
+        return 'ArrayType(element: Float16Type())';
+      case TypeIds.bfloat16Array:
+        return 'ArrayType(element: Bfloat16Type())';
+      case TypeIds.float32Array:
+        return 'ArrayType(element: Float32Type())';
+      case TypeIds.float64Array:
+        return 'ArrayType(element: Float64Type())';
       default:
         return 'type id $typeId';
     }
@@ -2592,10 +2721,10 @@ GeneratedFieldType(
     }
     final display = nonNullable.getDisplayString().replaceAll('?', '');
     switch (display) {
+      case 'BoolList':
+        return TypeIds.list;
       case 'Uint8List':
         return TypeIds.binary;
-      case 'List<bool>':
-        return TypeIds.boolArray;
       case 'Int8List':
         return TypeIds.int8Array;
       case 'Int16List':
@@ -2689,7 +2818,7 @@ GeneratedFieldType(
 
   String _enumWriteExpression(DartType type, String valueExpression) {
     if (_enumUsesRawValue(type)) {
-      return 'buffer.writeVarInt32($valueExpression.rawValue)';
+      return 'buffer.writeVarUint32($valueExpression.rawValue)';
     }
     return 'buffer.writeVarUint32($valueExpression.index)';
   }
@@ -2700,7 +2829,7 @@ GeneratedFieldType(
     String valueExpression,
   ) {
     if (_enumUsesRawValue(type)) {
-      return '$cursorExpression.writeVarInt32($valueExpression.rawValue)';
+      return '$cursorExpression.writeVarUint32($valueExpression.rawValue)';
     }
     return '$cursorExpression.writeVarUint32($valueExpression.index)';
   }
@@ -2708,7 +2837,7 @@ GeneratedFieldType(
   String _enumReadExpression(DartType type, String contextExpression) {
     final typeDisplay = _typeReferenceLiteral(type);
     if (_enumUsesRawValue(type)) {
-      return '$typeDisplay.fromRawValue($contextExpression.readVarInt32())';
+      return '$typeDisplay.fromRawValue($contextExpression.readVarUint32())';
     }
     return '$typeDisplay.values[$contextExpression.readVarUint32()]';
   }
@@ -2716,7 +2845,7 @@ GeneratedFieldType(
   String _enumCursorReadExpression(DartType type, String cursorExpression) {
     final typeDisplay = _typeReferenceLiteral(type);
     if (_enumUsesRawValue(type)) {
-      return '$typeDisplay.fromRawValue($cursorExpression.readVarInt32())';
+      return '$typeDisplay.fromRawValue($cursorExpression.readVarUint32())';
     }
     return '$typeDisplay.values[$cursorExpression.readVarUint32()]';
   }
@@ -2778,6 +2907,9 @@ GeneratedFieldType(
   }
 
   bool _isList(DartType type) => type.isDartCoreList;
+
+  bool _isBoolList(DartType type) =>
+      _typeLiteral(_withoutNullability(type)) == 'BoolList';
 
   bool _isSet(DartType type) =>
       type is InterfaceType && type.element.name == 'Set';
@@ -2893,9 +3025,6 @@ final class _GeneratedFieldSpec {
     required this.writable,
     required this.fieldType,
   });
-
-  String get sortKey => id != null && id! >= 0 ? '$id' : identifier;
-
   String readerFunctionName(String structName) {
     final fieldName = '${name[0].toUpperCase()}${name.substring(1)}';
     return '_read$structName$fieldName';
@@ -2970,6 +3099,7 @@ class _TypeSpecInfo {
   final _TypeSpecInfo? element;
   final _TypeSpecInfo? key;
   final _TypeSpecInfo? value;
+  final bool hasExplicitScalarEncoding;
 
   const _TypeSpecInfo({
     this.typeId,
@@ -2979,5 +3109,6 @@ class _TypeSpecInfo {
     this.element,
     this.key,
     this.value,
+    this.hasExplicitScalarEncoding = false,
   });
 }

@@ -366,15 +366,14 @@ public final class TypeInfo: @unchecked Sendable {
         userTypeID: UInt32?,
         registerByName: Bool,
         evolving: Bool,
-        namespace: String,
-        typeName: String
+        typeName: (namespace: String, name: String)
     ) -> Bool {
         self.typeID == typeID &&
             self.userTypeID == userTypeID &&
             self.registerByName == registerByName &&
             self.evolving == evolving &&
-            self.namespace.value == namespace &&
-            self.typeName.value == typeName
+            self.namespace.value == typeName.namespace &&
+            self.typeName.value == typeName.name
     }
 
     @inline(__always)
@@ -466,8 +465,7 @@ final class TypeResolver {
                userTypeID: id,
                registerByName: false,
                evolving: evolving,
-               namespace: "",
-               typeName: ""
+               typeName: (namespace: "", name: "")
            ) {
             return
         }
@@ -517,8 +515,7 @@ final class TypeResolver {
                userTypeID: nil,
                registerByName: true,
                evolving: evolving,
-               namespace: namespace,
-               typeName: typeName
+               typeName: (namespace: namespace, name: typeName)
            ) {
             return
         }

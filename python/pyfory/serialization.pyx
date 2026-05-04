@@ -44,7 +44,6 @@ from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.meta.metastring import MetaStringDecoder
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
-from pyfory.types import is_primitive_type
 from pyfory.includes.libserialization cimport (
     TypeId,
     TypeRegistrationKind,
@@ -80,6 +79,36 @@ ENABLE_FORY_CYTHON_SERIALIZATION = os.environ.get(
 cdef int32_t NOT_NULL_BOOL_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.BOOL << 8)
 cdef int32_t NOT_NULL_STRING_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.STRING << 8)
 cdef int32_t NOT_NULL_FLOAT64_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.FLOAT64 << 8)
+
+_PRIMITIVE_TYPEVAR_NAMES = frozenset(
+    {
+        "Int8",
+        "UInt8",
+        "Int16",
+        "UInt16",
+        "Int32",
+        "UInt32",
+        "FixedInt32",
+        "FixedUInt32",
+        "Int64",
+        "UInt64",
+        "FixedInt64",
+        "TaggedInt64",
+        "FixedUInt64",
+        "TaggedUInt64",
+        "Float16",
+        "BFloat16",
+        "Float32",
+        "Float64",
+    }
+)
+_PRIMITIVE_TYPE_IDS = frozenset(range(1, 21)) - {16}
+
+
+def _is_primitive_type(type_):
+    if type(type_) is int:
+        return type_ in _PRIMITIVE_TYPE_IDS
+    return type_ in (bool, int, float) or getattr(type_, "__name__", None) in _PRIMITIVE_TYPEVAR_NAMES
 
 
 @cython.final
@@ -441,6 +470,7 @@ cdef class TypeResolver:
 
     cdef _populate_type_info(self, TypeInfo typeinfo):
         cdef uint8_t type_id = typeinfo.type_id
+        cdef object canonical_typeinfo
         if (
             type_id == <uint8_t>TypeId.ENUM
             or type_id == <uint8_t>TypeId.STRUCT
@@ -449,12 +479,16 @@ cdef class TypeResolver:
             or type_id == <uint8_t>TypeId.TYPED_UNION
         ):
             if typeinfo.user_type_id != NO_USER_TYPE_ID:
-                self._c_user_type_id_to_type_info[typeinfo.user_type_id] = <PyObject *> typeinfo
+                canonical_typeinfo = self._user_type_id_to_type_info.get(typeinfo.user_type_id)
+                if canonical_typeinfo is None or canonical_typeinfo is typeinfo:
+                    self._c_user_type_id_to_type_info[typeinfo.user_type_id] = <PyObject *> typeinfo
         else:
             if type_id >= self._c_registered_id_to_type_info.size():
                 self._c_registered_id_to_type_info.resize(type_id * 2 if type_id > 0 else 1, NULL)
             if type_id > 0 and not is_namespaced_type(<TypeId>type_id):
-                self._c_registered_id_to_type_info[type_id] = <PyObject *> typeinfo
+                canonical_typeinfo = self._type_id_to_type_info.get(type_id)
+                if canonical_typeinfo is None or canonical_typeinfo is typeinfo:
+                    self._c_registered_id_to_type_info[type_id] = <PyObject *> typeinfo
         self._c_types_info[<uintptr_t> <PyObject *> typeinfo.cls] = <PyObject *> typeinfo
         if self._c_types_info.size() * 10 >= self._c_types_info.bucket_count() * 5:
             self._c_types_info.rehash(self._c_types_info.size() * 2)
@@ -591,7 +625,7 @@ cdef class Serializer:
         """
         self.type_resolver = type_resolver
         self.type_ = type_
-        self.need_to_write_ref = self.type_resolver.track_ref and not is_primitive_type(type_)
+        self.need_to_write_ref = self.type_resolver.track_ref and not _is_primitive_type(type_)
 
     cpdef write(self, WriteContext write_context, value):
         raise NotImplementedError(f"write method not implemented in {type(self)}")
@@ -1056,8 +1090,7 @@ cdef class Fory:
         self.reset_read()
 
 include "primitive.pxi"
-include "float16.pxi"
-include "bfloat16.pxi"
+include "number.pxi"
 include "collection.pxi"
 include "struct.pxi"
 

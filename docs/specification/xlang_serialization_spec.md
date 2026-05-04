@@ -39,18 +39,12 @@ This specification defines the Fory xlang binary format. The format is dynamic r
 - bool: a boolean value (true or false).
 - int8: a 8-bit signed integer.
 - int16: a 16-bit signed integer.
-- int32: a 32-bit signed integer.
-- varint32: a 32-bit signed integer which use fory variable-length encoding.
-- int64: a 64-bit signed integer.
-- varint64: a 64-bit signed integer which use fory PVL encoding.
-- tagged_int64: a 64-bit signed integer which use fory Hybrid encoding.
+- int32: a 32-bit signed integer. Scalar type expressions may use fixed or varint encoding.
+- int64: a 64-bit signed integer. Scalar type expressions may use fixed, varint/PVL, or tagged encoding.
 - uint8: an 8-bit unsigned integer.
 - uint16: a 16-bit unsigned integer.
-- uint32: a 32-bit unsigned integer.
-- var_uint32: a 32-bit unsigned integer which use fory variable-length encoding.
-- uint64: a 64-bit unsigned integer.
-- var_uint64: a 64-bit unsigned integer which use fory PVL encoding.
-- tagged_uint64: a 64-bit unsigned integer which use fory Hybrid encoding.
+- uint32: a 32-bit unsigned integer. Scalar type expressions may use fixed or varint encoding.
+- uint64: a 64-bit unsigned integer. Scalar type expressions may use fixed, varint/PVL, or tagged encoding.
 - float8: an 8-bit floating point number.
 - float16: a 16-bit floating point number.
 - bfloat16: a 16-bit brain floating point number.
@@ -76,20 +70,23 @@ This specification defines the Fory xlang binary format. The format is dynamic r
 - date: a naive date without timezone, encoded as a signed varint64 count of days since the Unix epoch.
 - decimal: an exact decimal value encoded as a signed `scale` and an exact `unscaled` integer.
 - binary: an variable-length array of bytes.
-- array: in current xlang, only one-dimensional primitive/numeric arrays have dedicated wire types. Other arrays are
-  taken as `list`, and implementations should support interoperability between array and list carriers. Internal type
-  ID `ARRAY (42)` is reserved for a future dedicated multi-dimensional array encoding and is not emitted by the current
-  xlang format.
-  - bool_array: one dimensional bool array.
-  - int8_array: one dimensional int8 array.
-  - int16_array: one dimensional int16 array.
-  - int32_array: one dimensional int32 array.
-  - int64_array: one dimensional int64 array.
-  - float8_array: one dimensional float8 array.
-  - float16_array: one dimensional half_float_16 array.
-  - bfloat16_array: one dimensional bfloat16 array.
-  - float32_array: one dimensional float32 array.
-  - float64_array: one dimensional float64 array.
+- array: `array<T>` is dense one-dimensional bool or numeric data. Current xlang emits the canonical specialized
+  `*_ARRAY` type IDs for each supported element domain. `ARRAY (42)` is reserved for a future generic array encoding and
+  is not emitted by the current xlang format. `list<T>` remains a separate schema kind.
+  - bool_array: canonical wire tag for `array<bool>`.
+  - int8_array: canonical wire tag for `array<int8>`.
+  - int16_array: canonical wire tag for `array<int16>`.
+  - int32_array: canonical wire tag for `array<int32>`.
+  - int64_array: canonical wire tag for `array<int64>`.
+  - uint8_array: canonical wire tag for `array<uint8>`.
+  - uint16_array: canonical wire tag for `array<uint16>`.
+  - uint32_array: canonical wire tag for `array<uint32>`.
+  - uint64_array: canonical wire tag for `array<uint64>`.
+  - float8_array: reserved canonical wire tag for `array<float8>`.
+  - float16_array: canonical wire tag for `array<float16>`.
+  - bfloat16_array: canonical wire tag for `array<bfloat16>`.
+  - float32_array: canonical wire tag for `array<float32>`.
+  - float64_array: canonical wire tag for `array<float64>`.
 - union: a tagged union type that can hold one of several alternative types. The active alternative is identified by an index.
 - typed_union: a union value with registered numeric union type ID.
 - named_union: a union value with embedded union type name or shared TypeDef.
@@ -128,9 +125,61 @@ class Foo2 {
 }
 ```
 
-`intArray` has an `int32_array` type. But both `objects` and `objectList` fields in the serialize data have `list` data
-type. When deserializing, the implementation will create an `Object` array for `objects`, but create a `ArrayList`
-for `objectList` to populate its elements. And the serialized data of `Foo` can be deserialized into `Foo2` too.
+`intArray` has `array<int32>` schema and uses the `int32_array` wire tag. Both `objects` and `objectList` have `list`
+schema. These schema kinds are distinct; implementations must not treat general object arrays as dense numeric arrays.
+
+### List and Array Semantics
+
+`list<T>` and `array<T>` are different schema kinds.
+
+Use `list<T>` for ordinary ordered collections whose elements may need collection
+semantics, nullable element handling, reference handling, or object/string/bytes
+payloads. A primitive `list<T>` may still use an optimized homogeneous element
+segment internally, but the payload is owned by the list protocol and carries
+list metadata.
+
+Use `array<T>` for dynamic-length dense one-dimensional bool or numeric data.
+`array<T>` elements are always non-null, non-reference-tracked, and fixed-width
+by the array contract. `array<bool>` uses one byte per value. Integer arrays use
+fixed-width little-endian element payloads even when the scalar `int32`,
+`int64`, `uint32`, or `uint64` default encoding is varint/PVL in scalar or list
+positions.
+
+Valid `array<T>` element domains are:
+
+```text
+bool
+int8, int16, int32, int64
+uint8, uint16, uint32, uint64
+float16, bfloat16, float32, float64
+```
+
+Invalid array schemas include `array<fixed int32>`,
+`array<optional int32>`, `array<ref T>`, `array<string>`, `array<bytes>`,
+`array<map<...>>`, and arrays of structs, unions, enums, temporal values,
+decimals, or dynamic `any` values.
+
+The current wire format keeps specialized primitive-array type IDs as the
+canonical dynamic tags for `array<T>`:
+
+| Schema            | Dynamic wire tag |
+| ----------------- | ---------------- |
+| `array<bool>`     | `BOOL_ARRAY`     |
+| `array<int8>`     | `INT8_ARRAY`     |
+| `array<int16>`    | `INT16_ARRAY`    |
+| `array<int32>`    | `INT32_ARRAY`    |
+| `array<int64>`    | `INT64_ARRAY`    |
+| `array<uint8>`    | `UINT8_ARRAY`    |
+| `array<uint16>`   | `UINT16_ARRAY`   |
+| `array<uint32>`   | `UINT32_ARRAY`   |
+| `array<uint64>`   | `UINT64_ARRAY`   |
+| `array<float16>`  | `FLOAT16_ARRAY`  |
+| `array<bfloat16>` | `BFLOAT16_ARRAY` |
+| `array<float32>`  | `FLOAT32_ARRAY`  |
+| `array<float64>`  | `FLOAT64_ARRAY`  |
+
+`ARRAY (42)` is reserved for a future generic or shaped-array descriptor and is
+not emitted for dense primitive arrays.
 
 Users can also provide meta hints for fields of a type, or the type whole. Here is an example in java which use
 annotation to provide such information.

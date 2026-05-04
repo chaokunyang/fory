@@ -98,7 +98,7 @@ export default class TypeResolver {
   private decimalSerializer: null | Serializer = null;
   private stringSerializer: null | Serializer = null;
   private setSerializer: null | Serializer = null;
-  private arraySerializer: null | Serializer = null;
+  private listSerializer: null | Serializer = null;
   private mapSerializer: null | Serializer = null;
   private uint8ArraySerializer: null | Serializer = null;
   private uint16ArraySerializer: null | Serializer = null;
@@ -170,26 +170,23 @@ export default class TypeResolver {
     registerSerializer(new TypeInfo(TypeId.ENUM));
     registerSerializer(new TypeInfo(TypeId.NAMED_ENUM));
     registerSerializer(Type.any());
-    registerSerializer(Type.array(Type.any()));
+    registerSerializer(Type.list(Type.any()));
     registerSerializer(Type.map(Type.any(), Type.any()));
     registerSerializer(Type.bool());
     registerSerializer(Type.int8());
     registerSerializer(Type.int16());
+    registerSerializer(Type.int32({ encoding: "fixed" }));
     registerSerializer(Type.int32());
-    registerSerializer(Type.varInt32());
-    registerSerializer(Type.varUInt64());
-    registerSerializer(Type.varInt64());
+    registerSerializer(Type.uint32({ encoding: "fixed" }));
+    registerSerializer(Type.uint64({ encoding: "fixed" }));
+    registerSerializer(Type.int64({ encoding: "fixed" }));
     registerSerializer(Type.int64());
     registerSerializer(Type.uint8());
     registerSerializer(Type.uint16());
     registerSerializer(Type.uint32());
     registerSerializer(Type.uint64());
-    registerSerializer(Type.varInt32());
-    registerSerializer(Type.varUInt32());
-    registerSerializer(Type.varUInt64());
-    registerSerializer(Type.varInt64());
-    registerSerializer(Type.taggedUInt64());
-    registerSerializer(Type.sliInt64());
+    registerSerializer(Type.uint64({ encoding: "tagged" }));
+    registerSerializer(Type.int64({ encoding: "tagged" }));
     registerSerializer(Type.float16());
     registerSerializer(Type.bfloat16());
     registerSerializer(Type.float32());
@@ -224,7 +221,7 @@ export default class TypeResolver {
     this.decimalSerializer = this.getSerializerById(TypeId.DECIMAL);
     this.stringSerializer = this.getSerializerById(TypeId.STRING);
     this.setSerializer = this.getSerializerById(TypeId.SET);
-    this.arraySerializer = this.getSerializerById(TypeId.LIST);
+    this.listSerializer = this.getSerializerById(TypeId.LIST);
     this.mapSerializer = this.getSerializerById(TypeId.MAP);
     this.uint8ArraySerializer = this.getSerializerById(TypeId.UINT8_ARRAY);
     this.uint16ArraySerializer = this.getSerializerById(TypeId.UINT16_ARRAY);
@@ -383,7 +380,7 @@ export default class TypeResolver {
     }
 
     if (Array.isArray(v)) {
-      return this.arraySerializer;
+      return this.listSerializer;
     }
 
     if (typeof v === "boolean") {

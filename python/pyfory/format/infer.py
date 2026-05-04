@@ -103,13 +103,13 @@ _supported_types_mapping = {
 }
 
 # Add pyfory type annotations support
-from pyfory.types import (
-    int8 as int8_type,
-    int16 as int16_type,
-    int32 as int32_type,
-    int64 as int64_type,
-    float32 as float32_type,
-    float64 as float64_type,
+from pyfory.annotation import (
+    Int8 as int8_type,
+    Int16 as int16_type,
+    Int32 as int32_type,
+    Int64 as int64_type,
+    Float32 as float32_type,
+    Float64 as float64_type,
 )
 
 _supported_types_mapping.update(
@@ -161,6 +161,9 @@ def infer_schema(clz, types_path=None) -> Schema:
 
 
 class ForyTypeVisitor(TypeVisitor):
+    def visit_array(self, field_name, elem_type, carrier, types_path=None):
+        raise TypeError(f"Row format does not support pyfory.{carrier} array annotations")
+
     def visit_list(self, field_name, elem_type, types_path=None):
         # Infer type recursively for type such as List[Dict[str, str]]
         elem_field = infer_field("item", elem_type, self, types_path=types_path)
@@ -275,22 +278,14 @@ def from_arrow_schema(arrow_schema) -> Schema:
         if pa_types.is_boolean(arrow_type):
             return boolean()
         elif pa_types.is_int8(arrow_type):
-            from pyfory.format._format import int8
-
             return int8()
         elif pa_types.is_int16(arrow_type):
-            from pyfory.format._format import int16
-
             return int16()
         elif pa_types.is_int32(arrow_type):
-            from pyfory.format._format import int32
-
             return int32()
         elif pa_types.is_int64(arrow_type):
             return int64()
         elif pa_types.is_float32(arrow_type):
-            from pyfory.format._format import float32
-
             return float32()
         elif pa_types.is_float64(arrow_type):
             return float64()

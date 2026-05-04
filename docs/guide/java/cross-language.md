@@ -109,7 +109,7 @@ from dataclasses import dataclass
 @dataclass
 class Person:
     name: str
-    age: pyfory.int32
+    age: pyfory.Int32
 
 # Create Fory in xlang mode
 fory = pyfory.Fory(xlang=True, ref=True)
@@ -159,9 +159,40 @@ Not all Java types have equivalents in other languages. When using xlang mode:
 - Use **primitive types** (`int`, `long`, `double`, `String`) for maximum compatibility
 - Use **standard collections** (`List`, `Map`, `Set`) instead of language-specific ones
 - Use **reduced-precision carriers** (`Float16`, `BFloat16`, `Float16List`, `BFloat16List`) for 16-bit float payloads
-- Treat `Float16[]` and `BFloat16[]` as xlang `list` carriers; use `Float16List` and `BFloat16List` when the wire type must be `float16_array` or `bfloat16_array`
+- Treat `Float16[]`, `BFloat16[]`, `Float16List`, and `BFloat16List` as `list<T>` carriers by default; use `@ArrayType` when the schema must be `array<float16>` or `array<bfloat16>`
 - Avoid **Java-specific types** like `Optional`, `BigDecimal` (unless the target language supports them)
 - See [Type Mapping Guide](../../specification/xlang_type_mapping.md) for complete compatibility matrix
+
+### Lists and Dense Arrays
+
+Java primitive arrays are dense `array<T>` carriers, except plain `byte[]`,
+which defaults to `bytes`. General Java collections and Fory primitive-list
+carriers such as `Int32List`, `Float16List`, and `BFloat16List` use
+`list<T>` unless the field has explicit `@ArrayType` metadata.
+
+| Fory schema       | Java field shape                           |
+| ----------------- | ------------------------------------------ |
+| `list<int32>`     | `List<Integer>` or `Int32List`             |
+| `array<bool>`     | `boolean[]`                                |
+| `array<int8>`     | `@Int8Type byte[]` type-use                |
+| `array<int16>`    | `short[]`                                  |
+| `array<int32>`    | `int[]`                                    |
+| `array<int64>`    | `long[]`                                   |
+| `array<uint8>`    | `@UInt8Type byte[]` type-use               |
+| `array<uint16>`   | `@UInt16Type short[]` type-use             |
+| `array<uint32>`   | `@UInt32Type int[]` type-use               |
+| `array<uint64>`   | `@UInt64Type long[]` type-use              |
+| `array<float16>`  | `Float16Array` or `@Float16Type short[]`   |
+| `array<bfloat16>` | `BFloat16Array` or `@BFloat16Type short[]` |
+| `array<float32>`  | `float[]`                                  |
+| `array<float64>`  | `double[]`                                 |
+
+Prefer type-use syntax for primitive-array annotations:
+
+```java
+private @UInt32Type int[] ids;
+private @BFloat16Type short[] values;
+```
 
 ### Compatible Types
 

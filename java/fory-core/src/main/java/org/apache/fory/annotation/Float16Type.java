@@ -24,25 +24,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Annotation to mark a field as an unsigned 8-bit integer array.
- *
- * <p>When applied to a field of type {@code byte[]}, this annotation indicates that the array
- * should be serialized as an unsigned 8-bit integer array (UINT8_ARRAY, type_id=44) with element
- * values in the range [0, 255].
- *
- * <p>This is useful for compatibility with languages that have native unsigned integer array types
- * (e.g., Rust's Vec&lt;u8&gt;, Go's []uint8, C++'s std::vector&lt;uint8_t&gt;).
- *
- * <p>Example usage:
- *
- * <pre>{@code
- * public class MyStruct {
- *   {@literal @}UInt8Elements
- *   byte[] data;  // Will be serialized as unsigned 8-bit array
- * }
- * }</pre>
- */
+/** Marks a {@code short[]} field as dense {@code array<float16>} schema. */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
-public @interface UInt8Elements {}
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.TYPE_USE})
+public @interface Float16Type {}

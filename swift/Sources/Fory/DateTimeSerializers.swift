@@ -73,8 +73,7 @@ private func writeScalarValue<T>(
     _ value: T?,
     context: WriteContext,
     refMode: RefMode,
-    writeTypeInfo: Bool,
-    typeID: TypeId,
+    typeInfo: (write: Bool, id: TypeId),
     writePayload: (T) throws -> Void
 ) throws {
     switch refMode {
@@ -82,8 +81,8 @@ private func writeScalarValue<T>(
         guard let value else {
             throw ForyError.encodingError("nil value requires nullable ref mode")
         }
-        if writeTypeInfo {
-            context.writeStaticTypeInfo(typeID)
+        if typeInfo.write {
+            context.writeStaticTypeInfo(typeInfo.id)
         }
         try writePayload(value)
     case .nullOnly, .tracking:
@@ -92,8 +91,8 @@ private func writeScalarValue<T>(
             return
         }
         context.buffer.writeInt8(RefFlag.notNullValue.rawValue)
-        if writeTypeInfo {
-            context.writeStaticTypeInfo(typeID)
+        if typeInfo.write {
+            context.writeStaticTypeInfo(typeInfo.id)
         }
         try writePayload(value)
     }
@@ -276,8 +275,7 @@ public extension WriteContext {
             value,
             context: self,
             refMode: refMode,
-            writeTypeInfo: writeTypeInfo,
-            typeID: .timestamp,
+            typeInfo: (write: writeTypeInfo, id: .timestamp),
             writePayload: { try self.writeTimestamp($0) }
         )
     }
@@ -292,8 +290,7 @@ public extension WriteContext {
             value,
             context: self,
             refMode: refMode,
-            writeTypeInfo: writeTypeInfo,
-            typeID: .date,
+            typeInfo: (write: writeTypeInfo, id: .date),
             writePayload: { try self.writeLocalDate($0) }
         )
     }

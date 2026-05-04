@@ -22,6 +22,8 @@ package org.apache.fory.type;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
 import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedArrayType;
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Method;
@@ -42,20 +44,18 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.fory.annotation.BFloat16Type;
 import org.apache.fory.annotation.Expose;
+import org.apache.fory.annotation.Float16Type;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Ignore;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
-import org.apache.fory.annotation.Int8ArrayType;
+import org.apache.fory.annotation.Int8Type;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.annotation.UInt16Elements;
 import org.apache.fory.annotation.UInt16Type;
-import org.apache.fory.annotation.UInt32Elements;
 import org.apache.fory.annotation.UInt32Type;
-import org.apache.fory.annotation.UInt64Elements;
 import org.apache.fory.annotation.UInt64Type;
-import org.apache.fory.annotation.UInt8Elements;
 import org.apache.fory.annotation.UInt8Type;
 import org.apache.fory.collection.Cache;
 import org.apache.fory.collection.CacheBuilder;
@@ -181,7 +181,8 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = readMethod.getAnnotation(ForyField.class);
-    typeAnnotation = getAnnotation(readMethod.getDeclaredAnnotations(), readMethod.getName());
+    typeAnnotation =
+        getTypeUseAnnotation(readMethod.getAnnotatedReturnType(), readMethod.getName());
     if (!readMethod.getReturnType().isPrimitive()) {
       this.nullable = foryField == null || foryField.nullable();
     }
@@ -688,19 +689,17 @@ public class Descriptor {
   static {
     typeAnnotationsTypes.add(Int32Type.class);
     typeAnnotationsTypes.add(Int64Type.class);
+    typeAnnotationsTypes.add(Int8Type.class);
     typeAnnotationsTypes.add(UInt8Type.class);
     typeAnnotationsTypes.add(UInt16Type.class);
     typeAnnotationsTypes.add(UInt32Type.class);
     typeAnnotationsTypes.add(UInt64Type.class);
-    typeAnnotationsTypes.add(Int8ArrayType.class);
-    typeAnnotationsTypes.add(UInt8Elements.class);
-    typeAnnotationsTypes.add(UInt16Elements.class);
-    typeAnnotationsTypes.add(UInt32Elements.class);
-    typeAnnotationsTypes.add(UInt64Elements.class);
+    typeAnnotationsTypes.add(Float16Type.class);
+    typeAnnotationsTypes.add(BFloat16Type.class);
   }
 
   public static Annotation getAnnotation(Field field) {
-    return getAnnotation(field.getDeclaredAnnotations(), field.getName());
+    return getTypeUseAnnotation(field.getAnnotatedType(), field.getName());
   }
 
   public static Annotation getAnnotation(Annotation[] declaredAnnotations, String name) {
@@ -717,6 +716,20 @@ public class Descriptor {
       }
     }
     return typeAnnotation;
+  }
+
+  public static Annotation getTypeUseAnnotation(AnnotatedType annotatedType, String name) {
+    Annotation typeAnnotation = getAnnotation(annotatedType.getAnnotations(), name);
+    if (typeAnnotation != null || !(annotatedType instanceof AnnotatedArrayType)) {
+      return typeAnnotation;
+    }
+    AnnotatedType annotatedComponent =
+        ((AnnotatedArrayType) annotatedType).getAnnotatedGenericComponentType();
+    Class<?> componentRawType = TypeUtils.getRawType(annotatedComponent.getType());
+    if (!componentRawType.isPrimitive()) {
+      return null;
+    }
+    return getAnnotation(annotatedComponent.getAnnotations(), name);
   }
 
   public static Class<?> getDeclareClass(List<Descriptor> descriptors) {

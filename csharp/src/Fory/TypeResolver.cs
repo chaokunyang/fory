@@ -1478,6 +1478,11 @@ public sealed class TypeResolver
             return TypeInfo.Create(type, new ForyDecimalSerializer());
         }
 
+        if (type == typeof(decimal))
+        {
+            return TypeInfo.Create(type, new DecimalSerializer());
+        }
+
         if (type == typeof(byte[]))
         {
             return TypeInfo.Create(type, new BinarySerializer());

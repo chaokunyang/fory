@@ -16,8 +16,10 @@
 # under the License.
 
 import enum
+import array
 import typing
 from typing import List
+from pyfory.annotation import ArrayMeta
 from pyfory.types import TypeId, is_polymorphic_type, is_union_type
 from pyfory._fory import NO_USER_TYPE_ID
 from pyfory.serialization import Buffer
@@ -168,7 +170,6 @@ class TypeDef:
         local_infos_by_tag = {field_info.tag_id: field_info for field_info in local_field_infos if field_info.tag_id >= 0}
         local_field_types = infer_field_types(self.cls, field_nullable=resolver.field_nullable)
         type_hints = get_type_hints(self.cls)
-        serializers = self.create_fields_serializer(resolver, field_names, local_field_types)
         runtime_field_infos = []
         for i, field_info in enumerate(self.fields):
             resolved_name = field_names[i]
@@ -183,6 +184,14 @@ class TypeDef:
             )
             type_hint = type_hints.get(resolved_name, typing.Any)
             unwrapped_type, _ = unwrap_optional(type_hint, field_nullable=resolver.field_nullable)
+            serializer = _create_compatible_field_serializer(
+                resolver,
+                resolved_name,
+                type_hint,
+                field_info.field_type,
+                local_info.field_type if local_info is not None else None,
+                local_field_types.get(resolved_name, None),
+            )
             runtime_field_infos.append(
                 StructFieldInfo(
                     name=resolved_name,
@@ -194,7 +203,7 @@ class TypeDef:
                     dynamic=is_polymorphic_type(field_info.field_type.type_id),
                     runtime_ref_tracking=field_info.field_type.is_tracking_ref,
                     type_id=field_info.field_type.type_id,
-                    serializer=serializers[i],
+                    serializer=serializer,
                     unwrapped_type=unwrapped_type,
                     field_type=field_info.field_type,
                     assign=can_assign,
@@ -322,6 +331,20 @@ class FieldType:
         # Handle list wrapper
         if isinstance(type_, list):
             type_ = type_[0]
+        if self.type_id in _ARRAY_TYPE_IDS:
+            array_meta = type_ if isinstance(type_, ArrayMeta) else None
+            if array_meta is None and type_ is not None:
+                from pyfory.type_util import unwrap_array
+
+                array_meta = unwrap_array(type_)
+            if array_meta is not None:
+                from pyfory.struct import StructFieldSerializerVisitor
+
+                return StructFieldSerializerVisitor(resolver).visit_array(
+                    "<array>",
+                    array_meta.element_type,
+                    array_meta.carrier,
+                )
         if is_union_type(self.type_id):
             if type_ is None:
                 return None
@@ -475,6 +498,86 @@ class DynamicFieldType(FieldType):
         return f"DynamicFieldType(type_id={self.type_id}, is_monomorphic={self.is_monomorphic}, is_nullable={self.is_nullable}, is_tracking_ref={self.is_tracking_ref})"
 
 
+_ARRAY_TYPE_IDS = frozenset(
+    (
+        TypeId.BOOL_ARRAY,
+        TypeId.INT8_ARRAY,
+        TypeId.INT16_ARRAY,
+        TypeId.INT32_ARRAY,
+        TypeId.INT64_ARRAY,
+        TypeId.UINT8_ARRAY,
+        TypeId.UINT16_ARRAY,
+        TypeId.UINT32_ARRAY,
+        TypeId.UINT64_ARRAY,
+        TypeId.FLOAT16_ARRAY,
+        TypeId.BFLOAT16_ARRAY,
+        TypeId.FLOAT32_ARRAY,
+        TypeId.FLOAT64_ARRAY,
+    )
+)
+
+
+def _payload_shape_matches(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+    if local_field_type is None:
+        return False
+    remote_type_id = remote_field_type.type_id
+    local_type_id = local_field_type.type_id
+    if _is_bytes_uint8_array_pair(remote_type_id, local_type_id):
+        return True
+    if remote_type_id != local_type_id:
+        return False
+    if remote_type_id in (TypeId.LIST, TypeId.SET):
+        return _payload_shape_matches(remote_field_type.element_type, local_field_type.element_type)
+    if remote_type_id == TypeId.MAP:
+        return _payload_shape_matches(remote_field_type.key_type, local_field_type.key_type) and _payload_shape_matches(
+            remote_field_type.value_type,
+            local_field_type.value_type,
+        )
+    return True
+
+
+def _payload_shape_needs_local_carrier(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+    remote_type_id = remote_field_type.type_id
+    local_type_id = local_field_type.type_id
+    if _is_bytes_uint8_array_pair(remote_type_id, local_type_id):
+        return True
+    if remote_type_id != local_type_id:
+        return False
+    if remote_type_id in _ARRAY_TYPE_IDS:
+        return True
+    if remote_type_id in (TypeId.LIST, TypeId.SET):
+        return _payload_shape_needs_local_carrier(remote_field_type.element_type, local_field_type.element_type)
+    if remote_type_id == TypeId.MAP:
+        return _payload_shape_needs_local_carrier(
+            remote_field_type.key_type,
+            local_field_type.key_type,
+        ) or _payload_shape_needs_local_carrier(remote_field_type.value_type, local_field_type.value_type)
+    return False
+
+
+def _create_local_typehint_serializer(resolver, field_name, type_hint):
+    from pyfory.struct import StructFieldSerializerVisitor
+    from pyfory.type_util import infer_field, unwrap_optional
+
+    unwrapped_type, _ = unwrap_optional(type_hint, field_nullable=resolver.field_nullable)
+    return infer_field(field_name, unwrapped_type, StructFieldSerializerVisitor(resolver))
+
+
+def _create_compatible_field_serializer(
+    resolver,
+    field_name,
+    type_hint,
+    remote_field_type: FieldType,
+    local_field_type: typing.Optional[FieldType],
+    local_declared_type,
+):
+    if _payload_shape_matches(remote_field_type, local_field_type) and _payload_shape_needs_local_carrier(remote_field_type, local_field_type):
+        serializer = _create_local_typehint_serializer(resolver, field_name, type_hint)
+        if serializer is not None:
+            return serializer
+    return remote_field_type.create_serializer(resolver, local_declared_type)
+
+
 _SIGNED_INT32_TYPE_IDS = frozenset((TypeId.INT32, TypeId.VARINT32))
 _SIGNED_INT64_TYPE_IDS = frozenset((TypeId.INT64, TypeId.VARINT64, TypeId.TAGGED_INT64))
 _UNSIGNED_INT32_TYPE_IDS = frozenset((TypeId.UINT32, TypeId.VAR_UINT32))
@@ -493,6 +596,12 @@ _INT_RANGES = {
 
 def _requires_nullable_validation(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
     return remote_field_type.is_nullable and not local_field_type.is_nullable
+
+
+def _is_bytes_uint8_array_pair(remote_type_id: int, local_type_id: int) -> bool:
+    return (remote_type_id == TypeId.BINARY and local_type_id == TypeId.UINT8_ARRAY) or (
+        remote_type_id == TypeId.UINT8_ARRAY and local_type_id == TypeId.BINARY
+    )
 
 
 def _field_type_assignment(remote_field_type: FieldType, local_field_type: FieldType) -> typing.Tuple[bool, bool]:
@@ -525,6 +634,8 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
             local_field_type.value_type,
         )
         return key_assignable and value_assignable, needs_validation or key_needs_validation or value_needs_validation
+    if _is_bytes_uint8_array_pair(remote_type_id, local_type_id):
+        return True, True
     remote_int_domain = _INT_TYPE_DOMAINS.get(remote_type_id)
     local_int_domain = _INT_TYPE_DOMAINS.get(local_type_id)
     if remote_int_domain is not None or local_int_domain is not None:
@@ -559,6 +670,60 @@ def _validate_int_value(value, type_id: int) -> bool:
     return min_value <= value <= max_value
 
 
+def _numpy_uint8_type():
+    try:
+        import numpy as np
+
+        return np, np.ndarray, np.dtype(np.uint8)
+    except ImportError:
+        return None, None, None
+
+
+def _is_bytes_like(value) -> bool:
+    return isinstance(value, (bytes, bytearray, memoryview))
+
+
+def _is_fory_uint8_array(value) -> bool:
+    try:
+        from pyfory import serialization
+
+        return type(value) is serialization.UInt8Array
+    except AttributeError:
+        return False
+
+
+def _is_uint8_array_like(value) -> bool:
+    if _is_fory_uint8_array(value):
+        return True
+    if isinstance(value, array.array):
+        return value.typecode == "B"
+    np, ndarray, uint8_dtype = _numpy_uint8_type()
+    return np is not None and isinstance(value, ndarray) and value.ndim == 1 and value.dtype == uint8_dtype
+
+
+def _bytes_from_uint8_value(value) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, memoryview):
+        return value.tobytes()
+    if _is_fory_uint8_array(value):
+        return bytes(value)
+    if isinstance(value, array.array) and value.typecode == "B":
+        return value.tobytes()
+    if _is_uint8_array_like(value):
+        return value.tobytes()
+    raise TypeError(f"Expected bytes or array<uint8> compatible value, got {type(value)!r}")
+
+
+def _uint8_array_from_bytes(value):
+    data = _bytes_from_uint8_value(value)
+    from pyfory import serialization
+
+    return serialization.UInt8Array(data)
+
+
 def is_value_assignable(value, local_field_type: FieldType) -> bool:
     if value is None:
         return local_field_type.is_nullable
@@ -578,6 +743,10 @@ def is_value_assignable(value, local_field_type: FieldType) -> bool:
         )
     if type_id in _INT_TYPE_DOMAINS:
         return _validate_int_value(value, type_id)
+    if type_id == TypeId.BINARY:
+        return _is_bytes_like(value) or _is_uint8_array_like(value)
+    if type_id == TypeId.UINT8_ARRAY:
+        return _is_bytes_like(value) or _is_uint8_array_like(value)
     if type_id == TypeId.BOOL:
         return type(value) is bool
     if type_id in (TypeId.FLOAT32, TypeId.FLOAT64):
@@ -585,6 +754,26 @@ def is_value_assignable(value, local_field_type: FieldType) -> bool:
     if type_id == TypeId.STRING:
         return type(value) is str
     return True
+
+
+def coerce_assignable_value(value, local_field_type: FieldType):
+    if value is None:
+        return None
+    type_id = local_field_type.type_id
+    if type_id == TypeId.BINARY:
+        return _bytes_from_uint8_value(value)
+    if type_id == TypeId.UINT8_ARRAY and _is_bytes_like(value):
+        return _uint8_array_from_bytes(value)
+    if type_id == TypeId.LIST:
+        return [coerce_assignable_value(element, local_field_type.element_type) for element in value]
+    if type_id == TypeId.SET:
+        return {coerce_assignable_value(element, local_field_type.element_type) for element in value}
+    if type_id == TypeId.MAP:
+        return {
+            coerce_assignable_value(key, local_field_type.key_type): coerce_assignable_value(map_value, local_field_type.value_type)
+            for key, map_value in value.items()
+        }
+    return value
 
 
 def build_field_infos(type_resolver, cls):
@@ -627,9 +816,10 @@ def build_field_infos(type_resolver, cls):
             # Skip ignored fields
             continue
 
-        # Determine nullable: use explicit metadata or fallback to type inference
+        # Determine nullable: Optional[T] stays nullable even when field metadata
+        # exists only to carry a tag id or default.
         if fory_meta is not None:
-            is_nullable = fory_meta.nullable
+            is_nullable = fory_meta.nullable or is_optional or field_nullable
         else:
             # Default behavior: Optional[T] fields are nullable. Global field_nullable
             # can force nullable for all fields.

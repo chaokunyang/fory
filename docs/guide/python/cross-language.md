@@ -45,7 +45,7 @@ f = pyfory.Fory(xlang=True, ref=True)
 @dataclass
 class Person:
     name: str
-    age: pyfory.int32
+    age: pyfory.Int32
 
 f.register(Person, typename="example.Person")
 
@@ -104,55 +104,94 @@ import pyfory
 
 @dataclass
 class TypedData:
-    int_value: pyfory.int32       # 32-bit integer
-    long_value: pyfory.int64      # 64-bit integer
-    float_value: pyfory.float32   # 32-bit float
-    double_value: pyfory.float64  # 64-bit float
-    values: Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]
+    int_value: pyfory.Int32       # 32-bit integer
+    long_value: pyfory.Int64      # 64-bit integer
+    float_value: pyfory.Float32   # 32-bit float
+    double_value: pyfory.Float64  # 64-bit float
+    values: Dict[pyfory.Int32, List[pyfory.Int64]]
 ```
 
-Nested collection annotations are part of the field schema. For example,
-`Dict[pyfory.fixed_int32, List[pyfory.tagged_int64]]` writes map keys as fixed int32 values and the
-nested list elements as tagged int64 values. Compatible-mode reads consume bytes with the remote
-schema metadata, then assign only when the decoded value safely satisfies the local schema.
+Nested collection annotations are part of the field schema. Compatible-mode
+reads consume bytes with the remote schema metadata, then assign only when the
+decoded value safely satisfies the local schema.
 
 ## Reduced-Precision Types
 
-`pyfory.serialization` exports Cython-only carrier types for xlang reduced-precision values:
+`pyfory.Float16` and `pyfory.BFloat16` are reserved annotation markers for xlang
+reduced-precision fields. They are not runtime value classes; scalar values deserialize as native
+Python `float`.
 
-- `float16` and `float16array`
-- `bfloat16` and `bfloat16array`
-
-These names are compiled into the `pyfory.serialization` extension and re-exported from `pyfory`. There is no pure-Python fallback module for them.
-
-The scalar wrappers behave like reduced-precision numeric value types. They support arithmetic and
-ordering with Python numeric operands, and each operation quantizes the result back to the wrapper's
-own format (`pyfory.float16` or `pyfory.bfloat16`).
-
-The array wrappers are value-oriented public APIs. Construct them from Python numeric values with
-`pyfory.float16array([...])`, `pyfory.float16array.from_values([...])`,
-`pyfory.bfloat16array([...])`, or `pyfory.bfloat16array.from_values([...])`. Use
-`from_buffer(...)` and `to_buffer()` only when you already need packed little-endian `uint16`
-storage and want the raw-buffer fast path. Both array carriers also implement the CPython buffer
-protocol, so `memoryview(pyfory.float16array(...))` and `memoryview(pyfory.bfloat16array(...))`
-expose the packed `uint16` storage directly.
+Dense reduced-precision arrays use public dense wrappers with list-like sequence behavior. Construct them from Python
+numeric values with `pyfory.Float16Array.from_values([...])` or
+`pyfory.BFloat16Array.from_values([...])`. Use `from_buffer(...)` and `to_buffer()` only when you
+already need packed little-endian `uint16` storage and want the raw-buffer fast path.
 
 ## Type Mapping
 
-| Python                 | Java           | Rust            | Go                    |
+| Python marker/carrier  | Java           | Rust            | Go                    |
 | ---------------------- | -------------- | --------------- | --------------------- |
 | `str`                  | `String`       | `String`        | `string`              |
 | `int`                  | `long`         | `i64`           | `int64`               |
-| `pyfory.int32`         | `int`          | `i32`           | `int32`               |
-| `pyfory.int64`         | `long`         | `i64`           | `int64`               |
+| `pyfory.Int32`         | `int`          | `i32`           | `int32`               |
+| `pyfory.Int64`         | `long`         | `i64`           | `int64`               |
 | `float`                | `double`       | `f64`           | `float64`             |
-| `pyfory.float32`       | `float`        | `f32`           | `float32`             |
-| `pyfory.float16`       | `Float16`      | `Float16`       | `float16.Float16`     |
-| `pyfory.bfloat16`      | `BFloat16`     | `BFloat16`      | `bfloat16.BFloat16`   |
-| `pyfory.float16array`  | `Float16List`  | `Vec<Float16>`  | `[]float16.Float16`   |
-| `pyfory.bfloat16array` | `BFloat16List` | `Vec<BFloat16>` | `[]bfloat16.BFloat16` |
+| `pyfory.Float32`       | `float`        | `f32`           | `float32`             |
+| `pyfory.Float16`       | `Float16`      | `Float16`       | `float16.Float16`     |
+| `pyfory.BFloat16`      | `BFloat16`     | `BFloat16`      | `bfloat16.BFloat16`   |
+| `pyfory.Float16Array`  | `Float16List`  | `Vec<Float16>`  | `[]float16.Float16`   |
+| `pyfory.BFloat16Array` | `BFloat16List` | `Vec<BFloat16>` | `[]bfloat16.BFloat16` |
 | `list`                 | `List`         | `Vec`           | `[]T`                 |
 | `dict`                 | `Map`          | `HashMap`       | `map[K]V`             |
+
+### Lists and Dense Arrays
+
+Python `List[T]` maps to Fory `list<T>`. Use `pyfory.Array[T]`,
+`pyfory.NDArray[T]`, or `pyfory.PyArray[T]` only when the schema is the dense
+one-dimensional `array<T>` kind.
+
+| Fory schema       | Python annotation and default carrier              |
+| ----------------- | -------------------------------------------------- |
+| `list<int32>`     | `List[pyfory.Int32]`                               |
+| `array<bool>`     | `pyfory.Array[bool]` -> `BoolArray`                |
+| `array<int8>`     | `pyfory.Array[pyfory.Int8]` -> `Int8Array`         |
+| `array<int16>`    | `pyfory.Array[pyfory.Int16]` -> `Int16Array`       |
+| `array<int32>`    | `pyfory.Array[pyfory.Int32]` -> `Int32Array`       |
+| `array<int64>`    | `pyfory.Array[pyfory.Int64]` -> `Int64Array`       |
+| `array<uint8>`    | `pyfory.Array[pyfory.UInt8]` -> `UInt8Array`       |
+| `array<uint16>`   | `pyfory.Array[pyfory.UInt16]` -> `UInt16Array`     |
+| `array<uint32>`   | `pyfory.Array[pyfory.UInt32]` -> `UInt32Array`     |
+| `array<uint64>`   | `pyfory.Array[pyfory.UInt64]` -> `UInt64Array`     |
+| `array<float16>`  | `pyfory.Array[pyfory.Float16]` -> `Float16Array`   |
+| `array<bfloat16>` | `pyfory.Array[pyfory.BFloat16]` -> `BFloat16Array` |
+| `array<float32>`  | `pyfory.Array[pyfory.Float32]` -> `Float32Array`   |
+| `array<float64>`  | `pyfory.Array[pyfory.Float64]` -> `Float64Array`   |
+
+The `pyfory.*Array` wrappers accept iterable constructors such as
+`pyfory.Float32Array([1, 2, 3])` and expose list-like sequence behavior over
+dense owned storage.
+
+`pyfory.Array[T]`, `pyfory.NDArray[T]`, and `pyfory.PyArray[T]` all describe
+the same Fory `array<T>` schema. They differ only in the Python carrier
+contract:
+
+| Python field annotation | Value accepted for that field                           | Deserialized carrier |
+| ----------------------- | ------------------------------------------------------- | -------------------- |
+| `pyfory.Array[T]`       | `pyfory.*Array`, `numpy.ndarray`, `array.array`, `list` | `pyfory.*Array`      |
+| `pyfory.NDArray[T]`     | `numpy.ndarray`                                         | `numpy.ndarray`      |
+| `pyfory.PyArray[T]`     | Python `array.array`                                    | Python `array.array` |
+
+In compatible mode, a writer and reader can use different Python carriers for
+the same named field as long as both annotations lower to the same Fory
+`array<T>` schema. For example, a writer field declared as
+`pyfory.Array[pyfory.Int32]` can be read by a Python class whose matching field
+is declared as `pyfory.NDArray[pyfory.Int32]`, and the reader receives a NumPy
+`int32` ndarray. The reverse pattern also works for `pyfory.PyArray[T]`; that
+name always means Python `array.array`.
+
+PyArrow is a separate row/columnar format surface, not a `pyfory.PyArray`
+carrier. Use `pyfory.format.from_arrow_schema(...)` and
+`pyfory.format.to_arrow_schema(...)` to convert between PyArrow schemas and
+Fory row-format schemas.
 
 ## Differences from Python Native Mode
 

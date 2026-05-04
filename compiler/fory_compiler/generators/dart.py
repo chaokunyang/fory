@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Set, Tuple
 from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
+    ArrayType,
     Enum,
     EnumValue,
     Field,
@@ -48,17 +49,11 @@ class DartGenerator(BaseGenerator):
         PrimitiveKind.INT8: "int",
         PrimitiveKind.INT16: "int",
         PrimitiveKind.INT32: "int",
-        PrimitiveKind.VARINT32: "int",
         PrimitiveKind.INT64: "Int64",
-        PrimitiveKind.VARINT64: "Int64",
-        PrimitiveKind.TAGGED_INT64: "Int64",
         PrimitiveKind.UINT8: "int",
         PrimitiveKind.UINT16: "int",
         PrimitiveKind.UINT32: "int",
-        PrimitiveKind.VAR_UINT32: "int",
         PrimitiveKind.UINT64: "Uint64",
-        PrimitiveKind.VAR_UINT64: "Uint64",
-        PrimitiveKind.TAGGED_UINT64: "Uint64",
         PrimitiveKind.FLOAT16: "Float16",
         PrimitiveKind.BFLOAT16: "Bfloat16",
         PrimitiveKind.FLOAT32: "Float32",
@@ -67,6 +62,7 @@ class DartGenerator(BaseGenerator):
         PrimitiveKind.BYTES: "Uint8List",
         PrimitiveKind.DATE: "LocalDate",
         PrimitiveKind.TIMESTAMP: "Timestamp",
+        PrimitiveKind.DURATION: "Duration",
         PrimitiveKind.DECIMAL: "Decimal",
         PrimitiveKind.ANY: "Object?",
     }
@@ -445,7 +441,7 @@ class DartGenerator(BaseGenerator):
         parent_stack: Optional[List[Message]] = None,
     ) -> bool:
         del parent_stack
-        return not isinstance(field_type, (ListType, MapType))
+        return not isinstance(field_type, (ListType, ArrayType, MapType))
 
     def _conversion_expression(
         self,
@@ -488,6 +484,9 @@ class DartGenerator(BaseGenerator):
                 parent_stack,
             )
             return f"List<{element_type}>.of((({value_expr} as List)).map((item) => {converted_item}))"
+        if isinstance(field_type, ArrayType):
+            array_type = self._dense_array_type(field_type)
+            return f"{value_expr} as {array_type}"
         if isinstance(field_type, MapType):
             key_type = self.dart_type(field_type.key_type, False, parent_stack)
             value_type = self.dart_type(field_type.value_type, False, parent_stack)
@@ -523,6 +522,8 @@ class DartGenerator(BaseGenerator):
             base = self.PRIMITIVE_MAP[field_type.kind]
         elif isinstance(field_type, ListType):
             base = self._typed_array_or_list(field_type, parent_stack)
+        elif isinstance(field_type, ArrayType):
+            base = self._dense_array_type(field_type)
         elif isinstance(field_type, MapType):
             base = (
                 f"Map<{self.dart_type(field_type.key_type, parent_stack=parent_stack)}, "
@@ -548,35 +549,25 @@ class DartGenerator(BaseGenerator):
         field_type: ListType,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
-        if (
-            not field_type.element_optional
-            and not field_type.element_ref
-            and isinstance(field_type.element_type, PrimitiveType)
-        ):
-            array_map = {
-                PrimitiveKind.INT8: "Int8List",
-                PrimitiveKind.INT16: "Int16List",
-                PrimitiveKind.INT32: "Int32List",
-                PrimitiveKind.VARINT32: "Int32List",
-                PrimitiveKind.INT64: "Int64List",
-                PrimitiveKind.VARINT64: "Int64List",
-                PrimitiveKind.TAGGED_INT64: "Int64List",
-                PrimitiveKind.UINT8: "Uint8List",
-                PrimitiveKind.UINT16: "Uint16List",
-                PrimitiveKind.UINT32: "Uint32List",
-                PrimitiveKind.VAR_UINT32: "Uint32List",
-                PrimitiveKind.UINT64: "Uint64List",
-                PrimitiveKind.VAR_UINT64: "Uint64List",
-                PrimitiveKind.TAGGED_UINT64: "Uint64List",
-                PrimitiveKind.FLOAT16: "Float16List",
-                PrimitiveKind.BFLOAT16: "Bfloat16List",
-                PrimitiveKind.FLOAT32: "Float32List",
-                PrimitiveKind.FLOAT64: "Float64List",
-            }
-            mapped = array_map.get(field_type.element_type.kind)
-            if mapped:
-                return mapped
         return f"List<{self.dart_type(field_type.element_type, field_type.element_optional, parent_stack)}>"
+
+    def _dense_array_type(self, field_type: ArrayType) -> str:
+        array_map = {
+            PrimitiveKind.BOOL: "BoolList",
+            PrimitiveKind.INT8: "Int8List",
+            PrimitiveKind.INT16: "Int16List",
+            PrimitiveKind.INT32: "Int32List",
+            PrimitiveKind.INT64: "Int64List",
+            PrimitiveKind.UINT8: "Uint8List",
+            PrimitiveKind.UINT16: "Uint16List",
+            PrimitiveKind.UINT32: "Uint32List",
+            PrimitiveKind.UINT64: "Uint64List",
+            PrimitiveKind.FLOAT16: "Float16List",
+            PrimitiveKind.BFLOAT16: "Bfloat16List",
+            PrimitiveKind.FLOAT32: "Float32List",
+            PrimitiveKind.FLOAT64: "Float64List",
+        }
+        return array_map[field_type.element_type.kind]
 
     def _default_value_for_type(
         self,
@@ -594,17 +585,11 @@ class DartGenerator(BaseGenerator):
                 PrimitiveKind.INT8: "0",
                 PrimitiveKind.INT16: "0",
                 PrimitiveKind.INT32: "0",
-                PrimitiveKind.VARINT32: "0",
                 PrimitiveKind.INT64: "Int64(0)",
-                PrimitiveKind.VARINT64: "Int64(0)",
-                PrimitiveKind.TAGGED_INT64: "Int64(0)",
                 PrimitiveKind.UINT8: "0",
                 PrimitiveKind.UINT16: "0",
                 PrimitiveKind.UINT32: "0",
-                PrimitiveKind.VAR_UINT32: "0",
                 PrimitiveKind.UINT64: "Uint64(0)",
-                PrimitiveKind.VAR_UINT64: "Uint64(0)",
-                PrimitiveKind.TAGGED_UINT64: "Uint64(0)",
                 PrimitiveKind.FLOAT16: "Float16(0)",
                 PrimitiveKind.BFLOAT16: "Bfloat16(0)",
                 PrimitiveKind.FLOAT32: "Float32(0)",
@@ -612,17 +597,17 @@ class DartGenerator(BaseGenerator):
                 PrimitiveKind.STRING: "''",
                 PrimitiveKind.BYTES: "Uint8List(0)",
                 PrimitiveKind.DATE: "const LocalDate(1970, 1, 1)",
-                PrimitiveKind.TIMESTAMP: "Timestamp(0, 0)",
-                PrimitiveKind.DECIMAL: "const Decimal.zero()",
+                PrimitiveKind.TIMESTAMP: "Timestamp(Int64(0), 0)",
+                PrimitiveKind.DURATION: "Duration.zero",
+                PrimitiveKind.DECIMAL: "Decimal.zero()",
                 PrimitiveKind.ANY: "null",
             }[t.kind]
         if isinstance(t, ListType):
-            arr = self._typed_array_or_list(t, parent_stack)
-            return (
-                f"{arr}(0)"
-                if arr.endswith("List") and arr != "List"
-                else f"<{self.dart_type(t.element_type, t.element_optional, parent_stack)}>[]"
-            )
+            return f"<{self.dart_type(t.element_type, t.element_optional, parent_stack)}>[]"
+        if isinstance(t, ArrayType):
+            if t.element_type.kind == PrimitiveKind.BOOL:
+                return "BoolList(0)"
+            return f"{self._dense_array_type(t)}(0)"
         if isinstance(t, MapType):
             key_type = self.dart_type(t.key_type, parent_stack=parent_stack)
             value_type = self.dart_type(t.value_type, t.value_optional, parent_stack)
@@ -691,24 +676,18 @@ class DartGenerator(BaseGenerator):
         element_ref_override: bool = False,
     ) -> Optional[str]:
         if isinstance(field_type, PrimitiveType):
+            integer_spec = self.integer_type_spec_expression(field_type)
+            if integer_spec is not None:
+                return integer_spec
             primitive = {
                 PrimitiveKind.INT8: "Int8Type()",
                 PrimitiveKind.INT16: "Int16Type()",
-                PrimitiveKind.INT32: "Int32Type(encoding: Encoding.fixed)",
-                PrimitiveKind.VARINT32: "Int32Type(encoding: Encoding.varint)",
-                PrimitiveKind.INT64: "Int64Type(encoding: Encoding.fixed)",
-                PrimitiveKind.VARINT64: "Int64Type(encoding: Encoding.varint)",
-                PrimitiveKind.TAGGED_INT64: "Int64Type(encoding: Encoding.tagged)",
                 PrimitiveKind.UINT8: "Uint8Type()",
                 PrimitiveKind.UINT16: "Uint16Type()",
-                PrimitiveKind.UINT32: "Uint32Type(encoding: Encoding.fixed)",
-                PrimitiveKind.VAR_UINT32: "Uint32Type(encoding: Encoding.varint)",
-                PrimitiveKind.UINT64: "Uint64Type(encoding: Encoding.fixed)",
-                PrimitiveKind.VAR_UINT64: "Uint64Type(encoding: Encoding.varint)",
-                PrimitiveKind.TAGGED_UINT64: "Uint64Type(encoding: Encoding.tagged)",
                 PrimitiveKind.FLOAT16: "Float16Type()",
                 PrimitiveKind.BFLOAT16: "Bfloat16Type()",
                 PrimitiveKind.FLOAT32: "Float32Type()",
+                PrimitiveKind.DURATION: "DurationType()",
             }.get(field_type.kind)
             if primitive is not None:
                 return primitive
@@ -729,6 +708,13 @@ class DartGenerator(BaseGenerator):
             if element_spec is None:
                 return None
             return f"ListType(element: {element_spec})"
+        if isinstance(field_type, ArrayType):
+            element_spec = self.array_element_type_spec_expression(
+                field_type.element_type
+            )
+            if element_spec is None:
+                return None
+            return f"ArrayType(element: {element_spec})"
         if isinstance(field_type, MapType):
             key_spec = self.type_spec_expression(field_type.key_type, parent_stack)
             value_spec = self.type_spec_expression(
@@ -745,6 +731,39 @@ class DartGenerator(BaseGenerator):
                 return None
             return f"MapType({', '.join(args)})"
         return None
+
+    def integer_type_spec_expression(self, field_type: PrimitiveType) -> Optional[str]:
+        type_name = {
+            PrimitiveKind.INT32: "Int32Type",
+            PrimitiveKind.INT64: "Int64Type",
+            PrimitiveKind.UINT32: "Uint32Type",
+            PrimitiveKind.UINT64: "Uint64Type",
+        }.get(field_type.kind)
+        if type_name is None:
+            return None
+        encoding = field_type.encoding_modifier or "varint"
+        return f"{type_name}(encoding: Encoding.{encoding})"
+
+    def array_element_type_spec_expression(
+        self, field_type: FieldType
+    ) -> Optional[str]:
+        if not isinstance(field_type, PrimitiveType):
+            return self.type_spec_expression(field_type)
+        return {
+            PrimitiveKind.BOOL: "BoolType()",
+            PrimitiveKind.INT8: "Int8Type()",
+            PrimitiveKind.INT16: "Int16Type()",
+            PrimitiveKind.INT32: "Int32Type()",
+            PrimitiveKind.INT64: "Int64Type()",
+            PrimitiveKind.UINT8: "Uint8Type()",
+            PrimitiveKind.UINT16: "Uint16Type()",
+            PrimitiveKind.UINT32: "Uint32Type()",
+            PrimitiveKind.UINT64: "Uint64Type()",
+            PrimitiveKind.FLOAT16: "Float16Type()",
+            PrimitiveKind.BFLOAT16: "Bfloat16Type()",
+            PrimitiveKind.FLOAT32: "Float32Type()",
+            PrimitiveKind.FLOAT64: "Float64Type()",
+        }.get(field_type.kind)
 
     def enum_case_name(self, enum: Enum, value: EnumValue) -> str:
         name = value.name
@@ -859,6 +878,12 @@ class DartGenerator(BaseGenerator):
                     "",
                 ]
             )
+        case_fields_name = (
+            f"_{self.safe_identifier(self.to_camel_case(name))}ForyCaseFieldInfo"
+        )
+        case_runtime_fields_name = (
+            f"_{self.safe_identifier(self.to_camel_case(name))}ForyCaseFields"
+        )
         lines.extend(
             [
                 f"{self.indent_str * (indent + 1)}@override",
@@ -871,17 +896,50 @@ class DartGenerator(BaseGenerator):
                 f"{self.indent_str * (indent + 1)}static {full} fromBytes(Uint8List bytes) => ForyRegistration.getFory().deserialize<{full}>(bytes);",
                 f"{self.indent_str * indent}}}",
                 "",
+                f"{self.indent_str * indent}const List<GeneratedFieldInfo> {case_fields_name} = <GeneratedFieldInfo>[",
+            ]
+        )
+        for field in union.fields:
+            lines.extend(self._field_info_lines(field, indent + 1, parent_stack))
+            lines[-1] += ","
+        lines.extend(
+            [
+                f"{self.indent_str * indent}];",
+                "",
+                f"{self.indent_str * indent}final List<GeneratedStructFieldInfo> {case_runtime_fields_name} = buildGeneratedUnionCaseFieldInfos({case_fields_name});",
+                "",
                 f"{self.indent_str * indent}final class _{name}ForySerializer extends UnionSerializer<{full}> {{",
                 f"{self.indent_str * (indent + 1)}const _{name}ForySerializer();",
                 f"{self.indent_str * (indent + 1)}@override",
-                f"{self.indent_str * (indent + 1)}void write(WriteContext context, {full} value) {{",
-                f"{self.indent_str * (indent + 2)}context.writeVarUint32(value.caseId);",
-                f"{self.indent_str * (indent + 2)}context.writeRef(value.value);",
+                f"{self.indent_str * (indent + 1)}int caseId({full} value) => value.caseId;",
+                f"{self.indent_str * (indent + 1)}@override",
+                f"{self.indent_str * (indent + 1)}Object? caseValue({full} value) => value.value;",
+                f"{self.indent_str * (indent + 1)}@override",
+                f"{self.indent_str * (indent + 1)}void writeCasePayload(WriteContext context, int caseId, Object? value) {{",
+            ]
+        )
+        for index, field in enumerate(union.fields):
+            lines.append(
+                f"{self.indent_str * (indent + 2)}if (caseId == {field.number}) {{ writeGeneratedUnionCaseValue(context, {case_runtime_fields_name}[{index}], value); return; }}"
+            )
+        lines.extend(
+            [
+                f"{self.indent_str * (indent + 2)}throw StateError('Unknown {name} case id ${{caseId}}.');",
                 f"{self.indent_str * (indent + 1)}}}",
                 f"{self.indent_str * (indent + 1)}@override",
-                f"{self.indent_str * (indent + 1)}{full} read(ReadContext context) {{",
-                f"{self.indent_str * (indent + 2)}final caseId = context.readVarUint32();",
-                f"{self.indent_str * (indent + 2)}final value = context.readRef();",
+                f"{self.indent_str * (indent + 1)}Object? readCasePayload(ReadContext context, int caseId) {{",
+            ]
+        )
+        for index, field in enumerate(union.fields):
+            lines.append(
+                f"{self.indent_str * (indent + 2)}if (caseId == {field.number}) return readGeneratedUnionCaseValue(context, {case_runtime_fields_name}[{index}]);"
+            )
+        lines.extend(
+            [
+                f"{self.indent_str * (indent + 2)}throw StateError('Unknown {name} case id ${{caseId}}.');",
+                f"{self.indent_str * (indent + 1)}}}",
+                f"{self.indent_str * (indent + 1)}@override",
+                f"{self.indent_str * (indent + 1)}{full} buildValue(int caseId, Object? value) {{",
             ]
         )
         for field in union.fields:
@@ -1025,6 +1083,16 @@ class DartGenerator(BaseGenerator):
                     parent_stack,
                 )
             )
+        elif isinstance(field_type, ArrayType):
+            args.append(
+                self._field_type_literal_from_type(
+                    field_type.element_type,
+                    False,
+                    False,
+                    indent + 2,
+                    parent_stack,
+                )
+            )
         elif isinstance(field_type, MapType):
             args.append(
                 self._field_type_literal_from_type(
@@ -1047,18 +1115,16 @@ class DartGenerator(BaseGenerator):
             + ",\n".join(args)
             + f"\n{self.indent_str * (indent + 1)}]"
         )
-        dynamic_literal = (
-            "null"
-            if isinstance(field_type, PrimitiveType)
-            else (
-                "false"
-                if isinstance(field_type, NamedType)
-                and isinstance(
-                    self.resolve_type(field_type.name, parent_stack), (Enum, Message)
-                )
-                else "true"
-            )
-        )
+        if isinstance(field_type, PrimitiveType):
+            dynamic_literal = "null"
+        elif isinstance(field_type, (ListType, ArrayType, MapType)):
+            dynamic_literal = "false"
+        elif isinstance(field_type, NamedType) and isinstance(
+            self.resolve_type(field_type.name, parent_stack), (Enum, Message, Union)
+        ):
+            dynamic_literal = "false"
+        else:
+            dynamic_literal = "true"
         return (
             "GeneratedFieldType(\n"
             f"{self.indent_str * (indent + 1)}type: {type_expr},\n"
@@ -1077,22 +1143,15 @@ class DartGenerator(BaseGenerator):
     ) -> Tuple[str, str]:
         parent_stack = parent_stack or []
         if isinstance(field_type, PrimitiveType):
+            integer_expr = self._integer_type_expr_and_id(field_type)
+            if integer_expr is not None:
+                return integer_expr
             return {
                 PrimitiveKind.BOOL: ("bool", "TypeIds.boolType"),
                 PrimitiveKind.INT8: ("int", "TypeIds.int8"),
                 PrimitiveKind.INT16: ("int", "TypeIds.int16"),
-                PrimitiveKind.INT32: ("int", "TypeIds.int32"),
-                PrimitiveKind.VARINT32: ("int", "TypeIds.varInt32"),
-                PrimitiveKind.INT64: ("Int64", "TypeIds.int64"),
-                PrimitiveKind.VARINT64: ("Int64", "TypeIds.varInt64"),
-                PrimitiveKind.TAGGED_INT64: ("Int64", "TypeIds.taggedInt64"),
                 PrimitiveKind.UINT8: ("int", "TypeIds.uint8"),
                 PrimitiveKind.UINT16: ("int", "TypeIds.uint16"),
-                PrimitiveKind.UINT32: ("int", "TypeIds.uint32"),
-                PrimitiveKind.VAR_UINT32: ("int", "TypeIds.varUint32"),
-                PrimitiveKind.UINT64: ("Uint64", "TypeIds.uint64"),
-                PrimitiveKind.VAR_UINT64: ("Uint64", "TypeIds.varUint64"),
-                PrimitiveKind.TAGGED_UINT64: ("Uint64", "TypeIds.taggedUint64"),
                 PrimitiveKind.FLOAT16: ("Float16", "TypeIds.float16"),
                 PrimitiveKind.BFLOAT16: ("Bfloat16", "TypeIds.bfloat16"),
                 PrimitiveKind.FLOAT32: ("Float32", "TypeIds.float32"),
@@ -1101,30 +1160,29 @@ class DartGenerator(BaseGenerator):
                 PrimitiveKind.BYTES: ("Uint8List", "TypeIds.binary"),
                 PrimitiveKind.DATE: ("LocalDate", "TypeIds.date"),
                 PrimitiveKind.TIMESTAMP: ("Timestamp", "TypeIds.timestamp"),
+                PrimitiveKind.DURATION: ("Duration", "TypeIds.duration"),
+                PrimitiveKind.DECIMAL: ("Decimal", "TypeIds.decimal"),
                 PrimitiveKind.ANY: ("Object", "TypeIds.unknown"),
             }[field_type.kind]
         if isinstance(field_type, ListType):
-            arr = self._typed_array_or_list(field_type, parent_stack)
-            if (
-                arr
-                != f"List<{self.dart_type(field_type.element_type, field_type.element_optional, parent_stack)}>"
-                and arr.endswith("List")
-            ):
-                return arr, {
-                    "Int8List": "TypeIds.int8Array",
-                    "Int16List": "TypeIds.int16Array",
-                    "Int32List": "TypeIds.int32Array",
-                    "Int64List": "TypeIds.int64Array",
-                    "Uint8List": "TypeIds.uint8Array",
-                    "Uint16List": "TypeIds.uint16Array",
-                    "Uint32List": "TypeIds.uint32Array",
-                    "Uint64List": "TypeIds.uint64Array",
-                    "Float16List": "TypeIds.float16Array",
-                    "Bfloat16List": "TypeIds.bfloat16Array",
-                    "Float32List": "TypeIds.float32Array",
-                    "Float64List": "TypeIds.float64Array",
-                }[arr]
             return "List", "TypeIds.list"
+        if isinstance(field_type, ArrayType):
+            arr = self._dense_array_type(field_type)
+            return arr, {
+                "BoolList": "TypeIds.boolArray",
+                "Int8List": "TypeIds.int8Array",
+                "Int16List": "TypeIds.int16Array",
+                "Int32List": "TypeIds.int32Array",
+                "Int64List": "TypeIds.int64Array",
+                "Uint8List": "TypeIds.uint8Array",
+                "Uint16List": "TypeIds.uint16Array",
+                "Uint32List": "TypeIds.uint32Array",
+                "Uint64List": "TypeIds.uint64Array",
+                "Float16List": "TypeIds.float16Array",
+                "Bfloat16List": "TypeIds.bfloat16Array",
+                "Float32List": "TypeIds.float32Array",
+                "Float64List": "TypeIds.float64Array",
+            }[arr]
         if isinstance(field_type, MapType):
             return "Map", "TypeIds.map"
         if isinstance(field_type, NamedType):
@@ -1143,6 +1201,41 @@ class DartGenerator(BaseGenerator):
                 self.to_pascal_case(field_type.name)
             ), "TypeIds.struct"
         return "Object", "TypeIds.unknown"
+
+    def _integer_type_expr_and_id(
+        self, field_type: PrimitiveType
+    ) -> Optional[Tuple[str, str]]:
+        table = {
+            PrimitiveKind.INT32: ("int", "TypeIds.int32", "TypeIds.varInt32", None),
+            PrimitiveKind.INT64: (
+                "Int64",
+                "TypeIds.int64",
+                "TypeIds.varInt64",
+                "TypeIds.taggedInt64",
+            ),
+            PrimitiveKind.UINT32: (
+                "int",
+                "TypeIds.uint32",
+                "TypeIds.varUint32",
+                None,
+            ),
+            PrimitiveKind.UINT64: (
+                "Uint64",
+                "TypeIds.uint64",
+                "TypeIds.varUint64",
+                "TypeIds.taggedUint64",
+            ),
+        }
+        entry = table.get(field_type.kind)
+        if entry is None:
+            return None
+        type_expr, fixed_type_id, varint_type_id, tagged_type_id = entry
+        encoding = field_type.encoding_modifier or "varint"
+        if encoding == "fixed":
+            return type_expr, fixed_type_id
+        if encoding == "tagged" and tagged_type_id is not None:
+            return type_expr, tagged_type_id
+        return type_expr, varint_type_id
 
     def generate_registration_type(self, indent: int) -> List[str]:
         generated_api = self.generated_api_name()

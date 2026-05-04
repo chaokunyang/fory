@@ -234,7 +234,7 @@ export class TypeMeta {
   }
 
   computeStructFingerprint(fields: FieldInfo[]) {
-    let fieldInfos = [];
+    let fieldInfos: Array<[FieldInfo, string, string]> = [];
     for (const field of fields) {
       let fieldIdentifier = "";
       if (field.hasFieldId()) {
@@ -242,12 +242,12 @@ export class TypeMeta {
       } else {
         fieldIdentifier = TypeMeta.toSnakeCase(field.getFieldName());
       }
-      fieldInfos.push([fieldIdentifier, this.computeFieldTypeFingerprint(field, true, true)]);
+      fieldInfos.push([field, fieldIdentifier, this.computeFieldTypeFingerprint(field, true, true)]);
     }
-    fieldInfos = fieldInfos.sort((a, b) => a[0].localeCompare(b[0]));
+    fieldInfos = fieldInfos.sort((a, b) => TypeMeta.compareFieldSortKey(a[0], b[0]));
     let result = "";
     for (const fieldInfo of fieldInfos) {
-      result += `${fieldInfo[0]},${fieldInfo[1]};`;
+      result += `${fieldInfo[1]},${fieldInfo[2]};`;
     }
     return result;
   }
@@ -827,6 +827,17 @@ export class TypeMeta {
     return TypeMeta.toSnakeCase(i.fieldName);
   }
 
+  static compareFieldSortKey(
+    a: { fieldName: string; fieldId?: number },
+    b: { fieldName: string; fieldId?: number }
+  ) {
+    if (a.fieldId !== undefined && a.fieldId !== null
+      && b.fieldId !== undefined && b.fieldId !== null) {
+      return a.fieldId - b.fieldId;
+    }
+    return TypeMeta.getFieldSortKey(a).localeCompare(TypeMeta.getFieldSortKey(b));
+  }
+
   static groupFieldsByType<T extends { fieldName: string; nullable?: boolean; typeId: number; fieldId?: number }>(typeInfos: Array<T>): Array<T> {
     const primitiveFields: Array<T> = [];
     const nullablePrimitiveFields: Array<T> = [];
@@ -900,11 +911,10 @@ export class TypeMeta {
       return nameSorter(a, b);
     };
 
-    const nameSorter = (a: T, b: T) => {
-      return TypeMeta.getFieldSortKey(a).localeCompare(TypeMeta.getFieldSortKey(b));
-    };
+    const nameSorter = (a: T, b: T) => TypeMeta.compareFieldSortKey(a, b);
 
-    // Sort each group
+    // Field IDs identify fields for fingerprints and compatible matching. They are only tie
+    // breakers inside the language-neutral direct payload groups, even when every field is tagged.
     primitiveFields.sort(primitiveComparator);
     nullablePrimitiveFields.sort(primitiveComparator);
     internalTypeFields.sort(typeIdThenNameSorter);

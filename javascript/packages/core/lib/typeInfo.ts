@@ -18,7 +18,7 @@
  */
 
 import { ForyTypeInfoSymbol, TypeId } from "./type";
-import { BFloat16 } from "./types/bfloat16";
+import { BFloat16, BFloat16Array } from "./types/bfloat16";
 import { Decimal } from "./types/decimal";
 
 
@@ -48,6 +48,7 @@ interface TypeInfoOptions {
   inner?: TypeInfo;
   enumProps?: { [key: string]: number };
   cases?: { [caseIndex: number]: TypeInfo };
+  scalarEncoding?: ScalarEncoding;
 }
 
 /**
@@ -360,6 +361,76 @@ export enum Dynamic {
   AUTO = "AUTO"
 }
 
+type ScalarEncoding = "fixed" | "varint" | "tagged";
+
+type IntegerEncodingOptions = {
+  encoding?: ScalarEncoding;
+};
+
+const scalarTypeInfo = <T extends number>(
+  typeId: T,
+  scalarEncoding?: ScalarEncoding,
+) => {
+  const typeInfo = TypeInfo.fromNonParam<T>(typeId);
+  if (scalarEncoding !== undefined) {
+    typeInfo.options = { scalarEncoding };
+  }
+  return typeInfo;
+};
+
+const typeIdForInt32Encoding = (options?: IntegerEncodingOptions) => {
+  switch (options?.encoding ?? "varint") {
+    case "fixed":
+      return TypeId.INT32;
+    case "varint":
+      return TypeId.VARINT32;
+    default:
+      throw new Error("int32 supports only fixed or varint encoding");
+  }
+};
+
+const typeIdForInt64Encoding = (options?: IntegerEncodingOptions) => {
+  switch (options?.encoding ?? "varint") {
+    case "fixed":
+      return TypeId.INT64;
+    case "varint":
+      return TypeId.VARINT64;
+    case "tagged":
+      return TypeId.TAGGED_INT64;
+    default:
+      throw new Error("unsupported int64 encoding");
+  }
+};
+
+const typeIdForUInt32Encoding = (options?: IntegerEncodingOptions) => {
+  switch (options?.encoding ?? "varint") {
+    case "fixed":
+      return TypeId.UINT32;
+    case "varint":
+      return TypeId.VAR_UINT32;
+    default:
+      throw new Error("uint32 supports only fixed or varint encoding");
+  }
+};
+
+const typeIdForUInt64Encoding = (options?: IntegerEncodingOptions) => {
+  switch (options?.encoding ?? "varint") {
+    case "fixed":
+      return TypeId.UINT64;
+    case "varint":
+      return TypeId.VAR_UINT64;
+    case "tagged":
+      return TypeId.TAGGED_UINT64;
+    default:
+      throw new Error("unsupported uint64 encoding");
+  }
+};
+
+const isDenseArrayTypeId = (typeId: number) => (
+  typeId >= TypeId.BOOL_ARRAY && typeId <= TypeId.FLOAT64_ARRAY
+);
+
+const denseArrayTypeInfo = <T extends number>(typeId: T) => TypeInfo.fromNonParam<T>(typeId);
 
 type Props<T> = T extends {
   options: {
@@ -481,6 +552,58 @@ export type HintInput<T> = T extends {
   }
   ? Uint8Array
   : T extends {
+    type: typeof TypeId.BOOL_ARRAY;
+  }
+  ? boolean[]
+  : T extends {
+    type: typeof TypeId.INT8_ARRAY;
+  }
+  ? Int8Array
+  : T extends {
+    type: typeof TypeId.INT16_ARRAY;
+  }
+  ? Int16Array
+  : T extends {
+    type: typeof TypeId.INT32_ARRAY;
+  }
+  ? Int32Array
+  : T extends {
+    type: typeof TypeId.INT64_ARRAY;
+  }
+  ? BigInt64Array
+  : T extends {
+    type: typeof TypeId.UINT8_ARRAY;
+  }
+  ? Uint8Array
+  : T extends {
+    type: typeof TypeId.UINT16_ARRAY;
+  }
+  ? Uint16Array
+  : T extends {
+    type: typeof TypeId.UINT32_ARRAY;
+  }
+  ? Uint32Array
+  : T extends {
+    type: typeof TypeId.UINT64_ARRAY;
+  }
+  ? BigUint64Array
+  : T extends {
+    type: typeof TypeId.FLOAT16_ARRAY;
+  }
+  ? number[]
+  : T extends {
+    type: typeof TypeId.BFLOAT16_ARRAY;
+  }
+  ? BFloat16Array | BFloat16[] | number[]
+  : T extends {
+    type: typeof TypeId.FLOAT32_ARRAY;
+  }
+  ? Float32Array
+  : T extends {
+    type: typeof TypeId.FLOAT64_ARRAY;
+  }
+  ? Float64Array
+  : T extends {
     type: typeof TypeId.ENUM;
   }
   ? EnumProps<T> : any;
@@ -557,7 +680,60 @@ export type HintResult<T> = T extends never ? any : T extends {
   : T extends {
     type: typeof TypeId.BINARY;
   }
-  ? Uint8Array : T extends {
+  ? Uint8Array
+  : T extends {
+    type: typeof TypeId.BOOL_ARRAY;
+  }
+  ? boolean[]
+  : T extends {
+    type: typeof TypeId.INT8_ARRAY;
+  }
+  ? Int8Array
+  : T extends {
+    type: typeof TypeId.INT16_ARRAY;
+  }
+  ? Int16Array
+  : T extends {
+    type: typeof TypeId.INT32_ARRAY;
+  }
+  ? Int32Array
+  : T extends {
+    type: typeof TypeId.INT64_ARRAY;
+  }
+  ? BigInt64Array
+  : T extends {
+    type: typeof TypeId.UINT8_ARRAY;
+  }
+  ? Uint8Array
+  : T extends {
+    type: typeof TypeId.UINT16_ARRAY;
+  }
+  ? Uint16Array
+  : T extends {
+    type: typeof TypeId.UINT32_ARRAY;
+  }
+  ? Uint32Array
+  : T extends {
+    type: typeof TypeId.UINT64_ARRAY;
+  }
+  ? BigUint64Array
+  : T extends {
+    type: typeof TypeId.FLOAT16_ARRAY;
+  }
+  ? number[]
+  : T extends {
+    type: typeof TypeId.BFLOAT16_ARRAY;
+  }
+  ? BFloat16[]
+  : T extends {
+    type: typeof TypeId.FLOAT32_ARRAY;
+  }
+  ? Float32Array
+  : T extends {
+    type: typeof TypeId.FLOAT64_ARRAY;
+  }
+  ? Float64Array
+  : T extends {
     type: typeof TypeId.ENUM;
   }
   ? EnumProps<T> : unknown;
@@ -566,7 +742,7 @@ export const Type = {
   any() {
     return TypeInfo.fromNonParam<typeof TypeId.UNKNOWN>(TypeId.UNKNOWN);
   },
-  array<T extends TypeInfo>(inner: T) {
+  list<T extends TypeInfo>(inner: T) {
     return TypeInfo.fromWithOptions<typeof TypeId.LIST, { inner: T }>(TypeId.LIST, {
       inner,
     });
@@ -575,6 +751,9 @@ export const Type = {
     key: T1,
     value: T2
   ) {
+    if (isDenseArrayTypeId(key.typeId)) {
+      throw new Error("Dense array schema is not valid as a map key type");
+    }
     return TypeInfo.fromWithOptions<typeof TypeId.MAP, {
       key: T1,
       value: T2
@@ -685,29 +864,11 @@ export const Type = {
 
     );
   },
-  int32() {
-    return TypeInfo.fromNonParam<typeof TypeId.INT32>(
-      (TypeId.INT32),
-
-    );
+  int32(options?: IntegerEncodingOptions) {
+    return scalarTypeInfo(typeIdForInt32Encoding(options), options?.encoding);
   },
-  varInt32() {
-    return TypeInfo.fromNonParam<typeof TypeId.VARINT32>(
-      (TypeId.VARINT32),
-
-    );
-  },
-  int64() {
-    return TypeInfo.fromNonParam<typeof TypeId.INT64>(
-      (TypeId.INT64),
-
-    );
-  },
-  sliInt64() {
-    return TypeInfo.fromNonParam<typeof TypeId.TAGGED_INT64>(
-      (TypeId.TAGGED_INT64),
-
-    );
+  int64(options?: IntegerEncodingOptions) {
+    return scalarTypeInfo(typeIdForInt64Encoding(options), options?.encoding);
   },
   float16() {
     return TypeInfo.fromNonParam<typeof TypeId.FLOAT16>(
@@ -743,35 +904,11 @@ export const Type = {
       (TypeId.UINT16),
     );
   },
-  uint32() {
-    return TypeInfo.fromNonParam<typeof TypeId.UINT32>(
-      (TypeId.UINT32),
-    );
+  uint32(options?: IntegerEncodingOptions) {
+    return scalarTypeInfo(typeIdForUInt32Encoding(options), options?.encoding);
   },
-  varUInt32() {
-    return TypeInfo.fromNonParam<typeof TypeId.VAR_UINT32>(
-      (TypeId.VAR_UINT32),
-    );
-  },
-  uint64() {
-    return TypeInfo.fromNonParam<typeof TypeId.UINT64>(
-      (TypeId.UINT64),
-    );
-  },
-  varUInt64() {
-    return TypeInfo.fromNonParam<typeof TypeId.VAR_UINT64>(
-      (TypeId.VAR_UINT64),
-    );
-  },
-  varInt64() {
-    return TypeInfo.fromNonParam<typeof TypeId.VARINT64>(
-      (TypeId.VARINT64),
-    );
-  },
-  taggedUInt64() {
-    return TypeInfo.fromNonParam<typeof TypeId.TAGGED_UINT64>(
-      (TypeId.TAGGED_UINT64),
-    );
+  uint64(options?: IntegerEncodingOptions) {
+    return scalarTypeInfo(typeIdForUInt64Encoding(options), options?.encoding);
   },
   binary() {
     return TypeInfo.fromNonParam<typeof TypeId.BINARY>(
@@ -800,80 +937,42 @@ export const Type = {
     );
   },
   boolArray() {
-    return TypeInfo.fromNonParam<typeof TypeId.BOOL_ARRAY>(
-      (TypeId.BOOL_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.BOOL_ARRAY>(TypeId.BOOL_ARRAY);
   },
   int8Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.INT8_ARRAY>(
-      (TypeId.INT8_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.INT8_ARRAY>(TypeId.INT8_ARRAY);
   },
   int16Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.INT16_ARRAY>(
-      (TypeId.INT16_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.INT16_ARRAY>(TypeId.INT16_ARRAY);
   },
   int32Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.INT32_ARRAY>(
-      (TypeId.INT32_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.INT32_ARRAY>(TypeId.INT32_ARRAY);
   },
   int64Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.INT64_ARRAY>(
-      (TypeId.INT64_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.INT64_ARRAY>(TypeId.INT64_ARRAY);
   },
   uint8Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.UINT8_ARRAY>(
-      (TypeId.UINT8_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.UINT8_ARRAY>(TypeId.UINT8_ARRAY);
   },
   uint16Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.UINT16_ARRAY>(
-      (TypeId.UINT16_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.UINT16_ARRAY>(TypeId.UINT16_ARRAY);
   },
   uint32Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.UINT32_ARRAY>(
-      (TypeId.UINT32_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.UINT32_ARRAY>(TypeId.UINT32_ARRAY);
   },
   uint64Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.UINT64_ARRAY>(
-      (TypeId.UINT64_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.UINT64_ARRAY>(TypeId.UINT64_ARRAY);
   },
   float16Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.FLOAT16_ARRAY>(
-      (TypeId.FLOAT16_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.FLOAT16_ARRAY>(TypeId.FLOAT16_ARRAY);
   },
   bfloat16Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.BFLOAT16_ARRAY>(
-      (TypeId.BFLOAT16_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.BFLOAT16_ARRAY>(TypeId.BFLOAT16_ARRAY);
   },
   float32Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.FLOAT32_ARRAY>(
-      (TypeId.FLOAT32_ARRAY),
-
-    );
+    return denseArrayTypeInfo<typeof TypeId.FLOAT32_ARRAY>(TypeId.FLOAT32_ARRAY);
   },
   float64Array() {
-    return TypeInfo.fromNonParam<typeof TypeId.FLOAT64_ARRAY>(
-      (TypeId.FLOAT64_ARRAY)
-    );
+    return denseArrayTypeInfo<typeof TypeId.FLOAT64_ARRAY>(TypeId.FLOAT64_ARRAY);
   },
 };

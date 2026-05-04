@@ -89,6 +89,7 @@ public class FieldGroups {
     return DescriptorGrouper.createDescriptorGrouper(
             typeResolver::usesPrimitiveFieldOrdering,
             typeResolver::isBuildIn,
+            typeResolver::isCollectionDescriptor,
             descriptors,
             descriptorsGroupedOrdered,
             descriptorUpdator,
@@ -178,9 +179,12 @@ public class FieldGroups {
       this.type = descriptor.getRawType();
       this.typeRef = d.getTypeRef();
       this.dispatchId = DispatchId.getDispatchId(resolver, d);
+      boolean primitiveListArray =
+          TypeUtils.isPrimitiveListClass(typeRef.getRawType())
+              && TypeAnnotationUtils.isArrayType(d);
       boolean primitiveListCollection =
-          TypeAnnotationUtils.usesCollectionProtocolForPrimitiveList(
-              d.getTypeAnnotation(), typeRef.getRawType());
+          TypeUtils.isPrimitiveListClass(typeRef.getRawType())
+              && resolver.isCollectionDescriptor(d);
       // invoke `copy` to avoid ObjectSerializer construct clear serializer by `clearSerializer`.
       if (resolver.isMonomorphic(descriptor)) {
         typeInfo = resolver.getTypeInfo(typeRef.getRawType());
@@ -226,13 +230,9 @@ public class FieldGroups {
 
       GenericType t;
       if (primitiveListCollection) {
-        int elementTypeId =
-            TypeAnnotationUtils.getPrimitiveListElementTypeId(
-                d.getTypeAnnotation(), typeRef.getRawType());
-        Class<?> elementClass =
-            TypeAnnotationUtils.getPrimitiveListElementClass(typeRef.getRawType());
         TypeRef<?> elementTypeRef =
-            TypeRef.of(elementClass, TypeExtMeta.of(elementTypeId, true, false));
+            TypeAnnotationUtils.getPrimitiveListElementTypeRef(
+                d.getTypeAnnotation(), typeRef.getRawType());
         t = new GenericType(typeRef, true, resolver.buildGenericType(elementTypeRef));
       } else {
         t = resolver.buildGenericType(typeRef);
@@ -256,8 +256,19 @@ public class FieldGroups {
         classInfoHolder = null;
       }
       isArray = cls.isArray();
-      if (primitiveListCollection) {
+      if (primitiveListArray) {
+        containerSerializerOverride =
+            org.apache.fory.serializer.collection.PrimitiveListSerializers.createArraySerializer(
+                resolver, type);
+      } else if (primitiveListCollection) {
         containerSerializerOverride = new CollectionSerializer(resolver, (Class) type);
+      } else if (TypeAnnotationUtils.isBoxedListArrayType(descriptor.getField())) {
+        containerSerializerOverride =
+            new org.apache.fory.serializer.collection.PrimitiveListSerializers
+                .BoxedArrayAsListSerializer(
+                resolver,
+                TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField()),
+                qualifiedFieldName);
       } else {
         containerSerializerOverride = null;
       }

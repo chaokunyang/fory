@@ -57,15 +57,14 @@ from pyfory.serializer import (
     VarUint64Serializer,
     TaggedUint64Serializer,
     Float16Serializer,
-    Float16ArraySerializer,
     Float32Serializer,
     Float64Serializer,
     BFloat16Serializer,
-    BFloat16ArraySerializer,
     StringSerializer,
     DecimalSerializer,
     DateSerializer,
     TimestampSerializer,
+    DurationSerializer,
     BytesSerializer,
     ListSerializer,
     TupleSerializer,
@@ -88,36 +87,50 @@ from pyfory.serializer import (
     NativeFuncMethodSerializer,
     PickleBufferSerializer,
     UnionSerializer,
+    fory_array_serializer_type,
 )
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.serialization import (
     Serializer as CythonSerializer,
-    bfloat16,
-    bfloat16array,
-    float16,
-    float16array,
+)
+from pyfory.annotation import (
+    BFloat16Array,
+    Float32,
+    Float64,
+    FixedInt32,
+    FixedInt64,
+    FixedUInt32,
+    FixedUInt64,
+    BoolArray,
+    Float16Array,
+    Float32Array,
+    Float64Array,
+    Int8,
+    Int16Array,
+    Int16,
+    Int32Array,
+    Int32,
+    Int64Array,
+    Int64,
+    Int8Array,
+    TaggedInt64,
+    TaggedUInt64,
+    UInt8,
+    UInt16Array,
+    UInt16,
+    UInt32Array,
+    UInt32,
+    UInt64Array,
+    UInt64,
+    UInt8Array,
+    BFloat16,
+    Float16,
 )
 from pyfory.meta.metastring import MetaStringEncoder, MetaStringDecoder
 from pyfory.meta.meta_compressor import DeflaterMetaCompressor
 from pyfory.context import EncodedMetaString
 from pyfory.types import (
     TypeId,
-    int8,
-    int16,
-    int32,
-    int64,
-    fixed_int32,
-    fixed_int64,
-    tagged_int64,
-    uint8,
-    uint16,
-    uint32,
-    fixed_uint32,
-    uint64,
-    fixed_uint64,
-    tagged_uint64,
-    float32,
-    float64,
     is_struct_type,
     needs_user_type_id,
 )
@@ -431,79 +444,91 @@ class TypeResolver:
         self._types_info[None] = self._types_info[type(None)]
         register(bool, type_id=TypeId.BOOL, serializer=BooleanSerializer)
         # Signed integers
-        # Note: int32/int64 use VARINT32/VARINT64 for xlang compatibility (matches Java/Rust)
-        # fixed_int32/fixed_int64 use INT32/INT64 for fixed-width encoding
-        register(int8, type_id=TypeId.INT8, serializer=ByteSerializer)
-        register(int16, type_id=TypeId.INT16, serializer=Int16Serializer)
-        register(int32, type_id=TypeId.VARINT32, serializer=Int32Serializer)
-        register(fixed_int32, type_id=TypeId.INT32, serializer=FixedInt32Serializer)
-        register(int64, type_id=TypeId.VARINT64, serializer=Int64Serializer)
+        # Note: Int32/Int64 use VARINT32/VARINT64 for xlang compatibility (matches Java/Rust)
+        # FixedInt32/FixedInt64 use INT32/INT64 for fixed-width encoding
+        register(Int8, type_id=TypeId.INT8, serializer=ByteSerializer)
+        register(Int16, type_id=TypeId.INT16, serializer=Int16Serializer)
+        register(Int32, type_id=TypeId.VARINT32, serializer=Int32Serializer)
+        register(FixedInt32, type_id=TypeId.INT32, serializer=FixedInt32Serializer)
+        register(Int64, type_id=TypeId.VARINT64, serializer=Int64Serializer)
         register(int, type_id=TypeId.VARINT64, serializer=Int64Serializer)
-        register(fixed_int64, type_id=TypeId.INT64, serializer=FixedInt64Serializer)
-        register(tagged_int64, type_id=TypeId.TAGGED_INT64, serializer=TaggedInt64Serializer)
+        register(FixedInt64, type_id=TypeId.INT64, serializer=FixedInt64Serializer)
+        register(TaggedInt64, type_id=TypeId.TAGGED_INT64, serializer=TaggedInt64Serializer)
         # Unsigned integers
-        register(uint8, type_id=TypeId.UINT8, serializer=Uint8Serializer)
-        register(uint16, type_id=TypeId.UINT16, serializer=Uint16Serializer)
-        register(uint32, type_id=TypeId.VAR_UINT32, serializer=VarUint32Serializer)
-        register(fixed_uint32, type_id=TypeId.UINT32, serializer=Uint32Serializer)
-        register(uint64, type_id=TypeId.VAR_UINT64, serializer=VarUint64Serializer)
-        register(fixed_uint64, type_id=TypeId.UINT64, serializer=Uint64Serializer)
-        register(tagged_uint64, type_id=TypeId.TAGGED_UINT64, serializer=TaggedUint64Serializer)
+        register(UInt8, type_id=TypeId.UINT8, serializer=Uint8Serializer)
+        register(UInt16, type_id=TypeId.UINT16, serializer=Uint16Serializer)
+        register(UInt32, type_id=TypeId.VAR_UINT32, serializer=VarUint32Serializer)
+        register(FixedUInt32, type_id=TypeId.UINT32, serializer=Uint32Serializer)
+        register(UInt64, type_id=TypeId.VAR_UINT64, serializer=VarUint64Serializer)
+        register(FixedUInt64, type_id=TypeId.UINT64, serializer=Uint64Serializer)
+        register(TaggedUInt64, type_id=TypeId.TAGGED_UINT64, serializer=TaggedUint64Serializer)
         # Floats
         register(
-            float32,
+            Float32,
             type_id=TypeId.FLOAT32,
             serializer=Float32Serializer,
         )
         register(
-            float64,
+            Float64,
             type_id=TypeId.FLOAT64,
             serializer=Float64Serializer,
         )
         register(float, type_id=TypeId.FLOAT64, serializer=Float64Serializer)
         register(
-            float16,
+            Float16,
             type_id=TypeId.FLOAT16,
             serializer=Float16Serializer,
         )
-        register(bfloat16, type_id=TypeId.BFLOAT16, serializer=BFloat16Serializer)
+        register(BFloat16, type_id=TypeId.BFLOAT16, serializer=BFloat16Serializer)
         register(str, type_id=TypeId.STRING, serializer=StringSerializer)
         register(decimal.Decimal, type_id=TypeId.DECIMAL, serializer=DecimalSerializer)
         register(datetime.datetime, type_id=TypeId.TIMESTAMP, serializer=TimestampSerializer)
+        register(datetime.timedelta, type_id=TypeId.DURATION, serializer=DurationSerializer)
         register(datetime.date, type_id=TypeId.DATE, serializer=DateSerializer)
         register(bytes, type_id=TypeId.BINARY, serializer=BytesSerializer)
-        register(
-            float16array,
-            type_id=TypeId.FLOAT16_ARRAY,
-            serializer=Float16ArraySerializer,
-        )
-        register(
-            bfloat16array,
-            type_id=TypeId.BFLOAT16_ARRAY,
-            serializer=BFloat16ArraySerializer,
-        )
+        for wrapper, type_id in (
+            (BoolArray, TypeId.BOOL_ARRAY),
+            (Int8Array, TypeId.INT8_ARRAY),
+            (Int16Array, TypeId.INT16_ARRAY),
+            (Int32Array, TypeId.INT32_ARRAY),
+            (Int64Array, TypeId.INT64_ARRAY),
+            (UInt8Array, TypeId.UINT8_ARRAY),
+            (UInt16Array, TypeId.UINT16_ARRAY),
+            (UInt32Array, TypeId.UINT32_ARRAY),
+            (UInt64Array, TypeId.UINT64_ARRAY),
+            (Float16Array, TypeId.FLOAT16_ARRAY),
+            (BFloat16Array, TypeId.BFLOAT16_ARRAY),
+            (Float32Array, TypeId.FLOAT32_ARRAY),
+            (Float64Array, TypeId.FLOAT64_ARRAY),
+        ):
+            serializer_type = fory_array_serializer_type(type_id)
+            register(
+                wrapper,
+                type_id=type_id,
+                serializer=serializer_type(self._actual_type_resolver, wrapper),
+            )
+        pyarray_ftypes = set()
         for itemsize, ftype, typeid in PyArraySerializer.typecode_dict.values():
+            if ftype in pyarray_ftypes:
+                continue
+            pyarray_ftypes.add(ftype)
             register(
                 ftype,
                 type_id=typeid,
                 serializer=PyArraySerializer(self._actual_type_resolver, ftype, typeid),
             )
         if np:
-            # overwrite pyarray  with same type id.
-            # if pyarray are needed, one must annotate that value with XXXArrayType
-            # as a field of a struct.
             for dtype, (
                 itemsize,
                 format,
                 ftype,
                 typeid,
             ) in Numpy1DArraySerializer.dtypes_dict.items():
-                typeinfo = register(
+                register(
                     ftype,
                     type_id=typeid,
                     serializer=Numpy1DArraySerializer(self._actual_type_resolver, ftype, dtype),
                 )
-                self._type_id_to_type_info[typeid] = typeinfo
         register(list, type_id=TypeId.LIST, serializer=ListSerializer)
         register(set, type_id=TypeId.SET, serializer=SetSerializer)
         register(dict, type_id=TypeId.MAP, serializer=MapSerializer)

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import dataclasses
 import datetime
+import decimal
 import enum
 import inspect
 import logging
@@ -27,26 +28,31 @@ import sys
 import typing
 from typing import List, Dict
 
+from pyfory.annotation import (
+    ArrayMeta,
+    BFloat16,
+    Float16,
+    Float32,
+    Float64,
+    FixedInt32,
+    FixedInt64,
+    FixedUInt32,
+    FixedUInt64,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    TaggedInt64,
+    TaggedUInt64,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
+)
 from pyfory.lib.mmh3 import hash_buffer
 from pyfory.policy import DEFAULT_POLICY
 from pyfory.types import (
     TypeId,
-    int8,
-    int16,
-    int32,
-    int64,
-    fixed_int32,
-    fixed_int64,
-    tagged_int64,
-    uint8,
-    uint16,
-    uint32,
-    fixed_uint32,
-    uint64,
-    fixed_uint64,
-    tagged_uint64,
-    float32,
-    float64,
     is_primitive_array_type,
     is_list_type,
     is_map_type,
@@ -64,12 +70,12 @@ from pyfory.type_util import (
     get_homogeneous_tuple_elem_type,
     is_subclass,
     get_type_hints,
+    unwrap_array,
     unwrap_optional,
     unwrap_ref,
 )
 from pyfory.serialization import Buffer
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
-from pyfory.serialization import bfloat16, float16
 from pyfory.error import TypeNotCompatibleError
 from pyfory.resolver import NULL_FLAG, NOT_NULL_VALUE_FLAG
 from pyfory.field import (
@@ -94,26 +100,26 @@ logger = logging.getLogger(__name__)
 
 _MISSING_DEFAULT_INT_TYPES = {
     int,
-    int8,
-    int16,
-    int32,
-    fixed_int32,
-    int64,
-    fixed_int64,
-    tagged_int64,
-    uint8,
-    uint16,
-    uint32,
-    fixed_uint32,
-    uint64,
-    fixed_uint64,
-    tagged_uint64,
+    Int8,
+    Int16,
+    Int32,
+    FixedInt32,
+    Int64,
+    FixedInt64,
+    TaggedInt64,
+    UInt8,
+    UInt16,
+    UInt32,
+    FixedUInt32,
+    UInt64,
+    FixedUInt64,
+    TaggedUInt64,
 }
 
 _MISSING_DEFAULT_FLOAT_TYPES = {
     float,
-    float32,
-    float64,
+    Float32,
+    Float64,
 }
 
 
@@ -156,12 +162,26 @@ def _is_abstract_type(type_hint: type) -> bool:
         return False
 
 
-def _default_field_meta(type_hint: type, field_nullable: bool = False) -> ForyFieldMeta:
+def _is_dynamic_nullable_default(type_hint: type) -> bool:
+    if type_hint is typing.Any:
+        return True
+    origin = _get_origin(type_hint)
+    args = _get_args(type_hint)
+    if origin in (list, dict, set, tuple) and not args:
+        return True
+    return type_hint in (list, dict, set, tuple, typing.List, typing.Dict, typing.Set, typing.Tuple)
+
+
+def _default_field_meta(type_hint: type, field_nullable: bool = False, xlang: bool = False) -> ForyFieldMeta:
     """Returns default field metadata for fields without pyfory.field().
 
     A field is considered nullable if:
     1. It's Optional[T], OR
-    2. Global field_nullable is True
+    2. Global field_nullable is True, OR
+    3. In Python-native mode, it is a dynamic field such as Any or a bare collection alias.
+
+    Xlang fields are non-nullable by default so schema fingerprints and payload flags stay aligned
+    with other runtimes unless users opt into nullability explicitly.
 
     For ref, defaults to False to preserve original serialization behavior.
     Non-nullable complex fields use write_no_ref (no ref header in buffer).
@@ -172,7 +192,7 @@ def _default_field_meta(type_hint: type, field_nullable: bool = False) -> ForyFi
     - Concrete types use type-id based dynamic detection
     """
     unwrapped_type, is_optional = unwrap_optional(type_hint)
-    nullable = is_optional or field_nullable
+    nullable = is_optional or field_nullable or (not xlang and _is_dynamic_nullable_default(unwrapped_type))
     # Default ref=False to preserve original serialization behavior where non-nullable
     # fields use write_no_ref. Users can explicitly set ref=True in pyfory.field()
     # to enable per-field ref tracking when fory.track_ref is enabled.
@@ -199,7 +219,7 @@ def _extract_field_infos(
         Tuple of (field_infos, field_metas) where field_metas maps field name to ForyFieldMeta
     """
     if not dataclasses.is_dataclass(clz):
-        # For non-dataclass, return empty - will use legacy path
+        # Non-dataclass registration uses the runtime type inspection path.
         return [], {}
 
     # Collect fields from class hierarchy (parent first, child last)
@@ -226,7 +246,7 @@ def _extract_field_infos(
             # Field without pyfory.field() - use defaults
             # Auto-detect Optional[T] for nullable, also respect global field_nullable
             field_type = type_hints.get(field_name, typing.Any)
-            meta = _default_field_meta(field_type, global_field_nullable)
+            meta = _default_field_meta(field_type, global_field_nullable, getattr(fory, "xlang", False))
 
         field_metas[field_name] = meta
 
@@ -263,7 +283,15 @@ def _extract_field_infos(
             effective_nullable,
             runtime_ref,
         )
-        serializer = field_type.create_serializer(fory, field_types.get(field_name, None))
+        array_meta = unwrap_array(unwrapped_type)
+        if array_meta is not None:
+            serializer = StructFieldSerializerVisitor(fory).visit_array(
+                field_name,
+                array_meta.element_type,
+                array_meta.carrier,
+            )
+        else:
+            serializer = field_type.create_serializer(fory, field_types.get(field_name, None))
 
         type_id = field_type.type_id
 
@@ -549,10 +577,12 @@ class DataClassSerializer(Serializer):
 
     def _assign_read_field_value(self, obj, obj_dict, field_name, field_value, validation_field_type):
         if validation_field_type is not None:
-            from pyfory.meta.typedef import is_value_assignable
+            from pyfory.meta.typedef import coerce_assignable_value, is_value_assignable
 
             if not is_value_assignable(field_value, validation_field_type):
                 field_value = self._default_field_value(field_name)
+            else:
+                field_value = coerce_assignable_value(field_value, validation_field_type)
         interned_name = self._field_name_interned[field_name]
         if obj_dict is not None:
             obj_dict[interned_name] = field_value
@@ -709,26 +739,26 @@ class DataClassStubSerializer(DataClassSerializer):
 basic_types = {
     bool,
     # Signed integers
-    int8,
-    int16,
-    int32,
-    fixed_int32,
-    int64,
-    fixed_int64,
-    tagged_int64,
+    Int8,
+    Int16,
+    Int32,
+    FixedInt32,
+    Int64,
+    FixedInt64,
+    TaggedInt64,
     # Unsigned integers
-    uint8,
-    uint16,
-    uint32,
-    fixed_uint32,
-    uint64,
-    fixed_uint64,
-    tagged_uint64,
+    UInt8,
+    UInt16,
+    UInt32,
+    FixedUInt32,
+    UInt64,
+    FixedUInt64,
+    TaggedUInt64,
     # Floats
-    float16,
-    bfloat16,
-    float32,
-    float64,
+    Float16,
+    BFloat16,
+    Float32,
+    Float64,
     # Python native types
     int,
     float,
@@ -737,7 +767,53 @@ basic_types = {
     datetime.datetime,
     datetime.date,
     datetime.time,
+    datetime.timedelta,
+    decimal.Decimal,
 }
+
+_ARRAY_ELEMENT_TYPE_IDS = {
+    bool: TypeId.BOOL_ARRAY,
+    Int8: TypeId.INT8_ARRAY,
+    Int16: TypeId.INT16_ARRAY,
+    Int32: TypeId.INT32_ARRAY,
+    Int64: TypeId.INT64_ARRAY,
+    UInt8: TypeId.UINT8_ARRAY,
+    UInt16: TypeId.UINT16_ARRAY,
+    UInt32: TypeId.UINT32_ARRAY,
+    UInt64: TypeId.UINT64_ARRAY,
+    Float16: TypeId.FLOAT16_ARRAY,
+    BFloat16: TypeId.BFLOAT16_ARRAY,
+    Float32: TypeId.FLOAT32_ARRAY,
+    Float64: TypeId.FLOAT64_ARRAY,
+}
+
+_ARRAY_INVALID_SCALAR_MODIFIERS = {
+    FixedInt32,
+    FixedInt64,
+    FixedUInt32,
+    FixedUInt64,
+    TaggedInt64,
+    TaggedUInt64,
+}
+
+
+def _array_type_id(elem_type, carrier):
+    elem_type, ref_override = unwrap_ref(elem_type)
+    elem_type, elem_nullable = unwrap_optional(elem_type)
+    if elem_nullable:
+        raise TypeError("array<T> does not allow optional elements")
+    if ref_override is not None:
+        raise TypeError("array<T> does not allow ref-tracked elements")
+    if elem_type in _ARRAY_INVALID_SCALAR_MODIFIERS:
+        raise TypeError(f"array<T> does not allow scalar encoding modifier {elem_type}")
+    if carrier == "ndarray" and elem_type is BFloat16:
+        raise TypeError("pyfory.NDArray does not support BFloat16 arrays")
+    if carrier == "pyarray" and elem_type in (bool, Float16, BFloat16):
+        raise TypeError("pyfory.PyArray supports Python array.array numeric typecodes only")
+    type_id = _ARRAY_ELEMENT_TYPE_IDS.get(elem_type)
+    if type_id is None:
+        raise TypeError(f"array<T> element type must be a number or bool marker, got {elem_type}")
+    return type_id
 
 
 class StructFieldSerializerVisitor(TypeVisitor):
@@ -746,6 +822,33 @@ class StructFieldSerializerVisitor(TypeVisitor):
         type_resolver,
     ):
         self.type_resolver = type_resolver
+
+    def visit_array(self, field_name, elem_type, carrier, types_path=None):
+        type_id = _array_type_id(elem_type, carrier)
+        from pyfory.serializer import (
+            ForyArrayFieldSerializer,
+            Numpy1DArraySerializer,
+            PyArraySerializer,
+            fory_array_wrapper_type,
+            typecode_dict,
+            typeid_code,
+        )
+
+        if carrier == "array":
+            wrapper_type = fory_array_wrapper_type(type_id)
+            return ForyArrayFieldSerializer(self.type_resolver, wrapper_type, type_id, field_name)
+        if carrier == "pyarray":
+            typecode = typeid_code.get(type_id)
+            if typecode is None:
+                raise TypeError(f"pyfory.PyArray does not support array type id {type_id}")
+            _itemsize, ftype, _type_id = typecode_dict[typecode]
+            return PyArraySerializer(self.type_resolver, ftype, type_id)
+        if carrier == "ndarray":
+            for dtype, (_itemsize, _format, ftype, dtype_type_id) in Numpy1DArraySerializer.dtypes_dict.items():
+                if dtype_type_id == type_id:
+                    return Numpy1DArraySerializer(self.type_resolver, ftype, dtype)
+            raise TypeError(f"pyfory.NDArray does not support array type id {type_id}")
+        raise TypeError(f"Unknown array carrier {carrier!r}")
 
     def visit_list(self, field_name, elem_type, types_path=None):
         from pyfory.serializer import ListSerializer  # Local import
@@ -840,7 +943,7 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
         fi = field_info_map.get(field_name)
         tag_id = fi.tag_id if fi else -1
         if tag_id >= 0:
-            sort_key = (0, str(tag_id), "")
+            sort_key = (0, tag_id, "")
         else:
             sort_key = (1, field_name, "")
         if serializer is None:
@@ -956,8 +1059,7 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
         # Determine field identifier for fingerprint
         if tag_id >= 0:
             field_id_or_name = str(tag_id)
-            # Sort by tag ID string (lexicographic) for tag ID fields
-            sort_key = (0, field_id_or_name, "")  # 0 = tag ID fields come first
+            sort_key = (0, tag_id, "")  # 0 = tag ID fields come first
         else:
             field_id_or_name = field_name
             # Sort by field name (lexicographic) for name-based fields
@@ -1024,6 +1126,11 @@ def _build_schema_fingerprint_type(type_resolver, type_hint, nullable, track_ref
 
     ref_flag = "1" if track_ref else "0"
     nullable_flag = "1" if include_nullable and nullable else "0"
+
+    array_meta = unwrap_array(unwrapped_type)
+    if array_meta is not None:
+        type_id = _array_type_id(array_meta.element_type, array_meta.carrier)
+        return f"{type_id},{ref_flag},{nullable_flag}"
 
     if args:
         if origin is list or origin == typing.List:
@@ -1094,7 +1201,7 @@ def compute_struct_meta(type_resolver, field_names, serializers, nullable_map=No
     Computes struct metadata including version hash, sorted field names, and serializers.
 
     Uses compute_struct_fingerprint to build the fingerprint string, then hashes it
-    with MurmurHash3 using seed 47, and takes the low 32 bits as signed int32.
+    with MurmurHash3 using seed 47, and takes the low 32 bits as signed Int32.
 
     This provides the cross-language struct version ID used by class version checking,
     consistent with Go, Java, Rust, and C++ implementations.
@@ -1138,6 +1245,9 @@ class StructTypeIdVisitor(TypeVisitor):
         self.type_resolver = type_resolver
         self.cls = cls
 
+    def visit_array(self, field_name, elem_type, carrier, types_path=None):
+        return [_array_type_id(elem_type, carrier)]
+
     def visit_list(self, field_name, elem_type, types_path=None):
         # Infer type recursively for type such as List[Dict[str, str]]
         elem_ids = infer_field("item", elem_type, self, types_path=types_path)
@@ -1179,6 +1289,10 @@ class StructTypeIdVisitor(TypeVisitor):
 class StructTypeVisitor(TypeVisitor):
     def __init__(self, cls):
         self.cls = cls
+
+    def visit_array(self, field_name, elem_type, carrier, types_path=None):
+        _array_type_id(elem_type, carrier)
+        return ArrayMeta(elem_type, carrier)
 
     def visit_list(self, field_name, elem_type, types_path=None):
         # Infer type recursively for type such as List[Dict[str, str]]

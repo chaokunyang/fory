@@ -24,25 +24,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Annotation to mark a field as an unsigned 16-bit integer array.
- *
- * <p>When applied to a field of type {@code short[]}, this annotation indicates that the array
- * should be serialized as an unsigned 16-bit integer array (UINT16_ARRAY, type_id=45) with element
- * values in the range [0, 65535].
- *
- * <p>This is useful for compatibility with languages that have native unsigned integer array types
- * (e.g., Rust's Vec&lt;u16&gt;, Go's []uint16, C++'s std::vector&lt;uint16_t&gt;).
- *
- * <p>Example usage:
- *
- * <pre>{@code
- * public class MyStruct {
- *   {@literal @}UInt16Elements
- *   short[] ports;  // Will be serialized as unsigned 16-bit array
- * }
- * }</pre>
- */
+/** Marks a byte scalar or byte array as signed 8-bit numeric schema. */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
-public @interface UInt16Elements {}
+@Target(ElementType.TYPE_USE)
+public @interface Int8Type {}

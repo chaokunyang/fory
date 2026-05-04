@@ -36,6 +36,7 @@ from fory_compiler.ir.ast import (
     EnumValue,
     Field,
     Import,
+    ArrayType,
     ListType,
     Message,
     NamedType,
@@ -46,7 +47,7 @@ from fory_compiler.ir.ast import (
     SourceLocation,
     Union,
 )
-from fory_compiler.ir.types import PrimitiveKind
+from fory_compiler.ir.types import ARRAY_ELEMENT_KINDS, PrimitiveKind
 
 
 class FbsTranslator:
@@ -57,14 +58,19 @@ class FbsTranslator:
         "ubyte": PrimitiveKind.UINT8,
         "short": PrimitiveKind.INT16,
         "ushort": PrimitiveKind.UINT16,
-        "int": PrimitiveKind.VARINT32,
-        "uint": PrimitiveKind.VAR_UINT32,
-        "long": PrimitiveKind.VARINT64,
-        "ulong": PrimitiveKind.VAR_UINT64,
+        "int": PrimitiveKind.INT32,
+        "uint": PrimitiveKind.UINT32,
+        "long": PrimitiveKind.INT64,
+        "ulong": PrimitiveKind.UINT64,
         "float": PrimitiveKind.FLOAT32,
         "double": PrimitiveKind.FLOAT64,
         "bool": PrimitiveKind.BOOL,
         "string": PrimitiveKind.STRING,
+    }
+
+    ARRAY_ELEMENT_KINDS = ARRAY_ELEMENT_KINDS - {
+        PrimitiveKind.FLOAT16,
+        PrimitiveKind.BFLOAT16,
     }
 
     def __init__(self, schema: FbsSchema):
@@ -270,6 +276,17 @@ class FbsTranslator:
     def _translate_type(self, fbs_type: FbsTypeRef):
         if isinstance(fbs_type, FbsVectorType):
             element_type = self._translate_type(fbs_type.element_type)
+            if (
+                isinstance(element_type, PrimitiveType)
+                and element_type.kind in self.ARRAY_ELEMENT_KINDS
+            ):
+                return ArrayType(
+                    PrimitiveType(
+                        element_type.kind,
+                        location=self._location(fbs_type.line, fbs_type.column),
+                    ),
+                    location=self._location(fbs_type.line, fbs_type.column),
+                )
             return ListType(
                 element_type, location=self._location(fbs_type.line, fbs_type.column)
             )

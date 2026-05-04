@@ -18,17 +18,30 @@
  */
 
 import Fory, { Type, BFloat16Array } from '../packages/core/index';
+import { TypeId } from '../packages/core/lib/type';
 import { describe, expect, test } from '@jest/globals';
 import * as beautify from 'js-beautify';
 
 describe('array', () => {
+  test('should distinguish list and dense array schema builders', () => {
+    expect(Type.list(Type.int32()).typeId).toBe(TypeId.LIST);
+    expect(Type.int32Array().typeId).toBe(TypeId.INT32_ARRAY);
+    expect(Type.uint8Array().typeId).toBe(TypeId.UINT8_ARRAY);
+    expect(Type.boolArray().typeId).toBe(TypeId.BOOL_ARRAY);
+  });
+
+  test('should expose dense arrays only through element-specific builders', () => {
+    expect((Type as Record<string, unknown>).array).toBeUndefined();
+    expect(() => Type.map(Type.uint8Array(), Type.string())).toThrow('map key');
+  });
+
   test('should array work', () => {
 
 
     const typeinfo = Type.struct({
       typeName: "example.bar"
     }, {
-      c: Type.array(Type.struct({
+      c: Type.list(Type.struct({
         typeName: "example.foo"
       }, {
         a: Type.string()
@@ -149,4 +162,3 @@ describe('array', () => {
     expect(result.a7[2].toFloat32()).toBe(0);
   });
 });
-

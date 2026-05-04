@@ -180,41 +180,9 @@ func getTypeID(t types.Type) string {
 		t = ptr.Elem()
 	}
 
-	// Check slice types - distinguish primitive arrays from generic lists
-	if slice, ok := t.(*types.Slice); ok {
-		elemType := slice.Elem()
-		// For pointer to primitive, unwrap the pointer
-		if ptr, ok := elemType.(*types.Pointer); ok {
-			elemType = ptr.Elem()
-		}
-		// Check if element is a primitive type (primitive arrays use specific typeIDs)
-		if basic, ok := elemType.Underlying().(*types.Basic); ok {
-			switch basic.Kind() {
-			case types.Bool:
-				return "BOOL_ARRAY"
-			case types.Int8:
-				return "INT8_ARRAY"
-			case types.Int16:
-				return "INT16_ARRAY"
-			case types.Int32:
-				return "INT32_ARRAY"
-			case types.Int, types.Int64:
-				return "INT64_ARRAY"
-			case types.Uint8:
-				return "UINT8_ARRAY"
-			case types.Uint16:
-				return "UINT16_ARRAY"
-			case types.Uint32:
-				return "UINT32_ARRAY"
-			case types.Uint, types.Uint64:
-				return "UINT64_ARRAY"
-			case types.Float32:
-				return "FLOAT32_ARRAY"
-			case types.Float64:
-				return "FLOAT64_ARRAY"
-			}
-		}
-		// Non-primitive slices use LIST
+	// Check slice types. Unannotated Go slices are logical list<T> fields;
+	// explicit array(...) tags are handled by runtime field metadata.
+	if _, ok := t.(*types.Slice); ok {
 		return "LIST"
 	}
 
@@ -457,7 +425,7 @@ func sortFields(fields []*FieldInfo) {
 
 // Field group constants for sorting.
 // This matches reflection's field ordering in field_info.go:
-// primitives → built-in non-container (including primitive arrays) → list/set → map → other
+// primitives → built-in non-container → list/set → map → other
 const (
 	groupPrimitive       = 0 // primitive and nullable primitive fields
 	groupInternalBuiltin = 1 // built-in non-container types sorted by typeId then name
@@ -468,8 +436,7 @@ const (
 
 // getFieldGroup categorizes a field into its sorting group
 func getFieldGroup(field *FieldInfo) int {
-	// Primitive fields (including nullable primitives)
-	// types: bool/int8/int16/int32/varint32/int64/varint64/sliint64/float16/float32/float64
+	// Primitive fields, including nullable primitives.
 	if field.IsPrimitive {
 		return groupPrimitive
 	}

@@ -28,8 +28,10 @@ from fory_compiler.ir.ast import (
     PrimitiveType,
     NamedType,
     ListType,
+    ArrayType,
     MapType,
 )
+from fory_compiler.ir.types import ARRAY_ELEMENT_KINDS
 
 
 @dataclass
@@ -57,6 +59,8 @@ class BaseGenerator(ABC):
     # Override in subclasses
     language_name: str = "base"
     file_extension: str = ".txt"
+
+    ARRAY_ELEMENT_KINDS = ARRAY_ELEMENT_KINDS
 
     def __init__(self, schema: Schema, options: GeneratorOptions):
         self.schema = schema
@@ -227,12 +231,17 @@ class BaseGenerator(ABC):
     def format_idl_type(self, field_type: FieldType) -> str:
         """Return an IDL-style type name for display purposes."""
         if isinstance(field_type, PrimitiveType):
+            if field_type.encoding_modifier:
+                return f"{field_type.encoding_modifier} {field_type.kind.value}"
             return field_type.kind.value
         if isinstance(field_type, NamedType):
             return field_type.name
         if isinstance(field_type, ListType):
             element = self.format_idl_type(field_type.element_type)
             return f"list<{element}>"
+        if isinstance(field_type, ArrayType):
+            element = self.format_idl_type(field_type.element_type)
+            return f"array<{element}>"
         if isinstance(field_type, MapType):
             key = self.format_idl_type(field_type.key_type)
             value = self.format_idl_type(field_type.value_type)

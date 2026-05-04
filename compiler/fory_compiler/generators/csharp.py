@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Set, Tuple, Union as TypingUnion
 from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
+    ArrayType,
     Enum,
     Field,
     FieldType,
@@ -48,17 +49,11 @@ class CSharpGenerator(BaseGenerator):
         PrimitiveKind.INT8: "sbyte",
         PrimitiveKind.INT16: "short",
         PrimitiveKind.INT32: "int",
-        PrimitiveKind.VARINT32: "int",
         PrimitiveKind.INT64: "long",
-        PrimitiveKind.VARINT64: "long",
-        PrimitiveKind.TAGGED_INT64: "long",
         PrimitiveKind.UINT8: "byte",
         PrimitiveKind.UINT16: "ushort",
         PrimitiveKind.UINT32: "uint",
-        PrimitiveKind.VAR_UINT32: "uint",
         PrimitiveKind.UINT64: "ulong",
-        PrimitiveKind.VAR_UINT64: "ulong",
-        PrimitiveKind.TAGGED_UINT64: "ulong",
         PrimitiveKind.FLOAT16: "Half",
         PrimitiveKind.BFLOAT16: "BFloat16",
         PrimitiveKind.FLOAT32: "float",
@@ -77,17 +72,11 @@ class CSharpGenerator(BaseGenerator):
         PrimitiveKind.INT8,
         PrimitiveKind.INT16,
         PrimitiveKind.INT32,
-        PrimitiveKind.VARINT32,
         PrimitiveKind.INT64,
-        PrimitiveKind.VARINT64,
-        PrimitiveKind.TAGGED_INT64,
         PrimitiveKind.UINT8,
         PrimitiveKind.UINT16,
         PrimitiveKind.UINT32,
-        PrimitiveKind.VAR_UINT32,
         PrimitiveKind.UINT64,
-        PrimitiveKind.VAR_UINT64,
-        PrimitiveKind.TAGGED_UINT64,
         PrimitiveKind.FLOAT16,
         PrimitiveKind.BFLOAT16,
         PrimitiveKind.FLOAT32,
@@ -529,6 +518,17 @@ class CSharpGenerator(BaseGenerator):
                 return f"{list_type}?"
             return list_type
 
+        if isinstance(field_type, ArrayType):
+            element_type = self.generate_type(
+                field_type.element_type,
+                nullable=False,
+                parent_stack=parent_stack,
+            )
+            array_type = f"{element_type}[]"
+            if nullable:
+                return f"{array_type}?"
+            return array_type
+
         if isinstance(field_type, MapType):
             key_type = self.generate_type(
                 field_type.key_type,
@@ -537,7 +537,7 @@ class CSharpGenerator(BaseGenerator):
             )
             value_type = self.generate_type(
                 field_type.value_type,
-                nullable=False,
+                nullable=field_type.value_optional,
                 parent_stack=parent_stack,
             )
             map_type = f"Dictionary<{key_type}, {value_type}>"
@@ -556,6 +556,14 @@ class CSharpGenerator(BaseGenerator):
         field_type = field.field_type
         if isinstance(field_type, ListType) or isinstance(field_type, MapType):
             return " = new();"
+
+        if isinstance(field_type, ArrayType):
+            element_type = self.generate_type(
+                field_type.element_type,
+                nullable=False,
+                parent_stack=parent_stack,
+            )
+            return f" = Array.Empty<{element_type}>();"
 
         if isinstance(field_type, PrimitiveType):
             if field_type.kind == PrimitiveKind.STRING:
@@ -578,13 +586,19 @@ class CSharpGenerator(BaseGenerator):
         self, field_type: FieldType, force: bool = False
     ) -> Optional[str]:
         if isinstance(field_type, PrimitiveType):
-            return self._primitive_schema_type_hint(field_type.kind, force)
+            return self._primitive_schema_type_hint(field_type, force)
 
         if isinstance(field_type, ListType):
             element_hint = self._schema_type_hint(field_type.element_type, force=True)
             if element_hint is None:
                 return None
             return f"S.List<{element_hint}>"
+
+        if isinstance(field_type, ArrayType):
+            element_hint = self._schema_type_hint(field_type.element_type, force=True)
+            if element_hint is None:
+                return None
+            return f"S.Array<{element_hint}>"
 
         if isinstance(field_type, MapType):
             key_hint = self._schema_type_hint(field_type.key_type, force=True)
@@ -602,24 +616,36 @@ class CSharpGenerator(BaseGenerator):
         return None
 
     def _primitive_schema_type_hint(
-        self, kind: PrimitiveKind, force: bool
+        self, field_type: PrimitiveType, force: bool
     ) -> Optional[str]:
+        kind = field_type.kind
+        encoding = field_type.encoding_modifier
+        if kind in (
+            PrimitiveKind.INT32,
+            PrimitiveKind.INT64,
+            PrimitiveKind.UINT32,
+            PrimitiveKind.UINT64,
+        ):
+            base = {
+                PrimitiveKind.INT32: "S.Int32",
+                PrimitiveKind.INT64: "S.Int64",
+                PrimitiveKind.UINT32: "S.UInt32",
+                PrimitiveKind.UINT64: "S.UInt64",
+            }[kind]
+            if encoding == "fixed":
+                return f"S.Fixed<{base}>"
+            if encoding == "tagged":
+                return f"S.Tagged<{base}>"
+            if force or encoding == "varint":
+                return base
+            return None
+
         hints = {
             PrimitiveKind.BOOL: "S.Bool",
             PrimitiveKind.INT8: "S.Int8",
             PrimitiveKind.INT16: "S.Int16",
-            PrimitiveKind.INT32: "S.Int32",
-            PrimitiveKind.VARINT32: "S.VarInt32",
-            PrimitiveKind.INT64: "S.Int64",
-            PrimitiveKind.VARINT64: "S.VarInt64",
-            PrimitiveKind.TAGGED_INT64: "S.TaggedInt64",
             PrimitiveKind.UINT8: "S.UInt8",
             PrimitiveKind.UINT16: "S.UInt16",
-            PrimitiveKind.UINT32: "S.UInt32",
-            PrimitiveKind.VAR_UINT32: "S.VarUInt32",
-            PrimitiveKind.UINT64: "S.UInt64",
-            PrimitiveKind.VAR_UINT64: "S.VarUInt64",
-            PrimitiveKind.TAGGED_UINT64: "S.TaggedUInt64",
             PrimitiveKind.FLOAT16: "S.Float16",
             PrimitiveKind.BFLOAT16: "S.BFloat16",
             PrimitiveKind.FLOAT32: "S.Float32",
@@ -633,15 +659,6 @@ class CSharpGenerator(BaseGenerator):
         }
         if force:
             return hints.get(kind)
-        if kind in {
-            PrimitiveKind.INT32,
-            PrimitiveKind.INT64,
-            PrimitiveKind.UINT32,
-            PrimitiveKind.UINT64,
-            PrimitiveKind.TAGGED_INT64,
-            PrimitiveKind.TAGGED_UINT64,
-        }:
-            return hints[kind]
         return None
 
     def _type_reference_for_local(
@@ -832,8 +849,10 @@ class CSharpGenerator(BaseGenerator):
             schema_type = self._schema_type_hint(field.field_type)
             if schema_type:
                 lines.append(
-                    f"{ind}{self.indent_str}[ForyField(Type = typeof({schema_type}))]"
+                    f"{ind}{self.indent_str}[ForyField({field.number}, Type = typeof({schema_type}))]"
                 )
+            else:
+                lines.append(f"{ind}{self.indent_str}[ForyField({field.number})]")
             field_name = self._field_member_name(field, message, used_field_names)
             field_type = self.generate_type(
                 field.field_type,

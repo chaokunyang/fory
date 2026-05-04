@@ -182,7 +182,8 @@ data = bytes(person) # or `person.to_bytes()`
 
 - **`optional`**: Field can be null/None
 - **`ref`**: Enable reference tracking for shared/circular references
-- **`list`**: Field is a list/array (alias: `repeated`)
+- **`list`**: Field is an ordered collection (alias: `repeated`)
+- **`array`**: Field is dense one-dimensional bool or numeric data
 
 ```protobuf
 message Example {
@@ -198,7 +199,7 @@ Fory IDL types map to native types in each language:
 
 | Fory IDL Type | Java      | Python         | Go       | Rust     | C++           | C#       | JavaScript | Swift    | Dart     |
 | ------------- | --------- | -------------- | -------- | -------- | ------------- | -------- | ---------- | -------- | -------- |
-| `int32`       | `int`     | `pyfory.int32` | `int32`  | `i32`    | `int32_t`     | `int`    | `number`   | `Int32`  | `int`    |
+| `int32`       | `int`     | `pyfory.Int32` | `int32`  | `i32`    | `int32_t`     | `int`    | `number`   | `Int32`  | `int`    |
 | `string`      | `String`  | `str`          | `string` | `String` | `std::string` | `string` | `string`   | `String` | `String` |
 | `bool`        | `boolean` | `bool`         | `bool`   | `bool`   | `bool`        | `bool`   | `boolean`  | `Bool`   | `bool`   |
 

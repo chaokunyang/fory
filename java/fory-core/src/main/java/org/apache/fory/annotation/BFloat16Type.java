@@ -24,24 +24,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Annotation to mark a field as a signed 8-bit integer array.
- *
- * <p>When applied to a field of type {@code byte[]}, this annotation indicates that the array
- * should be serialized as a signed 8-bit integer array (INT8_ARRAY, type_id=40).
- *
- * <p>This is useful for cross-language schemas that represent signed bytes explicitly (for example,
- * FlatBuffers {@code byte}).
- *
- * <p>Example usage:
- *
- * <pre>{@code
- * public class MyStruct {
- *   {@literal @}Int8ArrayType
- *   byte[] data;  // Will be serialized as signed 8-bit array
- * }
- * }</pre>
- */
+/** Marks a {@code short[]} field as dense {@code array<bfloat16>} schema. */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
-public @interface Int8ArrayType {}
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.TYPE_USE})
+public @interface BFloat16Type {}

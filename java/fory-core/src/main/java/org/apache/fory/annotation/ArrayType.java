@@ -25,24 +25,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Annotation to mark a field as an unsigned 64-bit integer array.
- *
- * <p>When applied to a field of type {@code long[]}, this annotation indicates that the array
- * should be serialized as an unsigned 64-bit integer array (UINT64_ARRAY, type_id=47) with element
- * values in the range [0, 18446744073709551615].
- *
- * <p>This is useful for compatibility with languages that have native unsigned integer array types
- * (e.g., Rust's Vec&lt;u64&gt;, Go's []uint64, C++'s std::vector&lt;uint64_t&gt;).
- *
- * <p>Example usage:
- *
- * <pre>{@code
- * public class MyStruct {
- *   {@literal @}UInt64Elements
- *   long[] timestamps;  // Will be serialized as unsigned 64-bit array
- * }
- * }</pre>
+ * Marks a Java primitive-list carrier or ordered {@link java.util.List} field as dense {@code
+ * array<T>} schema in xlang mode.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.FIELD, ElementType.METHOD})
-public @interface UInt64Elements {}
+public @interface ArrayType {}

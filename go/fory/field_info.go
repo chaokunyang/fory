@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -86,7 +87,7 @@ type FieldInfo struct {
 // Fields are stored as values (not pointers) for better cache locality.
 // Each field belongs to exactly one category:
 // - FixedFields: non-nullable fixed-size primitives (bool, int8-64, uint8-64, float32/64)
-// - VarintFields: non-nullable varint primitives (varint32/64, var_uint32/64, tagged_int64/uint64)
+// - VarintFields: non-nullable integer primitives using variable-length or tagged encodings
 // - RemainingFields: all other fields (nullable primitives, strings, collections, structs, etc.)
 type FieldGroup struct {
 	// Primitive field slices - minimal data for fast iteration in hot loops
@@ -155,11 +156,11 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 	// Categorize fields
 	for i := range fields {
 		field := &fields[i]
-		if isFixedSizePrimitive(field.DispatchId) {
+		if isPrimitiveFieldGroupType(field.Meta.TypeId) && isFixedSizePrimitive(field.DispatchId) {
 			// Non-nullable fixed-size primitives only
 			field.Meta.FixedSize = getFixedSizeByDispatchId(field.DispatchId)
 			g.FixedFields = append(g.FixedFields, *field)
-		} else if isVarintPrimitive(field.DispatchId) {
+		} else if isPrimitiveFieldGroupType(field.Meta.TypeId) && isVarintPrimitive(field.DispatchId) {
 			// Non-nullable varint primitives only
 			g.VarintFields = append(g.VarintFields, *field)
 		} else {
@@ -177,7 +178,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if fi.Meta.TypeId != fj.Meta.TypeId {
 			return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 		}
-		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
+		return lessFieldSortKey(fi, fj) // numeric tag ID or name ascending
 	})
 
 	// Compute WriteOffset after sorting and build primitive field slice
@@ -206,7 +207,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		if fi.Meta.TypeId != fj.Meta.TypeId {
 			return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 		}
-		return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
+		return lessFieldSortKey(fi, fj) // numeric tag ID or name ascending
 	})
 
 	// Compute maxVarintSize and build primitive varint field slice
@@ -240,13 +241,53 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 			if fi.Meta.TypeId != fj.Meta.TypeId {
 				return fi.Meta.TypeId < fj.Meta.TypeId
 			}
-			return getFieldSortKey(fi) < getFieldSortKey(fj)
+			return lessFieldSortKey(fi, fj)
 		}
 		// Other categories (struct, enum, etc.): sort by sort key
-		return getFieldSortKey(fi) < getFieldSortKey(fj)
+		return lessFieldSortKey(fi, fj)
 	})
 
 	return g
+}
+
+func getFieldTagID(field *FieldInfo) int {
+	if field.Meta != nil {
+		if field.Meta.Spec != nil && field.Meta.Spec.TagID >= 0 {
+			return field.Meta.Spec.TagID
+		}
+		if field.Meta.Spec == nil && field.Meta.FieldDef.tagID >= 0 {
+			return field.Meta.FieldDef.tagID
+		}
+	}
+	return -1
+}
+
+func isPrimitiveFieldGroupType(typeID TypeId) bool {
+	switch typeID {
+	case BOOL,
+		INT8,
+		INT16,
+		INT32,
+		VARINT32,
+		INT64,
+		VARINT64,
+		TAGGED_INT64,
+		UINT8,
+		UINT16,
+		UINT32,
+		VAR_UINT32,
+		UINT64,
+		VAR_UINT64,
+		TAGGED_UINT64,
+		FLOAT8,
+		FLOAT16,
+		BFLOAT16,
+		FLOAT32,
+		FLOAT64:
+		return true
+	default:
+		return false
+	}
 }
 
 // fieldHasNonPrimitiveSerializer returns true if the field has a serializer with a non-primitive type ID.
@@ -283,7 +324,8 @@ func isEnumField(field *FieldInfo) bool {
 // 3: map collections (sorted by typeId, then sort key)
 // 4: struct, enum, and all other types (sorted by sort key)
 func getFieldCategory(field *FieldInfo) int {
-	if isNullableFixedSizePrimitive(field.DispatchId) || isNullableVarintPrimitive(field.DispatchId) {
+	if isPrimitiveFieldGroupType(field.Meta.TypeId) &&
+		(isNullableFixedSizePrimitive(field.DispatchId) || isNullableVarintPrimitive(field.DispatchId)) {
 		return 0
 	}
 	typeId := field.Meta.TypeId
@@ -324,7 +366,7 @@ func comparePrimitiveFields(fi, fj *FieldInfo) bool {
 	if fi.Meta.TypeId != fj.Meta.TypeId {
 		return fi.Meta.TypeId < fj.Meta.TypeId // typeId ascending
 	}
-	return getFieldSortKey(fi) < getFieldSortKey(fj) // tag ID or name ascending
+	return lessFieldSortKey(fi, fj) // numeric tag ID or name ascending
 }
 
 // getNullableFixedSize returns the fixed size for nullable fixed primitives
@@ -545,7 +587,7 @@ type FieldFingerprintInfo struct {
 //
 //	Each field contributes:
 //	"<field_id_or_name>,<type_id>,<ref>,<nullable>[<nested_type_fingerprint>];"
-//	Fields are sorted by field_id_or_name (lexicographically as strings)
+//	Fields are sorted by numeric tag ID when tags are present, otherwise by field name.
 //
 // Field Components:
 //   - field_id_or_name: Tag ID as string if configured (e.g., "0", "1"), otherwise snake_case field name
@@ -561,23 +603,34 @@ type FieldFingerprintInfo struct {
 // Different nullable/ref settings will produce different fingerprints,
 // ensuring schema compatibility is properly validated.
 func ComputeStructFingerprint(fields []FieldFingerprintInfo) string {
-	// Sort fields by their identifier (field ID or name)
+	// Sort fields by their identifier (field ID or name).
 	type fieldWithKey struct {
-		field   FieldFingerprintInfo
-		sortKey string
+		field      FieldFingerprintInfo
+		sortKey    string
+		fieldID    int
+		hasFieldID bool
 	}
 	fieldsWithKeys := make([]fieldWithKey, 0, len(fields))
 	for _, field := range fields {
 		var sortKey string
+		hasFieldID := field.FieldID >= 0
 		if field.FieldID >= 0 {
 			sortKey = fmt.Sprintf("%d", field.FieldID)
 		} else {
 			sortKey = field.FieldName
 		}
-		fieldsWithKeys = append(fieldsWithKeys, fieldWithKey{field: field, sortKey: sortKey})
+		fieldsWithKeys = append(fieldsWithKeys, fieldWithKey{
+			field:      field,
+			sortKey:    sortKey,
+			fieldID:    field.FieldID,
+			hasFieldID: hasFieldID,
+		})
 	}
 
 	sort.Slice(fieldsWithKeys, func(i, j int) bool {
+		if fieldsWithKeys[i].hasFieldID && fieldsWithKeys[j].hasFieldID {
+			return fieldsWithKeys[i].fieldID < fieldsWithKeys[j].fieldID
+		}
 		return fieldsWithKeys[i].sortKey < fieldsWithKeys[j].sortKey
 	})
 
@@ -670,33 +723,46 @@ type triple struct {
 	tagID      int // -1 = use field name, >=0 = use tag ID for sorting
 }
 
-// getSortKey returns the sort key for a triple.
-// If tagID >= 0, returns the tag ID as string (for tag-based sorting).
-// Otherwise returns the snake_case field name.
-func (t triple) getSortKey() string {
+// getSortKeyText returns the text key used when fields do not both use numeric tag IDs.
+func (t triple) getSortKeyText() string {
 	if t.tagID >= 0 {
-		return fmt.Sprintf("%d", t.tagID)
+		return strconv.Itoa(t.tagID)
 	}
 	return SnakeCase(t.name)
 }
 
-// getFieldSortKey returns the sort key for a FieldInfo.
-// If TagID >= 0, returns the tag ID as string (for tag-based sorting).
-// Otherwise returns the field name (which is already snake_case).
-func getFieldSortKey(f *FieldInfo) string {
-	tagID := TagIDUseFieldName
-	if f.Meta != nil {
-		switch {
-		case f.Meta.Spec != nil:
-			tagID = f.Meta.Spec.TagID
-		case f.Meta.FieldDef.tagID >= 0:
-			tagID = f.Meta.FieldDef.tagID
-		}
+func lessTripleSortKey(a, b triple) bool {
+	if a.tagID >= 0 && b.tagID >= 0 && a.tagID != b.tagID {
+		return a.tagID < b.tagID
 	}
+	aText := a.getSortKeyText()
+	bText := b.getSortKeyText()
+	if aText != bText {
+		return aText < bText
+	}
+	return SnakeCase(a.name) < SnakeCase(b.name)
+}
+
+func getFieldSortKeyText(f *FieldInfo) string {
+	tagID := getFieldTagID(f)
 	if tagID >= 0 {
-		return fmt.Sprintf("%d", tagID)
+		return strconv.Itoa(tagID)
 	}
 	return f.Meta.Name
+}
+
+func lessFieldSortKey(a, b *FieldInfo) bool {
+	aTagID := getFieldTagID(a)
+	bTagID := getFieldTagID(b)
+	if aTagID >= 0 && bTagID >= 0 && aTagID != bTagID {
+		return aTagID < bTagID
+	}
+	aText := getFieldSortKeyText(a)
+	bText := getFieldSortKeyText(b)
+	if aText != bText {
+		return aText < bText
+	}
+	return a.Meta.Name < b.Meta.Name
 }
 
 // sortFields sorts fields with nullable information to match Java's field ordering.
@@ -741,7 +807,7 @@ func sortFields(
 
 	for _, t := range typeTriples {
 		switch {
-		case isPrimitiveType(t.typeID):
+		case isPrimitiveFieldGroupType(t.typeID):
 			// Separate non-nullable primitives from nullable (boxed) primitives
 			if t.nullable {
 				boxed = append(boxed, t)
@@ -791,7 +857,7 @@ func sortFields(
 			if ai.typeID != aj.typeID {
 				return ai.typeID < aj.typeID
 			}
-			return ai.getSortKey() < aj.getSortKey()
+			return lessTripleSortKey(ai, aj)
 		})
 	}
 	sortPrimitiveSlice(primitives)
@@ -803,12 +869,12 @@ func sortFields(
 			if s[i].typeID != s[j].typeID {
 				return s[i].typeID < s[j].typeID
 			}
-			return s[i].getSortKey() < s[j].getSortKey()
+			return lessTripleSortKey(s[i], s[j])
 		})
 	}
 	sortTuple := func(s []triple) {
 		sort.Slice(s, func(i, j int) bool {
-			return s[i].getSortKey() < s[j].getSortKey()
+			return lessTripleSortKey(s[i], s[j])
 		})
 	}
 	sortByTypeIDThenName(otherInternalTypeFields)

@@ -104,6 +104,13 @@ func primitiveTypeIdMatchesKind(typeId TypeId, kind reflect.Kind) bool {
 	}
 }
 
+func getListDispatchId(type_ reflect.Type) DispatchId {
+	if type_.Kind() == reflect.Slice && type_.Elem().Kind() == reflect.String {
+		return StringSliceDispatchId
+	}
+	return UnknownDispatchId
+}
+
 // initFields initializes fields from local struct type using TypeResolver
 func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 	// If we have fieldDefs from type_def (remote meta), use them
@@ -178,14 +185,20 @@ func (s *structSerializer) initFields(typeResolver *TypeResolver) error {
 			cachedTypeInfo = typeResolver.getTypeInfoByType(cachedType)
 		}
 
-		// Pre-compute DispatchId, with special handling for enum fields and pointer-to-numeric
+		// Pre-compute DispatchId, with special handling for enum fields and pointer-to-numeric.
+		// Declared LIST fields must use their declared serializer even when the local
+		// Go carrier is a primitive slice; primitive array specs keep the slice fast path.
 		dispatchId := getDispatchIdFromTypeId(fieldTypeId, nullableFlag)
 		if dispatchId == UnknownDispatchId {
 			dispatchType := baseType
 			if dispatchType.Kind() == reflect.Ptr {
 				dispatchType = dispatchType.Elem()
 			}
-			dispatchId = GetDispatchId(dispatchType)
+			if fieldTypeId == LIST {
+				dispatchId = getListDispatchId(dispatchType)
+			} else {
+				dispatchId = GetDispatchId(dispatchType)
+			}
 		}
 		if fieldSerializer != nil {
 			if _, ok := fieldSerializer.(*enumSerializer); ok {
@@ -545,7 +558,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 							def.name, localType, baseType, fieldSerializer)
 					}
 				}
-				if localType.Kind() == reflect.Array {
+				if localType.Kind() == reflect.Array && isPrimitiveArrayType(TypeId(defTypeId)) {
 					elemType := localType.Elem()
 					switch elemType.Kind() {
 					case reflect.Bool:
@@ -629,7 +642,13 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 		localIsPtr := localKind == reflect.Ptr
 		localIsPrimitive := isPrimitiveDispatchKind(baseKind) || (localIsPtr && isPrimitiveDispatchKind(fieldType.Elem().Kind()))
 
-		if localIsPrimitive {
+		if fieldTypeId == LIST {
+			dispatchType := baseType
+			if dispatchType.Kind() == reflect.Ptr {
+				dispatchType = dispatchType.Elem()
+			}
+			dispatchId = getListDispatchId(dispatchType)
+		} else if localIsPrimitive {
 			if def.nullable {
 				dispatchId = getDispatchIdFromTypeId(fieldTypeId, true)
 			} else {
@@ -766,9 +785,9 @@ func typeIdEqualForDiff(remoteTypeId TypeId, localTypeId TypeId) bool {
 	if localTypeId == UNION && (remoteTypeId == TYPED_UNION || remoteTypeId == NAMED_UNION) {
 		return true
 	}
-	// Treat byte array encodings as compatible for diffing.
-	if (remoteTypeId == INT8_ARRAY || remoteTypeId == UINT8_ARRAY || remoteTypeId == BINARY) &&
-		(localTypeId == INT8_ARRAY || localTypeId == UINT8_ARRAY || localTypeId == BINARY) {
+	// bytes and array<uint8> share a byte payload shape and can be assigned in compatible mode.
+	if (remoteTypeId == UINT8_ARRAY || remoteTypeId == BINARY) &&
+		(localTypeId == UINT8_ARRAY || localTypeId == BINARY) {
 		return true
 	}
 	return false

@@ -20,16 +20,26 @@
 #include <any>
 #include <cctype>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
+#include <optional>
+#include <sstream>
 #include <string>
+#include <tuple>
+#include <variant>
 #include <vector>
 
 #include "fory/serialization/any_serializer.h"
+#include "fory/serialization/decimal_serializers.h"
 #include "fory/serialization/fory.h"
+#include "fory/serialization/temporal_serializers.h"
+#include "fory/serialization/union_serializer.h"
+#include "fory/util/bfloat16.h"
+#include "fory/util/float16.h"
 #include "generated/addressbook.h"
 #include "generated/any_example.h"
 #include "generated/auto_id.h"
@@ -71,6 +81,47 @@ fory::Result<void, fory::Error> WriteFile(const std::string &path,
     return fory::Unexpected(fory::Error::invalid("failed to write data file"));
   }
   return fory::Result<void, fory::Error>();
+}
+
+template <typename T> std::string VectorDebugString(const std::vector<T> &v) {
+  std::ostringstream out;
+  out << "[";
+  for (size_t i = 0; i < v.size(); ++i) {
+    if (i != 0) {
+      out << ",";
+    }
+    out << +v[i];
+  }
+  out << "]";
+  return out.str();
+}
+
+std::string
+DescribeCollectionArray(const collection::NumericCollectionsArray &value) {
+  std::ostringstream out;
+  out << "int8=" << VectorDebugString(value.int8_values())
+      << " int16=" << VectorDebugString(value.int16_values())
+      << " int32=" << VectorDebugString(value.int32_values())
+      << " int64=" << VectorDebugString(value.int64_values())
+      << " uint8=" << VectorDebugString(value.uint8_values())
+      << " uint16=" << VectorDebugString(value.uint16_values())
+      << " uint32=" << VectorDebugString(value.uint32_values())
+      << " uint64=" << VectorDebugString(value.uint64_values())
+      << " float32=" << VectorDebugString(value.float32_values())
+      << " float64=" << VectorDebugString(value.float64_values());
+  return out.str();
+}
+
+std::string DescribeFieldTypes(const fory::serialization::TypeMeta &meta) {
+  std::ostringstream out;
+  const auto &fields = meta.get_field_infos();
+  for (size_t i = 0; i < fields.size(); ++i) {
+    if (i != 0) {
+      out << ",";
+    }
+    out << fields[i].field_id << ":" << fields[i].field_type.type_id;
+  }
+  return out.str();
 }
 
 tree::TreeNode BuildTree() {
@@ -159,6 +210,637 @@ fory::Result<void, fory::Error> ValidateGraph(const graph::Graph &graph_value) {
         fory::Error::invalid("graph edge endpoints mismatch"));
   }
   return fory::Result<void, fory::Error>();
+}
+
+} // namespace
+
+namespace example_peer {
+
+enum class ExampleState : int32_t {
+  UNKNOWN = 0,
+  READY = 1,
+  FAILED = 2,
+};
+
+struct ExampleLeaf {
+  std::string label;
+  int32_t count = 0;
+
+  bool operator==(const ExampleLeaf &other) const {
+    return label == other.label && count == other.count;
+  }
+
+  FORY_STRUCT(ExampleLeaf, (label, fory::F(1)), (count, fory::F(2).varint()));
+};
+
+class ExampleLeafUnion {
+public:
+  enum class Case : uint32_t {
+    NOTE = 1,
+    CODE = 2,
+    LEAF = 3,
+  };
+
+  ExampleLeafUnion() = default;
+
+  static ExampleLeafUnion note(std::string value) {
+    return ExampleLeafUnion(std::in_place_type<std::string>, std::move(value));
+  }
+
+  static ExampleLeafUnion code(int32_t value) {
+    return ExampleLeafUnion(std::in_place_type<int32_t>, value);
+  }
+
+  static ExampleLeafUnion leaf(ExampleLeaf value) {
+    return ExampleLeafUnion(std::in_place_type<ExampleLeaf>, std::move(value));
+  }
+
+  uint32_t fory_case_id() const noexcept {
+    if (std::holds_alternative<std::string>(value_)) {
+      return static_cast<uint32_t>(Case::NOTE);
+    }
+    if (std::holds_alternative<int32_t>(value_)) {
+      return static_cast<uint32_t>(Case::CODE);
+    }
+    return static_cast<uint32_t>(Case::LEAF);
+  }
+
+  template <class Visitor> decltype(auto) visit(Visitor &&visitor) const {
+    return std::visit(std::forward<Visitor>(visitor), value_);
+  }
+
+  bool operator==(const ExampleLeafUnion &other) const {
+    return value_ == other.value_;
+  }
+
+private:
+  std::variant<std::string, int32_t, ExampleLeaf> value_;
+
+  template <class T, class... Args>
+  explicit ExampleLeafUnion(std::in_place_type_t<T> tag, Args &&...args)
+      : value_(tag, std::forward<Args>(args)...) {}
+};
+
+class ExampleMessageUnion {
+public:
+  ExampleMessageUnion() = default;
+
+  static ExampleMessageUnion
+  int32_array_list(std::vector<std::vector<int32_t>> value) {
+    return ExampleMessageUnion(
+        std::in_place_type<std::vector<std::vector<int32_t>>>,
+        std::move(value));
+  }
+
+  uint32_t fory_case_id() const noexcept { return 314; }
+
+  template <class Visitor> decltype(auto) visit(Visitor &&visitor) const {
+    return std::visit(std::forward<Visitor>(visitor), value_);
+  }
+
+  bool operator==(const ExampleMessageUnion &other) const {
+    return value_ == other.value_;
+  }
+
+private:
+  std::variant<std::vector<std::vector<int32_t>>> value_;
+
+  template <class T, class... Args>
+  explicit ExampleMessageUnion(std::in_place_type_t<T> tag, Args &&...args)
+      : value_(tag, std::forward<Args>(args)...) {}
+};
+
+struct ExampleMessageScalars {
+  bool bool_value = false;
+  int8_t int8_value = 0;
+  int16_t int16_value = 0;
+  int32_t fixed_i32_value = 0;
+  int32_t varint_i32_value = 0;
+  int64_t fixed_i64_value = 0;
+  int64_t varint_i64_value = 0;
+  int64_t tagged_i64_value = 0;
+  uint8_t uint8_value = 0;
+  uint16_t uint16_value = 0;
+  uint32_t fixed_u32_value = 0;
+  uint32_t varint_u32_value = 0;
+  uint64_t fixed_u64_value = 0;
+  uint64_t varint_u64_value = 0;
+  uint64_t tagged_u64_value = 0;
+  fory::float16_t float16_value{};
+  fory::bfloat16_t bfloat16_value{};
+  float float32_value = 0.0F;
+  double float64_value = 0.0;
+  std::string string_value;
+  std::vector<uint8_t> bytes_value;
+  fory::serialization::Date date_value;
+  fory::serialization::Timestamp timestamp_value;
+  fory::serialization::Duration duration_value;
+  fory::serialization::Decimal decimal_value;
+  ExampleState enum_value = ExampleState::UNKNOWN;
+  std::optional<ExampleLeaf> message_value;
+  ExampleLeafUnion union_value;
+
+  FORY_STRUCT(
+      ExampleMessageScalars, (bool_value, fory::F(1)), (int8_value, fory::F(2)),
+      (int16_value, fory::F(3)), (fixed_i32_value, fory::F(4).fixed()),
+      (varint_i32_value, fory::F(5).varint()),
+      (fixed_i64_value, fory::F(6).fixed()),
+      (varint_i64_value, fory::F(7).varint()),
+      (tagged_i64_value, fory::F(8).tagged()), (uint8_value, fory::F(9)),
+      (uint16_value, fory::F(10)), (fixed_u32_value, fory::F(11).fixed()),
+      (varint_u32_value, fory::F(12).varint()),
+      (fixed_u64_value, fory::F(13).fixed()),
+      (varint_u64_value, fory::F(14).varint()),
+      (tagged_u64_value, fory::F(15).tagged()), (float16_value, fory::F(16)),
+      (bfloat16_value, fory::F(17)), (float32_value, fory::F(18)),
+      (float64_value, fory::F(19)), (string_value, fory::F(20)),
+      (bytes_value, fory::F(21)), (date_value, fory::F(22)),
+      (timestamp_value, fory::F(23)), (duration_value, fory::F(24)),
+      (decimal_value, fory::F(25)), (enum_value, fory::F(26)),
+      (message_value, fory::F(27).nullable()), (union_value, fory::F(28)));
+};
+
+struct ExampleMessageLists {
+  std::vector<bool> bool_list;
+  std::vector<int8_t> int8_list;
+  std::vector<int16_t> int16_list;
+  std::vector<int32_t> fixed_i32_list;
+  std::vector<int32_t> varint_i32_list;
+  std::vector<int64_t> fixed_i64_list;
+  std::vector<int64_t> varint_i64_list;
+  std::vector<int64_t> tagged_i64_list;
+  std::vector<uint8_t> uint8_list;
+  std::vector<uint16_t> uint16_list;
+  std::vector<uint32_t> fixed_u32_list;
+  std::vector<uint32_t> varint_u32_list;
+  std::vector<uint64_t> fixed_u64_list;
+  std::vector<uint64_t> varint_u64_list;
+  std::vector<uint64_t> tagged_u64_list;
+  std::vector<fory::float16_t> float16_list;
+  std::vector<fory::bfloat16_t> bfloat16_list;
+  std::vector<std::optional<fory::float16_t>> maybe_float16_list;
+  std::vector<std::optional<fory::bfloat16_t>> maybe_bfloat16_list;
+  std::vector<float> float32_list;
+  std::vector<double> float64_list;
+  std::vector<std::string> string_list;
+  std::vector<std::vector<uint8_t>> bytes_list;
+  std::vector<fory::serialization::Date> date_list;
+  std::vector<fory::serialization::Timestamp> timestamp_list;
+  std::vector<fory::serialization::Duration> duration_list;
+  std::vector<fory::serialization::Decimal> decimal_list;
+  std::vector<ExampleState> enum_list;
+  std::vector<ExampleLeaf> message_list;
+  std::vector<ExampleLeafUnion> union_list;
+  std::vector<std::optional<int32_t>> maybe_fixed_i32_list;
+  std::vector<std::optional<uint64_t>> maybe_uint64_list;
+
+  FORY_STRUCT(ExampleMessageLists,
+              (bool_list, fory::F(101).list(fory::T::boolean())),
+              (int8_list, fory::F(102).list(fory::T::int8())),
+              (int16_list, fory::F(103).list(fory::T::int16())),
+              (fixed_i32_list, fory::F(104).list(fory::T::int32().fixed())),
+              (varint_i32_list, fory::F(105).list(fory::T::int32().varint())),
+              (fixed_i64_list, fory::F(106).list(fory::T::int64().fixed())),
+              (varint_i64_list, fory::F(107).list(fory::T::int64().varint())),
+              (tagged_i64_list, fory::F(108).list(fory::T::int64().tagged())),
+              (uint8_list, fory::F(109).list(fory::T::uint8())),
+              (uint16_list, fory::F(110).list(fory::T::uint16())),
+              (fixed_u32_list, fory::F(111).list(fory::T::uint32().fixed())),
+              (varint_u32_list, fory::F(112).list(fory::T::uint32().varint())),
+              (fixed_u64_list, fory::F(113).list(fory::T::uint64().fixed())),
+              (varint_u64_list, fory::F(114).list(fory::T::uint64().varint())),
+              (tagged_u64_list, fory::F(115).list(fory::T::uint64().tagged())),
+              (float16_list, fory::F(116).list(fory::T::float16())),
+              (bfloat16_list, fory::F(117).list(fory::T::bfloat16())),
+              (maybe_float16_list,
+               fory::F(118).list(fory::T::inner(fory::T::float16()))),
+              (maybe_bfloat16_list,
+               fory::F(119).list(fory::T::inner(fory::T::bfloat16()))),
+              (float32_list, fory::F(120).list(fory::T::float32())),
+              (float64_list, fory::F(121).list(fory::T::float64())),
+              (string_list, fory::F(122).list(fory::T::string())),
+              (bytes_list, fory::F(123).list(fory::FieldNodeSpec{})),
+              (date_list, fory::F(124).list(fory::FieldNodeSpec{})),
+              (timestamp_list, fory::F(125).list(fory::FieldNodeSpec{})),
+              (duration_list, fory::F(126).list(fory::FieldNodeSpec{})),
+              (decimal_list, fory::F(127).list(fory::FieldNodeSpec{})),
+              (enum_list, fory::F(128).list(fory::FieldNodeSpec{})),
+              (message_list, fory::F(129).list(fory::FieldNodeSpec{})),
+              (union_list, fory::F(130).list(fory::FieldNodeSpec{})),
+              (maybe_fixed_i32_list,
+               fory::F(131).list(fory::T::inner(fory::T::int32().fixed()))),
+              (maybe_uint64_list,
+               fory::F(132).list(fory::T::inner(fory::T::uint64().varint()))));
+};
+
+struct ExampleMessageArraysMaps {
+  std::vector<bool> bool_array;
+  std::vector<int8_t> int8_array;
+  std::vector<int16_t> int16_array;
+  std::vector<int32_t> int32_array;
+  std::vector<int64_t> int64_array;
+  std::vector<uint8_t> uint8_array;
+  std::vector<uint16_t> uint16_array;
+  std::vector<uint32_t> uint32_array;
+  std::vector<uint64_t> uint64_array;
+  std::vector<fory::float16_t> float16_array;
+  std::vector<fory::bfloat16_t> bfloat16_array;
+  std::vector<float> float32_array;
+  std::vector<double> float64_array;
+  std::vector<std::vector<int32_t>> int32_array_list;
+  std::vector<std::vector<uint8_t>> uint8_array_list;
+  std::map<bool, std::string> string_values_by_bool;
+  std::map<int8_t, std::string> string_values_by_int8;
+  std::map<int16_t, std::string> string_values_by_int16;
+  std::map<int32_t, std::string> string_values_by_fixed_i32;
+  std::map<int32_t, std::string> string_values_by_varint_i32;
+  std::map<int64_t, std::string> string_values_by_fixed_i64;
+  std::map<int64_t, std::string> string_values_by_varint_i64;
+  std::map<int64_t, std::string> string_values_by_tagged_i64;
+  std::map<uint8_t, std::string> string_values_by_uint8;
+  std::map<uint16_t, std::string> string_values_by_uint16;
+  std::map<uint32_t, std::string> string_values_by_fixed_u32;
+  std::map<uint32_t, std::string> string_values_by_varint_u32;
+  std::map<uint64_t, std::string> string_values_by_fixed_u64;
+  std::map<uint64_t, std::string> string_values_by_varint_u64;
+  std::map<uint64_t, std::string> string_values_by_tagged_u64;
+  std::map<std::string, std::string> string_values_by_string;
+  std::map<fory::serialization::Timestamp, std::string>
+      string_values_by_timestamp;
+  std::map<fory::serialization::Duration, std::string>
+      string_values_by_duration;
+  std::map<ExampleState, std::string> string_values_by_enum;
+  std::map<std::string, fory::float16_t> float16_values_by_name;
+  std::map<std::string, fory::float16_t> maybe_float16_values_by_name;
+  std::map<std::string, fory::bfloat16_t> bfloat16_values_by_name;
+  std::map<std::string, fory::bfloat16_t> maybe_bfloat16_values_by_name;
+  std::map<std::string, std::vector<uint8_t>> bytes_values_by_name;
+  std::map<std::string, fory::serialization::Date> date_values_by_name;
+  std::map<std::string, fory::serialization::Decimal> decimal_values_by_name;
+  std::map<std::string, ExampleLeaf> message_values_by_name;
+  std::map<std::string, ExampleLeafUnion> union_values_by_name;
+  std::map<std::string, std::vector<uint8_t>> uint8_array_values_by_name;
+  std::map<std::string, std::vector<float>> float32_array_values_by_name;
+  std::map<std::string, std::vector<int32_t>> int32_array_values_by_name;
+
+  FORY_STRUCT(
+      ExampleMessageArraysMaps,
+      (bool_array, fory::F(301).array(fory::T::boolean())),
+      (int8_array, fory::F(302).array(fory::T::int8())),
+      (int16_array, fory::F(303).array(fory::T::int16())),
+      (int32_array, fory::F(304).array(fory::T::int32())),
+      (int64_array, fory::F(305).array(fory::T::int64())),
+      (uint8_array, fory::F(306).array(fory::T::uint8())),
+      (uint16_array, fory::F(307).array(fory::T::uint16())),
+      (uint32_array, fory::F(308).array(fory::T::uint32())),
+      (uint64_array, fory::F(309).array(fory::T::uint64())),
+      (float16_array, fory::F(310).array(fory::T::float16())),
+      (bfloat16_array, fory::F(311).array(fory::T::bfloat16())),
+      (float32_array, fory::F(312).array(fory::T::float32())),
+      (float64_array, fory::F(313).array(fory::T::float64())),
+      (int32_array_list, fory::F(314).list(fory::T::array(fory::T::int32()))),
+      (uint8_array_list, fory::F(315).list(fory::T::array(fory::T::uint8()))),
+      (string_values_by_bool,
+       fory::F(201).map(fory::T::boolean(), fory::T::string())),
+      (string_values_by_int8,
+       fory::F(202).map(fory::T::int8(), fory::T::string())),
+      (string_values_by_int16,
+       fory::F(203).map(fory::T::int16(), fory::T::string())),
+      (string_values_by_fixed_i32,
+       fory::F(204).map(fory::T::int32().fixed(), fory::T::string())),
+      (string_values_by_varint_i32,
+       fory::F(205).map(fory::T::int32().varint(), fory::T::string())),
+      (string_values_by_fixed_i64,
+       fory::F(206).map(fory::T::int64().fixed(), fory::T::string())),
+      (string_values_by_varint_i64,
+       fory::F(207).map(fory::T::int64().varint(), fory::T::string())),
+      (string_values_by_tagged_i64,
+       fory::F(208).map(fory::T::int64().tagged(), fory::T::string())),
+      (string_values_by_uint8,
+       fory::F(209).map(fory::T::uint8(), fory::T::string())),
+      (string_values_by_uint16,
+       fory::F(210).map(fory::T::uint16(), fory::T::string())),
+      (string_values_by_fixed_u32,
+       fory::F(211).map(fory::T::uint32().fixed(), fory::T::string())),
+      (string_values_by_varint_u32,
+       fory::F(212).map(fory::T::uint32().varint(), fory::T::string())),
+      (string_values_by_fixed_u64,
+       fory::F(213).map(fory::T::uint64().fixed(), fory::T::string())),
+      (string_values_by_varint_u64,
+       fory::F(214).map(fory::T::uint64().varint(), fory::T::string())),
+      (string_values_by_tagged_u64,
+       fory::F(215).map(fory::T::uint64().tagged(), fory::T::string())),
+      (string_values_by_string,
+       fory::F(218).map(fory::T::string(), fory::T::string())),
+      (string_values_by_timestamp,
+       fory::F(219).map(fory::FieldNodeSpec{}, fory::T::string())),
+      (string_values_by_duration,
+       fory::F(220).map(fory::FieldNodeSpec{}, fory::T::string())),
+      (string_values_by_enum,
+       fory::F(221).map(fory::FieldNodeSpec{}, fory::T::string())),
+      (float16_values_by_name,
+       fory::F(222).map(fory::T::string(), fory::T::float16())),
+      (maybe_float16_values_by_name,
+       fory::F(223).map(fory::T::string(), fory::T::inner(fory::T::float16()))),
+      (bfloat16_values_by_name,
+       fory::F(224).map(fory::T::string(), fory::T::bfloat16())),
+      (maybe_bfloat16_values_by_name,
+       fory::F(225).map(fory::T::string(),
+                        fory::T::inner(fory::T::bfloat16()))),
+      (bytes_values_by_name,
+       fory::F(226).map(fory::T::string(), fory::FieldNodeSpec{})),
+      (date_values_by_name,
+       fory::F(227).map(fory::T::string(), fory::FieldNodeSpec{})),
+      (decimal_values_by_name,
+       fory::F(228).map(fory::T::string(), fory::FieldNodeSpec{})),
+      (message_values_by_name,
+       fory::F(229).map(fory::T::string(), fory::FieldNodeSpec{})),
+      (union_values_by_name,
+       fory::F(230).map(fory::T::string(), fory::FieldNodeSpec{})),
+      (uint8_array_values_by_name,
+       fory::F(231).map(fory::T::string(), fory::T::array(fory::T::uint8()))),
+      (float32_array_values_by_name,
+       fory::F(232).map(fory::T::string(), fory::T::array(fory::T::float32()))),
+      (int32_array_values_by_name,
+       fory::F(233).map(fory::T::string(), fory::T::array(fory::T::int32()))));
+};
+
+struct ExampleMessage : ExampleMessageScalars,
+                        ExampleMessageLists,
+                        ExampleMessageArraysMaps {
+
+  bool operator==(const ExampleMessage &other) const {
+    return std::tie(
+               bool_value, int8_value, int16_value, fixed_i32_value,
+               varint_i32_value, fixed_i64_value, varint_i64_value,
+               tagged_i64_value, uint8_value, uint16_value, fixed_u32_value,
+               varint_u32_value, fixed_u64_value, varint_u64_value,
+               tagged_u64_value, float16_value, bfloat16_value, float32_value,
+               float64_value, string_value, bytes_value, date_value,
+               timestamp_value, duration_value, decimal_value, enum_value,
+               message_value, union_value, bool_list, int8_list, int16_list,
+               fixed_i32_list, varint_i32_list, fixed_i64_list, varint_i64_list,
+               tagged_i64_list, uint8_list, uint16_list, fixed_u32_list,
+               varint_u32_list, fixed_u64_list, varint_u64_list,
+               tagged_u64_list, float16_list, bfloat16_list, maybe_float16_list,
+               maybe_bfloat16_list, float32_list, float64_list, string_list,
+               bytes_list, date_list, timestamp_list, duration_list,
+               decimal_list, enum_list, message_list, union_list,
+               maybe_fixed_i32_list, maybe_uint64_list, bool_array, int8_array,
+               int16_array, int32_array, int64_array, uint8_array, uint16_array,
+               uint32_array, uint64_array, float16_array, bfloat16_array,
+               float32_array, float64_array, int32_array_list, uint8_array_list,
+               string_values_by_bool, string_values_by_int8,
+               string_values_by_int16, string_values_by_fixed_i32,
+               string_values_by_varint_i32, string_values_by_fixed_i64,
+               string_values_by_varint_i64, string_values_by_tagged_i64,
+               string_values_by_uint8, string_values_by_uint16,
+               string_values_by_fixed_u32, string_values_by_varint_u32,
+               string_values_by_fixed_u64, string_values_by_varint_u64,
+               string_values_by_tagged_u64, string_values_by_string,
+               string_values_by_timestamp, string_values_by_duration,
+               string_values_by_enum, float16_values_by_name,
+               maybe_float16_values_by_name, bfloat16_values_by_name,
+               maybe_bfloat16_values_by_name, bytes_values_by_name,
+               date_values_by_name, decimal_values_by_name,
+               message_values_by_name, union_values_by_name,
+               uint8_array_values_by_name, float32_array_values_by_name,
+               int32_array_values_by_name) ==
+           std::tie(
+               other.bool_value, other.int8_value, other.int16_value,
+               other.fixed_i32_value, other.varint_i32_value,
+               other.fixed_i64_value, other.varint_i64_value,
+               other.tagged_i64_value, other.uint8_value, other.uint16_value,
+               other.fixed_u32_value, other.varint_u32_value,
+               other.fixed_u64_value, other.varint_u64_value,
+               other.tagged_u64_value, other.float16_value,
+               other.bfloat16_value, other.float32_value, other.float64_value,
+               other.string_value, other.bytes_value, other.date_value,
+               other.timestamp_value, other.duration_value, other.decimal_value,
+               other.enum_value, other.message_value, other.union_value,
+               other.bool_list, other.int8_list, other.int16_list,
+               other.fixed_i32_list, other.varint_i32_list,
+               other.fixed_i64_list, other.varint_i64_list,
+               other.tagged_i64_list, other.uint8_list, other.uint16_list,
+               other.fixed_u32_list, other.varint_u32_list,
+               other.fixed_u64_list, other.varint_u64_list,
+               other.tagged_u64_list, other.float16_list, other.bfloat16_list,
+               other.maybe_float16_list, other.maybe_bfloat16_list,
+               other.float32_list, other.float64_list, other.string_list,
+               other.bytes_list, other.date_list, other.timestamp_list,
+               other.duration_list, other.decimal_list, other.enum_list,
+               other.message_list, other.union_list, other.maybe_fixed_i32_list,
+               other.maybe_uint64_list, other.bool_array, other.int8_array,
+               other.int16_array, other.int32_array, other.int64_array,
+               other.uint8_array, other.uint16_array, other.uint32_array,
+               other.uint64_array, other.float16_array, other.bfloat16_array,
+               other.float32_array, other.float64_array, other.int32_array_list,
+               other.uint8_array_list, other.string_values_by_bool,
+               other.string_values_by_int8, other.string_values_by_int16,
+               other.string_values_by_fixed_i32,
+               other.string_values_by_varint_i32,
+               other.string_values_by_fixed_i64,
+               other.string_values_by_varint_i64,
+               other.string_values_by_tagged_i64, other.string_values_by_uint8,
+               other.string_values_by_uint16, other.string_values_by_fixed_u32,
+               other.string_values_by_varint_u32,
+               other.string_values_by_fixed_u64,
+               other.string_values_by_varint_u64,
+               other.string_values_by_tagged_u64, other.string_values_by_string,
+               other.string_values_by_timestamp,
+               other.string_values_by_duration, other.string_values_by_enum,
+               other.float16_values_by_name, other.maybe_float16_values_by_name,
+               other.bfloat16_values_by_name,
+               other.maybe_bfloat16_values_by_name, other.bytes_values_by_name,
+               other.date_values_by_name, other.decimal_values_by_name,
+               other.message_values_by_name, other.union_values_by_name,
+               other.uint8_array_values_by_name,
+               other.float32_array_values_by_name,
+               other.int32_array_values_by_name);
+  }
+
+  FORY_STRUCT(ExampleMessage, FORY_BASE(ExampleMessageScalars),
+              FORY_BASE(ExampleMessageLists),
+              FORY_BASE(ExampleMessageArraysMaps));
+};
+
+FORY_ENUM(ExampleState, UNKNOWN, READY, FAILED);
+FORY_UNION_IDS(ExampleLeafUnion, 1, 2, 3);
+FORY_UNION_CASE(ExampleLeafUnion, 1, std::string, ExampleLeafUnion::note,
+                fory::F(1));
+FORY_UNION_CASE(ExampleLeafUnion, 2, int32_t, ExampleLeafUnion::code,
+                fory::F(2).varint());
+FORY_UNION_CASE(ExampleLeafUnion, 3, ExampleLeaf, ExampleLeafUnion::leaf,
+                fory::F(3));
+FORY_UNION_IDS(ExampleMessageUnion, 314);
+FORY_UNION_CASE(ExampleMessageUnion, 314, std::vector<std::vector<int32_t>>,
+                ExampleMessageUnion::int32_array_list,
+                fory::F(314).list(fory::T::array(fory::T::int32())));
+
+} // namespace example_peer
+
+FORY_STRUCT_EVOLVING(example_peer::ExampleLeaf, false);
+FORY_STRUCT_EVOLVING(example_peer::ExampleMessage, true);
+
+namespace {
+
+fory::Result<void, fory::Error>
+RegisterExampleTypes(fory::serialization::BaseFory &fory) {
+  FORY_RETURN_IF_ERROR(fory.register_enum<example_peer::ExampleState>(1504));
+  FORY_RETURN_IF_ERROR(
+      fory.register_union<example_peer::ExampleLeafUnion>(1503));
+  FORY_RETURN_IF_ERROR(
+      fory.register_union<example_peer::ExampleMessageUnion>(1501));
+  FORY_RETURN_IF_ERROR(fory.register_struct<example_peer::ExampleLeaf>(1502));
+  FORY_RETURN_IF_ERROR(
+      fory.register_struct<example_peer::ExampleMessage>(1500));
+  return fory::Result<void, fory::Error>();
+}
+
+example_peer::ExampleLeaf BuildExampleLeaf(std::string label = "leaf",
+                                           int32_t count = 7) {
+  return example_peer::ExampleLeaf{std::move(label), count};
+}
+
+example_peer::ExampleMessage BuildExampleMessage() {
+  auto leaf = BuildExampleLeaf();
+  auto other_leaf = BuildExampleLeaf("other", 8);
+  auto leaf_union = example_peer::ExampleLeafUnion::leaf(other_leaf);
+  auto f16 = [](float value) { return fory::float16_t::from_float(value); };
+  auto bf16 = [](float value) { return fory::bfloat16_t::from_float(value); };
+  auto ts = [](int64_t seconds) {
+    return fory::serialization::Timestamp(std::chrono::seconds(seconds));
+  };
+  using fory::serialization::Date;
+  using fory::serialization::Decimal;
+  using fory::serialization::Duration;
+  example_peer::ExampleMessage message;
+  message.bool_value = true;
+  message.int8_value = -12;
+  message.int16_value = -1234;
+  message.fixed_i32_value = -123456;
+  message.varint_i32_value = -12345;
+  message.fixed_i64_value = -123456789;
+  message.varint_i64_value = -987654321;
+  message.tagged_i64_value = 123456789;
+  message.uint8_value = static_cast<uint8_t>(200);
+  message.uint16_value = 60000;
+  message.fixed_u32_value = 1234567890;
+  message.varint_u32_value = 1234567890;
+  message.fixed_u64_value = 9876543210ULL;
+  message.varint_u64_value = 12345678901ULL;
+  message.tagged_u64_value = 2222222222ULL;
+  message.float16_value = fory::float16_t::from_float(1.5F);
+  message.bfloat16_value = fory::bfloat16_t::from_float(2.5F);
+  message.float32_value = 3.5F;
+  message.float64_value = 4.5;
+  message.string_value = "example";
+  message.bytes_value = {static_cast<uint8_t>(1), static_cast<uint8_t>(2),
+                         static_cast<uint8_t>(3)};
+  message.date_value = Date(19756);
+  message.timestamp_value = ts(1706933106);
+  message.duration_value = std::chrono::seconds(42) + Duration(7000);
+  message.decimal_value = Decimal::from_int64(12345, 2);
+  message.enum_value = example_peer::ExampleState::READY;
+  message.message_value = leaf;
+  message.union_value = leaf_union;
+  message.bool_list = {true, false, true};
+  message.int8_list = {1, -2, 3};
+  message.int16_list = {100, -200, 300};
+  message.fixed_i32_list = {1000, -2000, 3000};
+  message.varint_i32_list = {-10, 20, -30};
+  message.fixed_i64_list = {10000, -20000};
+  message.varint_i64_list = {-40, 50};
+  message.tagged_i64_list = {60, 70};
+  message.uint8_list = {static_cast<uint8_t>(200), static_cast<uint8_t>(250)};
+  message.uint16_list = {50000, 60000};
+  message.fixed_u32_list = {2000000000U, 2100000000U};
+  message.varint_u32_list = {100, 200};
+  message.fixed_u64_list = {9000000000ULL};
+  message.varint_u64_list = {12000000000ULL};
+  message.tagged_u64_list = {13000000000ULL};
+  message.float16_list = {fory::float16_t::from_bits(0x3C00),
+                          fory::float16_t::from_bits(0x4000)};
+  message.bfloat16_list = {fory::bfloat16_t::from_bits(0x3F80),
+                           fory::bfloat16_t::from_bits(0x4000)};
+  message.maybe_float16_list = {f16(1.0F), std::nullopt, f16(2.0F)};
+  message.maybe_bfloat16_list = {bf16(1.0F), std::nullopt, bf16(3.0F)};
+  message.float32_list = {1.5F, 2.5F};
+  message.float64_list = {3.5, 4.5};
+  message.string_list = {"alpha", "beta"};
+  message.bytes_list = {{static_cast<uint8_t>(4), static_cast<uint8_t>(5)},
+                        {static_cast<uint8_t>(6), static_cast<uint8_t>(7)}};
+  message.date_list = {Date(19723), Date(19724)};
+  message.timestamp_list = {ts(1704067200), ts(1704153600)};
+  message.duration_list = {std::chrono::milliseconds(1),
+                           std::chrono::seconds(2)};
+  message.decimal_list = {Decimal::from_int64(125, 2),
+                          Decimal::from_int64(250, 2)};
+  message.enum_list = {example_peer::ExampleState::UNKNOWN,
+                       example_peer::ExampleState::FAILED};
+  message.message_list = {leaf, other_leaf};
+  message.union_list = {example_peer::ExampleLeafUnion::note("note"),
+                        leaf_union};
+  message.maybe_fixed_i32_list = {1, std::nullopt, 3};
+  message.maybe_uint64_list = {10ULL, std::nullopt, 30ULL};
+  message.bool_array = {true, false};
+  message.int8_array = {1, -2};
+  message.int16_array = {100, -200};
+  message.int32_array = {1000, -2000};
+  message.int64_array = {10000, -20000};
+  message.uint8_array = {static_cast<uint8_t>(200), static_cast<uint8_t>(250)};
+  message.uint16_array = {50000, 60000};
+  message.uint32_array = {2000000000U, 2100000000U};
+  message.uint64_array = {9000000000ULL, 12000000000ULL};
+  message.float16_array = {f16(1.0F), f16(2.0F)};
+  message.bfloat16_array = {bf16(1.0F), bf16(2.0F)};
+  message.float32_array = {1.5F, 2.5F};
+  message.float64_array = {3.5, 4.5};
+  message.int32_array_list = {{1, 2}, {3, 4}};
+  message.uint8_array_list = {
+      {static_cast<uint8_t>(201), static_cast<uint8_t>(202)},
+      {static_cast<uint8_t>(203)}};
+  message.string_values_by_bool = {{true, "bool"}};
+  message.string_values_by_int8 = {{-1, "int8"}};
+  message.string_values_by_int16 = {{-2, "int16"}};
+  message.string_values_by_fixed_i32 = {{-3, "fixed-i32"}};
+  message.string_values_by_varint_i32 = {{4, "varint_i32"}};
+  message.string_values_by_fixed_i64 = {{-5, "fixed-i64"}};
+  message.string_values_by_varint_i64 = {{6, "varint_i64"}};
+  message.string_values_by_tagged_i64 = {{7, "tagged-i64"}};
+  message.string_values_by_uint8 = {{static_cast<uint8_t>(200), "uint8"}};
+  message.string_values_by_uint16 = {{60000, "uint16"}};
+  message.string_values_by_fixed_u32 = {{1234567890U, "fixed-u32"}};
+  message.string_values_by_varint_u32 = {{1234567891U, "varint-u32"}};
+  message.string_values_by_fixed_u64 = {{9876543210ULL, "fixed-u64"}};
+  message.string_values_by_varint_u64 = {{9876543211ULL, "varint-u64"}};
+  message.string_values_by_tagged_u64 = {{9876543212ULL, "tagged-u64"}};
+  message.string_values_by_string = {{"name", "value"}};
+  message.string_values_by_timestamp = {{ts(1709528767), "time"}};
+  message.string_values_by_duration = {{std::chrono::seconds(9), "duration"}};
+  message.string_values_by_enum = {
+      {example_peer::ExampleState::READY, "ready"}};
+  message.float16_values_by_name = {{"f16", f16(1.25F)}};
+  message.maybe_float16_values_by_name = {{"maybe-f16", f16(1.5F)}};
+  message.bfloat16_values_by_name = {{"bf16", bf16(1.75F)}};
+  message.maybe_bfloat16_values_by_name = {{"maybe-bf16", bf16(2.25F)}};
+  message.bytes_values_by_name = {
+      {"bytes", {static_cast<uint8_t>(8), static_cast<uint8_t>(9)}}};
+  message.date_values_by_name = {{"date", Date(19849)}};
+  message.decimal_values_by_name = {{"decimal", Decimal::from_int64(9901, 2)}};
+  message.message_values_by_name = {{"leaf", leaf}};
+  message.union_values_by_name = {
+      {"union", example_peer::ExampleLeafUnion::code(42)}};
+  message.uint8_array_values_by_name = {
+      {"u8", {static_cast<uint8_t>(201), static_cast<uint8_t>(202)}}};
+  message.float32_array_values_by_name = {{"f32", {1.25F, 2.5F}}};
+  message.int32_array_values_by_name = {{"i32", {101, 202}}};
+  return message;
+}
+
+example_peer::ExampleMessageUnion BuildExampleMessageUnion() {
+  return example_peer::ExampleMessageUnion::int32_array_list(
+      {{11, 12}, {13, 14}});
 }
 
 fory::Result<void, fory::Error> RunEvolvingRoundTrip() {
@@ -286,6 +968,7 @@ fory::Result<void, fory::Error> RunRoundTrip(bool compatible) {
   collection::register_types(fory);
   optional_types::register_types(fory);
   any_example::register_types(fory);
+  FORY_RETURN_IF_ERROR(RegisterExampleTypes(fory));
 
   if (compatible) {
     FORY_RETURN_IF_ERROR(RunEvolvingRoundTrip());
@@ -437,17 +1120,17 @@ fory::Result<void, fory::Error> RunRoundTrip(bool compatible) {
   types.set_int8_value(12);
   types.set_int16_value(1234);
   types.set_int32_value(-123456);
-  types.set_varint32_value(-12345);
+  types.set_varint_i32_value(-12345);
   types.set_int64_value(-123456789);
-  types.set_varint64_value(-987654321);
-  types.set_tagged_int64_value(123456789);
+  types.set_varint_i64_value(-987654321);
+  types.set_tagged_i64_value(123456789);
   types.set_uint8_value(200);
   types.set_uint16_value(60000);
   types.set_uint32_value(1234567890);
-  types.set_var_uint32_value(1234567890);
+  types.set_varint_u32_value(1234567890);
   types.set_uint64_value(9876543210ULL);
-  types.set_var_uint64_value(12345678901ULL);
-  types.set_tagged_uint64_value(2222222222ULL);
+  types.set_varint_u64_value(12345678901ULL);
+  types.set_tagged_u64_value(2222222222ULL);
   types.set_float32_value(2.5F);
   types.set_float64_value(3.5);
   *types.mutable_contact() =
@@ -611,21 +1294,21 @@ fory::Result<void, fory::Error> RunRoundTrip(bool compatible) {
   all_types.set_int8_value(12);
   all_types.set_int16_value(1234);
   all_types.set_int32_value(-123456);
-  all_types.set_fixed_int32_value(-123456);
-  all_types.set_varint32_value(-12345);
+  all_types.set_fixed_i32_value(-123456);
+  all_types.set_varint_i32_value(-12345);
   all_types.set_int64_value(-123456789);
-  all_types.set_fixed_int64_value(-123456789);
-  all_types.set_varint64_value(-987654321);
-  all_types.set_tagged_int64_value(123456789);
+  all_types.set_fixed_i64_value(-123456789);
+  all_types.set_varint_i64_value(-987654321);
+  all_types.set_tagged_i64_value(123456789);
   all_types.set_uint8_value(200);
   all_types.set_uint16_value(60000);
   all_types.set_uint32_value(1234567890);
-  all_types.set_fixed_uint32_value(1234567890);
-  all_types.set_var_uint32_value(1234567890);
+  all_types.set_fixed_u32_value(1234567890);
+  all_types.set_varint_u32_value(1234567890);
   all_types.set_uint64_value(9876543210ULL);
-  all_types.set_fixed_uint64_value(9876543210ULL);
-  all_types.set_var_uint64_value(12345678901ULL);
-  all_types.set_tagged_uint64_value(2222222222ULL);
+  all_types.set_fixed_u64_value(9876543210ULL);
+  all_types.set_varint_u64_value(12345678901ULL);
+  all_types.set_tagged_u64_value(2222222222ULL);
   all_types.set_float32_value(2.5F);
   all_types.set_float64_value(3.5);
   all_types.set_string_value("optional");
@@ -675,6 +1358,25 @@ fory::Result<void, fory::Error> RunRoundTrip(bool compatible) {
   if (!(any_roundtrip == any_holder)) {
     return fory::Unexpected(
         fory::Error::invalid("any holder roundtrip mismatch"));
+  }
+
+  example_peer::ExampleMessage example_message = BuildExampleMessage();
+  FORY_TRY(example_bytes, fory.serialize(example_message));
+  FORY_TRY(example_roundtrip, fory.deserialize<example_peer::ExampleMessage>(
+                                  example_bytes.data(), example_bytes.size()));
+  if (!(example_roundtrip == example_message)) {
+    return fory::Unexpected(
+        fory::Error::invalid("example message roundtrip mismatch"));
+  }
+
+  example_peer::ExampleMessageUnion example_union = BuildExampleMessageUnion();
+  FORY_TRY(example_union_bytes, fory.serialize(example_union));
+  FORY_TRY(example_union_roundtrip,
+           fory.deserialize<example_peer::ExampleMessageUnion>(
+               example_union_bytes.data(), example_union_bytes.size()));
+  if (!(example_union_roundtrip == example_union)) {
+    return fory::Unexpected(
+        fory::Error::invalid("example message union roundtrip mismatch"));
   }
 
   const char *data_file = std::getenv("DATA_FILE");
@@ -747,8 +1449,13 @@ fory::Result<void, fory::Error> RunRoundTrip(bool compatible) {
     FORY_TRY(peer_array, fory.deserialize<collection::NumericCollectionsArray>(
                              payload.data(), payload.size()));
     if (!(peer_array == collections_array)) {
-      return fory::Unexpected(
-          fory::Error::invalid("peer collection array payload mismatch"));
+      return fory::Unexpected(fory::Error::invalid(
+          "peer collection array payload mismatch: got " +
+          DescribeCollectionArray(peer_array) + " expected " +
+          DescribeCollectionArray(collections_array) + " local_meta=" +
+          DescribeFieldTypes(
+              fory.type_resolver()
+                  .clone_struct_meta<collection::NumericCollectionsArray>())));
     }
     FORY_TRY(peer_bytes, fory.serialize(peer_array));
     FORY_RETURN_IF_ERROR(WriteFile(collection_array_file, peer_bytes));
@@ -807,6 +1514,33 @@ fory::Result<void, fory::Error> RunRoundTrip(bool compatible) {
     }
     FORY_TRY(peer_bytes, fory.serialize(peer_holder));
     FORY_RETURN_IF_ERROR(WriteFile(optional_file, peer_bytes));
+  }
+
+  const char *example_file = std::getenv("DATA_FILE_EXAMPLE");
+  if (example_file != nullptr && example_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(example_file));
+    FORY_TRY(peer_example, fory.deserialize<example_peer::ExampleMessage>(
+                               payload.data(), payload.size()));
+    if (!(peer_example == example_message)) {
+      return fory::Unexpected(
+          fory::Error::invalid("peer example payload mismatch"));
+    }
+    FORY_TRY(peer_bytes, fory.serialize(peer_example));
+    FORY_RETURN_IF_ERROR(WriteFile(example_file, peer_bytes));
+  }
+
+  const char *example_union_file = std::getenv("DATA_FILE_EXAMPLE_UNION");
+  if (example_union_file != nullptr && example_union_file[0] != '\0') {
+    FORY_TRY(payload, ReadFile(example_union_file));
+    FORY_TRY(peer_example_union,
+             fory.deserialize<example_peer::ExampleMessageUnion>(
+                 payload.data(), payload.size()));
+    if (!(peer_example_union == example_union)) {
+      return fory::Unexpected(
+          fory::Error::invalid("peer example union payload mismatch"));
+    }
+    FORY_TRY(peer_bytes, fory.serialize(peer_example_union));
+    FORY_RETURN_IF_ERROR(WriteFile(example_union_file, peer_bytes));
   }
 
   auto ref_fory = fory::serialization::Fory::builder()

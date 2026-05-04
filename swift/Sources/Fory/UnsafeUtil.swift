@@ -1324,7 +1324,7 @@ public enum UnsafeUtil {
     @inline(__always)
     public static func readRegion(
         buffer: ByteBuffer,
-        _ body: (UnsafeBufferPointer<UInt8>) throws -> Int
+        _ body: (UnsafePointer<UInt8>, Int) throws -> Int
     ) throws {
         let startIndex = buffer.cursor
         let readableCount = buffer.count
@@ -1337,9 +1337,10 @@ public enum UnsafeUtil {
         }
         let available = readableCount - startIndex
         let consumed = try buffer.storage.withUnsafeBufferPointer { bytes -> Int in
-            let start = bytes.baseAddress.map { $0.advanced(by: startIndex) }
-            let region = UnsafeBufferPointer(start: start, count: available)
-            return try body(region)
+            guard let base = bytes.baseAddress else {
+                throw ForyError.outOfBounds(cursor: startIndex, need: 1, length: readableCount)
+            }
+            return try body(base.advanced(by: startIndex), available)
         }
         if consumed < 0 || consumed > available {
             throw ForyError.outOfBounds(cursor: startIndex, need: consumed, length: readableCount)

@@ -40,7 +40,6 @@ from pyfory._fory import (
     NOT_NULL_INT64_FLAG,
     BufferObject,
 )
-from pyfory.serialization import bfloat16, bfloat16array, float16, float16array
 
 _WINDOWS = os.name == "nt"
 
@@ -155,10 +154,22 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         Float32Serializer,
         Float64Serializer,
         Float16Serializer,
+        BoolArraySerializer,
+        Int8ArraySerializer,
+        Int16ArraySerializer,
+        Int32ArraySerializer,
+        Int64ArraySerializer,
+        UInt8ArraySerializer,
+        UInt16ArraySerializer,
+        UInt32ArraySerializer,
+        UInt64ArraySerializer,
         Float16ArraySerializer,
+        Float32ArraySerializer,
+        Float64ArraySerializer,
         StringSerializer,
         DateSerializer,
         TimestampSerializer,
+        DurationSerializer,
         CollectionSerializer,
         ListSerializer,
         TupleSerializer,
@@ -167,8 +178,6 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         MapSerializer,
         EnumSerializer,
         SliceSerializer,
-        bfloat16,
-        bfloat16array,
         BFloat16Serializer,
         BFloat16ArraySerializer,
     )
@@ -196,12 +205,24 @@ else:
         Float32Serializer,
         Float64Serializer,
         Float16Serializer,
+        BoolArraySerializer,
+        Int8ArraySerializer,
+        Int16ArraySerializer,
+        Int32ArraySerializer,
+        Int64ArraySerializer,
+        UInt8ArraySerializer,
+        UInt16ArraySerializer,
+        UInt32ArraySerializer,
+        UInt64ArraySerializer,
         Float16ArraySerializer,
+        Float32ArraySerializer,
+        Float64ArraySerializer,
         BFloat16Serializer,
         BFloat16ArraySerializer,
         StringSerializer,
         DateSerializer,
         TimestampSerializer,
+        DurationSerializer,
         EnumSerializer,
         SliceSerializer,
     )
@@ -215,29 +236,34 @@ else:
         MapSerializer,
     )
 
-from pyfory.types import (
-    int8_array,
-    uint8_array,
-    int16_array,
-    int32_array,
-    int64_array,
-    uint16_array,
-    uint32_array,
-    uint64_array,
-    float32_array,
-    float64_array,
-    BoolNDArrayType,
-    Int8NDArrayType,
-    Uint8NDArrayType,
-    Int16NDArrayType,
-    Int32NDArrayType,
-    Int64NDArrayType,
-    Uint16NDArrayType,
-    Uint32NDArrayType,
-    Uint64NDArrayType,
-    Float32NDArrayType,
-    Float64NDArrayType,
-    TypeId,
+from pyfory.types import TypeId
+from pyfory.annotation import (
+    BFloat16Array,
+    BoolArray,
+    Float16Array,
+    Float32Array,
+    Float64Array,
+    Int16Array,
+    Int32Array,
+    Int64Array,
+    Int8Array,
+    NDArray,
+    PyArray,
+    UInt16Array,
+    UInt32Array,
+    UInt64Array,
+    UInt8Array,
+    Float16,
+    Float32,
+    Float64,
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+    UInt8,
+    UInt16,
+    UInt32,
+    UInt64,
 )
 from pyfory.utils import is_little_endian
 
@@ -282,7 +308,7 @@ def _decimal_parts(value: decimal.Decimal) -> Tuple[int, int]:
     sign, digits, exponent = value.as_tuple()
     scale = -exponent
     if scale < _MIN_INT32 or scale > _MAX_INT32:
-        raise ValueError(f"Decimal scale {scale} is outside signed int32 range")
+        raise ValueError(f"Decimal scale {scale} is outside signed Int32 range")
     unscaled = 0
     for digit in digits:
         unscaled = unscaled * 10 + digit
@@ -419,103 +445,89 @@ class PandasRangeIndexSerializer(Serializer):
 
 
 # Use numpy array or python array module.
-typecode_dict = (
-    {
-        # bytes use BytesSerializer; array.array uses explicit typecodes.
-        "b": (1, int8_array, TypeId.INT8_ARRAY),
-        "B": (1, uint8_array, TypeId.UINT8_ARRAY),
-        "h": (2, int16_array, TypeId.INT16_ARRAY),
-        "i": (4, int32_array, TypeId.INT32_ARRAY),
-        "l": (8, int64_array, TypeId.INT64_ARRAY),
-        "H": (2, uint16_array, TypeId.UINT16_ARRAY),
-        "I": (4, uint32_array, TypeId.UINT32_ARRAY),
-        "L": (8, uint64_array, TypeId.UINT64_ARRAY),
-        "f": (4, float32_array, TypeId.FLOAT32_ARRAY),
-        "d": (8, float64_array, TypeId.FLOAT64_ARRAY),
-    }
-    if not _WINDOWS
-    else {
-        "b": (1, int8_array, TypeId.INT8_ARRAY),
-        "B": (1, uint8_array, TypeId.UINT8_ARRAY),
-        "h": (2, int16_array, TypeId.INT16_ARRAY),
-        "l": (4, int32_array, TypeId.INT32_ARRAY),
-        "q": (8, int64_array, TypeId.INT64_ARRAY),
-        "H": (2, uint16_array, TypeId.UINT16_ARRAY),
-        "L": (4, uint32_array, TypeId.UINT32_ARRAY),
-        "Q": (8, uint64_array, TypeId.UINT64_ARRAY),
-        "f": (4, float32_array, TypeId.FLOAT32_ARRAY),
-        "d": (8, float64_array, TypeId.FLOAT64_ARRAY),
-    }
-)
+_TYPECODE_SPECS = {
+    "b": {1: (PyArray[Int8], TypeId.INT8_ARRAY)},
+    "B": {1: (PyArray[UInt8], TypeId.UINT8_ARRAY)},
+    "h": {2: (PyArray[Int16], TypeId.INT16_ARRAY)},
+    "H": {2: (PyArray[UInt16], TypeId.UINT16_ARRAY)},
+    "i": {4: (PyArray[Int32], TypeId.INT32_ARRAY)},
+    "I": {4: (PyArray[UInt32], TypeId.UINT32_ARRAY)},
+    "l": {
+        4: (PyArray[Int32], TypeId.INT32_ARRAY),
+        8: (PyArray[Int64], TypeId.INT64_ARRAY),
+    },
+    "L": {
+        4: (PyArray[UInt32], TypeId.UINT32_ARRAY),
+        8: (PyArray[UInt64], TypeId.UINT64_ARRAY),
+    },
+    "q": {8: (PyArray[Int64], TypeId.INT64_ARRAY)},
+    "Q": {8: (PyArray[UInt64], TypeId.UINT64_ARRAY)},
+    "f": {4: (PyArray[Float32], TypeId.FLOAT32_ARRAY)},
+    "d": {8: (PyArray[Float64], TypeId.FLOAT64_ARRAY)},
+}
 
-typeid_code = (
-    {
-        TypeId.INT8_ARRAY: "b",
-        TypeId.UINT8_ARRAY: "B",
-        TypeId.INT16_ARRAY: "h",
-        TypeId.INT32_ARRAY: "i",
-        TypeId.INT64_ARRAY: "l",
-        TypeId.UINT16_ARRAY: "H",
-        TypeId.UINT32_ARRAY: "I",
-        TypeId.UINT64_ARRAY: "L",
-        TypeId.FLOAT32_ARRAY: "f",
-        TypeId.FLOAT64_ARRAY: "d",
-    }
-    if not _WINDOWS
-    else {
-        TypeId.INT8_ARRAY: "b",
-        TypeId.UINT8_ARRAY: "B",
-        TypeId.INT16_ARRAY: "h",
-        TypeId.INT32_ARRAY: "l",
-        TypeId.INT64_ARRAY: "q",
-        TypeId.UINT16_ARRAY: "H",
-        TypeId.UINT32_ARRAY: "L",
-        TypeId.UINT64_ARRAY: "Q",
-        TypeId.FLOAT32_ARRAY: "f",
-        TypeId.FLOAT64_ARRAY: "d",
-    }
-)
+_PREFERRED_TYPECODES = {
+    TypeId.INT8_ARRAY: ("b",),
+    TypeId.UINT8_ARRAY: ("B",),
+    TypeId.INT16_ARRAY: ("h",),
+    TypeId.UINT16_ARRAY: ("H",),
+    TypeId.INT32_ARRAY: ("i", "l"),
+    TypeId.UINT32_ARRAY: ("I", "L"),
+    TypeId.INT64_ARRAY: ("q", "l"),
+    TypeId.UINT64_ARRAY: ("Q", "L"),
+    TypeId.FLOAT32_ARRAY: ("f",),
+    TypeId.FLOAT64_ARRAY: ("d",),
+}
+
+
+def _build_pyarray_typecode_tables():
+    typecodes = {}
+    typeid_to_code = {}
+    for typecode, by_size in _TYPECODE_SPECS.items():
+        try:
+            itemsize = array.array(typecode).itemsize
+        except (TypeError, ValueError):
+            continue
+        typed_entry = by_size.get(itemsize)
+        if typed_entry is None:
+            continue
+        ftype, type_id = typed_entry
+        typecodes[typecode] = (itemsize, ftype, type_id)
+    for type_id, preferred_typecodes in _PREFERRED_TYPECODES.items():
+        for typecode in preferred_typecodes:
+            entry = typecodes.get(typecode)
+            if entry is not None and entry[2] == type_id:
+                typeid_to_code[type_id] = typecode
+                break
+    return typecodes, typeid_to_code
+
+
+typecode_dict, typeid_code = _build_pyarray_typecode_tables()
 
 
 class PyArraySerializer(Serializer):
     typecode_dict = typecode_dict
-    typecodearray_type = (
-        {
-            "b": int8_array,
-            "B": uint8_array,
-            "h": int16_array,
-            "i": int32_array,
-            "l": int64_array,
-            "H": uint16_array,
-            "I": uint32_array,
-            "L": uint64_array,
-            "f": float32_array,
-            "d": float64_array,
-        }
-        if not _WINDOWS
-        else {
-            "b": int8_array,
-            "B": uint8_array,
-            "h": int16_array,
-            "l": int32_array,
-            "q": int64_array,
-            "H": uint16_array,
-            "L": uint32_array,
-            "Q": uint64_array,
-            "f": float32_array,
-            "d": float64_array,
-        }
-    )
+    typecodearray_type = {typecode: ftype for typecode, (_itemsize, ftype, _type_id) in typecode_dict.items()}
 
     def __init__(self, type_resolver, ftype, type_id: str):
         super().__init__(type_resolver, ftype)
         self.typecode = typeid_code[type_id]
         self.itemsize, ftype, self.type_id = typecode_dict[self.typecode]
 
+    def _array_type_id(self, value):
+        entry = typecode_dict.get(value.typecode)
+        if entry is None:
+            raise TypeError(f"Unsupported array.array typecode {value.typecode!r}")
+        itemsize, _ftype, type_id = entry
+        if value.itemsize != itemsize:
+            raise TypeError(f"array.array typecode {value.typecode!r} has itemsize {value.itemsize}, expected {itemsize}")
+        return type_id
+
     def write(self, buffer, value):
-        assert value.itemsize == self.itemsize
+        actual_type_id = self._array_type_id(value)
+        if actual_type_id != self.type_id:
+            raise TypeError(f"array.array typecode {value.typecode!r} maps to type id {actual_type_id}, expected {self.type_id}")
         view = memoryview(value)
-        assert view.format == self.typecode
         assert view.itemsize == self.itemsize
         assert view.c_contiguous  # TODO handle contiguous
         nbytes = len(value) * self.itemsize
@@ -538,6 +550,144 @@ class PyArraySerializer(Serializer):
         return arr
 
 
+FORY_ARRAY_WRAPPERS = {
+    TypeId.BOOL_ARRAY: BoolArray,
+    TypeId.INT8_ARRAY: Int8Array,
+    TypeId.INT16_ARRAY: Int16Array,
+    TypeId.INT32_ARRAY: Int32Array,
+    TypeId.INT64_ARRAY: Int64Array,
+    TypeId.UINT8_ARRAY: UInt8Array,
+    TypeId.UINT16_ARRAY: UInt16Array,
+    TypeId.UINT32_ARRAY: UInt32Array,
+    TypeId.UINT64_ARRAY: UInt64Array,
+    TypeId.FLOAT16_ARRAY: Float16Array,
+    TypeId.BFLOAT16_ARRAY: BFloat16Array,
+    TypeId.FLOAT32_ARRAY: Float32Array,
+    TypeId.FLOAT64_ARRAY: Float64Array,
+}
+
+FORY_ARRAY_SERIALIZERS = {
+    TypeId.BOOL_ARRAY: BoolArraySerializer,
+    TypeId.INT8_ARRAY: Int8ArraySerializer,
+    TypeId.INT16_ARRAY: Int16ArraySerializer,
+    TypeId.INT32_ARRAY: Int32ArraySerializer,
+    TypeId.INT64_ARRAY: Int64ArraySerializer,
+    TypeId.UINT8_ARRAY: UInt8ArraySerializer,
+    TypeId.UINT16_ARRAY: UInt16ArraySerializer,
+    TypeId.UINT32_ARRAY: UInt32ArraySerializer,
+    TypeId.UINT64_ARRAY: UInt64ArraySerializer,
+    TypeId.FLOAT16_ARRAY: Float16ArraySerializer,
+    TypeId.BFLOAT16_ARRAY: BFloat16ArraySerializer,
+    TypeId.FLOAT32_ARRAY: Float32ArraySerializer,
+    TypeId.FLOAT64_ARRAY: Float64ArraySerializer,
+}
+
+
+def fory_array_wrapper_type(type_id):
+    return FORY_ARRAY_WRAPPERS[type_id]
+
+
+def fory_array_serializer_type(type_id):
+    return FORY_ARRAY_SERIALIZERS[type_id]
+
+
+class ForyArrayListAdapterSerializer(Serializer):
+    def __init__(self, type_resolver, wrapper_type, wrapper_serializer, field_name=None):
+        super().__init__(type_resolver, wrapper_type)
+        self.wrapper_type = wrapper_type
+        self.wrapper_serializer = wrapper_serializer
+        self.field_name = field_name or "<array>"
+        self.need_to_write_ref = False
+
+    def _copy_list_to_wrapper(self, value):
+        if type(value) is not list:
+            raise TypeError(f"pyfory.Array list adapter for {self.field_name!r} requires list, got {type(value)!r}")
+        wrapper = self.wrapper_type()
+        for index, item in enumerate(value):
+            try:
+                wrapper.append(item)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise type(exc)(f"{self.field_name}[{index}] invalid for {self.wrapper_type.__name__}: {exc}") from exc
+        return wrapper
+
+    def write(self, buffer, value):
+        self.wrapper_serializer.write(buffer, self._copy_list_to_wrapper(value))
+
+    def read(self, buffer):
+        return self.wrapper_serializer.read(buffer)
+
+
+class ForyArrayFieldSerializer(Serializer):
+    def __init__(self, type_resolver, wrapper_type, type_id, field_name=None):
+        super().__init__(type_resolver, wrapper_type)
+        self.wrapper_type = wrapper_type
+        self.type_id = type_id
+        self.field_name = field_name or "<array>"
+        wrapper_serializer_type = fory_array_serializer_type(type_id)
+        self.wrapper_serializer = wrapper_serializer_type(type_resolver, wrapper_type)
+        self.list_adapter_serializer = ForyArrayListAdapterSerializer(
+            type_resolver,
+            wrapper_type,
+            self.wrapper_serializer,
+            self.field_name,
+        )
+        self.pyarray_serializer = self._build_pyarray_serializer(type_resolver, type_id)
+        self.ndarray_serializer = self._build_ndarray_serializer(type_resolver, type_id)
+        self.need_to_write_ref = False
+
+    def _build_pyarray_serializer(self, type_resolver, type_id):
+        typecode = typeid_code.get(type_id)
+        if typecode is None:
+            return None
+        _itemsize, ftype, _type_id = typecode_dict[typecode]
+        return PyArraySerializer(type_resolver, ftype, type_id)
+
+    def _build_ndarray_serializer(self, type_resolver, type_id):
+        if np is None:
+            return None
+        for dtype, (_itemsize, _format, ftype, dtype_type_id) in Numpy1DArraySerializer.dtypes_dict.items():
+            if dtype_type_id == type_id:
+                return Numpy1DArraySerializer(type_resolver, ftype, dtype)
+        return None
+
+    def write(self, buffer, value):
+        value_type = type(value)
+        if value_type is self.wrapper_type:
+            self.wrapper_serializer.write(buffer, value)
+            return
+        if value_type is list:
+            self.list_adapter_serializer.write(buffer, value)
+            return
+        if value_type is array.array:
+            if self.pyarray_serializer is None:
+                raise TypeError(f"pyfory.Array field {self.field_name!r} does not support array.array for this element type")
+            actual_type_id = self.pyarray_serializer._array_type_id(value)
+            if actual_type_id != self.type_id:
+                raise TypeError(
+                    f"pyfory.Array field {self.field_name!r} requires array.array typecode for type id {self.type_id}, got {value.typecode!r}"
+                )
+            self.pyarray_serializer.write(buffer, value)
+            return
+        if np is not None and value_type is np.ndarray:
+            if self.ndarray_serializer is None:
+                raise TypeError(f"pyfory.Array field {self.field_name!r} does not support numpy ndarray for this element type")
+            if value.dtype != self.ndarray_serializer.dtype or value.ndim != 1:
+                raise TypeError(
+                    f"pyfory.Array field {self.field_name!r} requires 1D ndarray with dtype "
+                    f"{self.ndarray_serializer.dtype}, got dtype={value.dtype}, ndim={value.ndim}"
+                )
+            self.ndarray_serializer.write(buffer, value)
+            return
+        if value is None:
+            raise TypeError(f"pyfory.Array field {self.field_name!r} value must not be None")
+        raise TypeError(
+            f"pyfory.Array field {self.field_name!r} requires {self.wrapper_type.__name__}, list, numpy.ndarray, or array.array, got {type(value)!r}"
+        )
+
+    def read(self, buffer):
+        return self.wrapper_serializer.read(buffer)
+
+
 class DynamicPyArraySerializer(Serializer):
     """Serializer for dynamic Python arrays that handles any typecode."""
 
@@ -545,7 +695,12 @@ class DynamicPyArraySerializer(Serializer):
         super().__init__(type_resolver, cls)
 
     def write(self, buffer, value):
-        itemsize, ftype, type_id = typecode_dict[value.typecode]
+        try:
+            itemsize, ftype, type_id = typecode_dict[value.typecode]
+        except KeyError as exc:
+            raise TypeError(f"Unsupported array.array typecode {value.typecode!r}") from exc
+        if value.itemsize != itemsize:
+            raise TypeError(f"array.array typecode {value.typecode!r} has itemsize {value.itemsize}, expected {itemsize}")
         view = memoryview(value)
         nbytes = len(value) * itemsize
         buffer.write_uint8(type_id)
@@ -581,31 +736,33 @@ class DynamicPyArraySerializer(Serializer):
 if np:
     _np_dtypes_dict = (
         {
-            np.dtype(np.bool_): (1, "?", BoolNDArrayType, TypeId.BOOL_ARRAY),
-            np.dtype(np.int8): (1, "b", Int8NDArrayType, TypeId.INT8_ARRAY),
-            np.dtype(np.uint8): (1, "B", Uint8NDArrayType, TypeId.UINT8_ARRAY),
-            np.dtype(np.int16): (2, "h", Int16NDArrayType, TypeId.INT16_ARRAY),
-            np.dtype(np.int32): (4, "i", Int32NDArrayType, TypeId.INT32_ARRAY),
-            np.dtype(np.int64): (8, "l", Int64NDArrayType, TypeId.INT64_ARRAY),
-            np.dtype(np.uint16): (2, "H", Uint16NDArrayType, TypeId.UINT16_ARRAY),
-            np.dtype(np.uint32): (4, "I", Uint32NDArrayType, TypeId.UINT32_ARRAY),
-            np.dtype(np.uint64): (8, "L", Uint64NDArrayType, TypeId.UINT64_ARRAY),
-            np.dtype(np.float32): (4, "f", Float32NDArrayType, TypeId.FLOAT32_ARRAY),
-            np.dtype(np.float64): (8, "d", Float64NDArrayType, TypeId.FLOAT64_ARRAY),
+            np.dtype(np.bool_): (1, "?", NDArray[bool], TypeId.BOOL_ARRAY),
+            np.dtype(np.int8): (1, "b", NDArray[Int8], TypeId.INT8_ARRAY),
+            np.dtype(np.uint8): (1, "B", NDArray[UInt8], TypeId.UINT8_ARRAY),
+            np.dtype(np.int16): (2, "h", NDArray[Int16], TypeId.INT16_ARRAY),
+            np.dtype(np.int32): (4, "i", NDArray[Int32], TypeId.INT32_ARRAY),
+            np.dtype(np.int64): (8, "l", NDArray[Int64], TypeId.INT64_ARRAY),
+            np.dtype(np.uint16): (2, "H", NDArray[UInt16], TypeId.UINT16_ARRAY),
+            np.dtype(np.uint32): (4, "I", NDArray[UInt32], TypeId.UINT32_ARRAY),
+            np.dtype(np.uint64): (8, "L", NDArray[UInt64], TypeId.UINT64_ARRAY),
+            np.dtype(np.float16): (2, "e", NDArray[Float16], TypeId.FLOAT16_ARRAY),
+            np.dtype(np.float32): (4, "f", NDArray[Float32], TypeId.FLOAT32_ARRAY),
+            np.dtype(np.float64): (8, "d", NDArray[Float64], TypeId.FLOAT64_ARRAY),
         }
         if not _WINDOWS
         else {
-            np.dtype(np.bool_): (1, "?", BoolNDArrayType, TypeId.BOOL_ARRAY),
-            np.dtype(np.int8): (1, "b", Int8NDArrayType, TypeId.INT8_ARRAY),
-            np.dtype(np.uint8): (1, "B", Uint8NDArrayType, TypeId.UINT8_ARRAY),
-            np.dtype(np.int16): (2, "h", Int16NDArrayType, TypeId.INT16_ARRAY),
-            np.dtype(np.int32): (4, "l", Int32NDArrayType, TypeId.INT32_ARRAY),
-            np.dtype(np.int64): (8, "q", Int64NDArrayType, TypeId.INT64_ARRAY),
-            np.dtype(np.uint16): (2, "H", Uint16NDArrayType, TypeId.UINT16_ARRAY),
-            np.dtype(np.uint32): (4, "L", Uint32NDArrayType, TypeId.UINT32_ARRAY),
-            np.dtype(np.uint64): (8, "Q", Uint64NDArrayType, TypeId.UINT64_ARRAY),
-            np.dtype(np.float32): (4, "f", Float32NDArrayType, TypeId.FLOAT32_ARRAY),
-            np.dtype(np.float64): (8, "d", Float64NDArrayType, TypeId.FLOAT64_ARRAY),
+            np.dtype(np.bool_): (1, "?", NDArray[bool], TypeId.BOOL_ARRAY),
+            np.dtype(np.int8): (1, "b", NDArray[Int8], TypeId.INT8_ARRAY),
+            np.dtype(np.uint8): (1, "B", NDArray[UInt8], TypeId.UINT8_ARRAY),
+            np.dtype(np.int16): (2, "h", NDArray[Int16], TypeId.INT16_ARRAY),
+            np.dtype(np.int32): (4, "l", NDArray[Int32], TypeId.INT32_ARRAY),
+            np.dtype(np.int64): (8, "q", NDArray[Int64], TypeId.INT64_ARRAY),
+            np.dtype(np.uint16): (2, "H", NDArray[UInt16], TypeId.UINT16_ARRAY),
+            np.dtype(np.uint32): (4, "L", NDArray[UInt32], TypeId.UINT32_ARRAY),
+            np.dtype(np.uint64): (8, "Q", NDArray[UInt64], TypeId.UINT64_ARRAY),
+            np.dtype(np.float16): (2, "e", NDArray[Float16], TypeId.FLOAT16_ARRAY),
+            np.dtype(np.float32): (4, "f", NDArray[Float32], TypeId.FLOAT32_ARRAY),
+            np.dtype(np.float64): (8, "d", NDArray[Float64], TypeId.FLOAT64_ARRAY),
         }
     )
 else:
@@ -1566,19 +1723,27 @@ __all__ = [
     "Uint64Serializer",
     "VarUint64Serializer",
     "TaggedUint64Serializer",
-    "float16",
-    "float16array",
     "Float16Serializer",
+    "BoolArraySerializer",
+    "Int8ArraySerializer",
+    "Int16ArraySerializer",
+    "Int32ArraySerializer",
+    "Int64ArraySerializer",
+    "UInt8ArraySerializer",
+    "UInt16ArraySerializer",
+    "UInt32ArraySerializer",
+    "UInt64ArraySerializer",
     "Float16ArraySerializer",
+    "BFloat16ArraySerializer",
+    "Float32ArraySerializer",
+    "Float64ArraySerializer",
     "Float32Serializer",
     "Float64Serializer",
-    "bfloat16",
-    "bfloat16array",
     "BFloat16Serializer",
-    "BFloat16ArraySerializer",
     "StringSerializer",
     "DateSerializer",
     "TimestampSerializer",
+    "DurationSerializer",
     # Collection serializers (imported)
     "CollectionSerializer",
     "ListSerializer",
@@ -1595,6 +1760,12 @@ __all__ = [
     # Pandas serializers
     "PandasRangeIndexSerializer",
     # Array serializers
+    "FORY_ARRAY_SERIALIZERS",
+    "FORY_ARRAY_WRAPPERS",
+    "ForyArrayFieldSerializer",
+    "ForyArrayListAdapterSerializer",
+    "fory_array_serializer_type",
+    "fory_array_wrapper_type",
     "PyArraySerializer",
     "DynamicPyArraySerializer",
     "Numpy1DArraySerializer",

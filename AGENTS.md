@@ -104,6 +104,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 ## Shared Validation Expectations
 
 - Run the relevant tests for every touched language or subsystem before finishing.
+- When multiple independent language test suites are required, run them concurrently when the environment has enough resources instead of running them one by one; keep each language's logs and results separate, and rerun any failed suite with focused diagnostics.
 - Run applicable test commands in a subagent with a thinking budget one level lower than the main task budget, using medium when the current budget is unclear, unless the change is docs-only or the user explicitly asks to run them locally.
 - Reuse the same test subagent for repeated runs within one task and subsystem so it keeps failure context; create a fresh subagent when switching unrelated subsystems or when prior context may be stale or misleading.
 - Use `integration_tests/` for cross-language compatibility validation when behavior crosses runtimes.

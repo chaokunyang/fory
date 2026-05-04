@@ -513,6 +513,27 @@ func buildExampleMessage() example.ExampleMessage {
 		Uint8ArrayValuesByName:   map[string][]uint8{"u8": {201, 202}},
 		Float32ArrayValuesByName: map[string][]float32{"f32": {1.25, 2.5}},
 		Int32ArrayValuesByName:   map[string][]int32{"i32": {101, 202}},
+		StringValuesByDate:       map[fory.Date]string{{Year: 2024, Month: time.May, Day: 7}: "date-key"},
+		BoolValuesByName:         map[string]bool{"bool": true},
+		Int8ValuesByName:         map[string]int8{"int8": -8},
+		Int16ValuesByName:        map[string]int16{"int16": -16},
+		FixedI32ValuesByName:     map[string]int32{"fixed-i32": -32},
+		VarintI32ValuesByName:    map[string]int32{"varint-i32": 32},
+		FixedI64ValuesByName:     map[string]int64{"fixed-i64": -64},
+		VarintI64ValuesByName:    map[string]int64{"varint-i64": 64},
+		TaggedI64ValuesByName:    map[string]int64{"tagged-i64": 65},
+		Uint8ValuesByName:        map[string]uint8{"uint8": 208},
+		Uint16ValuesByName:       map[string]uint16{"uint16": 60001},
+		FixedU32ValuesByName:     map[string]uint32{"fixed-u32": 1234567892},
+		VarintU32ValuesByName:    map[string]uint32{"varint-u32": 1234567893},
+		FixedU64ValuesByName:     map[string]uint64{"fixed-u64": 9876543213},
+		VarintU64ValuesByName:    map[string]uint64{"varint-u64": 9876543214},
+		TaggedU64ValuesByName:    map[string]uint64{"tagged-u64": 9876543215},
+		Float32ValuesByName:      map[string]float32{"float32": 3.25},
+		Float64ValuesByName:      map[string]float64{"float64": 6.5},
+		TimestampValuesByName:    map[string]time.Time{"timestamp": time.Date(2024, 6, 7, 8, 9, 10, 0, time.UTC)},
+		DurationValuesByName:     map[string]time.Duration{"duration": 10 * time.Second},
+		EnumValuesByName:         map[string]example.ExampleState{"enum": example.ExampleStateFailed},
 	}
 	setOptionalExampleMessageFields(&message)
 	return message
@@ -627,6 +648,13 @@ func normalizeExampleMessageForCompare(message example.ExampleMessage) example.E
 			normalized[key.UTC()] = value
 		}
 		message.StringValuesByTimestamp = normalized
+	}
+	if message.TimestampValuesByName != nil {
+		normalized := make(map[string]time.Time, len(message.TimestampValuesByName))
+		for key, value := range message.TimestampValuesByName {
+			normalized[key] = value.UTC()
+		}
+		message.TimestampValuesByName = normalized
 	}
 	value := reflect.ValueOf(&message).Elem()
 	for i := 0; i < value.NumField(); i++ {

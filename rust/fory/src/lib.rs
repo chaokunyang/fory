@@ -806,7 +806,7 @@
 //!
 //! - External types from other crates that you can't modify
 //! - Types with special serialization requirements
-//! - Legacy data format compatibility
+//! - Existing external binary format interoperability
 //! - Performance-critical custom encoding
 //! - Complex types that require special handling
 //!

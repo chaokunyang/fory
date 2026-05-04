@@ -558,8 +558,6 @@ func parseFieldTag(field reflect.StructField) (parsedFieldTag, error) {
 			}
 			parsed.typeHintSet = true
 			parsed.typeHint = hint
-		case "compress", "nested_ref":
-			return parsedFieldTag{}, InvalidTagErrorf("unsupported legacy fory tag key %q on field %s", key, field.Name)
 		default:
 			return parsedFieldTag{}, InvalidTagErrorf("unknown fory tag key %q on field %s", key, field.Name)
 		}

@@ -27,6 +27,10 @@ import addressbook.Dog;
 import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
+import any_example.AnyExampleForyRegistration;
+import any_example.AnyHolder;
+import any_example.AnyInner;
+import any_example.AnyUnion;
 import auto_id.AutoIdForyRegistration;
 import auto_id.Envelope;
 import auto_id.Wrapper;
@@ -35,12 +39,6 @@ import collection.NumericCollectionArrayUnion;
 import collection.NumericCollectionUnion;
 import collection.NumericCollections;
 import collection.NumericCollectionsArray;
-import complex_pb.ComplexPbForyRegistration;
-import complex_pb.PrimitiveTypes;
-import any_example.AnyExampleForyRegistration;
-import any_example.AnyHolder;
-import any_example.AnyInner;
-import any_example.AnyUnion;
 import complex_fbs.ComplexFbsForyRegistration;
 import complex_fbs.Container;
 import complex_fbs.Metric;
@@ -48,6 +46,8 @@ import complex_fbs.Note;
 import complex_fbs.Payload;
 import complex_fbs.ScalarPack;
 import complex_fbs.Status;
+import complex_pb.ComplexPbForyRegistration;
+import complex_pb.PrimitiveTypes;
 import evolving1.Evolving1ForyRegistration;
 import evolving1.EvolvingMessage;
 import evolving1.EvolvingSizeMessage;
@@ -64,17 +64,6 @@ import graph.Edge;
 import graph.Graph;
 import graph.GraphForyRegistration;
 import graph.Node;
-import root.MultiHolder;
-import optional_types.AllOptionalTypes;
-import optional_types.OptionalHolder;
-import optional_types.OptionalTypesForyRegistration;
-import optional_types.OptionalUnion;
-import tree.TreeForyRegistration;
-import tree.TreeNode;
-import monster.Color;
-import monster.Monster;
-import monster.MonsterForyRegistration;
-import monster.Vec3;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -94,6 +83,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import monster.Color;
+import monster.Monster;
+import monster.MonsterForyRegistration;
+import monster.Vec3;
+import optional_types.AllOptionalTypes;
+import optional_types.OptionalHolder;
+import optional_types.OptionalTypesForyRegistration;
+import optional_types.OptionalUnion;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
@@ -114,6 +111,9 @@ import org.apache.fory.type.Float16;
 import org.apache.fory.type.Float16Array;
 import org.testng.Assert;
 import org.testng.annotations.Test;
+import root.MultiHolder;
+import tree.TreeForyRegistration;
+import tree.TreeNode;
 
 public class IdlRoundTripTest {
 
@@ -266,8 +266,7 @@ public class IdlRoundTripTest {
     Object fixedSizeDecoded = foryV2.deserialize(fixedSizeBytes);
     Assert.assertTrue(fixedSizeDecoded instanceof evolving2.FixedSizeMessage);
     Assert.assertEquals(
-        ((evolving2.FixedSizeMessage) fixedSizeDecoded).getPayload(),
-        fixedSizeV1.getPayload());
+        ((evolving2.FixedSizeMessage) fixedSizeDecoded).getPayload(), fixedSizeV1.getPayload());
     Object fixedSizeRoundTrip = foryV1.deserialize(foryV2.serialize(fixedSizeDecoded));
     Assert.assertTrue(fixedSizeRoundTrip instanceof FixedSizeMessage);
     Assert.assertEquals(fixedSizeRoundTrip, fixedSizeV1);
@@ -399,18 +398,15 @@ public class IdlRoundTripTest {
     assertNumericCollectionArrayUnion(arrayUnionDecoded, collectionArrayUnion);
 
     for (String peer : resolvePeers()) {
-      Path collectionsFile =
-          Files.createTempFile("idl-collections-" + peer + "-", ".bin");
+      Path collectionsFile = Files.createTempFile("idl-collections-" + peer + "-", ".bin");
       collectionsFile.toFile().deleteOnExit();
       Files.write(collectionsFile, collectionsBytes);
 
-      Path unionFile =
-          Files.createTempFile("idl-collection-union-" + peer + "-", ".bin");
+      Path unionFile = Files.createTempFile("idl-collection-union-" + peer + "-", ".bin");
       unionFile.toFile().deleteOnExit();
       Files.write(unionFile, unionBytes);
 
-      Path arrayFile =
-          Files.createTempFile("idl-collections-array-" + peer + "-", ".bin");
+      Path arrayFile = Files.createTempFile("idl-collections-array-" + peer + "-", ".bin");
       arrayFile.toFile().deleteOnExit();
       Files.write(arrayFile, arrayBytes);
 
@@ -423,8 +419,7 @@ public class IdlRoundTripTest {
       env.put("DATA_FILE_COLLECTION", collectionsFile.toAbsolutePath().toString());
       env.put("DATA_FILE_COLLECTION_UNION", unionFile.toAbsolutePath().toString());
       env.put("DATA_FILE_COLLECTION_ARRAY", arrayFile.toAbsolutePath().toString());
-      env.put(
-          "DATA_FILE_COLLECTION_ARRAY_UNION", arrayUnionFile.toAbsolutePath().toString());
+      env.put("DATA_FILE_COLLECTION_ARRAY_UNION", arrayUnionFile.toAbsolutePath().toString());
       PeerCommand command = buildPeerCommand(peer, env, compatible);
       runPeer(command, peer);
 
@@ -667,13 +662,11 @@ public class IdlRoundTripTest {
     Assert.assertEquals(containerDecoded, container);
 
     for (String peer : resolvePeers()) {
-      Path monsterFile =
-          Files.createTempFile("idl-flatbuffers-monster-" + peer + "-", ".bin");
+      Path monsterFile = Files.createTempFile("idl-flatbuffers-monster-" + peer + "-", ".bin");
       monsterFile.toFile().deleteOnExit();
       Files.write(monsterFile, monsterBytes);
 
-      Path containerFile =
-          Files.createTempFile("idl-flatbuffers-test2-" + peer + "-", ".bin");
+      Path containerFile = Files.createTempFile("idl-flatbuffers-test2-" + peer + "-", ".bin");
       containerFile.toFile().deleteOnExit();
       Files.write(containerFile, containerBytes);
 
@@ -696,18 +689,11 @@ public class IdlRoundTripTest {
   }
 
   private Fory buildFory(boolean compatible) {
-    return Fory.builder()
-        .withXlang(true)
-        .withCompatible(compatible)
-        .build();
+    return Fory.builder().withXlang(true).withCompatible(compatible).build();
   }
 
   private Fory buildRefFory(boolean compatible) {
-    return Fory.builder()
-        .withXlang(true)
-        .withCompatible(compatible)
-        .withRefTracking(true)
-        .build();
+    return Fory.builder().withXlang(true).withCompatible(compatible).withRefTracking(true).build();
   }
 
   private List<String> resolvePeers() {
@@ -802,10 +788,7 @@ public class IdlRoundTripTest {
         workDir = idlRoot.resolve("dart");
         command =
             Arrays.asList(
-                "dart",
-                "test",
-                "--name",
-                "interop file roundtrip hooks when env vars are set");
+                "dart", "test", "--name", "interop file roundtrip hooks when env vars are set");
         peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
         break;
       default:
@@ -834,9 +817,7 @@ public class IdlRoundTripTest {
       process.waitFor(10, TimeUnit.SECONDS);
       String output = outputCollector.awaitOutput();
       Assert.fail(
-          "Peer process timed out for "
-              + peer
-              + (output.isEmpty() ? "" : "\noutput:\n" + output));
+          "Peer process timed out for " + peer + (output.isEmpty() ? "" : "\noutput:\n" + output));
     }
 
     int exitCode = process.exitValue();
@@ -1085,8 +1066,7 @@ public class IdlRoundTripTest {
     message.setDateList(Arrays.asList(LocalDate.of(2024, 1, 1), LocalDate.of(2024, 1, 2)));
     message.setTimestampList(
         Arrays.asList(
-            Instant.parse("2024-01-01T00:00:00Z"),
-            Instant.parse("2024-01-02T00:00:00Z")));
+            Instant.parse("2024-01-01T00:00:00Z"), Instant.parse("2024-01-02T00:00:00Z")));
     message.setDurationList(Arrays.asList(Duration.ofMillis(1), Duration.ofSeconds(2)));
     message.setDecimalList(Arrays.asList(new BigDecimal("1.25"), new BigDecimal("2.50")));
     message.setEnumList(Arrays.asList(ExampleState.UNKNOWN, ExampleState.FAILED));
@@ -1144,6 +1124,27 @@ public class IdlRoundTripTest {
     message.setUint8ArrayValuesByName(Map.of("u8", new byte[] {(byte) 201, (byte) 202}));
     message.setFloat32ArrayValuesByName(Map.of("f32", new float[] {1.25f, 2.5f}));
     message.setInt32ArrayValuesByName(Map.of("i32", new int[] {101, 202}));
+    message.setStringValuesByDate(Map.of(LocalDate.of(2024, 5, 7), "date-key"));
+    message.setBoolValuesByName(Map.of("bool", true));
+    message.setInt8ValuesByName(Map.of("int8", (byte) -8));
+    message.setInt16ValuesByName(Map.of("int16", (short) -16));
+    message.setFixedI32ValuesByName(Map.of("fixed-i32", -32));
+    message.setVarintI32ValuesByName(Map.of("varint-i32", 32));
+    message.setFixedI64ValuesByName(Map.of("fixed-i64", -64L));
+    message.setVarintI64ValuesByName(Map.of("varint-i64", 64L));
+    message.setTaggedI64ValuesByName(Map.of("tagged-i64", 65L));
+    message.setUint8ValuesByName(Map.of("uint8", 208));
+    message.setUint16ValuesByName(Map.of("uint16", 60001));
+    message.setFixedU32ValuesByName(Map.of("fixed-u32", 1234567892L));
+    message.setVarintU32ValuesByName(Map.of("varint-u32", 1234567893L));
+    message.setFixedU64ValuesByName(Map.of("fixed-u64", 9876543213L));
+    message.setVarintU64ValuesByName(Map.of("varint-u64", 9876543214L));
+    message.setTaggedU64ValuesByName(Map.of("tagged-u64", 9876543215L));
+    message.setFloat32ValuesByName(Map.of("float32", 3.25f));
+    message.setFloat64ValuesByName(Map.of("float64", 6.5d));
+    message.setTimestampValuesByName(Map.of("timestamp", Instant.parse("2024-06-07T08:09:10Z")));
+    message.setDurationValuesByName(Map.of("duration", Duration.ofSeconds(10)));
+    message.setEnumValuesByName(Map.of("enum", ExampleState.FAILED));
     return message;
   }
 
@@ -1159,11 +1160,11 @@ public class IdlRoundTripTest {
         Arrays.asList(new int[] {11, 12}, new int[] {13, 14}));
   }
 
-  private void assertNumericCollectionUnion(
-      Object decoded, NumericCollectionUnion expected) {
+  private void assertNumericCollectionUnion(Object decoded, NumericCollectionUnion expected) {
     Assert.assertTrue(decoded instanceof NumericCollectionUnion);
     NumericCollectionUnion union = (NumericCollectionUnion) decoded;
-    Assert.assertEquals(union.getNumericCollectionUnionCase(), expected.getNumericCollectionUnionCase());
+    Assert.assertEquals(
+        union.getNumericCollectionUnionCase(), expected.getNumericCollectionUnionCase());
     switch (union.getNumericCollectionUnionCase()) {
       case INT32_VALUES:
         Assert.assertEquals(union.getInt32Values(), expected.getInt32Values());
@@ -1178,16 +1179,13 @@ public class IdlRoundTripTest {
     Assert.assertTrue(decoded instanceof NumericCollectionArrayUnion);
     NumericCollectionArrayUnion union = (NumericCollectionArrayUnion) decoded;
     Assert.assertEquals(
-        union.getNumericCollectionArrayUnionCase(),
-        expected.getNumericCollectionArrayUnionCase());
+        union.getNumericCollectionArrayUnionCase(), expected.getNumericCollectionArrayUnionCase());
     switch (union.getNumericCollectionArrayUnionCase()) {
       case UINT16_VALUES:
-        Assert.assertTrue(
-            Arrays.equals(union.getUint16Values(), expected.getUint16Values()));
+        Assert.assertTrue(Arrays.equals(union.getUint16Values(), expected.getUint16Values()));
         break;
       default:
-        Assert.fail(
-            "Unexpected array union case: " + union.getNumericCollectionArrayUnionCase());
+        Assert.fail("Unexpected array union case: " + union.getNumericCollectionArrayUnionCase());
     }
   }
 

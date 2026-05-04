@@ -220,12 +220,6 @@ func TestParseFieldSpecRejectsInvalidTags(t *testing.T) {
 	type UnknownKey struct {
 		Value int32 `fory:"id=0,unknown=true"`
 	}
-	type LegacyCompress struct {
-		Value uint32 `fory:"compress=true"`
-	}
-	type LegacyNestedRef struct {
-		Value []int32 `fory:"nested_ref=[[]]"`
-	}
 	type BadDSL struct {
 		Value []int32 `fory:"type=list(element=int32(encoding=fixed)"`
 	}
@@ -254,8 +248,6 @@ func TestParseFieldSpecRejectsInvalidTags(t *testing.T) {
 	}{
 		{name: "duplicate keys", typ: reflect.TypeOf(DuplicateKeys{})},
 		{name: "unknown key", typ: reflect.TypeOf(UnknownKey{})},
-		{name: "legacy compress", typ: reflect.TypeOf(LegacyCompress{})},
-		{name: "legacy nested_ref", typ: reflect.TypeOf(LegacyNestedRef{})},
 		{name: "bad dsl", typ: reflect.TypeOf(BadDSL{})},
 		{name: "impossible override", typ: reflect.TypeOf(ImpossibleOverride{})},
 		{name: "encoding conflict", typ: reflect.TypeOf(Conflict{})},

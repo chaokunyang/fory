@@ -63,7 +63,8 @@ This specification defines the Fory xlang binary format. The format is dynamic r
 - named_ext: an `ext` type whose type mapping will be encoded as a name.
 - list: a sequence of objects.
 - set: an unordered set of unique elements.
-- map: a map of key-value pairs. Mutable types such as `list/map/set/array` are not allowed as key of map.
+- map: a map of key-value pairs. Map keys do not allow binary values, floating-point values,
+  decimal values, or collection-shaped values such as `list`, `map`, `set`, and `array`.
 - duration: an absolute length of time, independent of any calendar/timezone, as a count of nanoseconds.
 - timestamp: a point in time, independent of any calendar/timezone, encoded as seconds (int64) and nanoseconds
   (uint32) since the epoch at UTC midnight on January 1, 1970.

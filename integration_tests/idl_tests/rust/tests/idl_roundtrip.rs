@@ -32,7 +32,7 @@ use idl_tests::generated::collection::{
     self, NumericCollectionArrayUnion, NumericCollectionUnion, NumericCollections,
     NumericCollectionsArray,
 };
-use idl_tests::generated::complex_fbs::{self, Container, Note, Payload, ScalarPack, Status};
+use idl_tests::generated::complex_fbs::{self, Container, Payload, ScalarPack, Status};
 use idl_tests::generated::complex_pb::{self, PrimitiveTypes};
 use idl_tests::generated::evolving1;
 use idl_tests::generated::evolving2;
@@ -54,11 +54,7 @@ fn build_address_book() -> AddressBook {
         phone_type: PhoneType::Work,
     };
 
-    let mut pet = Animal::Dog(Dog {
-        name: "Rex".to_string(),
-        bark_volume: 5,
-    });
-    pet = Animal::Cat(Cat {
+    let pet = Animal::Cat(Cat {
         name: "Mimi".to_string(),
         lives: 9,
     });
@@ -152,8 +148,7 @@ fn test_to_bytes_from_bytes() {
 }
 
 fn build_primitive_types() -> PrimitiveTypes {
-    let mut contact = complex_pb::primitive_types::Contact::Email("alice@example.com".to_string());
-    contact = complex_pb::primitive_types::Contact::Phone(12345);
+    let contact = complex_pb::primitive_types::Contact::Phone(12345);
 
     PrimitiveTypes {
         bool_value: true,
@@ -246,10 +241,7 @@ fn build_container() -> Container {
         d: 2.5,
         ok: true,
     };
-    let mut payload = Payload::Note(Note {
-        text: "alpha".to_string(),
-    });
-    payload = Payload::Metric(complex_fbs::Metric { value: 42.0 });
+    let payload = Payload::Metric(complex_fbs::Metric { value: 42.0 });
 
     Container {
         id: 9876543210,
@@ -519,6 +511,39 @@ fn build_example_message() -> ExampleMessage {
         uint8_array_values_by_name: HashMap::from([("u8".to_string(), vec![201, 202])]),
         float32_array_values_by_name: HashMap::from([("f32".to_string(), vec![1.25, 2.5])]),
         int32_array_values_by_name: HashMap::from([("i32".to_string(), vec![101, 202])]),
+        string_values_by_date: HashMap::from([(
+            NaiveDate::from_ymd_opt(2024, 5, 7).unwrap(),
+            "date-key".to_string(),
+        )]),
+        bool_values_by_name: HashMap::from([("bool".to_string(), true)]),
+        int8_values_by_name: HashMap::from([("int8".to_string(), -8)]),
+        int16_values_by_name: HashMap::from([("int16".to_string(), -16)]),
+        fixed_i32_values_by_name: HashMap::from([("fixed-i32".to_string(), -32)]),
+        varint_i32_values_by_name: HashMap::from([("varint-i32".to_string(), 32)]),
+        fixed_i64_values_by_name: HashMap::from([("fixed-i64".to_string(), -64)]),
+        varint_i64_values_by_name: HashMap::from([("varint-i64".to_string(), 64)]),
+        tagged_i64_values_by_name: HashMap::from([("tagged-i64".to_string(), 65)]),
+        uint8_values_by_name: HashMap::from([("uint8".to_string(), 208)]),
+        uint16_values_by_name: HashMap::from([("uint16".to_string(), 60001)]),
+        fixed_u32_values_by_name: HashMap::from([("fixed-u32".to_string(), 1234567892)]),
+        varint_u32_values_by_name: HashMap::from([("varint-u32".to_string(), 1234567893)]),
+        fixed_u64_values_by_name: HashMap::from([("fixed-u64".to_string(), 9876543213)]),
+        varint_u64_values_by_name: HashMap::from([("varint-u64".to_string(), 9876543214)]),
+        tagged_u64_values_by_name: HashMap::from([("tagged-u64".to_string(), 9876543215)]),
+        float32_values_by_name: HashMap::from([("float32".to_string(), 3.25)]),
+        float64_values_by_name: HashMap::from([("float64".to_string(), 6.5)]),
+        timestamp_values_by_name: HashMap::from([(
+            "timestamp".to_string(),
+            NaiveDate::from_ymd_opt(2024, 6, 7)
+                .unwrap()
+                .and_hms_opt(8, 9, 10)
+                .unwrap(),
+        )]),
+        duration_values_by_name: HashMap::from([(
+            "duration".to_string(),
+            chrono::Duration::seconds(10),
+        )]),
+        enum_values_by_name: HashMap::from([("enum".to_string(), ExampleState::Failed)]),
     }
 }
 

@@ -695,6 +695,36 @@ public sealed class RoundtripTests
             {
                 ["i32"] = [101, 202],
             },
+            StringValuesByDate = new Dictionary<DateOnly, string>
+            {
+                [new DateOnly(2024, 5, 7)] = "date-key",
+            },
+            BoolValuesByName = new Dictionary<string, bool> { ["bool"] = true },
+            Int8ValuesByName = new Dictionary<string, sbyte> { ["int8"] = -8 },
+            Int16ValuesByName = new Dictionary<string, short> { ["int16"] = -16 },
+            FixedI32ValuesByName = new Dictionary<string, int> { ["fixed-i32"] = -32 },
+            VarintI32ValuesByName = new Dictionary<string, int> { ["varint-i32"] = 32 },
+            FixedI64ValuesByName = new Dictionary<string, long> { ["fixed-i64"] = -64 },
+            VarintI64ValuesByName = new Dictionary<string, long> { ["varint-i64"] = 64 },
+            TaggedI64ValuesByName = new Dictionary<string, long> { ["tagged-i64"] = 65 },
+            Uint8ValuesByName = new Dictionary<string, byte> { ["uint8"] = 208 },
+            Uint16ValuesByName = new Dictionary<string, ushort> { ["uint16"] = 60001 },
+            FixedU32ValuesByName = new Dictionary<string, uint> { ["fixed-u32"] = 1234567892 },
+            VarintU32ValuesByName = new Dictionary<string, uint> { ["varint-u32"] = 1234567893 },
+            FixedU64ValuesByName = new Dictionary<string, ulong> { ["fixed-u64"] = 9876543213 },
+            VarintU64ValuesByName = new Dictionary<string, ulong> { ["varint-u64"] = 9876543214 },
+            TaggedU64ValuesByName = new Dictionary<string, ulong> { ["tagged-u64"] = 9876543215 },
+            Float32ValuesByName = new Dictionary<string, float> { ["float32"] = 3.25f },
+            Float64ValuesByName = new Dictionary<string, double> { ["float64"] = 6.5 },
+            TimestampValuesByName = new Dictionary<string, DateTimeOffset>
+            {
+                ["timestamp"] = DateTimeOffset.Parse(
+                    "2024-06-07T08:09:10Z",
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal),
+            },
+            DurationValuesByName = new Dictionary<string, TimeSpan> { ["duration"] = TimeSpan.FromSeconds(10) },
+            EnumValuesByName = new Dictionary<string, example.ExampleState> { ["enum"] = example.ExampleState.Failed },
         };
     }
 
@@ -1106,6 +1136,27 @@ public sealed class RoundtripTests
         AssertArrayMap(expected.Uint8ArrayValuesByName, actual.Uint8ArrayValuesByName);
         AssertArrayMap(expected.Float32ArrayValuesByName, actual.Float32ArrayValuesByName);
         AssertArrayMap(expected.Int32ArrayValuesByName, actual.Int32ArrayValuesByName);
+        AssertMap(expected.StringValuesByDate, actual.StringValuesByDate);
+        AssertMap(expected.BoolValuesByName, actual.BoolValuesByName);
+        AssertMap(expected.Int8ValuesByName, actual.Int8ValuesByName);
+        AssertMap(expected.Int16ValuesByName, actual.Int16ValuesByName);
+        AssertMap(expected.FixedI32ValuesByName, actual.FixedI32ValuesByName);
+        AssertMap(expected.VarintI32ValuesByName, actual.VarintI32ValuesByName);
+        AssertMap(expected.FixedI64ValuesByName, actual.FixedI64ValuesByName);
+        AssertMap(expected.VarintI64ValuesByName, actual.VarintI64ValuesByName);
+        AssertMap(expected.TaggedI64ValuesByName, actual.TaggedI64ValuesByName);
+        AssertMap(expected.Uint8ValuesByName, actual.Uint8ValuesByName);
+        AssertMap(expected.Uint16ValuesByName, actual.Uint16ValuesByName);
+        AssertMap(expected.FixedU32ValuesByName, actual.FixedU32ValuesByName);
+        AssertMap(expected.VarintU32ValuesByName, actual.VarintU32ValuesByName);
+        AssertMap(expected.FixedU64ValuesByName, actual.FixedU64ValuesByName);
+        AssertMap(expected.VarintU64ValuesByName, actual.VarintU64ValuesByName);
+        AssertMap(expected.TaggedU64ValuesByName, actual.TaggedU64ValuesByName);
+        AssertMap(expected.Float32ValuesByName, actual.Float32ValuesByName);
+        AssertMap(expected.Float64ValuesByName, actual.Float64ValuesByName);
+        AssertMap(expected.TimestampValuesByName, actual.TimestampValuesByName);
+        AssertMap(expected.DurationValuesByName, actual.DurationValuesByName);
+        AssertMap(expected.EnumValuesByName, actual.EnumValuesByName);
     }
 
     private static void AssertExampleLeaf(example.ExampleLeaf? expected, example.ExampleLeaf? actual)
@@ -1491,22 +1542,22 @@ public sealed class RoundtripTests
                 result = [.. strEnumerable];
                 return true;
             case IEnumerable<object?> objEnumerable:
-            {
-                List<string> normalized = [];
-                foreach (object? item in objEnumerable)
                 {
-                    if (item is not string text)
+                    List<string> normalized = [];
+                    foreach (object? item in objEnumerable)
                     {
-                        result = [];
-                        return false;
+                        if (item is not string text)
+                        {
+                            result = [];
+                            return false;
+                        }
+
+                        normalized.Add(text);
                     }
 
-                    normalized.Add(text);
+                    result = normalized;
+                    return true;
                 }
-
-                result = normalized;
-                return true;
-            }
             default:
                 result = [];
                 return false;
@@ -1524,22 +1575,22 @@ public sealed class RoundtripTests
                 result = readonlyMap.ToDictionary(kv => kv.Key, kv => kv.Value);
                 return true;
             case IEnumerable<KeyValuePair<object, object?>> objectPairs:
-            {
-                Dictionary<string, string> normalized = [];
-                foreach (KeyValuePair<object, object?> pair in objectPairs)
                 {
-                    if (pair.Key is not string key || pair.Value is not string val)
+                    Dictionary<string, string> normalized = [];
+                    foreach (KeyValuePair<object, object?> pair in objectPairs)
                     {
-                        result = [];
-                        return false;
+                        if (pair.Key is not string key || pair.Value is not string val)
+                        {
+                            result = [];
+                            return false;
+                        }
+
+                        normalized[key] = val;
                     }
 
-                    normalized[key] = val;
+                    result = normalized;
+                    return true;
                 }
-
-                result = normalized;
-                return true;
-            }
             default:
                 result = [];
                 return false;

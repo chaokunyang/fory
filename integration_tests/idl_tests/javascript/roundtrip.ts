@@ -147,11 +147,10 @@ function resolveRootSerializer(fory: Fory, bytes: Uint8Array): Serializer {
   // serializer detection from the payload, then map back to the local
   // registered serializer when available.
   const detectedSerializer = AnyHelper.detectSerializer(fory.readContext);
-  const resolvedSerializer = (
+  const resolvedSerializer =
     fory.typeResolver.getSerializerByTypeInfo(
       detectedSerializer.getTypeInfo(),
-    ) ?? detectedSerializer
-  );
+    ) ?? detectedSerializer;
   return resolvedSerializer;
 }
 
@@ -514,7 +513,9 @@ function buildExampleMessage(): ExampleMessage {
     stringValuesByVarintU64: new Map([[9876543211n, "varint-u64"]]),
     stringValuesByTaggedU64: new Map([[9876543212n, "tagged-u64"]]),
     stringValuesByString: new Map([["name", "value"]]),
-    stringValuesByTimestamp: new Map([[new Date("2024-03-04T05:06:07Z"), "time"]]),
+    stringValuesByTimestamp: new Map([
+      [new Date("2024-03-04T05:06:07Z"), "time"],
+    ]),
     stringValuesByDuration: new Map([[9000, "duration"]]),
     stringValuesByEnum: new Map([[ExampleState.READY, "ready"]]),
     float16ValuesByName: new Map([["f16", 1.25]]),
@@ -529,10 +530,31 @@ function buildExampleMessage(): ExampleMessage {
       ["union", { case: ExampleLeafUnionCase.CODE, value: 42 }],
     ]),
     uint8ArrayValuesByName: new Map([["u8", new Uint8Array([201, 202])]]),
-    float32ArrayValuesByName: new Map([
-      ["f32", new Float32Array([1.25, 2.5])],
-    ]),
+    float32ArrayValuesByName: new Map([["f32", new Float32Array([1.25, 2.5])]]),
     int32ArrayValuesByName: new Map([["i32", new Int32Array([101, 202])]]),
+    stringValuesByDate: new Map([[buildLocalDate(2024, 5, 7), "date-key"]]),
+    boolValuesByName: new Map([["bool", true]]),
+    int8ValuesByName: new Map([["int8", -8]]),
+    int16ValuesByName: new Map([["int16", -16]]),
+    fixedI32ValuesByName: new Map([["fixed-i32", -32]]),
+    varintI32ValuesByName: new Map([["varint-i32", 32]]),
+    fixedI64ValuesByName: new Map([["fixed-i64", -64n]]),
+    varintI64ValuesByName: new Map([["varint-i64", 64n]]),
+    taggedI64ValuesByName: new Map([["tagged-i64", 65n]]),
+    uint8ValuesByName: new Map([["uint8", 208]]),
+    uint16ValuesByName: new Map([["uint16", 60001]]),
+    fixedU32ValuesByName: new Map([["fixed-u32", 1234567892]]),
+    varintU32ValuesByName: new Map([["varint-u32", 1234567893]]),
+    fixedU64ValuesByName: new Map([["fixed-u64", 9876543213n]]),
+    varintU64ValuesByName: new Map([["varint-u64", 9876543214n]]),
+    taggedU64ValuesByName: new Map([["tagged-u64", 9876543215n]]),
+    float32ValuesByName: new Map([["float32", 3.25]]),
+    float64ValuesByName: new Map([["float64", 6.5]]),
+    timestampValuesByName: new Map([
+      ["timestamp", new Date("2024-06-07T08:09:10Z")],
+    ]),
+    durationValuesByName: new Map([["duration", 10000]]),
+    enumValuesByName: new Map([["enum", ExampleState.FAILED]]),
   };
 }
 

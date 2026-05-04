@@ -51,6 +51,10 @@ public:
 
   bool operator!=(const Date &other) const { return !(*this == other); }
 
+  bool operator<(const Date &other) const {
+    return days_since_epoch_ < other.days_since_epoch_;
+  }
+
 private:
   int32_t days_since_epoch_; // Days since Jan 1, 1970 UTC
 };

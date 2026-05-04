@@ -1274,7 +1274,7 @@ Generated carriers are language-specific, but the schema kind is not:
 | ----------------- | ---------------------------- | ---------------------- | -------------- | ------------------------ |
 | `list<bool>`      | `BoolList` / `List<Boolean>` | `List[bool]`           | `List<bool>`   | `Type.list(Type.bool())` |
 | `array<bool>`     | `boolean[]`                  | `pyfory.BoolArray`     | `BoolList`     | `Type.boolArray()`       |
-| `array<int8>`     | `byte[]`                     | `pyfory.Int8Array`     | `Int8List`     | `Type.int8Array()`       |
+| `array<int8>`     | `@Int8Type byte[]`           | `pyfory.Int8Array`     | `Int8List`     | `Type.int8Array()`       |
 | `array<int16>`    | `short[]`                    | `pyfory.Int16Array`    | `Int16List`    | `Type.int16Array()`      |
 | `array<int32>`    | `int[]`                      | `pyfory.Int32Array`    | `Int32List`    | `Type.int32Array()`      |
 | `array<int64>`    | `long[]`                     | `pyfory.Int64Array`    | `Int64List`    | `Type.int64Array()`      |
@@ -1316,10 +1316,14 @@ message Config {
 **Key Type Restrictions:**
 
 - `string` (most common)
-- Integer types (`int8`, `int16`, `int32`, `int64`)
 - `bool`
+- Integer types (`int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `uint64`)
+- Temporal scalar types (`date`, `timestamp`, `duration`)
+- Enums
 
-Avoid using messages or complex types as keys.
+Map keys do not support binary `bytes`, floating-point types, `decimal`, `list<T>`, `array<T>`,
+or nested `map<K, V>` types. Put those types in map values or wrap them in a message with a
+portable scalar or enum key.
 
 ### Type Compatibility Matrix
 

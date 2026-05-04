@@ -37,6 +37,18 @@ from fory_compiler.ir.ast import (
 from fory_compiler.ir.types import ARRAY_ELEMENT_KINDS, PrimitiveKind
 from fory_compiler.ir.type_id import compute_registered_type_id
 
+INVALID_MAP_KEY_KINDS = {
+    PrimitiveKind.BYTES,
+    PrimitiveKind.FLOAT16,
+    PrimitiveKind.BFLOAT16,
+    PrimitiveKind.FLOAT32,
+    PrimitiveKind.FLOAT64,
+    PrimitiveKind.DECIMAL,
+}
+INVALID_MAP_KEY_MESSAGE = (
+    "map keys do not support binary, float, decimal, list, map, or array types"
+)
+
 
 @dataclass
 class ValidationIssue:
@@ -69,7 +81,7 @@ class SchemaValidator:
         self._check_messages()
         self._check_type_references()
         self._check_services()
-        self._check_array_rules()
+        self._check_collection_type_rules()
         if not self.allow_nested_collections:
             self._check_collection_nesting()
         self._check_ref_rules()
@@ -524,13 +536,17 @@ class SchemaValidator:
             for f in union.fields:
                 check_field(f, None)
 
-    def _check_array_rules(self) -> None:
+    def _check_collection_type_rules(self) -> None:
+        def invalid_map_key(field_type: FieldType) -> bool:
+            if isinstance(field_type, PrimitiveType):
+                return field_type.kind in INVALID_MAP_KEY_KINDS
+            return isinstance(field_type, (ListType, ArrayType, MapType))
+
         def check_type(field_type: FieldType, field: Field, in_map_key: bool = False):
             if isinstance(field_type, ArrayType):
                 if in_map_key:
-                    self._error(
-                        "array<T> is not valid as a map key type", field.location
-                    )
+                    self._error(INVALID_MAP_KEY_MESSAGE, field.location)
+                    return
                 element_type = field_type.element_type
                 if not isinstance(element_type, PrimitiveType):
                     self._error(
@@ -551,9 +567,19 @@ class SchemaValidator:
                     )
                 return
             if isinstance(field_type, ListType):
+                if in_map_key:
+                    self._error(INVALID_MAP_KEY_MESSAGE, field.location)
+                    return
                 check_type(field_type.element_type, field)
             elif isinstance(field_type, MapType):
-                check_type(field_type.key_type, field, in_map_key=True)
+                if in_map_key:
+                    self._error(INVALID_MAP_KEY_MESSAGE, field.location)
+                    return
+                key_type = field_type.key_type
+                if invalid_map_key(key_type):
+                    self._error(INVALID_MAP_KEY_MESSAGE, field.location)
+                else:
+                    check_type(key_type, field, in_map_key=True)
                 check_type(field_type.value_type, field)
 
         def check_message_fields(message: Message) -> None:

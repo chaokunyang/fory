@@ -540,6 +540,31 @@ def build_example_message() -> "example.ExampleMessage":
         union_values_by_name={"union": example.ExampleLeafUnion.code(42)},
         uint8_array_values_by_name={"u8": np.array([201, 202], dtype=np.uint8)},
         float32_array_values_by_name={"f32": np.array([1.25, 2.5], dtype=np.float32)},
+        string_values_by_date={datetime.date(2024, 5, 7): "date-key"},
+        bool_values_by_name={"bool": True},
+        int8_values_by_name={"int8": -8},
+        int16_values_by_name={"int16": -16},
+        fixed_i32_values_by_name={"fixed-i32": -32},
+        varint_i32_values_by_name={"varint-i32": 32},
+        fixed_i64_values_by_name={"fixed-i64": -64},
+        varint_i64_values_by_name={"varint-i64": 64},
+        tagged_i64_values_by_name={"tagged-i64": 65},
+        uint8_values_by_name={"uint8": 208},
+        uint16_values_by_name={"uint16": 60001},
+        fixed_u32_values_by_name={"fixed-u32": 1234567892},
+        varint_u32_values_by_name={"varint-u32": 1234567893},
+        fixed_u64_values_by_name={"fixed-u64": 9876543213},
+        varint_u64_values_by_name={"varint-u64": 9876543214},
+        tagged_u64_values_by_name={"tagged-u64": 9876543215},
+        float32_values_by_name={"float32": 3.25},
+        float64_values_by_name={"float64": 6.5},
+        timestamp_values_by_name={
+            "timestamp": datetime.datetime(
+                2024, 6, 7, 8, 9, 10, tzinfo=datetime.timezone.utc
+            )
+        },
+        duration_values_by_name={"duration": datetime.timedelta(seconds=10)},
+        enum_values_by_name={"enum": example.ExampleState.FAILED},
     )
     fields = example.ExampleMessage.__dataclass_fields__
     if "uint8_array_list" in fields:

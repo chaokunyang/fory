@@ -373,8 +373,10 @@ example.ExampleMessage buildExampleMessage() {
     ..uint32Array = Uint32List.fromList(<int>[2000000000, 2100000000])
     ..uint64Array = Uint64List.fromList(<int>[9000000000, 12000000000])
     ..float16Array = Float16List.fromList(<Float16>[Float16(1.0), Float16(2.0)])
-    ..bfloat16Array =
-        Bfloat16List.fromList(<Bfloat16>[Bfloat16(1.0), Bfloat16(2.0)])
+    ..bfloat16Array = Bfloat16List.fromList(<Bfloat16>[
+      Bfloat16(1.0),
+      Bfloat16(2.0),
+    ])
     ..float32Array = Float32List.fromList(<double>[1.5, 2.5])
     ..float64Array = Float64List.fromList(<double>[3.5, 4.5])
     ..int32ArrayList = <Int32List>[
@@ -399,10 +401,10 @@ example.ExampleMessage buildExampleMessage() {
     ..stringValuesByVarintU32 = <int, String>{1234567891: 'varint-u32'}
     ..stringValuesByFixedU64 = <Uint64, String>{Uint64(9876543210): 'fixed-u64'}
     ..stringValuesByVarintU64 = <Uint64, String>{
-      Uint64(9876543211): 'varint-u64'
+      Uint64(9876543211): 'varint-u64',
     }
     ..stringValuesByTaggedU64 = <Uint64, String>{
-      Uint64(9876543212): 'tagged-u64'
+      Uint64(9876543212): 'tagged-u64',
     }
     ..stringValuesByString = <String, String>{'name': 'value'}
     ..stringValuesByTimestamp = <Timestamp, String>{
@@ -441,6 +443,35 @@ example.ExampleMessage buildExampleMessage() {
     }
     ..int32ArrayValuesByName = <String, Int32List>{
       'i32': Int32List.fromList(<int>[101, 202]),
+    }
+    ..stringValuesByDate = <LocalDate, String>{
+      const LocalDate(2024, 5, 7): 'date-key',
+    }
+    ..boolValuesByName = <String, bool>{'bool': true}
+    ..int8ValuesByName = <String, int>{'int8': -8}
+    ..int16ValuesByName = <String, int>{'int16': -16}
+    ..fixedI32ValuesByName = <String, int>{'fixed-i32': -32}
+    ..varintI32ValuesByName = <String, int>{'varint-i32': 32}
+    ..fixedI64ValuesByName = <String, Int64>{'fixed-i64': Int64(-64)}
+    ..varintI64ValuesByName = <String, Int64>{'varint-i64': Int64(64)}
+    ..taggedI64ValuesByName = <String, Int64>{'tagged-i64': Int64(65)}
+    ..uint8ValuesByName = <String, int>{'uint8': 208}
+    ..uint16ValuesByName = <String, int>{'uint16': 60001}
+    ..fixedU32ValuesByName = <String, int>{'fixed-u32': 1234567892}
+    ..varintU32ValuesByName = <String, int>{'varint-u32': 1234567893}
+    ..fixedU64ValuesByName = <String, Uint64>{'fixed-u64': Uint64(9876543213)}
+    ..varintU64ValuesByName = <String, Uint64>{'varint-u64': Uint64(9876543214)}
+    ..taggedU64ValuesByName = <String, Uint64>{'tagged-u64': Uint64(9876543215)}
+    ..float32ValuesByName = <String, Float32>{'float32': Float32(3.25)}
+    ..float64ValuesByName = <String, double>{'float64': 6.5}
+    ..timestampValuesByName = <String, Timestamp>{
+      'timestamp': Timestamp.fromDateTime(DateTime.utc(2024, 6, 7, 8, 9, 10)),
+    }
+    ..durationValuesByName = <String, Duration>{
+      'duration': const Duration(seconds: 10),
+    }
+    ..enumValuesByName = <String, example.ExampleState>{
+      'enum': example.ExampleState.failed,
     };
 }
 
@@ -1049,32 +1080,56 @@ void _expectExampleMessageEquals(
   _expectMapEquals(actual.stringValuesByInt8, expected.stringValuesByInt8);
   _expectMapEquals(actual.stringValuesByInt16, expected.stringValuesByInt16);
   _expectMapEquals(
-      actual.stringValuesByFixedI32, expected.stringValuesByFixedI32);
+    actual.stringValuesByFixedI32,
+    expected.stringValuesByFixedI32,
+  );
   _expectMapEquals(
-      actual.stringValuesByVarintI32, expected.stringValuesByVarintI32);
+    actual.stringValuesByVarintI32,
+    expected.stringValuesByVarintI32,
+  );
   _expectMapEquals(
-      actual.stringValuesByFixedI64, expected.stringValuesByFixedI64);
+    actual.stringValuesByFixedI64,
+    expected.stringValuesByFixedI64,
+  );
   _expectMapEquals(
-      actual.stringValuesByVarintI64, expected.stringValuesByVarintI64);
+    actual.stringValuesByVarintI64,
+    expected.stringValuesByVarintI64,
+  );
   _expectMapEquals(
-      actual.stringValuesByTaggedI64, expected.stringValuesByTaggedI64);
+    actual.stringValuesByTaggedI64,
+    expected.stringValuesByTaggedI64,
+  );
   _expectMapEquals(actual.stringValuesByUint8, expected.stringValuesByUint8);
   _expectMapEquals(actual.stringValuesByUint16, expected.stringValuesByUint16);
   _expectMapEquals(
-      actual.stringValuesByFixedU32, expected.stringValuesByFixedU32);
+    actual.stringValuesByFixedU32,
+    expected.stringValuesByFixedU32,
+  );
   _expectMapEquals(
-      actual.stringValuesByVarintU32, expected.stringValuesByVarintU32);
+    actual.stringValuesByVarintU32,
+    expected.stringValuesByVarintU32,
+  );
   _expectMapEquals(
-      actual.stringValuesByFixedU64, expected.stringValuesByFixedU64);
+    actual.stringValuesByFixedU64,
+    expected.stringValuesByFixedU64,
+  );
   _expectMapEquals(
-      actual.stringValuesByVarintU64, expected.stringValuesByVarintU64);
+    actual.stringValuesByVarintU64,
+    expected.stringValuesByVarintU64,
+  );
   _expectMapEquals(
-      actual.stringValuesByTaggedU64, expected.stringValuesByTaggedU64);
+    actual.stringValuesByTaggedU64,
+    expected.stringValuesByTaggedU64,
+  );
   _expectMapEquals(actual.stringValuesByString, expected.stringValuesByString);
   _expectMapEquals(
-      actual.stringValuesByTimestamp, expected.stringValuesByTimestamp);
+    actual.stringValuesByTimestamp,
+    expected.stringValuesByTimestamp,
+  );
   _expectMapEquals(
-      actual.stringValuesByDuration, expected.stringValuesByDuration);
+    actual.stringValuesByDuration,
+    expected.stringValuesByDuration,
+  );
   _expectMapEquals(actual.stringValuesByEnum, expected.stringValuesByEnum);
   _expectMapEquals(actual.float16ValuesByName, expected.float16ValuesByName);
   _expectMapEquals(
@@ -1093,7 +1148,9 @@ void _expectExampleMessageEquals(
   _expectMapEquals(actual.dateValuesByName, expected.dateValuesByName);
   _expectMapEquals(actual.decimalValuesByName, expected.decimalValuesByName);
   expect(
-      actual.messageValuesByName.length, expected.messageValuesByName.length);
+    actual.messageValuesByName.length,
+    expected.messageValuesByName.length,
+  );
   for (final entry in expected.messageValuesByName.entries) {
     final actualValue = actual.messageValuesByName[entry.key];
     expect(actualValue, isNotNull);
@@ -1117,6 +1174,48 @@ void _expectExampleMessageEquals(
     actual.int32ArrayValuesByName,
     expected.int32ArrayValuesByName,
   );
+  _expectMapEquals(actual.stringValuesByDate, expected.stringValuesByDate);
+  _expectMapEquals(actual.boolValuesByName, expected.boolValuesByName);
+  _expectMapEquals(actual.int8ValuesByName, expected.int8ValuesByName);
+  _expectMapEquals(actual.int16ValuesByName, expected.int16ValuesByName);
+  _expectMapEquals(actual.fixedI32ValuesByName, expected.fixedI32ValuesByName);
+  _expectMapEquals(
+    actual.varintI32ValuesByName,
+    expected.varintI32ValuesByName,
+  );
+  _expectMapEquals(actual.fixedI64ValuesByName, expected.fixedI64ValuesByName);
+  _expectMapEquals(
+    actual.varintI64ValuesByName,
+    expected.varintI64ValuesByName,
+  );
+  _expectMapEquals(
+    actual.taggedI64ValuesByName,
+    expected.taggedI64ValuesByName,
+  );
+  _expectMapEquals(actual.uint8ValuesByName, expected.uint8ValuesByName);
+  _expectMapEquals(actual.uint16ValuesByName, expected.uint16ValuesByName);
+  _expectMapEquals(actual.fixedU32ValuesByName, expected.fixedU32ValuesByName);
+  _expectMapEquals(
+    actual.varintU32ValuesByName,
+    expected.varintU32ValuesByName,
+  );
+  _expectMapEquals(actual.fixedU64ValuesByName, expected.fixedU64ValuesByName);
+  _expectMapEquals(
+    actual.varintU64ValuesByName,
+    expected.varintU64ValuesByName,
+  );
+  _expectMapEquals(
+    actual.taggedU64ValuesByName,
+    expected.taggedU64ValuesByName,
+  );
+  _expectMapEquals(actual.float32ValuesByName, expected.float32ValuesByName);
+  _expectMapEquals(actual.float64ValuesByName, expected.float64ValuesByName);
+  _expectMapEquals(
+    actual.timestampValuesByName,
+    expected.timestampValuesByName,
+  );
+  _expectMapEquals(actual.durationValuesByName, expected.durationValuesByName);
+  _expectMapEquals(actual.enumValuesByName, expected.enumValuesByName);
 }
 
 void _expectExampleMessageUnionEquals(

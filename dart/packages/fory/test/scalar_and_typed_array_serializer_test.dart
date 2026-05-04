@@ -389,6 +389,21 @@ void main() {
       );
     });
 
+    test('reuses Fory after typed-array reads without corrupting views', () {
+      final fory = Fory();
+      final values = <Int32List>[
+        Int32List.fromList(<int>[1, 2]),
+        Int32List.fromList(<int>[3, 4]),
+      ];
+
+      final decoded = fory.deserialize<List<Object?>>(fory.serialize(values));
+      final encodedAgain = fory.serialize(decoded);
+      final roundTrip = fory.deserialize<List<Object?>>(encodedAgain);
+
+      expect((roundTrip[0] as Int32List).toList(), orderedEquals(<int>[1, 2]));
+      expect((roundTrip[1] as Int32List).toList(), orderedEquals(<int>[3, 4]));
+    });
+
     test('round-trips empty binary and typed array payloads', () {
       final fory = Fory();
 

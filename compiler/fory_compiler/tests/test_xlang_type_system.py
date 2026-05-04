@@ -108,12 +108,24 @@ def test_array_type_is_distinct_from_list_type():
         "any",
         "date",
         "timestamp",
+        "duration",
         "decimal",
+        "ExampleState",
         "Child",
+        "ChildUnion",
     ],
 )
 def test_array_rejects_non_fixed_width_number_and_bool_elements(element):
     source = f"""
+    enum ExampleState {{
+        UNKNOWN = 0;
+        READY = 1;
+    }}
+
+    union ChildUnion {{
+        string note = 1;
+    }}
+
     message Child {{
         string name = 1;
     }}
@@ -151,18 +163,33 @@ def test_array_rejects_optional_or_ref_elements_at_parse_time():
         )
 
 
-def test_array_is_not_valid_as_map_key():
+@pytest.mark.parametrize(
+    "key_type",
+    [
+        "bytes",
+        "float16",
+        "bfloat16",
+        "float32",
+        "float64",
+        "decimal",
+        "list<int32>",
+        "array<uint8>",
+        "map<string, int32>",
+    ],
+)
+def test_map_rejects_non_portable_key_types(key_type):
     _schema, validator, ok = validate_schema(
-        """
-        message InvalidMap {
-            map<array<uint8>, string> values = 1;
-        }
+        f"""
+        message InvalidMap {{
+            map<{key_type}, string> values = 1;
+        }}
         """
     )
 
     assert not ok
     assert any(
-        "array<T> is not valid as a map key type" in err.message
+        "map keys do not support binary, float, decimal, list, map, or array types"
+        in err.message
         for err in validator.errors
     )
 

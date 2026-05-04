@@ -43,7 +43,8 @@ final class Fory {
   static const int _xlangHeaderFlag = 0x02;
   static const int _outOfBandHeaderFlag = 0x04;
 
-  late final Buffer _buffer;
+  late final Buffer _readBuffer;
+  late final Buffer _writeBuffer;
   late final WriteContext _writeContext;
   late final ReadContext _readContext;
   late final TypeResolver _typeResolver;
@@ -66,7 +67,8 @@ final class Fory {
       maxCollectionSize: maxCollectionSize,
       maxBinarySize: maxBinarySize,
     );
-    _buffer = Buffer();
+    _readBuffer = Buffer();
+    _writeBuffer = Buffer();
     _typeResolver = TypeResolver(config);
     _writeContext = WriteContext(
       config,
@@ -88,9 +90,9 @@ final class Fory {
   /// that needs shared-reference tracking and there is no field metadata to
   /// request it. Annotated fields should still use `@ForyField(ref: true)`.
   Uint8List serialize(Object? value, {bool trackRef = false}) {
-    _buffer.clear();
-    serializeTo(value, _buffer, trackRef: trackRef);
-    return Uint8List.fromList(_buffer.toBytes());
+    _writeBuffer.clear();
+    serializeTo(value, _writeBuffer, trackRef: trackRef);
+    return Uint8List.fromList(_writeBuffer.toBytes());
   }
 
   /// Serializes a non-null builtin [value] using the explicit xlang
@@ -104,14 +106,14 @@ final class Fory {
     required int wireTypeId,
     bool trackRef = false,
   }) {
-    _buffer.clear();
+    _writeBuffer.clear();
     serializeBuiltinTo(
       value,
-      _buffer,
+      _writeBuffer,
       wireTypeId: wireTypeId,
       trackRef: trackRef,
     );
-    return Uint8List.fromList(_buffer.toBytes());
+    return Uint8List.fromList(_writeBuffer.toBytes());
   }
 
   /// Serializes [value] into [buffer].
@@ -163,8 +165,8 @@ final class Fory {
   /// The payload is decoded from its wire metadata first. `T` is used as a
   /// post-read type check, not as an alternate schema.
   T deserialize<T>(Uint8List bytes) {
-    _buffer.wrap(bytes);
-    return deserializeFrom<T>(_buffer);
+    _readBuffer.wrap(bytes);
+    return deserializeFrom<T>(_readBuffer);
   }
 
   /// Deserializes a value from [buffer] and checks that it is assignable to

@@ -562,7 +562,28 @@ final class IdlRoundTripTests: XCTestCase {
             unionValuesByName: ["union": .code(42)],
             uint8ArrayValuesByName: ["u8": [201, 202]],
             float32ArrayValuesByName: ["f32": [1.25, 2.5]],
-            int32ArrayValuesByName: ["i32": [101, 202]]
+            int32ArrayValuesByName: ["i32": [101, 202]],
+            stringValuesByDate: [try! LocalDate(year: 2024, month: 5, day: 7): "date-key"],
+            boolValuesByName: ["bool": true],
+            int8ValuesByName: ["int8": -8],
+            int16ValuesByName: ["int16": -16],
+            fixedI32ValuesByName: ["fixed-i32": -32],
+            varintI32ValuesByName: ["varint-i32": 32],
+            fixedI64ValuesByName: ["fixed-i64": -64],
+            varintI64ValuesByName: ["varint-i64": 64],
+            taggedI64ValuesByName: ["tagged-i64": 65],
+            uint8ValuesByName: ["uint8": 208],
+            uint16ValuesByName: ["uint16": 60001],
+            fixedU32ValuesByName: ["fixed-u32": 1234567892],
+            varintU32ValuesByName: ["varint-u32": 1234567893],
+            fixedU64ValuesByName: ["fixed-u64": 9876543213],
+            varintU64ValuesByName: ["varint-u64": 9876543214],
+            taggedU64ValuesByName: ["tagged-u64": 9876543215],
+            float32ValuesByName: ["float32": 3.25],
+            float64ValuesByName: ["float64": 6.5],
+            timestampValuesByName: ["timestamp": Date(timeIntervalSince1970: 1717747750)],
+            durationValuesByName: ["duration": .seconds(10)],
+            enumValuesByName: ["enum": .failed]
         )
     }
 
@@ -618,6 +639,27 @@ final class IdlRoundTripTests: XCTestCase {
         XCTAssertEqual(actual.uint8ArrayValuesByName, expected.uint8ArrayValuesByName)
         XCTAssertEqual(actual.float32ArrayValuesByName, expected.float32ArrayValuesByName)
         XCTAssertEqual(actual.int32ArrayValuesByName, expected.int32ArrayValuesByName)
+        XCTAssertEqual(actual.stringValuesByDate, expected.stringValuesByDate)
+        XCTAssertEqual(actual.boolValuesByName, expected.boolValuesByName)
+        XCTAssertEqual(actual.int8ValuesByName, expected.int8ValuesByName)
+        XCTAssertEqual(actual.int16ValuesByName, expected.int16ValuesByName)
+        XCTAssertEqual(actual.fixedI32ValuesByName, expected.fixedI32ValuesByName)
+        XCTAssertEqual(actual.varintI32ValuesByName, expected.varintI32ValuesByName)
+        XCTAssertEqual(actual.fixedI64ValuesByName, expected.fixedI64ValuesByName)
+        XCTAssertEqual(actual.varintI64ValuesByName, expected.varintI64ValuesByName)
+        XCTAssertEqual(actual.taggedI64ValuesByName, expected.taggedI64ValuesByName)
+        XCTAssertEqual(actual.uint8ValuesByName, expected.uint8ValuesByName)
+        XCTAssertEqual(actual.uint16ValuesByName, expected.uint16ValuesByName)
+        XCTAssertEqual(actual.fixedU32ValuesByName, expected.fixedU32ValuesByName)
+        XCTAssertEqual(actual.varintU32ValuesByName, expected.varintU32ValuesByName)
+        XCTAssertEqual(actual.fixedU64ValuesByName, expected.fixedU64ValuesByName)
+        XCTAssertEqual(actual.varintU64ValuesByName, expected.varintU64ValuesByName)
+        XCTAssertEqual(actual.taggedU64ValuesByName, expected.taggedU64ValuesByName)
+        XCTAssertEqual(actual.float32ValuesByName, expected.float32ValuesByName)
+        XCTAssertEqual(actual.float64ValuesByName, expected.float64ValuesByName)
+        XCTAssertEqual(actual.timestampValuesByName, expected.timestampValuesByName)
+        XCTAssertEqual(actual.durationValuesByName, expected.durationValuesByName)
+        XCTAssertEqual(actual.enumValuesByName, expected.enumValuesByName)
     }
 
     private func buildOptionalHolder() -> OptionalTypes.OptionalHolder {

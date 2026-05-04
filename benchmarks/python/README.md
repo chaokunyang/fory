@@ -7,7 +7,7 @@ This directory contains two benchmark entrypoints:
    - `StructList`, `SampleList`, `MediaContentList`
    - operations: `serialize`, `deserialize`
    - serializers: `fory`, `pickle`, `protobuf`
-2. `fory_benchmark.py`: CPython microbench script using the current 1.0 annotation surface.
+2. `fory_benchmark.py`: CPython microbench script using the current annotation surface.
 
 ## Quick Start (Comprehensive Suite)
 

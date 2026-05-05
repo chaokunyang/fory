@@ -156,12 +156,27 @@ class TypeDefDecoder {
   }
 
   private static void validateRegisteredTypeDefKind(TypeInfo userTypeInfo, int typeId) {
-    if (userTypeInfo.getTypeId() != typeId) {
+    int registeredTypeId = userTypeInfo.getTypeId();
+    if (registeredTypeId != typeId && !isStructCompatibilityVariant(registeredTypeId, typeId)) {
       throw new DeserializationException(
           String.format(
               "TypeDef kind %s does not match registered kind %s for %s",
-              typeId, userTypeInfo.getTypeId(), userTypeInfo.getType()));
+              typeId, registeredTypeId, userTypeInfo.getType()));
     }
+  }
+
+  private static boolean isStructCompatibilityVariant(int registeredTypeId, int typeId) {
+    boolean registeredIdStruct =
+        registeredTypeId == Types.STRUCT || registeredTypeId == Types.COMPATIBLE_STRUCT;
+    boolean typeIdStruct = typeId == Types.STRUCT || typeId == Types.COMPATIBLE_STRUCT;
+    if (registeredIdStruct || typeIdStruct) {
+      return registeredIdStruct && typeIdStruct;
+    }
+    boolean registeredNamedStruct =
+        registeredTypeId == Types.NAMED_STRUCT || registeredTypeId == Types.NAMED_COMPATIBLE_STRUCT;
+    boolean typeIdNamedStruct =
+        typeId == Types.NAMED_STRUCT || typeId == Types.NAMED_COMPATIBLE_STRUCT;
+    return registeredNamedStruct && typeIdNamedStruct;
   }
 
   static int nonStructTypeId(int kindCode) {

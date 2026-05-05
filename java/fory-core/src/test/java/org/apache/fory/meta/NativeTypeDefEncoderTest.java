@@ -23,6 +23,8 @@ import static org.apache.fory.meta.NativeTypeDefEncoder.buildFieldsInfo;
 import static org.apache.fory.meta.NativeTypeDefEncoder.getClassFields;
 
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import lombok.Data;
 import org.apache.fory.Fory;
@@ -30,9 +32,11 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.MapFields;
 import org.apache.fory.test.bean.Struct;
+import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -96,6 +100,87 @@ public class NativeTypeDefEncoderTest {
         TypeDef.readTypeDef(
             fory.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
     Assert.assertEquals(typeDef1, typeDef);
+  }
+
+  @Data
+  public static class NaturalExtTypeWithFields implements Serializable {
+    private static final long serialVersionUID = 1L;
+    private int value;
+  }
+
+  @Test
+  public void testFieldMetadataTypeDefUsesStructKindForNaturalExtSerializer() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withMetaShare(true)
+            .withCompatible(true)
+            .requireClassRegistration(false)
+            .build();
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+    fory.registerSerializer(
+        NaturalExtTypeWithFields.class,
+        new ObjectStreamSerializer(resolver, NaturalExtTypeWithFields.class));
+
+    TypeDef typeDef = TypeDef.buildTypeDef(resolver, NaturalExtTypeWithFields.class);
+    Assert.assertTrue(typeDef.isStructSchemaKind());
+
+    TypeDef decoded =
+        TypeDef.readTypeDef(resolver, MemoryBuffer.fromByteArray(typeDef.getEncoded()));
+    Assert.assertEquals(decoded, typeDef);
+  }
+
+  @Test
+  public void testEmptyTypeDefKeepsNaturalExtKind() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withMetaShare(true)
+            .withCompatible(true)
+            .requireClassRegistration(false)
+            .build();
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+    fory.getTypeResolver().getTypeInfo(java.util.ArrayList.class);
+
+    TypeDef typeDef =
+        NativeTypeDefEncoder.buildTypeDefWithFieldInfos(
+            resolver, java.util.ArrayList.class, Collections.emptyList());
+    Assert.assertEquals(typeDef.getClassSpec().typeId, Types.NAMED_EXT);
+
+    TypeDef decoded =
+        TypeDef.readTypeDef(resolver, MemoryBuffer.fromByteArray(typeDef.getEncoded()));
+    Assert.assertEquals(decoded, typeDef);
+  }
+
+  @Test
+  public void testDecodeRejectsKnownClassWithForgedRootKind() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withMetaShare(true)
+            .withCompatible(true)
+            .requireClassRegistration(false)
+            .build();
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+    fory.getTypeResolver().getTypeInfo(java.util.ArrayList.class);
+
+    TypeDef typeDef =
+        NativeTypeDefEncoder.buildTypeDefWithFieldInfos(
+            resolver, java.util.ArrayList.class, Collections.emptyList());
+    byte[] encoded = typeDef.getEncoded();
+    MemoryBuffer encodedBuffer = MemoryBuffer.fromByteArray(encoded);
+    long header = encodedBuffer.readInt64();
+    Assert.assertEquals(header & TypeDef.COMPRESS_META_FLAG, 0L);
+    Assert.assertEquals((int) (header & TypeDef.META_SIZE_MASKS), encoded.length - Long.BYTES);
+
+    byte[] body = Arrays.copyOfRange(encoded, Long.BYTES, encoded.length);
+    body[0] =
+        (byte) ((NativeTypeDefEncoder.nativeKindCode(Types.NAMED_STRUCT) << 4) | (body[0] & 0x0f));
+    MemoryBuffer malformedBody = MemoryBuffer.newHeapBuffer(body.length);
+    malformedBody.writeBytes(body);
+    MemoryBuffer malformed = NativeTypeDefEncoder.prependHeader(malformedBody, false);
+    Assert.assertThrows(
+        DeserializationException.class, () -> TypeDef.readTypeDef(resolver, malformed));
   }
 
   @Data

@@ -876,6 +876,61 @@ public class ClassResolver extends TypeResolver {
     return typeId;
   }
 
+  public int getTypeDefRootTypeId(Class<?> cls, boolean hasFieldMetadata) {
+    if (hasFieldMetadata) {
+      // Preserve the normal TypeInfo/name cache so locally generated or dynamically registered
+      // classes can be resolved when the TypeDef is decoded by the same resolver.
+      getTypeIdForTypeDef(cls);
+      return getFieldMetadataTypeIdForTypeDef(cls);
+    }
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    if (typeInfo != null) {
+      return normalizeTypeDefRootTypeId(cls, typeInfo.typeId);
+    }
+    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    if (classId != null) {
+      typeInfo = classInfoMap.get(cls);
+      if (typeInfo == null) {
+        typeInfo = getTypeInfo(cls);
+      }
+      return normalizeTypeDefRootTypeId(cls, typeInfo.typeId);
+    }
+    return usesNonStructTypeDef(cls) ? Types.NAMED_EXT : buildUnregisteredTypeId(cls, null);
+  }
+
+  private int getFieldMetadataTypeIdForTypeDef(Class<?> cls) {
+    Integer classId = extRegistry.registeredClassIdMap.get(cls);
+    if (classId != null && !isInternalRegisteredClassId(cls, classId)) {
+      return buildUserTypeId(cls, null);
+    }
+    return super.buildUnregisteredTypeId(cls, null);
+  }
+
+  private int normalizeTypeDefRootTypeId(Class<?> cls, int typeId) {
+    if (isSupportedTypeDefTypeId(typeId)) {
+      return typeId;
+    }
+    return usesNonStructTypeDef(cls) ? Types.NAMED_EXT : buildUnregisteredTypeId(cls, null);
+  }
+
+  private static boolean isSupportedTypeDefTypeId(int typeId) {
+    switch (typeId) {
+      case Types.ENUM:
+      case Types.NAMED_ENUM:
+      case Types.STRUCT:
+      case Types.COMPATIBLE_STRUCT:
+      case Types.NAMED_STRUCT:
+      case Types.NAMED_COMPATIBLE_STRUCT:
+      case Types.EXT:
+      case Types.NAMED_EXT:
+      case Types.TYPED_UNION:
+      case Types.NAMED_UNION:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   private boolean usesNonStructTypeDef(Class<?> cls) {
     return !cls.isEnum()
         && (isCollection(cls)

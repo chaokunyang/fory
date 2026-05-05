@@ -146,12 +146,13 @@ public class NativeTypeDefEncoder {
 
   public static TypeDef buildTypeDefWithFieldInfos(
       ClassResolver classResolver, Class<?> type, List<FieldInfo> fieldInfos) {
+    boolean hasFieldMetadata = !fieldInfos.isEmpty();
     Map<String, List<FieldInfo>> classLayers = getClassFields(type, fieldInfos);
     fieldInfos = new ArrayList<>(fieldInfos.size());
     classLayers.values().forEach(fieldInfos::addAll);
-    MemoryBuffer encodeTypeDef = encodeTypeDef(classResolver, type, classLayers);
+    MemoryBuffer encodeTypeDef = encodeTypeDef(classResolver, type, classLayers, hasFieldMetadata);
     byte[] typeDefBytes = encodeTypeDef.getBytes(0, encodeTypeDef.writerIndex());
-    int typeId = classResolver.getTypeIdForTypeDef(type);
+    int typeId = classResolver.getTypeDefRootTypeId(type, hasFieldMetadata);
     int userTypeId = classResolver.getUserTypeIdForTypeDef(type);
     ClassSpec classSpec = new ClassSpec(type, typeId, userTypeId);
     return new TypeDef(classSpec, fieldInfos, encodeTypeDef.getInt64(0), typeDefBytes);
@@ -161,9 +162,18 @@ public class NativeTypeDefEncoder {
   // https://fory.apache.org/docs/specification/fory_java_serialization_spec
   public static MemoryBuffer encodeTypeDef(
       ClassResolver classResolver, Class<?> type, Map<String, List<FieldInfo>> classLayers) {
+    return encodeTypeDef(classResolver, type, classLayers, hasFieldMetadata(classLayers));
+  }
+
+  private static MemoryBuffer encodeTypeDef(
+      ClassResolver classResolver,
+      Class<?> type,
+      Map<String, List<FieldInfo>> classLayers,
+      boolean hasFieldMetadata) {
     MemoryBuffer typeDefBuf = MemoryBuffer.newHeapBuffer(128);
     int numClasses = classLayers.size() - 1; // num class must be greater than 0
-    int firstBodyByte = nativeKindCode(classResolver.getTypeIdForTypeDef(type)) << 4;
+    int rootTypeId = classResolver.getTypeDefRootTypeId(type, hasFieldMetadata);
+    int firstBodyByte = nativeKindCode(rootTypeId) << 4;
     if (numClasses >= NUM_CLASS_THRESHOLD) {
       typeDefBuf.writeByte(firstBodyByte | NUM_CLASS_THRESHOLD);
       typeDefBuf.writeVarUInt32Small7(numClasses - NUM_CLASS_THRESHOLD);
@@ -215,6 +225,15 @@ public class NativeTypeDefEncoder {
       typeDefBuf.writerIndex(compressed.length);
     }
     return prependHeader(typeDefBuf, isCompressed);
+  }
+
+  private static boolean hasFieldMetadata(Map<String, List<FieldInfo>> classLayers) {
+    for (List<FieldInfo> fields : classLayers.values()) {
+      if (!fields.isEmpty()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   static MemoryBuffer prependHeader(MemoryBuffer buffer, boolean isCompressed) {

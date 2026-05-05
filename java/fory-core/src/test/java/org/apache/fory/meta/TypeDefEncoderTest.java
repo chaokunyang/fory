@@ -29,6 +29,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -414,7 +415,8 @@ public class TypeDefEncoderTest {
     Assert.assertEquals(bodyHeader & TypeDefEncoder.SMALL_NUM_FIELDS_THRESHOLD, 31);
     Assert.assertEquals(bodyHeader & TypeDefEncoder.REGISTER_BY_NAME_FLAG, 0);
     TypeDef decoded =
-        TypeDef.readTypeDef(fory.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
+        TypeDef.readTypeDef(
+            fory.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
     Assert.assertEquals(decoded.getFieldsInfo().size(), 32);
   }
 
@@ -429,8 +431,7 @@ public class TypeDefEncoderTest {
     MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(compressedBody, true);
 
     Assert.assertThrows(
-        DeserializationException.class,
-        () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
+        DeserializationException.class, () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
   }
 
   @Test
@@ -502,8 +503,20 @@ public class TypeDefEncoderTest {
     MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
 
     Assert.assertThrows(
-        DeserializationException.class,
-        () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
+        DeserializationException.class, () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
+  }
+
+  @Test
+  public void testDecodePreservesCompatibleStructKindForRegisteredStruct() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).withCompatible(false).build();
+    fory.register(EmptyStruct.class, 6001);
+    MemoryBuffer body = MemoryBuffer.newHeapBuffer(8);
+    body.writeByte(TypeDefEncoder.STRUCT_FLAG | TypeDefEncoder.COMPATIBLE_FLAG);
+    body.writeVarUInt32(6001);
+    MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
+
+    TypeDef typeDef = TypeDef.readTypeDef(fory.getTypeResolver(), encoded);
+    Assert.assertEquals(typeDef.getClassSpec().typeId, Types.COMPATIBLE_STRUCT);
   }
 
   private static byte[] corruptEncodedBody(TypeDef typeDef, String needle) {

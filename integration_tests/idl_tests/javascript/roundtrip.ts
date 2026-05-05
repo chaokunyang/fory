@@ -123,8 +123,10 @@ function resolveRootSerializer(fory: Fory, bytes: Uint8Array): Serializer {
   fory.readContext.reset(bytes);
   const reader = fory.readContext.reader;
   const bitmap = reader.readUint8();
-  if ((bitmap & ConfigFlags.isNullFlag) === ConfigFlags.isNullFlag) {
-    throw new Error("IDL roundtrip does not support null root payloads");
+  const supportedBitmap =
+    ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
+  if ((bitmap & ~supportedBitmap) !== 0) {
+    throw new Error("unsupported root header bitmap");
   }
   if (
     (bitmap & ConfigFlags.isCrossLanguageFlag) !==

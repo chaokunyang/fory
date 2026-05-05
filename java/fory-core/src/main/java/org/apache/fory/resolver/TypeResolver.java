@@ -812,6 +812,16 @@ public abstract class TypeResolver {
     return typeInfo;
   }
 
+  public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
+    TypeInfo typeInfo = readSharedClassMeta(readContext);
+    Class<?> readClass = typeInfo.getType();
+    // replace target class if needed
+    if (targetClass != readClass) {
+      return getTargetTypeInfo(typeInfo, targetClass);
+    }
+    return typeInfo;
+  }
+
   private static TypeInfo getMetaReadTypeInfo(MetaReadContext metaReadContext, int index) {
     if (index < 0 || index >= metaReadContext.readTypeInfos.size) {
       throw new ForyException("Invalid class metadata reference id " + index);
@@ -819,16 +829,6 @@ public abstract class TypeResolver {
     TypeInfo typeInfo = metaReadContext.readTypeInfos.get(index);
     if (typeInfo == null) {
       throw new ForyException("Invalid class metadata reference id " + index);
-    }
-    return typeInfo;
-  }
-
-  public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
-    TypeInfo typeInfo = readSharedClassMeta(readContext);
-    Class<?> readClass = typeInfo.getType();
-    // replace target class if needed
-    if (targetClass != readClass) {
-      return getTargetTypeInfo(typeInfo, targetClass);
     }
     return typeInfo;
   }

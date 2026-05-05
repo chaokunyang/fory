@@ -90,12 +90,14 @@ class NativeTypeDefDecoder {
     String className;
     List<FieldInfo> classFields = new ArrayList<>();
     ClassSpec classSpec = null;
+    Class<?> rootClass = null;
     for (int i = 0; i < numClasses; i++) {
       // | num fields + register flag | header + package name | header + class name
       // | header + type id + field name | next field info | ... |
       int currentClassHeader = typeDefBuf.readVarUInt32Small7();
       boolean isRegistered = (currentClassHeader & 0b1) != 0;
       int numFields = currentClassHeader >>> 1;
+      Class<?> currentClass = null;
       if (isRegistered) {
         int typeId = typeDefBuf.readUInt8();
         int userTypeId = -1;
@@ -104,11 +106,16 @@ class NativeTypeDefDecoder {
         }
         Class<?> cls = resolver.getRegisteredClassByTypeId(typeId, userTypeId);
         if (cls == null) {
-          classSpec = new ClassSpec(UnknownClass.UnknownStruct.class, typeId, userTypeId);
+          classSpec =
+              new ClassSpec(
+                  UnknownClass.UnknownStruct.class,
+                  i == numClasses - 1 ? rootTypeId : typeId,
+                  userTypeId);
           className = classSpec.entireClassName;
         } else {
           className = cls.getName();
-          classSpec = new ClassSpec(cls, typeId, userTypeId);
+          classSpec = new ClassSpec(cls, i == numClasses - 1 ? rootTypeId : typeId, userTypeId);
+          currentClass = cls;
         }
       } else {
         String pkg = readPkgName(typeDefBuf);
@@ -118,9 +125,9 @@ class NativeTypeDefDecoder {
         if (resolver.isRegisteredByName(className)) {
           Class<?> cls = resolver.getRegisteredClass(className);
           className = cls.getName();
-          classSpec =
-              new ClassSpec(
-                  cls, resolver.getTypeIdForTypeDef(cls), resolver.getUserTypeIdForTypeDef(cls));
+          int typeId = i == numClasses - 1 ? rootTypeId : resolver.getTypeIdForTypeDef(cls);
+          classSpec = new ClassSpec(cls, typeId, resolver.getUserTypeIdForTypeDef(cls));
+          currentClass = cls;
         } else {
           Class<?> cls =
               resolver.loadClassForMeta(
@@ -145,21 +152,29 @@ class NativeTypeDefDecoder {
             classSpec.type = cls;
             className = classSpec.entireClassName;
           } else {
-            int typeId = resolver.getTypeIdForTypeDef(cls);
+            int typeId = i == numClasses - 1 ? rootTypeId : resolver.getTypeIdForTypeDef(cls);
             classSpec = new ClassSpec(cls, typeId, resolver.getUserTypeIdForTypeDef(cls));
             className = classSpec.entireClassName;
+            currentClass = cls;
           }
         }
       }
-      if (i == numClasses - 1 && classSpec.typeId != rootTypeId) {
-        throw new DeserializationException("TypeDef root kind does not match root class metadata");
+      if (i == numClasses - 1) {
+        rootClass = currentClass;
       }
       List<FieldInfo> fieldInfos = readFieldsInfo(typeDefBuf, resolver, className, numFields);
       classFields.addAll(fieldInfos);
     }
     Preconditions.checkNotNull(classSpec);
-    if (!Types.isStructType(rootTypeId) && !classFields.isEmpty()) {
+    boolean hasFieldMetadata = !classFields.isEmpty();
+    if (!Types.isStructType(rootTypeId) && hasFieldMetadata) {
       throw new DeserializationException("Non-struct TypeDef cannot carry field metadata");
+    }
+    if (rootClass != null) {
+      int expectedRootTypeId = resolver.getTypeDefRootTypeId(rootClass, hasFieldMetadata);
+      if (rootTypeId != expectedRootTypeId) {
+        throw new DeserializationException("TypeDef root kind does not match the decoded class");
+      }
     }
     if (typeDefBuf.remaining() != 0) {
       throw new DeserializationException("Invalid TypeDef metadata size");

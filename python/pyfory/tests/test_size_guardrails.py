@@ -198,6 +198,6 @@ class TestBinarySizeLimit:
             Fory(ref=True, max_binary_size=100).deserialize(data, buffers=[])
 
     def test_malformed_metastring_ref_raises_value_error(self):
-        payload = bytes([2, 255, TypeId.NAMED_STRUCT, 3])
+        payload = bytes([1, 255, TypeId.NAMED_STRUCT, 3])
         with pytest.raises(ValueError, match="Invalid dynamic metastring id"):
             Fory(xlang=True, strict=False).deserialize(payload)

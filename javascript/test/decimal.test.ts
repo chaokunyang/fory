@@ -20,7 +20,10 @@
 import Fory, { Decimal, Type } from "../packages/core/index";
 import { describe, expect, test } from "@jest/globals";
 
-function decimal(unscaledValue: string | bigint | number, scale: number): Decimal {
+function decimal(
+  unscaledValue: string | bigint | number,
+  scale: number,
+): Decimal {
   return new Decimal(unscaledValue, scale);
 }
 
@@ -52,18 +55,26 @@ describe("decimal", () => {
 
   test("round-trips struct decimal fields", () => {
     const fory = new Fory();
-    const serializer = fory.register(Type.struct({
-      typeName: "example.DecimalEnvelope",
-    }, {
-      amount: Type.decimal(),
-      note: Type.string(),
-    })).serializer;
+    const serializer = fory.register(
+      Type.struct(
+        {
+          typeName: "example.DecimalEnvelope",
+        },
+        {
+          amount: Type.decimal(),
+          note: Type.string(),
+        },
+      ),
+    ).serializer;
     const value = {
       amount: decimal("123456789012345678901234567890123456789", 37),
       note: "principal",
     };
 
-    const roundTrip = fory.deserialize(fory.serialize(value, serializer), serializer) as {
+    const roundTrip = fory.deserialize(
+      fory.serialize(value, serializer),
+      serializer,
+    ) as {
       amount: Decimal;
       note: string;
     };
@@ -75,24 +86,16 @@ describe("decimal", () => {
 
   test("rejects non-canonical big decimal payloads", () => {
     const fory = new Fory();
-    const zeroBigEncoding = Buffer.from([
-      0x02,
-      0xff,
-      0x28,
-      0x00,
-      0x01,
-    ]);
+    const zeroBigEncoding = Buffer.from([0x01, 0xff, 0x28, 0x00, 0x01]);
     const trailingZeroPayload = Buffer.from([
-      0x02,
-      0xff,
-      0x28,
-      0x00,
-      0x09,
-      0x01,
-      0x00,
+      0x01, 0xff, 0x28, 0x00, 0x09, 0x01, 0x00,
     ]);
 
-    expect(() => fory.deserialize(zeroBigEncoding)).toThrow(/Invalid decimal magnitude length/);
-    expect(() => fory.deserialize(trailingZeroPayload)).toThrow(/trailing zero byte/);
+    expect(() => fory.deserialize(zeroBigEncoding)).toThrow(
+      /Invalid decimal magnitude length/,
+    );
+    expect(() => fory.deserialize(trailingZeroPayload)).toThrow(
+      /trailing zero byte/,
+    );
   });
 });

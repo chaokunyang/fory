@@ -91,6 +91,7 @@ class NativeTypeDefDecoder {
     List<FieldInfo> classFields = new ArrayList<>();
     ClassSpec classSpec = null;
     Class<?> rootClass = null;
+    boolean rootClassLayerRegistered = false;
     for (int i = 0; i < numClasses; i++) {
       // | num fields + register flag | header + package name | header + class name
       // | header + type id + field name | next field info | ... |
@@ -161,6 +162,7 @@ class NativeTypeDefDecoder {
       }
       if (i == numClasses - 1) {
         rootClass = currentClass;
+        rootClassLayerRegistered = isRegistered;
       }
       List<FieldInfo> fieldInfos = readFieldsInfo(typeDefBuf, resolver, className, numFields);
       classFields.addAll(fieldInfos);
@@ -172,8 +174,16 @@ class NativeTypeDefDecoder {
     }
     if (rootClass != null) {
       int expectedRootTypeId = resolver.getTypeDefRootTypeId(rootClass, hasFieldMetadata);
-      if (rootTypeId != expectedRootTypeId) {
-        throw new DeserializationException("TypeDef root kind does not match the decoded class");
+      if (!isCompatibleRootKind(expectedRootTypeId, rootTypeId, !rootClassLayerRegistered)) {
+        throw new DeserializationException(
+            "TypeDef root kind does not match the decoded class: class="
+                + rootClass.getName()
+                + ", expected="
+                + expectedRootTypeId
+                + ", actual="
+                + rootTypeId
+                + ", registeredClassLayer="
+                + rootClassLayerRegistered);
       }
     }
     if (typeDefBuf.remaining() != 0) {
@@ -181,6 +191,31 @@ class NativeTypeDefDecoder {
     }
     validateParsedTypeDefHash(id, decoded.f1);
     return new TypeDef(classSpec, classFields, id, decoded.f1);
+  }
+
+  private static boolean isCompatibleRootKind(
+      int expectedTypeId, int actualTypeId, boolean allowNamednessDifference) {
+    if (expectedTypeId == actualTypeId) {
+      return true;
+    }
+    if (allowNamednessDifference) {
+      return Types.isStructType(expectedTypeId) && Types.isStructType(actualTypeId);
+    }
+    return isStructCompatibilityVariant(expectedTypeId, actualTypeId);
+  }
+
+  private static boolean isStructCompatibilityVariant(int expectedTypeId, int actualTypeId) {
+    boolean expectedIdStruct =
+        expectedTypeId == Types.STRUCT || expectedTypeId == Types.COMPATIBLE_STRUCT;
+    boolean actualIdStruct = actualTypeId == Types.STRUCT || actualTypeId == Types.COMPATIBLE_STRUCT;
+    if (expectedIdStruct || actualIdStruct) {
+      return expectedIdStruct && actualIdStruct;
+    }
+    boolean expectedNamedStruct =
+        expectedTypeId == Types.NAMED_STRUCT || expectedTypeId == Types.NAMED_COMPATIBLE_STRUCT;
+    boolean actualNamedStruct =
+        actualTypeId == Types.NAMED_STRUCT || actualTypeId == Types.NAMED_COMPATIBLE_STRUCT;
+    return expectedNamedStruct && actualNamedStruct;
   }
 
   static int nativeTypeId(int kindCode) {

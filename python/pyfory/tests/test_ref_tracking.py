@@ -269,7 +269,7 @@ def test_collection_mixed_type_primitive_ref_value_regression():
     write_context.prepare(buffer)
 
     # Fory payload framing + top-level list object.
-    buffer.write_int8(0b10)
+    buffer.write_int8(0b1)
     buffer.write_int8(REF_VALUE_FLAG)
     fory.type_resolver.write_type_info(write_context, fory.type_resolver.get_type_info(list))
 
@@ -295,7 +295,7 @@ def test_invalid_top_level_ref_id_raises_value_error():
     fory = pyfory.Fory(xlang=True, ref=True, strict=False)
     buffer = pyfory.Buffer.allocate(32)
 
-    buffer.write_int8(0b10)
+    buffer.write_int8(0b1)
     buffer.write_int8(REF_FLAG)
     buffer.write_var_uint32(12345)
 
@@ -310,7 +310,7 @@ def test_invalid_collection_element_ref_id_raises_value_error():
     write_context = fory.write_context
     write_context.prepare(buffer)
 
-    buffer.write_int8(0b10)
+    buffer.write_int8(0b1)
     buffer.write_int8(REF_VALUE_FLAG)
     fory.type_resolver.write_type_info(write_context, fory.type_resolver.get_type_info(list))
     buffer.write_var_uint32(1)

@@ -907,10 +907,15 @@ public class ClassResolver extends TypeResolver {
   }
 
   private int normalizeTypeDefRootTypeId(Class<?> cls, int typeId) {
+    if (usesNonStructTypeDef(cls)) {
+      // Placeholder TypeInfo can be created before the natural serializer is installed.
+      // The TypeDef root kind must still select the non-struct serializer family.
+      return Types.isExtType(typeId) ? typeId : Types.NAMED_EXT;
+    }
     if (isSupportedTypeDefTypeId(typeId)) {
       return typeId;
     }
-    return usesNonStructTypeDef(cls) ? Types.NAMED_EXT : buildUnregisteredTypeId(cls, null);
+    return buildUnregisteredTypeId(cls, null);
   }
 
   private static boolean isSupportedTypeDefTypeId(int typeId) {
@@ -933,7 +938,8 @@ public class ClassResolver extends TypeResolver {
 
   private boolean usesNonStructTypeDef(Class<?> cls) {
     return !cls.isEnum()
-        && (isCollection(cls)
+        && (cls.isArray()
+            || isCollection(cls)
             || isMap(cls)
             || Externalizable.class.isAssignableFrom(cls)
             || requireJavaSerialization(cls)

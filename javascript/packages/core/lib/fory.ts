@@ -58,8 +58,8 @@ export default class Fory {
         `maxBinarySize must be a non-negative integer but got ${maxBinarySize}`,
       );
     }
-    const maxCollectionSize =
-      this.config.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE;
+    const maxCollectionSize
+      = this.config.maxCollectionSize ?? DEFAULT_MAX_COLLECTION_SIZE;
     if (!Number.isInteger(maxCollectionSize) || maxCollectionSize < 0) {
       throw new Error(
         `maxCollectionSize must be a non-negative integer but got ${maxCollectionSize}`,
@@ -154,8 +154,8 @@ export default class Fory {
   }
 
   private throwInvalidRootHeader(bitmap: number): never {
-    const knownFlags =
-      ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
+    const knownFlags
+      = ConfigFlags.isCrossLanguageFlag | ConfigFlags.isOutOfBandFlag;
     if ((bitmap & ~knownFlags) !== 0) {
       throw new Error(
         `unsupported root header bitmap 0x${bitmap.toString(16)}`,

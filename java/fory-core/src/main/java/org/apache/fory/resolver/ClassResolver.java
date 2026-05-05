@@ -945,6 +945,7 @@ public class ClassResolver extends TypeResolver {
             || requireJavaSerialization(cls)
             || useReplaceResolveSerializer(cls)
             || Functions.isLambda(cls)
+            || (config.isScalaOptimizationEnabled() && ReflectionUtils.isScalaSingletonObject(cls))
             || Calendar.class.isAssignableFrom(cls)
             || ZoneId.class.isAssignableFrom(cls)
             || TimeZone.class.isAssignableFrom(cls)

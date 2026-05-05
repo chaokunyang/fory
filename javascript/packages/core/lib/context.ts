@@ -198,8 +198,8 @@ export class WriteContext {
   checkCollectionSize(size: number) {
     if (size > this._maxCollectionSize) {
       throw new Error(
-        `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. ` +
-          "The data may be malicious, or increase maxCollectionSize if needed.",
+        `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. `
+        + "The data may be malicious, or increase maxCollectionSize if needed.",
       );
     }
   }
@@ -207,8 +207,8 @@ export class WriteContext {
   checkBinarySize(size: number) {
     if (size > this._maxBinarySize) {
       throw new Error(
-        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. ` +
-          "The data may be malicious, or increase maxBinarySize if needed.",
+        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. `
+        + "The data may be malicious, or increase maxBinarySize if needed.",
       );
     }
   }
@@ -396,6 +396,7 @@ export class ReadContext {
     bigint,
     { readonly typeMeta: TypeMeta; readonly skipBytesAfterHeader: number }
   > = new Map();
+
   private _depth = 0;
   private _maxDepth: number;
   private _maxBinarySize: number;
@@ -429,8 +430,8 @@ export class ReadContext {
     this._depth++;
     if (this._depth > this._maxDepth) {
       throw new Error(
-        `Deserialization depth limit exceeded: ${this._depth} > ${this._maxDepth}. ` +
-          "The data may be malicious, or increase maxDepth if needed.",
+        `Deserialization depth limit exceeded: ${this._depth} > ${this._maxDepth}. `
+        + "The data may be malicious, or increase maxDepth if needed.",
       );
     }
   }
@@ -442,8 +443,8 @@ export class ReadContext {
   checkCollectionSize(size: number) {
     if (size > this._maxCollectionSize) {
       throw new Error(
-        `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. ` +
-          "The data may be malicious, or increase maxCollectionSize if needed.",
+        `Collection size ${size} exceeds maxCollectionSize ${this._maxCollectionSize}. `
+        + "The data may be malicious, or increase maxCollectionSize if needed.",
       );
     }
   }
@@ -451,8 +452,8 @@ export class ReadContext {
   checkBinarySize(size: number) {
     if (size > this._maxBinarySize) {
       throw new Error(
-        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. ` +
-          "The data may be malicious, or increase maxBinarySize if needed.",
+        `Binary size ${size} exceeds maxBinarySize ${this._maxBinarySize}. `
+        + "The data may be malicious, or increase maxBinarySize if needed.",
       );
     }
   }

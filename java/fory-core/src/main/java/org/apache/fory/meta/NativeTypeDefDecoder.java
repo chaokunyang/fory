@@ -207,7 +207,8 @@ class NativeTypeDefDecoder {
   private static boolean isStructCompatibilityVariant(int expectedTypeId, int actualTypeId) {
     boolean expectedIdStruct =
         expectedTypeId == Types.STRUCT || expectedTypeId == Types.COMPATIBLE_STRUCT;
-    boolean actualIdStruct = actualTypeId == Types.STRUCT || actualTypeId == Types.COMPATIBLE_STRUCT;
+    boolean actualIdStruct =
+        actualTypeId == Types.STRUCT || actualTypeId == Types.COMPATIBLE_STRUCT;
     if (expectedIdStruct || actualIdStruct) {
       return expectedIdStruct && actualIdStruct;
     }

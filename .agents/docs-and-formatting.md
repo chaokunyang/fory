@@ -31,6 +31,8 @@ Load this file when changing documentation, public APIs, protocol specs, benchma
 ## Formatting Commands
 
 - Markdown: `prettier --write <file>`
+- Do not format Markdown under `tasks/`, including task design, plan, progress, state, history,
+  and lessons files. These files are agent working state rather than repository documentation.
 - Python code, including `compiler/`, `benchmarks/`, `integration_tests/`, and `python/`:
   `python -m ruff format <changed-python-files>` and
   `python -m ruff check --fix <changed-python-files>`

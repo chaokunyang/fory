@@ -41,7 +41,6 @@ STRING_TYPE_ID = TypeId.STRING
 NOT_NULL_INT64_FLAG = NOT_NULL_VALUE_FLAG & 0b11111111 | (INT64_TYPE_ID << 8)
 
 from pyfory.serialization import Buffer, Config, ENABLE_FORY_CYTHON_SERIALIZATION
-from pyfory.utils import set_bit, get_bit, clear_bit
 from pyfory.context import WriteContext, ReadContext
 
 
@@ -490,16 +489,10 @@ class Fory:
         mask_index = buffer.get_writer_index()
         buffer.grow(1)
         buffer.set_writer_index(mask_index + 1)
-        buffer.put_int8(mask_index, 0)
-        if obj is None:
-            set_bit(buffer, mask_index, 0)
-        else:
-            clear_bit(buffer, mask_index, 0)
-        set_bit(buffer, mask_index, 1)
+        bitmap = 1 if self.xlang else 0
         if buffer_callback is not None:
-            set_bit(buffer, mask_index, 2)
-        else:
-            clear_bit(buffer, mask_index, 2)
+            bitmap |= 2
+        buffer.put_int8(mask_index, bitmap)
         write_context.write_ref(obj)
         return buffer
 
@@ -559,9 +552,12 @@ class Fory:
         read_context = self.read_context
         reader_index = buffer.get_reader_index()
         buffer.set_reader_index(reader_index + 1)
-        if get_bit(buffer, reader_index, 0):
-            return None
-        peer_out_of_band_enabled = get_bit(buffer, reader_index, 2)
+        bitmap = buffer.get_int8(reader_index) & 0xFF
+        if bitmap & ~0b11:
+            raise ValueError(f"Unsupported root header bitmap 0x{bitmap:02x}")
+        if bool(bitmap & 1) != self.xlang:
+            raise ValueError("Header bitmap mismatch at xlang bit")
+        peer_out_of_band_enabled = bool(bitmap & 2)
         if peer_out_of_band_enabled:
             assert buffers is not None, "buffers shouldn't be null when the serialized stream is produced with buffer_callback not null."
         else:

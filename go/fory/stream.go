@@ -112,15 +112,10 @@ func (f *Fory) DeserializeFromStream(is *InputStream, v any) error {
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = is.buffer
 
-	isNull := readHeader(f.readCtx)
+	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
 		f.readCtx.buffer = origBuffer
 		return f.readCtx.TakeError()
-	}
-
-	if isNull {
-		f.readCtx.buffer = origBuffer
-		return nil
 	}
 
 	target := reflect.ValueOf(v).Elem()
@@ -145,13 +140,9 @@ func (f *Fory) DeserializeFromReader(r io.Reader, v any) error {
 	// Always reset to enforce stateless semantics.
 	f.readCtx.buffer.ResetWithReader(r, 0)
 
-	isNull := readHeader(f.readCtx)
+	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
 		return f.readCtx.TakeError()
-	}
-
-	if isNull {
-		return nil
 	}
 
 	target := reflect.ValueOf(v).Elem()

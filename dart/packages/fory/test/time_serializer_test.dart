@@ -98,7 +98,7 @@ void main() {
 
       final bytes = fory.serialize(value);
       expect(
-          bytes, equals(Uint8List.fromList([0x02, 0xff, TypeIds.date, 0x01])));
+          bytes, equals(Uint8List.fromList([0x01, 0xff, TypeIds.date, 0x01])));
       expect(fory.deserialize<LocalDate>(bytes), equals(value));
     });
 

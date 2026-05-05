@@ -49,6 +49,7 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -681,6 +682,9 @@ public class ChildContainerSerializers {
     boolean isRef = (indexMarker & 1) == 1;
     int index = indexMarker >>> 1;
     if (isRef) {
+      if (index >= metaReadContext.readTypeInfos.size) {
+        throw new ForyException("Invalid layer metadata reference id " + index);
+      }
       // Reference to previously read type - nothing more to read
       return;
     }

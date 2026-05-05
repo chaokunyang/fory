@@ -21,7 +21,7 @@ use fory_core::type_id::TypeId;
 #[test]
 fn test_meta_hash() {
     let meta = TypeMeta::new(
-        42,
+        TypeId::STRUCT as u32,
         1,
         MetaString::get_empty().clone(),
         MetaString::get_empty().clone(),

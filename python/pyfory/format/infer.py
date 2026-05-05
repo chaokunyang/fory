@@ -63,14 +63,20 @@ def get_cls_by_schema(schema):
         else:
             from pyfory.type_util import record_class_factory
 
-            cls_ = record_class_factory("Record" + str(id(schema)), [schema.field(i).name for i in range(schema.num_fields)])
+            return record_class_factory(
+                "Record" + str(id(schema)),
+                [schema.field(i).name for i in range(schema.num_fields)],
+                publish=False,
+            )
         __type_map__[id_] = cls_
         __schemas__[id_] = schema
     return __type_map__[id_]
 
 
 def remove_schema(schema):
-    __schemas__.pop(id(schema))
+    id_ = id(schema)
+    __schemas__.pop(id_, None)
+    __type_map__.pop(id_, None)
 
 
 def reset():

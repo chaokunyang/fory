@@ -47,7 +47,7 @@ internal static class RefModeExtensions
 
 internal static class ForyHeaderFlag
 {
-    public const byte IsNull = 0x01;
-    public const byte IsXlang = 0x02;
-    public const byte IsOutOfBand = 0x04;
+    public const byte IsXlang = 0x01;
+    public const byte IsOutOfBand = 0x02;
+    public const byte KnownMask = IsXlang | IsOutOfBand;
 }

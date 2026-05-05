@@ -17,50 +17,57 @@
  * under the License.
  */
 
-import Fory, { Type } from '../packages/core/index';
-import { TypeMeta } from '../packages/core/lib/meta/TypeMeta';
-import { BinaryReader } from '../packages/core/lib/reader';
-import { describe, expect, test } from '@jest/globals';
+import Fory, { Type } from "../packages/core/index";
+import { TypeMeta } from "../packages/core/lib/meta/TypeMeta";
+import { BinaryReader } from "../packages/core/lib/reader";
+import { describe, expect, test } from "@jest/globals";
 
-const HAS_FIELDS_META_FLAG = 1n << 8n;
-const COMPRESS_META_FLAG = 1n << 9n;
-const META_SIZE_MASK = 0xFFn;
-const HASH_SHIFT_BITS = 14n;
+const COMPRESS_META_FLAG = 1n << 8n;
+const RESERVED_META_FLAGS = 0b111n << 9n;
+const META_SIZE_MASK = 0xffn;
+const HASH_SHIFT_BITS = 12n;
 
-describe('typemeta', () => {
-  test('writes TypeMeta header bits in the xlang layout', () => {
+describe("typemeta", () => {
+  test("writes TypeMeta header bits in the xlang layout", () => {
     const typeInfo = Type.struct(7001, {
       fullName: Type.string().setId(1),
       age: Type.int32().setId(2),
     });
 
     const bytes = TypeMeta.fromTypeInfo(typeInfo).toBytes();
-    const header = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getBigUint64(0, true);
+    const header = new DataView(
+      bytes.buffer,
+      bytes.byteOffset,
+      bytes.byteLength,
+    ).getBigUint64(0, true);
 
     expect(Number(header & META_SIZE_MASK)).toBe(bytes.length - 8);
-    expect((header & HAS_FIELDS_META_FLAG) !== 0n).toBe(true);
     expect((header & COMPRESS_META_FLAG) !== 0n).toBe(false);
+    expect((header & RESERVED_META_FLAGS) !== 0n).toBe(false);
     expect(header >> HASH_SHIFT_BITS).toBeGreaterThan(0n);
+    expect((bytes[8] & 0x80) !== 0).toBe(true);
   });
 
-  test('keeps tagged direct payload order grouped instead of field-id ordered', () => {
-    const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7005, {
-      stringValue: Type.string().setId(1),
-      mapValue: Type.map(Type.string(), Type.int32()).setId(2),
-      intValue: Type.int32().setId(10),
-    }));
+  test("keeps tagged direct payload order grouped instead of field-id ordered", () => {
+    const typeMeta = TypeMeta.fromTypeInfo(
+      Type.struct(7005, {
+        stringValue: Type.string().setId(1),
+        mapValue: Type.map(Type.string(), Type.int32()).setId(2),
+        intValue: Type.int32().setId(10),
+      }),
+    );
 
     expect(typeMeta.getFieldInfo().map((field) => field.fieldName)).toEqual([
-      'intValue',
-      'stringValue',
-      'mapValue',
+      "intValue",
+      "stringValue",
+      "mapValue",
     ]);
   });
 
-  test('writes the zero size extension when the TypeMeta body is exactly 0xFF bytes', () => {
+  test("writes the zero size extension when the TypeMeta body is exactly 0xFF bytes", () => {
     const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7003, {})) as any;
-    const body = new Uint8Array(0xFF);
-    const bytes = typeMeta.prependHeader(body, false, false) as Uint8Array;
+    const body = new Uint8Array(0xff);
+    const bytes = typeMeta.prependHeader(body, false) as Uint8Array;
     const reader = new BinaryReader({});
 
     expect(bytes).toHaveLength(8 + 1 + body.length);
@@ -72,24 +79,63 @@ describe('typemeta', () => {
     expect(reader.readGetCursor()).toBe(bytes.length);
   });
 
-  test('regenerates compatible named serializers when schema changes but field count stays the same', () => {
+  test("validates TypeMeta body hash before caching parsed metadata", () => {
+    const bytes = TypeMeta.fromTypeInfo(
+      Type.struct(7006, {
+        value: Type.string().setId(1),
+      }),
+    ).toBytes();
+    const malformed = new Uint8Array(bytes);
+    malformed[malformed.length - 1] ^= 1;
+
+    const parseReader = new BinaryReader({});
+    parseReader.reset(malformed);
+    expect(() => TypeMeta.fromBytes(parseReader)).toThrow(
+      "TypeMeta metadata hash mismatch",
+    );
+
+    const skipReader = new BinaryReader({});
+    skipReader.reset(bytes);
+    const header = TypeMeta.readHeader(skipReader);
+    TypeMeta.skipBody(skipReader, header);
+    expect(skipReader.readGetCursor()).toBe(bytes.length);
+  });
+
+  test("encodes extended id-registered struct field counts without the name bit", () => {
+    const fields: Record<string, any> = {};
+    for (let i = 0; i < 32; i++) {
+      fields[`field${i}`] = Type.int32().setId(i + 1);
+    }
+    const bytes = TypeMeta.fromTypeInfo(Type.struct(7201, fields)).toBytes();
+    const reader = new BinaryReader({});
+    const bodyOffset = typeMetaBodyOffset(bytes);
+
+    expect(bytes[bodyOffset] & 0x1f).toBe(0x1f);
+    expect(bytes[bodyOffset] & 0x20).toBe(0);
+
+    reader.reset(bytes);
+    const decoded = TypeMeta.fromBytes(reader);
+    expect(decoded.getFieldInfo()).toHaveLength(32);
+  });
+
+  test("regenerates compatible named serializers when schema changes but field count stays the same", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
-    const writerType = Type.struct('example.item', {
+    const writerType = Type.struct("example.item", {
       value: Type.string(),
     });
-    const readerType = Type.struct('example.item', {
+    const readerType = Type.struct("example.item", {
       value: Type.int32(),
     });
 
-    const bytes = writerFory.register(writerType).serialize({ value: 'hello' });
+    const bytes = writerFory.register(writerType).serialize({ value: "hello" });
     const result = readerFory.register(readerType).deserialize(bytes);
 
-    expect(result).toEqual({ value: 'hello' });
+    expect(result).toEqual({ value: "hello" });
   });
 
-  test('remaps compatible tag-id fields onto local property names during regeneration', () => {
+  test("remaps compatible tag-id fields onto local property names during regeneration", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -103,42 +149,42 @@ describe('typemeta', () => {
     });
 
     const bytes = writerFory.register(writerType).serialize({
-      fullName: 'Alice',
-      note: 'ally',
+      fullName: "Alice",
+      note: "ally",
     });
     const result = readerFory.register(readerType).deserialize(bytes);
 
     expect(result).toEqual({
-      name: 'Alice',
-      alias: 'ally',
+      name: "Alice",
+      alias: "ally",
     });
   });
 
-  test('keeps compatible named schema evolution working when field count differs', () => {
+  test("keeps compatible named schema evolution working when field count differs", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
-    const writerType = Type.struct('example.foo', {
+    const writerType = Type.struct("example.foo", {
       bar: Type.string(),
       bar2: Type.int32(),
     });
-    const readerType = Type.struct('example.foo', {
+    const readerType = Type.struct("example.foo", {
       bar: Type.string(),
     });
 
     const bytes = writerFory.register(writerType).serialize({
-      bar: 'hello',
+      bar: "hello",
       bar2: 123,
     });
     const result = readerFory.register(readerType).deserialize(bytes);
 
     expect(result).toEqual({
-      bar: 'hello',
+      bar: "hello",
       bar2: 123,
     });
   });
 
-  test('remaps regenerated compatible field names onto local snake_case properties', () => {
+  test("remaps regenerated compatible field names onto local snake_case properties", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -162,25 +208,27 @@ describe('typemeta', () => {
     const readerReg = readerFory.register(ReaderHolder);
 
     const value = new WriterHolder();
-    value.animalMap.set('dog', 7);
+    value.animalMap.set("dog", 7);
     value.marker = 99;
 
     const result = readerReg.deserialize(writerReg.serialize(value));
 
     expect(result).toBeInstanceOf(ReaderHolder);
-    expect(result.animal_map.get('dog')).toBe(7);
-    expect((result as ReaderHolder & { animalMap?: Map<string, number> }).animalMap).toBeUndefined();
+    expect(result.animal_map.get("dog")).toBe(7);
+    expect(
+      (result as ReaderHolder & { animalMap?: Map<string, number> }).animalMap,
+    ).toBeUndefined();
     expect((result as ReaderHolder & { marker?: number }).marker).toBe(99);
   });
 
-  test('skips unknown named custom fields by falling back to any when no local field exists', () => {
+  test("skips unknown named custom fields by falling back to any when no local field exists", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
     class MyExt {
       id = 0;
     }
-    Type.ext('my_ext')(MyExt);
+    Type.ext("my_ext")(MyExt);
 
     const customSerializer = {
       write: (writeContext: any, value: MyExt) => {
@@ -195,22 +243,22 @@ describe('typemeta', () => {
     readerFory.register(MyExt, customSerializer);
 
     class WriterWrapper {
-      note = '';
+      note = "";
       myExt = new MyExt();
     }
-    Type.struct('example.wrapper', {
+    Type.struct("example.wrapper", {
       note: Type.string(),
-      myExt: Type.ext('my_ext'),
+      myExt: Type.ext("my_ext"),
     })(WriterWrapper);
 
     class EmptyWrapper {}
-    Type.struct('example.wrapper', {})(EmptyWrapper);
+    Type.struct("example.wrapper", {})(EmptyWrapper);
 
     const writerReg = writerFory.register(WriterWrapper);
     const readerReg = readerFory.register(EmptyWrapper);
 
     const value = new WriterWrapper();
-    value.note = 'hello';
+    value.note = "hello";
     value.myExt.id = 42;
 
     const result = readerReg.deserialize(writerReg.serialize(value));
@@ -218,7 +266,7 @@ describe('typemeta', () => {
     expect(result).toBeInstanceOf(EmptyWrapper);
   });
 
-  test('skips unknown compatible enum fields when regenerating an empty reader', () => {
+  test("skips unknown compatible enum fields when regenerating an empty reader", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -251,7 +299,7 @@ describe('typemeta', () => {
     expect(result).toBeInstanceOf(EmptyStruct);
   });
 
-  test('skips unknown enum and named custom fields together during compatible regeneration', () => {
+  test("skips unknown enum and named custom fields together during compatible regeneration", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -261,13 +309,13 @@ describe('typemeta', () => {
       Blue: 2,
       White: 3,
     };
-    writerFory.register(Type.enum('color', Color));
-    readerFory.register(Type.enum('color', Color));
+    writerFory.register(Type.enum("color", Color));
+    readerFory.register(Type.enum("color", Color));
 
     class MyExt {
       id = 0;
     }
-    Type.ext('my_ext')(MyExt);
+    Type.ext("my_ext")(MyExt);
 
     const customSerializer = {
       write: (writeContext: any, value: MyExt) => {
@@ -284,7 +332,7 @@ describe('typemeta', () => {
     class MyStruct {
       id = 0;
     }
-    Type.struct('my_struct', {
+    Type.struct("my_struct", {
       id: Type.int32(),
     })(MyStruct);
 
@@ -296,14 +344,14 @@ describe('typemeta', () => {
       myStruct = new MyStruct();
       myExt = new MyExt();
     }
-    Type.struct('my_wrapper', {
-      color: Type.enum('color', Color),
-      myStruct: Type.struct('my_struct'),
-      myExt: Type.ext('my_ext'),
+    Type.struct("my_wrapper", {
+      color: Type.enum("color", Color),
+      myStruct: Type.struct("my_struct"),
+      myExt: Type.ext("my_ext"),
     })(WriterWrapper);
 
     class EmptyWrapper {}
-    Type.struct('my_wrapper', {})(EmptyWrapper);
+    Type.struct("my_wrapper", {})(EmptyWrapper);
 
     const writerReg = writerFory.register(WriterWrapper);
     const readerReg = readerFory.register(EmptyWrapper);
@@ -317,3 +365,13 @@ describe('typemeta', () => {
     expect(result).toBeInstanceOf(EmptyWrapper);
   });
 });
+
+function typeMetaBodyOffset(bytes: Uint8Array) {
+  const reader = new BinaryReader({});
+  reader.reset(bytes);
+  const header = TypeMeta.readHeader(reader);
+  if ((header & META_SIZE_MASK) === META_SIZE_MASK) {
+    reader.readVarUInt32();
+  }
+  return reader.readGetCursor();
+}

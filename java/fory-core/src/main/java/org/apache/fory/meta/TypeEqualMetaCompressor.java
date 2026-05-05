@@ -53,6 +53,11 @@ class TypeEqualMetaCompressor implements MetaCompressor {
   }
 
   @Override
+  public byte[] decompress(byte[] data, int offset, int size, int maxOutputSize) {
+    return compressor.decompress(data, offset, size, maxOutputSize);
+  }
+
+  @Override
   public boolean equals(Object obj) {
     if (obj == null || obj.getClass() != getClass()) {
       return false;

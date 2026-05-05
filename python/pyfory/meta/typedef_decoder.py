@@ -28,16 +28,23 @@ from pyfory.meta.typedef import TypeDef, FieldInfo, FieldType
 from pyfory.meta.typedef import (
     SMALL_NUM_FIELDS_THRESHOLD,
     REGISTER_BY_NAME_FLAG,
+    COMPATIBLE_TYPEDEF_FLAG,
+    STRUCT_TYPEDEF_FLAG,
     FIELD_NAME_SIZE_THRESHOLD,
     BIG_NAME_THRESHOLD,
     COMPRESS_META_FLAG,
-    HAS_FIELDS_META_FLAG,
+    RESERVED_META_FLAGS,
     META_SIZE_MASKS,
+    TYPEDEF_HASH_MASK,
     FIELD_NAME_ENCODINGS,
     NAMESPACE_ENCODINGS,
     TYPE_NAME_ENCODINGS,
     FIELD_NAME_ENCODING_TAG_ID,
     TAG_ID_SIZE_THRESHOLD,
+    is_struct_typedef_kind,
+    is_named_typedef_kind,
+    xlang_non_struct_type_id,
+    _typedef_header_hash,
 )
 from pyfory.types import TypeId
 from pyfory._fory import NO_USER_TYPE_ID
@@ -86,20 +93,20 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         header = buffer.read_int64()
 
     # Extract components from header
+    if header & RESERVED_META_FLAGS:
+        raise ValueError("Invalid TypeDef global header")
     meta_size = header & META_SIZE_MASKS
-    has_fields_meta = (header & HAS_FIELDS_META_FLAG) != 0
     is_compressed = (header & COMPRESS_META_FLAG) != 0
+    if is_compressed:
+        raise ValueError("Compressed xlang TypeDef is not supported")
 
     # If meta size is at maximum, read additional size
     if meta_size == META_SIZE_MASKS:
         meta_size += buffer.read_var_uint32()
 
     # Read meta data
-    meta_data = buffer.read_bytes(meta_size)
-
-    # Decompress if needed
-    if is_compressed:
-        meta_data = resolver.get_meta_compressor().decompress(meta_data)
+    encoded_meta_data = buffer.read_bytes(meta_size)
+    meta_data = encoded_meta_data
 
     # Create a new buffer for meta data
     meta_buffer = Buffer(meta_data)
@@ -107,22 +114,34 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     # Read meta header
     meta_header = meta_buffer.read_uint8()
 
-    # Extract number of fields
-    num_fields = meta_header & 0b11111
-    if num_fields == SMALL_NUM_FIELDS_THRESHOLD:
-        num_fields += meta_buffer.read_var_uint32()
-
-    # Check field count limit
-    if num_fields > MAX_FIELDS_PER_CLASS:
-        raise ValueError(
-            f"Class has {num_fields} fields, exceeding the maximum allowed {MAX_FIELDS_PER_CLASS} fields. This may indicate malicious data."
-        )
-
-    # Check if registered by name
-    is_registered_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0
+    is_struct = (meta_header & STRUCT_TYPEDEF_FLAG) != 0
+    num_fields = 0
+    is_registered_by_name = False
 
     type_cls = None
     user_type_id = NO_USER_TYPE_ID
+    if is_struct:
+        is_registered_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0
+        compatible = (meta_header & COMPATIBLE_TYPEDEF_FLAG) != 0
+        if is_registered_by_name:
+            type_id = (
+                TypeId.NAMED_COMPATIBLE_STRUCT if compatible else TypeId.NAMED_STRUCT
+            )
+        else:
+            type_id = TypeId.COMPATIBLE_STRUCT if compatible else TypeId.STRUCT
+        num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD
+        if num_fields == SMALL_NUM_FIELDS_THRESHOLD:
+            num_fields += meta_buffer.read_var_uint32()
+        if num_fields > MAX_FIELDS_PER_CLASS:
+            raise ValueError(
+                f"Class has {num_fields} fields, exceeding the maximum allowed {MAX_FIELDS_PER_CLASS} fields."
+            )
+    else:
+        if meta_header & 0b01110000:
+            raise ValueError("Invalid TypeDef kind header")
+        type_id = xlang_non_struct_type_id(meta_header & 0b1111)
+        is_registered_by_name = is_named_typedef_kind(type_id)
+
     # Read type info
     if is_registered_by_name:
         namespace = read_namespace(meta_buffer)
@@ -130,13 +149,10 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         # Look up the type_id from namespace and typename
         type_info = resolver.get_type_info_by_name(namespace, typename)
         if type_info:
-            type_id = type_info.type_id
+            if type_info.type_id != type_id:
+                raise ValueError("TypeDef kind does not match registered type metadata")
             type_cls = type_info.cls
-        else:
-            # Fallback to COMPATIBLE_STRUCT if not found
-            type_id = TypeId.COMPATIBLE_STRUCT
     else:
-        type_id = meta_buffer.read_uint8()
         user_type_id = meta_buffer.read_var_uint32()
         if resolver.is_registered_by_id(type_id=type_id, user_type_id=user_type_id):
             type_info = resolver.get_type_info_by_id(type_id, user_type_id=user_type_id)
@@ -147,12 +163,17 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
             namespace = "fory"
             typename = f"UnknownStruct{user_type_id if user_type_id != NO_USER_TYPE_ID else type_id}"
     name = namespace + "." + typename if namespace else typename
-    # Read fields info if present
-    field_infos = []
-    if has_fields_meta:
-        field_infos = read_fields_info(meta_buffer, resolver, name, num_fields)
-    if type_cls is None:
-        if getattr(resolver, "strict", False) and not getattr(resolver, "_allow_unregistered_typedef", False):
+
+    field_infos = read_fields_info(meta_buffer, resolver, name, num_fields)
+    if not is_struct and field_infos:
+        raise ValueError("Non-struct TypeDef cannot carry field metadata")
+    if meta_buffer.get_reader_index() != meta_buffer.size():
+        raise ValueError("Invalid TypeDef metadata size")
+    _validate_parsed_typedef_hash(header, encoded_meta_data)
+    if type_cls is None and is_struct_typedef_kind(type_id):
+        if getattr(resolver, "strict", False) and not getattr(
+            resolver, "_allow_unregistered_typedef", False
+        ):
             raise ValueError(f"TypeDef {name} is not registered in strict mode")
         # Check generated class count limit
         if _generated_class_count >= MAX_GENERATED_CLASSES:
@@ -168,9 +189,11 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
         type_cls = make_dataclass(class_name, field_definitions)
         policy = getattr(resolver, "policy", None)
         if policy is not None:
-            result = policy.validate_class(type_cls, is_local=False)
+            result = policy.validate_class(type_cls, is_local=True)
             if result is not None:
                 type_cls = result
+    elif type_cls is None:
+        raise ValueError(f"TypeDef {name} is not registered")
 
     # Create TypeDef object
     type_def = TypeDef(
@@ -186,6 +209,11 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
     return type_def
 
 
+def _validate_parsed_typedef_hash(header: int, encoded_meta_data: bytes) -> None:
+    if _typedef_header_hash(encoded_meta_data) != (header & TYPEDEF_HASH_MASK):
+        raise ValueError("Invalid TypeDef metadata hash")
+
+
 def read_namespace(buffer: Buffer) -> str:
     """Read namespace from the buffer."""
     return read_meta_string(buffer, NAMESPACE_DECODER, NAMESPACE_ENCODINGS)
@@ -196,7 +224,9 @@ def read_typename(buffer: Buffer) -> str:
     return read_meta_string(buffer, TYPENAME_DECODER, TYPE_NAME_ENCODINGS)
 
 
-def read_meta_string(buffer: Buffer, decoder: MetaStringDecoder, encodings: List[Encoding]) -> str:
+def read_meta_string(
+    buffer: Buffer, decoder: MetaStringDecoder, encodings: List[Encoding]
+) -> str:
     """Read a big meta string (namespace/typename) from the buffer using 6-bit size field."""
     # Read encoding and length combined in first byte
     header = buffer.read_uint8()
@@ -222,7 +252,9 @@ def read_meta_string(buffer: Buffer, decoder: MetaStringDecoder, encodings: List
         return ""
 
 
-def read_fields_info(buffer: Buffer, resolver, defined_class: str, num_fields: int) -> List[FieldInfo]:
+def read_fields_info(
+    buffer: Buffer, resolver, defined_class: str, num_fields: int
+) -> List[FieldInfo]:
     """Read field information from the buffer."""
     field_infos = []
     for _ in range(num_fields):
@@ -268,7 +300,9 @@ def read_field_info(buffer: Buffer, resolver, defined_class: str) -> FieldInfo:
 
         # Read field type info (no field name to read for TAG_ID)
         xtype_id = buffer.read_uint8()
-        field_type = FieldType.read_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
+        field_type = FieldType.read_with_type(
+            buffer, resolver, xtype_id, is_nullable, is_tracking_ref
+        )
 
         # For TAG_ID encoding, use tag_id as field name placeholder
         field_name = f"__tag_{tag_id}__"
@@ -283,7 +317,9 @@ def read_field_info(buffer: Buffer, resolver, defined_class: str) -> FieldInfo:
 
         # Read field type info BEFORE field name (matching Java TypeDefDecoder order)
         xtype_id = buffer.read_uint8()
-        field_type = FieldType.read_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
+        field_type = FieldType.read_with_type(
+            buffer, resolver, xtype_id, is_nullable, is_tracking_ref
+        )
 
         # Read field name meta string
         # Keep the wire field name as-is; TypeDef._resolve_field_names_from_tag_ids()

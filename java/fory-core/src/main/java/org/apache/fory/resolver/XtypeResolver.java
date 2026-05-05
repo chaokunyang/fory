@@ -334,8 +334,7 @@ public class XtypeResolver extends TypeResolver {
     typeInfo.setSerializer(this, serializer);
     extRegistry.registeredClasses.put(qualifiedName, type);
     if (typeInfo.typeName != null) {
-      TypeNameBytes typeNameBytes =
-          new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
+      TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
     registerGraalvmClass(type);
@@ -481,8 +480,7 @@ public class XtypeResolver extends TypeResolver {
     }
     updateTypeInfo(type, typeInfo);
     if (typeInfo.typeName != null) {
-      TypeNameBytes typeNameBytes =
-          new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
+      TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
   }
@@ -740,8 +738,7 @@ public class XtypeResolver extends TypeResolver {
   public TypeInfo getUserTypeInfo(String namespace, String typeName) {
     EncodedMetaString namespaceBytes = sharedRegistry.getPackageEncodedMetaString(namespace);
     EncodedMetaString typeNameBytes = sharedRegistry.getTypeNameEncodedMetaString(typeName);
-    return compositeClassNameBytes2TypeInfo.get(
-        new TypeNameBytes(namespaceBytes.hash, typeNameBytes.hash));
+    return compositeClassNameBytes2TypeInfo.get(new TypeNameBytes(namespaceBytes, typeNameBytes));
   }
 
   public TypeInfo getUserTypeInfo(int userTypeId) {
@@ -1113,8 +1110,7 @@ public class XtypeResolver extends TypeResolver {
   @Override
   protected TypeDef buildTypeDef(TypeInfo typeInfo) {
     TypeDef typeDef =
-        cacheTypeDef(
-            typeDefMap.computeIfAbsent(typeInfo.type, cls -> TypeDef.buildTypeDef(this, cls)));
+        typeDefMap.computeIfAbsent(typeInfo.type, cls -> TypeDef.buildTypeDef(this, cls));
     typeInfo.typeDef = typeDef;
     return typeDef;
   }
@@ -1196,8 +1192,7 @@ public class XtypeResolver extends TypeResolver {
       TypeInfo newTypeInfo = getTypeInfo(typeInfo.type);
       // Update the cache with the correct TypeInfo that has a serializer
       if (typeInfo.typeName != null) {
-        TypeNameBytes typeNameBytes =
-            new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
+        TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
         compositeClassNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
       }
       return newTypeInfo;
@@ -1207,7 +1202,7 @@ public class XtypeResolver extends TypeResolver {
 
   private TypeInfo loadBytesToTypeInfoWithTypeId(
       int internalTypeId, EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes) {
-    TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes.hash, simpleClassNameBytes.hash);
+    TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes, simpleClassNameBytes);
     TypeInfo typeInfo = compositeClassNameBytes2TypeInfo.get(typeNameBytes);
     if (typeInfo == null) {
       typeInfo =

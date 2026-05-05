@@ -66,9 +66,9 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
         memoryBuf.initDirectBuffer(ByteBufferUtil.getAddress(byteBuf), position, byteBuf);
       }
       byteBuf.limit(newLimit);
-      int readCount = channel.read(byteBuf);
-      memoryBuf.increaseSize(readCount);
-      return readCount;
+      readFully(byteBuf, minFillSize);
+      memoryBuf.increaseSize(minFillSize);
+      return minFillSize;
     } catch (IOException e) {
       throw new DeserializationException("Failed to read the provided byte channel", e);
     }
@@ -98,7 +98,7 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
       buf.readBytes(dst, dstIndex, remaining);
       try {
         ByteBuffer buffer = ByteBuffer.wrap(dst, dstIndex + remaining, length - remaining);
-        channel.read(buffer);
+        readFully(buffer, length - remaining);
       } catch (IOException e) {
         throw new DeserializationException("Failed to read the provided byte channel", e);
       }
@@ -130,10 +130,13 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
         int newLimit = dst.position() + length - remaining;
         if (dstLimit > newLimit) {
           dst.limit(newLimit);
-          channel.read(dst);
-          dst.limit(dstLimit);
+          try {
+            readFully(dst, length - remaining);
+          } finally {
+            dst.limit(dstLimit);
+          }
         } else {
-          channel.read(dst);
+          readFully(dst, length - remaining);
         }
       } catch (IOException e) {
         throw new DeserializationException("Failed to read the provided byte channel", e);
@@ -168,5 +171,16 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
   @Override
   public MemoryBuffer getBuffer() {
     return memoryBuffer;
+  }
+
+  private void readFully(ByteBuffer dst, int length) throws IOException {
+    int remaining = length;
+    while (remaining > 0) {
+      int read = channel.read(dst);
+      if (read <= 0) {
+        throw new DeserializationException("Unexpected end of byte channel");
+      }
+      remaining -= read;
+    }
   }
 }

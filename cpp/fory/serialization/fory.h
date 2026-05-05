@@ -629,15 +629,13 @@ public:
     Buffer buffer(const_cast<uint8_t *>(data), static_cast<uint32_t>(size),
                   false);
 
-    FORY_TRY(header, read_header(buffer));
-    if (header.is_null) {
-      return Unexpected(Error::invalid_data("Cannot deserialize null object"));
+    Error header_error;
+    const uint8_t header = buffer.read_uint8(header_error);
+    if (FORY_PREDICT_FALSE(!header_error.ok())) {
+      return Unexpected(std::move(header_error));
     }
-    if (FORY_PREDICT_FALSE(header.is_xlang != config_.xlang)) {
-      return Unexpected(Error::invalid_data(
-          "Protocol mismatch: payload xlang=" +
-          std::string(header.is_xlang ? "true" : "false") +
-          ", local xlang=" + std::string(config_.xlang ? "true" : "false")));
+    if (FORY_PREDICT_FALSE(header != precomputed_header_)) {
+      return Unexpected(invalid_root_header(header));
     }
 
     read_ctx_->attach(buffer);
@@ -668,19 +666,13 @@ public:
     if (FORY_PREDICT_FALSE(!finalized_)) {
       ensure_finalized();
     }
-    auto header_result = read_header(buffer);
-    if (FORY_PREDICT_FALSE(!header_result.ok())) {
-      return Unexpected(std::move(header_result).error());
+    Error header_error;
+    const uint8_t header = buffer.read_uint8(header_error);
+    if (FORY_PREDICT_FALSE(!header_error.ok())) {
+      return Unexpected(std::move(header_error));
     }
-    auto header = std::move(header_result).value();
-    if (header.is_null) {
-      return Unexpected(Error::invalid_data("Cannot deserialize null object"));
-    }
-    if (FORY_PREDICT_FALSE(header.is_xlang != config_.xlang)) {
-      return Unexpected(Error::invalid_data(
-          "Protocol mismatch: payload xlang=" +
-          std::string(header.is_xlang ? "true" : "false") +
-          ", local xlang=" + std::string(config_.xlang ? "true" : "false")));
+    if (FORY_PREDICT_FALSE(header != precomputed_header_)) {
+      return Unexpected(invalid_root_header(header));
     }
 
     read_ctx_->attach(buffer);
@@ -775,9 +767,26 @@ private:
   static uint8_t compute_header(bool xlang) {
     uint8_t flags = 0;
     if (xlang) {
-      flags |= (1 << 1); // bit 1: xlang flag
+      flags |= (1 << 0);
     }
     return flags;
+  }
+
+  FORY_NOINLINE Error invalid_root_header(uint8_t header) const {
+    constexpr uint8_t xlang_flag = 1 << 0;
+    constexpr uint8_t oob_flag = 1 << 1;
+    constexpr uint8_t known_flags = xlang_flag | oob_flag;
+    if ((header & ~known_flags) != 0) {
+      return Error::invalid_data("Unsupported root header bitmap");
+    }
+    if ((header & oob_flag) != 0) {
+      return Error::invalid_data("Out-of-band mode is not supported");
+    }
+    const bool payload_xlang = (header & xlang_flag) != 0;
+    return Error::invalid_data(
+        "Protocol mismatch: payload xlang=" +
+        std::string(payload_xlang ? "true" : "false") +
+        ", local xlang=" + std::string(config_.xlang ? "true" : "false"));
   }
 
   /// Core serialization implementation.

@@ -77,8 +77,8 @@ func (s decimalSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(DECIMAL) {
+		return
 	}
 	if ctx.HasError() {
 		return

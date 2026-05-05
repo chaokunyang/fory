@@ -152,8 +152,8 @@ func (s stringSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool,
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(STRING) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -194,8 +194,8 @@ func (s ptrToStringSerializer) Read(ctx *ReadContext, refMode RefMode, readType 
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(STRING) {
+		return
 	}
 	if ctx.HasError() {
 		return

@@ -233,9 +233,38 @@ final class ReadContext {
 
   /// Reads a root value using Ref semantics and expected root type [T].
   Object? readRefAs<T>() {
-    return _readRefWithResolved(
-      (resolved) => _typeResolver.resolveExpectedRootWireType<T>(resolved),
+    final flag = _refReader.tryPreserveRefId(_buffer);
+    final preservedRefId = flag >= RefWriter.refValueFlag ? flag : null;
+    if (flag == RefWriter.nullFlag) {
+      return null;
+    }
+    if (flag == RefWriter.refFlag) {
+      return _refReader.getReadRef();
+    }
+    final resolved = _typeResolver.resolveExpectedRootWireType<T>(
+      _readTypeMeta(),
     );
+    final rootPreservedRefId = preservedRefId == null &&
+            flag == RefWriter.notNullValueFlag &&
+            _depth == 0 &&
+            resolved.supportsRef
+        ? _refReader.preserveRefId()
+        : null;
+    final value = readResolvedValue(
+      resolved,
+      null,
+      hasPreservedRef: preservedRefId != null || rootPreservedRefId != null,
+    );
+    if (preservedRefId != null &&
+        resolved.supportsRef &&
+        _refReader.readRefAt(preservedRefId) == null) {
+      _refReader.setReadRef(preservedRefId, value);
+    }
+    if (rootPreservedRefId != null &&
+        _refReader.readRefAt(rootPreservedRefId) == null) {
+      _refReader.setReadRef(rootPreservedRefId, value);
+    }
+    return value;
   }
 
   Object? _readRefWithResolved(TypeInfo Function(TypeInfo) resolveRootType) {

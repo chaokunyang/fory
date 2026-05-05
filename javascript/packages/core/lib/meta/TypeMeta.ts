@@ -36,27 +36,36 @@ const pkgDecoder = new MetaStringDecoder(".", "_");
 const typeNameEncoder = new MetaStringEncoder("$", ".");
 const typeNameDecoder = new MetaStringDecoder("$", ".");
 
-// Constants shared with python/java/rust/go 0.17+. See e.g.
-// python/pyfory/meta/typedef.py, java/.../TypeDef.java,
-// rust/fory-core/src/meta/type_meta.rs, go/fory/type_def.go. The
-// JavaScript binding previously placed COMPRESS_META_FLAG at bit 63
-// and HAS_FIELDS_META_FLAG at bit 62, and used NUM_HASH_BITS = 41,
-// producing an 8-byte TypeMeta preamble that no other xlang binding
-// could decode. Aligning with the constants every other binding uses
-// so NAMED_COMPATIBLE_STRUCT output is byte-compatible cross-binding.
-const COMPRESS_META_FLAG = 1n << 9n;
-const HAS_FIELDS_META_FLAG = 1n << 8n;
-const META_SIZE_MASKS = 0xFF; // low 8 bits
-const NUM_HASH_BITS = 50;
+const COMPRESS_META_FLAG = 1n << 8n;
+const RESERVED_META_FLAGS = 0b111n << 9n;
+const META_SIZE_MASKS = 0xff; // low 8 bits
+const NUM_HASH_BITS = 52;
 const HASH_SHIFT_BITS = 64n - BigInt(NUM_HASH_BITS);
+const UINT64_MASK = 0xffffffffffffffffn;
+const HEADER_HASH_MASK = UINT64_MASK ^ ((1n << HASH_SHIFT_BITS) - 1n);
 const BIG_NAME_THRESHOLD = 0b111111;
 
 const PRIMITIVE_TYPE_IDS = [
-  TypeId.BOOL, TypeId.INT8, TypeId.INT16, TypeId.INT32, TypeId.VARINT32,
-  TypeId.INT64, TypeId.VARINT64, TypeId.TAGGED_INT64, TypeId.UINT8,
-  TypeId.UINT16, TypeId.UINT32, TypeId.VAR_UINT32, TypeId.UINT64,
-  TypeId.VAR_UINT64, TypeId.TAGGED_UINT64, TypeId.FLOAT8, TypeId.FLOAT16,
-  TypeId.BFLOAT16, TypeId.FLOAT32, TypeId.FLOAT64,
+  TypeId.BOOL,
+  TypeId.INT8,
+  TypeId.INT16,
+  TypeId.INT32,
+  TypeId.VARINT32,
+  TypeId.INT64,
+  TypeId.VARINT64,
+  TypeId.TAGGED_INT64,
+  TypeId.UINT8,
+  TypeId.UINT16,
+  TypeId.UINT32,
+  TypeId.VAR_UINT32,
+  TypeId.UINT64,
+  TypeId.VAR_UINT64,
+  TypeId.TAGGED_UINT64,
+  TypeId.FLOAT8,
+  TypeId.FLOAT16,
+  TypeId.BFLOAT16,
+  TypeId.FLOAT32,
+  TypeId.FLOAT64,
 ];
 
 export const isPrimitiveTypeId = (typeId: number): boolean => {
@@ -64,7 +73,12 @@ export const isPrimitiveTypeId = (typeId: number): boolean => {
 };
 
 export const refTrackingUnableTypeId = (typeId: number): boolean => {
-  return PRIMITIVE_TYPE_IDS.includes(typeId as any) || [TypeId.DURATION, TypeId.DATE, TypeId.TIMESTAMP, TypeId.STRING].includes(typeId as any);
+  return (
+    PRIMITIVE_TYPE_IDS.includes(typeId as any) ||
+    [TypeId.DURATION, TypeId.DATE, TypeId.TIMESTAMP, TypeId.STRING].includes(
+      typeId as any,
+    )
+  );
 };
 
 function getPrimitiveTypeSize(typeId: number) {
@@ -114,7 +128,11 @@ function getPrimitiveTypeSize(typeId: number) {
   }
 }
 
-export type InnerFieldInfoOptions = { key?: InnerFieldInfo; value?: InnerFieldInfo; inner?: InnerFieldInfo };
+export type InnerFieldInfoOptions = {
+  key?: InnerFieldInfo;
+  value?: InnerFieldInfo;
+  inner?: InnerFieldInfo;
+};
 export interface InnerFieldInfo {
   typeId: number;
   userTypeId: number;
@@ -131,9 +149,8 @@ export class FieldInfo {
     public trackingRef = false,
     public nullable = false,
     public options: InnerFieldInfoOptions = {},
-    public fieldId?: number
-  ) {
-  }
+    public fieldId?: number,
+  ) {}
 
   getFieldName() {
     return this.fieldName;
@@ -155,7 +172,11 @@ export class FieldInfo {
     return this.fieldId;
   }
 
-  static writeTypeId(writer: BinaryWriter, typeInfo: InnerFieldInfo, writeFlags = false) {
+  static writeTypeId(
+    writer: BinaryWriter,
+    typeInfo: InnerFieldInfo,
+    writeFlags = false,
+  ) {
     let { typeId } = typeInfo;
     if (typeId === TypeId.NAMED_ENUM) {
       typeId = TypeId.ENUM;
@@ -164,7 +185,7 @@ export class FieldInfo {
     }
     const { trackingRef, nullable } = typeInfo;
     if (writeFlags) {
-      typeId = (typeId << 2);
+      typeId = typeId << 2;
       if (nullable) {
         typeId |= 0b10;
       }
@@ -205,24 +226,80 @@ export class FieldInfo {
 
 const SMALL_NUM_FIELDS_THRESHOLD = 0b11111;
 const REGISTER_BY_NAME_FLAG = 0b100000;
+const COMPATIBLE_TYPEDEF_FLAG = 0b01000000;
+const STRUCT_TYPEDEF_FLAG = 0b10000000;
 const FIELD_NAME_SIZE_THRESHOLD = 0b1111;
 
-const pkgNameEncoding = [Encoding.UTF_8, Encoding.ALL_TO_LOWER_SPECIAL, Encoding.LOWER_UPPER_DIGIT_SPECIAL];
-const fieldNameEncoding = [Encoding.UTF_8, Encoding.ALL_TO_LOWER_SPECIAL, Encoding.LOWER_UPPER_DIGIT_SPECIAL];
-const typeNameEncoding = [Encoding.UTF_8, Encoding.ALL_TO_LOWER_SPECIAL, Encoding.LOWER_UPPER_DIGIT_SPECIAL, Encoding.FIRST_TO_LOWER_SPECIAL];
+const pkgNameEncoding = [
+  Encoding.UTF_8,
+  Encoding.ALL_TO_LOWER_SPECIAL,
+  Encoding.LOWER_UPPER_DIGIT_SPECIAL,
+];
+const fieldNameEncoding = [
+  Encoding.UTF_8,
+  Encoding.ALL_TO_LOWER_SPECIAL,
+  Encoding.LOWER_UPPER_DIGIT_SPECIAL,
+];
+const typeNameEncoding = [
+  Encoding.UTF_8,
+  Encoding.ALL_TO_LOWER_SPECIAL,
+  Encoding.LOWER_UPPER_DIGIT_SPECIAL,
+  Encoding.FIRST_TO_LOWER_SPECIAL,
+];
+
+function nonStructKindCode(typeId: number): number {
+  switch (typeId) {
+    case TypeId.ENUM:
+      return 0;
+    case TypeId.NAMED_ENUM:
+      return 1;
+    case TypeId.EXT:
+      return 2;
+    case TypeId.NAMED_EXT:
+      return 3;
+    case TypeId.TYPED_UNION:
+      return 4;
+    case TypeId.NAMED_UNION:
+      return 5;
+    default:
+      throw new Error(`unsupported TypeMeta kind ${typeId}`);
+  }
+}
+
+function nonStructTypeId(kindCode: number): number {
+  switch (kindCode) {
+    case 0:
+      return TypeId.ENUM;
+    case 1:
+      return TypeId.NAMED_ENUM;
+    case 2:
+      return TypeId.EXT;
+    case 3:
+      return TypeId.NAMED_EXT;
+    case 4:
+      return TypeId.TYPED_UNION;
+    case 5:
+      return TypeId.NAMED_UNION;
+    default:
+      throw new Error(`unsupported TypeMeta kind code ${kindCode}`);
+  }
+}
 export class TypeMeta {
   private headerHash: number | null;
-  private readonly hasFieldsMeta: boolean;
   private readonly compressed: boolean;
 
-  private constructor(private fields: FieldInfo[], private type: {
-    typeId: number;
-    typeName: string;
-    namespace: string;
-    userTypeId: number;
-  }, headerHash?: number, hasFieldsMeta?: boolean, compressed = false) {
+  private constructor(
+    private fields: FieldInfo[],
+    private type: {
+      typeId: number;
+      typeName: string;
+      namespace: string;
+      userTypeId: number;
+    },
+    headerHash?: number,
+    compressed = false,
+  ) {
     this.headerHash = headerHash ?? null;
-    this.hasFieldsMeta = hasFieldsMeta ?? fields.length > 0;
     this.compressed = compressed;
   }
 
@@ -242,9 +319,15 @@ export class TypeMeta {
       } else {
         fieldIdentifier = TypeMeta.toSnakeCase(field.getFieldName());
       }
-      fieldInfos.push([field, fieldIdentifier, this.computeFieldTypeFingerprint(field, true, true)]);
+      fieldInfos.push([
+        field,
+        fieldIdentifier,
+        this.computeFieldTypeFingerprint(field, true, true),
+      ]);
     }
-    fieldInfos = fieldInfos.sort((a, b) => TypeMeta.compareFieldSortKey(a[0], b[0]));
+    fieldInfos = fieldInfos.sort((a, b) =>
+      TypeMeta.compareFieldSortKey(a[0], b[0]),
+    );
     let result = "";
     for (const fieldInfo of fieldInfos) {
       result += `${fieldInfo[1]},${fieldInfo[2]};`;
@@ -252,7 +335,11 @@ export class TypeMeta {
     return result;
   }
 
-  private computeFieldTypeFingerprint(field: InnerFieldInfo, includeRef: boolean, includeNullable: boolean) {
+  private computeFieldTypeFingerprint(
+    field: InnerFieldInfo,
+    includeRef: boolean,
+    includeNullable: boolean,
+  ) {
     const ref = includeRef && field.trackingRef ? "1" : "0";
     const nullable = includeNullable && field.nullable ? "1" : "0";
     let result = `${this.fingerprintTypeId(field.typeId)},${ref},${nullable}`;
@@ -267,7 +354,12 @@ export class TypeMeta {
   }
 
   private fingerprintTypeId(typeId: number) {
-    if (TypeId.userDefinedType(typeId) || typeId === TypeId.UNION || typeId === TypeId.TYPED_UNION || typeId === TypeId.NAMED_UNION) {
+    if (
+      TypeId.userDefinedType(typeId) ||
+      typeId === TypeId.UNION ||
+      typeId === TypeId.TYPED_UNION ||
+      typeId === TypeId.NAMED_UNION
+    ) {
       return TypeId.UNKNOWN;
     }
     return typeId;
@@ -286,29 +378,38 @@ export class TypeMeta {
     let fieldInfo: FieldInfo[] = [];
     if (TypeId.structType(typeInfo.typeId)) {
       const structTypeInfo = typeInfo;
-      fieldInfo = Object.entries(structTypeInfo.options!.props!).map(([fieldName, typeInfo]) => {
-        let fieldTypeId = typeResolver ? typeResolver.computeTypeId(typeInfo) : typeInfo.typeId;
-        if (fieldTypeId === TypeId.NAMED_ENUM) {
-          fieldTypeId = TypeId.ENUM;
-        } else if (fieldTypeId === TypeId.NAMED_UNION || fieldTypeId === TypeId.TYPED_UNION) {
-          fieldTypeId = TypeId.UNION;
-        }
-        const { trackingRef, nullable, id, userTypeId, options } = typeInfo;
-        return new FieldInfo(
-          fieldName,
-          fieldTypeId,
-          userTypeId,
-          trackingRef,
-          nullable,
-          options!,
-          id
-        );
-      });
+      fieldInfo = Object.entries(structTypeInfo.options!.props!).map(
+        ([fieldName, typeInfo]) => {
+          let fieldTypeId = typeResolver
+            ? typeResolver.computeTypeId(typeInfo)
+            : typeInfo.typeId;
+          if (fieldTypeId === TypeId.NAMED_ENUM) {
+            fieldTypeId = TypeId.ENUM;
+          } else if (
+            fieldTypeId === TypeId.NAMED_UNION ||
+            fieldTypeId === TypeId.TYPED_UNION
+          ) {
+            fieldTypeId = TypeId.UNION;
+          }
+          const { trackingRef, nullable, id, userTypeId, options } = typeInfo;
+          return new FieldInfo(
+            fieldName,
+            fieldTypeId,
+            userTypeId,
+            trackingRef,
+            nullable,
+            options!,
+            id,
+          );
+        },
+      );
     }
     fieldInfo = TypeMeta.groupFieldsByType(fieldInfo);
 
     return new TypeMeta(fieldInfo, {
-      typeId: typeResolver ? typeResolver.computeTypeId(typeInfo) : typeInfo.typeId,
+      typeId: typeResolver
+        ? typeResolver.computeTypeId(typeInfo)
+        : typeInfo.typeId,
       namespace: typeInfo.namespace,
       typeName: typeInfo.typeName,
       userTypeId: typeInfo.userTypeId ?? -1,
@@ -327,7 +428,8 @@ export class TypeMeta {
    * Skip the type meta body bytes after the header has already been read.
    */
   static skipBody(reader: BinaryReader, header: bigint) {
-    reader.readSkip(TypeMeta.readMetaSize(reader, header));
+    const metaSize = TypeMeta.readMetaSize(reader, header);
+    reader.readSkip(metaSize);
   }
 
   static fromBytes(reader: BinaryReader): TypeMeta {
@@ -339,35 +441,48 @@ export class TypeMeta {
    * by readHeader(). Used by ReadContext to avoid re-reading the header.
    */
   static fromBytesAfterHeader(reader: BinaryReader, header: bigint): TypeMeta {
-    const compressed = (header & COMPRESS_META_FLAG) !== 0n;
-    if (compressed) {
-      throw new Error("compressed TypeMeta is not supported yet");
-    }
-    const hasFieldsMeta = (header & HAS_FIELDS_META_FLAG) !== 0n;
+    TypeMeta.validateGlobalHeader(header);
     const metaSize = TypeMeta.readMetaSize(reader, header);
+    const compressed = false;
     const headerHash = Number(header >> HASH_SHIFT_BITS);
 
     const bodyStart = reader.readGetCursor();
-    // Read class header
     const classHeader = reader.readUint8();
-    let numFields = classHeader & SMALL_NUM_FIELDS_THRESHOLD;
-
-    if (numFields === SMALL_NUM_FIELDS_THRESHOLD) {
-      numFields += reader.readVarUInt32();
-    }
+    const isStruct = (classHeader & STRUCT_TYPEDEF_FLAG) !== 0;
+    let numFields = 0;
 
     let typeId: number;
     let userTypeId = -1;
     let namespace = "";
     let typeName = "";
+    let registerByName: boolean;
 
-    if (classHeader & REGISTER_BY_NAME_FLAG) {
-      // Read namespace and type name
+    if (isStruct) {
+      registerByName = (classHeader & REGISTER_BY_NAME_FLAG) !== 0;
+      const compatible = (classHeader & COMPATIBLE_TYPEDEF_FLAG) !== 0;
+      if (registerByName) {
+        typeId = compatible
+          ? TypeId.NAMED_COMPATIBLE_STRUCT
+          : TypeId.NAMED_STRUCT;
+      } else {
+        typeId = compatible ? TypeId.COMPATIBLE_STRUCT : TypeId.STRUCT;
+      }
+      numFields = classHeader & SMALL_NUM_FIELDS_THRESHOLD;
+      if (numFields === SMALL_NUM_FIELDS_THRESHOLD) {
+        numFields += reader.readVarUInt32();
+      }
+    } else {
+      if ((classHeader & 0b01110000) !== 0) {
+        throw new Error("invalid TypeMeta kind header");
+      }
+      typeId = nonStructTypeId(classHeader & 0b1111);
+      registerByName = TypeId.isNamedType(typeId);
+    }
+
+    if (registerByName) {
       namespace = this.readPkgName(reader);
       typeName = this.readTypeName(reader);
-      typeId = TypeId.NAMED_STRUCT; // Default for named types
     } else {
-      typeId = reader.readUint8();
       userTypeId = reader.readVarUInt32();
     }
 
@@ -376,6 +491,9 @@ export class TypeMeta {
     for (let i = 0; i < numFields; i++) {
       const fieldInfo = this.readFieldInfo(reader);
       fields.push(fieldInfo);
+    }
+    if (!isStruct && fields.length !== 0) {
+      throw new Error("non-struct TypeMeta cannot carry field metadata");
     }
 
     // Create a basic TypeInfo for the decoded type
@@ -388,16 +506,25 @@ export class TypeMeta {
 
     const consumed = reader.readGetCursor() - bodyStart;
     if (consumed !== metaSize) {
-      throw new Error(`unexpected TypeMeta body size: expected ${metaSize}, consumed ${consumed}`);
+      throw new Error(
+        `unexpected TypeMeta body size: expected ${metaSize}, consumed ${consumed}`,
+      );
     }
-
-    return new TypeMeta(
-      fields,
-      typeInfo,
-      headerHash,
-      hasFieldsMeta,
-      compressed
+    TypeMeta.validateParsedBodyHash(
+      header,
+      reader.bufferRefAt(bodyStart, metaSize),
     );
+
+    return new TypeMeta(fields, typeInfo, headerHash, compressed);
+  }
+
+  private static validateGlobalHeader(header: bigint) {
+    if ((header & RESERVED_META_FLAGS) !== 0n) {
+      throw new Error("invalid TypeMeta global header");
+    }
+    if ((header & COMPRESS_META_FLAG) !== 0n) {
+      throw new Error("compressed TypeMeta is not supported yet");
+    }
   }
 
   private static readMetaSize(reader: BinaryReader, header: bigint): number {
@@ -406,6 +533,14 @@ export class TypeMeta {
       metaSize += reader.readVarUInt32();
     }
     return metaSize;
+  }
+
+  private static validateParsedBodyHash(header: bigint, body: Uint8Array) {
+    const expectedHeaderHash = TypeMeta.headerHashBits(body);
+    const actualHeaderHash = header & HEADER_HASH_MASK;
+    if (expectedHeaderHash !== actualHeaderHash) {
+      throw new Error("TypeMeta metadata hash mismatch");
+    }
   }
 
   private static readFieldInfo(reader: BinaryReader): FieldInfo {
@@ -431,14 +566,29 @@ export class TypeMeta {
       // Read field name
       const encoding = FieldInfo.u8ToEncoding(encodingFlags);
 
-      fieldName = fieldDecoder.decode(reader, size + 1, encoding || Encoding.UTF_8);
+      fieldName = fieldDecoder.decode(
+        reader,
+        size + 1,
+        encoding || Encoding.UTF_8,
+      );
       fieldName = TypeMeta.lowerUnderscoreToLowerCamelCase(fieldName);
     }
 
-    return new FieldInfo(fieldName, typeId, userTypeId, trackingRef, nullable, options, fieldId);
+    return new FieldInfo(
+      fieldName,
+      typeId,
+      userTypeId,
+      trackingRef,
+      nullable,
+      options,
+      fieldId,
+    );
   }
 
-  private static readTypeId(reader: BinaryReader, readFlag = false): InnerFieldInfo {
+  private static readTypeId(
+    reader: BinaryReader,
+    readFlag = false,
+  ): InnerFieldInfo {
     const options: InnerFieldInfoOptions = {};
     let nullable = false;
     let trackingRef = false;
@@ -449,7 +599,10 @@ export class TypeMeta {
       typeId = typeId >> 2;
       if (typeId === TypeId.NAMED_ENUM) {
         typeId = TypeId.ENUM;
-      } else if (typeId === TypeId.NAMED_UNION || typeId === TypeId.TYPED_UNION) {
+      } else if (
+        typeId === TypeId.NAMED_UNION ||
+        typeId === TypeId.TYPED_UNION
+      ) {
         typeId = TypeId.UNION;
       }
       this.readNestedTypeInfo(reader, typeId, options);
@@ -465,7 +618,11 @@ export class TypeMeta {
     return { typeId, userTypeId: -1, nullable, trackingRef, options };
   }
 
-  private static readNestedTypeInfo(reader: BinaryReader, typeId: number, options: InnerFieldInfoOptions) {
+  private static readNestedTypeInfo(
+    reader: BinaryReader,
+    typeId: number,
+    options: InnerFieldInfoOptions,
+  ) {
     switch (typeId) {
       case TypeId.LIST:
         options.inner = this.readTypeId(reader, true);
@@ -490,7 +647,11 @@ export class TypeMeta {
     return this.readName(reader, typeNameEncoding, typeNameDecoder);
   }
 
-  private static readName(reader: BinaryReader, encodings: Encoding[], decoder: MetaStringDecoder): string {
+  private static readName(
+    reader: BinaryReader,
+    encodings: Encoding[],
+    decoder: MetaStringDecoder,
+  ): string {
     const header = reader.readUint8();
     const encodingIndex = header & 0b11;
     let size = (header >> 2) & 0b111111;
@@ -523,7 +684,9 @@ export class TypeMeta {
     return this.fields;
   }
 
-  remapFieldNames(localProps: Record<string, TypeInfo> | undefined): FieldInfo[] {
+  remapFieldNames(
+    localProps: Record<string, TypeInfo> | undefined,
+  ): FieldInfo[] {
     if (!localProps) {
       return this.fields;
     }
@@ -566,7 +729,7 @@ export class TypeMeta {
         fieldInfo.trackingRef,
         fieldInfo.nullable,
         fieldInfo.options,
-        fieldInfo.fieldId
+        fieldInfo.fieldId,
       );
     });
   }
@@ -578,21 +741,40 @@ export class TypeMeta {
 
     const writer = new BinaryWriter({});
     writer.writeUint8(-1); // placeholder for header, update later
-    let currentClassHeader = this.fields.length;
+    const isStruct = TypeId.structType(this.type.typeId);
+    if (!isStruct && this.fields.length !== 0) {
+      throw new Error(
+        `non-struct TypeMeta ${this.type.typeId} cannot carry field metadata`,
+      );
+    }
 
-    if (this.fields.length >= SMALL_NUM_FIELDS_THRESHOLD) {
-      currentClassHeader = SMALL_NUM_FIELDS_THRESHOLD;
-      writer.writeVarUInt32(this.fields.length - SMALL_NUM_FIELDS_THRESHOLD);
+    let currentClassHeader: number;
+    if (isStruct) {
+      currentClassHeader =
+        STRUCT_TYPEDEF_FLAG |
+        Math.min(this.fields.length, SMALL_NUM_FIELDS_THRESHOLD);
+      if (
+        this.type.typeId === TypeId.COMPATIBLE_STRUCT ||
+        this.type.typeId === TypeId.NAMED_COMPATIBLE_STRUCT
+      ) {
+        currentClassHeader |= COMPATIBLE_TYPEDEF_FLAG;
+      }
+      if (this.fields.length >= SMALL_NUM_FIELDS_THRESHOLD) {
+        writer.writeVarUInt32(this.fields.length - SMALL_NUM_FIELDS_THRESHOLD);
+      }
+      if (TypeId.isNamedType(this.type.typeId)) {
+        currentClassHeader |= REGISTER_BY_NAME_FLAG;
+      }
+    } else {
+      currentClassHeader = nonStructKindCode(this.type.typeId);
     }
 
     if (!TypeId.isNamedType(this.type.typeId)) {
-      writer.writeUint8(this.type.typeId);
       if (this.type.userTypeId === undefined || this.type.userTypeId === -1) {
         throw new Error(`userTypeId required for typeId ${this.type.typeId}`);
       }
       writer.writeVarUInt32(this.type.userTypeId);
     } else {
-      currentClassHeader |= REGISTER_BY_NAME_FLAG;
       const ns = this.type.namespace;
       const typename = this.type.typeName;
       this.writePkgName(writer, ns);
@@ -603,12 +785,13 @@ export class TypeMeta {
     writer.setUint8Position(0, currentClassHeader);
 
     // Write fields info
-    this.writeFieldsInfo(writer, this.fields);
+    if (isStruct) {
+      this.writeFieldsInfo(writer, this.fields);
+    }
 
     const buffer = writer.dump();
 
-    // For now, skip compression and just add header
-    return this.prependHeader(buffer, false, this.fields.length > 0);
+    return this.prependHeader(buffer, false);
   }
 
   writePkgName(writer: BinaryWriter, pkg: string) {
@@ -619,7 +802,10 @@ export class TypeMeta {
   }
 
   writeTypeName(writer: BinaryWriter, typeName: string) {
-    const metaString = typeNameEncoder.encodeByEncodings(typeName, typeNameEncoding);
+    const metaString = typeNameEncoder.encodeByEncodings(
+      typeName,
+      typeNameEncoding,
+    );
     const encoded = metaString.getBytes();
     const encoding = metaString.getEncoding();
     this.writeName(writer, encoded, typeNameEncoding.indexOf(encoding));
@@ -660,14 +846,19 @@ export class TypeMeta {
         encodingFlags = 3; // TAG_ID encoding
       } else {
         // Convert camelCase to snake_case for xlang compatibility
-        const fieldName = TypeMeta.lowerCamelToLowerUnderscore(fieldInfo.getFieldName());
-        const metaString = fieldEncoder.encodeByEncodings(fieldName, fieldNameEncoding);
+        const fieldName = TypeMeta.lowerCamelToLowerUnderscore(
+          fieldInfo.getFieldName(),
+        );
+        const metaString = fieldEncoder.encodeByEncodings(
+          fieldName,
+          fieldNameEncoding,
+        );
         encodingFlags = fieldNameEncoding.indexOf(metaString.getEncoding());
         encoded = metaString.getBytes();
         size = encoded.length - 1;
       }
 
-      header |= (encodingFlags << 6);
+      header |= encodingFlags << 6;
       const bigSize = size >= FIELD_NAME_SIZE_THRESHOLD;
 
       if (bigSize) {
@@ -675,7 +866,7 @@ export class TypeMeta {
         writer.writeInt8(header);
         writer.writeVarUint32Small7(size - FIELD_NAME_SIZE_THRESHOLD);
       } else {
-        header |= (size << 2);
+        header |= size << 2;
         writer.writeInt8(header);
       }
 
@@ -746,7 +937,19 @@ export class TypeMeta {
     return result;
   }
 
-  private static buildHeader(buffer: Uint8Array, isCompressed: boolean, hasFieldsMeta: boolean) {
+  private static buildHeader(buffer: Uint8Array, isCompressed: boolean) {
+    let header = TypeMeta.headerHashBits(buffer);
+    if (isCompressed) {
+      header |= COMPRESS_META_FLAG;
+    }
+    header |= BigInt(Math.min(buffer.length, META_SIZE_MASKS));
+    return {
+      header: BigInt.asUintN(64, header),
+      headerHash: Number(header >> HASH_SHIFT_BITS),
+    };
+  }
+
+  private static headerHashBits(buffer: Uint8Array) {
     const hash = x64hash128(buffer, 47);
     // Read the high 64 bits of the 128-bit MurmurHash3 as a SIGNED
     // int64 to match pyfory (`hash_buffer()[0]` unpacks `int64_t[0]`),
@@ -757,33 +960,19 @@ export class TypeMeta {
     // is set -- unsigned BigInt can't go negative, so its sign-check
     // is always false and the abs is a no-op. Signed int64 here
     // matches the canonical behaviour of the other xlang bindings.
-    let header = hash.getBigInt64(0, false);
-    header = header << BigInt(64 - NUM_HASH_BITS);
-    // Arbitrary-precision abs + mask to 63 bits, matching pyfory's
-    // `abs(hash) & 0x7FFFFFFFFFFFFFFF`. The mask clears the sign bit
-    // so the COMPRESS_META_FLAG (bit 9) / HAS_FIELDS_META_FLAG
-    // (bit 8) / metaSize (low 8 bits) ORs below don't collide with
-    // residual hash bits.
+    let header = BigInt.asIntN(
+      64,
+      hash.getBigInt64(0, false) << HASH_SHIFT_BITS,
+    );
     if (header < 0n) {
       header = -header;
     }
-    header = header & 0x7FFFFFFFFFFFFFFFn;
-    if (isCompressed) {
-      header |= COMPRESS_META_FLAG;
-    }
-    if (hasFieldsMeta) {
-      header |= HAS_FIELDS_META_FLAG;
-    }
-    header |= BigInt(Math.min(buffer.length, META_SIZE_MASKS));
-    return {
-      header: BigInt.asUintN(64, header),
-      headerHash: Number(header >> HASH_SHIFT_BITS),
-    };
+    return BigInt.asUintN(64, header) & HEADER_HASH_MASK;
   }
 
-  private prependHeader(buffer: Uint8Array, isCompressed: boolean, hasFieldsMeta: boolean): Uint8Array {
+  private prependHeader(buffer: Uint8Array, isCompressed: boolean): Uint8Array {
     const metaSize = buffer.length;
-    const { header, headerHash } = TypeMeta.buildHeader(buffer, isCompressed, hasFieldsMeta);
+    const { header, headerHash } = TypeMeta.buildHeader(buffer, isCompressed);
     this.headerHash = headerHash;
 
     const writer = new BinaryWriter({});
@@ -806,7 +995,9 @@ export class TypeMeta {
       if (c >= "A" && c <= "Z") {
         if (i > 0) {
           const prevUpper = chars[i - 1] >= "A" && chars[i - 1] <= "Z";
-          const nextUpperOrEnd = i + 1 >= chars.length || (chars[i + 1] >= "A" && chars[i + 1] <= "Z");
+          const nextUpperOrEnd =
+            i + 1 >= chars.length ||
+            (chars[i + 1] >= "A" && chars[i + 1] <= "Z");
 
           if (!prevUpper || !nextUpperOrEnd) {
             result.push("_");
@@ -829,16 +1020,29 @@ export class TypeMeta {
 
   static compareFieldSortKey(
     a: { fieldName: string; fieldId?: number },
-    b: { fieldName: string; fieldId?: number }
+    b: { fieldName: string; fieldId?: number },
   ) {
-    if (a.fieldId !== undefined && a.fieldId !== null
-      && b.fieldId !== undefined && b.fieldId !== null) {
+    if (
+      a.fieldId !== undefined &&
+      a.fieldId !== null &&
+      b.fieldId !== undefined &&
+      b.fieldId !== null
+    ) {
       return a.fieldId - b.fieldId;
     }
-    return TypeMeta.getFieldSortKey(a).localeCompare(TypeMeta.getFieldSortKey(b));
+    return TypeMeta.getFieldSortKey(a).localeCompare(
+      TypeMeta.getFieldSortKey(b),
+    );
   }
 
-  static groupFieldsByType<T extends { fieldName: string; nullable?: boolean; typeId: number; fieldId?: number }>(typeInfos: Array<T>): Array<T> {
+  static groupFieldsByType<
+    T extends {
+      fieldName: string;
+      nullable?: boolean;
+      typeId: number;
+      fieldId?: number;
+    },
+  >(typeInfos: Array<T>): Array<T> {
     const primitiveFields: Array<T> = [];
     const nullablePrimitiveFields: Array<T> = [];
     const internalTypeFields: Array<T> = [];

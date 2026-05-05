@@ -268,6 +268,8 @@ public final class ReadContext {
                     bodySize += Int(try buffer.readVarUInt32())
                 }
                 if header == localTypeDefHeader {
+                    // Header-cache hits intentionally skip without rehashing. Entries reach this
+                    // cache only after a successful TypeDef parse and 52-bit body-hash validation.
                     compatibleTypeDefTypeInfos.push(localTypeInfo)
                     try buffer.skip(bodySize)
                     return nil
@@ -301,6 +303,8 @@ public final class ReadContext {
             bodySize += Int(try buffer.readVarUInt32())
         }
         if let cached = typeResolver.getTypeInfo(forHeader: header) {
+            // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+            // after a successful TypeDef parse and 52-bit body-hash validation.
             try buffer.skip(bodySize)
             compatibleTypeDefTypeInfos.push(cached)
             return cached
@@ -336,6 +340,8 @@ public final class ReadContext {
                 }
 
                 if header == localTypeDefHeader {
+                    // Header-cache hits intentionally skip without rehashing. Entries reach this
+                    // cache only after a successful TypeDef parse and 52-bit body-hash validation.
                     compatibleTypeDefTypeInfos.push(localTypeInfo)
                     try buffer.skip(bodySize)
                     return localTypeInfo

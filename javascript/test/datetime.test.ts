@@ -17,43 +17,38 @@
  * under the License.
  */
 
-import Fory, { Type } from '../packages/core/index';
-import {describe, expect, test} from '@jest/globals';
-import { TypeId } from '../packages/core/lib/type';
+import Fory, { Type } from "../packages/core/index";
+import { describe, expect, test } from "@jest/globals";
+import { TypeId } from "../packages/core/lib/type";
 
-describe('datetime', () => {
-  test('should date work', () => {
-    
-    const fory = new Fory({ ref: true });    
+describe("datetime", () => {
+  test("should date work", () => {
+    const fory = new Fory({ ref: true });
     const now = new Date();
     const input = fory.serialize(now);
-    const result: Date | null = fory.deserialize(
-        input
-    );
-    expect(result?.getFullYear()).toEqual(now.getFullYear())
-    expect(result?.getDate()).toEqual(now.getDate())
+    const result: Date | null = fory.deserialize(input);
+    expect(result?.getFullYear()).toEqual(now.getFullYear());
+    expect(result?.getDate()).toEqual(now.getDate());
   });
-  test('should datetime work', () => {
+  test("should datetime work", () => {
     const typeinfo = Type.struct("example.foo", {
       a: Type.timestamp(),
       b: Type.duration(),
-    })
-    const fory = new Fory({ ref: true });    
+    });
+    const fory = new Fory({ ref: true });
     const serializer = fory.register(typeinfo).serializer;
-    const d = new Date('2021/10/20 09:13');
-    const input = fory.serialize({ a:  d, b: d}, serializer);
-    const result = fory.deserialize(
-      input
-    );
-    expect(result).toEqual({ a: d, b: d.getTime() })
+    const d = new Date("2021/10/20 09:13");
+    const input = fory.serialize({ a: d, b: d }, serializer);
+    const result = fory.deserialize(input);
+    expect(result).toEqual({ a: d, b: d.getTime() });
   });
-  test('should use signed varint64 for date payloads', () => {
+  test("should use signed varint64 for date payloads", () => {
     const fory = new Fory({ ref: true });
     const serializer = fory.register(Type.date()).serializer;
     const value = new Date(1969, 11, 31);
 
     const encoded = fory.serialize(value, serializer);
-    expect(Array.from(encoded)).toEqual([0x02, 0xff, TypeId.DATE, 0x01]);
+    expect(Array.from(encoded)).toEqual([0x01, 0xff, TypeId.DATE, 0x01]);
     expect(fory.deserialize(encoded, serializer)).toEqual(value);
   });
 });

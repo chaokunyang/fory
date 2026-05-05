@@ -85,7 +85,27 @@ func (s *enumSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, 
 		}
 	}
 	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+		typeID := uint32(ctx.buffer.ReadUint8(err))
+		if ctx.HasError() {
+			return
+		}
+		internalID := TypeId(typeID)
+		if internalID != ENUM && internalID != NAMED_ENUM {
+			ctx.SetError(TypeMismatchError(internalID, ENUM))
+			return
+		}
+		typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
+		if ctx.HasError() {
+			return
+		}
+		if typeInfo == nil || typeInfo.Type != s.type_ {
+			var actualType reflect.Type
+			if typeInfo != nil {
+				actualType = typeInfo.Type
+			}
+			ctx.SetError(DeserializationErrorf("enum type mismatch: expected %v, got %v", s.type_, actualType))
+			return
+		}
 	}
 	if ctx.HasError() {
 		return

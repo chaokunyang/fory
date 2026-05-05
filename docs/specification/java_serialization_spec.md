@@ -44,14 +44,14 @@ Java native serialization writes a one byte bitmap header. The header layout mir
 bitmap and uses the same flag bits.
 
 ```
-|     5 bits    | 1 bit | 1 bit | 1 bit |
-+--------------+-------+-------+-------+
-| reserved     |  oob  | xlang | null  |
+|     6 bits    | 1 bit | 1 bit |
++---------------+-------+-------+
+| reserved      |  oob  | xlang |
 ```
 
-- null flag: 1 when object is null, 0 otherwise. If object is null, other bits are not set.
-- xlang flag: 1 when serialization uses xlang format, 0 when serialization uses Java native format.
-- oob flag: 1 when `BufferCallback` is not null, 0 otherwise.
+- xlang flag: bit 0, set when serialization uses xlang format and clear for Java native format.
+- oob flag: bit 1, set when `BufferCallback` is not null.
+- reserved bits: bits 2-7, must be zero.
 
 The header is always a single byte; no language ID is written.
 
@@ -202,32 +202,37 @@ when shared meta is enabled, or referenced by index when already seen.
 Header layout (lower bits on the right):
 
 ```
-| 50-bit hash | 4 bits reserved | 1 bit compress | 1 bit has_fields_meta | 8-bit size |
+| 52-bit hash | 3 bits reserved | 1 bit compress | 8-bit size |
 ```
 
 - size: lower 8 bits. If size equals the mask (0xFF), write extra size as varuint32 and add it.
-- compress: set when payload is compressed.
-- has_fields_meta: set when field metadata is present.
-- reserved: bits 10-13 are reserved for future use and must be zero.
-- hash: 50-bit hash of the payload and flags.
+- compress: bit 8, set when payload is compressed.
+- reserved: bits 9-11 are reserved for future use and must be zero.
+- hash: 52-bit hash of the payload.
 
 ### Class meta bytes
 
 Class meta encodes a linearized class hierarchy (from parent to leaf) and field metadata:
 
 ```
-| num_classes | class_layer_0 | class_layer_1 | ... |
+| root_kind_and_num_classes | class_layer_0 | class_layer_1 | ... |
 
 class_layer:
 | num_fields << 1 | registered_flag | [type_id if registered] |
 | namespace | type_name | field_infos |
 ```
 
-- `num_classes` stores `(num_layers - 1)` in a single byte.
-  - If it equals `0b1111`, read an extra varuint32 small7 and add it.
+- `root_kind_and_num_classes` stores the root TypeDef kind in the high four bits and
+  `(num_layers - 1)` in the low four bits.
+  - Root kind codes are `STRUCT=0`, `COMPATIBLE_STRUCT=1`, `NAMED_STRUCT=2`,
+    `NAMED_COMPATIBLE_STRUCT=3`, `ENUM=4`, `NAMED_ENUM=5`, `EXT=6`, `NAMED_EXT=7`,
+    `TYPED_UNION=8`, and `NAMED_UNION=9`.
+  - Kind codes `10-14` are reserved and `15` is an extended-kind escape rejected until defined.
+  - If the low four bits equal `0b1111`, read an extra varuint32 small7 and add it.
   - The actual number of layers is `num_classes + 1`.
 - `registered_flag` is 1 if the class is registered by numeric ID.
-- If registered by ID, the class type ID follows (varuint32 small7).
+- If registered by ID, the one-byte class type ID follows. For user-registered ID kinds, the
+  user type ID follows as varuint32.
 - If registered by name or unregistered, namespace and type name are written as meta strings.
 
 ### Field info

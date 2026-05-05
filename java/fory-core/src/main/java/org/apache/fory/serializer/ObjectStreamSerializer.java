@@ -51,6 +51,7 @@ import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -89,9 +90,10 @@ import org.apache.fory.util.unsafe._JDKAccess;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private static final Logger LOG = LoggerFactory.getLogger(ObjectStreamSerializer.class);
+  private static final int MAX_CACHED_TYPE_DEFS = 8192;
 
   private final SlotInfo[] slotsInfos;
-  // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots)
+  // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots).
   private final LongMap<TypeInfo> typeDefIdToTypeInfo = new LongMap<>(4, 0.4f);
 
   private static MetaSharedLayerSerializerBase<?> newGeneratedSerializer(
@@ -428,21 +430,11 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     TypeInfo typeInfo;
     if (isRef) {
       // Reference to previously read TypeInfo
-      typeInfo = metaReadContext.readTypeInfos.get(index);
+      typeInfo = getMetaReadTypeInfo(metaReadContext, index);
     } else {
-      // New TypeDef in stream - read ID first to check cache
+      // New TypeDef in stream, with optimized reuse by validated TypeDef header.
       long typeDefId = buffer.readInt64();
-      typeInfo = typeDefIdToTypeInfo.get(typeDefId);
-      if (typeInfo != null) {
-        // Already cached - skip the TypeDef bytes, reuse existing TypeInfo
-        TypeDef.skipTypeDef(buffer, typeDefId);
-      } else {
-        // Not cached - read full TypeDef and create TypeInfo
-        TypeDef typeDef =
-            typeResolver.cacheTypeDef(TypeDef.readTypeDef(typeResolver, buffer, typeDefId));
-        typeInfo = new TypeInfo(senderClass, typeDef);
-        typeDefIdToTypeInfo.put(typeDefId, typeInfo);
-      }
+      typeInfo = readLayerTypeInfo(typeResolver, buffer, senderClass, typeDefId);
       metaReadContext.readTypeInfos.add(typeInfo);
     }
 
@@ -458,6 +450,33 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       skipSerializer = newSerializer;
     }
     skipSerializer.skipFields(readContext);
+  }
+
+  private static TypeInfo getMetaReadTypeInfo(MetaReadContext metaReadContext, int index) {
+    if (index < 0 || index >= metaReadContext.readTypeInfos.size) {
+      throw new ForyException("Invalid layer metadata reference id " + index);
+    }
+    TypeInfo typeInfo = metaReadContext.readTypeInfos.get(index);
+    if (typeInfo == null) {
+      throw new ForyException("Invalid layer metadata reference id " + index);
+    }
+    return typeInfo;
+  }
+
+  private TypeInfo readLayerTypeInfo(
+      TypeResolver typeResolver, MemoryBuffer buffer, Class<?> cls, long typeDefId) {
+    TypeInfo typeInfo = typeDefIdToTypeInfo.get(typeDefId);
+    if (typeInfo != null) {
+      TypeDef.skipTypeDef(buffer, typeDefId);
+      return typeInfo;
+    }
+    TypeDef typeDef =
+        typeResolver.cacheTypeDef(TypeDef.readTypeDef(typeResolver, buffer, typeDefId));
+    typeInfo = new TypeInfo(cls, typeDef);
+    if (typeDefIdToTypeInfo.size < MAX_CACHED_TYPE_DEFS) {
+      typeDefIdToTypeInfo.put(typeDefId, typeInfo);
+    }
+    return typeInfo;
   }
 
   private static void throwUnsupportedEncodingException(Class<?> cls)
@@ -666,7 +685,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
             buildFieldInfoFromObjectStreamClass(typeResolver, objectStreamClass, type);
         layerTypeDef =
             NativeTypeDefEncoder.buildTypeDefWithFieldInfos(
-                (ClassResolver) typeResolver, type, fieldInfos, true);
+                (ClassResolver) typeResolver, type, fieldInfos);
       } else {
         // Fallback when ObjectStreamClass is not available (e.g., GraalVM native image)
         layerTypeDef = typeResolver.getTypeDef(type, false);
@@ -842,21 +861,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       int index = indexMarker >>> 1;
       if (isRef) {
         // Reference to previously read TypeInfo
-        return metaReadContext.readTypeInfos.get(index);
+        return getMetaReadTypeInfo(metaReadContext, index);
       } else {
-        // New TypeDef in stream - read ID first to check cache
+        // New TypeDef in stream, with optimized reuse by validated TypeDef header.
         long typeDefId = buffer.readInt64();
-        TypeInfo typeInfo = typeDefIdToTypeInfo.get(typeDefId);
-        if (typeInfo != null) {
-          // Already cached - skip the TypeDef bytes, reuse existing TypeInfo
-          TypeDef.skipTypeDef(buffer, typeDefId);
-        } else {
-          // Not cached - read full TypeDef and create TypeInfo
-          TypeDef typeDef =
-              typeResolver.cacheTypeDef(TypeDef.readTypeDef(typeResolver, buffer, typeDefId));
-          typeInfo = new TypeInfo(cls, typeDef);
-          typeDefIdToTypeInfo.put(typeDefId, typeInfo);
-        }
+        TypeInfo typeInfo =
+            ObjectStreamSerializer.this.readLayerTypeInfo(typeResolver, buffer, cls, typeDefId);
         metaReadContext.readTypeInfos.add(typeInfo);
         return typeInfo;
       }

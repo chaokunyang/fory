@@ -22,23 +22,26 @@ from pyfory.meta.typedef import (
     build_field_infos,
     SMALL_NUM_FIELDS_THRESHOLD,
     REGISTER_BY_NAME_FLAG,
+    COMPATIBLE_TYPEDEF_FLAG,
+    STRUCT_TYPEDEF_FLAG,
     FIELD_NAME_SIZE_THRESHOLD,
     BIG_NAME_THRESHOLD,
     COMPRESS_META_FLAG,
-    HAS_FIELDS_META_FLAG,
     META_SIZE_MASKS,
-    NUM_HASH_BITS,
     FIELD_NAME_ENCODINGS,
     NAMESPACE_ENCODINGS,
     TYPE_NAME_ENCODINGS,
     FIELD_NAME_ENCODING_TAG_ID,
     TAG_ID_SIZE_THRESHOLD,
+    is_struct_typedef_kind,
+    xlang_non_struct_kind_code,
+    _typedef_header_hash,
 )
 from pyfory.meta.metastring import MetaStringEncoder
 from pyfory._fory import NO_USER_TYPE_ID
+from pyfory.types import TypeId
 
 from pyfory.serialization import Buffer
-from pyfory.lib.mmh3 import hash_buffer
 
 
 # Meta string encoders
@@ -58,35 +61,43 @@ def encode_typedef(type_resolver, cls, include_fields: bool = True):
     Returns:
         The encoded TypeDef.
     """
-    if include_fields:
+    type_id, user_type_id = type_resolver.get_registered_type_ids(cls)
+    if include_fields and is_struct_typedef_kind(type_id):
         field_infos = build_field_infos(type_resolver, cls)
     else:
         field_infos = []
 
     buffer = Buffer.allocate(64)
 
-    # Write meta header
-    header = len(field_infos)
-    if len(field_infos) >= SMALL_NUM_FIELDS_THRESHOLD:
-        header = SMALL_NUM_FIELDS_THRESHOLD
+    # Write kind header
+    if is_struct_typedef_kind(type_id):
+        num_fields = len(field_infos)
+        header = STRUCT_TYPEDEF_FLAG | min(num_fields, SMALL_NUM_FIELDS_THRESHOLD)
+        if type_id in {TypeId.COMPATIBLE_STRUCT, TypeId.NAMED_COMPATIBLE_STRUCT}:
+            header |= COMPATIBLE_TYPEDEF_FLAG
         if type_resolver.is_registered_by_name(cls):
             header |= REGISTER_BY_NAME_FLAG
-        buffer.write_uint8(header)
-        buffer.write_var_uint32(len(field_infos) - SMALL_NUM_FIELDS_THRESHOLD)
+        if num_fields >= SMALL_NUM_FIELDS_THRESHOLD:
+            buffer.write_uint8(header)
+            buffer.write_var_uint32(num_fields - SMALL_NUM_FIELDS_THRESHOLD)
+        else:
+            buffer.write_uint8(header)
     else:
-        if type_resolver.is_registered_by_name(cls):
-            header |= REGISTER_BY_NAME_FLAG
-        buffer.write_uint8(header)
+        if field_infos:
+            raise ValueError(
+                f"Non-struct TypeDef {type_id} cannot carry field metadata"
+            )
+        buffer.write_uint8(xlang_non_struct_kind_code(type_id))
 
     # Write type info
-    type_id, user_type_id = type_resolver.get_registered_type_ids(cls)
     if type_resolver.is_registered_by_name(cls):
         namespace, typename = type_resolver.get_registered_name(cls)
         write_namespace(buffer, namespace)
         write_typename(buffer, typename)
     else:
-        assert type_resolver.is_registered_by_id(cls=cls), "Class must be registered by name or id"
-        buffer.write_uint8(type_id)
+        assert type_resolver.is_registered_by_id(
+            cls=cls
+        ), "Class must be registered by name or id"
         if user_type_id in {None, NO_USER_TYPE_ID}:
             raise ValueError(f"user_type_id required for type_id {type_id}")
         buffer.write_var_uint32(user_type_id)
@@ -97,12 +108,9 @@ def encode_typedef(type_resolver, cls, include_fields: bool = True):
     # Get the encoded binary (only the written portion, not the full buffer)
     binary = buffer.to_bytes(0, buffer.get_writer_index())
 
-    # Temporary xlang behavior: always write TypeDef metadata uncompressed.
-    # Some runtimes still do not support TypeMeta decompression, so keep the
-    # xlang wire payload uncompressed until all xlang implementations support it.
     is_compressed = False
     # Prepend header
-    binary = prepend_header(binary, is_compressed, len(field_infos) > 0)
+    binary = prepend_header(binary, is_compressed)
     # Extract namespace and typename
     if type_resolver.is_registered_by_name(cls):
         namespace, typename = type_resolver.get_registered_name(cls)
@@ -112,23 +120,29 @@ def encode_typedef(type_resolver, cls, include_fields: bool = True):
             splits.insert(0, "")
         namespace, typename = splits
 
-    result = TypeDef(namespace, typename, cls, type_id, field_infos, binary, is_compressed, user_type_id=user_type_id)
+    result = TypeDef(
+        namespace,
+        typename,
+        cls,
+        type_id,
+        field_infos,
+        binary,
+        is_compressed,
+        user_type_id=user_type_id,
+    )
     return result
 
 
-def prepend_header(buffer: bytes, is_compressed: bool, has_fields_meta: bool):
+def prepend_header(buffer: bytes, is_compressed: bool):
     """Prepend header to the buffer."""
     meta_size = len(buffer)
-    hash = hash_buffer(buffer, 47)[0]
-    hash <<= 64 - NUM_HASH_BITS
-    header = abs(hash) & 0x7FFFFFFFFFFFFFFF  # Ensure it fits in 63 bits
+    header = _typedef_header_hash(buffer)
     if is_compressed:
         header |= COMPRESS_META_FLAG
 
-    if has_fields_meta:
-        header |= HAS_FIELDS_META_FLAG
-
     header |= min(meta_size, META_SIZE_MASKS)
+    if header >= (1 << 63):
+        header -= 1 << 64
     result = Buffer.allocate(meta_size + 8)
     result.write_int64(header)
     if meta_size >= META_SIZE_MASKS:
@@ -146,7 +160,9 @@ def write_namespace(buffer: Buffer, namespace: str):
     #      The `6 bits size: 0~63`  will be used to indicate size `0~62`,
     #      the value `63` the size need more byte to read, the encoding will encode `size - 62` as a varint next.
     meta_string = NAMESPACE_ENCODER.encode(namespace, NAMESPACE_ENCODINGS)
-    write_meta_string(buffer, meta_string, NAMESPACE_ENCODINGS.index(meta_string.encoding))
+    write_meta_string(
+        buffer, meta_string, NAMESPACE_ENCODINGS.index(meta_string.encoding)
+    )
 
 
 def write_typename(buffer: Buffer, typename: str):
@@ -158,7 +174,9 @@ def write_typename(buffer: Buffer, typename: str):
     #       The `6 bits size: 0~63`  will be used to indicate size `1~64`,
     #       the value `63` the size need more byte to read, the encoding will encode `size - 63` as a varint next.
     meta_string = TYPENAME_ENCODER.encode(typename, TYPE_NAME_ENCODINGS)
-    write_meta_string(buffer, meta_string, TYPE_NAME_ENCODINGS.index(meta_string.encoding))
+    write_meta_string(
+        buffer, meta_string, TYPE_NAME_ENCODINGS.index(meta_string.encoding)
+    )
 
 
 def write_meta_string(buffer: Buffer, meta_string, encoding_value: int):
@@ -230,7 +248,9 @@ def write_field_info(buffer: Buffer, field_info: FieldInfo):
         field_info.field_type.write(buffer, False)
     else:
         # Field name encoding
-        encoding = FIELD_NAME_ENCODER.compute_encoding(field_info.name, FIELD_NAME_ENCODINGS)
+        encoding = FIELD_NAME_ENCODER.compute_encoding(
+            field_info.name, FIELD_NAME_ENCODINGS
+        )
         meta_string = FIELD_NAME_ENCODER.encode_with_encoding(field_info.name, encoding)
         # Store (length - 1) in size field, matching Java TypeDefEncoder
         field_name_binary_size = len(meta_string.encoded_data) - 1

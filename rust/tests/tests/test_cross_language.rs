@@ -124,7 +124,7 @@ fn test_naive_date_uses_var_i64_day_count() {
     fory.serialize_to(&mut buf, &day).unwrap();
 
     let mut reader = Reader::new(buf.as_slice());
-    assert_eq!(reader.read_u8().unwrap(), 2);
+    assert_eq!(reader.read_u8().unwrap(), 1);
     assert_eq!(reader.read_i8().unwrap(), -1);
     assert_eq!(reader.read_u8().unwrap(), TypeId::DATE as u8);
     assert_eq!(reader.read_var_i64().unwrap(), -1);

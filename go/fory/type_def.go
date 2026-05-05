@@ -18,10 +18,7 @@
 package fory
 
 import (
-	"bytes"
-	"compress/zlib"
 	"fmt"
-	"io"
 	"reflect"
 	"strings"
 
@@ -29,17 +26,17 @@ import (
 )
 
 const (
-	META_SIZE_MASK       = 0xFF
-	COMPRESS_META_FLAG   = 0b1 << 9
-	HAS_FIELDS_META_FLAG = 0b1 << 8
-	NUM_HASH_BITS        = 50
+	META_SIZE_MASK     = 0xFF
+	COMPRESS_META_FLAG = 0b1 << 8
+	RESERVED_META_BITS = 0b111 << 9
+	NUM_HASH_BITS      = 52
 )
 
 /*
 TypeDef represents a transportable value object containing type information and field definitions.
 typeDef are layout as following:
-  - first 8 bytes: global header (50 bits hash + 1 bit compress flag + write fields meta + 8 bits meta size)
-  - next 1 byte: meta header (2 bits reserved + 1 bit register by name flag + 5 bits num fields)
+  - first 8 bytes: global header (52 bits hash + 1 bit compress flag + 8 bits meta size)
+  - next 1 byte: kind header
   - next variable bytes: type id (varint) or ns name + type name
   - next variable bytes: field definitions (see below)
 */
@@ -218,21 +215,21 @@ func (td *TypeDef) buildTypeInfoWithResolver(resolver *TypeResolver) (TypeInfo, 
 	type_ := td.type_
 
 	var serializer Serializer
-	// For extension types, use the registered serializer if available
-	if type_ != nil && resolver != nil {
-		if existingSerializer, ok := resolver.typeToSerializers[type_]; ok {
-			// Only use registered serializer for extension types (not struct types)
-			if _, isExt := existingSerializer.(*extensionSerializerAdapter); isExt {
-				serializer = existingSerializer
-			} else if ptrSer, isPtrSer := existingSerializer.(*ptrToValueSerializer); isPtrSer {
-				if _, isExtInner := ptrSer.valueSerializer.(*extensionSerializerAdapter); isExtInner {
-					serializer = existingSerializer
-				}
+	if !isStructTypeId(TypeId(td.typeId)) {
+		if type_ != nil && resolver != nil {
+			var err error
+			serializer, err = resolver.getSerializerByType(type_, false)
+			if err != nil {
+				return TypeInfo{}, err
 			}
 		}
-	}
-	// If no extension serializer, create struct serializer
-	if serializer == nil {
+		if serializer == nil && resolver != nil {
+			serializer = resolver.getSerializerByTypeID(td.typeId)
+		}
+		if serializer == nil {
+			return TypeInfo{}, fmt.Errorf("no serializer registered for TypeDef kind %d", td.typeId)
+		}
+	} else {
 		if type_ == nil {
 			// Unknown struct type - use skipStructSerializer to skip data
 			serializer = &skipStructSerializer{
@@ -304,7 +301,14 @@ func readPkgName(buffer *ByteBuffer, namespaceDecoder *meta.Decoder, err *Error)
 	encodingFlags := header & 0b11 // 2 bits for encoding
 	size := header >> 2            // 6 bits for size
 	if size == BIG_NAME_THRESHOLD {
-		size = int(buffer.ReadVarUint32Small7(err)) + BIG_NAME_THRESHOLD
+		extra := buffer.ReadVarUint32Small7(err)
+		if err.HasError() {
+			return "", err.TakeError()
+		}
+		if uint64(extra) > uint64(MaxInt-BIG_NAME_THRESHOLD) {
+			return "", fmt.Errorf("invalid TypeDef namespace length")
+		}
+		size = int(extra) + BIG_NAME_THRESHOLD
 	}
 
 	var encoding meta.Encoding
@@ -319,6 +323,9 @@ func readPkgName(buffer *ByteBuffer, namespaceDecoder *meta.Decoder, err *Error)
 		return "", fmt.Errorf("invalid package encoding flags: %d", encodingFlags)
 	}
 
+	if size > buffer.remaining() {
+		return "", fmt.Errorf("TypeDef namespace length %d exceeds remaining metadata %d", size, buffer.remaining())
+	}
 	data := make([]byte, size)
 	if _, err := buffer.Read(data); err != nil {
 		return "", err
@@ -335,7 +342,14 @@ func readTypeName(buffer *ByteBuffer, typeNameDecoder *meta.Decoder, err *Error)
 	encodingFlags := header & 0b11 // 2 bits for encoding
 	size := header >> 2            // 6 bits for size
 	if size == BIG_NAME_THRESHOLD {
-		size = int(buffer.ReadVarUint32Small7(err)) + BIG_NAME_THRESHOLD
+		extra := buffer.ReadVarUint32Small7(err)
+		if err.HasError() {
+			return "", err.TakeError()
+		}
+		if uint64(extra) > uint64(MaxInt-BIG_NAME_THRESHOLD) {
+			return "", fmt.Errorf("invalid TypeDef typename length")
+		}
+		size = int(extra) + BIG_NAME_THRESHOLD
 	}
 
 	var encoding meta.Encoding
@@ -352,6 +366,9 @@ func readTypeName(buffer *ByteBuffer, typeNameDecoder *meta.Decoder, err *Error)
 		return "", fmt.Errorf("invalid typename encoding flags: %d", encodingFlags)
 	}
 
+	if size > buffer.remaining() {
+		return "", fmt.Errorf("TypeDef typename length %d exceeds remaining metadata %d", size, buffer.remaining())
+	}
 	data := make([]byte, size)
 	if _, err := buffer.Read(data); err != nil {
 		return "", err
@@ -362,16 +379,18 @@ func readTypeName(buffer *ByteBuffer, typeNameDecoder *meta.Decoder, err *Error)
 
 // buildTypeDef constructs a TypeDef from a value
 func buildTypeDef(fory *Fory, value reflect.Value) (*TypeDef, error) {
-	fieldDefs, err := buildFieldDefs(fory, value)
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract field infos: %w", err)
-	}
-
 	infoPtr, err := fory.typeResolver.getTypeInfo(value, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get type info for value %v: %w", value, err)
 	}
 	typeId := uint32(infoPtr.TypeID)
+	var fieldDefs []FieldDef
+	if isStructTypeId(TypeId(typeId)) {
+		fieldDefs, err = buildFieldDefs(fory, value)
+		if err != nil {
+			return nil, fmt.Errorf("failed to extract field infos: %w", err)
+		}
+	}
 	registerByName := IsNamespacedType(TypeId(typeId))
 	typeDef := NewTypeDef(typeId, infoPtr.UserTypeID, infoPtr.PkgPathBytes, infoPtr.NameBytes, registerByName, false, fieldDefs)
 
@@ -616,7 +635,9 @@ func newTypeSpecForTypeID(typeID TypeId) (*TypeSpec, error) {
 
 const (
 	SmallNumFieldsThreshold = 31
-	REGISTER_BY_NAME_FLAG   = 0b1 << 5
+	RegisterByNameFlag      = 0b0010_0000
+	CompatibleTypeDefFlag   = 0b0100_0000
+	StructTypeDefFlag       = 0b1000_0000
 	FieldNameSizeThreshold  = 15
 )
 
@@ -648,8 +669,8 @@ func getFieldNameEncodingIndex(encoding meta.Encoding) int {
 /*
 encodingTypeDef encodes a TypeDef into binary format according to the specification
 typeDef are layout as following:
-- first 8 bytes: global header (50 bits hash + 1 bit compress flag + write fields meta + 8 bits meta size)
-- next 1 byte: meta header (2 bits reserved + 1 bit register by name flag + 5 bits num fields)
+- first 8 bytes: global header (52 bits hash + 1 bit compress flag + 8 bits meta size)
+- next 1 byte: kind header
 - next variable bytes: type id (varint) or ns name + type name
 - next variable bytes: field defs (see below)
 */
@@ -758,20 +779,21 @@ func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, erro
 			return nil, fmt.Errorf("failed to write typename: %w", err)
 		}
 	} else {
-		buffer.WriteUint8(uint8(typeDef.typeId))
 		if typeDef.userTypeId == invalidUserTypeID {
 			return nil, fmt.Errorf("missing user type ID for typeID %d", typeDef.typeId)
 		}
 		buffer.WriteVarUint32(typeDef.userTypeId)
 	}
 
-	if err := writeFieldDefs(typeResolver, buffer, typeDef.fieldDefs); err != nil {
-		return nil, fmt.Errorf("failed to write fields def: %w", err)
+	if isStructTypeId(TypeId(typeDef.typeId)) {
+		if err := writeFieldDefs(typeResolver, buffer, typeDef.fieldDefs); err != nil {
+			return nil, fmt.Errorf("failed to write fields def: %w", err)
+		}
+	} else if len(typeDef.fieldDefs) != 0 {
+		return nil, fmt.Errorf("non-struct TypeDef %d cannot carry field metadata", typeDef.typeId)
 	}
 
-	// Temporary xlang behavior: keep TypeMeta uncompressed.
-	// Some runtimes still do not support TypeMeta decompression.
-	result, err := prependGlobalHeader(buffer, false, len(typeDef.fieldDefs) > 0)
+	result, err := prependGlobalHeader(buffer, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to write global binary header: %w", err)
 	}
@@ -780,16 +802,11 @@ func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, erro
 }
 
 // prependGlobalHeader writes the 8-byte global header
-func prependGlobalHeader(buffer *ByteBuffer, isCompressed bool, hasFieldsMeta bool) (*ByteBuffer, error) {
+func prependGlobalHeader(buffer *ByteBuffer, isCompressed bool) (*ByteBuffer, error) {
 	var header uint64
 	metaSize := buffer.WriterIndex()
 
-	hashValue := Murmur3Sum64WithSeed(buffer.GetByteSlice(0, metaSize), 47)
-	header |= hashValue << (64 - NUM_HASH_BITS)
-
-	if hasFieldsMeta {
-		header |= HAS_FIELDS_META_FLAG
-	}
+	header |= typeDefHeaderHash(buffer.GetByteSlice(0, metaSize))
 
 	if isCompressed {
 		header |= COMPRESS_META_FLAG
@@ -814,23 +831,80 @@ func prependGlobalHeader(buffer *ByteBuffer, isCompressed bool, hasFieldsMeta bo
 
 // writeMetaHeader writes the 1-byte meta header
 func writeMetaHeader(buffer *ByteBuffer, typeDef *TypeDef) error {
-	// 2 bits reserved + 1 bit register by name flag + 5 bits num fields
 	offset := buffer.writerIndex
 	if err := buffer.WriteByte(0xFF); err != nil {
 		return err
 	}
 	fieldInfos := typeDef.fieldDefs
-	header := len(fieldInfos)
-	if header > SmallNumFieldsThreshold {
-		header = SmallNumFieldsThreshold
-		buffer.WriteVarUint32(uint32(len(fieldInfos) - SmallNumFieldsThreshold))
-	}
-	if typeDef.registerByName {
-		header |= REGISTER_BY_NAME_FLAG
+	typeID := TypeId(typeDef.typeId)
+	var header int
+	if isStructTypeId(typeID) {
+		fieldCount := len(fieldInfos)
+		inlineFieldCount := fieldCount
+		if inlineFieldCount > SmallNumFieldsThreshold {
+			inlineFieldCount = SmallNumFieldsThreshold
+		}
+		header = StructTypeDefFlag | inlineFieldCount
+		if typeID == COMPATIBLE_STRUCT || typeID == NAMED_COMPATIBLE_STRUCT {
+			header |= CompatibleTypeDefFlag
+		}
+		if fieldCount >= SmallNumFieldsThreshold {
+			buffer.WriteVarUint32(uint32(fieldCount - SmallNumFieldsThreshold))
+		}
+		if typeDef.registerByName {
+			header |= RegisterByNameFlag
+		}
+	} else {
+		if len(fieldInfos) != 0 {
+			return fmt.Errorf("non-struct TypeDef %d cannot carry field metadata", typeDef.typeId)
+		}
+		kindCode, err := xlangNonStructKindCode(typeID)
+		if err != nil {
+			return err
+		}
+		header = kindCode
 	}
 
 	buffer.PutUint8(offset, uint8(header))
 	return nil
+}
+
+func xlangNonStructKindCode(typeID TypeId) (int, error) {
+	switch typeID {
+	case ENUM:
+		return 0, nil
+	case NAMED_ENUM:
+		return 1, nil
+	case EXT:
+		return 2, nil
+	case NAMED_EXT:
+		return 3, nil
+	case TYPED_UNION:
+		return 4, nil
+	case NAMED_UNION:
+		return 5, nil
+	default:
+		return 0, fmt.Errorf("unsupported TypeDef kind %d", typeID)
+	}
+}
+
+func xlangNonStructTypeID(kindCode int) (TypeId, error) {
+	switch kindCode {
+	case 0:
+		return ENUM, nil
+	case 1:
+		return NAMED_ENUM, nil
+	case 2:
+		return EXT, nil
+	case 3:
+		return NAMED_EXT, nil
+	case 4:
+		return TYPED_UNION, nil
+	case 5:
+		return NAMED_UNION, nil
+	default:
+		return UNKNOWN, fmt.Errorf("unsupported TypeDef kind code %d", kindCode)
+	}
 }
 
 // writeFieldDefs writes field definitions according to the specification
@@ -913,8 +987,8 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 /*
 decodeTypeDef decodes a TypeDef from the buffer
 typeDef are layout as following:
-  - first 8 bytes: global header (50 bits hash + 1 bit compress flag + write fields meta + 8 bits meta size)
-  - next 1 byte: meta header (2 bits reserved + 1 bit register by name flag + 5 bits num fields)
+  - first 8 bytes: global header (52 bits hash + 1 bit compress flag + 8 bits meta size)
+  - next 1 byte: kind header
   - next variable bytes: type id (varint) or ns name + type name
   - next variable bytes: field definitions (see below)
 */
@@ -922,14 +996,29 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	// ReadData 8-byte global header
 	var bufErr Error
 	globalHeader := header
-	hasFieldsMeta := (globalHeader & HAS_FIELDS_META_FLAG) != 0
+	if (globalHeader & RESERVED_META_BITS) != 0 {
+		return nil, fmt.Errorf("invalid TypeDef global header")
+	}
 	isCompressed := (globalHeader & COMPRESS_META_FLAG) != 0
+	if isCompressed {
+		return nil, fmt.Errorf("compressed xlang TypeDef is not supported")
+	}
 	metaSizeBits := int(globalHeader & META_SIZE_MASK)
 	metaSize := metaSizeBits
 	extraMetaSize := 0
 	if metaSizeBits == META_SIZE_MASK {
-		extraMetaSize = int(buffer.ReadVarUint32(&bufErr))
+		extra := buffer.ReadVarUint32(&bufErr)
+		if bufErr.HasError() {
+			return nil, bufErr.TakeError()
+		}
+		if uint64(extra) > uint64(MaxInt-metaSize) {
+			return nil, fmt.Errorf("invalid TypeDef metadata size")
+		}
+		extraMetaSize = int(extra)
 		metaSize += extraMetaSize
+	}
+	if metaSize > fory.config.MaxBinarySize {
+		return nil, MaxBinarySizeExceededError(metaSize, fory.config.MaxBinarySize)
 	}
 
 	// Store the encoded bytes for the TypeDef (including meta header and metadata)
@@ -937,34 +1026,54 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 	if bufErr.HasError() {
 		return nil, bufErr.TakeError()
 	}
-	decodedMeta := encodedMeta
-	if isCompressed {
-		decodedMetaBytes, err := decompressMeta(encodedMeta)
-		if err != nil {
-			return nil, err
-		}
-		decodedMeta = decodedMetaBytes
-	}
-	metaBuffer := NewByteBuffer(decodedMeta)
+	metaBuffer := NewByteBuffer(encodedMeta)
 	var metaErr Error
 
 	// ReadData 1-byte meta header
 	metaHeaderByte := metaBuffer.ReadByte(&metaErr)
-	// Extract field count from lower 5 bits
-	fieldCount := int(metaHeaderByte & SmallNumFieldsThreshold)
-	if fieldCount == SmallNumFieldsThreshold {
-		fieldCount += int(metaBuffer.ReadVarUint32(&metaErr))
-	}
-	if fieldCount > fory.config.MaxTypeFields || fieldCount > metaBuffer.remaining() {
-		return nil, fmt.Errorf("field count exceeds maximum allowed limit or available buffer size")
-	}
-	registeredByName := (metaHeaderByte & REGISTER_BY_NAME_FLAG) != 0
+	isStruct := (metaHeaderByte & StructTypeDefFlag) != 0
+	fieldCount := 0
+	registeredByName := false
 
 	// ReadData name or type ID according to the registerByName flag
 	var typeId uint32
 	userTypeId := invalidUserTypeID
 	var nsBytes, nameBytes *MetaStringBytes
 	var type_ reflect.Type
+	if isStruct {
+		registeredByName = (metaHeaderByte & RegisterByNameFlag) != 0
+		fieldCount = int(metaHeaderByte & SmallNumFieldsThreshold)
+		if fieldCount == SmallNumFieldsThreshold {
+			fieldCount += int(metaBuffer.ReadVarUint32(&metaErr))
+		}
+		if metaErr.HasError() {
+			return nil, metaErr.TakeError()
+		}
+		if fieldCount > fory.config.MaxTypeFields || fieldCount > metaBuffer.remaining() {
+			return nil, fmt.Errorf("field count exceeds maximum allowed limit or available buffer size")
+		}
+		if registeredByName {
+			if (metaHeaderByte & CompatibleTypeDefFlag) != 0 {
+				typeId = uint32(NAMED_COMPATIBLE_STRUCT)
+			} else {
+				typeId = uint32(NAMED_STRUCT)
+			}
+		} else if (metaHeaderByte & CompatibleTypeDefFlag) != 0 {
+			typeId = uint32(COMPATIBLE_STRUCT)
+		} else {
+			typeId = uint32(STRUCT)
+		}
+	} else {
+		if (metaHeaderByte & 0b0111_0000) != 0 {
+			return nil, fmt.Errorf("invalid TypeDef kind header")
+		}
+		kindType, err := xlangNonStructTypeID(int(metaHeaderByte & 0b1111))
+		if err != nil {
+			return nil, err
+		}
+		typeId = uint32(kindType)
+		registeredByName = IsNamespacedType(kindType)
+	}
 	if registeredByName {
 		// ReadData namespace and type name for namespaced types
 		// NOTE: TypeDefs use simple name format, not meta string format with dynamic IDs
@@ -974,7 +1083,14 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 		nsEncodingFlags := nsHeader & 0b11 // 2 bits for encoding
 		nsSize := nsHeader >> 2            // 6 bits for size
 		if nsSize == BIG_NAME_THRESHOLD {
-			nsSize = int(metaBuffer.ReadVarUint32Small7(&metaErr)) + BIG_NAME_THRESHOLD
+			extra := metaBuffer.ReadVarUint32Small7(&metaErr)
+			if metaErr.HasError() {
+				return nil, metaErr.TakeError()
+			}
+			if uint64(extra) > uint64(MaxInt-BIG_NAME_THRESHOLD) {
+				return nil, fmt.Errorf("invalid TypeDef namespace length")
+			}
+			nsSize = int(extra) + BIG_NAME_THRESHOLD
 		}
 
 		// Java pkg encoding: 0=UTF_8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL
@@ -989,6 +1105,9 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 		default:
 			return nil, fmt.Errorf("invalid package encoding flags: %d", nsEncodingFlags)
 		}
+		if nsSize > metaBuffer.remaining() {
+			return nil, fmt.Errorf("TypeDef namespace length %d exceeds remaining metadata %d", nsSize, metaBuffer.remaining())
+		}
 		nsData := make([]byte, nsSize)
 		if _, err := metaBuffer.Read(nsData); err != nil {
 			return nil, fmt.Errorf("failed to read namespace data: %w", err)
@@ -1000,7 +1119,14 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 		typeEncodingFlags := typeHeader & 0b11 // 2 bits for encoding
 		typeSize := typeHeader >> 2            // 6 bits for size
 		if typeSize == BIG_NAME_THRESHOLD {
-			typeSize = int(metaBuffer.ReadVarUint32Small7(&metaErr)) + BIG_NAME_THRESHOLD
+			extra := metaBuffer.ReadVarUint32Small7(&metaErr)
+			if metaErr.HasError() {
+				return nil, metaErr.TakeError()
+			}
+			if uint64(extra) > uint64(MaxInt-BIG_NAME_THRESHOLD) {
+				return nil, fmt.Errorf("invalid TypeDef typename length")
+			}
+			typeSize = int(extra) + BIG_NAME_THRESHOLD
 		}
 
 		// Java typename encoding: 0=UTF_8, 1=ALL_TO_LOWER_SPECIAL, 2=LOWER_UPPER_DIGIT_SPECIAL, 3=FIRST_TO_LOWER_SPECIAL
@@ -1016,6 +1142,9 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			typeEncoding = meta.FIRST_TO_LOWER_SPECIAL
 		default:
 			return nil, fmt.Errorf("invalid typename encoding flags: %d", typeEncodingFlags)
+		}
+		if typeSize > metaBuffer.remaining() {
+			return nil, fmt.Errorf("TypeDef typename length %d exceeds remaining metadata %d", typeSize, metaBuffer.remaining())
 		}
 		typeData := make([]byte, typeSize)
 		if _, err := metaBuffer.Read(typeData); err != nil {
@@ -1059,18 +1188,19 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			if type_.Kind() == reflect.Ptr {
 				type_ = type_.Elem()
 			}
-			typeId = uint32(info.TypeID)
+			if uint32(info.TypeID) != typeId {
+				return nil, fmt.Errorf("TypeDef kind does not match registered type metadata")
+			}
 			userTypeId = info.UserTypeID
 		} else {
-			// Type not registered - use NAMED_STRUCT as default typeId
-			// The type_ will remain nil and will be set from field definitions later
-			typeId = uint32(NAMED_STRUCT)
 			type_ = nil
 		}
 	} else {
-		typeId = uint32(metaBuffer.ReadUint8(&metaErr))
 		userTypeId = metaBuffer.ReadVarUint32(&metaErr)
 		if info, exists := fory.typeResolver.userTypeIdToTypeInfo[userTypeId]; exists {
+			if uint32(info.TypeID) != typeId {
+				return nil, fmt.Errorf("TypeDef kind does not match registered type metadata")
+			}
 			type_ = info.Type
 		} else if info, exists := fory.typeResolver.typeIDToTypeInfo[typeId]; exists {
 			type_ = info.Type
@@ -1083,14 +1213,24 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 
 	// ReadData fields information
 	fieldInfos := make([]FieldDef, fieldCount)
-	if hasFieldsMeta {
-		for i := 0; i < fieldCount; i++ {
-			fieldInfo, err := readFieldDef(fory.typeResolver, metaBuffer)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read field def %d: %w", i, err)
-			}
-			fieldInfos[i] = fieldInfo
+	for i := 0; i < fieldCount; i++ {
+		fieldInfo, err := readFieldDef(fory.typeResolver, metaBuffer)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read field def %d: %w", i, err)
 		}
+		fieldInfos[i] = fieldInfo
+	}
+	if !isStruct && len(fieldInfos) != 0 {
+		return nil, fmt.Errorf("non-struct TypeDef cannot carry field metadata")
+	}
+	if metaErr.HasError() {
+		return nil, metaErr.TakeError()
+	}
+	if remaining := metaBuffer.remaining(); remaining != 0 {
+		return nil, fmt.Errorf("TypeDef metadata body has %d trailing bytes", remaining)
+	}
+	if err := validateParsedTypeDefHash(globalHeader, metaSizeBits, extraMetaSize, encodedMeta); err != nil {
+		return nil, err
 	}
 
 	encoded := buildTypeDefEncoded(globalHeader, metaSizeBits, extraMetaSize, encodedMeta)
@@ -1130,17 +1270,32 @@ func buildTypeDefEncoded(header int64, metaSizeBits, extraMetaSize int, metaByte
 	return buffer.Bytes()
 }
 
-func decompressMeta(encoded []byte) ([]byte, error) {
-	reader, err := zlib.NewReader(bytes.NewReader(encoded))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create meta decompressor: %w", err)
+func typeDefHeaderHash(data []byte) uint64 {
+	hash := int64(Murmur3Sum64WithSeed(data, 47) << (64 - NUM_HASH_BITS))
+	if hash < 0 {
+		hash = -hash
 	}
-	defer reader.Close()
-	decoded, err := io.ReadAll(reader)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decompress meta: %w", err)
+	hashMask := ^uint64(0)
+	hashMask <<= uint(64 - NUM_HASH_BITS)
+	return uint64(hash) & hashMask
+}
+
+func validateParsedTypeDefHash(header int64, metaSizeBits, extraMetaSize int, encoded []byte) error {
+	size := metaSizeBits
+	if size == META_SIZE_MASK {
+		size += extraMetaSize
 	}
-	return decoded, nil
+	if len(encoded) != size {
+		return fmt.Errorf("invalid TypeDef encoded size")
+	}
+	hashMask := ^uint64(0)
+	hashMask <<= uint(64 - NUM_HASH_BITS)
+	expectedHeaderHash := typeDefHeaderHash(encoded)
+	actualHeaderHash := uint64(header) & hashMask
+	if expectedHeaderHash != actualHeaderHash {
+		return fmt.Errorf("invalid TypeDef metadata hash")
+	}
+	return nil
 }
 
 /*
@@ -1174,13 +1329,23 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 		// Read tag ID
 		tagID := sizeBits
 		if sizeBits == 0x0F {
-			tagID = FieldNameSizeThreshold + int(buffer.ReadVarUint32(&bufErr))
+			extra := buffer.ReadVarUint32(&bufErr)
+			if bufErr.HasError() {
+				return FieldDef{}, bufErr.TakeError()
+			}
+			if uint64(extra) > uint64(MaxInt-FieldNameSizeThreshold) {
+				return FieldDef{}, fmt.Errorf("invalid TypeDef field tag ID")
+			}
+			tagID = FieldNameSizeThreshold + int(extra)
 		}
 
 		// Read field type
 		ft, err := readFieldType(buffer, 0, maxDepth, &bufErr)
 		if err != nil {
 			return FieldDef{}, err
+		}
+		if bufErr.HasError() {
+			return FieldDef{}, bufErr.TakeError()
 		}
 
 		return FieldDef{
@@ -1197,7 +1362,14 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 	nameEncoding := fieldNameEncodings[nameEncodingFlag]
 	nameLen := sizeBits
 	if nameLen == 0x0F {
-		nameLen = FieldNameSizeThreshold + int(buffer.ReadVarUint32(&bufErr))
+		extra := buffer.ReadVarUint32(&bufErr)
+		if bufErr.HasError() {
+			return FieldDef{}, bufErr.TakeError()
+		}
+		if uint64(extra) > uint64(MaxInt-FieldNameSizeThreshold) {
+			return FieldDef{}, fmt.Errorf("invalid TypeDef field name length")
+		}
+		nameLen = FieldNameSizeThreshold + int(extra)
 	} else {
 		nameLen++ // Adjust for 1-based encoding
 	}
@@ -1207,9 +1379,18 @@ func readFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer) (FieldDef, err
 	if err != nil {
 		return FieldDef{}, err
 	}
+	if bufErr.HasError() {
+		return FieldDef{}, bufErr.TakeError()
+	}
 
 	// Read field name based on encoding
+	if nameLen > buffer.remaining() {
+		return FieldDef{}, fmt.Errorf("TypeDef field name length %d exceeds remaining metadata %d", nameLen, buffer.remaining())
+	}
 	nameBytes := buffer.ReadBinary(nameLen, &bufErr)
+	if bufErr.HasError() {
+		return FieldDef{}, bufErr.TakeError()
+	}
 	fieldName, err := typeResolver.typeNameDecoder.Decode(nameBytes, nameEncoding)
 	if err != nil {
 		return FieldDef{}, fmt.Errorf("failed to decode field name: %w", err)

@@ -2716,6 +2716,28 @@ public final class MemoryBuffer {
     return Platform.arrayEquals(heapMemory, pos1, buf2.heapMemory, pos2, len);
   }
 
+  /**
+   * Equals a memory buffer region with a byte array region.
+   *
+   * @param bytes Array to compare with
+   * @param bytesOffset Offset of bytes to start comparing
+   * @param offset Offset of this buffer to start comparing
+   * @param len Length of the compared memory region
+   * @return true if regions are equal or len zero, false otherwise
+   */
+  public boolean equalTo(byte[] bytes, int bytesOffset, int offset, int len) {
+    checkArgument(bytes != null);
+    checkArgument(len >= 0);
+    checkArgument(bytesOffset >= 0 && bytesOffset <= bytes.length - len);
+    checkArgument(offset >= 0 && offset <= size - len);
+    if (len == 0) {
+      return true;
+    }
+    final long pos = address + offset;
+    return Platform.arrayEquals(
+        heapMemory, pos, bytes, Platform.BYTE_ARRAY_OFFSET + bytesOffset, len);
+  }
+
   @Override
   public String toString() {
     return "MemoryBuffer{"

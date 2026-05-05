@@ -23,11 +23,12 @@ import java.util.Arrays;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.LongLongByteMap;
 import org.apache.fory.collection.LongMap;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.EncodedMetaString;
+import org.apache.fory.meta.MetaString;
 import org.apache.fory.resolver.SharedRegistry;
-import org.apache.fory.util.MurmurHash3;
 
 /**
  * Read-side state for meta-string references.
@@ -40,6 +41,9 @@ public final class MetaStringReader {
   private static final int INITIAL_CAPACITY = 2;
   private static final float LOAD_FACTOR = 0.5f;
   private static final int SMALL_STRING_THRESHOLD = 16;
+  private static final int ENCODING_BITS = 4;
+  private static final int MAX_CACHED_READ_META_STRINGS = 8192;
+  private static final int MAX_CACHED_READ_META_STRING_LENGTH = 2048;
 
   private final LongMap<EncodedMetaString> hash2MetaStringMap =
       new LongMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
@@ -47,7 +51,7 @@ public final class MetaStringReader {
       new LongLongByteMap<>(INITIAL_CAPACITY, LOAD_FACTOR);
   private final SharedRegistry sharedRegistry;
   private EncodedMetaString[] dynamicReadStringIds = new EncodedMetaString[INITIAL_CAPACITY];
-  private short dynamicReadStringId;
+  private int dynamicReadStringId;
 
   /** Creates an empty reader state for one deserialization stream. */
   public MetaStringReader(SharedRegistry sharedRegistry) {
@@ -68,7 +72,7 @@ public final class MetaStringReader {
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
-    return dynamicReadStringIds[len - 1];
+    return readDynamicString(len);
   }
 
   /**
@@ -88,7 +92,7 @@ public final class MetaStringReader {
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
-    return dynamicReadStringIds[len - 1];
+    return readDynamicString(len);
   }
 
   /** Reads a meta string from the current buffer, including any dynamic-id indirection. */
@@ -103,7 +107,7 @@ public final class MetaStringReader {
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
-    return dynamicReadStringIds[len - 1];
+    return readDynamicString(len);
   }
 
   /**
@@ -121,29 +125,69 @@ public final class MetaStringReader {
       updateDynamicString(encodedMetaString);
       return encodedMetaString;
     }
-    return dynamicReadStringIds[len - 1];
+    return readDynamicString(len);
   }
 
   private EncodedMetaString readBigMetaString(
       MemoryBuffer buffer, EncodedMetaString cache, int len) {
     long hashCode = buffer.readInt64();
-    if (cache.hash == hashCode) {
-      buffer.increaseReaderIndex(len);
+    if (cache.hash == hashCode && cache.bytes.length == len) {
+      buffer.checkReadableBytes(len);
+      buffer._increaseReaderIndexUnsafe(len);
       return cache;
     }
     return readBigMetaString(buffer, len, hashCode);
   }
 
   private EncodedMetaString readBigMetaString(MemoryBuffer buffer, int len, long hashCode) {
+    buffer.checkReadableBytes(len);
     EncodedMetaString encodedMetaString = hash2MetaStringMap.get(hashCode);
-    if (encodedMetaString == null) {
-      encodedMetaString =
-          sharedRegistry.getOrCreateEncodedMetaString(buffer.readBytes(len), hashCode);
-      hash2MetaStringMap.put(hashCode, encodedMetaString);
+    if (encodedMetaString != null && encodedMetaString.bytes.length == len) {
+      buffer._increaseReaderIndexUnsafe(len);
       return encodedMetaString;
     }
-    buffer.increaseReaderIndex(len);
+    byte[] bytes = readAndValidateBigMetaString(buffer, len, hashCode);
+    EncodedMetaString canonicalMetaString =
+        sharedRegistry.getOrCreateEncodedMetaString(bytes, hashCode);
+    if (encodedMetaString == null
+        && len <= MAX_CACHED_READ_META_STRING_LENGTH
+        && hash2MetaStringMap.size < MAX_CACHED_READ_META_STRINGS) {
+      hash2MetaStringMap.put(hashCode, canonicalMetaString);
+    }
+    return canonicalMetaString;
+  }
+
+  private byte[] readAndValidateBigMetaString(MemoryBuffer buffer, int len, long hashCode) {
+    byte[] bytes = buffer.readBytes(len);
+    MetaString.Encoding encoding = MetaString.Encoding.fromInt((int) (hashCode & 0xff));
+    long canonicalHash = EncodedMetaString.computeHash(bytes, encoding);
+    if (canonicalHash != hashCode) {
+      throw new ForyException("Malformed meta string hash");
+    }
+    return bytes;
+  }
+
+  private boolean shouldCacheSmallMetaString() {
+    return longLongMetaStringMap.size < MAX_CACHED_READ_META_STRINGS;
+  }
+
+  private EncodedMetaString cacheSmallMetaString(
+      long v1, long v2, byte key, EncodedMetaString encodedMetaString) {
+    if (shouldCacheSmallMetaString()) {
+      longLongMetaStringMap.put(v1, v2, key, encodedMetaString);
+    }
     return encodedMetaString;
+  }
+
+  private EncodedMetaString createSmallMetaString(
+      int len, MetaString.Encoding encoding, byte key, long v1, long v2) {
+    byte[] data = new byte[16];
+    LittleEndian.putInt64(data, 0, v1);
+    LittleEndian.putInt64(data, 8, v2);
+    byte[] bytes = Arrays.copyOf(data, len);
+    long hashCode = EncodedMetaString.computeHash(bytes, encoding);
+    return cacheSmallMetaString(
+        v1, v2, key, sharedRegistry.getOrCreateEncodedMetaString(bytes, hashCode));
   }
 
   private EncodedMetaString readSmallMetaString(MemoryBuffer buffer, int len) {
@@ -159,9 +203,11 @@ public final class MetaStringReader {
       v1 = buffer.readInt64();
       v2 = buffer.readBytesAsInt64(len - 8);
     }
-    EncodedMetaString encodedMetaString = longLongMetaStringMap.get(v1, v2, encoding);
+    int encodingValue = encoding & 0xff;
+    byte key = smallMetaStringKey(len, encodingValue);
+    EncodedMetaString encodedMetaString = longLongMetaStringMap.get(v1, v2, key);
     if (encodedMetaString == null) {
-      return createSmallMetaString(len, encoding, v1, v2);
+      return createSmallMetaString(len, MetaString.Encoding.fromInt(encodingValue), key, v1, v2);
     }
     return encodedMetaString;
   }
@@ -180,39 +226,45 @@ public final class MetaStringReader {
       v1 = buffer.readInt64();
       v2 = buffer.readBytesAsInt64(len - 8);
     }
-    if (cache.first8Bytes == v1 && cache.second8Bytes == v2) {
+    int encodingValue = encoding & 0xff;
+    if (cache.bytes.length == len
+        && cache.encodingValue == encodingValue
+        && cache.first8Bytes == v1
+        && cache.second8Bytes == v2) {
       return cache;
     }
-    EncodedMetaString encodedMetaString = longLongMetaStringMap.get(v1, v2, encoding);
+    byte key = smallMetaStringKey(len, encodingValue);
+    EncodedMetaString encodedMetaString = longLongMetaStringMap.get(v1, v2, key);
     if (encodedMetaString == null) {
-      return createSmallMetaString(len, encoding, v1, v2);
+      return createSmallMetaString(len, MetaString.Encoding.fromInt(encodingValue), key, v1, v2);
     }
     return encodedMetaString;
   }
 
-  private EncodedMetaString createSmallMetaString(int len, byte encoding, long v1, long v2) {
-    byte[] data = new byte[16];
-    LittleEndian.putInt64(data, 0, v1);
-    LittleEndian.putInt64(data, 8, v2);
-    long hashCode = MurmurHash3.murmurhash3_x64_128(data, 0, len, 47)[0];
-    hashCode = Math.abs(hashCode);
-    hashCode = (hashCode & 0xffffffffffffff00L) | encoding;
-    EncodedMetaString encodedMetaString =
-        sharedRegistry.getOrCreateEncodedMetaString(Arrays.copyOf(data, len), hashCode);
-    longLongMetaStringMap.put(v1, v2, encoding, encodedMetaString);
-    return encodedMetaString;
+  private static byte smallMetaStringKey(int len, int encodingValue) {
+    return (byte) (((len - 1) << ENCODING_BITS) | encodingValue);
+  }
+
+  private EncodedMetaString readDynamicString(int dynamicId) {
+    if (dynamicId <= 0 || dynamicId > dynamicReadStringId) {
+      throw new ForyException("Invalid meta string reference id " + dynamicId);
+    }
+    return dynamicReadStringIds[dynamicId - 1];
   }
 
   private void updateDynamicString(EncodedMetaString encodedMetaString) {
-    short currentDynamicReadId = dynamicReadStringId++;
+    int currentDynamicReadId = dynamicReadStringId++;
     EncodedMetaString[] readStringIds = dynamicReadStringIds;
     if (readStringIds.length <= currentDynamicReadId) {
+      if (currentDynamicReadId >= MAX_CACHED_READ_META_STRINGS) {
+        throw new ForyException("Too many meta string references in payload");
+      }
       readStringIds = dynamicReadStringIds = growRead(readStringIds, currentDynamicReadId);
     }
     readStringIds[currentDynamicReadId] = encodedMetaString;
   }
 
-  private EncodedMetaString[] growRead(EncodedMetaString[] current, int id) {
+  private static EncodedMetaString[] growRead(EncodedMetaString[] current, int id) {
     int newLength = current.length;
     while (newLength <= id) {
       newLength <<= 1;

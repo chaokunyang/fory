@@ -19,11 +19,17 @@ from pyfory.context import EncodedMetaString, EMPTY_ENCODED_META_STRING
 from pyfory.resolver import NULL_FLAG, REF_FLAG, NOT_NULL_VALUE_FLAG, REF_VALUE_FLAG
 
 
+cdef extern from "fory/thirdparty/MurmurHash3.h":
+    void MurmurHash3_x64_128(const void *key, int len, uint32_t seed, void *out) nogil
+
+
 INT64_TYPE_ID = TypeId.VARINT64
 FLOAT64_TYPE_ID = TypeId.FLOAT64
 BOOL_TYPE_ID = TypeId.BOOL
 STRING_TYPE_ID = TypeId.STRING
 SMALL_STRING_THRESHOLD = 16
+cdef int32_t MAX_CACHED_META_STRINGS = 8192
+cdef int32_t MAX_CACHED_META_STRING_LENGTH = 2048
 
 
 cdef inline uint64_t _mix64(uint64_t x):
@@ -309,11 +315,20 @@ cdef class MetaStringWriter:
 cdef class MetaStringReader:
     cdef object shared_registry
     cdef vector[PyObject *] _c_dynamic_id_to_encoded_meta_string_vec
+    cdef vector[PyObject *] _c_owned_dynamic_encoded_meta_string_vec
+    cdef vector[PyObject *] _c_cached_encoded_meta_string_vec
     cdef flat_hash_map[int64_t, PyObject *] _c_hash_to_encoded_meta_string
     cdef flat_hash_map[int64_t, PyObject *] _c_hash_to_small_encoded_meta_string
 
     def __init__(self, shared_registry):
         self.shared_registry = shared_registry
+
+    def __dealloc__(self):
+        cdef PyObject *item
+        self.reset()
+        for item in self._c_cached_encoded_meta_string_vec:
+            Py_XDECREF(item)
+        self._c_cached_encoded_meta_string_vec.clear()
 
     cpdef inline read_encoded_meta_string(self, Buffer buffer):
         cdef int32_t header = buffer.read_var_uint32()
@@ -321,12 +336,16 @@ cdef class MetaStringReader:
         cdef int64_t v1 = 0
         cdef int64_t v2 = 0
         cdef int64_t hashcode
+        cdef int64_t canonical_hash
+        cdef int64_t[2] hash_out
         cdef PyObject *encoded_meta_string_ptr
         cdef int32_t reader_index
         cdef int8_t encoding = 0
         cdef bytes data
+        cdef bytes cached_data
         cdef object encoded_meta_string
         cdef pair[int64_t, PyObject *] *entry
+        cdef bint cache_entry
         if header & 0b1:
             if length <= 0:
                 raise ValueError("Invalid dynamic metastring id 0")
@@ -344,39 +363,91 @@ cdef class MetaStringReader:
             else:
                 v1 = buffer.read_int64()
                 v2 = buffer.read_bytes_as_int64(length - 8)
+            if <uint8_t> encoding > 4:
+                raise ValueError(f"Unexpected encoding flag: {encoding}")
             hashcode = _hash_small_metastring(v1, v2, length, <uint8_t> encoding)
             entry = self._c_hash_to_small_encoded_meta_string.find(hashcode)
             if entry == NULL or deref(entry).second == NULL:
                 reader_index = buffer.get_reader_index()
                 data = buffer.get_bytes(reader_index - length, length)
+                cache_entry = self._c_hash_to_small_encoded_meta_string.size() < MAX_CACHED_META_STRINGS
                 encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(
                     data,
                     hashcode,
                 )
                 encoded_meta_string_ptr = <PyObject *> encoded_meta_string
-                self._c_hash_to_small_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+                if cache_entry:
+                    Py_INCREF(<object> encoded_meta_string_ptr)
+                    self._c_cached_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
+                    self._c_hash_to_small_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+                else:
+                    Py_INCREF(<object> encoded_meta_string_ptr)
+                    self._c_owned_dynamic_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
             else:
                 encoded_meta_string_ptr = deref(entry).second
         else:
             hashcode = buffer.read_int64()
+            if (hashcode & 0xFF) > 4:
+                raise ValueError(f"Unexpected encoding flag: {hashcode & 0xFF}")
             reader_index = buffer.get_reader_index()
             buffer.check_bound(reader_index, length)
-            buffer.set_reader_index(reader_index + length)
             entry = self._c_hash_to_encoded_meta_string.find(hashcode)
+            if entry != NULL and deref(entry).second != NULL:
+                cached_data = (<object> deref(entry).second).data
+                if (
+                    PyBytes_GET_SIZE(cached_data) == length
+                    and memcmp(
+                        <void *>(buffer.c_buffer.data() + reader_index),
+                        <void *> PyBytes_AS_STRING(cached_data),
+                        length,
+                    ) == 0
+                ):
+                    buffer.set_reader_index(reader_index + length)
+                    encoded_meta_string_ptr = deref(entry).second
+                    self._c_dynamic_id_to_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
+                    return <object> encoded_meta_string_ptr
+            MurmurHash3_x64_128(
+                <void *>(buffer.c_buffer.data() + reader_index),
+                length,
+                47,
+                &hash_out[0],
+            )
+            canonical_hash = <int64_t>(
+                ((<uint64_t> hash_out[0]) & <uint64_t> 0xffffffffffffff00)
+                | <uint64_t> (hashcode & 0xFF)
+            )
+            if canonical_hash != hashcode:
+                raise ValueError("Malformed metastring hash")
+            buffer.set_reader_index(reader_index + length)
+            data = buffer.get_bytes(reader_index, length)
+            encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(
+                data,
+                hashcode,
+            )
+            encoded_meta_string_ptr = <PyObject *> encoded_meta_string
             if entry == NULL or deref(entry).second == NULL:
-                data = buffer.get_bytes(reader_index, length)
-                encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(
-                    data,
-                    hashcode,
+                cache_entry = (
+                    self._c_hash_to_encoded_meta_string.size() < MAX_CACHED_META_STRINGS
+                    and length <= MAX_CACHED_META_STRING_LENGTH
                 )
-                encoded_meta_string_ptr = <PyObject *> encoded_meta_string
-                self._c_hash_to_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+                if cache_entry:
+                    Py_INCREF(<object> encoded_meta_string_ptr)
+                    self._c_cached_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
+                    self._c_hash_to_encoded_meta_string[hashcode] = encoded_meta_string_ptr
+                else:
+                    Py_INCREF(<object> encoded_meta_string_ptr)
+                    self._c_owned_dynamic_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
             else:
-                encoded_meta_string_ptr = deref(entry).second
+                Py_INCREF(<object> encoded_meta_string_ptr)
+                self._c_owned_dynamic_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
         self._c_dynamic_id_to_encoded_meta_string_vec.push_back(encoded_meta_string_ptr)
         return <object> encoded_meta_string_ptr
 
     cpdef inline reset(self):
+        cdef PyObject *item
+        for item in self._c_owned_dynamic_encoded_meta_string_vec:
+            Py_XDECREF(item)
+        self._c_owned_dynamic_encoded_meta_string_vec.clear()
         self._c_dynamic_id_to_encoded_meta_string_vec.clear()
 
 

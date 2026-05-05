@@ -49,8 +49,7 @@ import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.Utils;
 
 /**
- * An encoder which encode {@link TypeDef} into binary. Global header layout follows the xlang spec
- * with an 8-bit meta size and flags at bits 8/9. See spec documentation:
+ * An encoder which encode {@link TypeDef} into binary. See spec documentation:
  * docs/specification/fory_xlang_serialization_spec.md <a
  * href="https://fory.apache.org/docs/specification/fory_xlang_serialization_spec">...</a>
  */
@@ -115,7 +114,6 @@ class TypeDefEncoder {
         new TypeDef(
             new ClassSpec(type, typeInfo.getTypeId(), typeInfo.getUserTypeId()),
             fieldInfos,
-            true,
             encodeTypeDef.getInt64(0),
             typeDefBytes);
     if (Utils.DEBUG_OUTPUT_ENABLED) {
@@ -125,43 +123,82 @@ class TypeDefEncoder {
   }
 
   static final int SMALL_NUM_FIELDS_THRESHOLD = 0b11111;
-  static final int REGISTER_BY_NAME_FLAG = 0b100000;
+  static final int REGISTER_BY_NAME_FLAG = 0b0010_0000;
+  static final int COMPATIBLE_FLAG = 0b0100_0000;
+  static final int STRUCT_FLAG = 0b1000_0000;
   static final int FIELD_NAME_SIZE_THRESHOLD = 0b1111;
 
   // see spec documentation: docs/specification/xlang_serialization_spec.md
   // https://fory.apache.org/docs/specification/fory_xlang_serialization_spec
   static MemoryBuffer encodeTypeDef(XtypeResolver resolver, Class<?> type, List<FieldInfo> fields) {
     TypeInfo typeInfo = resolver.getTypeInfo(type);
+    int typeId = typeInfo.getTypeId();
+    boolean isStruct = Types.isStructType(typeId);
+    Preconditions.checkArgument(
+        isStruct || fields.isEmpty(), "Non-struct TypeDef %s cannot carry field metadata", typeId);
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
     buffer.writeByte(-1); // placeholder for header, update later
-    int currentClassHeader = fields.size();
-    if (fields.size() >= SMALL_NUM_FIELDS_THRESHOLD) {
-      currentClassHeader = SMALL_NUM_FIELDS_THRESHOLD;
-      buffer.writeVarUInt32(fields.size() - SMALL_NUM_FIELDS_THRESHOLD);
-    }
-    if (resolver.isRegisteredById(type)) {
-      buffer.writeUInt8(typeInfo.getTypeId());
-      Preconditions.checkArgument(
-          typeInfo.getUserTypeId() != -1,
-          "User type id is required for typeId %s",
-          typeInfo.getTypeId());
-      buffer.writeVarUInt32(typeInfo.getUserTypeId());
+    if (isStruct) {
+      int fieldCount = fields.size();
+      int currentClassHeader = STRUCT_FLAG | Math.min(fieldCount, SMALL_NUM_FIELDS_THRESHOLD);
+      if (typeId == Types.COMPATIBLE_STRUCT || typeId == Types.NAMED_COMPATIBLE_STRUCT) {
+        currentClassHeader |= COMPATIBLE_FLAG;
+      }
+      if (fieldCount >= SMALL_NUM_FIELDS_THRESHOLD) {
+        buffer.writeVarUInt32(fieldCount - SMALL_NUM_FIELDS_THRESHOLD);
+      }
+      if (resolver.isRegisteredById(type)) {
+        Preconditions.checkArgument(
+            typeInfo.getUserTypeId() != -1,
+            "User type id is required for typeId %s",
+            typeInfo.getTypeId());
+        buffer.writeVarUInt32(typeInfo.getUserTypeId());
+      } else {
+        Preconditions.checkArgument(resolver.isRegisteredByName(type));
+        currentClassHeader |= REGISTER_BY_NAME_FLAG;
+        String ns = typeInfo.decodeNamespace();
+        String typename = typeInfo.decodeTypeName();
+        writePkgName(buffer, ns);
+        writeTypeName(buffer, typename);
+      }
+      buffer.putByte(0, currentClassHeader);
+      writeFieldsInfo(resolver, buffer, fields);
     } else {
-      Preconditions.checkArgument(resolver.isRegisteredByName(type));
-      currentClassHeader |= REGISTER_BY_NAME_FLAG;
-      String ns = typeInfo.decodeNamespace();
-      String typename = typeInfo.decodeTypeName();
-      writePkgName(buffer, ns);
-      writeTypeName(buffer, typename);
+      buffer.putByte(0, nonStructKindCode(typeId));
+      if (resolver.isRegisteredById(type)) {
+        Preconditions.checkArgument(
+            typeInfo.getUserTypeId() != -1,
+            "User type id is required for typeId %s",
+            typeInfo.getTypeId());
+        buffer.writeVarUInt32(typeInfo.getUserTypeId());
+      } else {
+        Preconditions.checkArgument(resolver.isRegisteredByName(type));
+        String ns = typeInfo.decodeNamespace();
+        String typename = typeInfo.decodeTypeName();
+        writePkgName(buffer, ns);
+        writeTypeName(buffer, typename);
+      }
     }
-    buffer.putByte(0, currentClassHeader);
-    writeFieldsInfo(resolver, buffer, fields);
+    return prependHeader(buffer, false);
+  }
 
-    // Temporary xlang behavior: always write TypeMeta uncompressed.
-    // Some runtimes still don't support TypeMeta decompression, so we must avoid emitting
-    // compressed xlang TypeMeta until all xlang implementations support decompress.
-    // Note: native mode is unchanged and still uses NativeTypeDefEncoder compression flow.
-    return prependHeader(buffer, false, !fields.isEmpty());
+  static int nonStructKindCode(int typeId) {
+    switch (typeId) {
+      case Types.ENUM:
+        return 0;
+      case Types.NAMED_ENUM:
+        return 1;
+      case Types.EXT:
+        return 2;
+      case Types.NAMED_EXT:
+        return 3;
+      case Types.TYPED_UNION:
+        return 4;
+      case Types.NAMED_UNION:
+        return 5;
+      default:
+        throw new IllegalArgumentException("Unsupported TypeDef kind " + typeId);
+    }
   }
 
   static Map<String, FieldInfo> getClassFields(Class<?> type, List<FieldInfo> fieldsInfo) {

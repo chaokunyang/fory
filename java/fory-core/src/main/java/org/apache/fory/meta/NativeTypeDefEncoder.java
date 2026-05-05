@@ -23,7 +23,6 @@ import static org.apache.fory.meta.Encoders.fieldNameEncodingsList;
 import static org.apache.fory.meta.Encoders.pkgEncodingsList;
 import static org.apache.fory.meta.Encoders.typeNameEncodingsList;
 import static org.apache.fory.meta.TypeDef.COMPRESS_META_FLAG;
-import static org.apache.fory.meta.TypeDef.HAS_FIELDS_META_FLAG;
 import static org.apache.fory.meta.TypeDef.META_SIZE_MASKS;
 import static org.apache.fory.meta.TypeDef.NUM_HASH_BITS;
 
@@ -56,7 +55,6 @@ import org.apache.fory.util.MurmurHash3;
  */
 @Internal
 public class NativeTypeDefEncoder {
-  // a flag to mark a type is not struct.
   static final int NUM_CLASS_THRESHOLD = 0b1111;
   private static final java.util.function.Function<Descriptor, Descriptor> IDENTITY_DESCRIPTOR =
       descriptor -> descriptor;
@@ -142,43 +140,35 @@ public class NativeTypeDefEncoder {
   }
 
   /** Build class definition from fields of class. */
-  static TypeDef buildTypeDef(
-      ClassResolver classResolver, Class<?> type, List<Field> fields, boolean hasFieldsMeta) {
-    return buildTypeDefWithFieldInfos(
-        classResolver, type, buildFieldsInfo(classResolver, fields), hasFieldsMeta);
+  static TypeDef buildTypeDef(ClassResolver classResolver, Class<?> type, List<Field> fields) {
+    return buildTypeDefWithFieldInfos(classResolver, type, buildFieldsInfo(classResolver, fields));
   }
 
   public static TypeDef buildTypeDefWithFieldInfos(
-      ClassResolver classResolver,
-      Class<?> type,
-      List<FieldInfo> fieldInfos,
-      boolean hasFieldsMeta) {
+      ClassResolver classResolver, Class<?> type, List<FieldInfo> fieldInfos) {
     Map<String, List<FieldInfo>> classLayers = getClassFields(type, fieldInfos);
     fieldInfos = new ArrayList<>(fieldInfos.size());
     classLayers.values().forEach(fieldInfos::addAll);
-    MemoryBuffer encodeTypeDef = encodeTypeDef(classResolver, type, classLayers, hasFieldsMeta);
+    MemoryBuffer encodeTypeDef = encodeTypeDef(classResolver, type, classLayers);
     byte[] typeDefBytes = encodeTypeDef.getBytes(0, encodeTypeDef.writerIndex());
     int typeId = classResolver.getTypeIdForTypeDef(type);
     int userTypeId = classResolver.getUserTypeIdForTypeDef(type);
     ClassSpec classSpec = new ClassSpec(type, typeId, userTypeId);
-    return new TypeDef(
-        classSpec, fieldInfos, hasFieldsMeta, encodeTypeDef.getInt64(0), typeDefBytes);
+    return new TypeDef(classSpec, fieldInfos, encodeTypeDef.getInt64(0), typeDefBytes);
   }
 
   // see spec documentation: docs/specification/java_serialization_spec.md
   // https://fory.apache.org/docs/specification/fory_java_serialization_spec
   public static MemoryBuffer encodeTypeDef(
-      ClassResolver classResolver,
-      Class<?> type,
-      Map<String, List<FieldInfo>> classLayers,
-      boolean hasFieldsMeta) {
+      ClassResolver classResolver, Class<?> type, Map<String, List<FieldInfo>> classLayers) {
     MemoryBuffer typeDefBuf = MemoryBuffer.newHeapBuffer(128);
     int numClasses = classLayers.size() - 1; // num class must be greater than 0
+    int firstBodyByte = nativeKindCode(classResolver.getTypeIdForTypeDef(type)) << 4;
     if (numClasses >= NUM_CLASS_THRESHOLD) {
-      typeDefBuf.writeByte(NUM_CLASS_THRESHOLD);
+      typeDefBuf.writeByte(firstBodyByte | NUM_CLASS_THRESHOLD);
       typeDefBuf.writeVarUInt32Small7(numClasses - NUM_CLASS_THRESHOLD);
     } else {
-      typeDefBuf.writeByte(numClasses);
+      typeDefBuf.writeByte(firstBodyByte | numClasses);
     }
     for (Map.Entry<String, List<FieldInfo>> entry : classLayers.entrySet()) {
       String className = entry.getKey();
@@ -224,11 +214,10 @@ public class NativeTypeDefEncoder {
       typeDefBuf = MemoryBuffer.fromByteArray(compressed);
       typeDefBuf.writerIndex(compressed.length);
     }
-    return prependHeader(typeDefBuf, isCompressed, hasFieldsMeta);
+    return prependHeader(typeDefBuf, isCompressed);
   }
 
-  static MemoryBuffer prependHeader(
-      MemoryBuffer buffer, boolean isCompressed, boolean hasFieldsMeta) {
+  static MemoryBuffer prependHeader(MemoryBuffer buffer, boolean isCompressed) {
     int metaSize = buffer.writerIndex();
     long hash = MurmurHash3.murmurhash3_x64_128(buffer.getHeapMemory(), 0, metaSize, 47)[0];
     hash <<= (64 - NUM_HASH_BITS);
@@ -236,9 +225,6 @@ public class NativeTypeDefEncoder {
     long header = Math.abs(hash);
     if (isCompressed) {
       header |= COMPRESS_META_FLAG;
-    }
-    if (hasFieldsMeta) {
-      header |= HAS_FIELDS_META_FLAG;
     }
     header |= Math.min(metaSize, META_SIZE_MASKS);
     MemoryBuffer result = MemoryUtils.buffer(metaSize + 8);
@@ -248,6 +234,33 @@ public class NativeTypeDefEncoder {
     }
     result.writeBytes(buffer.getHeapMemory(), 0, metaSize);
     return result;
+  }
+
+  static int nativeKindCode(int typeId) {
+    switch (typeId) {
+      case Types.STRUCT:
+        return 0;
+      case Types.COMPATIBLE_STRUCT:
+        return 1;
+      case Types.NAMED_STRUCT:
+        return 2;
+      case Types.NAMED_COMPATIBLE_STRUCT:
+        return 3;
+      case Types.ENUM:
+        return 4;
+      case Types.NAMED_ENUM:
+        return 5;
+      case Types.EXT:
+        return 6;
+      case Types.NAMED_EXT:
+        return 7;
+      case Types.TYPED_UNION:
+        return 8;
+      case Types.NAMED_UNION:
+        return 9;
+      default:
+        throw new IllegalArgumentException("Unsupported TypeDef kind " + typeId);
+    }
   }
 
   private static Class<?> getType(Class<?> cls, String type) {

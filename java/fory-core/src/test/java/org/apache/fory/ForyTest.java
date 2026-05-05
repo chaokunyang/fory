@@ -89,6 +89,14 @@ public class ForyTest extends ForyTestBase {
     return new Object[][] {{false}, {true}};
   }
 
+  @Test
+  public void typedDeserializeRejectsOutOfBandRootHeaderWithoutBuffers() {
+    Fory fory = Fory.builder().build();
+    byte[] bytes = fory.serialize(7);
+    bytes[0] |= 0x02;
+    assertThrows(IllegalArgumentException.class, () -> fory.deserialize(bytes, Integer.class));
+  }
+
   @Test(dataProvider = "crossLanguageReferenceTrackingConfig")
   public void primitivesTest(boolean referenceTracking, boolean xlang) {
     Fory fory1 =

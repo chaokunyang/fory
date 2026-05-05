@@ -51,7 +51,9 @@ def _import_validated_module(policy, module_name):
     if result is not None:
         if isinstance(result, types.ModuleType):
             return result
-        assert isinstance(result, str), f"validate_module must return module, str, or None, got {type(result)}"
+        assert isinstance(
+            result, str
+        ), f"validate_module must return module, str, or None, got {type(result)}"
         module_name = result
     return importlib.import_module(module_name)
 
@@ -72,7 +74,43 @@ def _check_collection_size(read_context, size, kind):
     if size < 0:
         raise ValueError(f"{kind} size {size} must be non-negative")
     if size > read_context.max_collection_size:
-        raise ValueError(f"{kind} size {size} exceeds the configured limit of {read_context.max_collection_size}")
+        raise ValueError(
+            f"{kind} size {size} exceeds the configured limit of {read_context.max_collection_size}"
+        )
+
+
+def _is_local_qualname(module_name, qualname):
+    return module_name == "__main__" or "<locals>" in qualname
+
+
+def _is_local_class(cls):
+    return _is_local_qualname(cls.__module__, cls.__qualname__)
+
+
+def _is_local_receiver(obj):
+    cls = obj if isinstance(obj, type) else obj.__class__
+    return _is_local_class(cls)
+
+
+def _is_local_callable(obj):
+    if isinstance(obj, type):
+        return _is_local_class(obj)
+    if isinstance(obj, (types.MethodType, types.BuiltinMethodType)):
+        receiver = getattr(obj, "__self__", None)
+        if receiver is not None and not inspect.ismodule(receiver):
+            return _is_local_receiver(receiver)
+    module_name = getattr(obj, "__module__", "")
+    qualname = getattr(obj, "__qualname__", getattr(obj, "__name__", ""))
+    return _is_local_qualname(module_name, qualname)
+
+
+def _is_bound_method_value(obj):
+    if isinstance(obj, types.MethodType):
+        return True
+    if isinstance(obj, types.BuiltinMethodType):
+        receiver = getattr(obj, "__self__", None)
+        return receiver is not None and not inspect.ismodule(receiver)
+    return False
 
 
 def _validate_function_value(policy, func, is_local):
@@ -81,7 +119,14 @@ def _validate_function_value(policy, func, is_local):
         if result is not None:
             func = result
         if isinstance(func, type):
-            raise TypeError(f"Function serializer resolved class {func.__module__}.{func.__qualname__}")
+            raise TypeError(
+                f"Function serializer resolved class {func.__module__}.{func.__qualname__}"
+            )
+    if _is_bound_method_value(func):
+        result = policy.validate_method(func, is_local=is_local)
+        if result is not None:
+            func = result
+        return func
     if not callable(func):
         raise TypeError(f"Function serializer resolved non-callable object {func!r}")
     result = policy.validate_function(func, is_local=is_local)
@@ -336,7 +381,9 @@ def _write_decimal_parts(write_context, scale: int, unscaled: int):
     magnitude = abs(unscaled)
     if magnitude == 0:
         raise ValueError("Zero must use the small decimal encoding")
-    payload = magnitude.to_bytes((magnitude.bit_length() + 7) // 8, "little", signed=False)
+    payload = magnitude.to_bytes(
+        (magnitude.bit_length() + 7) // 8, "little", signed=False
+    )
     meta = (len(payload) << 1) | (1 if unscaled < 0 else 0)
     _write_var_uint64(write_context, (meta << 1) | 1)
     write_context.write_bytes(payload)
@@ -507,7 +554,10 @@ typecode_dict, typeid_code = _build_pyarray_typecode_tables()
 
 class PyArraySerializer(Serializer):
     typecode_dict = typecode_dict
-    typecodearray_type = {typecode: ftype for typecode, (_itemsize, ftype, _type_id) in typecode_dict.items()}
+    typecodearray_type = {
+        typecode: ftype
+        for typecode, (_itemsize, ftype, _type_id) in typecode_dict.items()
+    }
 
     def __init__(self, type_resolver, ftype, type_id: str):
         super().__init__(type_resolver, ftype)
@@ -520,13 +570,17 @@ class PyArraySerializer(Serializer):
             raise TypeError(f"Unsupported array.array typecode {value.typecode!r}")
         itemsize, _ftype, type_id = entry
         if value.itemsize != itemsize:
-            raise TypeError(f"array.array typecode {value.typecode!r} has itemsize {value.itemsize}, expected {itemsize}")
+            raise TypeError(
+                f"array.array typecode {value.typecode!r} has itemsize {value.itemsize}, expected {itemsize}"
+            )
         return type_id
 
     def write(self, buffer, value):
         actual_type_id = self._array_type_id(value)
         if actual_type_id != self.type_id:
-            raise TypeError(f"array.array typecode {value.typecode!r} maps to type id {actual_type_id}, expected {self.type_id}")
+            raise TypeError(
+                f"array.array typecode {value.typecode!r} maps to type id {actual_type_id}, expected {self.type_id}"
+            )
         view = memoryview(value)
         assert view.itemsize == self.itemsize
         assert view.c_contiguous  # TODO handle contiguous
@@ -592,7 +646,9 @@ def fory_array_serializer_type(type_id):
 
 
 class ForyArrayListAdapterSerializer(Serializer):
-    def __init__(self, type_resolver, wrapper_type, wrapper_serializer, field_name=None):
+    def __init__(
+        self, type_resolver, wrapper_type, wrapper_serializer, field_name=None
+    ):
         super().__init__(type_resolver, wrapper_type)
         self.wrapper_type = wrapper_type
         self.wrapper_serializer = wrapper_serializer
@@ -601,13 +657,17 @@ class ForyArrayListAdapterSerializer(Serializer):
 
     def _copy_list_to_wrapper(self, value):
         if type(value) is not list:
-            raise TypeError(f"pyfory.Array list adapter for {self.field_name!r} requires list, got {type(value)!r}")
+            raise TypeError(
+                f"pyfory.Array list adapter for {self.field_name!r} requires list, got {type(value)!r}"
+            )
         wrapper = self.wrapper_type()
         for index, item in enumerate(value):
             try:
                 wrapper.append(item)
             except (TypeError, ValueError, OverflowError) as exc:
-                raise type(exc)(f"{self.field_name}[{index}] invalid for {self.wrapper_type.__name__}: {exc}") from exc
+                raise type(exc)(
+                    f"{self.field_name}[{index}] invalid for {self.wrapper_type.__name__}: {exc}"
+                ) from exc
         return wrapper
 
     def write(self, buffer, value):
@@ -645,7 +705,12 @@ class ForyArrayFieldSerializer(Serializer):
     def _build_ndarray_serializer(self, type_resolver, type_id):
         if np is None:
             return None
-        for dtype, (_itemsize, _format, ftype, dtype_type_id) in Numpy1DArraySerializer.dtypes_dict.items():
+        for dtype, (
+            _itemsize,
+            _format,
+            ftype,
+            dtype_type_id,
+        ) in Numpy1DArraySerializer.dtypes_dict.items():
             if dtype_type_id == type_id:
                 return Numpy1DArraySerializer(type_resolver, ftype, dtype)
         return None
@@ -660,7 +725,9 @@ class ForyArrayFieldSerializer(Serializer):
             return
         if value_type is array.array:
             if self.pyarray_serializer is None:
-                raise TypeError(f"pyfory.Array field {self.field_name!r} does not support array.array for this element type")
+                raise TypeError(
+                    f"pyfory.Array field {self.field_name!r} does not support array.array for this element type"
+                )
             actual_type_id = self.pyarray_serializer._array_type_id(value)
             if actual_type_id != self.type_id:
                 raise TypeError(
@@ -670,7 +737,9 @@ class ForyArrayFieldSerializer(Serializer):
             return
         if np is not None and value_type is np.ndarray:
             if self.ndarray_serializer is None:
-                raise TypeError(f"pyfory.Array field {self.field_name!r} does not support numpy ndarray for this element type")
+                raise TypeError(
+                    f"pyfory.Array field {self.field_name!r} does not support numpy ndarray for this element type"
+                )
             if value.dtype != self.ndarray_serializer.dtype or value.ndim != 1:
                 raise TypeError(
                     f"pyfory.Array field {self.field_name!r} requires 1D ndarray with dtype "
@@ -679,7 +748,9 @@ class ForyArrayFieldSerializer(Serializer):
             self.ndarray_serializer.write(buffer, value)
             return
         if value is None:
-            raise TypeError(f"pyfory.Array field {self.field_name!r} value must not be None")
+            raise TypeError(
+                f"pyfory.Array field {self.field_name!r} value must not be None"
+            )
         raise TypeError(
             f"pyfory.Array field {self.field_name!r} requires {self.wrapper_type.__name__}, list, numpy.ndarray, or array.array, got {type(value)!r}"
         )
@@ -698,9 +769,13 @@ class DynamicPyArraySerializer(Serializer):
         try:
             itemsize, ftype, type_id = typecode_dict[value.typecode]
         except KeyError as exc:
-            raise TypeError(f"Unsupported array.array typecode {value.typecode!r}") from exc
+            raise TypeError(
+                f"Unsupported array.array typecode {value.typecode!r}"
+            ) from exc
         if value.itemsize != itemsize:
-            raise TypeError(f"array.array typecode {value.typecode!r} has itemsize {value.itemsize}, expected {itemsize}")
+            raise TypeError(
+                f"array.array typecode {value.typecode!r} has itemsize {value.itemsize}, expected {itemsize}"
+            )
         view = memoryview(value)
         nbytes = len(value) * itemsize
         buffer.write_uint8(type_id)
@@ -767,7 +842,9 @@ if np:
     )
 else:
     _np_dtypes_dict = {}
-_np_typeid_to_dtype = {type_id: dtype for dtype, (_, _, _, type_id) in _np_dtypes_dict.items()}
+_np_typeid_to_dtype = {
+    type_id: dtype for dtype, (_, _, _, type_id) in _np_dtypes_dict.items()
+}
 
 
 class Numpy1DArraySerializer(Serializer):
@@ -791,7 +868,9 @@ class Numpy1DArraySerializer(Serializer):
         if self.dtype == np.dtype("bool") or not view.c_contiguous:
             if not is_little_endian and self.itemsize > 1:
                 # Swap bytes on big-endian machines for multi-byte types
-                buffer.write_bytes(value.astype(value.dtype.newbyteorder("<")).tobytes())
+                buffer.write_bytes(
+                    value.astype(value.dtype.newbyteorder("<")).tobytes()
+                )
             else:
                 buffer.write_bytes(value.tobytes())
         elif is_little_endian or self.itemsize == 1:
@@ -818,7 +897,9 @@ class NDArraySerializer(Serializer):
         # Write concrete 1D primitive ndarray using type id + bytes payload.
         dtype_info = _np_dtypes_dict.get(value.dtype)
         if dtype_info is None or value.ndim != 1:
-            raise NotImplementedError(f"Unsupported ndarray: dtype={value.dtype}, ndim={value.ndim}")
+            raise NotImplementedError(
+                f"Unsupported ndarray: dtype={value.dtype}, ndim={value.ndim}"
+            )
         itemsize, _typecode, _ftype, type_id = dtype_info
         view = memoryview(value)
         nbytes = len(value) * itemsize
@@ -826,7 +907,9 @@ class NDArraySerializer(Serializer):
         buffer.write_var_uint32(nbytes)
         if value.dtype == np.dtype("bool") or not view.c_contiguous:
             if not is_little_endian and itemsize > 1:
-                buffer.write_bytes(value.astype(value.dtype.newbyteorder("<")).tobytes())
+                buffer.write_bytes(
+                    value.astype(value.dtype.newbyteorder("<")).tobytes()
+                )
             else:
                 buffer.write_bytes(value.tobytes())
         elif is_little_endian or itemsize == 1:
@@ -1082,17 +1165,11 @@ class ReduceSerializer(Serializer):
     def _validate_global_object(self, policy, obj):
         result = None
         if isinstance(obj, type):
-            result = policy.validate_class(obj, is_local=False)
-        elif isinstance(
-            obj,
-            (
-                types.FunctionType,
-                types.BuiltinFunctionType,
-                types.MethodType,
-                types.BuiltinMethodType,
-            ),
-        ):
-            result = policy.validate_function(obj, is_local=False)
+            result = policy.validate_class(obj, is_local=_is_local_class(obj))
+        elif _is_bound_method_value(obj):
+            result = policy.validate_method(obj, is_local=_is_local_callable(obj))
+        elif isinstance(obj, (types.FunctionType, types.BuiltinFunctionType)):
+            result = policy.validate_function(obj, is_local=_is_local_callable(obj))
         if result is not None:
             obj = result
         return obj
@@ -1112,7 +1189,10 @@ class ReduceSerializer(Serializer):
     def write(self, write_context, value):
         # Try __reduce_ex__ first (with protocol 5 for pickle5 out-of-band buffer support), then __reduce__
         # Check if the object has a custom __reduce_ex__ method (not just the default from object)
-        if hasattr(value, "__reduce_ex__") and value.__class__.__reduce_ex__ is not object.__reduce_ex__:
+        if (
+            hasattr(value, "__reduce_ex__")
+            and value.__class__.__reduce_ex__ is not object.__reduce_ex__
+        ):
             try:
                 reduce_result = value.__reduce_ex__(5)
             except TypeError:
@@ -1121,7 +1201,9 @@ class ReduceSerializer(Serializer):
         elif hasattr(value, "__reduce__"):
             reduce_result = value.__reduce__()
         else:
-            raise ValueError(f"Object {value} has no __reduce__ or __reduce_ex__ method")
+            raise ValueError(
+                f"Object {value} has no __reduce__ or __reduce_ex__ method"
+            )
 
         # Handle different __reduce__ return formats
         if isinstance(reduce_result, str):
@@ -1152,7 +1234,9 @@ class ReduceSerializer(Serializer):
                     dictitems,
                 )
             else:
-                raise ValueError(f"Invalid __reduce__ result length: {len(reduce_result)}")
+                raise ValueError(
+                    f"Invalid __reduce__ result length: {len(reduce_result)}"
+                )
         else:
             raise ValueError(f"Invalid __reduce__ result type: {type(reduce_result)}")
         write_context.write_var_uint32(len(reduce_data))
@@ -1241,15 +1325,19 @@ class TypeSerializer(Serializer):
             return self._deserialize_local_class(read_context)
         module_name = read_context.read_string()
         qualname = read_context.read_string()
-        cls = _resolve_validated_module_qualname(read_context.policy, module_name, qualname)
-        result = read_context.policy.validate_class(cls, is_local=False)
+        cls = _resolve_validated_module_qualname(
+            read_context.policy, module_name, qualname
+        )
+        result = read_context.policy.validate_class(cls, is_local=_is_local_class(cls))
         if result is not None:
             cls = result
         return cls
 
     def _serialize_local_class(self, write_context, cls):
         """Serialize a local class by capturing its creation context."""
-        assert self.type_resolver.track_ref, "Reference tracking must be enabled for local classes serialization"
+        assert (
+            self.type_resolver.track_ref
+        ), "Reference tracking must be enabled for local classes serialization"
         module = cls.__module__
         qualname = cls.__qualname__
         write_context.write_string(module)
@@ -1282,7 +1370,9 @@ class TypeSerializer(Serializer):
 
     def _deserialize_local_class(self, read_context):
         """Deserialize a local class by recreating it with the captured context."""
-        assert self.type_resolver.track_ref, "Reference tracking must be enabled for local classes deserialization"
+        assert (
+            self.type_resolver.track_ref
+        ), "Reference tracking must be enabled for local classes deserialization"
         module = read_context.read_string()
         qualname = read_context.read_string()
         name = qualname.rsplit(".", 1)[-1]
@@ -1291,7 +1381,9 @@ class TypeSerializer(Serializer):
         num_bases = read_context.read_var_uint32()
         _check_collection_size(read_context, num_bases, "local class base")
         bases = tuple(read_context.read_ref() for _ in range(num_bases))
-        read_context.policy.authorize_instantiation(type, module=module, qualname=qualname, bases=bases)
+        read_context.policy.authorize_instantiation(
+            type, module=module, qualname=qualname, bases=bases
+        )
         cls = type(name, bases, {})
         read_context.set_read_ref(ref_id, cls)
         result = read_context.policy.validate_class(cls, is_local=True)
@@ -1452,7 +1544,9 @@ class FunctionSerializer(Serializer):
                         global_names.add(name)
 
         # Create and serialize a dictionary with only the necessary globals
-        globals_to_serialize = {name: globals_dict[name] for name in global_names if name in globals_dict}
+        globals_to_serialize = {
+            name: globals_dict[name] for name in global_names if name in globals_dict
+        }
         write_context.write_ref(globals_to_serialize)
 
         # Handle additional attributes
@@ -1479,13 +1573,19 @@ class FunctionSerializer(Serializer):
             policy = read_context.policy
             if policy is DEFAULT_POLICY:
                 return getattr(self_obj, method_name)
-            return _resolve_validated_bound_method(policy, self_obj, method_name, is_local=False)
+            return _resolve_validated_bound_method(
+                policy, self_obj, method_name, is_local=_is_local_receiver(self_obj)
+            )
 
         if func_type_id == 1:
             module = read_context.read_string()
             qualname = read_context.read_string()
-            mod = _resolve_validated_module_qualname(read_context.policy, module, qualname)
-            return _validate_function_value(read_context.policy, mod, is_local=False)
+            mod = _resolve_validated_module_qualname(
+                read_context.policy, module, qualname
+            )
+            return _validate_function_value(
+                read_context.policy, mod, is_local=_is_local_callable(mod)
+            )
 
         module = read_context.read_string()
         qualname = read_context.read_string()
@@ -1572,14 +1672,18 @@ class NativeFuncMethodSerializer(Serializer):
         if read_context.read_bool():
             module = read_context.read_string()
             func = _resolve_validated_module_attr(read_context.policy, module, name)
-            func = _validate_function_value(read_context.policy, func, is_local=False)
+            func = _validate_function_value(
+                read_context.policy, func, is_local=_is_local_callable(func)
+            )
         else:
             obj = read_context.read_ref()
             policy = read_context.policy
             if policy is DEFAULT_POLICY:
                 func = getattr(obj, name)
             else:
-                func = _resolve_validated_bound_method(policy, obj, name, is_local=False)
+                func = _resolve_validated_bound_method(
+                    policy, obj, name, is_local=_is_local_receiver(obj)
+                )
         return func
 
 
@@ -1604,9 +1708,12 @@ class MethodSerializer(Serializer):
 
         if self._use_default_policy:
             return getattr(instance, method_name)
-        cls = instance if isinstance(instance, type) else instance.__class__
-        is_local = cls.__module__ == "__main__" or "<locals>" in cls.__qualname__
-        return _resolve_validated_bound_method(read_context.policy, instance, method_name, is_local=is_local)
+        return _resolve_validated_bound_method(
+            read_context.policy,
+            instance,
+            method_name,
+            is_local=_is_local_receiver(instance),
+        )
 
 
 class ObjectSerializer(Serializer):
@@ -1645,7 +1752,9 @@ class ObjectSerializer(Serializer):
         read_context.reference(obj)
         num_fields = read_context.read_var_uint32()
         if num_fields > read_context.max_collection_size:
-            raise ValueError(f"object field size {num_fields} exceeds the configured limit of {read_context.max_collection_size}")
+            raise ValueError(
+                f"object field size {num_fields} exceeds the configured limit of {read_context.max_collection_size}"
+            )
         state = {}
         for _ in range(num_fields):
             field_name = read_context.read_string()
@@ -1663,7 +1772,9 @@ class _DefaultPolicyObjectSerializer(ObjectSerializer):
         read_context.reference(obj)
         num_fields = read_context.read_var_uint32()
         if num_fields > read_context.max_collection_size:
-            raise ValueError(f"object field size {num_fields} exceeds the configured limit of {read_context.max_collection_size}")
+            raise ValueError(
+                f"object field size {num_fields} exceeds the configured limit of {read_context.max_collection_size}"
+            )
         for _ in range(num_fields):
             field_name = read_context.read_string()
             field_value = read_context.read_ref()

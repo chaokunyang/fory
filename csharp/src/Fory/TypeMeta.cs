@@ -19,14 +19,18 @@ namespace Apache.Fory;
 
 internal static class TypeMetaConstants
 {
+    // 8 size bits + 1 compression bit + 3 reserved bits.
+    public const int TypeMetaHashShift = 12;
+    public const ulong TypeMetaHashMask = ulong.MaxValue << TypeMetaHashShift;
     public const int SmallNumFieldsThreshold = 0b1_1111;
     public const byte RegisterByNameFlag = 0b10_0000;
+    public const byte CompatibleFlag = 0b0100_0000;
+    public const byte StructFlag = 0b1000_0000;
     public const int FieldNameSizeThreshold = 0b1111;
     public const int BigNameThreshold = 0b11_1111;
-    public const ulong TypeMetaHasFieldsMetaFlag = 1UL << 8;
-    public const ulong TypeMetaCompressedFlag = 1UL << 9;
+    public const ulong TypeMetaCompressedFlag = 1UL << 8;
+    public const ulong TypeMetaReservedFlags = 0b111UL << 9;
     public const ulong TypeMetaSizeMask = 0xFF;
-    public const ulong TypeMetaNumHashBits = 50;
     public const ulong TypeMetaHashSeed = 47;
     public const uint NoUserTypeId = uint.MaxValue;
 }
@@ -395,7 +399,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         MetaString typeName,
         bool registerByName,
         IReadOnlyList<TypeMetaFieldInfo> fields,
-        bool hasFieldsMeta = true,
         bool compressed = false,
         ulong headerHash = 0)
     {
@@ -425,7 +428,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         TypeName = typeName;
         RegisterByName = registerByName;
         Fields = fields;
-        HasFieldsMeta = hasFieldsMeta;
         Compressed = compressed;
         HeaderHash = headerHash;
     }
@@ -441,8 +443,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
     public bool RegisterByName { get; }
 
     public IReadOnlyList<TypeMetaFieldInfo> Fields { get; }
-
-    public bool HasFieldsMeta { get; }
 
     public bool Compressed { get; }
 
@@ -467,22 +467,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
 
         byte[] body = EncodeBody();
-        (ulong bodyHash, _) = MurmurHash3.X64_128(body, TypeMetaConstants.TypeMetaHashSeed);
-        ulong shifted = bodyHash << (int)(64 - TypeMetaConstants.TypeMetaNumHashBits);
-        long signed = unchecked((long)shifted);
-        long absSigned = signed == long.MinValue ? signed : Math.Abs(signed);
-
-        ulong header = unchecked((ulong)absSigned);
-        if (HasFieldsMeta)
-        {
-            header |= TypeMetaConstants.TypeMetaHasFieldsMetaFlag;
-        }
-
-        if (Compressed)
-        {
-            header |= TypeMetaConstants.TypeMetaCompressedFlag;
-        }
-
+        ulong header = ComputeHeaderHashBits(body);
         uint bodySize = (uint)Math.Min(body.Length, (int)TypeMetaConstants.TypeMetaSizeMask);
         header |= bodySize;
         ByteWriter writer = new(body.Length + 16);
@@ -504,43 +489,50 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
     public static TypeMeta Decode(ByteReader reader)
     {
         ulong header = reader.ReadUInt64();
-        bool compressed = (header & TypeMetaConstants.TypeMetaCompressedFlag) != 0;
-        bool hasFieldsMeta = (header & TypeMetaConstants.TypeMetaHasFieldsMetaFlag) != 0;
-        int metaSize = (int)(header & TypeMetaConstants.TypeMetaSizeMask);
-        if (metaSize == (int)TypeMetaConstants.TypeMetaSizeMask)
-        {
-            metaSize += (int)reader.ReadVarUInt32();
-        }
-
+        ValidateGlobalHeader(header);
+        int metaSize = ReadBodySize(reader, header);
         byte[] encodedBody = reader.ReadBytes(metaSize);
-        if (compressed)
-        {
-            throw new EncodingException("compressed TypeMeta is not supported yet");
-        }
-
         ByteReader bodyReader = new(encodedBody);
         byte metaHeader = bodyReader.ReadUInt8();
-        int numFields = metaHeader & TypeMetaConstants.SmallNumFieldsThreshold;
-        if (numFields == TypeMetaConstants.SmallNumFieldsThreshold)
-        {
-            numFields += (int)bodyReader.ReadVarUInt32();
-        }
-
-        bool registerByName = (metaHeader & TypeMetaConstants.RegisterByNameFlag) != 0;
+        bool isStruct = (metaHeader & TypeMetaConstants.StructFlag) != 0;
+        int numFields = 0;
+        bool registerByName;
         uint? typeId;
         uint? userTypeId;
         MetaString namespaceName;
         MetaString typeName;
+        if (isStruct)
+        {
+            registerByName = (metaHeader & TypeMetaConstants.RegisterByNameFlag) != 0;
+            bool compatible = (metaHeader & TypeMetaConstants.CompatibleFlag) != 0;
+            typeId = (uint)(registerByName
+                ? compatible ? global::Apache.Fory.TypeId.NamedCompatibleStruct : global::Apache.Fory.TypeId.NamedStruct
+                : compatible ? global::Apache.Fory.TypeId.CompatibleStruct : global::Apache.Fory.TypeId.Struct);
+            numFields = metaHeader & TypeMetaConstants.SmallNumFieldsThreshold;
+            if (numFields == TypeMetaConstants.SmallNumFieldsThreshold)
+            {
+                numFields += (int)bodyReader.ReadVarUInt32();
+            }
+        }
+        else
+        {
+            if ((metaHeader & 0b0111_0000) != 0)
+            {
+                throw new InvalidDataException("invalid TypeMeta kind header");
+            }
+
+            typeId = NonStructTypeId(metaHeader & 0b1111);
+            registerByName = IsNamedKind(typeId.Value);
+        }
+
         if (registerByName)
         {
             namespaceName = ReadName(bodyReader, MetaStringDecoder.Namespace, TypeMetaEncodings.NamespaceMetaStringEncodings);
             typeName = ReadName(bodyReader, MetaStringDecoder.TypeName, TypeMetaEncodings.TypeNameMetaStringEncodings);
-            typeId = null;
             userTypeId = null;
         }
         else
         {
-            typeId = bodyReader.ReadUInt8();
             userTypeId = bodyReader.ReadVarUInt32();
             namespaceName = MetaString.Empty('.', '_');
             typeName = MetaString.Empty('$', '_');
@@ -552,11 +544,17 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             fields.Add(TypeMetaFieldInfo.Read(bodyReader));
         }
 
+        if (!isStruct && fields.Count != 0)
+        {
+            throw new InvalidDataException("non-struct TypeMeta cannot carry field metadata");
+        }
+
         if (bodyReader.Remaining != 0)
         {
             throw new InvalidDataException("unexpected trailing bytes in TypeMeta body");
         }
 
+        ValidateParsedTypeMetaHash(header, encodedBody);
         return new TypeMeta(
             typeId,
             userTypeId,
@@ -564,9 +562,112 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             typeName,
             registerByName,
             fields,
-            hasFieldsMeta,
-            compressed,
-            header >> (int)(64 - TypeMetaConstants.TypeMetaNumHashBits));
+            compressed: false,
+            header >> TypeMetaConstants.TypeMetaHashShift);
+    }
+
+    internal static void ValidateAndSkipBody(ByteReader reader, ulong header)
+    {
+        ValidateGlobalHeader(header);
+        int metaSize = ReadBodySize(reader, header);
+        ReadOnlySpan<byte> encodedBody = reader.ReadSpan(metaSize);
+        ValidateParsedTypeMetaHash(header, encodedBody);
+    }
+
+    private static void ValidateGlobalHeader(ulong header)
+    {
+        if ((header & TypeMetaConstants.TypeMetaReservedFlags) != 0)
+        {
+            throw new InvalidDataException("invalid TypeMeta global header");
+        }
+
+        if ((header & TypeMetaConstants.TypeMetaCompressedFlag) != 0)
+        {
+            throw new EncodingException("compressed TypeMeta is not supported yet");
+        }
+    }
+
+    private static int ReadBodySize(ByteReader reader, ulong header)
+    {
+        int metaSize = (int)(header & TypeMetaConstants.TypeMetaSizeMask);
+        if (metaSize == (int)TypeMetaConstants.TypeMetaSizeMask)
+        {
+            uint moreSize = reader.ReadVarUInt32();
+            if (moreSize > int.MaxValue - metaSize)
+            {
+                throw new InvalidDataException("invalid TypeMeta metadata size");
+            }
+
+            metaSize += (int)moreSize;
+        }
+
+        return metaSize;
+    }
+
+    private static ulong ComputeHeaderHashBits(ReadOnlySpan<byte> body)
+    {
+        (ulong bodyHash, _) = MurmurHash3.X64_128(body, TypeMetaConstants.TypeMetaHashSeed);
+        ulong shifted = bodyHash << TypeMetaConstants.TypeMetaHashShift;
+        long signed = unchecked((long)shifted);
+        long absSigned = signed == long.MinValue ? signed : Math.Abs(signed);
+        return unchecked((ulong)absSigned) & TypeMetaConstants.TypeMetaHashMask;
+    }
+
+    private static void ValidateParsedTypeMetaHash(ulong header, ReadOnlySpan<byte> body)
+    {
+        ulong expectedHeaderHash = ComputeHeaderHashBits(body);
+        ulong actualHeaderHash = header & TypeMetaConstants.TypeMetaHashMask;
+        if (actualHeaderHash != expectedHeaderHash)
+        {
+            throw new InvalidDataException("TypeMeta metadata hash mismatch");
+        }
+    }
+
+    private static uint NonStructKindCode(uint typeId)
+    {
+        return (global::Apache.Fory.TypeId)typeId switch
+        {
+            global::Apache.Fory.TypeId.Enum => 0,
+            global::Apache.Fory.TypeId.NamedEnum => 1,
+            global::Apache.Fory.TypeId.Ext => 2,
+            global::Apache.Fory.TypeId.NamedExt => 3,
+            global::Apache.Fory.TypeId.TypedUnion => 4,
+            global::Apache.Fory.TypeId.NamedUnion => 5,
+            _ => throw new EncodingException($"unsupported TypeMeta kind {typeId}"),
+        };
+    }
+
+    private static uint NonStructTypeId(int kindCode)
+    {
+        return kindCode switch
+        {
+            0 => (uint)global::Apache.Fory.TypeId.Enum,
+            1 => (uint)global::Apache.Fory.TypeId.NamedEnum,
+            2 => (uint)global::Apache.Fory.TypeId.Ext,
+            3 => (uint)global::Apache.Fory.TypeId.NamedExt,
+            4 => (uint)global::Apache.Fory.TypeId.TypedUnion,
+            5 => (uint)global::Apache.Fory.TypeId.NamedUnion,
+            _ => throw new InvalidDataException($"unsupported TypeMeta kind code {kindCode}"),
+        };
+    }
+
+    private static bool IsStructKind(uint typeId)
+    {
+        return (global::Apache.Fory.TypeId)typeId is
+            global::Apache.Fory.TypeId.Struct or
+            global::Apache.Fory.TypeId.CompatibleStruct or
+            global::Apache.Fory.TypeId.NamedStruct or
+            global::Apache.Fory.TypeId.NamedCompatibleStruct;
+    }
+
+    private static bool IsNamedKind(uint typeId)
+    {
+        return (global::Apache.Fory.TypeId)typeId is
+            global::Apache.Fory.TypeId.NamedStruct or
+            global::Apache.Fory.TypeId.NamedCompatibleStruct or
+            global::Apache.Fory.TypeId.NamedEnum or
+            global::Apache.Fory.TypeId.NamedExt or
+            global::Apache.Fory.TypeId.NamedUnion;
     }
 
     /// <summary>
@@ -708,14 +809,40 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
     private byte[] EncodeBody()
     {
         ByteWriter writer = new(128);
-        byte metaHeader = (byte)Math.Min(Fields.Count, TypeMetaConstants.SmallNumFieldsThreshold);
-        if (RegisterByName)
+        if (!TypeId.HasValue)
         {
-            metaHeader |= TypeMetaConstants.RegisterByNameFlag;
+            throw new EncodingException("type id is required");
+        }
+
+        bool isStruct = IsStructKind(TypeId.Value);
+        if (!isStruct && Fields.Count != 0)
+        {
+            throw new EncodingException("non-struct TypeMeta cannot carry field metadata");
+        }
+
+        byte metaHeader;
+        if (isStruct)
+        {
+            metaHeader = (byte)(TypeMetaConstants.StructFlag |
+                                Math.Min(Fields.Count, TypeMetaConstants.SmallNumFieldsThreshold));
+            if (TypeId.Value is (uint)global::Apache.Fory.TypeId.CompatibleStruct or
+                (uint)global::Apache.Fory.TypeId.NamedCompatibleStruct)
+            {
+                metaHeader |= TypeMetaConstants.CompatibleFlag;
+            }
+
+            if (RegisterByName)
+            {
+                metaHeader |= TypeMetaConstants.RegisterByNameFlag;
+            }
+        }
+        else
+        {
+            metaHeader = (byte)NonStructKindCode(TypeId.Value);
         }
 
         writer.WriteUInt8(metaHeader);
-        if (Fields.Count >= TypeMetaConstants.SmallNumFieldsThreshold)
+        if (isStruct && Fields.Count >= TypeMetaConstants.SmallNumFieldsThreshold)
         {
             writer.WriteVarUInt32((uint)(Fields.Count - TypeMetaConstants.SmallNumFieldsThreshold));
         }
@@ -727,17 +854,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
         else
         {
-            if (!TypeId.HasValue)
-            {
-                throw new EncodingException("type id is required in register-by-id mode");
-            }
-
             if (!UserTypeId.HasValue || UserTypeId == TypeMetaConstants.NoUserTypeId)
             {
                 throw new EncodingException("user type id is required in register-by-id mode");
             }
 
-            writer.WriteUInt8(unchecked((byte)TypeId.Value));
             writer.WriteVarUInt32(UserTypeId.Value);
         }
 
@@ -811,7 +932,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                TypeName.Equals(other.TypeName) &&
                RegisterByName == other.RegisterByName &&
                Fields.SequenceEqual(other.Fields) &&
-               HasFieldsMeta == other.HasFieldsMeta &&
                Compressed == other.Compressed &&
                HeaderHash == other.HeaderHash;
     }
@@ -829,7 +949,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         hc.Add(NamespaceName);
         hc.Add(TypeName);
         hc.Add(RegisterByName);
-        hc.Add(HasFieldsMeta);
         hc.Add(Compressed);
         hc.Add(HeaderHash);
         foreach (TypeMetaFieldInfo f in Fields)

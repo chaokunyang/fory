@@ -156,6 +156,8 @@ except ImportError:
 logger = logging.getLogger(__name__)
 namespace_decoder = MetaStringDecoder(".", "_")
 typename_decoder = MetaStringDecoder("$", "_")
+MAX_CACHED_TYPE_DEFS = 8192
+MAX_CACHED_ENCODED_META_STRINGS = 8192
 
 _NO_REF_NUMERIC_TYPE_IDS = frozenset(
     {
@@ -313,7 +315,8 @@ class SharedRegistry:
         encoded_meta_string = self._encoded_metastrings.get(key)
         if encoded_meta_string is None:
             encoded_meta_string = EncodedMetaString(data, hashcode)
-            self._encoded_metastrings[key] = encoded_meta_string
+            if len(self._encoded_metastrings) < MAX_CACHED_ENCODED_META_STRINGS:
+                self._encoded_metastrings[key] = encoded_meta_string
         return encoded_meta_string
 
 
@@ -374,7 +377,6 @@ class TypeResolver:
         self._named_type_to_type_info = dict()
         self.namespace_encoder = MetaStringEncoder(".", "_")
         self.namespace_decoder = MetaStringDecoder(".", "_")
-        # Cache for TypeDef and TypeInfo tuples (similar to Java's classIdToDef)
         self._meta_shared_type_info = {}
         self.typename_encoder = MetaStringEncoder("$", "_")
         self.typename_decoder = MetaStringDecoder("$", "_")
@@ -1157,12 +1159,14 @@ class TypeResolver:
         """
         # Read the header (first 8 bytes) to get the type ID
         header = buffer.read_int64()
-        # Check if we already have this TypeDef cached
         type_info = self._meta_shared_type_info.get(header)
         if type_info is not None:
+            # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+            # after a successful TypeDef parse and 52-bit body-hash validation.
             skip_typedef(buffer, header)
-        else:
-            type_def = decode_typedef(buffer, self, header=header)
-            type_info = self._build_type_info_from_typedef(type_def)
+            return type_info
+        type_def = decode_typedef(buffer, self, header=header)
+        type_info = self._build_type_info_from_typedef(type_def)
+        if len(self._meta_shared_type_info) < MAX_CACHED_TYPE_DEFS:
             self._meta_shared_type_info[header] = type_info
         return type_info

@@ -43,6 +43,11 @@ public class DeflaterMetaCompressor implements MetaCompressor {
 
   @Override
   public byte[] decompress(byte[] input, int offset, int size) {
+    return decompress(input, offset, size, Integer.MAX_VALUE);
+  }
+
+  @Override
+  public byte[] decompress(byte[] input, int offset, int size, int maxOutputSize) {
     Inflater inflater = new Inflater();
     inflater.setInput(input, offset, size);
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
@@ -51,6 +56,10 @@ public class DeflaterMetaCompressor implements MetaCompressor {
       while (!inflater.finished()) {
         int decompressedSize = inflater.inflate(buffer);
         if (decompressedSize > 0) {
+          if (outputStream.size() > maxOutputSize - decompressedSize) {
+            throw new InvalidDataException(
+                "Decompressed TypeDef metadata exceeds the maximum size.");
+          }
           outputStream.write(buffer, 0, decompressedSize);
           continue;
         }

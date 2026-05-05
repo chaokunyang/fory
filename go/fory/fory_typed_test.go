@@ -132,6 +132,44 @@ func TestSerializeGenericPrimitives(t *testing.T) {
 	})
 }
 
+func TestDeserializeRejectsRootTypeMismatch(t *testing.T) {
+	f := NewFory()
+
+	data := []byte{0, 0xff, byte(STRING)}
+	var result bool
+	require.Error(t, Deserialize(f, data, &result))
+
+	data = []byte{0, 0xff, byte(BOOL)}
+	var mapResult map[string]string
+	require.Error(t, Deserialize(f, data, &mapResult))
+}
+
+func TestDeserializeRejectsRootPrimitiveSliceTypeMismatch(t *testing.T) {
+	f := NewFory()
+
+	data := []byte{0, 0xff, byte(BINARY)}
+	var int32Result []int32
+	require.Error(t, Deserialize(f, data, &int32Result))
+
+	data = []byte{0, 0xff, byte(INT8_ARRAY)}
+	var byteResult []byte
+	require.Error(t, Deserialize(f, data, &byteResult))
+}
+
+func TestDeserializeByteSliceAcceptsUint8ArrayRootType(t *testing.T) {
+	f := NewFory()
+	buf := NewByteBuffer(nil)
+	buf.WriteByte(0)
+	buf.WriteInt8(NotNullValueFlag)
+	buf.WriteUint8(uint8(UINT8_ARRAY))
+	buf.WriteLength(3)
+	buf.WriteBinary([]byte{1, 2, 3})
+
+	var result []byte
+	require.NoError(t, Deserialize(f, buf.Bytes(), &result))
+	require.Equal(t, []byte{1, 2, 3}, result)
+}
+
 // TestSerializeGenericComplex tests Serialize[T]/DeserializeWithCallbackBuffers[T] with complex types.
 // These fall back to reflection-based serialization.
 func TestSerializeGenericComplex(t *testing.T) {

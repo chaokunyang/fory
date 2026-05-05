@@ -39,9 +39,9 @@ import 'package:fory/src/serializer/serializer.dart';
 ///
 /// The Dart runtime only supports xlang payloads.
 final class Fory {
-  static const int _nullHeaderFlag = 0x01;
-  static const int _xlangHeaderFlag = 0x02;
-  static const int _outOfBandHeaderFlag = 0x04;
+  static const int _xlangHeaderFlag = 0x01;
+  static const int _outOfBandHeaderFlag = 0x02;
+  static const int _knownHeaderFlags = _xlangHeaderFlag | _outOfBandHeaderFlag;
 
   late final Buffer _readBuffer;
   late final Buffer _writeBuffer;
@@ -124,11 +124,11 @@ final class Fory {
     buffer.clear();
     _writeContext.prepare(buffer, trackRef: trackRef);
     try {
+      buffer.writeUint8(_xlangHeaderFlag);
       if (value == null) {
-        buffer.writeUint8(_nullHeaderFlag);
+        _writeContext.writeRootValue(null, trackRef: trackRef);
         return;
       }
-      buffer.writeUint8(_xlangHeaderFlag);
       _writeContext.writeRootValue(value, trackRef: trackRef);
     } finally {
       _writeContext.reset();
@@ -183,18 +183,8 @@ final class Fory {
     _readContext.prepare(buffer);
     try {
       final header = buffer.readUint8();
-      if ((header & _outOfBandHeaderFlag) != 0) {
-        throw StateError(
-          'Out-of-band buffers are not supported by the Dart runtime.',
-        );
-      }
-      if ((header & _nullHeaderFlag) != 0) {
-        return null as T;
-      }
-      if ((header & _xlangHeaderFlag) == 0) {
-        throw StateError(
-          'Only xlang payloads are supported by the Dart runtime.',
-        );
+      if (header != _xlangHeaderFlag) {
+        _throwInvalidRootHeader(header);
       }
       final value = _readContext.readRefAs<T>();
       if (value is T) {
@@ -206,6 +196,23 @@ final class Fory {
     } finally {
       _readContext.reset();
     }
+  }
+
+  @pragma('vm:never-inline')
+  Never _throwInvalidRootHeader(int header) {
+    if ((header & ~_knownHeaderFlags) != 0) {
+      throw StateError(
+        'Unsupported root header bitmap 0x${header.toRadixString(16)}.',
+      );
+    }
+    if ((header & _outOfBandHeaderFlag) != 0) {
+      throw StateError(
+        'Out-of-band buffers are not supported by the Dart runtime.',
+      );
+    }
+    throw StateError(
+      'Only xlang payloads are supported by the Dart runtime.',
+    );
   }
 
   /// Registers a generated type.

@@ -148,15 +148,19 @@ impl MetaReaderResolver {
                 .as_ref()
                 .filter(|_| self.last_meta_header == meta_header)
             {
+                // Header-cache hits intentionally skip without rehashing. Entries reach this cache
+                // only after a successful TypeMeta parse and 52-bit body-hash validation.
                 self.reading_type_infos.push(type_info.clone());
-                TypeMeta::skip_bytes(reader, meta_header)?;
+                TypeMeta::skip_bytes_for_validated_header(reader, meta_header)?;
                 return Ok(type_info.clone());
             }
             if let Some(type_info) = self.parsed_type_infos.get(&meta_header) {
+                // Header-cache hits intentionally skip without rehashing. Entries reach this cache
+                // only after a successful TypeMeta parse and 52-bit body-hash validation.
                 self.last_meta_header = meta_header;
                 self.last_type_info = Some(type_info.clone());
                 self.reading_type_infos.push(type_info.clone());
-                TypeMeta::skip_bytes(reader, meta_header)?;
+                TypeMeta::skip_bytes_for_validated_header(reader, meta_header)?;
                 Ok(type_info.clone())
             } else {
                 let type_meta = Rc::new(TypeMeta::from_bytes_with_header(

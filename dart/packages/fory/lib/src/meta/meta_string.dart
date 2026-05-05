@@ -32,6 +32,8 @@ const int metaStringAllToLowerSpecialEncoding = 4;
 const int metaStringSmallThreshold = 16;
 const int typeDefSmallFieldCountThreshold = 0x1f;
 const int typeDefRegisterByNameFlag = 0x20;
+const int typeDefCompatibleFlag = 0x40;
+const int typeDefStructFlag = 0x80;
 const int typeDefBigFieldNameThreshold = 0x0f;
 const int typeDefBigNameThreshold = 0x3f;
 

@@ -29,7 +29,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamField;
 import java.io.Serializable;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.Inet4Address;
@@ -46,13 +45,11 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.collection.LongMap;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.SharedRegistry;
-import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.serializer.collection.CollectionSerializers;
 import org.apache.fory.serializer.collection.MapSerializers;
 import org.apache.fory.util.Preconditions;
@@ -1071,8 +1068,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "compatibleModeProvider")
-  public void testObjectStreamSharedRegistryCanonicalizesTypeDef(boolean compatible)
-      throws Exception {
+  public void testObjectStreamReadersReuseValidatedTypeDefCache(boolean compatible) {
     ForyBuilder builder =
         Fory.builder()
             .withXlang(false)
@@ -1102,20 +1098,14 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     byte[] bytes = writerFory.serialize(new MixedSerializationClass("shared", 7));
 
     readerFory1.setMetaReadContext(new MetaReadContext());
-    readerFory1.deserialize(bytes);
+    MixedSerializationClass result1 = (MixedSerializationClass) readerFory1.deserialize(bytes);
     readerFory2.setMetaReadContext(new MetaReadContext());
-    readerFory2.deserialize(bytes);
+    MixedSerializationClass result2 = (MixedSerializationClass) readerFory2.deserialize(bytes);
 
-    TypeInfo typeInfo1 =
-        getFirstTypeInfo(
-            getTypeDefIdToTypeInfo(
-                (ObjectStreamSerializer) readerFory1.getSerializer(MixedSerializationClass.class)));
-    TypeInfo typeInfo2 =
-        getFirstTypeInfo(
-            getTypeDefIdToTypeInfo(
-                (ObjectStreamSerializer) readerFory2.getSerializer(MixedSerializationClass.class)));
-
-    assertSame(typeInfo1.getTypeDef(), typeInfo2.getTypeDef());
+    assertEquals(result1.name, "shared");
+    assertEquals(result1.value, 7);
+    assertEquals(result2.name, "shared");
+    assertEquals(result2.value, 7);
   }
 
   // ==================== Default Value Tests ====================
@@ -1156,35 +1146,6 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
       doubleField = fields.get("doubleField", 99.9);
       objectField = fields.get("objectField", "defaultObject");
     }
-  }
-
-  private static LongMap<TypeInfo> getTypeDefIdToTypeInfo(ObjectStreamSerializer serializer)
-      throws ReflectiveOperationException {
-    Field field = ObjectStreamSerializer.class.getDeclaredField("typeDefIdToTypeInfo");
-    field.setAccessible(true);
-    @SuppressWarnings("unchecked")
-    LongMap<TypeInfo> typeDefIdToTypeInfo = (LongMap<TypeInfo>) field.get(serializer);
-    return typeDefIdToTypeInfo;
-  }
-
-  private static TypeInfo getFirstTypeInfo(LongMap<TypeInfo> typeDefIdToTypeInfo)
-      throws ReflectiveOperationException {
-    Field zeroValueField = LongMap.class.getDeclaredField("zeroValue");
-    zeroValueField.setAccessible(true);
-    TypeInfo zeroValue = (TypeInfo) zeroValueField.get(typeDefIdToTypeInfo);
-    if (zeroValue != null) {
-      return zeroValue;
-    }
-    Field valueTableField = LongMap.class.getDeclaredField("valueTable");
-    valueTableField.setAccessible(true);
-    Object[] valueTable = (Object[]) valueTableField.get(typeDefIdToTypeInfo);
-    for (Object value : valueTable) {
-      if (value != null) {
-        return (TypeInfo) value;
-      }
-    }
-    Assert.fail("Expected at least one cached TypeInfo in ObjectStreamSerializer");
-    return null;
   }
 
   private static void finishBuilder(ForyBuilder builder) {

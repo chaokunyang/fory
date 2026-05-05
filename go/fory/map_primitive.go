@@ -81,50 +81,32 @@ func readMapStringString(ctx *ReadContext) map[string]string {
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
 
-		// Handle null key/value cases
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull && valueHasNull {
-			// Both null - use empty strings for key and value
-			result[""] = ""
-			size--
-			continue
-		} else if keyHasNull {
-			// Null key with non-null value
-			valueDeclared := (chunkHeader & VALUE_DECL_TYPE) != 0
-			if !valueDeclared {
-				buf.ReadUint8(err) // skip value type
-			}
-			v := readString(buf, err)
-			result[""] = v // empty string as null key
-			size--
-			continue
-		} else if valueHasNull {
-			// Non-null key with null value
-			keyDeclared := (chunkHeader & KEY_DECL_TYPE) != 0
-			if !keyDeclared {
-				buf.ReadUint8(err) // skip key type
-			}
-			k := readString(buf, err)
-			result[k] = "" // empty string as null value
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
-		// ReadData chunk size
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 
-		// Read type info if not DECL_TYPE
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err) // skip key type
+			if !ctx.readExpectedTypeID(STRING) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err) // skip value type
+			if !ctx.readExpectedTypeID(STRING) {
+				return result
+			}
 		}
 
-		// ReadData chunk entries
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := readString(buf, err)
 			v := readString(buf, err)
 			result[k] = v
@@ -185,22 +167,30 @@ func readMapStringInt64(ctx *ReadContext) map[string]int64 {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(STRING) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT64) {
+				return result
+			}
 		}
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := readString(buf, err)
 			v := buf.ReadVarint64(err)
 			result[k] = v
@@ -261,22 +251,30 @@ func readMapStringInt32(ctx *ReadContext) map[string]int32 {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(STRING) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT32) {
+				return result
+			}
 		}
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := readString(buf, err)
 			v := buf.ReadVarint32(err)
 			result[k] = v
@@ -337,22 +335,30 @@ func readMapStringInt(ctx *ReadContext) map[string]int {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(STRING) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT64) {
+				return result
+			}
 		}
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := readString(buf, err)
 			v := buf.ReadVarint64(err)
 			result[k] = int(v)
@@ -413,22 +419,30 @@ func readMapStringFloat64(ctx *ReadContext) map[string]float64 {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(STRING) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(FLOAT64) {
+				return result
+			}
 		}
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := readString(buf, err)
 			v := buf.ReadFloat64(err)
 			result[k] = v
@@ -489,27 +503,34 @@ func readMapStringBool(ctx *ReadContext) map[string]bool {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 
-		// Read type info (written by writeMapStringBool)
 		keyDeclType := (chunkHeader & KEY_DECL_TYPE) != 0
 		valDeclType := (chunkHeader & VALUE_DECL_TYPE) != 0
 		if !keyDeclType {
-			buf.ReadUint8(err) // skip key type info
+			if !ctx.readExpectedTypeID(STRING) {
+				return result
+			}
 		}
 		if !valDeclType {
-			buf.ReadUint8(err) // skip value type info
+			if !ctx.readExpectedTypeID(BOOL) {
+				return result
+			}
 		}
 
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := readString(buf, err)
 			v := buf.ReadBool(err)
 			result[k] = v
@@ -570,22 +591,30 @@ func readMapInt32Int32(ctx *ReadContext) map[int32]int32 {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT32) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT32) {
+				return result
+			}
 		}
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := buf.ReadVarint32(err)
 			v := buf.ReadVarint32(err)
 			result[k] = v
@@ -646,22 +675,30 @@ func readMapInt64Int64(ctx *ReadContext) map[int64]int64 {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT64) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT64) {
+				return result
+			}
 		}
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := buf.ReadVarint64(err)
 			v := buf.ReadVarint64(err)
 			result[k] = v
@@ -722,22 +759,30 @@ func readMapIntInt(ctx *ReadContext) map[int]int {
 
 	for size > 0 {
 		chunkHeader := buf.ReadUint8(err)
-		keyHasNull := (chunkHeader & KEY_HAS_NULL) != 0
-		valueHasNull := (chunkHeader & VALUE_HAS_NULL) != 0
-
-		if keyHasNull || valueHasNull {
-			size--
-			continue
+		if chunkHeader&(TRACKING_KEY_REF|KEY_HAS_NULL|TRACKING_VALUE_REF|VALUE_HAS_NULL) != 0 {
+			ctx.SetError(DeserializationError("typed map reader does not support ref/null chunks"))
+			return result
 		}
 
 		chunkSize := int(buf.ReadUint8(err))
+		if ctx.HasError() {
+			return result
+		}
+		if chunkSize == 0 || chunkSize > size {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+			return result
+		}
 		if (chunkHeader & KEY_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT64) {
+				return result
+			}
 		}
 		if (chunkHeader & VALUE_DECL_TYPE) == 0 {
-			buf.ReadUint8(err)
+			if !ctx.readExpectedTypeID(VARINT64) {
+				return result
+			}
 		}
-		for i := 0; i < chunkSize && size > 0; i++ {
+		for i := 0; i < chunkSize; i++ {
 			k := buf.ReadVarint64(err)
 			v := buf.ReadVarint64(err)
 			result[int(k)] = int(v)

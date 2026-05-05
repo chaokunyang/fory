@@ -68,7 +68,7 @@ import org.apache.fory.util.StringUtils;
 /**
  * Cross-language header layout: 1-byte bitmap.
  *
- * <p>Bit 0: null flag, Bit 1: xlang flag, Bit 2: out-of-band flag, Bits 3-7 reserved.
+ * <p>Bit 0: xlang flag, Bit 1: out-of-band flag, Bits 2-7 reserved.
  *
  * <p>serialize/deserialize are the root object APIs. Nested serialization and deserialization go
  * through {@link WriteContext} and {@link ReadContext}.
@@ -86,9 +86,9 @@ public final class Fory implements BaseFory {
   // this flag indicates that the object is a referencable and first write.
   public static final byte REF_VALUE_FLAG = 0;
   public static final byte NOT_SUPPORT_XLANG = 0;
-  private static final byte isNilFlag = 1;
-  private static final byte isCrossLanguageFlag = 1 << 1;
-  private static final byte isOutOfBandFlag = 1 << 2;
+  private static final byte isCrossLanguageFlag = 1;
+  private static final byte isOutOfBandFlag = 1 << 1;
+  private static final byte reservedBitmapFlags = (byte) ~0b11;
 
   private final Config config;
   private final TypeResolver typeResolver;
@@ -98,6 +98,7 @@ public final class Fory implements BaseFory {
   private final WriteContext writeContext;
   private final ReadContext readContext;
   private final CopyContext copyContext;
+  private final byte headerBitmap;
   private MemoryBuffer buffer;
 
   public Fory(ForyBuilder builder, ClassLoader classLoader) {
@@ -119,6 +120,7 @@ public final class Fory implements BaseFory {
     this.sharedRegistry = sharedRegistry;
     this.classLoader = classLoader;
     config = new Config(builder);
+    headerBitmap = config.isXlang() ? isCrossLanguageFlag : 0;
     RefWriter refWriter;
     RefReader refReader;
     if (config.trackingRef()) {
@@ -293,15 +295,7 @@ public final class Fory implements BaseFory {
     ensureRegistrationFinished();
     writeContext.prepare(buffer, callback);
     try {
-      byte bitmap = 0;
-      if (config.isXlang()) {
-        bitmap |= isCrossLanguageFlag;
-      }
-      if (obj == null) {
-        bitmap |= isNilFlag;
-        buffer.writeByte(bitmap);
-        return buffer;
-      }
+      byte bitmap = headerBitmap;
       if (callback != null) {
         bitmap |= isOutOfBandFlag;
       }
@@ -379,12 +373,9 @@ public final class Fory implements BaseFory {
   public <T> T deserialize(MemoryBuffer buffer, Class<T> type) {
     ensureRegistrationFinished();
     byte bitmap = buffer.readByte();
-    if ((bitmap & isNilFlag) == isNilFlag) {
-      return null;
+    if (bitmap != headerBitmap) {
+      checkHeaderBitmapWithoutOutOfBand(bitmap);
     }
-    boolean peerOutOfBandEnabled = (bitmap & isOutOfBandFlag) == isOutOfBandFlag;
-    assert !peerOutOfBandEnabled : "Out of band buffers not passed in when deserializing";
-    checkXlangBitmap(bitmap);
     readContext.prepare(buffer, null, false);
     try {
       try {
@@ -449,11 +440,10 @@ public final class Fory implements BaseFory {
   public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
     ensureRegistrationFinished();
     byte bitmap = buffer.readByte();
-    if ((bitmap & isNilFlag) == isNilFlag) {
-      return null;
+    boolean peerOutOfBandEnabled = false;
+    if (bitmap != headerBitmap) {
+      peerOutOfBandEnabled = checkHeaderBitmap(bitmap);
     }
-    checkXlangBitmap(bitmap);
-    boolean peerOutOfBandEnabled = (bitmap & isOutOfBandFlag) == isOutOfBandFlag;
     if (peerOutOfBandEnabled) {
       Preconditions.checkNotNull(
           outOfBandBuffers,
@@ -530,13 +520,24 @@ public final class Fory implements BaseFory {
     }
   }
 
-  private void checkXlangBitmap(byte bitmap) {
+  private void checkHeaderBitmapWithoutOutOfBand(byte bitmap) {
+    if (checkHeaderBitmap(bitmap)) {
+      throw new IllegalArgumentException("Out of band buffers not passed in when deserializing");
+    }
+  }
+
+  private boolean checkHeaderBitmap(byte bitmap) {
+    Preconditions.checkArgument(
+        (bitmap & reservedBitmapFlags) == 0,
+        "Serialized payload uses reserved header bitmap flags 0x%s",
+        Integer.toHexString(Byte.toUnsignedInt((byte) (bitmap & reservedBitmapFlags))));
     boolean payloadCrossLanguage = (bitmap & isCrossLanguageFlag) == isCrossLanguageFlag;
     Preconditions.checkArgument(
         payloadCrossLanguage == config.isXlang(),
         "Serialized payload xlang flag %s does not match this Fory mode %s",
         payloadCrossLanguage,
         config.isXlang());
+    return (bitmap & isOutOfBandFlag) == isOutOfBandFlag;
   }
 
   @Override

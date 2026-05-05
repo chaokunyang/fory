@@ -25,13 +25,13 @@ describe('fory', () => {
     test('should deserialize null work', () => {
         const fory = new Fory();
 
-        expect(fory.deserialize(new Uint8Array([1]))).toBe(null)
+        expect(fory.deserialize(new Uint8Array([1, 253]))).toBe(null)
     });
 
     test('should deserialize xlang disable work', () => {
         const fory = new Fory();
         try {
-            // bit 0 = null flag, bit 1 = xlang flag, bit 2 = oob flag
+            // bit 0 = xlang flag, bit 1 = oob flag
             // value 0 means xlang is disabled
             fory.deserialize(new Uint8Array([0]))
             throw new Error('unreachable code')
@@ -43,9 +43,9 @@ describe('fory', () => {
     test('should deserialize oob mode work', () => {
         const fory = new Fory();
         try {
-            // bit 0 = null flag, bit 1 = xlang flag, bit 2 = oob flag
-            // value 6 = xlang (2) + oob (4) = 6
-            fory.deserialize(new Uint8Array([6]))
+            // bit 0 = xlang flag, bit 1 = oob flag
+            // value 3 = xlang (1) + oob (2)
+            fory.deserialize(new Uint8Array([3]))
             throw new Error('unreachable code')
         } catch (error) {
             expect(error.message).toBe('outofband mode is not supported now');

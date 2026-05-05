@@ -25,10 +25,9 @@ import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/types/uint64.dart';
 
-const int _typeDefCompressMetaFlag = 1 << 9;
-const int _typeDefHasFieldsMetaFlag = 1 << 8;
+const int _typeDefCompressMetaFlag = 1 << 8;
 const int _typeDefMetaSizeMask = 0xff;
-const int _typeDefHashShift = 14;
+const int _typeDefHashShift = 12;
 
 final Uint64 _metaStringHashMask = Uint64.fromWords(0xffffff00, 0xffffffff);
 final Uint64 _c1 = Uint64.fromWords(0x114253d5, 0x87c37b91);
@@ -154,7 +153,6 @@ Int64 metaStringHash(List<int> bytes, {int encoding = 0}) {
 
 Int64 typeDefHeader(
   List<int> bytes, {
-  required bool hasFieldsMeta,
   bool compressed = false,
 }) {
   final hash = _int64FromUint64(
@@ -163,9 +161,6 @@ Int64 typeDefHeader(
   var header = _absSigned64Bits(hash);
   if (compressed) {
     header = header | _typeDefCompressMetaFlag;
-  }
-  if (hasFieldsMeta) {
-    header = header | _typeDefHasFieldsMetaFlag;
   }
   header = header |
       (bytes.length > _typeDefMetaSizeMask

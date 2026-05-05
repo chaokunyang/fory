@@ -319,7 +319,8 @@ public:
   from_bytes_with_header(Buffer &buffer, int64_t header);
 
   /// skip type meta in buffer without parsing
-  static Result<void, Error> skip_bytes(Buffer &buffer, int64_t header);
+  static Result<void, Error> skip_bytes_for_validated_header(Buffer &buffer,
+                                                             int64_t header);
 
   /// Check struct version consistency
   static Result<void, Error> check_struct_version(int32_t read_version,

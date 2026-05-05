@@ -323,15 +323,14 @@ Detailed byte layout:
 
 ```
 Byte 0:   Bitmap flags
-          - Bit 0: null flag (0x01)
-          - Bit 1: xlang flag (0x02)
-          - Bit 2: oob flag (0x04)
-          - Bits 3-7: reserved
+          - Bit 0: xlang flag (0x01)
+          - Bit 1: oob flag (0x02)
+          - Bits 2-7: reserved
 ```
 
-- **null flag** (bit 0): 1 when object is null, 0 otherwise. If an object is null, only this flag is set.
-- **xlang flag** (bit 1): 1 when serialization uses Fory xlang format, 0 when serialization uses Fory language-native format.
-- **oob flag** (bit 2): 1 when out-of-band serialization is enabled (BufferCallback is not null), 0 otherwise.
+- **xlang flag** (bit 0): 1 when serialization uses Fory xlang format, 0 when serialization uses Fory language-native format.
+- **oob flag** (bit 1): 1 when out-of-band serialization is enabled (BufferCallback is not null), 0 otherwise.
+- **reserved bits** (bits 2-7): must be zero.
 
 All data is encoded in little-endian format.
 
@@ -536,12 +535,11 @@ The 8-byte header is a little-endian uint64:
 - Low 8 bits: meta size (number of bytes in the TypeDef body).
   - If meta size >= 0xFF, the low 8 bits are set to 0xFF and an extra
     `varuint32(meta_size - 0xFF)` follows immediately after the header.
-- Bit 8: `HAS_FIELDS_META` (1 = fields metadata present).
-- Bit 9: `COMPRESS_META` is reserved for a future xlang metadata-compression extension.
+- Bit 8: `COMPRESS_META` is reserved for a future xlang metadata-compression extension.
   Current xlang writers MUST leave this bit unset and current xlang readers MUST treat a set bit
   as unsupported.
-- Bits 10-13: reserved for future extension (must be zero).
-- High 50 bits: hash of the TypeDef body.
+- Bits 9-11: reserved for future extension (must be zero).
+- High 52 bits: hash of the TypeDef body.
 
 #### TypeDef body
 
@@ -551,12 +549,30 @@ TypeDef body has a single layer (fields are flattened in class hierarchy order):
 | meta header (1 byte) | type spec | field info ... |
 ```
 
-Meta header byte:
+Meta header byte for struct TypeDefs:
 
+- Bit 7: `IS_STRUCT` (1).
+- Bit 6: `COMPATIBLE`.
+- Bit 5: `REGISTER_BY_NAME` (1 = namespace + type name, 0 = numeric user type ID).
 - Bits 0-4: `num_fields` (0-30).
   - If `num_fields == 31`, read an extra `varuint32` and add it.
-- Bit 5: `REGISTER_BY_NAME` (1 = namespace + type name, 0 = numeric type ID).
-- Bits 6-7: reserved.
+
+Meta header byte for non-struct TypeDefs:
+
+- Bit 7: `IS_STRUCT` (0).
+- Bits 4-6: reserved (must be zero).
+- Bits 0-3: kind code.
+
+Non-struct kind codes:
+
+- `0`: `ENUM`
+- `1`: `NAMED_ENUM`
+- `2`: `EXT`
+- `3`: `NAMED_EXT`
+- `4`: `TYPED_UNION`
+- `5`: `NAMED_UNION`
+- `6-14`: reserved
+- `15`: extended-kind escape, rejected until defined
 
 Type spec:
 
@@ -564,7 +580,7 @@ Type spec:
   - `namespace` meta string
   - `type_name` meta string
 - Otherwise:
-  - `type_id` as `varuint32` (small7)
+  - user type ID as `varuint32`
 
 Field info list:
 

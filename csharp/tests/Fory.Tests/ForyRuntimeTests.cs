@@ -833,7 +833,7 @@ public sealed class ForyRuntimeTests
         byte[] data = fory.Serialize(value);
 
         ByteReader reader = new(data);
-        _ = fory.ReadHead(reader);
+        fory.ReadHead(reader);
         _ = reader.ReadInt8();
         _ = reader.ReadVarUInt32();
         _ = reader.ReadVarUInt32();
@@ -1520,11 +1520,26 @@ public sealed class ForyRuntimeTests
         writer.Register<OneStringField>(200);
         byte[] payload = writer.Serialize(new OneStringField { F1 = "hello" });
 
-        byte[] tamperedPayload = RewriteCompatibleTypeMetaTypeId(payload, (uint)TypeId.Map);
+        byte[] tamperedPayload = RewriteCompatibleTypeMetaTypeId(payload, (uint)TypeId.Struct);
 
         ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
         reader.Register<OneStringField>(200);
         Assert.Throws<TypeMismatchException>(() => reader.Deserialize<OneStringField>(tamperedPayload));
+    }
+
+    [Fact]
+    public void CompatibleTypeMetaCacheMissValidatesBodyHashBeforeCaching()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<OneStringField>(200);
+        byte[] payload = writer.Serialize(new OneStringField { F1 = "hello" });
+        byte[] tamperedPayload = CorruptCompatibleTypeMetaBody(payload);
+
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<OneStringField>(200);
+        InvalidDataException exception =
+            Assert.Throws<InvalidDataException>(() => reader.Deserialize<OneStringField>(tamperedPayload));
+        Assert.Contains("TypeMeta metadata hash mismatch", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1653,6 +1668,36 @@ public sealed class ForyRuntimeTests
 
     private static byte[] RewriteCompatibleTypeMetaTypeId(byte[] payload, uint embeddedTypeId)
     {
+        (int typeMetaStart, int typeMetaEnd, TypeMeta originalTypeMeta) = ReadCompatibleTypeMetaRange(payload);
+
+        TypeMeta rewrittenTypeMeta = new(
+            embeddedTypeId,
+            originalTypeMeta.UserTypeId,
+            originalTypeMeta.NamespaceName,
+            originalTypeMeta.TypeName,
+            originalTypeMeta.RegisterByName,
+            originalTypeMeta.Fields,
+            originalTypeMeta.Compressed);
+        byte[] rewrittenTypeMetaBytes = rewrittenTypeMeta.Encode();
+
+        byte[] rewrittenPayload = new byte[typeMetaStart + rewrittenTypeMetaBytes.Length + (payload.Length - typeMetaEnd)];
+        Buffer.BlockCopy(payload, 0, rewrittenPayload, 0, typeMetaStart);
+        Buffer.BlockCopy(rewrittenTypeMetaBytes, 0, rewrittenPayload, typeMetaStart, rewrittenTypeMetaBytes.Length);
+        Buffer.BlockCopy(payload, typeMetaEnd, rewrittenPayload, typeMetaStart + rewrittenTypeMetaBytes.Length, payload.Length - typeMetaEnd);
+        return rewrittenPayload;
+    }
+
+    private static byte[] CorruptCompatibleTypeMetaBody(byte[] payload)
+    {
+        (int typeMetaStart, int typeMetaEnd, _) = ReadCompatibleTypeMetaRange(payload);
+        Assert.True(typeMetaEnd > typeMetaStart + sizeof(ulong));
+        byte[] malformed = (byte[])payload.Clone();
+        malformed[typeMetaEnd - 1] ^= 1;
+        return malformed;
+    }
+
+    private static (int TypeMetaStart, int TypeMetaEnd, TypeMeta TypeMeta) ReadCompatibleTypeMetaRange(byte[] payload)
+    {
         ByteReader reader = new(payload);
         _ = reader.ReadUInt8(); // frame header bitmap
 
@@ -1668,23 +1713,7 @@ public sealed class ForyRuntimeTests
         int typeMetaStart = reader.Cursor;
         TypeMeta originalTypeMeta = TypeMeta.Decode(reader);
         int typeMetaEnd = reader.Cursor;
-
-        TypeMeta rewrittenTypeMeta = new(
-            embeddedTypeId,
-            originalTypeMeta.UserTypeId,
-            originalTypeMeta.NamespaceName,
-            originalTypeMeta.TypeName,
-            originalTypeMeta.RegisterByName,
-            originalTypeMeta.Fields,
-            originalTypeMeta.HasFieldsMeta,
-            originalTypeMeta.Compressed);
-        byte[] rewrittenTypeMetaBytes = rewrittenTypeMeta.Encode();
-
-        byte[] rewrittenPayload = new byte[typeMetaStart + rewrittenTypeMetaBytes.Length + (payload.Length - typeMetaEnd)];
-        Buffer.BlockCopy(payload, 0, rewrittenPayload, 0, typeMetaStart);
-        Buffer.BlockCopy(rewrittenTypeMetaBytes, 0, rewrittenPayload, typeMetaStart, rewrittenTypeMetaBytes.Length);
-        Buffer.BlockCopy(payload, typeMetaEnd, rewrittenPayload, typeMetaStart + rewrittenTypeMetaBytes.Length, payload.Length - typeMetaEnd);
-        return rewrittenPayload;
+        return (typeMetaStart, typeMetaEnd, originalTypeMeta);
     }
 
     private static (ulong Encoding, string Decoded) WriteAndReadString(string value)

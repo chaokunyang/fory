@@ -24,7 +24,7 @@ use crate::meta::{
 use crate::resolver::{TypeInfo, TypeResolver};
 use crate::type_id::{
     TypeId, BINARY, COMPATIBLE_STRUCT, ENUM, EXT, NAMED_COMPATIBLE_STRUCT, NAMED_ENUM, NAMED_EXT,
-    NAMED_STRUCT, STRUCT, UINT8_ARRAY, UNKNOWN,
+    NAMED_STRUCT, NAMED_UNION, STRUCT, TYPED_UNION, UINT8_ARRAY, UNKNOWN,
 };
 use crate::util::{murmurhash3_x64_128, to_snake_case};
 
@@ -61,7 +61,9 @@ use std::rc::Rc;
 
 const SMALL_NUM_FIELDS_THRESHOLD: usize = 0b11111;
 const MAX_TYPE_META_FIELDS: usize = i16::MAX as usize;
-const REGISTER_BY_NAME_FLAG: u8 = 0b100000;
+const REGISTER_BY_NAME_FLAG: u8 = 0b0010_0000;
+const COMPATIBLE_TYPEDEF_FLAG: u8 = 0b0100_0000;
+const STRUCT_TYPEDEF_FLAG: u8 = 0b1000_0000;
 const FIELD_NAME_SIZE_THRESHOLD: usize = 0b1111;
 /// Marker value in encoding bits to indicate field ID mode (instead of field name)
 const FIELD_ID_ENCODING_MARKER: u8 = 0b11;
@@ -71,9 +73,10 @@ const SMALL_FIELD_ID_THRESHOLD: i16 = 0b1111;
 const BIG_NAME_THRESHOLD: usize = 0b111111;
 
 const META_SIZE_MASK: i64 = 0xff;
-const COMPRESS_META_FLAG: i64 = 0b1 << 9;
-const HAS_FIELDS_META_FLAG: i64 = 0b1 << 8;
-const NUM_HASH_BITS: i8 = 50;
+const COMPRESS_META_FLAG: i64 = 0b1 << 8;
+const RESERVED_META_FLAGS: i64 = 0b111 << 9;
+const NUM_HASH_BITS: i8 = 52;
+const TYPE_META_HASH_SHIFT: u32 = 64 - NUM_HASH_BITS as u32;
 const NO_USER_TYPE_ID: u32 = u32::MAX;
 const MAX_HASH32: u64 = (1 << 31) - 1;
 
@@ -95,6 +98,88 @@ static FIELD_NAME_ENCODINGS: &[Encoding] = &[
     Encoding::AllToLowerSpecial,
     Encoding::LowerUpperDigitSpecial,
 ];
+
+#[inline(always)]
+fn is_struct_type_def_kind(type_id: u32) -> bool {
+    type_id == STRUCT
+        || type_id == COMPATIBLE_STRUCT
+        || type_id == NAMED_STRUCT
+        || type_id == NAMED_COMPATIBLE_STRUCT
+}
+
+#[inline(always)]
+fn is_named_type_def_kind(type_id: u32) -> bool {
+    type_id == NAMED_STRUCT
+        || type_id == NAMED_COMPATIBLE_STRUCT
+        || type_id == NAMED_ENUM
+        || type_id == NAMED_EXT
+        || type_id == NAMED_UNION
+}
+
+fn non_struct_kind_code(type_id: u32) -> Result<u8, Error> {
+    match type_id {
+        x if x == ENUM => Ok(0),
+        x if x == NAMED_ENUM => Ok(1),
+        x if x == EXT => Ok(2),
+        x if x == NAMED_EXT => Ok(3),
+        x if x == TYPED_UNION => Ok(4),
+        x if x == NAMED_UNION => Ok(5),
+        _ => Err(Error::invalid_data(format!(
+            "unsupported TypeMeta kind {type_id}"
+        ))),
+    }
+}
+
+fn non_struct_type_id(kind_code: u8) -> Result<u32, Error> {
+    match kind_code {
+        0 => Ok(ENUM),
+        1 => Ok(NAMED_ENUM),
+        2 => Ok(EXT),
+        3 => Ok(NAMED_EXT),
+        4 => Ok(TYPED_UNION),
+        5 => Ok(NAMED_UNION),
+        _ => Err(Error::invalid_data(format!(
+            "unsupported TypeMeta kind code {kind_code}"
+        ))),
+    }
+}
+
+#[inline(always)]
+fn validate_type_meta_header(header: i64) -> Result<(), Error> {
+    if (header & RESERVED_META_FLAGS) != 0 {
+        return Err(Error::invalid_data("invalid TypeMeta global header"));
+    }
+    if (header & COMPRESS_META_FLAG) != 0 {
+        return Err(Error::invalid_data("compressed TypeMeta is not supported"));
+    }
+    Ok(())
+}
+
+#[inline(always)]
+fn read_type_meta_body_size(reader: &mut Reader, header: i64) -> Result<usize, Error> {
+    let mut meta_size = (header & META_SIZE_MASK) as usize;
+    if meta_size == META_SIZE_MASK as usize {
+        meta_size = meta_size
+            .checked_add(reader.read_var_u32()? as usize)
+            .ok_or_else(|| Error::invalid_data("invalid TypeMeta metadata size"))?;
+    }
+    Ok(meta_size)
+}
+
+#[inline(always)]
+fn type_meta_hash_bits(body: &[u8]) -> u64 {
+    let hash_value = murmurhash3_x64_128(body, 47).0 as i64;
+    hash_value.wrapping_shl(TYPE_META_HASH_SHIFT).wrapping_abs() as u64
+}
+
+#[inline(always)]
+fn validate_type_meta_body_hash(header: i64, body: &[u8]) -> Result<(), Error> {
+    let hash_mask = u64::MAX << TYPE_META_HASH_SHIFT;
+    if ((header as u64) & hash_mask) != (type_meta_hash_bits(body) & hash_mask) {
+        return Err(Error::invalid_data("TypeMeta metadata hash mismatch"));
+    }
+    Ok(())
+}
 
 #[derive(Eq, Clone)]
 pub struct FieldType {
@@ -203,7 +288,12 @@ impl FieldType {
             _nullable = (header & 2) != 0;
         } else {
             type_id = header;
-            _nullable = nullable.unwrap();
+            _nullable = match nullable {
+                Some(value) => value,
+                None => {
+                    return Err(Error::invalid_data("missing TypeMeta field nullability"));
+                }
+            };
             _ref_tracking = false;
         }
         if type_id == NAMED_ENUM {
@@ -746,23 +836,33 @@ impl TypeMeta {
 
     fn to_meta_bytes(&self) -> Result<Vec<u8>, Error> {
         let mut buffer = vec![];
-        // meta_bytes:| meta_header | fields meta |
         let mut writer = Writer::from_buffer(&mut buffer);
         let num_fields = self.field_infos.len();
-        // meta_header: | unuse:2 bits | is_register_by_id:1 bit | num_fields:4 bits |
-        let mut meta_header: u8 = min(num_fields, SMALL_NUM_FIELDS_THRESHOLD) as u8;
-        if self.register_by_name {
-            meta_header |= REGISTER_BY_NAME_FLAG;
+        let mut meta_header: u8;
+        if is_struct_type_def_kind(self.type_id) {
+            meta_header = STRUCT_TYPEDEF_FLAG | min(num_fields, SMALL_NUM_FIELDS_THRESHOLD) as u8;
+            if self.type_id == COMPATIBLE_STRUCT || self.type_id == NAMED_COMPATIBLE_STRUCT {
+                meta_header |= COMPATIBLE_TYPEDEF_FLAG;
+            }
+            if self.register_by_name {
+                meta_header |= REGISTER_BY_NAME_FLAG;
+            }
+        } else {
+            if num_fields != 0 {
+                return Err(Error::invalid_data(
+                    "non-struct TypeMeta cannot carry field metadata",
+                ));
+            }
+            meta_header = non_struct_kind_code(self.type_id)?;
         }
         writer.write_u8(meta_header);
-        if num_fields >= SMALL_NUM_FIELDS_THRESHOLD {
+        if is_struct_type_def_kind(self.type_id) && num_fields >= SMALL_NUM_FIELDS_THRESHOLD {
             writer.write_var_u32((num_fields - SMALL_NUM_FIELDS_THRESHOLD) as u32);
         }
         if self.register_by_name {
             self.write_namespace(&mut writer);
             self.write_type_name(&mut writer);
         } else {
-            writer.write_u8(self.type_id as u8);
             if self.user_type_id == NO_USER_TYPE_ID {
                 return Err(Error::type_error(
                     "User type id is required for this type id",
@@ -770,8 +870,10 @@ impl TypeMeta {
             }
             writer.write_var_u32(self.user_type_id);
         }
-        for field in self.field_infos.iter() {
-            writer.write_bytes(field.to_bytes()?.as_slice());
+        if is_struct_type_def_kind(self.type_id) {
+            for field in self.field_infos.iter() {
+                writer.write_bytes(field.to_bytes()?.as_slice());
+            }
         }
         Ok(buffer)
     }
@@ -781,28 +883,48 @@ impl TypeMeta {
         type_resolver: &TypeResolver,
     ) -> Result<TypeMeta, Error> {
         let meta_header = reader.read_u8()?;
-        let register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
-        let mut num_fields = meta_header as usize & SMALL_NUM_FIELDS_THRESHOLD;
-        if num_fields == SMALL_NUM_FIELDS_THRESHOLD {
-            num_fields += reader.read_var_u32()? as usize;
-        }
-        // limit the number of fields to prevent potential OOM when creating Vec<FieldInfo>
-        if num_fields > MAX_TYPE_META_FIELDS {
-            return Err(Error::invalid_data(format!(
-                "too many fields in type meta: {}, max: {}",
-                num_fields, MAX_TYPE_META_FIELDS
-            )));
-        }
-        let mut type_id;
+        let is_struct = (meta_header & STRUCT_TYPEDEF_FLAG) != 0;
+        let register_by_name;
+        let mut num_fields = 0usize;
+        let type_id;
         let mut user_type_id = NO_USER_TYPE_ID;
         let namespace;
         let type_name;
+        if is_struct {
+            register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
+            let compatible = (meta_header & COMPATIBLE_TYPEDEF_FLAG) != 0;
+            type_id = if register_by_name {
+                if compatible {
+                    NAMED_COMPATIBLE_STRUCT
+                } else {
+                    NAMED_STRUCT
+                }
+            } else if compatible {
+                COMPATIBLE_STRUCT
+            } else {
+                STRUCT
+            };
+            num_fields = meta_header as usize & SMALL_NUM_FIELDS_THRESHOLD;
+            if num_fields == SMALL_NUM_FIELDS_THRESHOLD {
+                num_fields += reader.read_var_u32()? as usize;
+            }
+            if num_fields > MAX_TYPE_META_FIELDS {
+                return Err(Error::invalid_data(format!(
+                    "too many fields in type meta: {}, max: {}",
+                    num_fields, MAX_TYPE_META_FIELDS
+                )));
+            }
+        } else {
+            if (meta_header & 0b0111_0000) != 0 {
+                return Err(Error::invalid_data("invalid TypeMeta kind header"));
+            }
+            type_id = non_struct_type_id(meta_header & 0b1111)?;
+            register_by_name = is_named_type_def_kind(type_id);
+        }
         if register_by_name {
             namespace = Self::read_namespace(reader)?;
             type_name = Self::read_type_name(reader)?;
-            type_id = 0;
         } else {
-            type_id = reader.read_u8()? as u32;
             user_type_id = reader.read_var_u32()?;
             let empty_name = MetaString::default();
             namespace = empty_name.clone();
@@ -813,6 +935,11 @@ impl TypeMeta {
         for _ in 0..num_fields {
             field_infos.push(FieldInfo::from_bytes(reader)?);
         }
+        if !is_struct && !field_infos.is_empty() {
+            return Err(Error::invalid_data(
+                "non-struct TypeMeta cannot carry field metadata",
+            ));
+        }
         // TypeMeta field order is the payload order. Preserve the peer's encoded order while only
         // remapping matched fields to local generated field indexes.
         let mut sorted_field_infos = field_infos;
@@ -821,11 +948,20 @@ impl TypeMeta {
             if let Some(type_info_current) =
                 type_resolver.get_type_info_by_name(&namespace.original, &type_name.original)
             {
-                type_id = type_info_current.get_type_id() as u32;
+                if type_info_current.get_type_id() as u32 != type_id {
+                    return Err(Error::invalid_data(
+                        "TypeMeta kind does not match registered type metadata",
+                    ));
+                }
                 Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
             }
         } else if user_type_id != NO_USER_TYPE_ID {
             if let Some(type_info_current) = type_resolver.get_user_type_info_by_id(user_type_id) {
+                if type_info_current.get_type_id() as u32 != type_id {
+                    return Err(Error::invalid_data(
+                        "TypeMeta kind does not match registered type metadata",
+                    ));
+                }
                 Self::assign_field_ids(&type_info_current, &mut sorted_field_infos);
             }
         } else if let Some(type_info_current) = type_resolver.get_type_info_by_id(type_id) {
@@ -933,21 +1069,7 @@ impl TypeMeta {
         type_resolver: &TypeResolver,
     ) -> Result<TypeMeta, Error> {
         let header = reader.read_i64()?;
-        let meta_size = header & META_SIZE_MASK;
-        if meta_size == META_SIZE_MASK {
-            // meta_size += reader.read_var_u32() as i64;
-            reader.read_var_u32()?;
-        }
-
-        // let write_fields_meta = (header & HAS_FIELDS_META_FLAG) != 0;
-        // let is_compressed: bool = (header & COMPRESS_META_FLAG) != 0;
-        let meta_hash = header >> (64 - NUM_HASH_BITS);
-
-        // let current_meta_size = 0;
-        // while current_meta_size < meta_size {}
-        let mut meta = Self::from_meta_bytes(reader, type_resolver)?;
-        meta.hash = meta_hash;
-        Ok(meta)
+        Self::from_bytes_with_header(reader, type_resolver, header)
     }
 
     pub(crate) fn from_bytes_with_header(
@@ -955,30 +1077,27 @@ impl TypeMeta {
         type_resolver: &TypeResolver,
         header: i64,
     ) -> Result<TypeMeta, Error> {
-        let meta_size = header & META_SIZE_MASK;
-        if meta_size == META_SIZE_MASK {
-            // meta_size += reader.read_var_u32()? as i64;
-            reader.read_var_u32()?;
+        validate_type_meta_header(header)?;
+        let meta_size = read_type_meta_body_size(reader, header)?;
+        let body = reader.read_bytes(meta_size)?;
+        let mut body_reader = Reader::new(body);
+        let mut meta = Self::from_meta_bytes(&mut body_reader, type_resolver)?;
+        if !body_reader.slice_after_cursor().is_empty() {
+            return Err(Error::invalid_data("invalid TypeMeta metadata size"));
         }
-
-        // let write_fields_meta = (header & HAS_FIELDS_META_FLAG) != 0;
-        // let is_compressed: bool = (header & COMPRESS_META_FLAG) != 0;
-        let meta_hash = header >> (64 - NUM_HASH_BITS);
-
-        // let current_meta_size = 0;
-        // while current_meta_size < meta_size {}
-        let mut meta = Self::from_meta_bytes(reader, type_resolver)?;
+        validate_type_meta_body_hash(header, body)?;
+        let meta_hash = header >> TYPE_META_HASH_SHIFT;
         meta.hash = meta_hash;
         Ok(meta)
     }
 
     #[inline(always)]
-    pub fn skip_bytes(reader: &mut Reader, header: i64) -> Result<(), Error> {
-        let mut meta_size = header & META_SIZE_MASK;
-        if meta_size == META_SIZE_MASK {
-            meta_size += reader.read_var_u32()? as i64;
-        }
-        reader.skip(meta_size as usize)
+    pub(crate) fn skip_bytes_for_validated_header(
+        reader: &mut Reader,
+        header: i64,
+    ) -> Result<(), Error> {
+        let meta_size = read_type_meta_body_size(reader, header)?;
+        reader.skip(meta_size)
     }
 
     /// Check class version consistency, similar to Java's checkClassVersion
@@ -1005,22 +1124,14 @@ impl TypeMeta {
         let mut meta_buffer = vec![];
         let mut meta_writer = Writer::from_buffer(&mut meta_buffer);
         meta_writer.write_bytes(self.to_meta_bytes()?.as_slice());
-        // global_binary_header:| hash:50bits | reserved:4bits | is_compressed:1bit | write_fields_meta:1bit | meta_size:8bits |
         let meta_size = meta_writer.len() as i64;
         let mut header: i64 = min(META_SIZE_MASK, meta_size);
-        let write_meta_fields_flag = !self.get_field_infos().is_empty();
-        if write_meta_fields_flag {
-            header |= HAS_FIELDS_META_FLAG;
-        }
-        // Temporary xlang behavior: keep TypeMeta uncompressed.
-        // Some runtimes still do not support TypeMeta decompression.
         let is_compressed = false;
         if is_compressed {
             header |= COMPRESS_META_FLAG;
         }
-        let hash_value = murmurhash3_x64_128(meta_writer.dump().as_slice(), 47).0 as i64;
-        let meta_hash_shifted = (hash_value << (64 - NUM_HASH_BITS)).abs();
-        let meta_hash = meta_hash_shifted >> (64 - NUM_HASH_BITS);
+        let meta_hash_shifted = type_meta_hash_bits(meta_writer.dump().as_slice()) as i64;
+        let meta_hash = meta_hash_shifted >> TYPE_META_HASH_SHIFT;
         header |= meta_hash_shifted;
         result.write_i64(header);
         if meta_size >= META_SIZE_MASK {
@@ -1028,5 +1139,68 @@ impl TypeMeta {
         }
         result.write_bytes(meta_buffer.as_slice());
         Ok((buffer, meta_hash))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_body_hash_mismatch_after_successful_parse() {
+        let meta = TypeMeta::new(
+            STRUCT,
+            1,
+            MetaString::get_empty().clone(),
+            MetaString::get_empty().clone(),
+            false,
+            vec![],
+        )
+        .unwrap();
+        let (mut bytes, _) = meta.to_bytes().unwrap();
+        let last = bytes.len() - 1;
+        bytes[last] ^= 1;
+
+        let mut reader = Reader::new(&bytes);
+        let result = TypeMeta::from_bytes(&mut reader, &TypeResolver::default());
+        let message = result
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+        assert!(message.contains("hash mismatch"));
+    }
+
+    #[test]
+    fn rejects_hash_consistent_trailing_body_bytes() {
+        let meta = TypeMeta::new(
+            STRUCT,
+            1,
+            MetaString::get_empty().clone(),
+            MetaString::get_empty().clone(),
+            false,
+            vec![],
+        )
+        .unwrap();
+        let mut body = meta.to_meta_bytes().unwrap();
+        body.push(0);
+
+        let mut frame = vec![];
+        let mut writer = Writer::from_buffer(&mut frame);
+        let body_size = body.len() as i64;
+        let mut header = type_meta_hash_bits(&body) as i64;
+        header |= min(META_SIZE_MASK, body_size);
+        writer.write_i64(header);
+        if body_size >= META_SIZE_MASK {
+            writer.write_var_u32((body_size - META_SIZE_MASK) as u32);
+        }
+        writer.write_bytes(&body);
+
+        let mut reader = Reader::new(&frame);
+        let result = TypeMeta::from_bytes(&mut reader, &TypeResolver::default());
+        let message = result
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+        assert!(message.contains("metadata size"));
     }
 }

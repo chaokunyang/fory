@@ -414,9 +414,8 @@ pub const fn needs_user_type_id(type_id: u32) -> bool {
 }
 
 pub mod config_flags {
-    pub const IS_NULL_FLAG: u8 = 1 << 0;
-    pub const IS_CROSS_LANGUAGE_FLAG: u8 = 1 << 1;
-    pub const IS_OUT_OF_BAND_FLAG: u8 = 1 << 2;
+    pub const IS_CROSS_LANGUAGE_FLAG: u8 = 1 << 0;
+    pub const IS_OUT_OF_BAND_FLAG: u8 = 1 << 1;
 }
 
 // every object start with i8 i16 reference flag and type flag

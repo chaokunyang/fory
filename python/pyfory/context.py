@@ -31,6 +31,8 @@ from pyfory.resolver import (
 from pyfory.types import TypeId
 
 SMALL_STRING_THRESHOLD = 16
+MAX_CACHED_META_STRINGS = 8192
+MAX_CACHED_META_STRING_LENGTH = 2048
 INT64_TYPE_ID = TypeId.VARINT64
 FLOAT64_TYPE_ID = TypeId.FLOAT64
 BOOL_TYPE_ID = TypeId.BOOL
@@ -154,7 +156,9 @@ class MetaStringReader:
     def _read_small_meta_string(self, buffer, length: int):
         if length == 0:
             return EMPTY_ENCODED_META_STRING
-        encoding = buffer.read_int8()
+        encoding = buffer.read_int8() & 0xFF
+        if encoding > 4:
+            raise ValueError(f"Unexpected encoding flag: {encoding}")
         if length <= 8:
             v1 = buffer.read_bytes_as_int64(length)
             v2 = 0
@@ -169,20 +173,28 @@ class MetaStringReader:
         reader_index = buffer.get_reader_index()
         data = buffer.get_bytes(reader_index - length, length)
         encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(data, hashcode)
-        self._small_encoded_meta_strings[key] = encoded_meta_string
+        if len(self._small_encoded_meta_strings) < MAX_CACHED_META_STRINGS:
+            self._small_encoded_meta_strings[key] = encoded_meta_string
         return encoded_meta_string
 
     def _read_big_meta_string(self, buffer, length: int):
         hashcode = buffer.read_int64()
+        encoding = hashcode & 0xFF
+        if encoding > 4:
+            raise ValueError(f"Unexpected encoding flag: {encoding}")
         reader_index = buffer.get_reader_index()
         buffer.check_bound(reader_index, length)
         data = buffer.get_bytes(reader_index, length)
         buffer.set_reader_index(reader_index + length)
+        canonical_hash = hash_meta_string_data(data, encoding)
+        if canonical_hash != hashcode:
+            raise ValueError("Malformed metastring hash")
         key = (hashcode, data)
         encoded_meta_string = self._hash_to_encoded_meta_strings.get(key)
         if encoded_meta_string is None:
             encoded_meta_string = self.shared_registry.get_or_create_encoded_meta_string(data, hashcode)
-            self._hash_to_encoded_meta_strings[key] = encoded_meta_string
+            if length <= MAX_CACHED_META_STRING_LENGTH and len(self._hash_to_encoded_meta_strings) < MAX_CACHED_META_STRINGS:
+                self._hash_to_encoded_meta_strings[key] = encoded_meta_string
         return encoded_meta_string
 
     def reset(self):

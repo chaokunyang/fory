@@ -186,7 +186,7 @@ public class TypeDefTest extends ForyTestBase {
     Fory fory = Fory.builder().withMetaShare(true).build();
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), Map.class);
     assertTrue(typeDef.getFieldsInfo().isEmpty());
-    assertTrue(typeDef.hasFieldsMeta());
+    assertFalse(typeDef.isStructSchemaKind());
   }
 
   @Test

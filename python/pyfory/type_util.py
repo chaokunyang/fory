@@ -113,7 +113,7 @@ def unwrap_array(type_):
 
 
 # modified from `fluent python`
-def record_class_factory(cls_name, field_names):
+def record_class_factory(cls_name, field_names, *, publish=True):
     """
     record_factory: create simple classes just for holding data fields
 
@@ -204,8 +204,9 @@ def record_class_factory(cls_name, field_names):
     )
 
     cls_ = type(cls_name, (object,), cls_attrs)
-    # combined with __reduce__ to make it pickable
-    globals()[cls_name] = cls_
+    if publish:
+        # combined with __reduce__ to make it pickable
+        globals()[cls_name] = cls_
     return cls_
 
 
@@ -390,7 +391,8 @@ def load_class(classname: str, policy=None):
         while classes:
             cls = getattr(cls, classes.pop(0))
         if policy is not None:
-            result = policy.validate_class(cls, is_local=False)
+            is_local = cls.__module__ == "__main__" or "<locals>" in cls.__qualname__
+            result = policy.validate_class(cls, is_local=is_local)
             if result is not None:
                 cls = result
         return cls

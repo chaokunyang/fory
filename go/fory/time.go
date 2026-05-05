@@ -159,8 +159,8 @@ func (s dateSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(DATE) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -268,8 +268,8 @@ func (s durationSerializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(DURATION) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -311,8 +311,8 @@ func (s timeSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(TIMESTAMP) {
+		return
 	}
 	if ctx.HasError() {
 		return

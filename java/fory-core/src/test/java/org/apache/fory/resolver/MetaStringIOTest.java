@@ -20,13 +20,18 @@
 package org.apache.fory.resolver;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNotEquals;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.expectThrows;
 
 import java.nio.ByteBuffer;
+import org.apache.fory.TestUtils;
+import org.apache.fory.collection.LongLongByteMap;
 import org.apache.fory.context.MetaStringReader;
 import org.apache.fory.context.MetaStringWriter;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.EncodedMetaString;
@@ -139,6 +144,90 @@ public class MetaStringIOTest {
 
     assertSame(first, newGenericMetaString(sharedRegistry, "meta_0"));
     assertNotSame(overflow1, overflow2);
+  }
+
+  @Test
+  public void testReadBigMetaStringRejectsNonCanonicalHash() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+    EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+
+    buffer.writeVarUInt32Small7(encodedMetaString.bytes.length << 1);
+    buffer.writeInt64(encodedMetaString.hash + 0x100);
+    buffer.writeBytes(encodedMetaString.bytes);
+
+    expectThrows(ForyException.class, () -> reader.readMetaString(buffer));
+  }
+
+  @Test
+  public void testCachedBigMetaStringReusesHeaderCache() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+    EncodedMetaString encodedMetaString = newGenericMetaString(StringUtils.random(32, 0));
+    MemoryBuffer buffer = MemoryUtils.buffer(128);
+
+    buffer.writeVarUInt32Small7(encodedMetaString.bytes.length << 1);
+    buffer.writeInt64(encodedMetaString.hash);
+    buffer.writeBytes(encodedMetaString.bytes);
+    assertSame(
+        reader.readMetaString(buffer),
+        sharedRegistry.getOrCreateEncodedMetaString(
+            encodedMetaString.bytes, encodedMetaString.hash));
+    assertEquals(buffer.readerIndex(), buffer.writerIndex());
+  }
+
+  @Test
+  public void testReadSmallMetaStringKeyIncludesLengthAndEncoding() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+
+    buffer.writeVarUInt32Small7(1 << 1);
+    buffer.writeByte(0);
+    buffer.writeByte('a');
+    buffer.writeVarUInt32Small7(2 << 1);
+    buffer.writeByte(0);
+    buffer.writeByte('a');
+    buffer.writeByte(0);
+
+    EncodedMetaString oneByte = reader.readMetaString(buffer);
+    EncodedMetaString twoBytes = reader.readMetaString(buffer);
+
+    assertEquals(oneByte.bytes.length, 1);
+    assertEquals(twoBytes.bytes.length, 2);
+    assertNotEquals(oneByte.hash, twoBytes.hash);
+  }
+
+  @Test
+  public void testMetaStringReaderResetClearsDynamicIdsOnly() {
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    MetaStringReader reader = new MetaStringReader(sharedRegistry);
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+
+    buffer.writeVarUInt32Small7(1 << 1);
+    buffer.writeByte(0);
+    buffer.writeByte('a');
+    reader.readMetaString(buffer);
+
+    LongLongByteMap<?> readCache = TestUtils.getFieldValue(reader, "longLongMetaStringMap");
+    assertEquals(readCache.size, 1);
+    reader.reset();
+    assertEquals(readCache.size, 1);
+
+    MemoryBuffer refBuffer = MemoryUtils.buffer(8);
+    refBuffer.writeVarUInt32Small7((1 << 1) | 1);
+    expectThrows(ForyException.class, () -> reader.readMetaString(refBuffer));
+  }
+
+  @Test
+  public void testTypeNameBytesUsesBytesWhenHashesMatch() {
+    EncodedMetaString namespace1 = new EncodedMetaString(new byte[] {'a'}, 0x100);
+    EncodedMetaString namespace2 = new EncodedMetaString(new byte[] {'b'}, 0x100);
+    EncodedMetaString typeName = new EncodedMetaString(new byte[] {'C'}, 0x200);
+
+    assertNotEquals(
+        new TypeNameBytes(namespace1, typeName), new TypeNameBytes(namespace2, typeName));
   }
 
   private static EncodedMetaString newGenericMetaString(String str) {

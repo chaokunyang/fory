@@ -712,7 +712,6 @@ public sealed class TypeInfo
             compatible: true,
             Evolving);
         IReadOnlyList<TypeMetaFieldInfo> fields = TypeMetaFields(trackRef);
-        bool hasFieldsMeta = fields.Count > 0;
         TypeMeta typeMeta;
         if (RegisterByName)
         {
@@ -727,8 +726,7 @@ public sealed class TypeInfo
                 NamespaceName.Value,
                 TypeName.Value,
                 true,
-                fields,
-                hasFieldsMeta);
+                fields);
         }
         else
         {
@@ -743,13 +741,12 @@ public sealed class TypeInfo
                 MetaString.Empty('.', '_'),
                 MetaString.Empty('$', '_'),
                 false,
-                fields,
-                hasFieldsMeta);
+                fields);
         }
 
         byte[] encoded = typeMeta.Encode();
         ulong header = BinaryPrimitives.ReadUInt64LittleEndian(encoded);
-        ulong headerHash = header >> (int)(64 - TypeMetaConstants.TypeMetaNumHashBits);
+        ulong headerHash = header >> TypeMetaConstants.TypeMetaHashShift;
         return new TypeMetaCacheEntry(typeMeta, encoded, headerHash);
     }
 }

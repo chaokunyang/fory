@@ -50,7 +50,7 @@ public class TypeDefEncoderTest {
     List<FieldInfo> fieldsInfo = buildFieldsInfo(classResolver, type);
     MemoryBuffer buffer =
         NativeTypeDefEncoder.encodeTypeDef(
-            classResolver, type, getClassFields(type, fieldsInfo), true);
+            classResolver, type, getClassFields(type, fieldsInfo));
     TypeDef typeDef = TypeDef.readTypeDef(classResolver, buffer);
     Assert.assertEquals(typeDef.getClassName(), type.getName());
     Assert.assertEquals(typeDef.getFieldsInfo().size(), type.getDeclaredFields().length);

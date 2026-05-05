@@ -31,11 +31,12 @@ import (
 type ReadContext struct {
 	buffer            *ByteBuffer
 	refReader         *RefReader
-	trackRef          bool          // Cached flag to avoid indirection
-	xlang             bool          // Cross-language serialization mode
+	trackRef          bool // Cached flag to avoid indirection
+	xlang             bool // Cross-language serialization mode
+	rootHeader        byte
 	compatible        bool          // Schema evolution compatibility mode
 	typeResolver      *TypeResolver // For complex type deserialization
-	refResolver       *RefResolver  // For reference tracking (legacy)
+	refResolver       *RefResolver  // For reference tracking in native-mode paths
 	outOfBandBuffers  []*ByteBuffer // Out-of-band buffers for deserialization
 	outOfBandIndex    int           // Current index into out-of-band buffers
 	depth             int           // Current nesting depth for cycle detection
@@ -109,7 +110,7 @@ func (c *ReadContext) TypeResolver() *TypeResolver {
 	return c.typeResolver
 }
 
-// RefResolver returns the reference resolver (legacy)
+// RefResolver returns the reference resolver.
 func (c *ReadContext) RefResolver() *RefResolver {
 	return c.refResolver
 }
@@ -149,6 +150,18 @@ func (c *ReadContext) CheckError() error {
 		return c.TakeError()
 	}
 	return nil
+}
+
+func (c *ReadContext) readExpectedTypeID(expected TypeId) bool {
+	actual := TypeId(c.buffer.ReadUint8(c.Err()))
+	if c.HasError() {
+		return false
+	}
+	if actual != expected {
+		c.SetError(TypeMismatchError(actual, expected))
+		return false
+	}
+	return true
 }
 
 // Inline primitive reads
@@ -288,7 +301,11 @@ func (c *ReadContext) ReadBoolSlice(refMode RefMode, readType bool) []bool {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != BOOL_ARRAY {
+			c.SetError(TypeMismatchError(actual, BOOL_ARRAY))
+			return nil
+		}
 	}
 	return ReadBoolSlice(c.buffer, err)
 }
@@ -302,7 +319,11 @@ func (c *ReadContext) ReadInt8Slice(refMode RefMode, readType bool) []int8 {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != INT8_ARRAY {
+			c.SetError(TypeMismatchError(actual, INT8_ARRAY))
+			return nil
+		}
 	}
 	return ReadInt8Slice(c.buffer, err)
 }
@@ -316,7 +337,11 @@ func (c *ReadContext) ReadInt16Slice(refMode RefMode, readType bool) []int16 {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != INT16_ARRAY {
+			c.SetError(TypeMismatchError(actual, INT16_ARRAY))
+			return nil
+		}
 	}
 	return ReadInt16Slice(c.buffer, err)
 }
@@ -330,7 +355,11 @@ func (c *ReadContext) ReadInt32Slice(refMode RefMode, readType bool) []int32 {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != INT32_ARRAY {
+			c.SetError(TypeMismatchError(actual, INT32_ARRAY))
+			return nil
+		}
 	}
 	return ReadInt32Slice(c.buffer, err)
 }
@@ -344,7 +373,11 @@ func (c *ReadContext) ReadInt64Slice(refMode RefMode, readType bool) []int64 {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != INT64_ARRAY {
+			c.SetError(TypeMismatchError(actual, INT64_ARRAY))
+			return nil
+		}
 	}
 	return ReadInt64Slice(c.buffer, err)
 }
@@ -358,7 +391,11 @@ func (c *ReadContext) ReadUint16Slice(refMode RefMode, readType bool) []uint16 {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != UINT16_ARRAY {
+			c.SetError(TypeMismatchError(actual, UINT16_ARRAY))
+			return nil
+		}
 	}
 	return ReadUint16Slice(c.buffer, err)
 }
@@ -372,7 +409,11 @@ func (c *ReadContext) ReadUint32Slice(refMode RefMode, readType bool) []uint32 {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != UINT32_ARRAY {
+			c.SetError(TypeMismatchError(actual, UINT32_ARRAY))
+			return nil
+		}
 	}
 	return ReadUint32Slice(c.buffer, err)
 }
@@ -386,7 +427,11 @@ func (c *ReadContext) ReadUint64Slice(refMode RefMode, readType bool) []uint64 {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != UINT64_ARRAY {
+			c.SetError(TypeMismatchError(actual, UINT64_ARRAY))
+			return nil
+		}
 	}
 	return ReadUint64Slice(c.buffer, err)
 }
@@ -400,7 +445,15 @@ func (c *ReadContext) ReadIntSlice(refMode RefMode, readType bool) []int {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		expected := TypeId(INT64_ARRAY)
+		if strconv.IntSize == 32 {
+			expected = INT32_ARRAY
+		}
+		if actual != expected {
+			c.SetError(TypeMismatchError(actual, expected))
+			return nil
+		}
 	}
 	return ReadIntSlice(c.buffer, err)
 }
@@ -414,7 +467,15 @@ func (c *ReadContext) ReadUintSlice(refMode RefMode, readType bool) []uint {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		expected := TypeId(UINT64_ARRAY)
+		if strconv.IntSize == 32 {
+			expected = UINT32_ARRAY
+		}
+		if actual != expected {
+			c.SetError(TypeMismatchError(actual, expected))
+			return nil
+		}
 	}
 	return ReadUintSlice(c.buffer, err)
 }
@@ -428,7 +489,11 @@ func (c *ReadContext) ReadFloat32Slice(refMode RefMode, readType bool) []float32
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != FLOAT32_ARRAY {
+			c.SetError(TypeMismatchError(actual, FLOAT32_ARRAY))
+			return nil
+		}
 	}
 	return ReadFloat32Slice(c.buffer, err)
 }
@@ -442,7 +507,11 @@ func (c *ReadContext) ReadFloat64Slice(refMode RefMode, readType bool) []float64
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != FLOAT64_ARRAY {
+			c.SetError(TypeMismatchError(actual, FLOAT64_ARRAY))
+			return nil
+		}
 	}
 	return ReadFloat64Slice(c.buffer, err)
 }
@@ -456,7 +525,11 @@ func (c *ReadContext) ReadByteSlice(refMode RefMode, readType bool) []byte {
 		}
 	}
 	if readType {
-		_ = c.buffer.ReadUint8(err)
+		actual := TypeId(c.buffer.ReadUint8(err))
+		if actual != BINARY && actual != UINT8_ARRAY {
+			c.SetError(DeserializationErrorf("slice type mismatch: expected BINARY (%d) or UINT8_ARRAY (%d), got %d", BINARY, UINT8_ARRAY, actual))
+			return nil
+		}
 	}
 	size := c.ReadBinaryLength()
 	return c.buffer.ReadBinary(size, err)
@@ -484,8 +557,8 @@ func (c *ReadContext) ReadStringStringMap(refMode RefMode, readType bool) map[st
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapStringString(c)
 }
@@ -498,8 +571,8 @@ func (c *ReadContext) ReadStringInt64Map(refMode RefMode, readType bool) map[str
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapStringInt64(c)
 }
@@ -512,8 +585,8 @@ func (c *ReadContext) ReadStringInt32Map(refMode RefMode, readType bool) map[str
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapStringInt32(c)
 }
@@ -526,8 +599,8 @@ func (c *ReadContext) ReadStringIntMap(refMode RefMode, readType bool) map[strin
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapStringInt(c)
 }
@@ -540,8 +613,8 @@ func (c *ReadContext) ReadStringFloat64Map(refMode RefMode, readType bool) map[s
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapStringFloat64(c)
 }
@@ -554,8 +627,8 @@ func (c *ReadContext) ReadStringBoolMap(refMode RefMode, readType bool) map[stri
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapStringBool(c)
 }
@@ -568,8 +641,8 @@ func (c *ReadContext) ReadInt32Int32Map(refMode RefMode, readType bool) map[int3
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapInt32Int32(c)
 }
@@ -582,8 +655,8 @@ func (c *ReadContext) ReadInt64Int64Map(refMode RefMode, readType bool) map[int6
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapInt64Int64(c)
 }
@@ -596,8 +669,8 @@ func (c *ReadContext) ReadIntIntMap(refMode RefMode, readType bool) map[int]int 
 			return nil
 		}
 	}
-	if readType {
-		_ = c.buffer.ReadUint8(err)
+	if readType && !c.readExpectedTypeID(MAP) {
+		return nil
 	}
 	return readMapIntInt(c)
 }

@@ -29,12 +29,15 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.io.ForyStreamReader;
@@ -282,6 +285,25 @@ public class StreamTest extends ForyTestBase {
   }
 
   @Test
+  public void testReadableChannelRequiresExactReads() throws IOException {
+    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    BeanA beanA = BeanA.createBeanA(2);
+    byte[] serialized = fory.serialize(beanA);
+
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(new ChunkedReadableByteChannel(serialized, 1))) {
+      Assert.assertEquals(fory.deserialize(channel), beanA);
+    }
+
+    byte[] truncated = new byte[serialized.length - 1];
+    System.arraycopy(serialized, 0, truncated, 0, truncated.length);
+    try (ForyReadableChannel channel =
+        new ForyReadableChannel(new ChunkedReadableByteChannel(truncated, 1))) {
+      Assert.assertThrows(DeserializationException.class, () -> fory.deserialize(channel));
+    }
+  }
+
+  @Test
   public void testScopedMetaShare() throws IOException {
     Fory fory =
         Fory.builder()
@@ -304,6 +326,45 @@ public class StreamTest extends ForyTestBase {
     Assert.assertEquals(fory.deserialize(stream), list);
     Assert.assertEquals(fory.deserialize(stream), map);
     Assert.assertEquals(fory.deserialize(stream), list2);
+  }
+
+  private static final class ChunkedReadableByteChannel implements ReadableByteChannel {
+    private final byte[] data;
+    private final int chunkSize;
+    private int index;
+    private boolean open = true;
+
+    private ChunkedReadableByteChannel(byte[] data, int chunkSize) {
+      this.data = data;
+      this.chunkSize = chunkSize;
+    }
+
+    @Override
+    public int read(ByteBuffer dst) {
+      if (!open) {
+        throw new IllegalStateException("Channel is closed");
+      }
+      if (!dst.hasRemaining()) {
+        return 0;
+      }
+      if (index == data.length) {
+        return -1;
+      }
+      int length = Math.min(chunkSize, Math.min(dst.remaining(), data.length - index));
+      dst.put(data, index, length);
+      index += length;
+      return length;
+    }
+
+    @Override
+    public boolean isOpen() {
+      return open;
+    }
+
+    @Override
+    public void close() {
+      open = false;
+    }
   }
 
   @Test

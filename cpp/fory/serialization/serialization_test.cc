@@ -68,8 +68,8 @@ struct NestedStruct {
 };
 
 enum class Color { RED, GREEN, BLUE };
-enum class LegacyStatus : int32_t { NEG = -3, ZERO = 0, LARGE = 42 };
-FORY_ENUM(LegacyStatus, NEG, ZERO, LARGE);
+enum class SignedScopedStatus : int32_t { NEG = -3, ZERO = 0, LARGE = 42 };
+FORY_ENUM(SignedScopedStatus, NEG, ZERO, LARGE);
 enum class SparseStatus : int32_t { UNKNOWN = 4096, OK = 8192 };
 FORY_ENUM(SparseStatus, UNKNOWN, OK);
 
@@ -95,7 +95,7 @@ inline void register_test_types(Fory &fory) {
 
   // Register all enum types used in tests
   fory.register_enum<Color>(type_id++);
-  fory.register_enum<LegacyStatus>(type_id++);
+  fory.register_enum<SignedScopedStatus>(type_id++);
   fory.register_enum<SparseStatus>(type_id++);
   fory.register_enum<OldStatus>(type_id++);
 }
@@ -224,7 +224,7 @@ TEST(SerializationTest, DateExposesDaysSinceEpochAccessorAndRoundTrips) {
 
   std::vector<uint8_t> bytes = std::move(serialize_result).value();
   Buffer expected;
-  expected.write_uint8(0b10);
+  expected.write_uint8(0b1);
   expected.write_int8(NOT_NULL_VALUE_FLAG);
   expected.write_uint8(static_cast<uint8_t>(TypeId::DATE));
   expected.write_var_int64(-1);
@@ -308,7 +308,7 @@ TEST(SerializationTest, DecimalRejectsNonCanonicalBigPayloads) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
 
   Buffer zero_big_encoding;
-  zero_big_encoding.write_uint8(0b10);
+  zero_big_encoding.write_uint8(0b1);
   zero_big_encoding.write_int8(NOT_NULL_VALUE_FLAG);
   zero_big_encoding.write_uint8(static_cast<uint8_t>(TypeId::DECIMAL));
   zero_big_encoding.write_var_int32(0);
@@ -322,7 +322,7 @@ TEST(SerializationTest, DecimalRejectsNonCanonicalBigPayloads) {
       std::string::npos);
 
   Buffer trailing_zero_payload;
-  trailing_zero_payload.write_uint8(0b10);
+  trailing_zero_payload.write_uint8(0b1);
   trailing_zero_payload.write_int8(NOT_NULL_VALUE_FLAG);
   trailing_zero_payload.write_uint8(static_cast<uint8_t>(TypeId::DECIMAL));
   trailing_zero_payload.write_var_int32(0);
@@ -459,9 +459,9 @@ TEST(SerializationTest, SparseEnumRoundtrip) {
 
 TEST(SerializationTest, EnumSerializesOrdinalValue) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_enum<LegacyStatus>(1);
+  fory.register_enum<SignedScopedStatus>(1);
 
-  auto bytes_result = fory.serialize(LegacyStatus::LARGE);
+  auto bytes_result = fory.serialize(SignedScopedStatus::LARGE);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
 
@@ -500,9 +500,9 @@ TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
 
 TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_enum<LegacyStatus>(1);
+  fory.register_enum<SignedScopedStatus>(1);
 
-  auto bytes_result = fory.serialize(LegacyStatus::NEG);
+  auto bytes_result = fory.serialize(SignedScopedStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
 
@@ -516,17 +516,18 @@ TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
   // Ordinal 0 encoded as varuint32 is just 1 byte with value 0
   EXPECT_EQ(bytes[offset + 3], 0);
 
-  auto roundtrip = fory.deserialize<LegacyStatus>(bytes.data(), bytes.size());
+  auto roundtrip =
+      fory.deserialize<SignedScopedStatus>(bytes.data(), bytes.size());
   ASSERT_TRUE(roundtrip.ok())
       << "Deserialization failed: " << roundtrip.error().to_string();
-  EXPECT_EQ(roundtrip.value(), LegacyStatus::NEG);
+  EXPECT_EQ(roundtrip.value(), SignedScopedStatus::NEG);
 }
 
 TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
-  fory.register_enum<LegacyStatus>(1);
+  fory.register_enum<SignedScopedStatus>(1);
 
-  auto bytes_result = fory.serialize(LegacyStatus::NEG);
+  auto bytes_result = fory.serialize(SignedScopedStatus::NEG);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
 
@@ -536,7 +537,8 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
   // offset + 3 Replace the valid ordinal with an invalid one (99 as varuint32)
   bytes[offset + 3] = 99;
 
-  auto decode = fory.deserialize<LegacyStatus>(bytes.data(), bytes.size());
+  auto decode =
+      fory.deserialize<SignedScopedStatus>(bytes.data(), bytes.size());
   EXPECT_FALSE(decode.ok());
 }
 
@@ -689,6 +691,41 @@ TEST(SerializationTest, DeserializeRejectsXlangProtocolMismatch) {
             std::string::npos);
 }
 
+TEST(SerializationTest, RootHeaderUsesXlangBitZero) {
+  auto fory = Fory::builder().xlang(true).build();
+  auto bytes_result = fory.serialize<int32_t>(123);
+  ASSERT_TRUE(bytes_result.ok())
+      << "Serialization failed: " << bytes_result.error().to_string();
+  ASSERT_FALSE(bytes_result.value().empty());
+  EXPECT_EQ(bytes_result.value()[0], 0x01);
+}
+
+TEST(SerializationTest, DeserializeRejectsRootHeaderReservedBits) {
+  auto fory = Fory::builder().xlang(true).build();
+  auto bytes_result = fory.serialize<int32_t>(123);
+  ASSERT_TRUE(bytes_result.ok())
+      << "Serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  bytes[0] = 0x05;
+  auto result = fory.deserialize<int32_t>(bytes.data(), bytes.size());
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SerializationTest, DeserializeRejectsOutOfBandRootHeader) {
+  auto fory = Fory::builder().xlang(true).build();
+  auto bytes_result = fory.serialize<int32_t>(123);
+  ASSERT_TRUE(bytes_result.ok())
+      << "Serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  bytes[0] = 0x03;
+  auto result = fory.deserialize<int32_t>(bytes.data(), bytes.size());
+  ASSERT_FALSE(result.ok());
+  EXPECT_EQ(result.error().code(), ErrorCode::InvalidData);
+}
+
 TEST(SerializationTest, RegistrationByIdFailureDoesNotLeakTypeInfo) {
   auto fory = Fory::builder().xlang(true).track_ref(false).build();
   TypeResolver &resolver = fory.type_resolver();
@@ -752,6 +789,139 @@ TEST(SerializationTest, TypeMetaRejectsOverConsumedDeclaredSize) {
   Buffer buffer(bytes);
   auto parsed = TypeMeta::from_bytes(buffer, nullptr);
   EXPECT_FALSE(parsed.ok());
+  ASSERT_FALSE(parsed.ok());
+  EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SerializationTest, TypeMetaHeaderUses52BitBodyHash) {
+  std::vector<FieldInfo> fields;
+  fields.emplace_back(
+      "value", FieldType(static_cast<uint32_t>(TypeId::VARINT32), false));
+  TypeMeta meta = TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT),
+                                        "", "S", false, 1, std::move(fields));
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+
+  const std::vector<uint8_t> &bytes = bytes_result.value();
+  ASSERT_GT(bytes.size(), sizeof(uint64_t));
+  uint64_t header = 0;
+  std::memcpy(&header, bytes.data(), sizeof(header));
+
+  constexpr uint64_t kMetaSizeMask = 0xff;
+  constexpr uint64_t kCompressMetaFlag = 0x100;
+  constexpr uint64_t kReservedBitsMask = 0xe00;
+  constexpr uint32_t kHashShift = 12;
+
+  EXPECT_EQ(header & kCompressMetaFlag, 0);
+  EXPECT_EQ(header & kReservedBitsMask, 0);
+  ASSERT_NE(header & kMetaSizeMask, kMetaSizeMask);
+  uint64_t meta_size = header & kMetaSizeMask;
+  ASSERT_EQ(bytes.size(), sizeof(uint64_t) + meta_size);
+  ASSERT_GT(meta_size, 0);
+  uint8_t body_header = bytes[sizeof(uint64_t)];
+  EXPECT_EQ(body_header & 0x80, 0x80);
+  EXPECT_EQ(body_header & 0x40, 0);
+  EXPECT_EQ(body_header & 0x20, 0);
+  EXPECT_EQ(body_header & 0x1F, 1);
+
+  std::vector<uint8_t> parse_bytes = bytes;
+  Buffer buffer(parse_bytes);
+  auto parsed = TypeMeta::from_bytes(buffer, nullptr);
+  ASSERT_TRUE(parsed.ok()) << parsed.error().to_string();
+  EXPECT_EQ(static_cast<int64_t>(header >> kHashShift),
+            parsed.value()->get_hash());
+}
+
+TEST(SerializationTest, TypeMetaNonStructHeaderUsesDenseKindCode) {
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(TypeId::ENUM), "", "E", false,
+                            7, std::vector<FieldInfo>{});
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  ASSERT_GT(bytes.size(), sizeof(uint64_t));
+  EXPECT_EQ(bytes[sizeof(uint64_t)], 0x00);
+
+  Buffer buffer(bytes);
+  auto parsed = TypeMeta::from_bytes(buffer, nullptr);
+  ASSERT_TRUE(parsed.ok()) << parsed.error().to_string();
+  EXPECT_EQ(parsed.value()->get_type_id(), static_cast<uint32_t>(TypeId::ENUM));
+}
+
+TEST(SerializationTest, TypeMetaRejectsNonStructReservedKindBits) {
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(TypeId::ENUM), "", "E", false,
+                            7, std::vector<FieldInfo>{});
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  bytes[sizeof(uint64_t)] |= 0x10;
+
+  Buffer buffer(bytes);
+  auto parsed = TypeMeta::from_bytes(buffer, nullptr);
+  ASSERT_FALSE(parsed.ok());
+  EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SerializationTest, TypeMetaRejectsReservedHeaderBits) {
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT), "", "S",
+                            false, 1, std::vector<FieldInfo>{});
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  uint64_t header = 0;
+  std::memcpy(&header, bytes.data(), sizeof(header));
+  header |= 0x200;
+  std::memcpy(bytes.data(), &header, sizeof(header));
+
+  Buffer buffer(bytes);
+  auto parsed = TypeMeta::from_bytes(buffer, nullptr);
+  ASSERT_FALSE(parsed.ok());
+  EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SerializationTest, TypeMetaRejectsUnsupportedCompressedHeader) {
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT), "", "S",
+                            false, 1, std::vector<FieldInfo>{});
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  uint64_t header = 0;
+  std::memcpy(&header, bytes.data(), sizeof(header));
+  header |= 0x100;
+  std::memcpy(bytes.data(), &header, sizeof(header));
+
+  Buffer buffer(bytes);
+  auto parsed = TypeMeta::from_bytes(buffer, nullptr);
+  ASSERT_FALSE(parsed.ok());
+  EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
+}
+
+TEST(SerializationTest, TypeMetaRejectsBodyHashMismatchAfterParse) {
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT), "", "S",
+                            false, 1, std::vector<FieldInfo>{});
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  ASSERT_GT(bytes.size(), sizeof(uint64_t));
+  bytes.back() ^= 0x01;
+
+  Buffer buffer(bytes);
+  auto parsed = TypeMeta::from_bytes(buffer, nullptr);
   ASSERT_FALSE(parsed.ok());
   EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
 }

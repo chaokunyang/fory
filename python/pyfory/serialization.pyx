@@ -34,6 +34,8 @@ from cpython.dict cimport PyDict_Next
 from cpython.list cimport PyList_New, PyList_SET_ITEM
 from cpython.tuple cimport PyTuple_New, PyTuple_SET_ITEM
 from cpython.ref cimport Py_INCREF, Py_XDECREF
+from cpython.bytes cimport PyBytes_GET_SIZE
+from libc.string cimport memcmp
 from pyfory.includes.libflat_hash_map cimport flat_hash_map
 from pyfory.includes.libutil cimport FlatIntMap
 from pyfory._fory import (
@@ -79,6 +81,7 @@ ENABLE_FORY_CYTHON_SERIALIZATION = os.environ.get(
 cdef int32_t NOT_NULL_BOOL_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.BOOL << 8)
 cdef int32_t NOT_NULL_STRING_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.STRING << 8)
 cdef int32_t NOT_NULL_FLOAT64_FLAG = (NOT_NULL_VALUE_FLAG & 0xFF) | (<int32_t>TypeId.FLOAT64 << 8)
+cdef int32_t MAX_CACHED_TYPE_DEFS = 8192
 
 _PRIMITIVE_TYPEVAR_NAMES = frozenset(
     {
@@ -492,6 +495,7 @@ cdef class TypeResolver:
         self._c_types_info[<uintptr_t> <PyObject *> typeinfo.cls] = <PyObject *> typeinfo
         if self._c_types_info.size() * 10 >= self._c_types_info.bucket_count() * 5:
             self._c_types_info.rehash(self._c_types_info.size() * 2)
+
         if typeinfo.typename_bytes is not None:
             self._c_meta_hash_to_type_info[
                 pair[int64_t, int64_t](
@@ -556,27 +560,34 @@ cdef class TypeResolver:
         cdef TypeInfo typeinfo = self._meta_shared_type_info.get(header)
         cdef object type_def
         if typeinfo is not None:
+            # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+            # after a successful TypeDef parse and 52-bit body-hash validation.
             _skip_typedef_fast(buffer, header)
             return typeinfo
         type_def = decode_typedef(buffer, self.resolver, header=header)
         typeinfo = self.resolver._build_type_info_from_typedef(type_def)
-        self._meta_shared_type_info[header] = typeinfo
+        if len(self._meta_shared_type_info) < MAX_CACHED_TYPE_DEFS:
+            self._meta_shared_type_info[header] = typeinfo
         return typeinfo
 
-    cdef inline TypeInfo _load_bytes_to_type_info(self, object ns_metabytes, object type_metabytes):
+    cdef inline TypeInfo _load_bytes_to_type_info(
+        self, object ns_metabytes, object type_metabytes
+    ):
         cdef pair[int64_t, int64_t] hash_key = pair[int64_t, int64_t](
             ns_metabytes.hashcode,
             type_metabytes.hashcode,
         )
-        cdef pair[pair[int64_t, int64_t], PyObject *] *entry = self._c_meta_hash_to_type_info.find(hash_key)
+        cdef pair[pair[int64_t, int64_t], PyObject *] *entry = (
+            self._c_meta_hash_to_type_info.find(hash_key)
+        )
         cdef TypeInfo typeinfo
         if entry != NULL and deref(entry).second != NULL:
             return <TypeInfo>deref(entry).second
         typeinfo = self.resolver._load_metabytes_to_type_info(ns_metabytes, type_metabytes)
-        self._c_meta_hash_to_type_info[
-            hash_key
-        ] = <PyObject *>typeinfo
+        if self._c_meta_hash_to_type_info.size() < MAX_CACHED_TYPE_DEFS:
+            self._c_meta_hash_to_type_info[hash_key] = <PyObject *>typeinfo
         return typeinfo
+
 
 cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
     cdef int32_t meta_size = <int32_t>(header & 0xFF)
@@ -589,6 +600,7 @@ cdef inline void _skip_typedef_fast(Buffer buffer, int64_t header):
     reader_index = buffer.get_reader_index()
     buffer.check_bound(reader_index, meta_size)
     buffer.set_reader_index(reader_index + meta_size)
+
 
 
 namespace_decoder = MetaStringDecoder(".", "_")
@@ -998,6 +1010,7 @@ cdef class Fory:
     cdef Buffer _serialize(self, obj, Buffer buffer=None, buffer_callback=None, unsupported_callback=None):
         cdef WriteContext write_context = self.write_context
         cdef int32_t mask_index
+        cdef uint8_t bitmap
         if buffer is None:
             self.buffer.set_writer_index(0)
             buffer = self.buffer
@@ -1011,16 +1024,10 @@ cdef class Fory:
         mask_index = buffer.get_writer_index()
         buffer.grow(1)
         buffer.set_writer_index(mask_index + 1)
-        buffer.put_int8(mask_index, 0)
-        if obj is None:
-            set_bit(buffer, mask_index, 0)
-        else:
-            clear_bit(buffer, mask_index, 0)
-        set_bit(buffer, mask_index, 1)
+        bitmap = 1 if self.xlang else 0
         if buffer_callback is not None:
-            set_bit(buffer, mask_index, 2)
-        else:
-            clear_bit(buffer, mask_index, 2)
+            bitmap |= 2
+        buffer.put_int8(mask_index, <int8_t>bitmap)
         write_context.write_ref(obj)
         return buffer
 
@@ -1038,15 +1045,19 @@ cdef class Fory:
         cdef ReadContext read_context = self.read_context
         cdef Buffer read_buffer
         cdef int32_t reader_index
+        cdef uint8_t bitmap
         cdef bint peer_out_of_band_enabled
         if isinstance(buffer, bytes):
             buffer = Buffer(buffer, max_binary_size=self.max_binary_size)
         read_buffer = buffer
         reader_index = read_buffer.get_reader_index()
         read_buffer.set_reader_index(reader_index + 1)
-        if get_bit(read_buffer, reader_index, 0):
-            return None
-        peer_out_of_band_enabled = get_bit(read_buffer, reader_index, 2)
+        bitmap = <uint8_t>read_buffer.get_int8(reader_index)
+        if bitmap & 0xFC:
+            raise ValueError(f"Unsupported root header bitmap 0x{bitmap:02x}")
+        if ((bitmap & 1) != 0) != self.xlang:
+            raise ValueError("Header bitmap mismatch at xlang bit")
+        peer_out_of_band_enabled = (bitmap & 2) != 0
         if peer_out_of_band_enabled:
             assert buffers is not None, (
                 "buffers shouldn't be null when the serialized stream is produced with buffer_callback not null."

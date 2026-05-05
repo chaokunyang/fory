@@ -32,6 +32,23 @@ use std::vec;
 
 use std::{any::Any, collections::HashMap};
 
+#[inline(always)]
+fn supports_type_def(type_id: u32) -> bool {
+    matches!(
+        type_id,
+        x if x == TypeId::ENUM as u32
+            || x == TypeId::NAMED_ENUM as u32
+            || x == TypeId::STRUCT as u32
+            || x == TypeId::COMPATIBLE_STRUCT as u32
+            || x == TypeId::NAMED_STRUCT as u32
+            || x == TypeId::NAMED_COMPATIBLE_STRUCT as u32
+            || x == TypeId::EXT as u32
+            || x == TypeId::NAMED_EXT as u32
+            || x == TypeId::TYPED_UNION as u32
+            || x == TypeId::NAMED_UNION as u32
+    )
+}
+
 type WriteFn = fn(
     &dyn Any,
     &mut WriteContext,
@@ -411,7 +428,7 @@ fn build_struct_type_infos<T: StructSerializer>(
                 let type_name_ms = TYPE_NAME_ENCODER
                     .encode_with_encodings(&variant_type_name, TYPE_NAME_ENCODINGS)?;
                 TypeMeta::from_fields(
-                    TypeId::ENUM as u32,
+                    TypeId::NAMED_COMPATIBLE_STRUCT as u32,
                     NO_USER_TYPE_ID,
                     namespace_ms,
                     type_name_ms,
@@ -442,7 +459,7 @@ fn build_struct_type_infos<T: StructSerializer>(
                     )));
                 }
                 TypeMeta::from_fields(
-                    TypeId::ENUM as u32,
+                    TypeId::NAMED_COMPATIBLE_STRUCT as u32,
                     NO_USER_TYPE_ID,
                     namespace_ms,
                     type_name_ms,
@@ -467,6 +484,9 @@ fn build_serializer_type_infos(
     partial_info: &TypeInfo,
     rust_type_id: std::any::TypeId,
 ) -> Result<Vec<(std::any::TypeId, TypeInfo)>, Error> {
+    if !supports_type_def(partial_info.type_id as u32) {
+        return Ok(vec![(rust_type_id, partial_info.clone())]);
+    }
     // For ext types, we just build the type info with empty fields
     let type_meta = TypeMeta::from_fields(
         partial_info.type_id as u32,

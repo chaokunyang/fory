@@ -160,7 +160,7 @@ public sealed class RuntimeEdgeCaseTests
         byte[] payload = fory.Serialize(TimeSpan.FromSeconds(1) + TimeSpan.FromTicks(3));
 
         ByteReader reader = new(payload);
-        Assert.False(fory.ReadHead(reader));
+        fory.ReadHead(reader);
         Assert.Equal((sbyte)RefFlag.NotNullValue, reader.ReadInt8());
         Assert.Equal((uint)TypeId.Duration, reader.ReadUInt8());
         Assert.Equal(1L, reader.ReadVarInt64());
@@ -175,7 +175,7 @@ public sealed class RuntimeEdgeCaseTests
         byte[] payload = fory.Serialize(new DateOnly(2021, 11, 23));
 
         ByteReader reader = new(payload);
-        Assert.False(fory.ReadHead(reader));
+        fory.ReadHead(reader);
         Assert.Equal((sbyte)RefFlag.NotNullValue, reader.ReadInt8());
         Assert.Equal((uint)TypeId.Date, reader.ReadUInt8());
         Assert.Equal(18_954L, reader.ReadVarInt64());
@@ -252,7 +252,7 @@ public sealed class RuntimeEdgeCaseTests
         byte[] payload = fory.Serialize(new ForyDecimal(BigInteger.Zero, 2));
 
         ByteReader reader = new(payload);
-        Assert.False(fory.ReadHead(reader));
+        fory.ReadHead(reader);
         Assert.Equal((sbyte)RefFlag.NotNullValue, reader.ReadInt8());
         Assert.Equal((uint)TypeId.Decimal, reader.ReadUInt8());
         Assert.Equal(2, reader.ReadVarInt32());
@@ -261,7 +261,7 @@ public sealed class RuntimeEdgeCaseTests
 
         payload = fory.Serialize(new ForyDecimal(BigInteger.Parse("9223372036854775808"), 0));
         reader.Reset(payload);
-        Assert.False(fory.ReadHead(reader));
+        fory.ReadHead(reader);
         Assert.Equal((sbyte)RefFlag.NotNullValue, reader.ReadInt8());
         Assert.Equal((uint)TypeId.Decimal, reader.ReadUInt8());
         Assert.Equal(0, reader.ReadVarInt32());
@@ -275,7 +275,7 @@ public sealed class RuntimeEdgeCaseTests
     {
         ForyRuntime fory = ForyRuntime.Builder().Build();
         ByteWriter writer = new();
-        fory.WriteHead(writer, isNone: false);
+        fory.WriteHead(writer);
         writer.WriteInt8((sbyte)RefFlag.NotNullValue);
         writer.WriteUInt8((byte)TypeId.Decimal);
         writer.WriteVarInt32(0);
@@ -283,7 +283,7 @@ public sealed class RuntimeEdgeCaseTests
         _ = Assert.Throws<InvalidDataException>(() => fory.Deserialize<ForyDecimal>(writer.ToArray()));
 
         writer.Reset();
-        fory.WriteHead(writer, isNone: false);
+        fory.WriteHead(writer);
         writer.WriteInt8((sbyte)RefFlag.NotNullValue);
         writer.WriteUInt8((byte)TypeId.Decimal);
         writer.WriteVarInt32(0);
@@ -302,7 +302,7 @@ public sealed class RuntimeEdgeCaseTests
         byte[] payload = fory.Serialize(DateTimeOffset.FromUnixTimeMilliseconds(-1));
 
         ByteReader reader = new(payload);
-        Assert.False(fory.ReadHead(reader));
+        fory.ReadHead(reader);
         Assert.Equal((sbyte)RefFlag.NotNullValue, reader.ReadInt8());
         Assert.Equal((uint)TypeId.Timestamp, reader.ReadUInt8());
         Assert.Equal(-1L, reader.ReadInt64());
@@ -405,6 +405,34 @@ public sealed class RuntimeEdgeCaseTests
 
         InvalidDataException exception = Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(payload));
         Assert.Contains("xlang bitmap mismatch", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SerializeNullRootUsesRefMeta()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        byte[] payload = fory.Serialize<string?>(null);
+
+        Assert.Equal(ForyHeaderFlag.IsXlang, payload[0]);
+        Assert.Equal(unchecked((byte)(sbyte)RefFlag.Null), payload[1]);
+        Assert.Null(fory.Deserialize<string?>(payload));
+    }
+
+    [Fact]
+    public void DeserializeRejectsUnsupportedRootHeaderBits()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Build();
+        byte[] payload = fory.Serialize(123);
+
+        foreach (byte bitmap in new[] { (byte)0x03, (byte)0x05, (byte)0x81 })
+        {
+            byte[] invalidPayload = [.. payload];
+            invalidPayload[0] = bitmap;
+
+            InvalidDataException exception =
+                Assert.Throws<InvalidDataException>(() => fory.Deserialize<int>(invalidPayload));
+            Assert.Contains("unsupported root header bitmap", exception.Message, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

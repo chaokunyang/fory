@@ -604,14 +604,12 @@ func TestSkipAnyValueReadsSharedTypeMeta(t *testing.T) {
 	f.resetReadState()
 	f.readCtx.SetData(buf.Bytes())
 
-	isNull := readHeader(f.readCtx)
-	require.False(t, isNull)
+	readHeader(f.readCtx)
 	SkipAnyValue(f.readCtx, true)
 	require.NoError(t, f.readCtx.CheckError())
 
 	f.resetReadState()
-	isNull = readHeader(f.readCtx)
-	require.False(t, isNull)
+	readHeader(f.readCtx)
 
 	var out any
 	f.readCtx.ReadValue(reflect.ValueOf(&out).Elem(), RefModeTracking, true)
@@ -620,6 +618,17 @@ func TestSkipAnyValueReadsSharedTypeMeta(t *testing.T) {
 	result, ok := out.(*Second)
 	require.True(t, ok)
 	require.Equal(t, "ok", result.Name)
+}
+
+func TestReadHeaderRejectsOutOfBandWithoutBuffers(t *testing.T) {
+	f := New(WithXlang(true))
+	f.readCtx.SetData([]byte{XLangFlag | OutOfBandFlag})
+
+	readHeader(f.readCtx)
+
+	err := f.readCtx.TakeError()
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "out-of-band buffers")
 }
 
 func TestFloat16StructField(t *testing.T) {

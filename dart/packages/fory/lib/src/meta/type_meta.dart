@@ -18,6 +18,7 @@
  */
 
 import 'dart:collection';
+import 'dart:typed_data';
 
 import 'package:fory/src/memory/buffer.dart';
 import 'package:fory/src/config.dart';
@@ -25,6 +26,7 @@ import 'package:fory/src/meta/meta_string.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/types/int64.dart';
+import 'package:fory/src/util/hash_util.dart';
 
 /// Wire-level type metadata for one value.
 final class WireTypeMeta {
@@ -53,9 +55,23 @@ final class WireTypeMeta {
 }
 
 final class TypeHeader {
+  static const int _compressMetaFlag = 1 << 8;
+  static const int _reservedMetaFlags = 0x0e00;
+  static const int _hashLow32Mask = 0xfffff000;
+
   final Int64 value;
 
   const TypeHeader(this.value);
+
+  @pragma('vm:prefer-inline')
+  void validateGlobal() {
+    if ((value.low32 & _reservedMetaFlags) != 0) {
+      throw StateError('Invalid TypeDef global header.');
+    }
+    if ((value.low32 & _compressMetaFlag) != 0) {
+      throw StateError('Compressed TypeDef metadata is not supported.');
+    }
+  }
 
   @pragma('vm:prefer-inline')
   int readMetaSize(Buffer buffer) {
@@ -69,6 +85,15 @@ final class TypeHeader {
   @pragma('vm:prefer-inline')
   void skipRemaining(Buffer buffer) {
     buffer.skip(readMetaSize(buffer));
+  }
+
+  @pragma('vm:prefer-inline')
+  void validateBodyHash(Uint8List body) {
+    final expected = typeDefHeader(body);
+    if (value.high32Unsigned != expected.high32Unsigned ||
+        (value.low32 & _hashLow32Mask) != (expected.low32 & _hashLow32Mask)) {
+      throw StateError('Invalid TypeDef metadata hash.');
+    }
   }
 }
 
@@ -109,7 +134,7 @@ final class WireTypeMetaEncoder {
   const WireTypeMetaEncoder();
 
   WireTypeMeta typeMetaFor(Config config, TypeInfo resolvedType) {
-    final wireTypeId = _wireTypeIdFor(config, resolvedType);
+    final wireTypeId = wireTypeIdFor(config, resolvedType);
     final writesTypeDef = wireTypeId == TypeIds.compatibleStruct ||
         wireTypeId == TypeIds.namedCompatibleStruct ||
         (config.compatible &&
@@ -146,7 +171,8 @@ final class WireTypeMetaEncoder {
     }
   }
 
-  int _wireTypeIdFor(Config config, TypeInfo resolvedType) {
+  @pragma('vm:prefer-inline')
+  int wireTypeIdFor(Config config, TypeInfo resolvedType) {
     switch (resolvedType.kind) {
       case RegistrationKind.builtin:
         return resolvedType.typeId;

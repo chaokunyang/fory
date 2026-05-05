@@ -62,6 +62,17 @@ public class DeflaterMetaCompressorTest {
     assertTrue(e.getMessage().contains("Invalid compressed metadata"));
   }
 
+  @Test(timeOut = 5_000)
+  public void testDecompressRejectsOutputAboveLimit() {
+    byte[] input = new byte[4096];
+    byte[] compressed = compressor.compress(input, 0, input.length);
+    InvalidDataException e =
+        Assert.expectThrows(
+            InvalidDataException.class,
+            () -> compressor.decompress(compressed, 0, compressed.length, 1024));
+    assertTrue(e.getMessage().contains("maximum size"));
+  }
+
   private static byte[] sampleInput() {
     return "0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"
         .getBytes(StandardCharsets.UTF_8);

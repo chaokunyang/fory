@@ -19,6 +19,7 @@
 
 package org.apache.fory.collection;
 
+import java.util.Arrays;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.util.Preconditions;
 
@@ -127,6 +128,25 @@ public final class LongLongByteMap<V> {
         return valueTable[i];
       }
     }
+  }
+
+  public void clear() {
+    if (size == 0) {
+      return;
+    }
+    size = 0;
+    Arrays.fill(keyTable, null);
+    ObjectArray.clearObjectArray(valueTable, 0, valueTable.length);
+  }
+
+  public void clear(int maximumCapacity) {
+    int tableSize = ForyObjectMap.tableSize(maximumCapacity, loadFactor);
+    if (keyTable.length <= tableSize) {
+      clear();
+      return;
+    }
+    size = 0;
+    resize(tableSize);
   }
 
   private void resize(int newSize) {

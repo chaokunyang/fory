@@ -484,6 +484,10 @@ func (s mapSerializer) readChunk(ctx *ReadContext, mapVal reflect.Value, header 
 	if ctx.HasError() {
 		return 0
 	}
+	if chunkSize == 0 || chunkSize > size {
+		ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, size))
+		return 0
+	}
 
 	// Read type info if not declared
 	var keyTypeInfo, valueTypeInfo *TypeInfo
@@ -618,7 +622,9 @@ func readMapRefAndType(ctx *ReadContext, refMode RefMode, readType bool, value r
 		}
 	}
 	if readType {
-		buf.ReadUint8(ctxErr)
+		if !ctx.readExpectedTypeID(MAP) {
+			return false
+		}
 	}
 	return false
 }

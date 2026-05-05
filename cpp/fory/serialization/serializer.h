@@ -72,7 +72,6 @@ inline bool is_little_endian_system() {
 
 /// Fory header information
 struct HeaderInfo {
-  bool is_null;
   bool is_xlang;
   bool is_oob;
   uint32_t meta_start_offset; // 0 if not present
@@ -89,9 +88,14 @@ inline Result<HeaderInfo, Error> read_header(Buffer &buffer) {
     return Unexpected(std::move(error));
   }
   HeaderInfo info;
-  info.is_null = (flags & (1 << 0)) != 0;
-  info.is_xlang = (flags & (1 << 1)) != 0;
-  info.is_oob = (flags & (1 << 2)) != 0;
+  constexpr uint8_t xlang_flag = 1 << 0;
+  constexpr uint8_t oob_flag = 1 << 1;
+  constexpr uint8_t known_flags = xlang_flag | oob_flag;
+  if (FORY_PREDICT_FALSE((flags & ~known_flags) != 0)) {
+    return Unexpected(Error::invalid_data("Unsupported root header bitmap"));
+  }
+  info.is_xlang = (flags & xlang_flag) != 0;
+  info.is_oob = (flags & oob_flag) != 0;
 
   // Note: Meta start offset would be read here if present
   info.meta_start_offset = 0;

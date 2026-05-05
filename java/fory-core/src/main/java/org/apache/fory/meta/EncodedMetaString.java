@@ -33,6 +33,7 @@ public final class EncodedMetaString {
 
   public final byte[] bytes;
   public final long hash;
+  public final int encodingValue;
   public final MetaString.Encoding encoding;
   public final long first8Bytes;
   public final long second8Bytes;
@@ -45,7 +46,8 @@ public final class EncodedMetaString {
     assert hash != 0;
     this.bytes = bytes;
     this.hash = hash;
-    this.encoding = MetaString.Encoding.fromInt((int) (hash & HEADER_MASK));
+    this.encodingValue = (int) (hash & HEADER_MASK);
+    this.encoding = MetaString.Encoding.fromInt(encodingValue);
     byte[] data = bytes;
     if (bytes.length < 16) {
       data = new byte[16];
@@ -55,7 +57,7 @@ public final class EncodedMetaString {
     second8Bytes = LittleEndian.getInt64(data, Platform.BYTE_ARRAY_OFFSET + 8);
   }
 
-  private static long computeHash(byte[] bytes, MetaString.Encoding encoding) {
+  public static long computeHash(byte[] bytes, MetaString.Encoding encoding) {
     long hash = MurmurHash3.murmurhash3_x64_128(bytes, 0, bytes.length, 47)[0];
     hash = Math.abs(hash);
     if (hash == 0) {

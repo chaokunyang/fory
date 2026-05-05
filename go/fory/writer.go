@@ -38,7 +38,7 @@ type WriteContext struct {
 	depth          int
 	maxDepth       int
 	typeResolver   *TypeResolver           // For complex type serialization
-	refResolver    *RefResolver            // For reference tracking (legacy)
+	refResolver    *RefResolver            // For reference tracking in native-mode paths
 	bufferCallback func(BufferObject) bool // Callback for out-of-band buffers
 	outOfBand      bool                    // Whether out-of-band serialization is enabled
 	err            Error                   // Accumulated error state for deferred checking
@@ -108,7 +108,7 @@ func (c *WriteContext) TypeResolver() *TypeResolver {
 	return c.typeResolver
 }
 
-// RefResolver returns the reference resolver (legacy)
+// RefResolver returns the reference resolver.
 func (c *WriteContext) RefResolver() *RefResolver {
 	return c.refResolver
 }

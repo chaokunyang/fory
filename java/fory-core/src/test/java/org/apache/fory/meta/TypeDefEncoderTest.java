@@ -26,6 +26,8 @@ import java.util.List;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -111,6 +113,43 @@ public class TypeDefEncoderTest {
     private String field1;
     private int field2;
     private double field3;
+  }
+
+  public static class EmptyStruct {}
+
+  public static class ManyFields {
+    int f00;
+    int f01;
+    int f02;
+    int f03;
+    int f04;
+    int f05;
+    int f06;
+    int f07;
+    int f08;
+    int f09;
+    int f10;
+    int f11;
+    int f12;
+    int f13;
+    int f14;
+    int f15;
+    int f16;
+    int f17;
+    int f18;
+    int f19;
+    int f20;
+    int f21;
+    int f22;
+    int f23;
+    int f24;
+    int f25;
+    int f26;
+    int f27;
+    int f28;
+    int f29;
+    int f30;
+    int f31;
   }
 
   // Test data: Class with all fields using field names (tagId = -1)
@@ -363,6 +402,142 @@ public class TypeDefEncoderTest {
 
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
     Assert.assertEquals(typeDef.getId() & TypeDef.COMPRESS_META_FLAG, 0);
+  }
+
+  @Test
+  public void testExtendedFieldCountHeaderDoesNotSetRegisterByName() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    fory.register(ManyFields.class, 6002);
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ManyFields.class);
+    byte bodyHeader = typeDef.getEncoded()[typeDefBodyOffset(typeDef.getEncoded())];
+
+    Assert.assertEquals(bodyHeader & TypeDefEncoder.SMALL_NUM_FIELDS_THRESHOLD, 31);
+    Assert.assertEquals(bodyHeader & TypeDefEncoder.REGISTER_BY_NAME_FLAG, 0);
+    TypeDef decoded =
+        TypeDef.readTypeDef(fory.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
+    Assert.assertEquals(decoded.getFieldsInfo().size(), 32);
+  }
+
+  @Test
+  public void testDecodeRejectsCompressedXlangTypeDef() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    fory.register(ClassWithNoAnnotations.class);
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
+    byte[] body = Arrays.copyOfRange(typeDef.getEncoded(), Long.BYTES, typeDef.getEncoded().length);
+    byte[] compressed = fory.getConfig().getMetaCompressor().compress(body, 0, body.length);
+    MemoryBuffer compressedBody = MemoryBuffer.fromByteArray(compressed);
+    MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(compressedBody, true);
+
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
+  }
+
+  @Test
+  public void testDecodeRejectsReservedGlobalBits() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    fory.register(ClassWithNoAnnotations.class);
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
+    MemoryBuffer encoded = MemoryBuffer.fromByteArray(typeDef.getEncoded());
+    long header = encoded.readInt64();
+
+    MemoryBuffer malformed = MemoryBuffer.newHeapBuffer(typeDef.getEncoded().length);
+    malformed.writeInt64(header | TypeDef.RESERVED_META_FLAGS);
+    malformed.writeBytes(
+        typeDef.getEncoded(), Long.BYTES, typeDef.getEncoded().length - Long.BYTES);
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> TypeDef.readTypeDef(fory.getTypeResolver(), malformed));
+  }
+
+  @Test
+  public void testDecodeRejectsTrailingTypeDefBodyBytes() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    fory.register(ClassWithNoAnnotations.class);
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
+    MemoryBuffer encoded = MemoryBuffer.fromByteArray(typeDef.getEncoded());
+    long header = encoded.readInt64();
+    long size = header & TypeDef.META_SIZE_MASKS;
+    Assert.assertTrue(size < TypeDef.META_SIZE_MASKS);
+
+    MemoryBuffer malformed = MemoryBuffer.newHeapBuffer(typeDef.getEncoded().length + 1);
+    malformed.writeInt64((header & ~TypeDef.META_SIZE_MASKS) | (size + 1));
+    malformed.writeBytes(
+        typeDef.getEncoded(), Long.BYTES, typeDef.getEncoded().length - Long.BYTES);
+    malformed.writeByte(0);
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> TypeDef.readTypeDef(fory.getTypeResolver(), malformed));
+  }
+
+  @Test
+  public void testDecodeRejectsParsedTypeDefWithMismatchedHash() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    fory.register(ClassWithNoAnnotations.class);
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
+    byte[] malformed = corruptEncodedBody(typeDef, "field1");
+
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> TypeDef.readTypeDef(fory.getTypeResolver(), MemoryBuffer.fromByteArray(malformed)));
+  }
+
+  @Test
+  public void testDecodeRejectsHashConsistentMalformedTypeDefBody() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    MemoryBuffer body = MemoryBuffer.newHeapBuffer(1);
+    body.writeByte(0);
+    MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
+    Assert.assertThrows(
+        RuntimeException.class, () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
+  }
+
+  @Test
+  public void testDecodeRejectsRegisteredTypeDefKindMismatch() {
+    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    fory.register(EmptyStruct.class, 6001);
+    MemoryBuffer body = MemoryBuffer.newHeapBuffer(8);
+    body.writeByte(0);
+    body.writeVarUInt32(6001);
+    MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
+
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> TypeDef.readTypeDef(fory.getTypeResolver(), encoded));
+  }
+
+  private static byte[] corruptEncodedBody(TypeDef typeDef, String needle) {
+    byte[] malformed = typeDef.getEncoded().clone();
+    byte[] needleBytes = Encoders.encodeFieldName(needle).getBytes();
+    int index = indexOf(malformed, needleBytes, Long.BYTES);
+    Assert.assertTrue(index >= Long.BYTES);
+    malformed[index + needleBytes.length - 1] ^= 1;
+    return malformed;
+  }
+
+  private static int indexOf(byte[] bytes, byte[] needle, int fromIndex) {
+    for (int i = fromIndex; i <= bytes.length - needle.length; i++) {
+      boolean match = true;
+      for (int j = 0; j < needle.length; j++) {
+        if (bytes[i + j] != needle[j]) {
+          match = false;
+          break;
+        }
+      }
+      if (match) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private static int typeDefBodyOffset(byte[] encoded) {
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(encoded);
+    long header = buffer.readInt64();
+    if ((header & TypeDef.META_SIZE_MASKS) == TypeDef.META_SIZE_MASKS) {
+      buffer.readVarUInt32();
+    }
+    return buffer.readerIndex();
   }
 
   /** Helper method to get a field from a class by name. */

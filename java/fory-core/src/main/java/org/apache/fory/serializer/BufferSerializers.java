@@ -24,6 +24,7 @@ import java.nio.ByteOrder;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
@@ -60,8 +61,14 @@ public class BufferSerializers {
       MemoryBuffer newBuffer = readContext.readBufferObject();
       int readerIndex = newBuffer.readerIndex();
       int size = newBuffer.remaining();
+      if (size < 1) {
+        throw new DeserializationException("Invalid ByteBuffer payload");
+      }
       ByteBuffer originalBuffer = newBuffer.sliceAsByteBuffer(readerIndex, size - 1);
       byte isBigEndian = newBuffer.getByte(readerIndex + size - 1);
+      if (isBigEndian != 0 && isBigEndian != (byte) 1) {
+        throw new DeserializationException("Invalid ByteBuffer byte order marker");
+      }
       originalBuffer.order(
           isBigEndian == (byte) 1 ? ByteOrder.BIG_ENDIAN : ByteOrder.LITTLE_ENDIAN);
       return originalBuffer;

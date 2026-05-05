@@ -33,9 +33,7 @@ export class BinaryReader {
   /** Cached ArrayBuffer for fast-path DataView reuse. */
   private cachedArrayBuffer: ArrayBuffer | null = null;
 
-  constructor(config: {
-    useSliceString?: boolean;
-  }) {
+  constructor(config: { useSliceString?: boolean }) {
     this.sliceStringEnable = isNodeEnv && config.useSliceString;
   }
 
@@ -44,15 +42,25 @@ export class BinaryReader {
     this.byteLength = this.platformBuffer.byteLength;
     // Reuse DataView when the underlying ArrayBuffer, byteOffset, and byteLength are unchanged.
     const buf = this.platformBuffer.buffer;
-    if (buf !== this.cachedArrayBuffer
-      || !this.dataView
-      || this.dataView.byteOffset !== this.platformBuffer.byteOffset
-      || this.dataView.byteLength !== this.byteLength) {
-      this.dataView = new DataView(buf, this.platformBuffer.byteOffset, this.byteLength);
+    if (
+      buf !== this.cachedArrayBuffer ||
+      !this.dataView ||
+      this.dataView.byteOffset !== this.platformBuffer.byteOffset ||
+      this.dataView.byteLength !== this.byteLength
+    ) {
+      this.dataView = new DataView(
+        buf,
+        this.platformBuffer.byteOffset,
+        this.byteLength,
+      );
       this.cachedArrayBuffer = buf;
     }
     if (this.sliceStringEnable) {
-      this.bigString = this.platformBuffer.toString("latin1", 0, this.byteLength);
+      this.bigString = this.platformBuffer.toString(
+        "latin1",
+        0,
+        this.byteLength,
+      );
     }
     this.cursor = 0;
   }
@@ -184,13 +192,21 @@ export class BinaryReader {
   }
 
   stringUtf8(len: number) {
-    const result = this.platformBuffer.toString("utf8", this.cursor, this.cursor + len);
+    const result = this.platformBuffer.toString(
+      "utf8",
+      this.cursor,
+      this.cursor + len,
+    );
     this.cursor += len;
     return result;
   }
 
   stringUtf16LE(len: number) {
-    const result = this.platformBuffer.toString("utf16le", this.cursor, this.cursor + len);
+    const result = this.platformBuffer.toString(
+      "utf16le",
+      this.cursor,
+      this.cursor + len,
+    );
     this.cursor += len;
     return result;
   }
@@ -243,6 +259,10 @@ export class BinaryReader {
     return result;
   }
 
+  bufferRefAt(start: number, len: number) {
+    return this.platformBuffer.subarray(start, start + len);
+  }
+
   readVarUInt32() {
     // Reduce memory reads as much as possible. Reading a uint32 at once is far faster than reading four uint8s separately.
     if (this.byteLength - this.cursor >= 5) {
@@ -262,7 +282,7 @@ export class BinaryReader {
             // 0xfe00000: 0b1111111 << 21
             result |= (fourByteValue >>> 3) & 0xfe00000;
             if ((fourByteValue & 0x80000000) != 0) {
-              result |= (this.readUint8()) << 28;
+              result |= this.readUint8() << 28;
             }
           }
         }
@@ -282,7 +302,7 @@ export class BinaryReader {
           result |= (byte & 0x7f) << 21;
           if ((byte & 0x80) != 0) {
             byte = this.readUint8();
-            result |= (byte) << 28;
+            result |= byte << 28;
           }
         }
       }
@@ -307,7 +327,7 @@ export class BinaryReader {
     if (this.byteLength - readIdx >= 5) {
       const fourByteValue = this.dataView.getUint32(readIdx, true);
       this.cursor = readIdx + 1;
-      let value = fourByteValue & 0x7F;
+      let value = fourByteValue & 0x7f;
       if ((fourByteValue & 0x80) !== 0) {
         this.cursor++;
         value |= (fourByteValue >>> 1) & 0x3f80;
@@ -321,14 +341,18 @@ export class BinaryReader {
     }
   }
 
-  private continueReadVarUint32(readIdx: number, bulkRead: number, value: number): number {
+  private continueReadVarUint32(
+    readIdx: number,
+    bulkRead: number,
+    value: number,
+  ): number {
     readIdx++;
     value |= (bulkRead >>> 2) & 0x1fc000;
     if ((bulkRead & 0x800000) !== 0) {
       readIdx++;
       value |= (bulkRead >>> 3) & 0xfe00000;
       if ((bulkRead & 0x80000000) !== 0) {
-        value |= (this.dataView.getUint8(readIdx++) & 0x7F) << 28;
+        value |= (this.dataView.getUint8(readIdx++) & 0x7f) << 28;
       }
     }
     this.cursor = readIdx;
@@ -340,7 +364,7 @@ export class BinaryReader {
     if (this.byteLength - readIdx >= 5) {
       const fourByteValue = this.dataView.getUint32(readIdx, true);
       this.cursor = readIdx + 1;
-      let result = fourByteValue & 0x7F;
+      let result = fourByteValue & 0x7f;
       if ((fourByteValue & 0x80) !== 0) {
         this.cursor++;
         result |= (fourByteValue >>> 1) & 0x3f80;
@@ -354,14 +378,18 @@ export class BinaryReader {
     }
   }
 
-  private continueReadVarUint36(readIdx: number, fourByteValue: number, result: number): number {
+  private continueReadVarUint36(
+    readIdx: number,
+    fourByteValue: number,
+    result: number,
+  ): number {
     readIdx++;
     result |= (fourByteValue >>> 2) & 0x1fc000;
     if ((fourByteValue & 0x800000) !== 0) {
       readIdx++;
       result |= (fourByteValue >>> 3) & 0xfe00000;
       if ((fourByteValue & 0x80000000) !== 0) {
-        result |= (this.dataView.getUint8(readIdx++) & 0xFF) << 28;
+        result |= (this.dataView.getUint8(readIdx++) & 0xff) << 28;
       }
     }
     this.cursor = readIdx;
@@ -370,19 +398,19 @@ export class BinaryReader {
 
   private readVarUint36Slow(): number {
     let b = this.readUint8();
-    let result = b & 0x7F;
+    let result = b & 0x7f;
     if ((b & 0x80) !== 0) {
       b = this.readUint8();
-      result |= (b & 0x7F) << 7;
+      result |= (b & 0x7f) << 7;
       if ((b & 0x80) !== 0) {
         b = this.readUint8();
-        result |= (b & 0x7F) << 14;
+        result |= (b & 0x7f) << 14;
         if ((b & 0x80) !== 0) {
           b = this.readUint8();
-          result |= (b & 0x7F) << 21;
+          result |= (b & 0x7f) << 21;
           if ((b & 0x80) !== 0) {
             b = this.readUint8();
-            result |= (b & 0xFF) << 28;
+            result |= (b & 0xff) << 28;
           }
         }
       }
@@ -427,7 +455,7 @@ export class BinaryReader {
                     result |= (byte & 0x7fn) << 49n;
                     if ((byte & 0x80n) != 0n) {
                       byte = this.bigUInt8();
-                      result |= (byte) << 56n;
+                      result |= byte << 56n;
                     }
                   }
                 }
@@ -457,7 +485,7 @@ export class BinaryReader {
           if ((byte & 0x80) != 0) {
             const h32 = this.dataView.getUint32(this.cursor++, true);
             byte = h32 & 0xff;
-            rh28 |= (byte & 0x7f);
+            rh28 |= byte & 0x7f;
             if ((byte & 0x80) != 0) {
               byte = (h32 >>> 8) & 0xff;
               this.cursor++;
@@ -471,7 +499,11 @@ export class BinaryReader {
                   this.cursor++;
                   rh28 |= (byte & 0x7f) << 21;
                   if ((byte & 0x80) != 0) {
-                    return (BigInt(this.readUint8()) << 56n) | BigInt(rh28) << 28n | BigInt(rl28);
+                    return (
+                      (BigInt(this.readUint8()) << 56n) |
+                      (BigInt(rh28) << 28n) |
+                      BigInt(rl28)
+                    );
                   }
                 }
               }
@@ -481,7 +513,7 @@ export class BinaryReader {
       }
     }
 
-    return BigInt(rh28) << 28n | BigInt(rl28);
+    return (BigInt(rh28) << 28n) | BigInt(rl28);
   }
 
   readVarInt64() {
@@ -492,8 +524,8 @@ export class BinaryReader {
   readFloat16() {
     const asUint16 = this.readUint16();
     const sign = asUint16 >> 15;
-    const exponent = (asUint16 >> 10) & 0x1F;
-    const mantissa = asUint16 & 0x3FF;
+    const exponent = (asUint16 >> 10) & 0x1f;
+    const mantissa = asUint16 & 0x3ff;
 
     // IEEE 754-2008
     if (exponent === 0) {
@@ -514,7 +546,9 @@ export class BinaryReader {
       }
     } else {
       // Normalized number
-      return (sign === 0 ? 1 : -1) * (1 + mantissa * 2 ** -10) * 2 ** (exponent - 15);
+      return (
+        (sign === 0 ? 1 : -1) * (1 + mantissa * 2 ** -10) * 2 ** (exponent - 15)
+      );
     }
   }
 

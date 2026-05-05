@@ -56,8 +56,8 @@ func (s boolSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(BOOL) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -103,8 +103,8 @@ func (s int8Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(INT8) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -149,8 +149,8 @@ func (s byteSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(UINT8) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -195,8 +195,8 @@ func (s uint16Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool,
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(UINT16) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -241,8 +241,8 @@ func (s uint32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool,
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(VAR_UINT32) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -287,8 +287,8 @@ func (s uint64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool,
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(VAR_UINT64) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -331,8 +331,8 @@ func (s uintSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, h
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(VAR_UINT64) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -375,8 +375,8 @@ func (s int16Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, 
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(INT16) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -419,8 +419,8 @@ func (s int32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, 
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(VARINT32) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -463,8 +463,8 @@ func (s int64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool, 
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(VARINT64) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -505,8 +505,8 @@ func (s intSerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, ha
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(VARINT64) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -549,8 +549,8 @@ func (s float32Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(FLOAT32) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -593,8 +593,8 @@ func (s float64Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(FLOAT64) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -651,8 +651,8 @@ func (s float16Serializer) Read(ctx *ReadContext, refMode RefMode, readType bool
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(FLOAT16) {
+		return
 	}
 	if ctx.HasError() {
 		return
@@ -704,8 +704,8 @@ func (s bfloat16Serializer) Read(ctx *ReadContext, refMode RefMode, readType boo
 			return
 		}
 	}
-	if readType {
-		_ = ctx.buffer.ReadUint8(err)
+	if readType && !ctx.readExpectedTypeID(BFLOAT16) {
+		return
 	}
 	if ctx.HasError() {
 		return

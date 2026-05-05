@@ -55,6 +55,57 @@ import 'package:fory/src/util/hash_util.dart';
 
 enum RegistrationKind { builtin, struct, enumType, ext, union }
 
+bool _isStructTypeDefKind(int typeId) =>
+    typeId == TypeIds.struct ||
+    typeId == TypeIds.compatibleStruct ||
+    typeId == TypeIds.namedStruct ||
+    typeId == TypeIds.namedCompatibleStruct;
+
+bool _isNamedTypeDefKind(int typeId) =>
+    typeId == TypeIds.namedStruct ||
+    typeId == TypeIds.namedCompatibleStruct ||
+    typeId == TypeIds.namedEnum ||
+    typeId == TypeIds.namedExt ||
+    typeId == TypeIds.namedUnion;
+
+int _nonStructTypeDefKindCode(int typeId) {
+  switch (typeId) {
+    case TypeIds.enumById:
+      return 0;
+    case TypeIds.namedEnum:
+      return 1;
+    case TypeIds.ext:
+      return 2;
+    case TypeIds.namedExt:
+      return 3;
+    case TypeIds.typedUnion:
+      return 4;
+    case TypeIds.namedUnion:
+      return 5;
+    default:
+      throw StateError('Unsupported TypeDef kind $typeId.');
+  }
+}
+
+int _nonStructTypeDefTypeId(int kindCode) {
+  switch (kindCode) {
+    case 0:
+      return TypeIds.enumById;
+    case 1:
+      return TypeIds.namedEnum;
+    case 2:
+      return TypeIds.ext;
+    case 3:
+      return TypeIds.namedExt;
+    case 4:
+      return TypeIds.typedUnion;
+    case 5:
+      return TypeIds.namedUnion;
+    default:
+      throw StateError('Unsupported TypeDef kind code $kindCode.');
+  }
+}
+
 final class TypeInfo {
   final Type type;
   final RegistrationKind kind;
@@ -588,24 +639,46 @@ final class TypeResolver {
     required LinkedHashMap<TypeDef, int> typeDefIds,
     required MetaStringWriter metaStringWriter,
   }) {
-    _wireTypeMetaEncoder.write(
-      buffer,
-      wireTypeMetaForResolved(resolved),
-      writeTypeDef: (wireTypeMeta) => _writeTypeDef(
-        buffer,
-        typeDef ?? wireTypeMeta.resolvedType.typeDef!,
-        typeDefIds: typeDefIds,
-      ),
-      writePackageMetaString: (value) => metaStringWriter.writeMetaString(
-        buffer,
-        value,
-      ),
-      writeTypeNameMetaString: (value) => metaStringWriter.writeMetaString(
-        buffer,
-        value,
-      ),
-    );
+    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(config, resolved);
+    buffer.writeVarUint32Small7(wireTypeId);
+    if (_wireTypeWritesUserTypeId(wireTypeId)) {
+      buffer.writeVarUint32(resolved.userTypeId!);
+      return;
+    }
+    if (_wireTypeWritesTypeDef(wireTypeId)) {
+      _writeTypeDef(buffer, typeDef ?? resolved.typeDef!,
+          typeDefIds: typeDefIds);
+      return;
+    }
+    if (_wireTypeWritesNamedType(wireTypeId)) {
+      metaStringWriter.writeMetaString(buffer, resolved.encodedNamespace!);
+      metaStringWriter.writeMetaString(buffer, resolved.encodedTypeName!);
+    }
   }
+
+  @pragma('vm:prefer-inline')
+  bool _wireTypeWritesUserTypeId(int wireTypeId) =>
+      wireTypeId == TypeIds.enumById ||
+      wireTypeId == TypeIds.struct ||
+      wireTypeId == TypeIds.ext ||
+      wireTypeId == TypeIds.typedUnion;
+
+  @pragma('vm:prefer-inline')
+  bool _wireTypeWritesTypeDef(int wireTypeId) =>
+      wireTypeId == TypeIds.compatibleStruct ||
+      wireTypeId == TypeIds.namedCompatibleStruct ||
+      (config.compatible &&
+          (wireTypeId == TypeIds.namedEnum ||
+              wireTypeId == TypeIds.namedStruct ||
+              wireTypeId == TypeIds.namedExt ||
+              wireTypeId == TypeIds.namedUnion));
+
+  @pragma('vm:prefer-inline')
+  bool _wireTypeWritesNamedType(int wireTypeId) =>
+      wireTypeId == TypeIds.namedEnum ||
+      wireTypeId == TypeIds.namedStruct ||
+      wireTypeId == TypeIds.namedExt ||
+      wireTypeId == TypeIds.namedUnion;
 
   @pragma('vm:prefer-inline')
   TypeInfo readTypeMeta(
@@ -671,6 +744,7 @@ final class TypeResolver {
   }) {
     final encoded = _encodeTypeDef(
       kind: kind,
+      evolving: evolving,
       userTypeId: userTypeId,
       encodedNamespace: encodedNamespace,
       encodedTypeName: encodedTypeName,
@@ -687,24 +761,44 @@ final class TypeResolver {
 
   Uint8List _encodeTypeDef({
     required RegistrationKind kind,
+    required bool evolving,
     required int? userTypeId,
     required EncodedMetaString? encodedNamespace,
     required EncodedMetaString? encodedTypeName,
     required List<FieldInfo> fields,
   }) {
     final metaBuffer = Buffer();
-    var classHeader = fields.length;
-    metaBuffer.writeByte(0xff);
-    if (fields.length >= typeDefSmallFieldCountThreshold) {
-      classHeader = typeDefSmallFieldCountThreshold;
-      metaBuffer.writeVarUint32Small7(
-        fields.length - typeDefSmallFieldCountThreshold,
-      );
-    }
-    if (userTypeId == null &&
+    final byName = userTypeId == null &&
         encodedNamespace != null &&
-        encodedTypeName != null) {
-      classHeader |= typeDefRegisterByNameFlag;
+        encodedTypeName != null;
+    final typeId = _typeDefTypeId(kind, byName: byName, evolving: evolving);
+    if (!_isStructTypeDefKind(typeId) && fields.isNotEmpty) {
+      throw StateError(
+          'Non-struct TypeDef $typeId cannot carry field metadata.');
+    }
+    var classHeader = 0;
+    metaBuffer.writeByte(0xff);
+    if (_isStructTypeDefKind(typeId)) {
+      final inlineFieldCount = fields.length >= typeDefSmallFieldCountThreshold
+          ? typeDefSmallFieldCountThreshold
+          : fields.length;
+      classHeader = typeDefStructFlag | inlineFieldCount;
+      if (typeId == TypeIds.compatibleStruct ||
+          typeId == TypeIds.namedCompatibleStruct) {
+        classHeader |= typeDefCompatibleFlag;
+      }
+      if (fields.length >= typeDefSmallFieldCountThreshold) {
+        metaBuffer.writeVarUint32Small7(
+          fields.length - typeDefSmallFieldCountThreshold,
+        );
+      }
+      if (byName) {
+        classHeader |= typeDefRegisterByNameFlag;
+      }
+    } else {
+      classHeader = _nonStructTypeDefKindCode(typeId);
+    }
+    if (byName) {
       _writeTypeDefName(
         metaBuffer,
         encodedNamespace.bytes,
@@ -720,17 +814,18 @@ final class TypeResolver {
         ),
       );
     } else {
-      metaBuffer.writeUint8(_typeDefTypeId(kind));
       metaBuffer.writeVarUint32(userTypeId!);
     }
     metaBuffer.toBytes()[0] = classHeader;
-    for (final field in fields) {
-      _writeTypeDefField(metaBuffer, field);
+    if (_isStructTypeDefKind(typeId)) {
+      for (final field in fields) {
+        _writeTypeDefField(metaBuffer, field);
+      }
     }
     final body = metaBuffer.toBytes();
     final buffer = Buffer();
     buffer.writeInt64(
-      typeDefHeader(body, hasFieldsMeta: fields.isNotEmpty),
+      typeDefHeader(body),
     );
     if (body.length >= 0xff) {
       buffer.writeVarUint32(body.length - 0xff);
@@ -805,16 +900,23 @@ final class TypeResolver {
     target.writeBytes(bytes);
   }
 
-  int _typeDefTypeId(RegistrationKind kind) {
+  int _typeDefTypeId(
+    RegistrationKind kind, {
+    required bool byName,
+    required bool evolving,
+  }) {
     switch (kind) {
       case RegistrationKind.struct:
-        return TypeIds.struct;
+        if (byName) {
+          return evolving ? TypeIds.namedCompatibleStruct : TypeIds.namedStruct;
+        }
+        return evolving ? TypeIds.compatibleStruct : TypeIds.struct;
       case RegistrationKind.enumType:
-        return TypeIds.enumById;
+        return byName ? TypeIds.namedEnum : TypeIds.enumById;
       case RegistrationKind.ext:
-        return TypeIds.ext;
+        return byName ? TypeIds.namedExt : TypeIds.ext;
       case RegistrationKind.union:
-        return TypeIds.typedUnion;
+        return byName ? TypeIds.namedUnion : TypeIds.typedUnion;
       case RegistrationKind.builtin:
         throw StateError('Built-in types do not write TypeDef metadata.');
     }
@@ -849,12 +951,16 @@ final class TypeResolver {
     final header = TypeHeader(buffer.readInt64());
     final expectedTypeDef = expectedType?.typeDef;
     if (expectedTypeDef != null && expectedTypeDef.header == header.value) {
+      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+      // after a successful TypeDef parse and 52-bit body-hash validation.
       header.skipRemaining(buffer);
       sharedTypes.add(expectedType!);
       return wireTypeMetaForResolved(expectedType);
     }
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
+      // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+      // after a successful TypeDef parse and 52-bit body-hash validation.
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);
@@ -866,33 +972,69 @@ final class TypeResolver {
   }
 
   TypeInfo _readTypeDefWithHeader(Buffer buffer, TypeHeader header) {
+    header.validateGlobal();
     final metaSize = header.readMetaSize(buffer);
-    final metaBytes = Buffer.wrap(buffer.readBytes(metaSize));
+    final metaBody = buffer.readBytes(metaSize);
+    final metaBytes = Buffer.wrap(metaBody);
     final classHeader = metaBytes.readUint8();
-    var fieldCount = classHeader & typeDefSmallFieldCountThreshold;
-    if (fieldCount == typeDefSmallFieldCountThreshold) {
-      fieldCount += metaBytes.readVarUint32Small7();
+    final isStruct = (classHeader & typeDefStructFlag) != 0;
+    var fieldCount = 0;
+    bool byName;
+    int typeId;
+    if (isStruct) {
+      byName = (classHeader & typeDefRegisterByNameFlag) != 0;
+      final compatible = (classHeader & typeDefCompatibleFlag) != 0;
+      if (byName) {
+        typeId =
+            compatible ? TypeIds.namedCompatibleStruct : TypeIds.namedStruct;
+      } else {
+        typeId = compatible ? TypeIds.compatibleStruct : TypeIds.struct;
+      }
+      fieldCount = classHeader & typeDefSmallFieldCountThreshold;
+      if (fieldCount == typeDefSmallFieldCountThreshold) {
+        fieldCount += metaBytes.readVarUint32Small7();
+      }
+    } else {
+      if ((classHeader & 0x70) != 0) {
+        throw StateError('Invalid TypeDef kind header.');
+      }
+      typeId = _nonStructTypeDefTypeId(classHeader & 0x0f);
+      byName = _isNamedTypeDefKind(typeId);
     }
-    final byName = (classHeader & typeDefRegisterByNameFlag) != 0;
     final encodedNamespace =
         byName ? _readTypeDefName(metaBytes, packageNameEncoding) : null;
     final encodedTypeName =
         byName ? _readTypeDefName(metaBytes, typeNameEncoding) : null;
     int? userTypeId;
     if (!byName) {
-      metaBytes.readUint8();
       userTypeId = metaBytes.readVarUint32();
     }
     final fields = <FieldInfo>[];
     for (var i = 0; i < fieldCount; i += 1) {
       fields.add(_readTypeDefField(metaBytes));
     }
+    if (!isStruct && fields.isNotEmpty) {
+      throw StateError('Non-struct TypeDef cannot carry field metadata.');
+    }
+    if (metaBytes.readableBytes != 0) {
+      throw StateError('Invalid TypeDef metadata size.');
+    }
+    header.validateBodyHash(metaBody);
     final resolved = userTypeId != null
         ? resolveUserById(userTypeId)
         : resolveUserByEncodedName(
             encodedNamespace!,
             encodedTypeName!,
           );
+    if (resolved.typeDef?.header != header.value &&
+        _typeDefTypeId(
+              resolved.kind,
+              byName: byName,
+              evolving: resolved.typeDef?.evolving ?? false,
+            ) !=
+            typeId) {
+      throw StateError('TypeDef kind does not match registered type metadata.');
+    }
     if (resolved.kind != RegistrationKind.struct) {
       return resolved;
     }

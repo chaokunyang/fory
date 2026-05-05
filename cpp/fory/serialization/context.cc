@@ -500,48 +500,28 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
 
   // Check if we already parsed this type meta (cache lookup by header)
   if (has_last_meta_header_ && meta_header == last_meta_header_) {
-    // Fast path: same header as last parsed
+    // Header-cache hits intentionally skip without rehashing. Entries reach
+    // this cache only after a successful TypeMeta parse and 52-bit body-hash
+    // validation.
     const TypeInfo *cached = last_meta_type_info_;
     reading_type_infos_.push_back(cached);
-    if (cached && !cached->type_def.empty()) {
-      const size_t type_def_size = cached->type_def.size();
-      if (type_def_size >= sizeof(int64_t) &&
-          type_def_size <= std::numeric_limits<uint32_t>::max()) {
-        Error skip_error;
-        buffer_->skip(static_cast<uint32_t>(type_def_size - sizeof(int64_t)),
-                      skip_error);
-        if (FORY_PREDICT_FALSE(!skip_error.ok())) {
-          return Unexpected(std::move(skip_error));
-        }
-        return cached;
-      }
-    }
-    FORY_RETURN_NOT_OK(TypeMeta::skip_bytes(*buffer_, meta_header));
+    FORY_RETURN_NOT_OK(
+        TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
     return cached;
   }
 
   auto *cache_entry = parsed_type_infos_.find(meta_header);
   if (cache_entry != nullptr) {
-    // Found in cache - reuse and skip the bytes
+    // Header-cache hits intentionally skip without rehashing. Entries reach
+    // this cache only after a successful TypeMeta parse and 52-bit body-hash
+    // validation.
     const TypeInfo *cached = cache_entry->second;
     reading_type_infos_.push_back(cached);
     has_last_meta_header_ = true;
     last_meta_header_ = meta_header;
     last_meta_type_info_ = cached;
-    if (cached && !cached->type_def.empty()) {
-      const size_t type_def_size = cached->type_def.size();
-      if (type_def_size >= sizeof(int64_t) &&
-          type_def_size <= std::numeric_limits<uint32_t>::max()) {
-        Error skip_error;
-        buffer_->skip(static_cast<uint32_t>(type_def_size - sizeof(int64_t)),
-                      skip_error);
-        if (FORY_PREDICT_FALSE(!skip_error.ok())) {
-          return Unexpected(std::move(skip_error));
-        }
-        return cached;
-      }
-    }
-    FORY_RETURN_NOT_OK(TypeMeta::skip_bytes(*buffer_, meta_header));
+    FORY_RETURN_NOT_OK(
+        TypeMeta::skip_bytes_for_validated_header(*buffer_, meta_header));
     return cached;
   }
 

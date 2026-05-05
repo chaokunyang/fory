@@ -208,9 +208,8 @@ export const TypeId = {
 } as const;
 
 export enum ConfigFlags {
-  isNullFlag = 1 << 0,
-  isCrossLanguageFlag = 1 << 1,
-  isOutOfBandFlag = 1 << 2,
+  isCrossLanguageFlag = 1 << 0,
+  isOutOfBandFlag = 1 << 1,
 }
 
 export type CustomSerializer<T> = {

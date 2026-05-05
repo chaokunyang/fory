@@ -25,6 +25,7 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <map>
 #include <unordered_map>
 
@@ -36,13 +37,18 @@ using namespace meta;
 // Constants from xlang spec
 constexpr size_t SMALL_NUM_FIELDS_THRESHOLD = 0b11111;
 constexpr uint8_t REGISTER_BY_NAME_FLAG = 0b100000;
+constexpr uint8_t COMPATIBLE_TYPEDEF_FLAG = 0b01000000;
+constexpr uint8_t STRUCT_TYPEDEF_FLAG = 0b10000000;
+constexpr uint8_t NON_STRUCT_RESERVED_BITS_MASK = 0b01110000;
 constexpr size_t FIELD_NAME_SIZE_THRESHOLD = 0b1111;
 constexpr size_t BIG_NAME_THRESHOLD = 0b111111;
-constexpr int64_t META_SIZE_MASK = 0xff;
-// Temporary xlang behavior: keep TypeMeta uncompressed because some runtimes
-// still do not support TypeMeta decompression.
-constexpr int64_t HAS_FIELDS_META_FLAG = 0b1 << 8;
-constexpr int8_t NUM_HASH_BITS = 50;
+constexpr uint64_t META_SIZE_MASK = 0xff;
+constexpr uint64_t COMPRESS_META_FLAG = 0x100;
+constexpr uint64_t TYPE_META_RESERVED_BITS_MASK = 0xe00;
+constexpr int8_t NUM_HASH_BITS = 52;
+constexpr uint32_t TYPE_META_HASH_SHIFT = 64 - NUM_HASH_BITS;
+constexpr uint64_t TYPE_META_HASH_BITS_MASK = ~uint64_t{0}
+                                              << TYPE_META_HASH_SHIFT;
 
 // ============================================================================
 // FieldType Implementation
@@ -329,6 +335,122 @@ write_meta_name(Buffer &buffer, const std::string &name,
   return Result<void, Error>();
 }
 
+inline bool is_compatible_struct_type_id(uint32_t type_id) {
+  return type_id == static_cast<uint32_t>(TypeId::COMPATIBLE_STRUCT) ||
+         type_id == static_cast<uint32_t>(TypeId::NAMED_COMPATIBLE_STRUCT);
+}
+
+inline Result<uint8_t, Error> type_meta_kind_code(uint32_t type_id) {
+  switch (static_cast<TypeId>(type_id)) {
+  case TypeId::ENUM:
+    return static_cast<uint8_t>(0);
+  case TypeId::NAMED_ENUM:
+    return static_cast<uint8_t>(1);
+  case TypeId::EXT:
+    return static_cast<uint8_t>(2);
+  case TypeId::NAMED_EXT:
+    return static_cast<uint8_t>(3);
+  case TypeId::TYPED_UNION:
+    return static_cast<uint8_t>(4);
+  case TypeId::NAMED_UNION:
+    return static_cast<uint8_t>(5);
+  default:
+    return Unexpected(Error::type_error("Unsupported TypeMeta kind"));
+  }
+}
+
+inline Result<uint32_t, Error> type_id_from_type_meta_kind(uint8_t kind_code) {
+  switch (kind_code) {
+  case 0:
+    return static_cast<uint32_t>(TypeId::ENUM);
+  case 1:
+    return static_cast<uint32_t>(TypeId::NAMED_ENUM);
+  case 2:
+    return static_cast<uint32_t>(TypeId::EXT);
+  case 3:
+    return static_cast<uint32_t>(TypeId::NAMED_EXT);
+  case 4:
+    return static_cast<uint32_t>(TypeId::TYPED_UNION);
+  case 5:
+    return static_cast<uint32_t>(TypeId::NAMED_UNION);
+  default:
+    return Unexpected(Error::invalid_data("Unsupported TypeMeta kind code"));
+  }
+}
+
+inline uint64_t compute_type_meta_hash_bits(const uint8_t *meta_bytes,
+                                            size_t meta_size) {
+  int64_t hash_out[2] = {0, 0};
+  MurmurHash3_x64_128(meta_bytes, static_cast<int>(meta_size), 47, hash_out);
+  uint64_t shifted = static_cast<uint64_t>(hash_out[0]) << TYPE_META_HASH_SHIFT;
+  if (static_cast<int64_t>(shifted) < 0) {
+    shifted = ~shifted + 1;
+  }
+  return shifted & TYPE_META_HASH_BITS_MASK;
+}
+
+inline int64_t compute_type_meta_hash(const uint8_t *meta_bytes,
+                                      size_t meta_size) {
+  return static_cast<int64_t>(
+      compute_type_meta_hash_bits(meta_bytes, meta_size) >>
+      TYPE_META_HASH_SHIFT);
+}
+
+inline Result<void, Error> validate_type_meta_header(uint64_t header) {
+  if (FORY_PREDICT_FALSE((header & TYPE_META_RESERVED_BITS_MASK) != 0)) {
+    return Unexpected(
+        Error::invalid_data("TypeMeta reserved header bits must be zero"));
+  }
+  if (FORY_PREDICT_FALSE((header & COMPRESS_META_FLAG) != 0)) {
+    return Unexpected(
+        Error::invalid_data("Compressed TypeMeta is not supported"));
+  }
+  return Result<void, Error>();
+}
+
+inline Result<uint32_t, Error>
+read_type_meta_size(Buffer &buffer, uint64_t header, size_t *header_size) {
+  Error error;
+  uint64_t meta_size = header & META_SIZE_MASK;
+  if (meta_size == META_SIZE_MASK) {
+    uint32_t before = buffer.reader_index();
+    uint32_t extra = buffer.read_var_uint32(error);
+    if (FORY_PREDICT_FALSE(!error.ok())) {
+      return Unexpected(std::move(error));
+    }
+    meta_size += extra;
+    uint32_t after = buffer.reader_index();
+    if (header_size != nullptr) {
+      *header_size += (after - before);
+    }
+  }
+  if (FORY_PREDICT_FALSE(
+          meta_size > static_cast<uint64_t>(std::numeric_limits<int>::max()))) {
+    return Unexpected(
+        Error::invalid_data("TypeMeta body size exceeds supported range"));
+  }
+  return static_cast<uint32_t>(meta_size);
+}
+
+inline Result<void, Error> validate_type_meta_hash(Buffer &buffer,
+                                                   uint32_t body_start,
+                                                   uint32_t meta_size,
+                                                   int64_t header_hash) {
+  uint64_t body_end = static_cast<uint64_t>(body_start) + meta_size;
+  if (FORY_PREDICT_FALSE(body_end > buffer.reader_index() ||
+                         body_end > buffer.size())) {
+    return Unexpected(
+        Error::invalid_data("TypeMeta body range is not readable"));
+  }
+  uint64_t computed_hash_bits = compute_type_meta_hash_bits(
+      buffer.data() + body_start, static_cast<size_t>(meta_size));
+  if (FORY_PREDICT_FALSE((computed_hash_bits >> TYPE_META_HASH_SHIFT) !=
+                         static_cast<uint64_t>(header_hash))) {
+    return Unexpected(Error::invalid_data("TypeMeta body hash mismatch"));
+  }
+  return Result<void, Error>();
+}
+
 inline Result<std::string, Error>
 read_meta_name(Buffer &buffer, const MetaStringDecoder &decoder,
                const MetaEncoding *encodings, size_t enc_count) {
@@ -392,21 +514,33 @@ TypeMeta TypeMeta::from_fields(uint32_t tid, const std::string &ns,
 Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
   Buffer layer_buffer;
 
-  // write meta header
+  bool is_struct = is_struct_type(static_cast<TypeId>(type_id));
   size_t num_fields = field_infos.size();
-  uint8_t meta_header =
-      static_cast<uint8_t>(std::min(num_fields, SMALL_NUM_FIELDS_THRESHOLD));
-  if (register_by_name) {
-    meta_header |= REGISTER_BY_NAME_FLAG;
-  }
-  layer_buffer.write_uint8(meta_header);
-
-  if (num_fields >= SMALL_NUM_FIELDS_THRESHOLD) {
-    layer_buffer.write_var_uint32(num_fields - SMALL_NUM_FIELDS_THRESHOLD);
+  if (FORY_PREDICT_FALSE(!is_struct && num_fields != 0)) {
+    return Unexpected(
+        Error::invalid_data("Non-struct TypeMeta cannot carry field metadata"));
   }
 
-  // write namespace and type name (if registered by name) using the
-  // same compact meta string format as Rust/Java.
+  if (is_struct) {
+    uint8_t meta_header =
+        STRUCT_TYPEDEF_FLAG |
+        static_cast<uint8_t>(std::min(num_fields, SMALL_NUM_FIELDS_THRESHOLD));
+    if (is_compatible_struct_type_id(type_id)) {
+      meta_header |= COMPATIBLE_TYPEDEF_FLAG;
+    }
+    if (register_by_name) {
+      meta_header |= REGISTER_BY_NAME_FLAG;
+    }
+    layer_buffer.write_uint8(meta_header);
+
+    if (num_fields >= SMALL_NUM_FIELDS_THRESHOLD) {
+      layer_buffer.write_var_uint32(num_fields - SMALL_NUM_FIELDS_THRESHOLD);
+    }
+  } else {
+    FORY_TRY(kind_code, type_meta_kind_code(type_id));
+    layer_buffer.write_uint8(kind_code);
+  }
+
   if (register_by_name) {
     FORY_RETURN_NOT_OK(write_meta_name(
         layer_buffer, namespace_str, k_namespace_encoder,
@@ -417,7 +551,6 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
         k_type_name_encodings,
         sizeof(k_type_name_encodings) / sizeof(k_type_name_encodings[0])));
   } else {
-    layer_buffer.write_uint8(static_cast<uint8_t>(type_id));
     if (user_type_id == kInvalidUserTypeId) {
       return Unexpected(
           Error::type_error("User type id is required for this type"));
@@ -434,26 +567,23 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
   // Now write global binary header
   Buffer result_buffer;
   const uint32_t layer_size = layer_buffer.writer_index();
-  int64_t meta_size = layer_size;
-  int64_t header = std::min(META_SIZE_MASK, meta_size);
-
-  bool write_meta_fields_flag = !field_infos.empty();
-  if (write_meta_fields_flag) {
-    header |= HAS_FIELDS_META_FLAG;
+  if (FORY_PREDICT_FALSE(layer_size > static_cast<uint32_t>(
+                                          std::numeric_limits<int>::max()))) {
+    return Unexpected(
+        Error::invalid_data("TypeMeta body size exceeds supported range"));
   }
+  uint64_t meta_size = layer_size;
+  uint64_t header = std::min(META_SIZE_MASK, meta_size);
 
-  // Compute hash
-  std::vector<uint8_t> layer_data(layer_buffer.data(),
-                                  layer_buffer.data() + layer_size);
-  int64_t meta_hash = compute_hash(layer_data);
-  header |= (meta_hash << (64 - NUM_HASH_BITS));
+  header |= compute_type_meta_hash_bits(layer_buffer.data(), layer_size);
 
   result_buffer.write_bytes(reinterpret_cast<const uint8_t *>(&header),
                             sizeof(header));
   if (meta_size >= META_SIZE_MASK) {
-    result_buffer.write_var_uint32(meta_size - META_SIZE_MASK);
+    result_buffer.write_var_uint32(
+        static_cast<uint32_t>(meta_size - META_SIZE_MASK));
   }
-  result_buffer.write_bytes(layer_data.data(), layer_data.size());
+  result_buffer.write_bytes(layer_buffer.data(), layer_size);
   // Use actual bytes written to construct return vector
   return std::vector<uint8_t>(result_buffer.data(),
                               result_buffer.data() +
@@ -473,39 +603,52 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
   }
 
   size_t header_size = sizeof(header);
-  int64_t meta_size = header & META_SIZE_MASK;
-  if (meta_size == META_SIZE_MASK) {
-    uint32_t before = buffer.reader_index();
-    uint32_t extra = buffer.read_var_uint32(error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    meta_size += extra;
-    uint32_t after = buffer.reader_index();
-    header_size += (after - before);
-  }
-  int64_t meta_hash = header >> (64 - NUM_HASH_BITS);
+  uint64_t header_bits = static_cast<uint64_t>(header);
+  FORY_RETURN_IF_ERROR(validate_type_meta_header(header_bits));
+  FORY_TRY(meta_size, read_type_meta_size(buffer, header_bits, &header_size));
+  int64_t meta_hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
+  uint32_t body_start = static_cast<uint32_t>(start_pos + header_size);
   // Read meta header
   uint8_t meta_header = buffer.read_uint8(error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
     return Unexpected(std::move(error));
   }
 
-  bool register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
-  size_t num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
-  if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
-    uint32_t extra = buffer.read_var_uint32(error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    num_fields += extra;
-  }
-
-  // Read type ID or namespace/type name
   uint32_t type_id = 0;
   uint32_t user_type_id = kInvalidUserTypeId;
   std::string namespace_str;
   std::string type_name;
+  bool register_by_name = false;
+  size_t num_fields = 0;
+
+  if ((meta_header & STRUCT_TYPEDEF_FLAG) != 0) {
+    register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
+    bool compatible = (meta_header & COMPATIBLE_TYPEDEF_FLAG) != 0;
+    if (register_by_name) {
+      type_id = static_cast<uint32_t>(
+          compatible ? TypeId::NAMED_COMPATIBLE_STRUCT : TypeId::NAMED_STRUCT);
+    } else {
+      type_id = static_cast<uint32_t>(compatible ? TypeId::COMPATIBLE_STRUCT
+                                                 : TypeId::STRUCT);
+    }
+    num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
+    if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
+      uint32_t extra = buffer.read_var_uint32(error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
+      num_fields += extra;
+    }
+  } else {
+    if (FORY_PREDICT_FALSE((meta_header & NON_STRUCT_RESERVED_BITS_MASK) !=
+                           0)) {
+      return Unexpected(Error::invalid_data("Invalid TypeMeta kind header"));
+    }
+    FORY_TRY(decoded_type_id,
+             type_id_from_type_meta_kind(meta_header & 0b1111));
+    type_id = decoded_type_id;
+    register_by_name = is_namespaced_type(static_cast<TypeId>(type_id));
+  }
 
   if (register_by_name) {
     static const MetaStringDecoder k_namespace_decoder('.', '_');
@@ -523,11 +666,6 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
                                 sizeof(k_type_name_encodings[0])));
     type_name = std::move(tn);
   } else {
-    uint32_t tid = buffer.read_uint8(error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    type_id = tid;
     uint32_t uid = buffer.read_var_uint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
@@ -559,13 +697,12 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
     return Unexpected(Error::invalid_data(
         "TypeMeta parser consumed beyond declared meta size"));
   }
-  if (current_pos < expected_end_pos) {
-    size_t remaining = expected_end_pos - current_pos;
-    buffer.skip(static_cast<uint32_t>(remaining), error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
+  if (FORY_PREDICT_FALSE(current_pos < expected_end_pos)) {
+    return Unexpected(Error::invalid_data(
+        "TypeMeta parser did not consume declared meta size"));
   }
+  FORY_RETURN_IF_ERROR(
+      validate_type_meta_hash(buffer, body_start, meta_size, meta_hash));
 
   auto meta = std::make_unique<TypeMeta>();
   meta->hash = meta_hash;
@@ -581,18 +718,13 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
 
 Result<std::unique_ptr<TypeMeta>, Error>
 TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
-  Error error;
-  int64_t meta_size = header & META_SIZE_MASK;
-  if (meta_size == META_SIZE_MASK) {
-    uint32_t extra = buffer.read_var_uint32(error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    meta_size += extra;
-  }
-  int64_t meta_hash = header >> (64 - NUM_HASH_BITS);
+  uint64_t header_bits = static_cast<uint64_t>(header);
+  FORY_RETURN_IF_ERROR(validate_type_meta_header(header_bits));
+  FORY_TRY(meta_size, read_type_meta_size(buffer, header_bits, nullptr));
+  int64_t meta_hash = static_cast<int64_t>(header_bits >> TYPE_META_HASH_SHIFT);
 
-  size_t start_pos = buffer.reader_index();
+  uint32_t start_pos = buffer.reader_index();
+  Error error;
 
   // Read meta header
   uint8_t meta_header = buffer.read_uint8(error);
@@ -600,21 +732,41 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
     return Unexpected(std::move(error));
   }
 
-  bool register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
-  size_t num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
-  if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
-    uint32_t extra = buffer.read_var_uint32(error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
-    num_fields += extra;
-  }
-
-  // Read type ID or namespace/type name
   uint32_t type_id = 0;
   uint32_t user_type_id = kInvalidUserTypeId;
   std::string namespace_str;
   std::string type_name;
+  bool register_by_name = false;
+  size_t num_fields = 0;
+
+  if ((meta_header & STRUCT_TYPEDEF_FLAG) != 0) {
+    register_by_name = (meta_header & REGISTER_BY_NAME_FLAG) != 0;
+    bool compatible = (meta_header & COMPATIBLE_TYPEDEF_FLAG) != 0;
+    if (register_by_name) {
+      type_id = static_cast<uint32_t>(
+          compatible ? TypeId::NAMED_COMPATIBLE_STRUCT : TypeId::NAMED_STRUCT);
+    } else {
+      type_id = static_cast<uint32_t>(compatible ? TypeId::COMPATIBLE_STRUCT
+                                                 : TypeId::STRUCT);
+    }
+    num_fields = meta_header & SMALL_NUM_FIELDS_THRESHOLD;
+    if (num_fields == SMALL_NUM_FIELDS_THRESHOLD) {
+      uint32_t extra = buffer.read_var_uint32(error);
+      if (FORY_PREDICT_FALSE(!error.ok())) {
+        return Unexpected(std::move(error));
+      }
+      num_fields += extra;
+    }
+  } else {
+    if (FORY_PREDICT_FALSE((meta_header & NON_STRUCT_RESERVED_BITS_MASK) !=
+                           0)) {
+      return Unexpected(Error::invalid_data("Invalid TypeMeta kind header"));
+    }
+    FORY_TRY(decoded_type_id,
+             type_id_from_type_meta_kind(meta_header & 0b1111));
+    type_id = decoded_type_id;
+    register_by_name = is_namespaced_type(static_cast<TypeId>(type_id));
+  }
 
   if (register_by_name) {
     static const MetaStringDecoder k_namespace_decoder('.', '_');
@@ -632,27 +784,11 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
                                 sizeof(k_type_name_encodings[0])));
     type_name = std::move(tn);
   } else {
-    uint32_t tid = buffer.read_uint8(error);
+    uint32_t uid = buffer.read_var_uint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
-    type_id = tid;
-    switch (static_cast<TypeId>(type_id)) {
-    case TypeId::ENUM:
-    case TypeId::STRUCT:
-    case TypeId::COMPATIBLE_STRUCT:
-    case TypeId::EXT:
-    case TypeId::TYPED_UNION: {
-      uint32_t uid = buffer.read_var_uint32(error);
-      if (FORY_PREDICT_FALSE(!error.ok())) {
-        return Unexpected(std::move(error));
-      }
-      user_type_id = uid;
-      break;
-    }
-    default:
-      break;
-    }
+    user_type_id = uid;
   }
 
   // Read field infos
@@ -668,18 +804,17 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
 
   // CRITICAL FIX: Ensure we consume exactly meta_size bytes
   size_t current_pos = buffer.reader_index();
-  size_t expected_end_pos = start_pos + meta_size;
+  size_t expected_end_pos = static_cast<size_t>(start_pos) + meta_size;
   if (FORY_PREDICT_FALSE(current_pos > expected_end_pos)) {
     return Unexpected(Error::invalid_data(
         "TypeMeta parser consumed beyond declared meta size"));
   }
-  if (current_pos < expected_end_pos) {
-    size_t remaining = expected_end_pos - current_pos;
-    buffer.skip(static_cast<uint32_t>(remaining), error);
-    if (FORY_PREDICT_FALSE(!error.ok())) {
-      return Unexpected(std::move(error));
-    }
+  if (FORY_PREDICT_FALSE(current_pos < expected_end_pos)) {
+    return Unexpected(Error::invalid_data(
+        "TypeMeta parser did not consume declared meta size"));
   }
+  FORY_RETURN_IF_ERROR(
+      validate_type_meta_hash(buffer, start_pos, meta_size, meta_hash));
 
   auto meta = std::make_unique<TypeMeta>();
   meta->hash = meta_hash;
@@ -693,15 +828,22 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   return meta;
 }
 
-Result<void, Error> TypeMeta::skip_bytes(Buffer &buffer, int64_t header) {
+Result<void, Error> TypeMeta::skip_bytes_for_validated_header(Buffer &buffer,
+                                                              int64_t header) {
   Error error;
-  int64_t meta_size = header & META_SIZE_MASK;
+  uint64_t meta_size = static_cast<uint64_t>(header) & META_SIZE_MASK;
   if (meta_size == META_SIZE_MASK) {
     uint32_t extra = buffer.read_var_uint32(error);
     if (FORY_PREDICT_FALSE(!error.ok())) {
       return Unexpected(std::move(error));
     }
     meta_size += extra;
+  }
+  if (FORY_PREDICT_FALSE(
+          meta_size >
+          static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()))) {
+    return Unexpected(
+        Error::invalid_data("TypeMeta body size exceeds supported range"));
   }
   buffer.skip(static_cast<uint32_t>(meta_size), error);
   if (FORY_PREDICT_FALSE(!error.ok())) {
@@ -1026,18 +1168,7 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
 }
 
 int64_t TypeMeta::compute_hash(const std::vector<uint8_t> &meta_bytes) {
-  // Compute hash using MurmurHash3_x64_128 to match Rust/Java
-  // TypeMeta implementation. We take the high 64 bits and then
-  // keep only the lower NUM_HASH_BITS bits.
-  int64_t hash_out[2] = {0, 0};
-  MurmurHash3_x64_128(meta_bytes.data(), static_cast<int>(meta_bytes.size()),
-                      47, hash_out);
-
-  // hash_out[0] is the low 64 bits, hash_out[1] the high 64 bits.
-  uint64_t high = static_cast<uint64_t>(hash_out[1]);
-  uint64_t mask = (NUM_HASH_BITS >= 64) ? ~uint64_t{0}
-                                        : ((uint64_t{1} << NUM_HASH_BITS) - 1);
-  return static_cast<int64_t>(high & mask);
+  return compute_type_meta_hash(meta_bytes.data(), meta_bytes.size());
 }
 
 namespace {

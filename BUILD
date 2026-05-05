@@ -52,6 +52,7 @@ pyx_library(
         "//cpp/fory/type:fory_type",
         "//python/pyfory/cpp:_pyfory",
         "//cpp/fory/thirdparty:flat_hash_map",
+        "//cpp/fory/thirdparty:libmmh3",
     ],
 )
 

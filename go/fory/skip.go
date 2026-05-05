@@ -56,7 +56,10 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 
 		// Check if it's an EXT type first - EXT types don't have meta info like structs
 		if internalID == EXT {
-			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID, err)
+			typeInfo := readKnownTypeInfoForSkip(ctx, wroteTypeID)
+			if ctx.HasError() {
+				return
+			}
 			if typeInfo != nil && typeInfo.Serializer != nil {
 				// Use the serializer to read and discard the value
 				var dummy any
@@ -71,8 +74,11 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 
 		// Check if it's a NAMED_EXT type - need to read type info to find serializer
 		if internalID == NAMED_EXT {
-			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID, err)
-			if typeInfo.Serializer != nil {
+			typeInfo := readKnownTypeInfoForSkip(ctx, wroteTypeID)
+			if ctx.HasError() {
+				return
+			}
+			if typeInfo != nil && typeInfo.Serializer != nil {
 				// Use the serializer to read and discard the value
 				var dummy any
 				dummyVal := reflect.ValueOf(&dummy).Elem()
@@ -86,14 +92,20 @@ func SkipFieldValueWithTypeFlag(ctx *ReadContext, fieldDef FieldDef, readRefFlag
 		// Check if it's a struct type - need to read type info and skip struct data
 		if internalID == COMPATIBLE_STRUCT || internalID == STRUCT ||
 			internalID == NAMED_STRUCT || internalID == NAMED_COMPATIBLE_STRUCT {
-			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID, err)
+			typeInfo := readKnownTypeInfoForSkip(ctx, wroteTypeID)
+			if ctx.HasError() {
+				return
+			}
 			// Now skip the struct data using the typeInfo from the written type
 			skipStruct(ctx, typeInfo)
 			return
 		}
 
 		if IsNamespacedType(internalID) {
-			typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, wroteTypeID, err)
+			typeInfo := readKnownTypeInfoForSkip(ctx, wroteTypeID)
+			if ctx.HasError() {
+				return
+			}
 			// Now skip the struct data using the typeInfo from the written type
 			skipStruct(ctx, typeInfo)
 			return
@@ -153,24 +165,15 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 			typeSpec: NewMapTypeSpec(TypeId(typeID), NewSimpleTypeSpec(UNKNOWN), NewSimpleTypeSpec(UNKNOWN)),
 			nullable: true,
 		}
-	case NAMED_UNION:
-		resolver := ctx.TypeResolver()
-		_, _ = resolver.metaStringResolver.ReadMetaStringBytes(ctx.buffer, err)
-		if ctx.HasError() {
-			return
-		}
-		_, _ = resolver.metaStringResolver.ReadMetaStringBytes(ctx.buffer, err)
-		if ctx.HasError() {
-			return
-		}
-		fieldDef = FieldDef{
-			typeSpec: NewSimpleTypeSpec(TypeId(typeID)),
-			nullable: true,
-		}
-	case COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT, STRUCT, NAMED_STRUCT, EXT, TYPED_UNION:
+	case ENUM, NAMED_ENUM, COMPATIBLE_STRUCT, NAMED_COMPATIBLE_STRUCT, STRUCT, NAMED_STRUCT,
+		EXT, NAMED_EXT, TYPED_UNION, NAMED_UNION:
 		// Read type info using the shared meta reader when enabled.
 		typeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
 		if ctx.HasError() {
+			return
+		}
+		if typeInfo == nil {
+			ctx.SetError(DeserializationErrorf("cannot skip type %d: type info not found", typeID))
 			return
 		}
 		fieldDef = FieldDef{
@@ -178,13 +181,6 @@ func SkipAnyValue(ctx *ReadContext, readRefFlag bool) {
 			nullable: true,
 		}
 	default:
-		if internalID == ENUM || internalID == STRUCT ||
-			internalID == EXT || internalID == TYPED_UNION {
-			ctx.buffer.ReadVarUint32(err)
-			if ctx.HasError() {
-				return
-			}
-		}
 		fieldDef = FieldDef{
 			typeSpec: NewSimpleTypeSpec(TypeId(typeID)),
 			nullable: true,
@@ -206,7 +202,25 @@ func readTypeInfoForSkip(ctx *ReadContext, fieldTypeId TypeId) *TypeInfo {
 		return nil
 	}
 	// Use readTypeInfoWithTypeID which handles both namespaced and non-namespaced types correctly
-	return ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
+	typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
+	if ctx.HasError() {
+		return nil
+	}
+	if typeInfo == nil {
+		ctx.SetError(DeserializationErrorf("cannot skip type %d: type info not found", typeID))
+	}
+	return typeInfo
+}
+
+func readKnownTypeInfoForSkip(ctx *ReadContext, typeID uint32) *TypeInfo {
+	typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, ctx.Err())
+	if ctx.HasError() {
+		return nil
+	}
+	if typeInfo == nil {
+		ctx.SetError(DeserializationErrorf("cannot skip type %d: type info not found", typeID))
+	}
+	return typeInfo
 }
 
 // skipCollection skips a collection (list/set) value
@@ -236,7 +250,10 @@ func skipCollection(ctx *ReadContext, fieldDef FieldDef) {
 		if ctx.HasError() {
 			return
 		}
-		elemTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, err)
+		elemTypeInfo = readKnownTypeInfoForSkip(ctx, typeID)
+		if ctx.HasError() {
+			return
+		}
 		elemDef = FieldDef{
 			typeSpec: NewSimpleTypeSpec(TypeId(elemTypeInfo.TypeID)),
 			nullable: hasNull,
@@ -336,7 +353,10 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 				if ctx.HasError() {
 					return
 				}
-				valueTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
+				valueTypeInfo = readKnownTypeInfoForSkip(ctx, typeID)
+				if ctx.HasError() {
+					return
+				}
 				valueDef = FieldDef{
 					typeSpec: NewSimpleTypeSpec(TypeId(valueTypeInfo.TypeID)),
 					nullable: true,
@@ -368,7 +388,10 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 				if ctx.HasError() {
 					return
 				}
-				keyTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
+				keyTypeInfo = readKnownTypeInfoForSkip(ctx, typeID)
+				if ctx.HasError() {
+					return
+				}
 				keyDef = FieldDef{
 					typeSpec: NewSimpleTypeSpec(TypeId(keyTypeInfo.TypeID)),
 					nullable: true,
@@ -395,6 +418,10 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 		if ctx.HasError() {
 			return
 		}
+		if chunkSize == 0 || uint32(chunkSize) > length-lenCounter {
+			ctx.SetError(DeserializationErrorf("invalid map chunk size %d for remaining length %d", chunkSize, length-lenCounter))
+			return
+		}
 
 		keyDeclared := (header & KEY_DECL_TYPE) != 0
 		valueDeclared := (header & VALUE_DECL_TYPE) != 0
@@ -406,7 +433,10 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 			if ctx.HasError() {
 				return
 			}
-			keyTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
+			keyTypeInfo = readKnownTypeInfoForSkip(ctx, typeID)
+			if ctx.HasError() {
+				return
+			}
 			keyDef = FieldDef{
 				typeSpec: NewSimpleTypeSpec(TypeId(keyTypeInfo.TypeID)),
 				nullable: true,
@@ -420,7 +450,10 @@ func skipMap(ctx *ReadContext, fieldDef FieldDef) {
 			if ctx.HasError() {
 				return
 			}
-			valueTypeInfo = ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeID, bufErr)
+			valueTypeInfo = readKnownTypeInfoForSkip(ctx, typeID)
+			if ctx.HasError() {
+				return
+			}
 			valueDef = FieldDef{
 				typeSpec: NewSimpleTypeSpec(TypeId(valueTypeInfo.TypeID)),
 				nullable: true,
@@ -527,25 +560,32 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 	internalID := TypeId(typeIDNum)
 	// Handle struct-like types
 	if internalID == COMPATIBLE_STRUCT || internalID == STRUCT ||
-		internalID == NAMED_STRUCT || internalID == NAMED_COMPATIBLE_STRUCT ||
-		internalID == UNKNOWN {
+		internalID == NAMED_STRUCT || internalID == NAMED_COMPATIBLE_STRUCT {
 		// If type_info is provided (from SkipAnyValue), use skipStruct directly
 		if typeInfo != nil {
 			skipStruct(ctx, typeInfo)
 			return
 		}
 		// Otherwise we need to read type info
-		ti := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeIDNum, err)
+		ti := readKnownTypeInfoForSkip(ctx, typeIDNum)
+		if ctx.HasError() {
+			return
+		}
 		skipStruct(ctx, ti)
 		return
 	}
-	if internalID == ENUM {
+	if internalID == ENUM || internalID == NAMED_ENUM {
 		// Enum values are encoded as ordinal only (VarUint32Small7) for xlang.
-		_ = ctx.buffer.ReadUint8(err)
+		_ = ctx.buffer.ReadVarUint32Small7(err)
 		return
 	}
 	if internalID == EXT || internalID == NAMED_EXT || internalID == TYPED_UNION || internalID == NAMED_UNION {
-		typeInfo := ctx.TypeResolver().readTypeInfoWithTypeID(ctx.buffer, typeIDNum, err)
+		if typeInfo == nil {
+			typeInfo = readKnownTypeInfoForSkip(ctx, typeIDNum)
+			if ctx.HasError() {
+				return
+			}
+		}
 		if typeInfo != nil && typeInfo.Serializer != nil {
 			// Use the serializer to read and discard the value
 			var dummy any
@@ -569,11 +609,15 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 	case INT16:
 		_ = ctx.buffer.ReadInt16(err)
 	case INT32:
-		_ = ctx.buffer.ReadUint8(err)
+		_ = ctx.buffer.ReadInt32(err)
 	case VARINT32:
-		_ = ctx.buffer.ReadUint8(err)
-	case INT64, VARINT64, TAGGED_INT64:
+		_ = ctx.buffer.ReadVarint32(err)
+	case INT64:
+		_ = ctx.buffer.ReadInt64(err)
+	case VARINT64:
 		_ = ctx.buffer.ReadVarint64(err)
+	case TAGGED_INT64:
+		_ = ctx.buffer.ReadTaggedInt64(err)
 
 	// Floating point types
 	case BFLOAT16, FLOAT16:
@@ -676,7 +720,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 
 	// Enum types
 	case ENUM:
-		_ = ctx.buffer.ReadVarUint32(err)
+		_ = ctx.buffer.ReadVarUint32Small7(err)
 
 	// Unsigned integer types
 	case UINT8:
@@ -692,12 +736,7 @@ func skipValue(ctx *ReadContext, fieldDef FieldDef, readRefFlag bool, isField bo
 	case VAR_UINT64:
 		_ = ctx.buffer.ReadVarUint64(err)
 	case TAGGED_UINT64:
-		firstInt32 := ctx.buffer.ReadInt32(err)
-		if (firstInt32 & 1) != 0 {
-			// 9-byte encoding
-			_ = ctx.buffer.ReadUint64(err)
-		}
-		// Otherwise it's 4-byte encoding, already read
+		_ = ctx.buffer.ReadTaggedUint64(err)
 
 	// Unknown (polymorphic) type - read type info and skip dynamically
 	case UNKNOWN:

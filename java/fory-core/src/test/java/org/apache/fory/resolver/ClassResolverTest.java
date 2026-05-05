@@ -250,7 +250,7 @@ public class ClassResolverTest extends ForyTestBase {
   }
 
   @Test
-  public void testSharedRegistryCachesTypeDefByIdButKeepsTypeInfoLocal() {
+  public void testReadTypeDefPublishesValidatedTypeDefById() {
     ForyBuilder builder =
         Fory.builder().withXlang(false).requireClassRegistration(false).withMetaShare(true);
     finishBuilder(builder);
@@ -265,21 +265,40 @@ public class ClassResolverTest extends ForyTestBase {
     typeDef.writeTypeDef(buffer);
 
     buffer.readerIndex(0);
-    TypeDef canonicalTypeDef1 = resolver1.readTypeDef(buffer, buffer.readInt64());
+    TypeDef readTypeDef1 = resolver1.readTypeDef(buffer, buffer.readInt64());
     buffer.readerIndex(0);
-    TypeDef canonicalTypeDef2 = resolver2.readTypeDef(buffer, buffer.readInt64());
+    TypeDef readTypeDef2 = resolver2.readTypeDef(buffer, buffer.readInt64());
 
-    assertSame(sharedRegistry.typeDefById.get(typeDef.getId()), canonicalTypeDef1);
-    assertSame(canonicalTypeDef1, canonicalTypeDef2);
-    assertNull(resolver1.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()));
-    assertNull(resolver2.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()));
+    assertSame(readTypeDef1, readTypeDef2);
 
-    TypeInfo typeInfo1 = resolver1.buildMetaSharedTypeInfo(canonicalTypeDef1);
-    TypeInfo typeInfo2 = resolver2.buildMetaSharedTypeInfo(canonicalTypeDef2);
+    TypeInfo typeInfo1 = resolver1.buildMetaSharedTypeInfo(readTypeDef1);
+    TypeInfo typeInfo2 = resolver2.buildMetaSharedTypeInfo(readTypeDef2);
 
-    assertSame(resolver1.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()), typeInfo1);
-    assertSame(resolver2.extRegistry.typeInfoByTypeDefId.get(typeDef.getId()), typeInfo2);
     assertNotSame(typeInfo1, typeInfo2);
+  }
+
+  @Test
+  public void testTypeDefHeaderCacheStopsAtMaxEntries() {
+    ForyBuilder builder =
+        Fory.builder().withXlang(false).requireClassRegistration(false).withMetaShare(true);
+    finishBuilder(builder);
+    SharedRegistry sharedRegistry = new SharedRegistry();
+    Fory fory = new Fory(builder, ClassResolverTest.class.getClassLoader(), sharedRegistry);
+    ClassResolver resolver = (ClassResolver) fory.getTypeResolver();
+    TypeDef typeDef = TypeDef.buildTypeDef(resolver, BeanB.class);
+    int maxCachedTypeDefs = 8192;
+    for (long i = 0; i < maxCachedTypeDefs; i++) {
+      sharedRegistry.typeDefById.put(i, typeDef);
+    }
+
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(256);
+    typeDef.writeTypeDef(buffer);
+    buffer.readerIndex(0);
+    TypeDef readTypeDef = resolver.readTypeDef(buffer, buffer.readInt64());
+
+    assertNotNull(readTypeDef);
+    assertNull(sharedRegistry.typeDefById.get(typeDef.getId()));
+    assertEquals(sharedRegistry.typeDefById.size(), maxCachedTypeDefs);
   }
 
   @Test

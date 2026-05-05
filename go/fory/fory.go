@@ -39,9 +39,9 @@ var ErrNoSerializer = errors.New("fory: no serializer registered for type")
 
 // Bitmap flags for protocol header
 const (
-	IsNilFlag     = 1 << 0
-	XLangFlag     = 1 << 1
-	OutOfBandFlag = 1 << 2
+	XLangFlag      = 1 << 0
+	OutOfBandFlag  = 1 << 1
+	headerFlagMask = XLangFlag | OutOfBandFlag
 )
 
 // ============================================================================
@@ -185,6 +185,9 @@ func New(opts ...Option) *Fory {
 	f.readCtx.refResolver = f.refResolver
 	f.readCtx.compatible = f.config.Compatible
 	f.readCtx.xlang = f.config.IsXlang
+	if f.config.IsXlang {
+		f.readCtx.rootHeader = XLangFlag
+	}
 
 	return f
 }
@@ -487,13 +490,6 @@ func (f *Fory) Reset() {
 // For thread-safe usage, use threadsafe.Fory which copies the data internally.
 func (f *Fory) Serialize(value any) ([]byte, error) {
 	defer f.resetWriteState()
-	// Check if value is nil interface OR a nil pointer/slice/map/etc.
-	// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to serialize it as null.
-	if isNilValue(value) {
-		// Use Java-compatible null format: 3 bytes (magic + bitmap with isNilFlag)
-		writeNullHeader(f.writeCtx)
-		return f.writeCtx.buffer.GetByteSlice(0, f.writeCtx.buffer.writerIndex), nil
-	}
 	// WriteData protocol header
 	writeHeader(f.writeCtx, f.config)
 
@@ -521,14 +517,9 @@ func (f *Fory) Deserialize(data []byte, v any) error {
 	defer f.resetReadState()
 	f.readCtx.SetData(data)
 
-	isNull := readHeader(f.readCtx)
+	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
 		return f.readCtx.TakeError()
-	}
-
-	// Check if the serialized object is null
-	if isNull {
-		return nil
 	}
 
 	// Deserialize the value - TypeMeta is read inline using streaming protocol
@@ -561,13 +552,6 @@ func (f *Fory) resetWriteState() {
 // This is useful when you need to write multiple serialized values to the same buffer.
 // Returns error if serialization fails.
 func (f *Fory) SerializeTo(buf *ByteBuffer, value any) error {
-	// Handle nil values
-	if isNilValue(value) {
-		// Use Java-compatible null format: 1 byte (bitmap with isNilFlag)
-		buf.WriteByte_(IsNilFlag)
-		return nil
-	}
-
 	defer f.resetWriteState()
 
 	// Temporarily swap buffer
@@ -625,16 +609,10 @@ func (f *Fory) DeserializeFrom(buf *ByteBuffer, v any) error {
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = buf
 
-	isNull := readHeader(f.readCtx)
+	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
 		f.readCtx.buffer = origBuffer
 		return f.readCtx.TakeError()
-	}
-
-	// Check if the serialized object is null
-	if isNull {
-		f.readCtx.buffer = origBuffer
-		return nil
 	}
 
 	// Deserialize the value - TypeMeta is read inline using streaming protocol
@@ -731,19 +709,9 @@ func (f *Fory) DeserializeWithCallbackBuffers(buffer *ByteBuffer, v any, buffers
 	}
 
 	// ReadData and validate header
-	isNull := readHeader(f.readCtx)
+	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
 		return f.readCtx.TakeError()
-	}
-
-	// Check if the serialized object is null
-	if isNull {
-		// v must be a pointer so we can set it to nil
-		rv := reflect.ValueOf(v)
-		if rv.Kind() == reflect.Ptr && !rv.IsNil() {
-			rv.Elem().Set(reflect.Zero(rv.Elem().Type()))
-		}
-		return nil
 	}
 
 	// v must be a pointer so we can deserialize into it
@@ -803,50 +771,34 @@ func writeHeader(ctx *WriteContext, config Config) {
 	ctx.buffer.WriteByte_(bitmap)
 }
 
-// isNilValue checks if a value is nil, including nil pointers wrapped in any
-// In Go, `*int32(nil)` wrapped in `any` is NOT equal to `nil`, but we need to treat it as null.
-//
-//go:noinline
-func isNilValue(value any) bool {
-	if value == nil {
-		return true
-	}
-	rv := reflect.ValueOf(value)
-	switch rv.Kind() {
-	case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Chan, reflect.Func, reflect.Interface:
-		return rv.IsNil()
-	}
-	return false
-}
-
-// writeNullHeader writes a null object header (1 byte: bitmap with isNilFlag)
-// This is compatible with Java's null serialization format
-//
-//go:noinline
-func writeNullHeader(ctx *WriteContext) {
-	ctx.buffer.WriteByte_(IsNilFlag) // bitmap with only isNilFlag set
-}
-
-// Special return value indicating null object in readHeader
-// Using math.MinInt32 to avoid conflict with -1 which is used for "no meta offset"
-const NullObjectMetaOffset int32 = -0x7FFFFFFF
-
 // readHeader reads and validates the Fory protocol header
-// Returns true if the serialized object is null
 // Sets error on ctx if header is invalid (use ctx.HasError() to check)
-func readHeader(ctx *ReadContext) bool {
+func readHeader(ctx *ReadContext) {
 	err := ctx.Err()
 	bitmap := ctx.buffer.ReadByte(err)
 	if ctx.HasError() {
-		return false
+		return
 	}
-
-	// Check if this is a null object - only bitmap with isNilFlag was written
-	if (bitmap & IsNilFlag) != 0 {
-		return true // is null
+	if bitmap == ctx.rootHeader {
+		return
 	}
+	readHeaderSlow(ctx, bitmap)
+}
 
-	return false // not null
+//go:noinline
+func readHeaderSlow(ctx *ReadContext, bitmap byte) {
+	if bitmap&^headerFlagMask != 0 {
+		ctx.SetError(DeserializationErrorf("unsupported root header bitmap 0x%02x", bitmap))
+		return
+	}
+	if ((bitmap & XLangFlag) != 0) != ctx.xlang {
+		ctx.SetError(DeserializationErrorf("header bitmap mismatch at xlang bit"))
+		return
+	}
+	if (bitmap&OutOfBandFlag) != 0 && ctx.outOfBandBuffers == nil {
+		ctx.SetError(DeserializationErrorf("out-of-band buffers are required by root header"))
+		return
+	}
 }
 
 // ============================================================================
@@ -1025,16 +977,9 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	f.readCtx.SetData(data)
 
 	// ReadData and validate header
-	isNull := readHeader(f.readCtx)
+	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
 		return f.readCtx.TakeError()
-	}
-
-	// Check if the serialized object is null
-	if isNull {
-		var zero T
-		*target = zero
-		return nil
 	}
 
 	// Fast path: type switch for common types (Go compiler can optimize this)
@@ -1043,48 +988,73 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 	err := f.readCtx.Err()
 	switch t := any(target).(type) {
 	case *bool:
-		_ = buf.ReadInt8(err)  // null flag
-		_ = buf.ReadUint8(err) // type ID
+		_ = buf.ReadInt8(err) // null flag
+		if !f.readCtx.readExpectedTypeID(BOOL) {
+			return f.readCtx.CheckError()
+		}
 		*t = buf.ReadBool(err)
 		return f.readCtx.CheckError()
 	case *int8:
 		_ = buf.ReadInt8(err)
-		_ = buf.ReadUint8(err)
+		if !f.readCtx.readExpectedTypeID(INT8) {
+			return f.readCtx.CheckError()
+		}
 		*t = buf.ReadInt8(err)
 		return f.readCtx.CheckError()
 	case *int16:
 		_ = buf.ReadInt8(err)
-		_ = buf.ReadUint8(err)
+		if !f.readCtx.readExpectedTypeID(INT16) {
+			return f.readCtx.CheckError()
+		}
 		*t = buf.ReadInt16(err)
 		return f.readCtx.CheckError()
 	case *int32:
 		_ = buf.ReadInt8(err)
-		_ = buf.ReadUint8(err)
+		if !f.readCtx.readExpectedTypeID(VARINT32) {
+			return f.readCtx.CheckError()
+		}
 		*t = buf.ReadVarint32(err)
 		return f.readCtx.CheckError()
 	case *int64:
 		_ = buf.ReadInt8(err)
-		_ = buf.ReadUint8(err)
+		if !f.readCtx.readExpectedTypeID(VARINT64) {
+			return f.readCtx.CheckError()
+		}
 		*t = buf.ReadVarint64(err)
 		return f.readCtx.CheckError()
 	case *int:
 		_ = buf.ReadInt8(err)
-		_ = buf.ReadUint8(err)
+		if strconv.IntSize == 32 {
+			if !f.readCtx.readExpectedTypeID(VARINT32) {
+				return f.readCtx.CheckError()
+			}
+			*t = int(buf.ReadVarint32(err))
+			return f.readCtx.CheckError()
+		}
+		if !f.readCtx.readExpectedTypeID(VARINT64) {
+			return f.readCtx.CheckError()
+		}
 		*t = int(buf.ReadVarint64(err))
 		return f.readCtx.CheckError()
 	case *float32:
 		_ = buf.ReadInt8(err)
-		_ = buf.ReadUint8(err)
+		if !f.readCtx.readExpectedTypeID(FLOAT32) {
+			return f.readCtx.CheckError()
+		}
 		*t = buf.ReadFloat32(err)
 		return f.readCtx.CheckError()
 	case *float64:
 		_ = buf.ReadInt8(err)
-		_ = buf.ReadUint8(err)
+		if !f.readCtx.readExpectedTypeID(FLOAT64) {
+			return f.readCtx.CheckError()
+		}
 		*t = buf.ReadFloat64(err)
 		return f.readCtx.CheckError()
 	case *string:
-		_ = buf.ReadInt8(err)  // null flag
-		_ = buf.ReadUint8(err) // type ID
+		_ = buf.ReadInt8(err) // null flag
+		if !f.readCtx.readExpectedTypeID(STRING) {
+			return f.readCtx.CheckError()
+		}
 		*t = f.readCtx.ReadString()
 		return f.readCtx.CheckError()
 	case *[]byte:
@@ -1116,31 +1086,31 @@ func Deserialize[T any](f *Fory, data []byte, target *T) error {
 		return f.readCtx.CheckError()
 	case *map[string]string:
 		*t = f.readCtx.ReadStringStringMap(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[string]int64:
 		*t = f.readCtx.ReadStringInt64Map(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[string]int32:
 		*t = f.readCtx.ReadStringInt32Map(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[string]int:
 		*t = f.readCtx.ReadStringIntMap(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[string]float64:
 		*t = f.readCtx.ReadStringFloat64Map(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[string]bool:
 		*t = f.readCtx.ReadStringBoolMap(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[int32]int32:
 		*t = f.readCtx.ReadInt32Int32Map(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[int64]int64:
 		*t = f.readCtx.ReadInt64Int64Map(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	case *map[int]int:
 		*t = f.readCtx.ReadIntIntMap(RefModeNullOnly, true)
-		return nil
+		return f.readCtx.CheckError()
 	default:
 		// Slow path: use serializer-based deserialization
 		targetVal := reflect.ValueOf(target).Elem()

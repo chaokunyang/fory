@@ -18,10 +18,13 @@
 package fory
 
 import (
+	"bytes"
+	"compress/zlib"
 	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test structs for encoding/decoding
@@ -176,6 +179,35 @@ func checkTypeSpecRecursivelyOrNil(t *testing.T, original, decoded *TypeSpec, pa
 	checkTypeSpecRecursively(t, original, decoded, path, compareRootFlags)
 }
 
+func typeDefTestBodyWithoutFields() []byte {
+	buffer := NewByteBuffer(nil)
+	buffer.WriteByte(StructTypeDefFlag)
+	buffer.WriteVarUint32(0)
+	return buffer.Bytes()
+}
+
+func typeDefTestFrame(t *testing.T, body []byte, compressed bool) (*ByteBuffer, int64) {
+	t.Helper()
+	bodyBuffer := NewByteBuffer(nil)
+	bodyBuffer.WriteBinary(body)
+	frame, err := prependGlobalHeader(bodyBuffer, compressed)
+	require.NoError(t, err)
+	readErr := &Error{}
+	header := frame.ReadInt64(readErr)
+	require.NoError(t, readErr.CheckError())
+	return frame, header
+}
+
+func deflateTypeDefTestBody(t *testing.T, body []byte) []byte {
+	t.Helper()
+	var compressed bytes.Buffer
+	writer := zlib.NewWriter(&compressed)
+	_, err := writer.Write(body)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return compressed.Bytes()
+}
+
 // Item1 struct with mixed nullable (pointer) and non-nullable (primitive) fields
 type Item1 struct {
 	F1 int32
@@ -301,20 +333,164 @@ func TestTypeDefNullableFields(t *testing.T) {
 // allocation that would OOM-crash the process.
 func TestTypeDefFieldCountOOMPanic(t *testing.T) {
 	fory := NewFory()
-	header := int64(HAS_FIELDS_META_FLAG | 8)
 
-	// metaHeaderByte value of 31 triggers the extended VarUint32 field-count path.
 	buffer := NewByteBuffer(make([]byte, 0, 8))
-	buffer.WriteByte(31)
+	buffer.WriteByte(StructTypeDefFlag | SmallNumFieldsThreshold)
 	buffer.WriteVarUint32(2000000000)
-	buffer.WriteUint8(0)
-	buffer.WriteVarUint32(0)
 	buffer.SetReaderIndex(0)
 
-	_, err := decodeTypeDef(fory, buffer, header)
+	_, err := decodeTypeDef(fory, buffer, int64(buffer.WriterIndex()))
 	if err == nil {
 		t.Fatal("expected error for oversized fieldCount, got nil")
 	}
+}
+
+func TestTypeDefRejectsReservedGlobalHeaderBits(t *testing.T) {
+	fory := NewFory()
+	buffer := NewByteBuffer(nil)
+	buffer.WriteByte(StructTypeDefFlag)
+	buffer.WriteVarUint32(0)
+	buffer.SetReaderIndex(0)
+
+	_, err := decodeTypeDef(fory, buffer, int64(RESERVED_META_BITS|uint64(buffer.WriterIndex())))
+	if err == nil {
+		t.Fatal("expected error for reserved TypeDef global header bits")
+	}
+}
+
+func TestTypeDefRejectsReservedNonStructKindBits(t *testing.T) {
+	fory := NewFory()
+	body := []byte{0b0001_0000}
+	frame, header := typeDefTestFrame(t, body, false)
+
+	_, err := decodeTypeDef(fory, frame, header)
+	if err == nil {
+		t.Fatal("expected error for reserved non-struct TypeDef kind bits")
+	}
+}
+
+func TestTypeDefRejectsTrailingMetadataBytes(t *testing.T) {
+	fory := NewFory()
+	meta := NewByteBuffer(nil)
+	meta.WriteByte(StructTypeDefFlag)
+	meta.WriteVarUint32(0)
+	meta.WriteByte(0xff)
+
+	buffer := NewByteBuffer(nil)
+	_, writeErr := buffer.Write(meta.Bytes())
+	if writeErr != nil {
+		t.Fatalf("failed to write type def metadata: %v", writeErr)
+	}
+	buffer.SetReaderIndex(0)
+
+	_, err := decodeTypeDef(fory, buffer, int64(len(meta.Bytes())))
+	if err == nil {
+		t.Fatal("expected error for trailing TypeDef metadata bytes")
+	}
+}
+
+func TestTypeDefExtendedFieldCountHeaderDoesNotSetRegisterByName(t *testing.T) {
+	fields := make([]FieldDef, 32)
+	for i := range fields {
+		fields[i] = FieldDef{
+			typeSpec: NewSimpleTypeSpec(INT32),
+			tagID:    i + 1,
+		}
+	}
+	typeDef := NewTypeDef(uint32(STRUCT), 700, nil, nil, false, false, fields)
+	buffer := NewByteBuffer(nil)
+
+	require.NoError(t, writeMetaHeader(buffer, typeDef))
+	header := buffer.Bytes()[0]
+	require.Equal(t, byte(StructTypeDefFlag|SmallNumFieldsThreshold), header)
+	require.Zero(t, header&RegisterByNameFlag)
+}
+
+func TestTypeDefRejectsMetadataHashMismatch(t *testing.T) {
+	fory := NewFory()
+	body := typeDefTestBodyWithoutFields()
+	buffer := NewByteBuffer(nil)
+	buffer.WriteBinary(body)
+	buffer.SetReaderIndex(0)
+
+	_, err := decodeTypeDef(fory, buffer, int64(len(body)))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "metadata hash")
+}
+
+func TestTypeDefRejectsEncodedMetadataAboveMaxBinarySize(t *testing.T) {
+	fory := NewFory(WithMaxBinarySize(1))
+	body := typeDefTestBodyWithoutFields()
+	frame, header := typeDefTestFrame(t, body, false)
+
+	_, err := decodeTypeDef(fory, frame, header)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "max binary size exceeded")
+}
+
+func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
+	decoded := typeDefTestBodyWithoutFields()
+	compressed := deflateTypeDefTestBody(t, decoded)
+	fory := NewFory(WithMaxBinarySize(4096))
+	frame, header := typeDefTestFrame(t, compressed, true)
+
+	_, err := decodeTypeDef(fory, frame, header)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "compressed xlang TypeDef")
+}
+
+func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
+	fory := NewFory(WithCompatible(true))
+	require.NoError(t, fory.RegisterNamedStruct(SimpleStruct{}, "example.SimpleStruct"))
+	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
+	require.NoError(t, err)
+	require.NotEmpty(t, typeDef.encoded)
+
+	for i := 0; i < maxCachedTypeDefs; i++ {
+		fory.typeResolver.defIdToTypeDef[int64(i)] = typeDef
+	}
+	headerErr := &Error{}
+	header := NewByteBuffer(typeDef.encoded).ReadInt64(headerErr)
+	require.NoError(t, headerErr.CheckError())
+	require.NotContains(t, fory.typeResolver.defIdToTypeDef, header)
+
+	buffer := NewByteBuffer(nil)
+	buffer.WriteVarUint32(0)
+	buffer.WriteBinary(typeDef.encoded)
+	readErr := &Error{}
+	typeInfo := fory.typeResolver.readSharedTypeMeta(buffer, readErr)
+	require.NoError(t, readErr.CheckError())
+	require.NotNil(t, typeInfo)
+	require.Len(t, fory.typeResolver.defIdToTypeDef, maxCachedTypeDefs)
+	require.NotContains(t, fory.typeResolver.defIdToTypeDef, header)
+}
+
+func TestTypeDefRejectsNamespaceLengthBeyondMetadata(t *testing.T) {
+	fory := NewFory()
+	meta := NewByteBuffer(nil)
+	meta.WriteByte(StructTypeDefFlag | RegisterByNameFlag)
+	meta.WriteByte(byte(BIG_NAME_THRESHOLD << 2))
+	meta.WriteVarUint32Small7(100)
+	frame, header := typeDefTestFrame(t, meta.Bytes(), false)
+
+	_, err := decodeTypeDef(fory, frame, header)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "namespace length")
+}
+
+func TestTypeDefRejectsFieldNameLengthBeyondMetadata(t *testing.T) {
+	fory := NewFory()
+	meta := NewByteBuffer(nil)
+	meta.WriteByte(StructTypeDefFlag | 1)
+	meta.WriteVarUint32(0)
+	meta.WriteByte(0x0F << 2)
+	meta.WriteVarUint32(100)
+	meta.WriteUint8(uint8(INT32))
+	frame, header := typeDefTestFrame(t, meta.Bytes(), false)
+
+	_, err := decodeTypeDef(fory, frame, header)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "field name length")
 }
 
 // TestTypeDefNestedRecursionStackOverflowPanic verifies that readFieldTypeWithFlags

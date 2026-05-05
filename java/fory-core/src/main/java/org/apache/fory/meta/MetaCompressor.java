@@ -19,6 +19,8 @@
 
 package org.apache.fory.meta;
 
+import org.apache.fory.exception.InvalidDataException;
+
 /**
  * An interface used to compress class metadata such as field names and types. The implementation of
  * this interface should be thread safe.
@@ -27,6 +29,14 @@ public interface MetaCompressor {
   byte[] compress(byte[] data, int offset, int size);
 
   byte[] decompress(byte[] data, int offset, int size);
+
+  default byte[] decompress(byte[] data, int offset, int size, int maxOutputSize) {
+    byte[] decompressed = decompress(data, offset, size);
+    if (decompressed.length > maxOutputSize) {
+      throw new InvalidDataException("Decompressed TypeDef metadata exceeds the maximum size.");
+    }
+    return decompressed;
+  }
 
   /**
    * Check whether {@link MetaCompressor} implements `equals/hashCode` method. If not implemented,

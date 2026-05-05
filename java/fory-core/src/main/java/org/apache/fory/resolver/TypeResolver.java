@@ -116,7 +116,20 @@ public abstract class TypeResolver {
   static final int INTERNAL_NATIVE_ID_LIMIT = 250;
   private static final GenericType OBJECT_GENERIC_TYPE = GenericType.build(Object.class);
   private static final float TYPE_ID_MAP_LOAD_FACTOR = 0.5f;
+  private static final int MAX_CACHED_TYPE_DEFS = 8192;
   static final long MAX_USER_TYPE_ID = 0xffff_fffEL;
+
+  private static final class TransformedTypeInfo {
+    final Class<?> readClass;
+    final long typeDefId;
+    final TypeInfo typeInfo;
+
+    TransformedTypeInfo(Class<?> readClass, long typeDefId, TypeInfo typeInfo) {
+      this.readClass = readClass;
+      this.typeDefId = typeDefId;
+      this.typeInfo = typeInfo;
+    }
+  }
 
   final Config config;
   final boolean metaContextShareEnabled;
@@ -729,7 +742,7 @@ public abstract class TypeResolver {
 
   /**
    * Read class info from bytes with cache optimization. Uses the cached namespace and type name
-   * bytes to avoid map lookups when the class is the same as the cached one (hash comparison).
+   * bytes to avoid map lookups when the class is the same as the cached one.
    */
   protected final TypeInfo readTypeInfoFromBytes(
       ReadContext readContext, TypeInfo typeInfoCache, int header) {
@@ -746,9 +759,8 @@ public abstract class TypeResolver {
       assert packageNameBytesCache != null;
       simpleClassNameBytes = metaStringReader.readMetaString(buffer, typeNameBytesCache);
 
-      // Fast path: if hashes match, return cached TypeInfo (already has serializer)
-      if (typeNameBytesCache.hash == simpleClassNameBytes.hash
-          && packageNameBytesCache.hash == namespaceBytes.hash) {
+      // MetaStringReader returns the provided cache object only after validating the encoded body.
+      if (typeNameBytesCache == simpleClassNameBytes && packageNameBytesCache == namespaceBytes) {
         return typeInfoCache;
       }
     } else {
@@ -775,9 +787,11 @@ public abstract class TypeResolver {
     TypeInfo typeInfo;
     if (isRef) {
       // Reference to previously read type in this stream
-      typeInfo = metaReadContext.readTypeInfos.get(index);
+      typeInfo = getMetaReadTypeInfo(metaReadContext, index);
     } else {
-      // New type in stream - but may already be known from registry
+      // New type in stream, with optimized reuse by validated TypeDef header. A header-cache
+      // hit intentionally skips the body without rehashing: entries are published only after the
+      // TypeDef body has parsed successfully and matched the 52-bit body hash.
       long id = buffer.readInt64();
       typeInfo = extRegistry.typeInfoByTypeDefId.get(id);
       if (typeInfo != null) {
@@ -797,6 +811,17 @@ public abstract class TypeResolver {
     return typeInfo;
   }
 
+  private static TypeInfo getMetaReadTypeInfo(MetaReadContext metaReadContext, int index) {
+    if (index < 0 || index >= metaReadContext.readTypeInfos.size) {
+      throw new ForyException("Invalid class metadata reference id " + index);
+    }
+    TypeInfo typeInfo = metaReadContext.readTypeInfos.get(index);
+    if (typeInfo == null) {
+      throw new ForyException("Invalid class metadata reference id " + index);
+    }
+    return typeInfo;
+  }
+
   public final TypeInfo readSharedClassMeta(ReadContext readContext, Class<?> targetClass) {
     TypeInfo typeInfo = readSharedClassMeta(readContext);
     Class<?> readClass = typeInfo.getType();
@@ -808,20 +833,26 @@ public abstract class TypeResolver {
   }
 
   private TypeInfo getTargetTypeInfo(TypeInfo typeInfo, Class<?> targetClass) {
-    Tuple2<Class<?>, TypeInfo>[] infos = extRegistry.transformedTypeInfo.get(targetClass);
+    TransformedTypeInfo[] infos = extRegistry.transformedTypeInfo.get(targetClass);
     Class<?> readClass = typeInfo.getType();
+    long typeDefId = transformCacheTypeDefId(typeInfo);
     if (infos != null) {
       // It's ok to use loop here since most of case the array size will be 1.
-      for (Tuple2<Class<?>, TypeInfo> info : infos) {
-        if (info.f0 == readClass) {
-          return info.f1;
+      for (TransformedTypeInfo info : infos) {
+        if (info.readClass == readClass && info.typeDefId == typeDefId) {
+          return info.typeInfo;
         }
       }
     }
-    return transformTypeInfo(typeInfo, targetClass);
+    return transformTypeInfo(typeInfo, targetClass, typeDefId);
   }
 
-  private TypeInfo transformTypeInfo(TypeInfo typeInfo, Class<?> targetClass) {
+  private static long transformCacheTypeDefId(TypeInfo typeInfo) {
+    TypeDef typeDef = typeInfo.getTypeDef();
+    return typeDef == null ? 0 : typeDef.getId();
+  }
+
+  private TypeInfo transformTypeInfo(TypeInfo typeInfo, Class<?> targetClass, long typeDefId) {
     Class<?> readClass = typeInfo.getType();
     TypeInfo newTypeInfo;
     if (targetClass.isAssignableFrom(readClass)) {
@@ -832,14 +863,16 @@ public abstract class TypeResolver {
           getMetaSharedTypeInfo(
               typeInfo.typeDef.replaceRootClassTo(this, targetClass), targetClass);
     }
-    Tuple2<Class<?>, TypeInfo>[] infos = extRegistry.transformedTypeInfo.get(targetClass);
+    TransformedTypeInfo[] infos = extRegistry.transformedTypeInfo.get(targetClass);
     int size = infos == null ? 0 : infos.length;
-    @SuppressWarnings("unchecked")
-    Tuple2<Class<?>, TypeInfo>[] newInfos = (Tuple2<Class<?>, TypeInfo>[]) new Tuple2[size + 1];
+    if (size >= MAX_CACHED_TYPE_DEFS) {
+      return newTypeInfo;
+    }
+    TransformedTypeInfo[] newInfos = new TransformedTypeInfo[size + 1];
     if (size > 0) {
       System.arraycopy(infos, 0, newInfos, 0, size);
     }
-    newInfos[size] = Tuple2.of(readClass, newTypeInfo);
+    newInfos[size] = new TransformedTypeInfo(readClass, typeDefId, newTypeInfo);
     extRegistry.transformedTypeInfo.put(targetClass, newInfos);
     return newTypeInfo;
   }
@@ -921,10 +954,7 @@ public abstract class TypeResolver {
       return typeInfo;
     }
     Class<?> cls = loadClass(typeDef.getClassSpec());
-    // For nonexistent classes, always create a new TypeInfo with the correct typeDef,
-    // even if the typeDef has no fields meta. This ensures the UnknownStructSerializer
-    // has access to the typeDef for proper deserialization.
-    if (!typeDef.hasFieldsMeta()
+    if (!typeDef.isStructSchemaKind()
         && !UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       typeInfo = getTypeInfo(cls);
     } else if (ClassResolver.useReplaceResolveSerializer(cls)) {
@@ -934,7 +964,9 @@ public abstract class TypeResolver {
     } else {
       typeInfo = getMetaSharedTypeInfo(typeDef, cls);
     }
-    extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
+    if (extRegistry.typeInfoByTypeDefId.size < MAX_CACHED_TYPE_DEFS) {
+      extRegistry.typeInfoByTypeDefId.put(typeDef.getId(), typeInfo);
+    }
     return typeInfo;
   }
 
@@ -1807,15 +1839,12 @@ public abstract class TypeResolver {
     int userIdGenerator = 0;
     SerializerFactory serializerFactory;
     final LongMap<TypeInfo> typeInfoByTypeDefId = new LongMap<>(2, 0.5f);
-
     // cache absTypeInfo, support customized serializer for abstract or interface.
     // IdentityHashMap is more memory efficient than fory IdentityMap, and this is not in hotpath
     // for query
     final IdentityHashMap<Class<?>, TypeInfo> abstractTypeInfo = new IdentityHashMap<>();
-    // Tuple2<Class, Class>: Tuple2<From Class, To Class>
-    final IdentityHashMap<Class<?>, Tuple2<Class<?>, TypeInfo>[]> transformedTypeInfo =
+    final IdentityHashMap<Class<?>, TransformedTypeInfo[]> transformedTypeInfo =
         new IdentityHashMap<>();
-
     // avoid potential recursive call for seq codec generation.
     // ex. A->field1: B, B.field1: A
     final Set<Class<?>> getClassCtx = new HashSet<>();

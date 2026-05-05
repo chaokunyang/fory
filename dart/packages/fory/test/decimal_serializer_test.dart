@@ -88,14 +88,14 @@ void main() {
     test('rejects non-canonical big decimal payloads', () {
       final fory = Fory();
       final zeroBigEncoding = Uint8List.fromList(<int>[
-        0x02,
+        0x01,
         0xff,
         TypeIds.decimal,
         0x00,
         0x01,
       ]);
       final trailingZeroPayload = Uint8List.fromList(<int>[
-        0x02,
+        0x01,
         0xff,
         TypeIds.decimal,
         0x00,

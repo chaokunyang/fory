@@ -27,6 +27,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.collection.BiMap;
@@ -54,6 +55,7 @@ import org.apache.fory.util.GraalvmSupport;
 public final class SharedRegistry {
   private static final int MAX_CACHED_ENCODED_META_STRINGS = 32768;
   private static final int MAX_CACHED_ENCODED_META_STRING_LENGTH = 2048;
+  private static final int MAX_CACHED_TYPE_DEFS = 8192;
 
   final ConcurrentIdentityMap<Class<?>, TypeDef> typeDefMap = new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, TypeDef> currentLayerTypeDef =
@@ -80,6 +82,7 @@ public final class SharedRegistry {
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
   private final Object metaStringCacheLock = new Object();
+  private final AtomicInteger cachedTypeDefCount = new AtomicInteger();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;
   volatile BiMap<String, Class<?>> registeredClasses;
 
@@ -123,6 +126,43 @@ public final class SharedRegistry {
   TypeInfo cacheRegisteredTypeInfo(Class<?> type, TypeInfo typeInfo) {
     TypeInfo existing = registeredTypeInfoCache.putIfAbsent(type, typeInfo);
     return existing == null ? typeInfo : existing;
+  }
+
+  TypeDef getOrCreateTypeDef(TypeDef typeDef) {
+    long id = typeDef.getId();
+    TypeDef existing = typeDefById.get(id);
+    if (existing != null) {
+      return existing;
+    }
+    if (!reserveTypeDefCacheSlot()) {
+      return typeDef;
+    }
+    existing = typeDefById.putIfAbsent(id, typeDef);
+    if (existing != null) {
+      cachedTypeDefCount.decrementAndGet();
+      return existing;
+    }
+    return typeDef;
+  }
+
+  private boolean reserveTypeDefCacheSlot() {
+    while (true) {
+      int count = cachedTypeDefCount.get();
+      int mapSize = typeDefById.size();
+      if (mapSize > count) {
+        if (cachedTypeDefCount.compareAndSet(count, mapSize)) {
+          count = mapSize;
+        } else {
+          continue;
+        }
+      }
+      if (count >= MAX_CACHED_TYPE_DEFS) {
+        return false;
+      }
+      if (cachedTypeDefCount.compareAndSet(count, count + 1)) {
+        return true;
+      }
+    }
   }
 
   EncodedMetaString getPackageEncodedMetaString(String string) {
@@ -208,11 +248,6 @@ public final class SharedRegistry {
 
   private boolean shouldCacheEncodedMetaStringLength(EncodedMetaString encodedMetaString) {
     return encodedMetaString.bytes.length <= MAX_CACHED_ENCODED_META_STRING_LENGTH;
-  }
-
-  TypeDef getOrCreateTypeDef(TypeDef typeDef) {
-    TypeDef existingTypeDef = typeDefById.putIfAbsent(typeDef.getId(), typeDef);
-    return existingTypeDef == null ? typeDef : existingTypeDef;
   }
 
   List<Descriptor> getOrCreateFieldDescriptors(

@@ -20,13 +20,15 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/meta/type_meta.dart';
+import 'package:fory/src/util/hash_util.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('xlang protocol regressions', () {
     test('deserializes NONE wire values as null', () {
       final fory = Fory();
-      final bytes = Uint8List.fromList(<int>[0x02, 0xff, TypeIds.none]);
+      final bytes = Uint8List.fromList(<int>[0x01, 0xff, TypeIds.none]);
 
       expect(fory.deserialize<Object?>(bytes), isNull);
       expect(fory.deserialize<Null>(bytes), isNull);
@@ -77,7 +79,7 @@ void main() {
       final fory = Fory();
       final bytes = fory.serializeBuiltin(7, wireTypeId: TypeIds.varInt32);
 
-      expect(bytes[0], equals(0x02));
+      expect(bytes[0], equals(0x01));
       expect(bytes[1], equals(0xff));
       expect(bytes[2], equals(TypeIds.varInt32));
       expect(fory.deserialize<int>(bytes), equals(7));
@@ -86,7 +88,7 @@ void main() {
     test('rejects out-of-band xlang payload headers', () {
       final fory = Fory();
       final bytes = Uint8List.fromList(fory.serialize('value'));
-      bytes[0] |= 0x04;
+      bytes[0] |= 0x02;
 
       expect(
         () => fory.deserialize<String>(bytes),
@@ -95,6 +97,27 @@ void main() {
             (error) => error.toString(),
             'message',
             contains('Out-of-band buffers'),
+          ),
+        ),
+      );
+    });
+
+    test('validates parsed TypeDef body hash before caching', () {
+      final body = Uint8List.fromList(<int>[0x80]);
+      final header = TypeHeader(typeDefHeader(body));
+      final valid = Buffer.wrap(body);
+      header.skipRemaining(valid);
+      expect(valid.readableBytes, equals(0));
+
+      final malformed = Uint8List.fromList(body);
+      malformed[0] ^= 1;
+      expect(
+        () => header.validateBodyHash(malformed),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('metadata hash'),
           ),
         ),
       );

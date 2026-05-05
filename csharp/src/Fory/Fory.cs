@@ -16,6 +16,7 @@
 // under the License.
 
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Apache.Fory;
 
@@ -142,15 +143,11 @@ public sealed class Fory
         ByteWriter writer = _writeContext.Writer;
         writer.Reset();
         Serializer<T> serializer = _typeResolver.GetSerializer<T>();
-        bool isNone = value is null;
-        WriteHead(writer, isNone);
-        if (!isNone)
-        {
-            _writeContext.ResetFor(writer);
-            RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
-            serializer.Write(_writeContext, value, refMode, true, false);
-            _writeContext.RefWriter.Reset();
-        }
+        WriteHead(writer);
+        _writeContext.ResetFor(writer);
+        RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
+        serializer.Write(_writeContext, value, refMode, true, false);
+        _writeContext.RefWriter.Reset();
 
         return writer.ToArray();
     }
@@ -181,7 +178,7 @@ public sealed class Fory
         T value = DeserializeFromReader<T>(reader);
         if (reader.Remaining != 0)
         {
-            throw new InvalidDataException($"unexpected trailing bytes after deserializing {typeof(T)}");
+            ThrowUnexpectedTrailingBytes<T>();
         }
 
         return value;
@@ -201,7 +198,7 @@ public sealed class Fory
         T value = DeserializeFromReader<T>(reader);
         if (reader.Remaining != 0)
         {
-            throw new InvalidDataException($"unexpected trailing bytes after deserializing {typeof(T)}");
+            ThrowUnexpectedTrailingBytes<T>();
         }
 
         return value;
@@ -228,46 +225,43 @@ public sealed class Fory
     /// Writes the frame header for a payload.
     /// </summary>
     /// <param name="writer">Destination writer.</param>
-    /// <param name="isNone">Whether the payload value is null.</param>
-    internal void WriteHead(ByteWriter writer, bool isNone)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void WriteHead(ByteWriter writer)
     {
-        byte bitmap = ForyHeaderFlag.IsXlang;
-
-        if (isNone)
-        {
-            bitmap |= ForyHeaderFlag.IsNull;
-        }
-
-        writer.WriteUInt8(bitmap);
+        writer.WriteUInt8(ForyHeaderFlag.IsXlang);
     }
 
     /// <summary>
     /// Reads and validates the frame header.
     /// </summary>
     /// <param name="reader">Source reader.</param>
-    /// <returns><c>true</c> if the payload value is null; otherwise <c>false</c>.</returns>
     /// <exception cref="InvalidDataException">Thrown when the peer xlang bitmap does not match this runtime mode.</exception>
-    internal bool ReadHead(ByteReader reader)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal void ReadHead(ByteReader reader)
     {
         byte bitmap = reader.ReadUInt8();
-        bool peerIsXlang = (bitmap & ForyHeaderFlag.IsXlang) != 0;
-        if (!peerIsXlang)
+        if (bitmap == ForyHeaderFlag.IsXlang)
         {
-            throw new InvalidDataException("xlang bitmap mismatch");
+            return;
         }
-
-        return (bitmap & ForyHeaderFlag.IsNull) != 0;
+        ThrowInvalidRootHeader(bitmap);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowUnexpectedTrailingBytes<T>() =>
+        throw new InvalidDataException($"unexpected trailing bytes after deserializing {typeof(T)}");
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowInvalidRootHeader(byte bitmap) =>
+        throw new InvalidDataException((bitmap & ForyHeaderFlag.IsXlang) == 0
+            ? "xlang bitmap mismatch"
+            : $"unsupported root header bitmap 0x{bitmap:X2}");
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private T DeserializeFromReader<T>(ByteReader reader)
     {
-        bool isNone = ReadHead(reader);
+        ReadHead(reader);
         Serializer<T> serializer = _typeResolver.GetSerializer<T>();
-        if (isNone)
-        {
-            return serializer.DefaultValue;
-        }
-
         ReadContext readContext = _readContext;
         readContext.ResetFor(reader);
         RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;

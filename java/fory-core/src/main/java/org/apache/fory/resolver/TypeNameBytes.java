@@ -19,20 +19,30 @@
 
 package org.apache.fory.resolver;
 
+import java.util.Arrays;
+import org.apache.fory.meta.EncodedMetaString;
+
 class TypeNameBytes {
   private final long packageHash;
   private final long classNameHash;
+  private final byte[] packageBytes;
+  private final byte[] classNameBytes;
 
-  TypeNameBytes(long packageHash, long classNameHash) {
-    this.packageHash = packageHash;
-    this.classNameHash = classNameHash;
+  TypeNameBytes(EncodedMetaString packageBytes, EncodedMetaString classNameBytes) {
+    this.packageHash = packageBytes.hash;
+    this.classNameHash = classNameBytes.hash;
+    this.packageBytes = packageBytes.bytes;
+    this.classNameBytes = classNameBytes.bytes;
   }
 
   @Override
   public boolean equals(Object o) {
     // ClassNameBytes is used internally, skip
     TypeNameBytes that = (TypeNameBytes) o;
-    return packageHash == that.packageHash && classNameHash == that.classNameHash;
+    return packageHash == that.packageHash
+        && classNameHash == that.classNameHash
+        && Arrays.equals(packageBytes, that.packageBytes)
+        && Arrays.equals(classNameBytes, that.classNameBytes);
   }
 
   @Override

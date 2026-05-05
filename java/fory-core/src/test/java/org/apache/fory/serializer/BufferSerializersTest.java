@@ -22,7 +22,9 @@ package org.apache.fory.serializer;
 import java.nio.ByteBuffer;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.ByteBufferUtil;
+import org.apache.fory.memory.MemoryBuffer;
 import org.testng.annotations.Test;
 
 public class BufferSerializersTest extends ForyTestBase {
@@ -50,5 +52,25 @@ public class BufferSerializersTest extends ForyTestBase {
     buffer2.putDouble(1.0 / 3);
     ByteBufferUtil.rewind(buffer2);
     copyCheck(fory, buffer2);
+  }
+
+  @Test
+  public void testByteBufferRejectsMalformedPayload() {
+    Fory fory = Fory.builder().build();
+    Serializer<ByteBuffer> serializer =
+        new BufferSerializers.ByteBufferSerializer(fory.getTypeResolver(), ByteBuffer.class);
+
+    MemoryBuffer zeroSize = MemoryBuffer.newHeapBuffer(16);
+    zeroSize.writeBoolean(true);
+    zeroSize.writeVarUInt32Aligned(0);
+    org.testng.Assert.assertThrows(
+        DeserializationException.class, () -> readSerializer(fory, serializer, zeroSize));
+
+    MemoryBuffer invalidOrder = MemoryBuffer.newHeapBuffer(16);
+    invalidOrder.writeBoolean(true);
+    invalidOrder.writeVarUInt32Aligned(1);
+    invalidOrder.writeByte(2);
+    org.testng.Assert.assertThrows(
+        DeserializationException.class, () -> readSerializer(fory, serializer, invalidOrder));
   }
 }

@@ -200,6 +200,8 @@ public sealed class ReadContext
         ulong header = Reader.ReadUInt64();
         if (TryGetCachedReadTypeMeta(header, out TypeMeta cachedTypeMeta, out int skipBytesAfterHeader))
         {
+            // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
+            // after a successful TypeMeta parse and 52-bit body-hash validation.
             Reader.Skip(skipBytesAfterHeader);
             StoreReadTypeMeta(cachedTypeMeta, index);
             return cachedTypeMeta;

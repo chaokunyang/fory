@@ -23,10 +23,13 @@ from dataclasses import dataclass
 from pyfory.format.infer import (
     ForyTypeVisitor,
     from_arrow_schema,
+    get_cls_by_schema,
     infer_field,
     infer_schema,
+    remove_schema,
     to_arrow_schema,
 )
+import pyfory.format.infer as infer_module
 from pyfory.format import (
     TypeId,
 )
@@ -49,6 +52,22 @@ class Foo:
     f5: List[int]
     f6: int
     f7: Bar
+
+
+class FakeField:
+    def __init__(self, name):
+        self.name = name
+
+
+class FakeSchema:
+    def __init__(self, field_name, cls=None):
+        self.num_fields = 1
+        self._field = FakeField(field_name)
+        self.metadata = {} if cls is None else {b"cls": f"{cls.__module__}.{cls.__name__}".encode()}
+
+    def field(self, index):
+        assert index == 0
+        return self._field
 
 
 def _infer_field(field_name, type_, types_path=None):
@@ -140,6 +159,29 @@ def test_pyarrow_schema_fields_roundtrip_through_row_format_schema():
 def test_row_format_rejects_xlang_array_carrier_annotations():
     with pytest.raises(TypeError, match="Row format does not support pyfory.array array annotations"):
         _infer_field("values", pyfory.Array[pyfory.Int32])
+
+
+def test_row_schema_without_class_metadata_is_not_globally_cached():
+    infer_module.reset()
+    classes = [get_cls_by_schema(FakeSchema(f"f{i}")) for i in range(8)]
+
+    assert len({id(cls) for cls in classes}) == len(classes)
+    assert infer_module.__type_map__ == {}
+    assert infer_module.__schemas__ == {}
+    for cls in classes:
+        assert cls.__name__ not in pyfory.type_util.__dict__
+
+
+def test_remove_schema_clears_row_class_cache():
+    infer_module.reset()
+    schema = FakeSchema("f", Foo)
+
+    assert get_cls_by_schema(schema) is Foo
+    assert id(schema) in infer_module.__type_map__
+    assert id(schema) in infer_module.__schemas__
+    remove_schema(schema)
+    assert id(schema) not in infer_module.__type_map__
+    assert id(schema) not in infer_module.__schemas__
 
 
 if __name__ == "__main__":

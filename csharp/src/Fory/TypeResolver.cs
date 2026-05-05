@@ -937,6 +937,7 @@ public sealed class TypeResolver
 
     private TypeInfo ResolveAnyTypeInfoFromMeta(TypeId wireTypeId, TypeMeta typeMeta, bool compatible)
     {
+        ValidateTypeMetaWireType(typeMeta, wireTypeId);
         TypeInfo typeInfo = typeMeta.RegisterByName
             ? RequireRegisteredTypeInfoByName(typeMeta.NamespaceName.Value, typeMeta.TypeName.Value)
             : typeMeta.UserTypeId.HasValue
@@ -1233,6 +1234,8 @@ public sealed class TypeResolver
         bool compatible,
         TypeId actualWireTypeId)
     {
+        ValidateTypeMetaWireType(remoteTypeMeta, actualWireTypeId);
+
         if (remoteTypeMeta.RegisterByName)
         {
             if (!localInfo.RegisterByName || !localInfo.NamespaceName.HasValue || !localInfo.TypeName.HasValue)
@@ -1285,6 +1288,19 @@ public sealed class TypeResolver
             {
                 throw new TypeMismatchException((uint)actualWireTypeId, remoteTypeMeta.TypeId.Value);
             }
+        }
+    }
+
+    private static void ValidateTypeMetaWireType(TypeMeta remoteTypeMeta, TypeId actualWireTypeId)
+    {
+        if (!remoteTypeMeta.TypeId.HasValue || !IsKnownTypeId(remoteTypeMeta.TypeId.Value))
+        {
+            throw new InvalidDataException("missing or unknown TypeMeta kind");
+        }
+
+        if ((TypeId)remoteTypeMeta.TypeId.Value != actualWireTypeId)
+        {
+            throw new TypeMismatchException((uint)actualWireTypeId, remoteTypeMeta.TypeId.Value);
         }
     }
 

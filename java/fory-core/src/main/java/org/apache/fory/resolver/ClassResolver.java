@@ -41,6 +41,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.EnumSet;
@@ -101,6 +102,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
+import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -537,7 +539,7 @@ public class ClassResolver extends TypeResolver {
         buildUnregisteredTypeId(cls, existingInfo == null ? null : existingInfo.serializer);
     TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, null, typeId, -1);
     classInfoMap.put(cls, typeInfo);
-    compositeNameBytes2TypeInfo.put(new TypeNameBytes(nsBytes.hash, nameBytes.hash), typeInfo);
+    compositeNameBytes2TypeInfo.put(new TypeNameBytes(nsBytes, nameBytes), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
     registerGraalvmClass(cls);
   }
@@ -583,7 +585,7 @@ public class ClassResolver extends TypeResolver {
     TypeInfo typeInfo = new TypeInfo(cls, nsBytes, nameBytes, serializer, typeId, -1);
     typeInfo.setSerializer(this, serializer);
     classInfoMap.put(cls, typeInfo);
-    compositeNameBytes2TypeInfo.put(new TypeNameBytes(nsBytes.hash, nameBytes.hash), typeInfo);
+    compositeNameBytes2TypeInfo.put(new TypeNameBytes(nsBytes, nameBytes), typeInfo);
     extRegistry.registeredClasses.put(fullname, cls);
     registerGraalvmClass(cls);
   }
@@ -864,15 +866,28 @@ public class ClassResolver extends TypeResolver {
       }
       return typeInfo.typeId;
     }
-    int typeId = buildUnregisteredTypeId(cls, null);
+    int typeId = usesNonStructTypeDef(cls) ? Types.NAMED_EXT : buildUnregisteredTypeId(cls, null);
     typeInfo = new TypeInfo(this, cls, null, typeId, INVALID_USER_TYPE_ID);
     classInfoMap.put(cls, typeInfo);
     if (typeInfo.namespace != null && typeInfo.typeName != null) {
-      TypeNameBytes typeNameBytes =
-          new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
+      TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
       compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
     }
     return typeId;
+  }
+
+  private boolean usesNonStructTypeDef(Class<?> cls) {
+    return !cls.isEnum()
+        && (isCollection(cls)
+            || isMap(cls)
+            || Externalizable.class.isAssignableFrom(cls)
+            || requireJavaSerialization(cls)
+            || useReplaceResolveSerializer(cls)
+            || Functions.isLambda(cls)
+            || Calendar.class.isAssignableFrom(cls)
+            || ZoneId.class.isAssignableFrom(cls)
+            || TimeZone.class.isAssignableFrom(cls)
+            || ByteBuffer.class.isAssignableFrom(cls));
   }
 
   /**
@@ -1079,8 +1094,7 @@ public class ClassResolver extends TypeResolver {
         typeInfo = sharedTypeInfo;
         updateTypeInfo(type, typeInfo);
         if (typeInfo.namespace != null && typeInfo.typeName != null) {
-          TypeNameBytes typeNameBytes =
-              new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
+          TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
           compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
         }
         if (typeInfoCache.type == type) {
@@ -1226,8 +1240,7 @@ public class ClassResolver extends TypeResolver {
       // readTypeInfo can find the TypeInfo by name bytes during deserialization.
       // This is important for dynamically created classes that can't be loaded by name.
       if (typeInfo.namespace != null && typeInfo.typeName != null) {
-        TypeNameBytes typeNameBytes =
-            new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
+        TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
         compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
       }
     }
@@ -1708,7 +1721,6 @@ public class ClassResolver extends TypeResolver {
       getGraalvmClassRegistry()
           .putDeserializerClass(
               typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
-      extRegistry.typeInfoByTypeDefId.remove(typeDef.getId());
     }
     typeInfoCache = NIL_TYPE_INFO;
     if (RecordUtils.isRecord(cls)) {
@@ -1809,15 +1821,15 @@ public class ClassResolver extends TypeResolver {
     Preconditions.checkArgument(
         serializerClass != UnknownClassSerializers.UnknownStructSerializer.class);
     if (needToWriteTypeDef(serializerClass)) {
-      typeDef =
-          cacheTypeDef(
-              typeDefMap.computeIfAbsent(typeInfo.type, cls -> TypeDef.buildTypeDef(this, cls)));
+      typeDef = typeDefMap.computeIfAbsent(typeInfo.type, cls -> TypeDef.buildTypeDef(this, cls));
     } else {
       // Some type will use other serializers such MapSerializer and so on.
       typeDef =
-          cacheTypeDef(
-              typeDefMap.computeIfAbsent(
-                  typeInfo.type, cls -> TypeDef.buildTypeDef(this, cls, new ArrayList<>(), false)));
+          typeDefMap.computeIfAbsent(
+              typeInfo.type,
+              cls ->
+                  NativeTypeDefEncoder.buildTypeDefWithFieldInfos(
+                      this, cls, Collections.emptyList()));
     }
     typeInfo.typeDef = typeDef;
     return typeDef;
@@ -1924,7 +1936,7 @@ public class ClassResolver extends TypeResolver {
   @Override
   protected TypeInfo loadBytesToTypeInfo(
       EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes) {
-    TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes.hash, simpleClassNameBytes.hash);
+    TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes, simpleClassNameBytes);
     TypeInfo typeInfo = compositeNameBytes2TypeInfo.get(typeNameBytes);
     if (typeInfo == null) {
       typeInfo = populateBytesToTypeInfo(typeNameBytes, packageBytes, simpleClassNameBytes);
@@ -1946,8 +1958,7 @@ public class ClassResolver extends TypeResolver {
       TypeInfo newTypeInfo = getTypeInfo(typeInfo.type);
       // Update the cache with the correct TypeInfo that has a serializer
       if (typeInfo.typeName != null) {
-        TypeNameBytes typeNameBytes =
-            new TypeNameBytes(typeInfo.namespace.hash, typeInfo.typeName.hash);
+        TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
         compositeNameBytes2TypeInfo.put(typeNameBytes, newTypeInfo);
       }
       return newTypeInfo;
@@ -1985,8 +1996,7 @@ public class ClassResolver extends TypeResolver {
     String typeName = ReflectionUtils.getClassNameWithoutPackage(className);
     EncodedMetaString pkgBytes = sharedRegistry.getPackageEncodedMetaString(pkg);
     EncodedMetaString typeBytes = sharedRegistry.getTypeNameEncodedMetaString(typeName);
-    TypeInfo cachedInfo =
-        compositeNameBytes2TypeInfo.get(new TypeNameBytes(pkgBytes.hash, typeBytes.hash));
+    TypeInfo cachedInfo = compositeNameBytes2TypeInfo.get(new TypeNameBytes(pkgBytes, typeBytes));
     if (cachedInfo != null) {
       return cachedInfo.type;
     }

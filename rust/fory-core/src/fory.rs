@@ -170,6 +170,20 @@ impl ForyBuilder {
         self
     }
 
+    /// Enables or disables checked UTF-8 string reads.
+    ///
+    /// Checked reads validate UTF-8 payload bytes before constructing Rust `String` values.
+    /// Disabling this keeps the faster unchecked construction path and must only be used when
+    /// serialized bytes are trusted to contain valid UTF-8 strings.
+    ///
+    /// # Default
+    ///
+    /// The default value is `true`.
+    pub fn check_string_read(mut self, check_string_read: bool) -> Self {
+        self.config.check_string_read = check_string_read;
+        self
+    }
+
     /// Enables or disables class version checking for schema consistency.
     ///
     /// # Arguments
@@ -440,6 +454,11 @@ impl Fory {
     /// `true` if meta string compression is enabled, `false` otherwise.
     pub fn is_compress_string(&self) -> bool {
         self.config.compress_string
+    }
+
+    /// Returns whether UTF-8 string payload validation is enabled.
+    pub fn is_check_string_read(&self) -> bool {
+        self.config.check_string_read
     }
 
     /// Returns whether metadata sharing is enabled.

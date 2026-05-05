@@ -357,6 +357,7 @@ pub struct ReadContext<'a> {
     xlang: bool,
     max_dyn_depth: u32,
     check_struct_version: bool,
+    check_string_read: bool,
     max_binary_size: u32,
     max_collection_size: u32,
 
@@ -386,6 +387,7 @@ impl<'a> ReadContext<'a> {
             xlang: config.xlang,
             max_dyn_depth: config.max_dyn_depth,
             check_struct_version: config.check_struct_version,
+            check_string_read: config.check_string_read,
             max_binary_size: config.max_binary_size,
             max_collection_size: config.max_collection_size,
             reader: Reader::default(),
@@ -424,6 +426,12 @@ impl<'a> ReadContext<'a> {
     #[inline(always)]
     pub fn is_check_struct_version(&self) -> bool {
         self.check_struct_version
+    }
+
+    /// Check if UTF-8 string payload validation is enabled.
+    #[inline(always)]
+    pub fn is_check_string_read(&self) -> bool {
+        self.check_string_read
     }
 
     /// Get maximum dynamic depth

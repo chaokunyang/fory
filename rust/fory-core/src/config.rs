@@ -30,6 +30,8 @@ pub struct Config {
     pub share_meta: bool,
     /// Whether meta string compression is enabled.
     pub compress_string: bool,
+    /// Whether UTF-8 string payloads are validated before constructing Rust strings.
+    pub check_string_read: bool,
     /// Maximum depth for nested dynamic object serialization.
     pub max_dyn_depth: u32,
     /// Whether class version checking is enabled.
@@ -53,6 +55,7 @@ impl Default for Config {
             xlang: false,
             share_meta: false,
             compress_string: false,
+            check_string_read: true,
             max_dyn_depth: 5,
             check_struct_version: false,
             track_ref: false,
@@ -90,6 +93,12 @@ impl Config {
     #[inline(always)]
     pub fn is_compress_string(&self) -> bool {
         self.compress_string
+    }
+
+    /// Check if UTF-8 string payload validation is enabled.
+    #[inline(always)]
+    pub fn is_check_string_read(&self) -> bool {
+        self.check_string_read
     }
 
     /// Get maximum dynamic depth.

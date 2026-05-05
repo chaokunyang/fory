@@ -16,6 +16,7 @@
 // under the License.
 
 use fory_core::buffer::{Reader, Writer};
+use fory_core::Fory;
 
 #[test]
 fn test_var_i32() {
@@ -115,4 +116,39 @@ fn test_fixed_width_read_bounds_checks() {
     bad_cursor.set_cursor(10);
     assert!(bad_cursor.read_u16().is_err());
     assert!(bad_cursor.read_var_u36_small().is_err());
+}
+
+#[test]
+fn test_utf8_string_read_rejects_invalid_payload() {
+    let mut reader = Reader::new(&[0xff]);
+    let err = reader.read_utf8_string(1).unwrap_err();
+    assert!(
+        err.to_string().contains("invalid UTF-8 string"),
+        "unexpected error: {err}"
+    );
+    assert_eq!(reader.get_cursor(), 0);
+}
+
+#[test]
+fn test_fory_rejects_invalid_utf8_string_by_default() {
+    let fory = Fory::builder().build();
+    assert!(fory.is_check_string_read());
+    let mut bytes = fory.serialize(&"a".to_string()).unwrap();
+    *bytes.last_mut().unwrap() = 0xff;
+
+    let err = fory.deserialize::<String>(&bytes).unwrap_err();
+    assert!(
+        err.to_string().contains("invalid UTF-8 string"),
+        "unexpected error: {err}"
+    );
+}
+
+#[test]
+fn test_fory_can_disable_checked_string_read_for_trusted_data() {
+    let fory = Fory::builder().check_string_read(false).build();
+    assert!(!fory.is_check_string_read());
+
+    let bytes = fory.serialize(&"valid".to_string()).unwrap();
+    let value = fory.deserialize::<String>(&bytes).unwrap();
+    assert_eq!(value, "valid");
 }

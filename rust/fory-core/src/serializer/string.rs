@@ -49,7 +49,14 @@ impl Serializer for String {
         let s = match encoding {
             0 => context.reader.read_latin1_string(len as usize),
             1 => context.reader.read_utf16_string(len as usize),
-            2 => context.reader.read_utf8_string(len as usize),
+            2 => {
+                let len = len as usize;
+                if context.is_check_string_read() {
+                    context.reader.read_utf8_string(len)
+                } else {
+                    context.reader.read_utf8_string_unchecked(len)
+                }
+            }
             _ => {
                 return Err(Error::encoding_error(format!(
                     "wrong encoding value: {}",

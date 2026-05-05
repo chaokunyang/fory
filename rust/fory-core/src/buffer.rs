@@ -959,8 +959,25 @@ impl<'a> Reader<'a> {
             // Use fastest possible copy - copy_nonoverlapping compiles to memcpy
             std::ptr::copy_nonoverlapping(src, dst, len);
             vec.set_len(len);
+            let string = String::from_utf8(vec)
+                .map_err(|_| Error::encoding_error("invalid UTF-8 string"))?;
             self.move_next(len);
-            // SAFETY: Assuming valid UTF-8 bytes (responsibility of serialization protocol)
+            Ok(string)
+        }
+    }
+
+    #[inline(always)]
+    pub fn read_utf8_string_unchecked(&mut self, len: usize) -> Result<String, Error> {
+        self.check_bound(len)?;
+        // don't use simd for memory copy, copy_non_overlapping is faster
+        unsafe {
+            let mut vec = Vec::with_capacity(len);
+            let src = self.bf.as_ptr().add(self.cursor);
+            let dst = vec.as_mut_ptr();
+            // Use fastest possible copy - copy_nonoverlapping compiles to memcpy
+            std::ptr::copy_nonoverlapping(src, dst, len);
+            vec.set_len(len);
+            self.move_next(len);
             Ok(String::from_utf8_unchecked(vec))
         }
     }

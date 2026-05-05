@@ -491,6 +491,31 @@ func primitiveArrayTypeIDs() throws {
 }
 
 @Test
+func typeDefHeaderCacheStopsPublishingAtCapacity() throws {
+  let resolver = TypeResolver()
+  resolver.register(Person.self, id: 901)
+  let typeInfo = try resolver.requireTypeInfo(for: Person.self)
+  let typeMeta = try #require(typeInfo.typeMeta)
+  let localHeader = try #require(typeInfo.typeDefHeader)
+  #expect(resolver.getTypeInfo(forHeader: localHeader) != nil)
+
+  var header = UInt64(0x0100_0000_0000_0000)
+  var inserted = 0
+  while inserted < 8191 {
+    if header != localHeader {
+      _ = try resolver.cacheTypeInfo(typeMeta, forHeader: header)
+      inserted += 1
+    }
+    header += 1
+  }
+
+  let uncachedHeader = header == localHeader ? header + 1 : header
+  let current = try resolver.cacheTypeInfo(typeMeta, forHeader: uncachedHeader)
+  #expect(current.compatibleTypeMeta != nil)
+  #expect(resolver.getTypeInfo(forHeader: uncachedHeader) == nil)
+}
+
+@Test
 func macroStructRoundTrip() throws {
   let fory = Fory()
   fory.register(Address.self, id: 100)

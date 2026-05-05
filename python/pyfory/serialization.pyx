@@ -1058,14 +1058,10 @@ cdef class Fory:
         if ((bitmap & 1) != 0) != self.xlang:
             raise ValueError("Header bitmap mismatch at xlang bit")
         peer_out_of_band_enabled = (bitmap & 2) != 0
-        if peer_out_of_band_enabled:
-            assert buffers is not None, (
-                "buffers shouldn't be null when the serialized stream is produced with buffer_callback not null."
-            )
-        else:
-            assert buffers is None, (
-                "buffers should be null when the serialized stream is produced with buffer_callback null."
-            )
+        if peer_out_of_band_enabled and buffers is None:
+            raise ValueError("Out-of-band buffers are required by the root header")
+        if not peer_out_of_band_enabled and buffers is not None:
+            raise ValueError("Out-of-band buffers were provided for an in-band root payload")
         # Keep the root context setup inline. Top-level deserialize is a hot path,
         # so it should not pay an extra method call just to bind the active buffer.
         read_context.buffer = read_buffer

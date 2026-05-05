@@ -558,10 +558,10 @@ class Fory:
         if bool(bitmap & 1) != self.xlang:
             raise ValueError("Header bitmap mismatch at xlang bit")
         peer_out_of_band_enabled = bool(bitmap & 2)
-        if peer_out_of_band_enabled:
-            assert buffers is not None, "buffers shouldn't be null when the serialized stream is produced with buffer_callback not null."
-        else:
-            assert buffers is None, "buffers should be null when the serialized stream is produced with buffer_callback null."
+        if peer_out_of_band_enabled and buffers is None:
+            raise ValueError("Out-of-band buffers are required by the root header")
+        if not peer_out_of_band_enabled and buffers is not None:
+            raise ValueError("Out-of-band buffers were provided for an in-band root payload")
         read_context.prepare(
             buffer,
             buffers=buffers,

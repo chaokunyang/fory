@@ -436,6 +436,29 @@ public sealed class RuntimeEdgeCaseTests
     }
 
     [Fact]
+    public void TypeMetaHeaderCacheStopsPublishingAtCapacity()
+    {
+        ReadContext context = new(new ByteReader(Array.Empty<byte>()), new TypeResolver(), trackRef: false);
+        TypeMeta typeMeta = new(
+            (uint)TypeId.Struct,
+            901,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            []);
+
+        for (ulong header = 1; header <= 8192; header++)
+        {
+            context.CacheReadTypeMeta(header, typeMeta, skipBytesAfterHeader: 0);
+        }
+
+        Assert.True(context.TryGetCachedReadTypeMeta(8192, out _, out _));
+        context.CacheReadTypeMeta(8193, typeMeta, skipBytesAfterHeader: 0);
+
+        Assert.False(context.TryGetCachedReadTypeMeta(8193, out _, out _));
+    }
+
+    [Fact]
     public void DynamicAnyRejectsUnknownUserTypeId()
     {
         ForyRuntime writer = ForyRuntime.Builder().Build();

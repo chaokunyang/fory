@@ -20,6 +20,7 @@
 #include "fory/serialization/fory.h"
 #include "fory/serialization/ref_resolver.h"
 #include "fory/serialization/skip.h"
+#include "fory/thirdparty/MurmurHash3.h"
 #include "gtest/gtest.h"
 #include <atomic>
 #include <chrono>
@@ -79,6 +80,23 @@ FORY_ENUM(::OldStatus, OLD_NEG, OLD_ZERO, OLD_POS);
 namespace fory {
 namespace serialization {
 namespace test {
+
+namespace {
+
+uint64_t compute_type_meta_hash_bits_for_test(const uint8_t *meta_bytes,
+                                              size_t meta_size) {
+  constexpr uint32_t kHashShift = 12;
+  constexpr uint64_t kHashBitsMask = UINT64_MAX << kHashShift;
+  int64_t hash_out[2] = {0, 0};
+  MurmurHash3_x64_128(meta_bytes, static_cast<int>(meta_size), 47, hash_out);
+  uint64_t shifted = static_cast<uint64_t>(hash_out[0]) << kHashShift;
+  if (static_cast<int64_t>(shifted) < 0) {
+    shifted = ~shifted + 1;
+  }
+  return shifted & kHashBitsMask;
+}
+
+} // namespace
 
 // ============================================================================
 // Test Helpers
@@ -861,11 +879,19 @@ TEST(SerializationTest, TypeMetaRejectsNonStructReservedKindBits) {
 
   std::vector<uint8_t> bytes = bytes_result.value();
   bytes[sizeof(uint64_t)] |= 0x10;
+  uint64_t header = 0;
+  std::memcpy(&header, bytes.data(), sizeof(header));
+  ASSERT_NE(header & 0xff, 0xff);
+  header &= ~(UINT64_MAX << 12);
+  header |= compute_type_meta_hash_bits_for_test(
+      bytes.data() + sizeof(uint64_t), bytes.size() - sizeof(uint64_t));
+  std::memcpy(bytes.data(), &header, sizeof(header));
 
   Buffer buffer(bytes);
   auto parsed = TypeMeta::from_bytes(buffer, nullptr);
   ASSERT_FALSE(parsed.ok());
   EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
+  EXPECT_NE(parsed.error().to_string().find("kind header"), std::string::npos);
 }
 
 TEST(SerializationTest, TypeMetaRejectsReservedHeaderBits) {

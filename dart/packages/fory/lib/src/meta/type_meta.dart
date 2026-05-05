@@ -120,9 +120,17 @@ final class ParsedTypeMetaCache {
 
   @pragma('vm:prefer-inline')
   void remember(TypeHeader header, TypeInfo resolved) {
-    if (!_entries.containsKey(header.value) && _entries.length >= maxEntries) {
-      _entries.remove(_entries.keys.first);
+    final cached = _entries[header.value];
+    if (cached != null) {
+      _entries[header.value] = resolved;
+      _lastHeader = header.value;
+      _lastResolved = resolved;
+      return;
     }
+    if (_entries.length >= maxEntries) {
+      return;
+    }
+
     _entries[header.value] = resolved;
     _lastHeader = header.value;
     _lastResolved = resolved;

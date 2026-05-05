@@ -759,7 +759,8 @@ public abstract class TypeResolver {
       assert packageNameBytesCache != null;
       simpleClassNameBytes = metaStringReader.readMetaString(buffer, typeNameBytesCache);
 
-      // MetaStringReader returns the provided cache object only after validating the encoded body.
+      // MetaStringReader returns the provided cache object only when the wire identity matches. For
+      // big meta strings, body-hash validation happens before the entry is first cached.
       if (typeNameBytesCache == simpleClassNameBytes && packageNameBytesCache == namespaceBytes) {
         return typeInfoCache;
       }

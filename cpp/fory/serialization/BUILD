@@ -51,6 +51,7 @@ cc_test(
     srcs = ["serialization_test.cc"],
     deps = [
         ":fory_serialization",
+        "//cpp/fory/thirdparty:libmmh3",
         "@googletest//:gtest",
         "@googletest//:gtest_main",
     ],

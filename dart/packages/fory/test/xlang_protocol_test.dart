@@ -20,9 +20,27 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
+import 'package:fory/src/context/read_context.dart';
+import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/type_meta.dart';
+import 'package:fory/src/resolver/type_resolver.dart';
+import 'package:fory/src/serializer/serializer.dart';
+import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/util/hash_util.dart';
 import 'package:test/test.dart';
+
+final class _CacheTestSerializer extends Serializer<Object?> {
+  const _CacheTestSerializer();
+
+  @override
+  bool get supportsRef => false;
+
+  @override
+  Object? read(ReadContext context) => null;
+
+  @override
+  void write(WriteContext context, Object? value) {}
+}
 
 void main() {
   group('xlang protocol regressions', () {
@@ -100,6 +118,37 @@ void main() {
           ),
         ),
       );
+    });
+
+    test('parsed TypeDef cache stops publishing at capacity', () {
+      const resolved = TypeInfo(
+        type: Object,
+        kind: RegistrationKind.builtin,
+        typeId: TypeIds.struct,
+        supportsRef: false,
+        serializer: _CacheTestSerializer(),
+        structSerializer: null,
+        userTypeId: null,
+        namespace: null,
+        typeName: null,
+        encodedNamespace: null,
+        encodedTypeName: null,
+        typeDef: null,
+        remoteTypeDef: null,
+      );
+      final cache = ParsedTypeMetaCache();
+      for (var i = 0; i < ParsedTypeMetaCache.maxEntries; i++) {
+        cache.remember(TypeHeader(Int64(i)), resolved);
+      }
+
+      expect(
+        cache.lookup(TypeHeader(Int64(ParsedTypeMetaCache.maxEntries - 1))),
+        same(resolved),
+      );
+      final uncached = TypeHeader(Int64(ParsedTypeMetaCache.maxEntries));
+      cache.remember(uncached, resolved);
+
+      expect(cache.lookup(uncached), isNull);
     });
 
     test('validates parsed TypeDef body hash before caching', () {

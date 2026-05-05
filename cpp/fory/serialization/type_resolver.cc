@@ -195,7 +195,6 @@ Result<std::vector<uint8_t>, Error> FieldInfo::to_bytes() const {
     buffer.write_bytes(encoded_name.data(), encoded_name.size());
   }
 
-  // CRITICAL FIX: Use writer_index() not size() to get actual bytes written!
   return std::vector<uint8_t>(buffer.data(),
                               buffer.data() + buffer.writer_index());
 }
@@ -690,7 +689,6 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
     assign_field_ids(local_type_info, field_infos);
   }
 
-  // CRITICAL FIX: Ensure we consume exactly meta_size bytes
   size_t current_pos = buffer.reader_index();
   size_t expected_end_pos = start_pos + header_size + meta_size;
   if (FORY_PREDICT_FALSE(current_pos > expected_end_pos)) {
@@ -802,7 +800,6 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
   // NOTE: Do NOT sort remote fields! They are already in the sender's sorted
   // order, which matches the data order.
 
-  // CRITICAL FIX: Ensure we consume exactly meta_size bytes
   size_t current_pos = buffer.reader_index();
   size_t expected_end_pos = static_cast<size_t>(start_pos) + meta_size;
   if (FORY_PREDICT_FALSE(current_pos > expected_end_pos)) {

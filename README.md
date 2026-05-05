@@ -744,7 +744,7 @@ Apache Fory™ supports class schema forward/backward compatibility across **Jav
 
 ### Binary Compatibility
 
-**Current Status**: Binary compatibility is **not guaranteed** between Fory major releases as the protocol continues to evolve. However, compatibility **is guaranteed** between minor versions (e.g., 0.13.x).
+**Current Status**: Binary compatibility is **not guaranteed** between Fory major releases as the protocol continues to evolve. Compatibility **is guaranteed** between minor versions (for example, 0.13.x).
 
 **Recommendations**:
 
@@ -752,7 +752,7 @@ Apache Fory™ supports class schema forward/backward compatibility across **Jav
 - Plan migration strategies when upgrading major versions
 - See [upgrade guide](docs/guide/java) for details
 
-**Future**: Binary compatibility will be guaranteed starting from Fory 1.0 release.
+Major-version compatibility is the boundary for stable serialized data.
 
 ## Security
 

@@ -398,6 +398,8 @@ private struct TypeNameKey: Hashable {
 }
 
 final class TypeResolver {
+  private static let maxCachedTypeDefHeaders = 8192
+
   private let trackRef: Bool
   private var registrationFinished = false
 
@@ -551,7 +553,9 @@ final class TypeResolver {
     }
     let localTypeInfo = try requireTypeInfo(for: typeMeta)
     if header == localTypeInfo.typeDefHeader {
-      typeInfoByHeader.set(localTypeInfo, for: header)
+      if typeInfoByHeader.count < Self.maxCachedTypeDefHeaders {
+        typeInfoByHeader.set(localTypeInfo, for: header)
+      }
       return localTypeInfo
     }
     let canonicalTypeMeta: TypeMeta
@@ -562,7 +566,9 @@ final class TypeResolver {
       canonicalTypeMeta = typeMeta
     }
     let typeInfo = TypeInfo(dynamic: localTypeInfo, compatibleTypeMeta: canonicalTypeMeta)
-    typeInfoByHeader.set(typeInfo, for: header)
+    if typeInfoByHeader.count < Self.maxCachedTypeDefHeaders {
+      typeInfoByHeader.set(typeInfo, for: header)
+    }
     return typeInfo
   }
 

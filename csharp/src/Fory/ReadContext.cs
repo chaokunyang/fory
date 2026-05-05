@@ -161,14 +161,24 @@ public sealed class ReadContext
 
     internal void CacheReadTypeMeta(ulong header, TypeMeta typeMeta, int skipBytesAfterHeader)
     {
+        if (_cachedTypeMetasByHeader.TryGetValue(header, out CachedTypeMetaEntry existing))
+        {
+            _lastMetaHeader = header;
+            _lastTypeMeta = existing;
+            _hasLastMetaHeader = true;
+            return;
+        }
+
+        if (_cachedTypeMetasByHeader.Count >= MaxParsedTypeMetaEntries)
+        {
+            return;
+        }
+
         CachedTypeMetaEntry cached = new(typeMeta, skipBytesAfterHeader);
         _lastMetaHeader = header;
         _lastTypeMeta = cached;
         _hasLastMetaHeader = true;
-        if (_cachedTypeMetasByHeader.Count < MaxParsedTypeMetaEntries)
-        {
-            _cachedTypeMetasByHeader.TryAdd(header, cached);
-        }
+        _cachedTypeMetasByHeader.TryAdd(header, cached);
     }
 
     internal MetaString? GetReadMetaString(int index)

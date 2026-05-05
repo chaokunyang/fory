@@ -69,9 +69,7 @@ FIELD_NAME_ENCODINGS = [
 ]
 
 # TAG_ID encoding constants
-TAG_ID_SIZE_THRESHOLD = (
-    0b1111  # 4-bit threshold for tag IDs (0-14 inline, 15 = overflow)
-)
+TAG_ID_SIZE_THRESHOLD = 0b1111  # 4-bit threshold for tag IDs (0-14 inline, 15 = overflow)
 
 
 def is_struct_typedef_kind(type_id: int) -> bool:
@@ -154,9 +152,7 @@ class TypeDef:
         self.encoded = encoded
         self.is_compressed = is_compressed
 
-    def create_fields_serializer(
-        self, resolver, resolved_field_names=None, local_field_types=None
-    ):
+    def create_fields_serializer(self, resolver, resolved_field_names=None, local_field_types=None):
         """Create serializers for each field.
 
         Args:
@@ -167,18 +163,12 @@ class TypeDef:
         """
         field_types = local_field_types
         if field_types is None:
-            field_types = infer_field_types(
-                self.cls, field_nullable=resolver.field_nullable
-            )
+            field_types = infer_field_types(self.cls, field_nullable=resolver.field_nullable)
         serializers = []
         for i, field_info in enumerate(self.fields):
             # Use resolved name if provided, otherwise use original name
-            lookup_name = (
-                resolved_field_names[i] if resolved_field_names else field_info.name
-            )
-            serializer = field_info.field_type.create_serializer(
-                resolver, field_types.get(lookup_name, None)
-            )
+            lookup_name = resolved_field_names[i] if resolved_field_names else field_info.name
+            serializer = field_info.field_type.create_serializer(resolver, field_types.get(lookup_name, None))
             serializers.append(serializer)
         return serializers
 
@@ -238,18 +228,14 @@ class TypeDef:
         if not is_struct_typedef_kind(self.type_id):
             if is_named_typedef_kind(self.type_id):
                 try:
-                    return resolver.get_type_info_by_name(
-                        self.namespace, self.typename
-                    ).serializer
+                    return resolver.get_type_info_by_name(self.namespace, self.typename).serializer
                 except Exception:
                     if self.type_id == TypeId.NAMED_ENUM:
                         from pyfory.serializer import NonExistEnumSerializer
 
                         return NonExistEnumSerializer(resolver)
                     raise
-            return resolver.get_type_info_by_id(
-                self.type_id, user_type_id=self.user_type_id
-            ).serializer
+            return resolver.get_type_info_by_id(self.type_id, user_type_id=self.user_type_id).serializer
         from pyfory.struct import DataClassSerializer
         from pyfory.struct import FieldInfo as StructFieldInfo
         from pyfory.type_util import get_type_hints, unwrap_optional
@@ -258,17 +244,9 @@ class TypeDef:
         field_names = self._resolve_field_names_from_tag_ids()
 
         local_field_infos = build_field_infos(resolver, self.cls)
-        local_infos_by_name = {
-            field_info.name: field_info for field_info in local_field_infos
-        }
-        local_infos_by_tag = {
-            field_info.tag_id: field_info
-            for field_info in local_field_infos
-            if field_info.tag_id >= 0
-        }
-        local_field_types = infer_field_types(
-            self.cls, field_nullable=resolver.field_nullable
-        )
+        local_infos_by_name = {field_info.name: field_info for field_info in local_field_infos}
+        local_infos_by_tag = {field_info.tag_id: field_info for field_info in local_field_infos if field_info.tag_id >= 0}
+        local_field_types = infer_field_types(self.cls, field_nullable=resolver.field_nullable)
         type_hints = get_type_hints(self.cls)
         runtime_field_infos = []
         for i, field_info in enumerate(self.fields):
@@ -283,9 +261,7 @@ class TypeDef:
                 local_info.field_type if local_info is not None else None,
             )
             type_hint = type_hints.get(resolved_name, typing.Any)
-            unwrapped_type, _ = unwrap_optional(
-                type_hint, field_nullable=resolver.field_nullable
-            )
+            unwrapped_type, _ = unwrap_optional(type_hint, field_nullable=resolver.field_nullable)
             serializer = _create_compatible_field_serializer(
                 resolver,
                 resolved_name,
@@ -346,9 +322,7 @@ def _snake_to_camel(s: str) -> str:
 
 
 class FieldInfo:
-    def __init__(
-        self, name: str, field_type: "FieldType", defined_class: str, tag_id: int = -1
-    ):
+    def __init__(self, name: str, field_type: "FieldType", defined_class: str, tag_id: int = -1):
         self.name = name
         self.field_type = field_type
         self.defined_class = defined_class
@@ -412,9 +386,7 @@ class FieldType:
         is_tracking_ref = (xtype_id & 0b1) != 0
         is_nullable = (xtype_id & 0b10) != 0
         xtype_id = xtype_id >> 2
-        return cls.read_with_type(
-            buffer, resolver, xtype_id, is_nullable, is_tracking_ref
-        )
+        return cls.read_with_type(buffer, resolver, xtype_id, is_nullable, is_tracking_ref)
 
     @classmethod
     def read_with_type(
@@ -428,19 +400,13 @@ class FieldType:
         user_type_id = NO_USER_TYPE_ID
         if xtype_id in [TypeId.LIST, TypeId.SET]:
             element_type = cls.read(buffer, resolver)
-            return CollectionFieldType(
-                xtype_id, True, is_nullable, is_tracking_ref, element_type
-            )
+            return CollectionFieldType(xtype_id, True, is_nullable, is_tracking_ref, element_type)
         elif xtype_id == TypeId.MAP:
             key_type = cls.read(buffer, resolver)
             value_type = cls.read(buffer, resolver)
-            return MapFieldType(
-                xtype_id, True, is_nullable, is_tracking_ref, key_type, value_type
-            )
+            return MapFieldType(xtype_id, True, is_nullable, is_tracking_ref, key_type, value_type)
         elif xtype_id == TypeId.UNKNOWN:
-            return DynamicFieldType(
-                xtype_id, False, is_nullable, is_tracking_ref, user_type_id=user_type_id
-            )
+            return DynamicFieldType(xtype_id, False, is_nullable, is_tracking_ref, user_type_id=user_type_id)
         else:
             # For primitive types, determine if they are monomorphic based on the type
             is_monomorphic = not is_polymorphic_type(xtype_id)
@@ -617,10 +583,10 @@ class DynamicFieldType(FieldType):
         # to write/read the union payload correctly.
         if isinstance(type_, list):
             type_ = type_[0]
-        assert not is_union_type(
-            self.type_id
-        ), "Union fields don't write field type info, \
+        assert not is_union_type(self.type_id), (
+            "Union fields don't write field type info, \
             they are not dynamic field types"
+        )
         if self.type_id != TypeId.UNKNOWN:
             return FieldType.create_serializer(self, resolver, type_)
         return None
@@ -648,9 +614,7 @@ _ARRAY_TYPE_IDS = frozenset(
 )
 
 
-def _payload_shape_matches(
-    remote_field_type: FieldType, local_field_type: FieldType
-) -> bool:
+def _payload_shape_matches(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
     if local_field_type is None:
         return False
     remote_type_id = remote_field_type.type_id
@@ -660,22 +624,16 @@ def _payload_shape_matches(
     if remote_type_id != local_type_id:
         return False
     if remote_type_id in (TypeId.LIST, TypeId.SET):
-        return _payload_shape_matches(
-            remote_field_type.element_type, local_field_type.element_type
-        )
+        return _payload_shape_matches(remote_field_type.element_type, local_field_type.element_type)
     if remote_type_id == TypeId.MAP:
-        return _payload_shape_matches(
-            remote_field_type.key_type, local_field_type.key_type
-        ) and _payload_shape_matches(
+        return _payload_shape_matches(remote_field_type.key_type, local_field_type.key_type) and _payload_shape_matches(
             remote_field_type.value_type,
             local_field_type.value_type,
         )
     return True
 
 
-def _payload_shape_needs_local_carrier(
-    remote_field_type: FieldType, local_field_type: FieldType
-) -> bool:
+def _payload_shape_needs_local_carrier(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
     remote_type_id = remote_field_type.type_id
     local_type_id = local_field_type.type_id
     if _is_bytes_uint8_array_pair(remote_type_id, local_type_id):
@@ -685,16 +643,12 @@ def _payload_shape_needs_local_carrier(
     if remote_type_id in _ARRAY_TYPE_IDS:
         return True
     if remote_type_id in (TypeId.LIST, TypeId.SET):
-        return _payload_shape_needs_local_carrier(
-            remote_field_type.element_type, local_field_type.element_type
-        )
+        return _payload_shape_needs_local_carrier(remote_field_type.element_type, local_field_type.element_type)
     if remote_type_id == TypeId.MAP:
         return _payload_shape_needs_local_carrier(
             remote_field_type.key_type,
             local_field_type.key_type,
-        ) or _payload_shape_needs_local_carrier(
-            remote_field_type.value_type, local_field_type.value_type
-        )
+        ) or _payload_shape_needs_local_carrier(remote_field_type.value_type, local_field_type.value_type)
     return False
 
 
@@ -702,12 +656,8 @@ def _create_local_typehint_serializer(resolver, field_name, type_hint):
     from pyfory.struct import StructFieldSerializerVisitor
     from pyfory.type_util import infer_field, unwrap_optional
 
-    unwrapped_type, _ = unwrap_optional(
-        type_hint, field_nullable=resolver.field_nullable
-    )
-    return infer_field(
-        field_name, unwrapped_type, StructFieldSerializerVisitor(resolver)
-    )
+    unwrapped_type, _ = unwrap_optional(type_hint, field_nullable=resolver.field_nullable)
+    return infer_field(field_name, unwrapped_type, StructFieldSerializerVisitor(resolver))
 
 
 def _create_compatible_field_serializer(
@@ -718,9 +668,7 @@ def _create_compatible_field_serializer(
     local_field_type: typing.Optional[FieldType],
     local_declared_type,
 ):
-    if _payload_shape_matches(
-        remote_field_type, local_field_type
-    ) and _payload_shape_needs_local_carrier(remote_field_type, local_field_type):
+    if _payload_shape_matches(remote_field_type, local_field_type) and _payload_shape_needs_local_carrier(remote_field_type, local_field_type):
         serializer = _create_local_typehint_serializer(resolver, field_name, type_hint)
         if serializer is not None:
             return serializer
@@ -730,9 +678,7 @@ def _create_compatible_field_serializer(
 _SIGNED_INT32_TYPE_IDS = frozenset((TypeId.INT32, TypeId.VARINT32))
 _SIGNED_INT64_TYPE_IDS = frozenset((TypeId.INT64, TypeId.VARINT64, TypeId.TAGGED_INT64))
 _UNSIGNED_INT32_TYPE_IDS = frozenset((TypeId.UINT32, TypeId.VAR_UINT32))
-_UNSIGNED_INT64_TYPE_IDS = frozenset(
-    (TypeId.UINT64, TypeId.VAR_UINT64, TypeId.TAGGED_UINT64)
-)
+_UNSIGNED_INT64_TYPE_IDS = frozenset((TypeId.UINT64, TypeId.VAR_UINT64, TypeId.TAGGED_UINT64))
 _INT_TYPE_DOMAINS = {type_id: (True, 32) for type_id in _SIGNED_INT32_TYPE_IDS}
 _INT_TYPE_DOMAINS.update({type_id: (True, 64) for type_id in _SIGNED_INT64_TYPE_IDS})
 _INT_TYPE_DOMAINS.update({type_id: (False, 32) for type_id in _UNSIGNED_INT32_TYPE_IDS})
@@ -745,26 +691,20 @@ _INT_RANGES = {
 }
 
 
-def _requires_nullable_validation(
-    remote_field_type: FieldType, local_field_type: FieldType
-) -> bool:
+def _requires_nullable_validation(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
     return remote_field_type.is_nullable and not local_field_type.is_nullable
 
 
 def _is_bytes_uint8_array_pair(remote_type_id: int, local_type_id: int) -> bool:
-    return (
-        remote_type_id == TypeId.BINARY and local_type_id == TypeId.UINT8_ARRAY
-    ) or (remote_type_id == TypeId.UINT8_ARRAY and local_type_id == TypeId.BINARY)
+    return (remote_type_id == TypeId.BINARY and local_type_id == TypeId.UINT8_ARRAY) or (
+        remote_type_id == TypeId.UINT8_ARRAY and local_type_id == TypeId.BINARY
+    )
 
 
-def _field_type_assignment(
-    remote_field_type: FieldType, local_field_type: FieldType
-) -> typing.Tuple[bool, bool]:
+def _field_type_assignment(remote_field_type: FieldType, local_field_type: FieldType) -> typing.Tuple[bool, bool]:
     if local_field_type is None:
         return False, False
-    needs_validation = _requires_nullable_validation(
-        remote_field_type, local_field_type
-    )
+    needs_validation = _requires_nullable_validation(remote_field_type, local_field_type)
     remote_type_id = remote_field_type.type_id
     local_type_id = local_field_type.type_id
     if local_type_id == TypeId.UNKNOWN:
@@ -814,9 +754,7 @@ def _field_type_assignment(
 def plan_field_assignment(
     remote_field_type: FieldType, local_field_type: typing.Optional[FieldType]
 ) -> typing.Tuple[bool, typing.Optional[FieldType]]:
-    assignable, needs_validation = _field_type_assignment(
-        remote_field_type, local_field_type
-    )
+    assignable, needs_validation = _field_type_assignment(remote_field_type, local_field_type)
     if not assignable:
         return False, None
     return True, local_field_type if needs_validation else None
@@ -860,12 +798,7 @@ def _is_uint8_array_like(value) -> bool:
     if isinstance(value, array.array):
         return value.typecode == "B"
     np, ndarray, uint8_dtype = _numpy_uint8_type()
-    return (
-        np is not None
-        and isinstance(value, ndarray)
-        and value.ndim == 1
-        and value.dtype == uint8_dtype
-    )
+    return np is not None and isinstance(value, ndarray) and value.ndim == 1 and value.dtype == uint8_dtype
 
 
 def _bytes_from_uint8_value(value) -> bytes:
@@ -881,9 +814,7 @@ def _bytes_from_uint8_value(value) -> bytes:
         return value.tobytes()
     if _is_uint8_array_like(value):
         return value.tobytes()
-    raise TypeError(
-        f"Expected bytes or array<uint8> compatible value, got {type(value)!r}"
-    )
+    raise TypeError(f"Expected bytes or array<uint8> compatible value, got {type(value)!r}")
 
 
 def _uint8_array_from_bytes(value):
@@ -902,16 +833,12 @@ def is_value_assignable(value, local_field_type: FieldType) -> bool:
     if type_id in (TypeId.LIST, TypeId.SET):
         if not isinstance(value, (list, tuple, set)):
             return False
-        return all(
-            is_value_assignable(element, local_field_type.element_type)
-            for element in value
-        )
+        return all(is_value_assignable(element, local_field_type.element_type) for element in value)
     if type_id == TypeId.MAP:
         if not isinstance(value, dict):
             return False
         return all(
-            is_value_assignable(key, local_field_type.key_type)
-            and is_value_assignable(map_value, local_field_type.value_type)
+            is_value_assignable(key, local_field_type.key_type) and is_value_assignable(map_value, local_field_type.value_type)
             for key, map_value in value.items()
         )
     if type_id in _INT_TYPE_DOMAINS:
@@ -938,20 +865,12 @@ def coerce_assignable_value(value, local_field_type: FieldType):
     if type_id == TypeId.UINT8_ARRAY and _is_bytes_like(value):
         return _uint8_array_from_bytes(value)
     if type_id == TypeId.LIST:
-        return [
-            coerce_assignable_value(element, local_field_type.element_type)
-            for element in value
-        ]
+        return [coerce_assignable_value(element, local_field_type.element_type) for element in value]
     if type_id == TypeId.SET:
-        return {
-            coerce_assignable_value(element, local_field_type.element_type)
-            for element in value
-        }
+        return {coerce_assignable_value(element, local_field_type.element_type) for element in value}
     if type_id == TypeId.MAP:
         return {
-            coerce_assignable_value(
-                key, local_field_type.key_type
-            ): coerce_assignable_value(map_value, local_field_type.value_type)
+            coerce_assignable_value(key, local_field_type.key_type): coerce_assignable_value(map_value, local_field_type.value_type)
             for key, map_value in value.items()
         }
     return value
@@ -989,9 +908,7 @@ def build_field_infos(type_resolver, cls):
 
     for field_name in field_names:
         field_type_hint = type_hints.get(field_name, typing.Any)
-        unwrapped_type, is_optional = unwrap_optional(
-            field_type_hint, field_nullable=field_nullable
-        )
+        unwrapped_type, is_optional = unwrap_optional(field_type_hint, field_nullable=field_nullable)
 
         # Get field metadata if available
         fory_meta = field_metas.get(field_name)
@@ -1031,12 +948,7 @@ def build_field_infos(type_resolver, cls):
         field_infos.append(field_info)
 
     field_types = infer_field_types(cls, field_nullable=field_nullable)
-    serializers = [
-        field_info.field_type.create_serializer(
-            type_resolver, field_types.get(field_info.name, None)
-        )
-        for field_info in field_infos
-    ]
+    serializers = [field_info.field_type.create_serializer(type_resolver, field_types.get(field_info.name, None)) for field_info in field_infos]
 
     # Get just the field names for sorting
     current_field_names = [fi.name for fi in field_infos]
@@ -1076,9 +988,7 @@ def build_field_type_with_ref(
             type_hint=type_hint,
         )
     except Exception as e:
-        raise TypeError(
-            f"Error building field type for field: {field_name} with type hint: {type_hint} in class: {visitor.cls}"
-        ) from e
+        raise TypeError(f"Error building field type for field: {field_name} with type hint: {type_hint} in class: {visitor.cls}") from e
 
 
 def build_field_type_from_type_ids_with_ref(
@@ -1108,17 +1018,9 @@ def build_field_type_from_type_ids_with_ref(
         elem_nullable = False
         elem_ref_override = None
         if type_hint is not None:
-            origin = (
-                typing.get_origin(type_hint)
-                if hasattr(typing, "get_origin")
-                else getattr(type_hint, "__origin__", None)
-            )
+            origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
             if origin in (list, typing.List, set, typing.Set):
-                args = (
-                    typing.get_args(type_hint)
-                    if hasattr(typing, "get_args")
-                    else getattr(type_hint, "__args__", ())
-                )
+                args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if args:
                     elem_hint, elem_ref_override = unwrap_ref(args[0])
                     elem_hint, elem_nullable = unwrap_optional(elem_hint)
@@ -1141,9 +1043,7 @@ def build_field_type_from_type_ids_with_ref(
         )
         if elem_ref_override is not None:
             elem_type.tracking_ref_override = elem_ref_override
-        return CollectionFieldType(
-            type_id, morphic, is_nullable, is_tracking_ref, elem_type
-        )
+        return CollectionFieldType(type_id, morphic, is_nullable, is_tracking_ref, elem_type)
     elif type_id == TypeId.MAP:
         key_hint = None
         value_hint = None
@@ -1152,17 +1052,9 @@ def build_field_type_from_type_ids_with_ref(
         key_ref_override = None
         value_ref_override = None
         if type_hint is not None:
-            origin = (
-                typing.get_origin(type_hint)
-                if hasattr(typing, "get_origin")
-                else getattr(type_hint, "__origin__", None)
-            )
+            origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
             if origin in (dict, typing.Dict):
-                args = (
-                    typing.get_args(type_hint)
-                    if hasattr(typing, "get_args")
-                    else getattr(type_hint, "__args__", ())
-                )
+                args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if len(args) >= 2:
                     key_hint, key_ref_override = unwrap_ref(args[0])
                     key_hint, key_nullable = unwrap_optional(key_hint)
@@ -1196,9 +1088,7 @@ def build_field_type_from_type_ids_with_ref(
             key_type.tracking_ref_override = key_ref_override
         if value_ref_override is not None:
             value_type.tracking_ref_override = value_ref_override
-        return MapFieldType(
-            type_id, morphic, is_nullable, is_tracking_ref, key_type, value_type
-        )
+        return MapFieldType(type_id, morphic, is_nullable, is_tracking_ref, key_type, value_type)
     elif type_id in [
         TypeId.UNKNOWN,
         TypeId.EXT,
@@ -1207,21 +1097,15 @@ def build_field_type_from_type_ids_with_ref(
         TypeId.COMPATIBLE_STRUCT,
         TypeId.NAMED_COMPATIBLE_STRUCT,
     ]:
-        return DynamicFieldType(
-            type_id, False, is_nullable, is_tracking_ref, user_type_id=NO_USER_TYPE_ID
-        )
+        return DynamicFieldType(type_id, False, is_nullable, is_tracking_ref, user_type_id=NO_USER_TYPE_ID)
     else:
         if type_id <= 0 or type_id >= TypeId.BOUND:
             raise TypeError(f"Unknown type: {type_id} for field: {field_name}")
         # union/enum go here too
-        return FieldType(
-            type_id, morphic, is_nullable, is_tracking_ref, user_type_id=NO_USER_TYPE_ID
-        )
+        return FieldType(type_id, morphic, is_nullable, is_tracking_ref, user_type_id=NO_USER_TYPE_ID)
 
 
-def build_field_type(
-    type_resolver, field_name: str, type_hint, visitor, is_nullable=False
-):
+def build_field_type(type_resolver, field_name: str, type_hint, visitor, is_nullable=False):
     """Build field type from type hint."""
     type_ids = infer_field(field_name, type_hint, visitor)
     try:
@@ -1234,14 +1118,10 @@ def build_field_type(
             type_hint=type_hint,
         )
     except Exception as e:
-        raise TypeError(
-            f"Error building field type for field: {field_name} with type hint: {type_hint} in class: {visitor.cls}"
-        ) from e
+        raise TypeError(f"Error building field type for field: {field_name} with type hint: {type_hint} in class: {visitor.cls}") from e
 
 
-def build_field_type_from_type_ids(
-    type_resolver, field_name: str, type_ids, visitor, is_nullable=False, type_hint=None
-):
+def build_field_type_from_type_ids(type_resolver, field_name: str, type_ids, visitor, is_nullable=False, type_hint=None):
     from pyfory.type_util import unwrap_optional, unwrap_ref
 
     tracking_ref = type_resolver.track_ref
@@ -1258,17 +1138,9 @@ def build_field_type_from_type_ids(
         elem_hint = None
         elem_nullable = False
         if type_hint is not None:
-            origin = (
-                typing.get_origin(type_hint)
-                if hasattr(typing, "get_origin")
-                else getattr(type_hint, "__origin__", None)
-            )
+            origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
             if origin in (list, typing.List, set, typing.Set):
-                args = (
-                    typing.get_args(type_hint)
-                    if hasattr(typing, "get_args")
-                    else getattr(type_hint, "__args__", ())
-                )
+                args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if args:
                     elem_hint, _ = unwrap_ref(args[0])
                     elem_hint, elem_nullable = unwrap_optional(elem_hint)
@@ -1285,26 +1157,16 @@ def build_field_type_from_type_ids(
             is_nullable=elem_nullable,
             type_hint=elem_hint,
         )
-        return CollectionFieldType(
-            type_id, morphic, is_nullable, tracking_ref, elem_type
-        )
+        return CollectionFieldType(type_id, morphic, is_nullable, tracking_ref, elem_type)
     elif type_id == TypeId.MAP:
         key_hint = None
         value_hint = None
         key_nullable = False
         value_nullable = False
         if type_hint is not None:
-            origin = (
-                typing.get_origin(type_hint)
-                if hasattr(typing, "get_origin")
-                else getattr(type_hint, "__origin__", None)
-            )
+            origin = typing.get_origin(type_hint) if hasattr(typing, "get_origin") else getattr(type_hint, "__origin__", None)
             if origin in (dict, typing.Dict):
-                args = (
-                    typing.get_args(type_hint)
-                    if hasattr(typing, "get_args")
-                    else getattr(type_hint, "__args__", ())
-                )
+                args = typing.get_args(type_hint) if hasattr(typing, "get_args") else getattr(type_hint, "__args__", ())
                 if len(args) >= 2:
                     key_hint, _ = unwrap_ref(args[0])
                     key_hint, key_nullable = unwrap_optional(key_hint)
@@ -1326,9 +1188,7 @@ def build_field_type_from_type_ids(
             is_nullable=value_nullable,
             type_hint=value_hint,
         )
-        return MapFieldType(
-            type_id, morphic, is_nullable, tracking_ref, key_type, value_type
-        )
+        return MapFieldType(type_id, morphic, is_nullable, tracking_ref, key_type, value_type)
     elif type_id in [
         TypeId.UNKNOWN,
         TypeId.EXT,
@@ -1337,12 +1197,8 @@ def build_field_type_from_type_ids(
         TypeId.COMPATIBLE_STRUCT,
         TypeId.NAMED_COMPATIBLE_STRUCT,
     ]:
-        return DynamicFieldType(
-            type_id, False, is_nullable, tracking_ref, user_type_id=NO_USER_TYPE_ID
-        )
+        return DynamicFieldType(type_id, False, is_nullable, tracking_ref, user_type_id=NO_USER_TYPE_ID)
     else:
         if type_id <= 0 or type_id >= TypeId.BOUND:
             raise TypeError(f"Unknown type: {type_id} for field: {field_name}")
-        return FieldType(
-            type_id, morphic, is_nullable, tracking_ref, user_type_id=NO_USER_TYPE_ID
-        )
+        return FieldType(type_id, morphic, is_nullable, tracking_ref, user_type_id=NO_USER_TYPE_ID)

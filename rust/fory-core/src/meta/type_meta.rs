@@ -1096,7 +1096,10 @@ impl TypeMeta {
         reader: &mut Reader,
         header: i64,
     ) -> Result<(), Error> {
-        let meta_size = read_type_meta_body_size(reader, header)?;
+        let mut meta_size = (header & META_SIZE_MASK) as usize;
+        if meta_size == META_SIZE_MASK as usize {
+            meta_size += reader.read_var_u32()? as usize;
+        }
         reader.skip(meta_size)
     }
 

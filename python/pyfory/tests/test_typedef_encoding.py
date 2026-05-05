@@ -130,9 +130,7 @@ def test_typedef_creation():
         FieldInfo("age", FieldType(TypeId.INT32, True, True, False), "TestTypeDef"),
     ]
 
-    typedef = TypeDef(
-        "", "TestTypeDef", None, TypeId.STRUCT, fields, b"encoded_data", False
-    )
+    typedef = TypeDef("", "TestTypeDef", None, TypeId.STRUCT, fields, b"encoded_data", False)
 
     assert typedef.namespace == ""
     assert typedef.typename == "TestTypeDef"
@@ -194,9 +192,7 @@ def test_encode_decode_typedef():
         for i, field in enumerate(decoded_typedef.fields):
             assert field.name == typedef.fields[i].name
             assert field.field_type.type_id == typedef.fields[i].field_type.type_id
-            assert (
-                field.field_type.is_nullable == typedef.fields[i].field_type.is_nullable
-            )
+            assert field.field_type.is_nullable == typedef.fields[i].field_type.is_nullable
 
 
 def test_decode_typedef_rejects_parsed_body_with_mismatched_hash():
@@ -232,9 +228,7 @@ def test_decode_typedef_rejects_compressed_xlang_metadata():
 
 
 def test_id_registered_typedef_extended_field_count_header():
-    many_fields_type = make_dataclass(
-        "ManyTypeDefFields", [(f"field_{i}", int) for i in range(32)]
-    )
+    many_fields_type = make_dataclass("ManyTypeDefFields", [(f"field_{i}", int) for i in range(32)])
     fory = Fory(xlang=True)
     fory.register(many_fields_type, type_id=701)
     typedef = encode_typedef(fory.type_resolver, many_fields_type)
@@ -285,37 +279,26 @@ def _typedef_body_offset(encoded):
 
 def test_nested_container_typedef_preserves_declared_encoding():
     fory = Fory(xlang=True)
-    fory.register(
-        NestedEncodingTypeDef, namespace="example", typename="NestedEncodingTypeDef"
-    )
+    fory.register(NestedEncodingTypeDef, namespace="example", typename="NestedEncodingTypeDef")
 
     typedef = encode_typedef(fory.type_resolver, NestedEncodingTypeDef)
     values_field = next(field for field in typedef.fields if field.name == "values")
     assert values_field.field_type.type_id == TypeId.MAP
     assert values_field.field_type.key_type.type_id == TypeId.INT32
     assert values_field.field_type.value_type.type_id == TypeId.LIST
-    assert (
-        values_field.field_type.value_type.element_type.type_id == TypeId.TAGGED_INT64
-    )
+    assert values_field.field_type.value_type.element_type.type_id == TypeId.TAGGED_INT64
 
     decoded_typedef = decode_typedef(Buffer(typedef.encoded), fory.type_resolver)
-    decoded_values_field = next(
-        field for field in decoded_typedef.fields if field.name == "values"
-    )
+    decoded_values_field = next(field for field in decoded_typedef.fields if field.name == "values")
     assert decoded_values_field.field_type.type_id == TypeId.MAP
     assert decoded_values_field.field_type.key_type.type_id == TypeId.INT32
     assert decoded_values_field.field_type.value_type.type_id == TypeId.LIST
-    assert (
-        decoded_values_field.field_type.value_type.element_type.type_id
-        == TypeId.TAGGED_INT64
-    )
+    assert decoded_values_field.field_type.value_type.element_type.type_id == TypeId.TAGGED_INT64
 
 
 def test_python_array_typehint_lowering_keeps_list_schema_distinct():
     fory = Fory(xlang=True)
-    fory.register(
-        PythonArrayTypeHints, namespace="example", typename="PythonArrayTypeHints"
-    )
+    fory.register(PythonArrayTypeHints, namespace="example", typename="PythonArrayTypeHints")
 
     typedef = encode_typedef(fory.type_resolver, PythonArrayTypeHints)
     fields = {field.name: field.field_type for field in typedef.fields}
@@ -341,9 +324,7 @@ def test_python_array_typehint_rejects_scalar_encoding_modifier():
         namespace="example",
         typename="InvalidArrayModifierTypeDef",
     )
-    with pytest.raises(
-        TypeError, match="array<T> does not allow scalar encoding modifier"
-    ):
+    with pytest.raises(TypeError, match="array<T> does not allow scalar encoding modifier"):
         encode_typedef(fory.type_resolver, InvalidArrayModifierTypeDef)
 
 
@@ -368,9 +349,7 @@ def test_compatible_bytes_assigns_to_uint8_array():
     _register_byte_sequence(writer, BytesPayload)
     _register_byte_sequence(reader, UInt8ArrayPayload)
 
-    decoded = reader.deserialize(
-        writer.serialize(BytesPayload(payload=b"\x01\x02\xff"))
-    )
+    decoded = reader.deserialize(writer.serialize(BytesPayload(payload=b"\x01\x02\xff")))
 
     assert isinstance(decoded, UInt8ArrayPayload)
     _assert_uint8_array_value(decoded.payload, [1, 2, 255])
@@ -382,9 +361,7 @@ def test_compatible_uint8_array_assigns_to_bytes():
     _register_byte_sequence(writer, UInt8ArrayPayload)
     _register_byte_sequence(reader, BytesPayload)
 
-    decoded = reader.deserialize(
-        writer.serialize(UInt8ArrayPayload(payload=_uint8_array_value([1, 2, 255])))
-    )
+    decoded = reader.deserialize(writer.serialize(UInt8ArrayPayload(payload=_uint8_array_value([1, 2, 255]))))
 
     assert isinstance(decoded, BytesPayload)
     assert decoded.payload == b"\x01\x02\xff"

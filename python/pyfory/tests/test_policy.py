@@ -116,10 +116,7 @@ class BlockReduceCallPolicy(DeserializationPolicy):
         self.blocked_names = blocked_names
 
     def intercept_reduce_call(self, callable_obj, args, **kwargs):
-        if (
-            hasattr(callable_obj, "__name__")
-            and callable_obj.__name__ in self.blocked_names
-        ):
+        if hasattr(callable_obj, "__name__") and callable_obj.__name__ in self.blocked_names:
             raise ValueError(f"Callable {callable_obj.__name__} is blocked")
         return None
 
@@ -349,9 +346,7 @@ def test_multiple_policy_hooks():
 
         def intercept_reduce_call(self, callable_obj, args, **kwargs):
             if hasattr(callable_obj, "__name__"):
-                self.hooks_called.append(
-                    ("intercept_reduce_call", callable_obj.__name__)
-                )
+                self.hooks_called.append(("intercept_reduce_call", callable_obj.__name__))
             return None
 
         def inspect_reduced_object(self, obj, **kwargs):
@@ -659,9 +654,7 @@ def test_native_bound_method_reports_receiver_locality_to_policy():
 
     policy = CaptureMethodPolicy()
     fory = Fory(ref=True, strict=False, policy=policy)
-    serializer = NativeFuncMethodSerializer(
-        fory.type_resolver, type(policy_global_function)
-    )
+    serializer = NativeFuncMethodSerializer(fory.type_resolver, type(policy_global_function))
     read_context = FakeReadContext(policy, ["run", False, LocalReceiver()])
 
     with pytest.raises(ValueError, match="method blocked"):
@@ -735,9 +728,7 @@ def test_function_global_path_reports_main_function_as_local():
     try:
         policy = CaptureFunctionPolicy()
         fory = Fory(ref=True, strict=False, policy=policy)
-        serializer = FunctionSerializer(
-            fory.type_resolver, type(policy_global_function)
-        )
+        serializer = FunctionSerializer(fory.type_resolver, type(policy_global_function))
         read_context = FakeReadContext(policy, [1, __name__, "policy_global_function"])
 
         assert serializer._deserialize_function(read_context) is policy_global_function
@@ -764,9 +755,7 @@ def test_native_function_serializer_rejects_class_resolution():
 
     policy = BlockClassPolicy()
     fory = Fory(ref=True, strict=False, policy=policy)
-    serializer = NativeFuncMethodSerializer(
-        fory.type_resolver, type(policy_global_function)
-    )
+    serializer = NativeFuncMethodSerializer(fory.type_resolver, type(policy_global_function))
     read_context = FakeReadContext(policy, ["Popen", True, "subprocess"])
 
     with pytest.raises(ValueError, match="class blocked"):
@@ -791,12 +780,8 @@ def test_native_function_global_method_resolution_uses_validate_method():
 
     policy = MethodPolicy()
     fory = Fory(ref=True, strict=False, policy=policy)
-    serializer = NativeFuncMethodSerializer(
-        fory.type_resolver, type(policy_global_function)
-    )
-    read_context = FakeReadContext(
-        policy, ["policy_global_bound_method", True, __name__]
-    )
+    serializer = NativeFuncMethodSerializer(fory.type_resolver, type(policy_global_function))
+    read_context = FakeReadContext(policy, ["policy_global_bound_method", True, __name__])
 
     with pytest.raises(ValueError, match="method blocked"):
         serializer.read(read_context)
@@ -818,12 +803,8 @@ def test_native_function_global_path_reports_main_function_as_local():
     try:
         policy = CaptureFunctionPolicy()
         fory = Fory(ref=True, strict=False, policy=policy)
-        serializer = NativeFuncMethodSerializer(
-            fory.type_resolver, type(policy_global_function)
-        )
-        read_context = FakeReadContext(
-            policy, ["policy_global_function", True, __name__]
-        )
+        serializer = NativeFuncMethodSerializer(fory.type_resolver, type(policy_global_function))
+        read_context = FakeReadContext(policy, ["policy_global_function", True, __name__])
 
         assert serializer.read(read_context) is policy_global_function
         assert policy.is_local_values == [True]

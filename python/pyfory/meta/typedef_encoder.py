@@ -84,9 +84,7 @@ def encode_typedef(type_resolver, cls, include_fields: bool = True):
             buffer.write_uint8(header)
     else:
         if field_infos:
-            raise ValueError(
-                f"Non-struct TypeDef {type_id} cannot carry field metadata"
-            )
+            raise ValueError(f"Non-struct TypeDef {type_id} cannot carry field metadata")
         buffer.write_uint8(xlang_non_struct_kind_code(type_id))
 
     # Write type info
@@ -95,9 +93,7 @@ def encode_typedef(type_resolver, cls, include_fields: bool = True):
         write_namespace(buffer, namespace)
         write_typename(buffer, typename)
     else:
-        assert type_resolver.is_registered_by_id(
-            cls=cls
-        ), "Class must be registered by name or id"
+        assert type_resolver.is_registered_by_id(cls=cls), "Class must be registered by name or id"
         if user_type_id in {None, NO_USER_TYPE_ID}:
             raise ValueError(f"user_type_id required for type_id {type_id}")
         buffer.write_var_uint32(user_type_id)
@@ -160,9 +156,7 @@ def write_namespace(buffer: Buffer, namespace: str):
     #      The `6 bits size: 0~63`  will be used to indicate size `0~62`,
     #      the value `63` the size need more byte to read, the encoding will encode `size - 62` as a varint next.
     meta_string = NAMESPACE_ENCODER.encode(namespace, NAMESPACE_ENCODINGS)
-    write_meta_string(
-        buffer, meta_string, NAMESPACE_ENCODINGS.index(meta_string.encoding)
-    )
+    write_meta_string(buffer, meta_string, NAMESPACE_ENCODINGS.index(meta_string.encoding))
 
 
 def write_typename(buffer: Buffer, typename: str):
@@ -174,9 +168,7 @@ def write_typename(buffer: Buffer, typename: str):
     #       The `6 bits size: 0~63`  will be used to indicate size `1~64`,
     #       the value `63` the size need more byte to read, the encoding will encode `size - 63` as a varint next.
     meta_string = TYPENAME_ENCODER.encode(typename, TYPE_NAME_ENCODINGS)
-    write_meta_string(
-        buffer, meta_string, TYPE_NAME_ENCODINGS.index(meta_string.encoding)
-    )
+    write_meta_string(buffer, meta_string, TYPE_NAME_ENCODINGS.index(meta_string.encoding))
 
 
 def write_meta_string(buffer: Buffer, meta_string, encoding_value: int):
@@ -248,9 +240,7 @@ def write_field_info(buffer: Buffer, field_info: FieldInfo):
         field_info.field_type.write(buffer, False)
     else:
         # Field name encoding
-        encoding = FIELD_NAME_ENCODER.compute_encoding(
-            field_info.name, FIELD_NAME_ENCODINGS
-        )
+        encoding = FIELD_NAME_ENCODER.compute_encoding(field_info.name, FIELD_NAME_ENCODINGS)
         meta_string = FIELD_NAME_ENCODER.encode_with_encoding(field_info.name, encoding)
         # Store (length - 1) in size field, matching Java TypeDefEncoder
         field_name_binary_size = len(meta_string.encoded_data) - 1

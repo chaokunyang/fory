@@ -28,6 +28,10 @@ import static org.testng.Assert.assertSame;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
+import java.io.Externalizable;
+import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.AbstractCollection;
@@ -903,6 +907,66 @@ public class CollectionSerializersTest extends ForyTestBase {
     CollectionViewTestStruct struct2 = serDeCheck(fory, new CollectionViewTestStruct(set, set));
     if (fory.getConfig().trackingRef()) {
       assertSame(struct2.collection, struct2.set);
+    }
+  }
+
+  @Test
+  public void testSetFromMapNestedInExternalizablePreservesRefIds() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(true)
+            .suppressClassRegistrationWarnings(true)
+            .build();
+    fory.register(ExternalizableSetFromMapHolder.class);
+    fory.register(RefMarker.class);
+
+    Set<String> set = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    RefMarker marker = new RefMarker("after-set");
+    ExternalizableSetFromMapHolder holder =
+        new ExternalizableSetFromMapHolder(set, marker, marker);
+
+    ExternalizableSetFromMapHolder deserialized = serDe(fory, holder);
+    assertSame(deserialized.after, deserialized.afterAgain);
+  }
+
+  public static final class ExternalizableSetFromMapHolder implements Externalizable {
+    private Set<?> set;
+    private RefMarker after;
+    private RefMarker afterAgain;
+
+    public ExternalizableSetFromMapHolder() {}
+
+    private ExternalizableSetFromMapHolder(Set<?> set, RefMarker after, RefMarker afterAgain) {
+      this.set = set;
+      this.after = after;
+      this.afterAgain = afterAgain;
+    }
+
+    @Override
+    public void writeExternal(ObjectOutput out) throws IOException {
+      out.writeObject(set);
+      out.writeObject(after);
+      out.writeObject(afterAgain);
+    }
+
+    @Override
+    public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
+      set = (Set<?>) in.readObject();
+      after = (RefMarker) in.readObject();
+      afterAgain = (RefMarker) in.readObject();
+    }
+  }
+
+  public static final class RefMarker {
+    private String value;
+
+    public RefMarker() {}
+
+    private RefMarker(String value) {
+      this.value = value;
     }
   }
 

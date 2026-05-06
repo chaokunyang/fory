@@ -539,13 +539,9 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				fieldType = localType
 				sliceType := reflect.SliceOf(localType.Elem())
 				if listReader, ok := newPrimitiveListSerializer(sliceType, def.typeSpec.Element.TypeID); ok {
-					if def.typeSpec.Element.Nullable {
-						fieldSerializer = compatibleNullableListToArraySerializer{}
-					} else {
-						fieldSerializer = compatiblePrimitiveListToArraySerializer{
-							arrayType:  localType,
-							listReader: listReader.(primitiveListSerializer),
-						}
+					fieldSerializer = compatiblePrimitiveListToArraySerializer{
+						arrayType:  localType,
+						listReader: listReader.(primitiveListSerializer),
 					}
 				}
 			} else if defTypeId == LIST && localType.Kind() == reflect.Array {

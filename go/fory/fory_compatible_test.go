@@ -600,7 +600,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			writeType: NullableInt32ListPayloadDataClass{},
 			readType:  Int32ArrayPayloadDataClass{},
 			input: NullableInt32ListPayloadDataClass{
-				Payload: []*int32{ptr(int32(1)), ptr(int32(2)), ptr(int32(3))},
+				Payload: []*int32{ptr(int32(1)), nil, ptr(int32(3))},
 			},
 			unmarshalErrContains: "compatible list to array field requires non-null elements",
 		},

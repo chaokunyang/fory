@@ -229,6 +229,20 @@ fn primitive_array_element_type_id(type_id: u32) -> Option<u32> {
 }
 
 #[inline(always)]
+fn primitive_array_element_size(type_id: u32) -> Option<usize> {
+    match type_id {
+        type_id::BOOL_ARRAY | type_id::INT8_ARRAY | type_id::UINT8_ARRAY => Some(1),
+        type_id::INT16_ARRAY
+        | type_id::UINT16_ARRAY
+        | type_id::FLOAT16_ARRAY
+        | type_id::BFLOAT16_ARRAY => Some(2),
+        type_id::INT32_ARRAY | type_id::UINT32_ARRAY | type_id::FLOAT32_ARRAY => Some(4),
+        type_id::INT64_ARRAY | type_id::UINT64_ARRAY | type_id::FLOAT64_ARRAY => Some(8),
+        _ => None,
+    }
+}
+
+#[inline(always)]
 fn list_element_type_matches_array(list: &FieldType, array: &FieldType) -> bool {
     primitive_array_element_type_id(array.type_id).is_some_and(|element_type_id| {
         list.type_id == type_id::LIST
@@ -277,6 +291,47 @@ fn generic_field_type<'a>(
             "{owner} field metadata is missing generic type at index {index}"
         ))
     })
+}
+
+fn read_primitive_array_data_with_codec<T, C>(
+    context: &mut ReadContext,
+    remote_field_type: &FieldType,
+) -> Result<Vec<T>, Error>
+where
+    T: 'static,
+    C: Codec<T>,
+{
+    let size_bytes = context.reader.read_var_u32()? as usize;
+    let elem_size = primitive_array_element_size(remote_field_type.type_id)
+        .ok_or_else(|| Error::type_error("array-compatible field is not a primitive array"))?;
+    if size_bytes % elem_size != 0 {
+        return Err(Error::invalid_data("Invalid data length"));
+    }
+    let max = context.max_binary_size() as usize;
+    if size_bytes > max {
+        return Err(Error::size_limit_exceeded(format!(
+            "Binary size {} exceeds limit {}",
+            size_bytes, max
+        )));
+    }
+    let remaining = context.reader.slice_after_cursor().len();
+    if size_bytes > remaining {
+        let cursor = context.reader.get_cursor();
+        return Err(Error::buffer_out_of_bound(
+            cursor,
+            size_bytes,
+            cursor + remaining,
+        ));
+    }
+    let len = size_bytes / elem_size;
+    let element_type_id = primitive_array_element_type_id(remote_field_type.type_id)
+        .ok_or_else(|| Error::type_error("array-compatible field is not a primitive array"))?;
+    let element_type = FieldType::new(element_type_id, false, Vec::new());
+    let mut vec = Vec::with_capacity(len);
+    for _ in 0..len {
+        vec.push(C::read_data_with_type(context, &element_type)?);
+    }
+    Ok(vec)
 }
 
 fn read_non_nullable_list_data_with_type<T>(
@@ -1332,7 +1387,7 @@ pub struct VecCodec<T, C, const NULLABLE: bool, const TRACK_REF: bool>(PhantomDa
 impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Codec<Vec<T>>
     for VecCodec<T, C, NULLABLE, TRACK_REF>
 where
-    T: Serializer + ForyDefault,
+    T: 'static,
     C: Codec<T>,
 {
     #[inline(always)]
@@ -1397,7 +1452,8 @@ where
                     return Err(Error::type_mismatch(remote_field_type.type_id, remote));
                 }
             }
-            return primitive_list::fory_read_data(context).map(Some);
+            return read_primitive_array_data_with_codec::<T, C>(context, remote_field_type)
+                .map(Some);
         }
         Ok(None)
     }
@@ -1680,9 +1736,13 @@ where
         }
         if remote_field_type.type_id == type_id::LIST
             && !remote_field_type.generics.is_empty()
-            && !remote_field_type.generics[0].nullable
             && list_element_type_matches_array(remote_field_type, local_field_type)
         {
+            if remote_field_type.generics[0].nullable {
+                return Err(Error::type_error(
+                    "array-compatible list declares nullable elements",
+                ));
+            }
             if field_ref_mode(remote_field_type) != RefMode::None {
                 let ref_flag = context.reader.read_i8()?;
                 if ref_flag == RefFlag::Null as i8 {

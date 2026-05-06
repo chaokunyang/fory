@@ -29,7 +29,14 @@
 import * as assert from "assert/strict";
 import * as fs from "fs";
 
-import Fory, { BFloat16, Decimal, Type } from "@apache-fory/core";
+import Fory, {
+  BFloat16,
+  BFloat16Array,
+  BoolArray,
+  Decimal,
+  ForyFloat16Array,
+  Type,
+} from "@apache-fory/core";
 import { AnyHelper } from "@apache-fory/core/dist/lib/gen/any";
 import {
   ConfigFlags,
@@ -182,6 +189,15 @@ function normalizeAcyclic(value: unknown): unknown {
   }
   if (value instanceof BFloat16) {
     return value.toFloat32();
+  }
+  if (
+    value instanceof BoolArray ||
+    value instanceof ForyFloat16Array ||
+    value instanceof BFloat16Array
+  ) {
+    return Array.from(value as Iterable<unknown>, (item) =>
+      normalizeAcyclic(item),
+    );
   }
   if (value instanceof Date) {
     return { __dateMs: value.getTime() };

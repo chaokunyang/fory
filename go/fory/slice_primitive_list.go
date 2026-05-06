@@ -32,6 +32,8 @@ type compatiblePrimitiveListToArraySerializer struct {
 	listReader primitiveListSerializer
 }
 
+type compatibleNullableListToArraySerializer struct{}
+
 func newPrimitiveListSerializer(type_ reflect.Type, elemTypeID TypeId) (Serializer, bool) {
 	if type_.Kind() != reflect.Slice {
 		return nil, false
@@ -258,6 +260,26 @@ func (s compatiblePrimitiveListToArraySerializer) ReadData(ctx *ReadContext, val
 
 func (s compatiblePrimitiveListToArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
 	s.Read(ctx, refMode, false, false, value)
+}
+
+func (s compatibleNullableListToArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.SetError(SerializationErrorf("compatible nullable list-to-array field serializer is read-only"))
+}
+
+func (s compatibleNullableListToArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	ctx.SetError(SerializationErrorf("compatible nullable list-to-array field serializer is read-only"))
+}
+
+func (s compatibleNullableListToArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	s.ReadData(ctx, value)
+}
+
+func (s compatibleNullableListToArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	ctx.SetError(DeserializationErrorf("compatible list to array field requires non-null elements"))
+}
+
+func (s compatibleNullableListToArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.ReadData(ctx, value)
 }
 
 func (s primitiveListSerializer) readValues(buf *ByteBuffer, err *Error, value reflect.Value, length int, hasNull bool) {

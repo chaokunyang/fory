@@ -17,7 +17,14 @@
  * under the License.
  */
 
-import Fory, { BFloat16, Decimal, Type } from "@apache-fory/core";
+import Fory, {
+  BFloat16,
+  BFloat16Array,
+  BoolArray,
+  Decimal,
+  ForyFloat16Array,
+  Type,
+} from "@apache-fory/core";
 import {
   AddressBook,
   Animal,
@@ -127,6 +134,13 @@ function normalize(value: unknown): unknown {
   }
   if (value instanceof BFloat16) {
     return value.toFloat32();
+  }
+  if (
+    value instanceof BoolArray ||
+    value instanceof ForyFloat16Array ||
+    value instanceof BFloat16Array
+  ) {
+    return Array.from(value as Iterable<unknown>, (item) => normalize(item));
   }
   if (value instanceof Date) {
     return { __dateMs: value.getTime() };

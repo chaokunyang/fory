@@ -602,10 +602,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			input: NullableInt32ListPayloadDataClass{
 				Payload: []*int32{ptr(int32(1)), ptr(int32(2)), ptr(int32(3))},
 			},
-			assertFunc: func(t *testing.T, input any, output any) {
-				out := output.(Int32ArrayPayloadDataClass)
-				assert.Equal(t, [3]int32{}, out.Payload)
-			},
+			unmarshalErrContains: "compatible list to array field requires non-null elements",
 		},
 		{
 			name:      "NestedListArrayMismatch",
@@ -630,14 +627,15 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 }
 
 type compatibilityCase struct {
-	name        string
-	tag         string
-	writeType   any
-	readType    any
-	input       any
-	assertFunc  func(t *testing.T, input any, output any)
-	writerSetup func(*Fory) error
-	readerSetup func(*Fory) error
+	name                 string
+	tag                  string
+	writeType            any
+	readType             any
+	input                any
+	assertFunc           func(t *testing.T, input any, output any)
+	writerSetup          func(*Fory) error
+	readerSetup          func(*Fory) error
+	unmarshalErrContains string
 }
 
 func runCompatibilityCase(t *testing.T, tc compatibilityCase) {
@@ -676,6 +674,12 @@ func runCompatibilityCase(t *testing.T, tc compatibilityCase) {
 	assert.NotPanics(t, func() {
 		unmarshalErr = reader.Unmarshal(data, target.Interface())
 	})
+	if tc.unmarshalErrContains != "" {
+		if assert.Error(t, unmarshalErr) {
+			assert.Contains(t, unmarshalErr.Error(), tc.unmarshalErrContains)
+		}
+		return
+	}
 	assert.NoError(t, unmarshalErr)
 
 	tc.assertFunc(t, tc.input, target.Elem().Interface())

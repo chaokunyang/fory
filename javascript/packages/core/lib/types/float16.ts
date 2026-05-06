@@ -209,3 +209,7 @@ export function createFloat16ArrayFromRaw(raw: Uint16Array): Float16Array {
   }
   return ForyFloat16Array.fromRaw(raw);
 }
+
+export function createFloat16Array(source: ArrayLike<number>): Float16Array {
+  return new Float16Array(source) as Float16Array;
+}

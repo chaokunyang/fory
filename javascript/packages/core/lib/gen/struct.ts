@@ -73,12 +73,25 @@ function denseArrayConstructor(elementTypeId: number | undefined): string | unde
   }
 }
 
-function compatibleReadTargetExpr(typeInfo: TypeInfo, expr: string): string {
-  switch (typeInfo.options?.compatibleReadTarget) {
-    case "array": {
-      const creator = denseArrayConstructor(typeInfo.options.compatibleReadElementTypeId);
+function compatibleDenseArrayTargetExpr(elementTypeId: number | undefined, expr: string): string {
+  switch (elementTypeId) {
+    case TypeId.BOOL:
+      return `new external.BoolArray(${expr})`;
+    case TypeId.FLOAT16:
+      return `external.createFloat16Array(${expr})`;
+    case TypeId.BFLOAT16:
+      return `new external.BFloat16Array(${expr})`;
+    default: {
+      const creator = denseArrayConstructor(elementTypeId);
       return creator ? `new ${creator}(${expr})` : expr;
     }
+  }
+}
+
+function compatibleReadTargetExpr(typeInfo: TypeInfo, expr: string): string {
+  switch (typeInfo.options?.compatibleReadTarget) {
+    case "array":
+      return compatibleDenseArrayTargetExpr(typeInfo.options.compatibleReadElementTypeId, expr);
     case "list":
       return `Array.from(${expr})`;
     default:

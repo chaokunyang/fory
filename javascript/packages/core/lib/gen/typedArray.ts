@@ -26,6 +26,7 @@ import { TypeId } from "../type";
 import { BFloat16Array } from "../types/bfloat16";
 import { BoolArray } from "../types/boolArray";
 import {
+  createFloat16Array,
   createFloat16ArrayFromRaw,
   getFloat16Raw,
 } from "../types/float16";
@@ -305,5 +306,6 @@ CodegenRegistry.register(TypeId.FLOAT32_ARRAY, build(Type.float32(), `Float32Arr
 CodegenRegistry.register(TypeId.FLOAT64_ARRAY, build(Type.float64(), `Float64Array`, 8, "readFloat64", "writeFloat64"));
 CodegenRegistry.registerExternal(BFloat16Array);
 CodegenRegistry.registerExternal(BoolArray);
+CodegenRegistry.registerExternal(createFloat16Array);
 CodegenRegistry.registerExternal(createFloat16ArrayFromRaw);
 CodegenRegistry.registerExternal(getFloat16Raw);

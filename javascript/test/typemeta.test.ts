@@ -17,7 +17,12 @@
  * under the License.
  */
 
-import Fory, { Type } from "../packages/core/index";
+import Fory, {
+  BFloat16Array,
+  BoolArray,
+  Float16Array,
+  Type,
+} from "../packages/core/index";
 import { ReadContext } from "../packages/core/lib/context";
 import { TypeMeta } from "../packages/core/lib/meta/TypeMeta";
 import { BinaryReader } from "../packages/core/lib/reader";
@@ -213,6 +218,37 @@ describe("typemeta", () => {
 
     expect(result.values).toBeInstanceOf(Int32Array);
     expect(Array.from(result.values)).toEqual([1, 2, 3]);
+  });
+
+  test("adapts compatible list fields to reduced-precision dense array carriers", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const writerType = Type.struct(7214, {
+      bools: Type.list(Type.bool()).setId(1),
+      float16s: Type.list(Type.float16()).setId(2),
+      bfloat16s: Type.list(Type.bfloat16()).setId(3),
+    });
+    const readerType = Type.struct(7214, {
+      bools: Type.boolArray().setId(1),
+      float16s: Type.float16Array().setId(2),
+      bfloat16s: Type.bfloat16Array().setId(3),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      bools: [true, false],
+      float16s: [1.5, -2],
+      bfloat16s: [1.5, -2],
+    });
+    const result = readerFory.register(readerType).deserialize(bytes);
+
+    expect(result.bools).toBeInstanceOf(BoolArray);
+    expect(Array.from(result.bools)).toEqual([true, false]);
+    expect(result.float16s).toBeInstanceOf(Float16Array as any);
+    expect(Array.from(result.float16s as Iterable<number>)[0]).toBeCloseTo(1.5, 1);
+    expect(Array.from(result.float16s as Iterable<number>)[1]).toBeCloseTo(-2, 1);
+    expect(result.bfloat16s).toBeInstanceOf(BFloat16Array);
+    expect(Array.from(result.bfloat16s as Iterable<number>)).toEqual([1.5, -2]);
   });
 
   test("adapts compatible dense array field to immediate list field", () => {

@@ -133,7 +133,21 @@ fn compatible_list_array_field_pairs() {
         })
         .unwrap();
     let decoded: ArrayPayload = reader.deserialize(&bytes).unwrap();
-    assert_eq!(decoded.payload, Vec::<i32>::default());
+    assert_eq!(decoded.payload, vec![1, 2, 3]);
+
+    let bytes = writer
+        .serialize(&NullableListPayload {
+            payload: vec![Some(1), None, Some(3)],
+        })
+        .unwrap();
+    let err = reader
+        .deserialize::<ArrayPayload>(&bytes)
+        .expect_err("expected nullable list payload to fail compatible array read");
+    assert!(
+        err.to_string()
+            .contains("compatible list to array field requires non-null elements"),
+        "{err}"
+    );
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();

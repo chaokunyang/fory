@@ -488,7 +488,7 @@ where
     let header = context.reader.read_u8()?;
     if (header & HAS_NULL) != 0 {
         return Err(Error::type_error(
-            "array-compatible list declares nullable elements",
+            "compatible list to array field requires non-null elements",
         ));
     }
     if (header & TRACKING_REF) != 0 {

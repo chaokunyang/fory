@@ -365,30 +365,6 @@ impl ForyBuilder {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::Fory;
-
-    #[test]
-    fn xlang_defaults_to_compatible_unless_explicitly_set() {
-        let default_xlang = Fory::builder().xlang(true).build();
-        let explicit_schema_consistent = Fory::builder().compatible(false).xlang(true).build();
-        let explicit_schema_consistent_reverse_order =
-            Fory::builder().xlang(true).compatible(false).build();
-
-        assert!(default_xlang.is_compatible());
-        assert!(default_xlang.is_share_meta());
-        assert!(!default_xlang.is_check_struct_version());
-
-        assert!(!explicit_schema_consistent.is_compatible());
-        assert!(!explicit_schema_consistent.is_share_meta());
-        assert!(explicit_schema_consistent.is_check_struct_version());
-        assert!(!explicit_schema_consistent_reverse_order.is_compatible());
-        assert!(!explicit_schema_consistent_reverse_order.is_share_meta());
-        assert!(explicit_schema_consistent_reverse_order.is_check_struct_version());
-    }
-}
-
 /// The main Fory serialization framework instance.
 ///
 /// `Fory` provides high-performance cross-language serialization and deserialization
@@ -1243,5 +1219,29 @@ impl Fory {
             Error::invalid_data("header bitmap mismatch at xlang bit")
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Fory;
+
+    #[test]
+    fn xlang_defaults_to_compatible_unless_explicitly_set() {
+        let default_xlang = Fory::builder().xlang(true).build();
+        let explicit_schema_consistent = Fory::builder().compatible(false).xlang(true).build();
+        let explicit_schema_consistent_reverse_order =
+            Fory::builder().xlang(true).compatible(false).build();
+
+        assert!(default_xlang.is_compatible());
+        assert!(default_xlang.is_share_meta());
+        assert!(!default_xlang.is_check_struct_version());
+
+        assert!(!explicit_schema_consistent.is_compatible());
+        assert!(!explicit_schema_consistent.is_share_meta());
+        assert!(explicit_schema_consistent.is_check_struct_version());
+        assert!(!explicit_schema_consistent_reverse_order.is_compatible());
+        assert!(!explicit_schema_consistent_reverse_order.is_share_meta());
+        assert!(explicit_schema_consistent_reverse_order.is_check_struct_version());
     }
 }

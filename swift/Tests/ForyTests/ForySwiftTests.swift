@@ -863,7 +863,7 @@ func collectionAndMapRefTracking() throws {
 
 @Test
 func macroFieldOrderFollowsForyRules() throws {
-  let fory = Fory()
+  let fory = Fory(compatible: false)
   fory.register(FieldOrder.self, id: 300)
 
   let value = FieldOrder(textTail: "tail", longValue: 123_456_789, shortValue: 17, intValue: 99)
@@ -891,7 +891,7 @@ func macroFieldOrderFollowsForyRules() throws {
 
 @Test
 func macroTaggedFieldsKeepGroupedPayloadOrder() throws {
-  let fory = Fory()
+  let fory = Fory(compatible: false)
   fory.register(TaggedFieldOrder.self, id: 303)
 
   let fields = TaggedFieldOrder.foryFieldsInfo(trackRef: false)
@@ -914,7 +914,7 @@ func macroTaggedFieldsKeepGroupedPayloadOrder() throws {
 
 @Test
 func macroFieldEncodingOverridesForUnsignedTypes() throws {
-  let fory = Fory()
+  let fory = Fory(compatible: false)
   fory.register(EncodedNumberFields.self, id: 301)
 
   let value = EncodedNumberFields(

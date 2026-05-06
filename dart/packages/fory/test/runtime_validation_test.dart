@@ -318,68 +318,70 @@ void main() {
       );
     });
 
-    test('rejects missing generated metadata and invalid registration modes',
-        () {
-      final fory = Fory();
+    test(
+      'rejects missing generated metadata and invalid registration modes',
+      () {
+        final fory = Fory();
 
-      expect(
-        () => fory.register(
-          FreshGeneratedValue,
-          namespace: 'validation',
-          typeName: 'FreshGeneratedValue',
-        ),
-        throwsA(
-          isA<StateError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('has no generated registration metadata'),
+        expect(
+          () => fory.register(
+            FreshGeneratedValue,
+            namespace: 'validation',
+            typeName: 'FreshGeneratedValue',
           ),
-        ),
-      );
-      expect(
-        () => fory.registerSerializer(
-          PlainManualValue,
-          const PlainManualValueSerializer(),
-        ),
-        throwsA(
-          isA<ArgumentError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('Exactly one registration mode is required'),
+          throwsA(
+            isA<StateError>().having(
+              (error) => error.toString(),
+              'message',
+              contains('has no generated registration metadata'),
+            ),
           ),
-        ),
-      );
-      expect(
-        () => fory.registerSerializer(
-          PlainManualValue,
-          const PlainManualValueSerializer(),
-          namespace: 'validation',
-        ),
-        throwsA(
-          isA<ArgumentError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('Both namespace and typeName are required'),
+        );
+        expect(
+          () => fory.registerSerializer(
+            PlainManualValue,
+            const PlainManualValueSerializer(),
           ),
-        ),
-      );
-      expect(
-        () => fory.registerSerializer(
-          PlainManualValue,
-          const PlainManualValueSerializer(),
-          id: 1,
-          namespace: 'validation',
-          typeName: 'PlainManualValue',
-        ),
-        throwsA(
-          isA<ArgumentError>().having(
-            (error) => error.toString(),
-            'message',
-            contains('Exactly one registration mode is required'),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.toString(),
+              'message',
+              contains('Exactly one registration mode is required'),
+            ),
           ),
-        ),
-      );
-    });
+        );
+        expect(
+          () => fory.registerSerializer(
+            PlainManualValue,
+            const PlainManualValueSerializer(),
+            namespace: 'validation',
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.toString(),
+              'message',
+              contains('Both namespace and typeName are required'),
+            ),
+          ),
+        );
+        expect(
+          () => fory.registerSerializer(
+            PlainManualValue,
+            const PlainManualValueSerializer(),
+            id: 1,
+            namespace: 'validation',
+            typeName: 'PlainManualValue',
+          ),
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.toString(),
+              'message',
+              contains('Exactly one registration mode is required'),
+            ),
+          ),
+        );
+      },
+    );
 
     test('enforces maxDepth during write and read', () {
       final nested = _nestedList(4);
@@ -408,8 +410,8 @@ void main() {
     });
 
     test('rejects schema version mismatches in schema-consistent mode', () {
-      final writer = Fory();
-      final reader = Fory();
+      final writer = Fory(compatible: false);
+      final reader = Fory(compatible: false);
       _registerSchemaV1(writer);
       _registerSchemaV2(reader);
 

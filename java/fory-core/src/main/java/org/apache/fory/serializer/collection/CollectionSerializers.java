@@ -50,9 +50,11 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.fory.collection.CollectionSnapshot;
+import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
@@ -74,6 +76,39 @@ import org.apache.fory.util.unsafe._JDKAccess;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class CollectionSerializers {
+  private static void throwBinarySizeLimitExceeded(long size, int maxBinarySize) {
+    throw new DeserializationException(
+        "Binary payload size " + size + " exceeds max binary size " + maxBinarySize);
+  }
+
+  private static void throwNegativeBinarySize(int size) {
+    throw new DeserializationException("Binary payload size must be non-negative: " + size);
+  }
+
+  private static void throwUnalignedBinarySize(int size, int elemSize) {
+    throw new DeserializationException(
+        "Binary payload size " + size + " is not aligned to element size " + elemSize);
+  }
+
+  private static void checkBoundedQueueCapacity(Config config, int numElements, int capacity) {
+    // Keep these as direct primitive branches. This collection read path is JIT-sensitive; using
+    // Preconditions.checkArgument here adds helper/varargs overhead and hurts inlining.
+    if (numElements < 0) {
+      throw new DeserializationException("Queue size must be non-negative: " + numElements);
+    }
+    if (capacity <= 0) {
+      throw new DeserializationException("Queue capacity must be positive: " + capacity);
+    }
+    if (capacity < numElements) {
+      throw new DeserializationException(
+          "Queue capacity " + capacity + " is smaller than serialized size " + numElements);
+    }
+    int maxCollectionSize = config.maxCollectionSize();
+    if (capacity > maxCollectionSize) {
+      throw new DeserializationException(
+          "Queue capacity " + capacity + " exceeds max collection size " + maxCollectionSize);
+    }
+  }
 
   public static final class ArrayListSerializer extends CollectionSerializer<ArrayList> {
     public ArrayListSerializer(TypeResolver typeResolver) {
@@ -83,7 +118,7 @@ public class CollectionSerializers {
     @Override
     public ArrayList newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
       readContext.reference(arrayList);
@@ -141,7 +176,7 @@ public class CollectionSerializers {
     @Override
     public ArrayList newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       ArrayList arrayList = new ArrayList(numElements);
       readContext.reference(arrayList);
@@ -157,7 +192,7 @@ public class CollectionSerializers {
     @Override
     public HashSet newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       HashSet hashSet = new HashSet(numElements);
       readContext.reference(hashSet);
@@ -173,7 +208,7 @@ public class CollectionSerializers {
     @Override
     public LinkedHashSet newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       LinkedHashSet hashSet = new LinkedHashSet(numElements);
       readContext.reference(hashSet);
@@ -220,7 +255,7 @@ public class CollectionSerializers {
     public T newCollection(ReadContext readContext) {
       assert !config.isXlang();
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       T collection;
       Comparator comparator = (Comparator) readContext.readRef();
@@ -284,7 +319,11 @@ public class CollectionSerializers {
     @Override
     public List<?> read(ReadContext readContext) {
       if (config.isXlang()) {
-        readContext.getBuffer().readVarUInt32Small7();
+        int numElements = readCollectionSize(readContext.getBuffer());
+        if (numElements != 0) {
+          throw new DeserializationException(
+              "Empty list payload must have zero elements but got " + numElements);
+        }
       }
       return Collections.EMPTY_LIST;
     }
@@ -301,7 +340,7 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
     }
@@ -335,7 +374,7 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
     }
@@ -484,7 +523,7 @@ public class CollectionSerializers {
     @Override
     public ConcurrentSkipListSet newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       assert !config.isXlang();
       int refId = readContext.lastPreservedRefId();
@@ -631,7 +670,7 @@ public class CollectionSerializers {
     @Override
     public Vector newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       Vector<Object> vector = new Vector<>(numElements);
       readContext.reference(vector);
@@ -648,7 +687,7 @@ public class CollectionSerializers {
     @Override
     public ArrayDeque newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       ArrayDeque deque = new ArrayDeque(numElements);
       readContext.reference(deque);
@@ -693,7 +732,7 @@ public class CollectionSerializers {
       Class elemClass = typeResolver.readTypeInfo(readContext).getType();
       EnumSet object = EnumSet.noneOf(elemClass);
       Serializer elemSerializer = typeResolver.getSerializer(elemClass);
-      int length = buffer.readVarUInt32Small7();
+      int length = readCollectionSize(buffer);
       for (int i = 0; i < length; i++) {
         object.add(elemSerializer.read(readContext));
       }
@@ -707,8 +746,11 @@ public class CollectionSerializers {
   }
 
   public static class BitSetSerializer extends Serializer<BitSet> {
+    private final int maxBinarySize;
+
     public BitSetSerializer(TypeResolver typeResolver, Class<BitSet> type) {
       super(typeResolver.getConfig(), type);
+      maxBinarySize = typeResolver.getConfig().maxBinarySize();
     }
 
     @Override
@@ -727,7 +769,20 @@ public class CollectionSerializers {
     @Override
     public BitSet read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      long[] values = buffer.readLongs(buffer.readVarUInt32Small7());
+      int size = buffer.readVarUInt32Small7();
+      if (size < 0) {
+        throwNegativeBinarySize(size);
+      }
+      if ((size & 7) != 0) {
+        throwUnalignedBinarySize(size, 8);
+      }
+      if (size > maxBinarySize) {
+        throwBinarySizeLimitExceeded(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
+      long[] values = buffer.readLongs(size);
       return BitSet.valueOf(values);
     }
   }
@@ -758,7 +813,7 @@ public class CollectionSerializers {
     public PriorityQueue newCollection(ReadContext readContext) {
       assert !config.isXlang();
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
       PriorityQueue queue = new PriorityQueue(comparator);
@@ -813,9 +868,10 @@ public class CollectionSerializers {
     @Override
     public ArrayBlockingQueue newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
+      checkBoundedQueueCapacity(config, numElements, capacity);
       ArrayBlockingQueue queue = new ArrayBlockingQueue<>(capacity);
       readContext.reference(queue);
       return queue;
@@ -873,9 +929,10 @@ public class CollectionSerializers {
     @Override
     public LinkedBlockingQueue newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       int capacity = buffer.readVarUInt32Small7();
+      checkBoundedQueueCapacity(config, numElements, capacity);
       LinkedBlockingQueue queue = new LinkedBlockingQueue<>(capacity);
       readContext.reference(queue);
       return queue;
@@ -1012,7 +1069,7 @@ public class CollectionSerializers {
     @Override
     public List newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       ArrayList list = new ArrayList(numElements);
       readContext.reference(list);
@@ -1028,7 +1085,7 @@ public class CollectionSerializers {
     @Override
     public Set newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       HashSet set = new HashSet(numElements);
       readContext.reference(set);

@@ -494,6 +494,15 @@ public class TypeDefEncoderTest {
   }
 
   @Test
+  public void testSkipTypeDefRejectsExtendedSizeOverflow() {
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
+    buffer.writeVarUInt32(-1);
+
+    Assert.assertThrows(
+        DeserializationException.class, () -> TypeDef.skipTypeDef(buffer, TypeDef.META_SIZE_MASKS));
+  }
+
+  @Test
   public void testDecodeRejectsRegisteredTypeDefKindMismatch() {
     Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
     fory.register(EmptyStruct.class, 6001);

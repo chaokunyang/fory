@@ -604,6 +604,11 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         return metaSize;
     }
 
+    internal static void SkipBody(ByteReader reader, ulong header)
+    {
+        reader.Skip(ReadBodySize(reader, header));
+    }
+
     private static ulong ComputeHeaderHashBits(ReadOnlySpan<byte> body)
     {
         (ulong bodyHash, _) = MurmurHash3.X64_128(body, TypeMetaConstants.TypeMetaHashSeed);

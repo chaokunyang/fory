@@ -25,6 +25,7 @@ import java.math.MathContext;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 
 /** Serializer for {@link BigDecimal} in native and xlang modes. */
@@ -32,10 +33,12 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
   private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
   private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
   private final boolean xlang;
+  private final int maxBinarySize;
 
   public DecimalSerializer(Config config) {
     super(config, BigDecimal.class);
     xlang = config.isXlang();
+    maxBinarySize = config.maxBinarySize();
   }
 
   @Override
@@ -69,6 +72,8 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
     int scale = buffer.readVarUInt32Small7();
     int precision = buffer.readVarUInt32Small7();
     int len = buffer.readVarUInt32Small7();
+    checkBinaryPayloadLength(len, maxBinarySize);
+    buffer.checkReadableBytes(len);
     byte[] bytes = buffer.readBytes(len);
     BigInteger bigInteger = new BigInteger(bytes);
     return new BigDecimal(bigInteger, scale, new MathContext(precision));
@@ -79,7 +84,7 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
   }
 
   private BigDecimal readXlang(ReadContext readContext) {
-    return readXlangDecimal(readContext.getBuffer());
+    return readXlangDecimal(readContext.getBuffer(), maxBinarySize);
   }
 
   static void writeXlangDecimal(MemoryBuffer buffer, int scale, BigInteger unscaled) {
@@ -100,13 +105,21 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
   }
 
   static BigDecimal readXlangDecimal(MemoryBuffer buffer) {
+    return readXlangDecimal(buffer, Integer.MAX_VALUE);
+  }
+
+  static BigDecimal readXlangDecimal(MemoryBuffer buffer, int maxBinarySize) {
     int scale = buffer.readVarInt32();
-    return new BigDecimal(readXlangUnscaled(buffer), scale);
+    return new BigDecimal(readXlangUnscaled(buffer, maxBinarySize), scale);
   }
 
   static BigInteger readXlangBigInteger(MemoryBuffer buffer) {
+    return readXlangBigInteger(buffer, Integer.MAX_VALUE);
+  }
+
+  static BigInteger readXlangBigInteger(MemoryBuffer buffer, int maxBinarySize) {
     int scale = buffer.readVarInt32();
-    BigInteger unscaled = readXlangUnscaled(buffer);
+    BigInteger unscaled = readXlangUnscaled(buffer, maxBinarySize);
     if (scale != 0) {
       throw new IllegalArgumentException(
           "Cannot deserialize xlang decimal with scale " + scale + " into BigInteger");
@@ -114,7 +127,7 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
     return unscaled;
   }
 
-  private static BigInteger readXlangUnscaled(MemoryBuffer buffer) {
+  private static BigInteger readXlangUnscaled(MemoryBuffer buffer, int maxBinarySize) {
     long header = buffer.readVarUInt64();
     if ((header & 1L) == 0L) {
       return BigInteger.valueOf(decodeZigZag64(header >>> 1));
@@ -126,7 +139,12 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
       throw new IllegalArgumentException(
           "Invalid decimal magnitude length " + lenLong + " in xlang payload");
     }
+    if (lenLong > maxBinarySize) {
+      throw new DeserializationException(
+          "Decimal magnitude length " + lenLong + " exceeds max binary size " + maxBinarySize);
+    }
     int len = (int) lenLong;
+    buffer.checkReadableBytes(len);
     byte[] payload = buffer.readBytes(len);
     if (payload[len - 1] == 0) {
       throw new IllegalArgumentException("Non-canonical decimal payload: trailing zero byte");
@@ -137,6 +155,16 @@ public final class DecimalSerializer extends ImmutableSerializer<BigDecimal> imp
       throw new IllegalArgumentException("Big decimal encoding must not represent zero");
     }
     return sign == 0 ? abs : abs.negate();
+  }
+
+  private static void checkBinaryPayloadLength(int len, int maxBinarySize) {
+    if (len <= 0) {
+      throw new DeserializationException("Decimal payload length must be positive: " + len);
+    }
+    if (len > maxBinarySize) {
+      throw new DeserializationException(
+          "Decimal payload length " + len + " exceeds max binary size " + maxBinarySize);
+    }
   }
 
   private static boolean canUseSmallEncoding(BigInteger value) {

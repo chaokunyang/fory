@@ -392,10 +392,7 @@ export class ReadContext {
 
   private typeMeta: TypeMeta[] = [];
   /** Persistent cross-message cache keyed by 8-byte type meta header. */
-  private typeMetaCache: Map<
-    bigint,
-    { readonly typeMeta: TypeMeta; readonly skipBytesAfterHeader: number }
-  > = new Map();
+  private typeMetaCache: Map<bigint, TypeMeta> = new Map();
 
   private _depth = 0;
   private _maxDepth: number;
@@ -486,17 +483,14 @@ export class ReadContext {
     let typeMeta: TypeMeta;
     if (cached) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeMeta parse and 52-bit body-hash validation.
-      this.reader.readSkip(cached.skipBytesAfterHeader);
-      typeMeta = cached.typeMeta;
+      // after a successful TypeMeta parse and 52-bit body-hash validation. The current body
+      // size still comes from the current header bytes, not from the cached TypeMeta.
+      TypeMeta.skipBody(this.reader, header);
+      typeMeta = cached;
     } else {
-      const bodyStart = this.reader.readGetCursor();
       typeMeta = TypeMeta.fromBytesAfterHeader(this.reader, header);
       if (this.typeMetaCache.size < ReadContext.MAX_CACHED_TYPE_META) {
-        this.typeMetaCache.set(header, {
-          typeMeta,
-          skipBytesAfterHeader: this.reader.readGetCursor() - bodyStart,
-        });
+        this.typeMetaCache.set(header, typeMeta);
       }
     }
     this.typeMeta[dynamicTypeId] = typeMeta;

@@ -67,6 +67,7 @@ import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.context.ReadContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.reflect.TypeRef;
@@ -973,6 +974,74 @@ public class CollectionSerializersTest extends ForyTestBase {
       // Verify capacity is preserved
       assertEquals(deserialized.remainingCapacity() + deserialized.size(), 10);
     }
+  }
+
+  @Test
+  public void testDeserializeJavaBlockingQueueRejectsMalformedCapacity() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withMaxCollectionSize(4)
+            .build();
+    CollectionSerializers.ArrayBlockingQueueSerializer arraySerializer =
+        new CollectionSerializers.ArrayBlockingQueueSerializer(
+            fory.getTypeResolver(), ArrayBlockingQueue.class);
+    CollectionSerializers.LinkedBlockingQueueSerializer linkedSerializer =
+        new CollectionSerializers.LinkedBlockingQueueSerializer(
+            fory.getTypeResolver(), LinkedBlockingQueue.class);
+
+    MemoryBuffer oversizedCapacity = MemoryUtils.buffer(8);
+    oversizedCapacity.writeVarUInt32Small7(2);
+    oversizedCapacity.writeVarUInt32Small7(5);
+    Assert.expectThrows(
+        DeserializationException.class,
+        () -> withReadContext(fory, oversizedCapacity, arraySerializer::newCollection));
+
+    MemoryBuffer undersizedCapacity = MemoryUtils.buffer(8);
+    undersizedCapacity.writeVarUInt32Small7(2);
+    undersizedCapacity.writeVarUInt32Small7(1);
+    Assert.expectThrows(
+        DeserializationException.class,
+        () -> withReadContext(fory, undersizedCapacity, linkedSerializer::newCollection));
+  }
+
+  @Test
+  public void testCollectionReadRejectsOversizedElementCount() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withMaxCollectionSize(1)
+            .build();
+    CollectionSerializers.ArrayListSerializer serializer =
+        new CollectionSerializers.ArrayListSerializer(fory.getTypeResolver());
+    MemoryBuffer buffer = MemoryUtils.buffer(8);
+    buffer.writeVarUInt32Small7(2);
+    Assert.expectThrows(
+        DeserializationException.class,
+        () -> withReadContext(fory, buffer, serializer::newCollection));
+  }
+
+  @Test
+  public void testBitSetReadRejectsNegativeDecodedBinaryPayload() {
+    Fory fory = Fory.builder().build();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
+    writeNegativeDecodedVarUInt32(buffer);
+    ReadContext readContext = fory.getReadContext();
+    readContext.prepare(buffer, null, false);
+    Assert.expectThrows(
+        DeserializationException.class, () -> fory.getSerializer(BitSet.class).read(readContext));
+  }
+
+  private static void writeNegativeDecodedVarUInt32(MemoryBuffer buffer) {
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x08);
   }
 
   @Test(dataProvider = "foryCopyConfig")

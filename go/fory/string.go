@@ -106,7 +106,9 @@ func readUTF16LE(buf *ByteBuffer, byteCount int, err *Error) string {
 
 func readUTF8(buf *ByteBuffer, size int, err *Error) string {
 	data := buf.ReadBinary(size, err)
-	return string(data) // Direct UTF-8 conversion
+	// Go intentionally keeps direct string conversion here. Rust is the runtime that checks UTF-8
+	// string payloads by default; Go preserves its platform behavior for invalid byte sequences.
+	return string(data)
 }
 
 // ============================================================================

@@ -25,6 +25,7 @@ import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
@@ -74,11 +75,47 @@ public final class PrimitiveArraySerializers {
   public abstract static class PrimitiveArraySerializer<T> extends Serializer<T>
       implements Shareable {
     protected final Config config;
+    protected final int maxBinarySize;
 
     public PrimitiveArraySerializer(TypeResolver typeResolver, Class<T> cls) {
       super(typeResolver.getConfig(), cls);
       this.config = typeResolver.getConfig();
+      maxBinarySize = config.maxBinarySize();
     }
+  }
+
+  private static void throwBinarySizeLimitExceeded(long size, int maxBinarySize) {
+    throw new DeserializationException(
+        "Binary payload size " + size + " exceeds max binary size " + maxBinarySize);
+  }
+
+  private static void throwNegativeBinarySize(int size) {
+    throw new DeserializationException("Binary payload size must be non-negative: " + size);
+  }
+
+  private static void throwNegativeElementCount(int numElements) {
+    throw new DeserializationException("Element count must be non-negative: " + numElements);
+  }
+
+  private static void throwInvalidBinarySize(int size, int maxBinarySize) {
+    if (size < 0) {
+      throwNegativeBinarySize(size);
+    } else {
+      throwBinarySizeLimitExceeded(size, maxBinarySize);
+    }
+  }
+
+  private static void throwInvalidElementCount(int numElements, int maxBinarySize, int elemSize) {
+    if (numElements < 0) {
+      throwNegativeElementCount(numElements);
+    } else {
+      throwBinarySizeLimitExceeded((long) numElements * elemSize, maxBinarySize);
+    }
+  }
+
+  private static void throwUnalignedBinarySize(int size, int elemSize) {
+    throw new DeserializationException(
+        "Binary payload size " + size + " is not aligned to element size " + elemSize);
   }
 
   public static final class BooleanArraySerializer extends PrimitiveArraySerializer<boolean[]> {
@@ -109,11 +146,20 @@ public final class PrimitiveArraySerializers {
       if (readContext.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
+        if (size > maxBinarySize) {
+          throwBinarySizeLimitExceeded(size, maxBinarySize);
+        }
         boolean[] values = new boolean[size];
         buf.copyToUnsafe(0, values, Platform.BOOLEAN_ARRAY_OFFSET, size);
         return values;
       }
       int size = buffer.readVarUInt32Small7();
+      if (size < 0 || size > maxBinarySize) {
+        throwInvalidBinarySize(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
       boolean[] values = new boolean[size];
       buffer.readToUnsafe(values, Platform.BOOLEAN_ARRAY_OFFSET, size);
       return values;
@@ -148,11 +194,20 @@ public final class PrimitiveArraySerializers {
       if (readContext.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
+        if (size > maxBinarySize) {
+          throwBinarySizeLimitExceeded(size, maxBinarySize);
+        }
         byte[] values = new byte[size];
         buf.copyToUnsafe(0, values, Platform.BYTE_ARRAY_OFFSET, size);
         return values;
       }
       int size = buffer.readVarUInt32Small7();
+      if (size < 0 || size > maxBinarySize) {
+        throwInvalidBinarySize(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
       byte[] values = new byte[size];
       buffer.readToUnsafe(values, Platform.BYTE_ARRAY_OFFSET, size);
       return values;
@@ -208,7 +263,13 @@ public final class PrimitiveArraySerializers {
       if (readContext.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
-        int numElements = size / 2;
+        if ((size & 1) != 0) {
+          throwUnalignedBinarySize(size, 2);
+        }
+        if (size > maxBinarySize) {
+          throwBinarySizeLimitExceeded(size, maxBinarySize);
+        }
+        int numElements = size >>> 1;
         char[] values = new char[numElements];
         if (Platform.IS_LITTLE_ENDIAN) {
           buf.copyToUnsafe(0, values, Platform.CHAR_ARRAY_OFFSET, size);
@@ -218,7 +279,16 @@ public final class PrimitiveArraySerializers {
         return values;
       }
       int size = buffer.readVarUInt32Small7();
-      int numElements = size / 2;
+      if ((size & 1) != 0) {
+        throwUnalignedBinarySize(size, 2);
+      }
+      if (size < 0 || size > maxBinarySize) {
+        throwInvalidBinarySize(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
+      int numElements = size >>> 1;
       char[] values = new char[numElements];
       if (Platform.IS_LITTLE_ENDIAN) {
         buffer.readToUnsafe(values, Platform.CHAR_ARRAY_OFFSET, size);
@@ -256,7 +326,7 @@ public final class PrimitiveArraySerializers {
 
     @Override
     public short[] read(ReadContext readContext) {
-      return readShortBits(readContext);
+      return readShortBits(readContext, maxBinarySize);
     }
   }
 
@@ -307,7 +377,13 @@ public final class PrimitiveArraySerializers {
       if (readContext.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
-        int numElements = size / 4;
+        if ((size & 3) != 0) {
+          throwUnalignedBinarySize(size, 4);
+        }
+        if (size > maxBinarySize) {
+          throwBinarySizeLimitExceeded(size, maxBinarySize);
+        }
+        int numElements = size >>> 2;
         int[] values = new int[numElements];
         if (size > 0) {
           if (Platform.IS_LITTLE_ENDIAN) {
@@ -322,7 +398,16 @@ public final class PrimitiveArraySerializers {
         return readInt32Compressed(buffer);
       }
       int size = buffer.readVarUInt32Small7();
-      int numElements = size / 4;
+      if ((size & 3) != 0) {
+        throwUnalignedBinarySize(size, 4);
+      }
+      if (size < 0 || size > maxBinarySize) {
+        throwInvalidBinarySize(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
+      int numElements = size >>> 2;
       int[] values = new int[numElements];
       if (size > 0) {
         if (Platform.IS_LITTLE_ENDIAN) {
@@ -353,6 +438,9 @@ public final class PrimitiveArraySerializers {
 
     private int[] readInt32Compressed(MemoryBuffer buffer) {
       int numElements = buffer.readVarUInt32Small7();
+      if (numElements < 0 || numElements > maxBinarySize / 4) {
+        throwInvalidElementCount(numElements, maxBinarySize, 4);
+      }
       int[] values = new int[numElements];
       for (int i = 0; i < numElements; i++) {
         values[i] = buffer.readVarInt32();
@@ -414,7 +502,13 @@ public final class PrimitiveArraySerializers {
       if (readContext.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
-        int numElements = size / 8;
+        if ((size & 7) != 0) {
+          throwUnalignedBinarySize(size, 8);
+        }
+        if (size > maxBinarySize) {
+          throwBinarySizeLimitExceeded(size, maxBinarySize);
+        }
+        int numElements = size >>> 3;
         long[] values = new long[numElements];
         if (size > 0) {
           if (Platform.IS_LITTLE_ENDIAN) {
@@ -429,7 +523,16 @@ public final class PrimitiveArraySerializers {
         return readInt64Compressed(buffer, config.longEncoding());
       }
       int size = buffer.readVarUInt32Small7();
-      int numElements = size / 8;
+      if ((size & 7) != 0) {
+        throwUnalignedBinarySize(size, 8);
+      }
+      if (size < 0 || size > maxBinarySize) {
+        throwInvalidBinarySize(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
+      int numElements = size >>> 3;
       long[] values = new long[numElements];
       if (size > 0) {
         if (Platform.IS_LITTLE_ENDIAN) {
@@ -468,6 +571,9 @@ public final class PrimitiveArraySerializers {
 
     private long[] readInt64Compressed(MemoryBuffer buffer, Int64Encoding longEncoding) {
       int numElements = buffer.readVarUInt32Small7();
+      if (numElements < 0 || numElements > maxBinarySize / 8) {
+        throwInvalidElementCount(numElements, maxBinarySize, 8);
+      }
       long[] values = new long[numElements];
       if (longEncoding == Int64Encoding.TAGGED) {
         for (int i = 0; i < numElements; i++) {
@@ -525,7 +631,13 @@ public final class PrimitiveArraySerializers {
       if (readContext.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
-        int numElements = size / 4;
+        if ((size & 3) != 0) {
+          throwUnalignedBinarySize(size, 4);
+        }
+        if (size > maxBinarySize) {
+          throwBinarySizeLimitExceeded(size, maxBinarySize);
+        }
+        int numElements = size >>> 2;
         float[] values = new float[numElements];
         if (Platform.IS_LITTLE_ENDIAN) {
           buf.copyToUnsafe(0, values, Platform.FLOAT_ARRAY_OFFSET, size);
@@ -535,7 +647,16 @@ public final class PrimitiveArraySerializers {
         return values;
       }
       int size = buffer.readVarUInt32Small7();
-      int numElements = size / 4;
+      if ((size & 3) != 0) {
+        throwUnalignedBinarySize(size, 4);
+      }
+      if (size < 0 || size > maxBinarySize) {
+        throwInvalidBinarySize(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
+      int numElements = size >>> 2;
       float[] values = new float[numElements];
       if (Platform.IS_LITTLE_ENDIAN) {
         buffer.readToUnsafe(values, Platform.FLOAT_ARRAY_OFFSET, size);
@@ -599,7 +720,13 @@ public final class PrimitiveArraySerializers {
       if (readContext.isPeerOutOfBandEnabled()) {
         MemoryBuffer buf = readContext.readBufferObject();
         int size = buf.remaining();
-        int numElements = size / 8;
+        if ((size & 7) != 0) {
+          throwUnalignedBinarySize(size, 8);
+        }
+        if (size > maxBinarySize) {
+          throwBinarySizeLimitExceeded(size, maxBinarySize);
+        }
+        int numElements = size >>> 3;
         double[] values = new double[numElements];
         if (Platform.IS_LITTLE_ENDIAN) {
           buf.copyToUnsafe(0, values, Platform.DOUBLE_ARRAY_OFFSET, size);
@@ -609,7 +736,16 @@ public final class PrimitiveArraySerializers {
         return values;
       }
       int size = buffer.readVarUInt32Small7();
-      int numElements = size / 8;
+      if ((size & 7) != 0) {
+        throwUnalignedBinarySize(size, 8);
+      }
+      if (size < 0 || size > maxBinarySize) {
+        throwInvalidBinarySize(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
+      int numElements = size >>> 3;
       double[] values = new double[numElements];
       if (Platform.IS_LITTLE_ENDIAN) {
         buffer.readToUnsafe(values, Platform.DOUBLE_ARRAY_OFFSET, size);
@@ -647,7 +783,7 @@ public final class PrimitiveArraySerializers {
 
     @Override
     public Float16Array read(ReadContext readContext) {
-      return Float16Array.wrapBits(readShortBits(readContext));
+      return Float16Array.wrapBits(readShortBits(readContext, maxBinarySize));
     }
   }
 
@@ -669,7 +805,7 @@ public final class PrimitiveArraySerializers {
 
     @Override
     public BFloat16Array read(ReadContext readContext) {
-      return BFloat16Array.wrapBits(readShortBits(readContext));
+      return BFloat16Array.wrapBits(readShortBits(readContext, maxBinarySize));
     }
   }
 
@@ -699,12 +835,18 @@ public final class PrimitiveArraySerializers {
     buffer._unsafeWriterIndex(idx + length * 2);
   }
 
-  private static short[] readShortBits(ReadContext readContext) {
+  private static short[] readShortBits(ReadContext readContext, int maxBinarySize) {
     MemoryBuffer buffer = readContext.getBuffer();
     if (readContext.isPeerOutOfBandEnabled()) {
       MemoryBuffer buf = readContext.readBufferObject();
       int size = buf.remaining();
-      int numElements = size / 2;
+      if ((size & 1) != 0) {
+        throwUnalignedBinarySize(size, 2);
+      }
+      if (size > maxBinarySize) {
+        throwBinarySizeLimitExceeded(size, maxBinarySize);
+      }
+      int numElements = size >>> 1;
       short[] values = new short[numElements];
       if (Platform.IS_LITTLE_ENDIAN) {
         buf.copyToUnsafe(0, values, Platform.SHORT_ARRAY_OFFSET, size);
@@ -714,7 +856,16 @@ public final class PrimitiveArraySerializers {
       return values;
     }
     int size = buffer.readVarUInt32Small7();
-    int numElements = size / 2;
+    if ((size & 1) != 0) {
+      throwUnalignedBinarySize(size, 2);
+    }
+    if (size < 0 || size > maxBinarySize) {
+      throwInvalidBinarySize(size, maxBinarySize);
+    }
+    if (size > buffer.remaining()) {
+      buffer.checkReadableBytes(size);
+    }
+    int numElements = size >>> 1;
     short[] values = new short[numElements];
     if (Platform.IS_LITTLE_ENDIAN) {
       buffer.readToUnsafe(values, Platform.SHORT_ARRAY_OFFSET, size);

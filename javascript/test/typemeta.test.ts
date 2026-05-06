@@ -18,8 +18,10 @@
  */
 
 import Fory, { Type } from "../packages/core/index";
+import { ReadContext } from "../packages/core/lib/context";
 import { TypeMeta } from "../packages/core/lib/meta/TypeMeta";
 import { BinaryReader } from "../packages/core/lib/reader";
+import { BinaryWriter } from "../packages/core/lib/writer";
 import { describe, expect, test } from "@jest/globals";
 
 const COMPRESS_META_FLAG = 1n << 8n;
@@ -99,6 +101,39 @@ describe("typemeta", () => {
     const header = TypeMeta.readHeader(skipReader);
     TypeMeta.skipBody(skipReader, header);
     expect(skipReader.readGetCursor()).toBe(bytes.length);
+  });
+
+  test("TypeMeta header cache hit skips the current body size", () => {
+    const header = 0xffn;
+    const typeMeta = TypeMeta.fromTypeInfo(Type.struct(7010, {}));
+    const writer = new BinaryWriter({});
+    writer.writeVarUInt32(0);
+    writer.writeUint64(header);
+    writer.writeVarUInt32(0);
+    writer.buffer(new Uint8Array(0xff));
+    writer.buffer(new Uint8Array([0x7b]));
+
+    const config = { ref: false, useSliceString: false, hooks: {} } as any;
+    const context = new ReadContext(
+      {
+        config,
+        trackingRef: false,
+        computeTypeId: (typeInfo: any) => typeInfo.typeId,
+        getSerializerById: () => undefined,
+        getSerializerByName: () => undefined,
+        getSerializerByData: () => undefined,
+        isCompatible: () => false,
+        regenerateReadSerializer: () => {
+          throw new Error("unused");
+        },
+      } as any,
+      config,
+    );
+    (context as any).typeMetaCache.set(header, typeMeta);
+    context.reset(writer.dump());
+
+    expect(context.readTypeMeta()).toBe(typeMeta);
+    expect(context.reader.readUint8()).toBe(0x7b);
   });
 
   test("encodes extended id-registered struct field counts without the name bit", () => {

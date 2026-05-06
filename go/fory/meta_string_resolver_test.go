@@ -18,8 +18,11 @@
 package fory
 
 import (
+	"encoding/binary"
 	"github.com/stretchr/testify/require"
 	"testing"
+
+	"github.com/apache/fory/go/fory/meta"
 )
 
 // TestMetaStringResolverNegativeIndexPanic reproduces the CRITICAL security bug
@@ -64,4 +67,126 @@ func TestMetaStringResolverBoundaryRegression(t *testing.T) {
 	result, err := resolver.ReadMetaStringBytes(buffer, &ctxErr)
 	require.NoError(t, err)
 	require.Equal(t, m, result, "Should correctly resolve the first dynamic string (index 0)")
+}
+
+func TestMetaStringResolverRejectsLargeBodyHashMismatch(t *testing.T) {
+	resolver := NewMetaStringResolver()
+	buffer := NewByteBuffer(nil)
+	data := []byte("0123456789abcdefg")
+
+	buffer.WriteVarUint32Small7(uint32(len(data)) << 1)
+	buffer.WriteInt64(int64(meta.UTF_8))
+	buffer.Write(data)
+	buffer.SetReaderIndex(0)
+
+	var ctxErr Error
+	_, err := resolver.ReadMetaStringBytes(buffer, &ctxErr)
+	require.Error(t, err)
+	require.Empty(t, resolver.hashToMetaStrBytes)
+	require.Empty(t, resolver.dynamicIDToEnumString)
+}
+
+func TestMetaStringResolverRejectsOversizedLengthBeforeAllocation(t *testing.T) {
+	resolver := NewMetaStringResolver()
+	buffer := NewByteBuffer(nil)
+	buffer.WriteVarUint32Small7(uint32(MaxInt16+1) << 1)
+	buffer.SetReaderIndex(0)
+
+	var ctxErr Error
+	_, err := resolver.ReadMetaStringBytes(buffer, &ctxErr)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "meta string length")
+	require.Empty(t, resolver.hashToMetaStrBytes)
+	require.Empty(t, resolver.smallHashToMetaStrBytes)
+	require.Empty(t, resolver.dynamicIDToEnumString)
+}
+
+func TestMetaStringResolverSmallCacheKeyIncludesLengthAndEncoding(t *testing.T) {
+	resolver := NewMetaStringResolver()
+
+	oneByte := NewByteBuffer(nil)
+	oneByte.WriteVarUint32Small7(1 << 1)
+	oneByte.WriteByte(byte(meta.UTF_8))
+	oneByte.WriteByte(1)
+	oneByte.SetReaderIndex(0)
+	var oneErr Error
+	first, err := resolver.ReadMetaStringBytes(oneByte, &oneErr)
+	require.NoError(t, err)
+	require.Equal(t, []byte{1}, first.Data)
+
+	twoBytes := NewByteBuffer(nil)
+	twoBytes.WriteVarUint32Small7(2 << 1)
+	twoBytes.WriteByte(byte(meta.UTF_8))
+	twoBytes.Write([]byte{1, 0})
+	twoBytes.SetReaderIndex(0)
+	var twoErr Error
+	second, err := resolver.ReadMetaStringBytes(twoBytes, &twoErr)
+	require.NoError(t, err)
+	require.Equal(t, []byte{1, 0}, second.Data)
+	require.NotSame(t, first, second)
+
+	differentEncoding := NewByteBuffer(nil)
+	differentEncoding.WriteVarUint32Small7(1 << 1)
+	differentEncoding.WriteByte(byte(meta.LOWER_SPECIAL))
+	differentEncoding.WriteByte(1)
+	differentEncoding.SetReaderIndex(0)
+	var encodingErr Error
+	third, err := resolver.ReadMetaStringBytes(differentEncoding, &encodingErr)
+	require.NoError(t, err)
+	require.Equal(t, []byte{1}, third.Data)
+	require.Equal(t, meta.LOWER_SPECIAL, third.Encoding)
+	require.NotSame(t, first, third)
+	require.Len(t, resolver.smallHashToMetaStrBytes, 3)
+}
+
+func TestComputeMetaStringHashIncludesSmallLength(t *testing.T) {
+	require.NotEqual(
+		t,
+		ComputeMetaStringHash([]byte{1}, meta.UTF_8),
+		ComputeMetaStringHash([]byte{1, 0}, meta.UTF_8),
+	)
+	require.NotEqual(
+		t,
+		ComputeMetaStringHash([]byte{1}, meta.UTF_8),
+		ComputeMetaStringHash([]byte{1}, meta.LOWER_SPECIAL),
+	)
+}
+
+func TestMetaStringResolverReadCachesAreCapped(t *testing.T) {
+	resolver := NewMetaStringResolver()
+	smallKey := smallMetaStringKey{v1: 1, v2: 0, compactKey: byte(meta.UTF_8)}
+	for i := 0; i < maxCachedMetaStrings; i++ {
+		resolver.smallHashToMetaStrBytes[smallMetaStringKey{
+			v1:         int64(i + 2),
+			v2:         0,
+			compactKey: byte(meta.UTF_8),
+		}] =
+			NewMetaStringBytes([]byte{byte(i)}, int64(i+2)<<8)
+		resolver.hashToMetaStrBytes[int64(i+2)<<8] =
+			NewMetaStringBytes([]byte("0123456789abcdefg"), int64(i+2)<<8)
+	}
+
+	smallBuffer := NewByteBuffer(nil)
+	smallBuffer.WriteVarUint32Small7(1 << 1)
+	smallBuffer.WriteByte(byte(meta.UTF_8))
+	smallBuffer.WriteByte(1)
+	smallBuffer.SetReaderIndex(0)
+	var smallErr Error
+	_, err := resolver.ReadMetaStringBytes(smallBuffer, &smallErr)
+	require.NoError(t, err)
+	require.Len(t, resolver.smallHashToMetaStrBytes, maxCachedMetaStrings)
+	require.NotContains(t, resolver.smallHashToMetaStrBytes, smallKey)
+
+	largeData := []byte("0123456789abcdefg")
+	largeHash := ComputeMetaStringHash(largeData, meta.UTF_8)
+	largeBuffer := NewByteBuffer(nil)
+	largeBuffer.WriteVarUint32Small7(uint32(len(largeData)) << 1)
+	require.NoError(t, binary.Write(largeBuffer, binary.LittleEndian, largeHash))
+	largeBuffer.Write(largeData)
+	largeBuffer.SetReaderIndex(0)
+	var largeErr Error
+	_, err = resolver.ReadMetaStringBytes(largeBuffer, &largeErr)
+	require.NoError(t, err)
+	require.Len(t, resolver.hashToMetaStrBytes, maxCachedMetaStrings)
+	require.NotContains(t, resolver.hashToMetaStrBytes, largeHash)
 }

@@ -86,6 +86,9 @@ export class BinaryReader {
   }
 
   readSkip(len: number) {
+    if (len < 0 || len > this.byteLength - this.cursor) {
+      throw new Error("Insufficient bytes to skip");
+    }
     this.cursor += len;
   }
 
@@ -188,20 +191,32 @@ export class BinaryReader {
   }
 
   stringUtf8At(start: number, len: number) {
-    return this.platformBuffer.toString("utf8", start, start + len);
+    if (start < 0 || len < 0 || start > this.byteLength - len) {
+      throw new Error("Insufficient bytes for UTF-8 string");
+    }
+    const end = start + len;
+    return this.platformBuffer.toString("utf8", start, end);
   }
 
   stringUtf8(len: number) {
-    const result = this.platformBuffer.toString(
-      "utf8",
-      this.cursor,
-      this.cursor + len,
-    );
+    if (len < 0 || len > this.byteLength - this.cursor) {
+      throw new Error("Insufficient bytes for UTF-8 string");
+    }
+    const end = this.cursor + len;
+    // JavaScript intentionally preserves platform UTF-8 replacement behavior; Rust is the runtime
+    // that provides checked UTF-8 string reads by default.
+    const result = this.platformBuffer.toString("utf8", this.cursor, end);
     this.cursor += len;
     return result;
   }
 
   stringUtf16LE(len: number) {
+    if (len < 0 || len > this.byteLength - this.cursor) {
+      throw new Error("Insufficient bytes for UTF-16LE string");
+    }
+    if ((len & 1) !== 0) {
+      throw new Error("UTF-16LE string length must be even");
+    }
     const result = this.platformBuffer.toString(
       "utf16le",
       this.cursor,
@@ -223,11 +238,14 @@ export class BinaryReader {
       case UTF16:
         return this.stringUtf16LE(len);
       default:
-        break;
+        throw new Error(`Unsupported string encoding: ${type}`);
     }
   }
 
   stringLatin1(len: number) {
+    if (len < 0 || len > this.byteLength - this.cursor) {
+      throw new Error("Insufficient bytes for Latin1 string");
+    }
     if (this.sliceStringEnable) {
       return this.stringLatin1Fast(len);
     }
@@ -247,6 +265,9 @@ export class BinaryReader {
   }
 
   buffer(len: number) {
+    if (len < 0 || len > this.byteLength - this.cursor) {
+      throw new Error("Insufficient bytes for buffer");
+    }
     const result = alloc(len);
     this.platformBuffer.copy(result, 0, this.cursor, this.cursor + len);
     this.cursor += len;
@@ -254,12 +275,18 @@ export class BinaryReader {
   }
 
   bufferRef(len: number) {
+    if (len < 0 || len > this.byteLength - this.cursor) {
+      throw new Error("Insufficient bytes for buffer reference");
+    }
     const result = this.platformBuffer.subarray(this.cursor, this.cursor + len);
     this.cursor += len;
     return result;
   }
 
   bufferRefAt(start: number, len: number) {
+    if (start < 0 || len < 0 || start > this.byteLength - len) {
+      throw new Error("Insufficient bytes for buffer reference");
+    }
     return this.platformBuffer.subarray(start, start + len);
   }
 

@@ -465,6 +465,36 @@ func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
 	require.NotContains(t, fory.typeResolver.defIdToTypeDef, header)
 }
 
+func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {
+	fory := NewFory(WithCompatible(true))
+	require.NoError(t, fory.RegisterNamedStruct(SimpleStruct{}, "example.SimpleStruct"))
+	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
+	require.NoError(t, err)
+	require.NotNil(t, typeDef.nsName)
+	require.NotNil(t, typeDef.typeName)
+
+	nameKey := nsTypeKey{typeDef.nsName.Hashcode, typeDef.typeName.Hashcode}
+	delete(fory.typeResolver.nsTypeToTypeInfo, nameKey)
+	info := fory.typeResolver.namedTypeToTypeInfo[[2]string{"example", "SimpleStruct"}]
+	require.NotNil(t, info)
+	for i := 0; len(fory.typeResolver.nsTypeToTypeInfo) < maxCachedNamedTypeInfos; i++ {
+		fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{int64(i + 1), int64(i + 2)}] = info
+	}
+	require.NotContains(t, fory.typeResolver.nsTypeToTypeInfo, nameKey)
+
+	buffer := NewByteBuffer(nil)
+	readErr := &Error{}
+	typeDef.writeTypeDef(buffer, readErr)
+	require.NoError(t, readErr.CheckError())
+	header := buffer.ReadInt64(readErr)
+	require.NoError(t, readErr.CheckError())
+	decoded := readTypeDef(fory, buffer, header, readErr)
+	require.NoError(t, readErr.CheckError())
+	require.NotNil(t, decoded)
+	require.Len(t, fory.typeResolver.nsTypeToTypeInfo, maxCachedNamedTypeInfos)
+	require.NotContains(t, fory.typeResolver.nsTypeToTypeInfo, nameKey)
+}
+
 func TestTypeDefRejectsNamespaceLengthBeyondMetadata(t *testing.T) {
 	fory := NewFory()
 	meta := NewByteBuffer(nil)

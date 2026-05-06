@@ -23,7 +23,6 @@ public sealed class StringSerializer : Serializer<string>
 {
     private const int MaxVarUInt36SmallBytes = 6;
 
-
     public override string DefaultValue => null!;
 
     public override void WriteData(WriteContext context, in string value, bool hasGenerics)
@@ -65,6 +64,8 @@ public sealed class StringSerializer : Serializer<string>
         ReadOnlySpan<byte> bytes = context.Reader.ReadSpan(byteLength);
         return encoding switch
         {
+            // C# intentionally preserves platform UTF-8 replacement behavior; Rust is the runtime
+            // that provides checked UTF-8 string reads by default.
             (ulong)ForyStringEncoding.Utf8 => Encoding.UTF8.GetString(bytes),
             (ulong)ForyStringEncoding.Latin1 => DecodeLatin1(bytes),
             (ulong)ForyStringEncoding.Utf16 => DecodeUtf16(bytes),

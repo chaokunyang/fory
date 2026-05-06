@@ -827,15 +827,15 @@ public final class MemoryBuffer {
   }
 
   private int continueWriteVarUInt32Small7(int value) {
-    long encoded = (value & 0x7F);
+    int encoded = (value & 0x7F);
     encoded |= (((value & 0x3f80) << 1) | 0x80);
     int writerIdx = writerIndex;
     if (value >>> 14 == 0) {
-      _unsafePutInt32(writerIdx, (int) encoded);
+      _unsafePutInt32(writerIdx, encoded);
       writerIndex += 2;
       return 2;
     }
-    int diff = continuePutVarInt36(writerIdx, encoded, value);
+    int diff = continuePutVarUInt32(writerIdx, encoded, value);
     writerIndex += diff;
     return diff;
   }
@@ -1811,7 +1811,7 @@ public final class MemoryBuffer {
     int readIdx = readerIndex;
     int result;
     if (size - readIdx < 5) {
-      result = (int) readVarUint36Slow();
+      result = readVarUInt32Slow();
     } else {
       long address = this.address;
       // | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits |
@@ -1835,7 +1835,11 @@ public final class MemoryBuffer {
             // 0xfe00000: 0b1111111 << 21
             result |= (fourByteValue >>> 3) & 0xfe00000;
             if ((fourByteValue & 0x80000000) != 0) {
-              result |= (UNSAFE.getByte(heapMemory, address + readIdx++) & 0x7F) << 28;
+              int fifthByte = UNSAFE.getByte(heapMemory, address + readIdx++) & 0xFF;
+              if ((fifthByte & 0xF0) != 0) {
+                throwMalformedVarUInt32(fifthByte);
+              }
+              result |= fifthByte << 28;
             }
           }
         }
@@ -1854,7 +1858,7 @@ public final class MemoryBuffer {
     int readIdx = readerIndex;
     int result;
     if (size - readIdx < 5) {
-      result = (int) readVarUint36Slow();
+      result = readVarUInt32Slow();
     } else {
       long address = this.address;
       int fourByteValue = Integer.reverseBytes(UNSAFE.getInt(heapMemory, address + readIdx));
@@ -1877,7 +1881,11 @@ public final class MemoryBuffer {
             // 0xfe00000: 0b1111111 << 21
             result |= (fourByteValue >>> 3) & 0xfe00000;
             if ((fourByteValue & 0x80000000) != 0) {
-              result |= (UNSAFE.getByte(heapMemory, address + readIdx++) & 0x7F) << 28;
+              int fifthByte = UNSAFE.getByte(heapMemory, address + readIdx++) & 0xFF;
+              if ((fifthByte & 0xF0) != 0) {
+                throwMalformedVarUInt32(fifthByte);
+              }
+              result |= fifthByte << 28;
             }
           }
         }
@@ -1956,11 +1964,45 @@ public final class MemoryBuffer {
     return result;
   }
 
+  private int readVarUInt32Slow() {
+    int b = readByte() & 0xFF;
+    int result = b & 0x7F;
+    // Note:
+    //  Loop are not used here to improve performance.
+    //  We manually unroll the loop for better performance.
+    // noinspection Duplicates
+    if ((b & 0x80) != 0) {
+      b = readByte() & 0xFF;
+      result |= (b & 0x7F) << 7;
+      if ((b & 0x80) != 0) {
+        b = readByte() & 0xFF;
+        result |= (b & 0x7F) << 14;
+        if ((b & 0x80) != 0) {
+          b = readByte() & 0xFF;
+          result |= (b & 0x7F) << 21;
+          if ((b & 0x80) != 0) {
+            b = readByte() & 0xFF;
+            if ((b & 0xF0) != 0) {
+              throwMalformedVarUInt32(b);
+            }
+            result |= b << 28;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  private static void throwMalformedVarUInt32(int fifthByte) {
+    throw new IllegalArgumentException(
+        "Malformed varuint32 fifth byte " + fifthByte + " exceeds 32 bits");
+  }
+
   /** Reads the 1-5 byte int part of a non-negative varint. */
   public int readVarUInt32() {
     int readIdx = readerIndex;
     if (size - readIdx < 5) {
-      return (int) readVarUint36Slow();
+      return readVarUInt32Slow();
     }
     // | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits |
     int fourByteValue = _unsafeGetInt32(readIdx);
@@ -1983,7 +2025,11 @@ public final class MemoryBuffer {
           // 0xfe00000: 0b1111111 << 21
           result |= (fourByteValue >>> 3) & 0xfe00000;
           if ((fourByteValue & 0x80000000) != 0) {
-            result |= (UNSAFE.getByte(heapMemory, address + readIdx++) & 0x7F) << 28;
+            int fifthByte = UNSAFE.getByte(heapMemory, address + readIdx++) & 0xFF;
+            if ((fifthByte & 0xF0) != 0) {
+              throwMalformedVarUInt32(fifthByte);
+            }
+            result |= fifthByte << 28;
           }
         }
       }
@@ -2031,7 +2077,7 @@ public final class MemoryBuffer {
       readerIndex = readIdx;
       return value;
     } else {
-      return (int) readVarUint36Slow();
+      return readVarUInt32Slow();
     }
   }
 
@@ -2044,7 +2090,11 @@ public final class MemoryBuffer {
       readIdx++;
       value |= (bulkRead >>> 3) & 0xfe00000;
       if ((bulkRead & 0x80000000) != 0) {
-        value |= (UNSAFE.getByte(heapMemory, address + readIdx++) & 0x7F) << 28;
+        int fifthByte = UNSAFE.getByte(heapMemory, address + readIdx++) & 0xFF;
+        if ((fifthByte & 0xF0) != 0) {
+          throwMalformedVarUInt32(fifthByte);
+        }
+        value |= fifthByte << 28;
       }
     }
     readerIndex = readIdx;
@@ -2440,7 +2490,7 @@ public final class MemoryBuffer {
       }
       readerIndex = readIdx;
     } else {
-      binarySize = (int) readVarUint36Slow();
+      binarySize = readVarUInt32Slow();
       readIdx = readerIndex;
     }
     int diff = size - readIdx;
@@ -2459,7 +2509,11 @@ public final class MemoryBuffer {
       readIdx++;
       binarySize |= (bulkRead >>> 3) & 0xfe00000;
       if ((bulkRead & 0x80000000) != 0) {
-        binarySize |= (UNSAFE.getByte(heapMemory, address + readIdx++) & 0x7F) << 28;
+        int fifthByte = UNSAFE.getByte(heapMemory, address + readIdx++) & 0xFF;
+        if ((fifthByte & 0xF0) != 0) {
+          throwMalformedVarUInt32(fifthByte);
+        }
+        binarySize |= fifthByte << 28;
       }
     }
     int diff = size - readIdx;

@@ -18,7 +18,6 @@
 package fory
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"github.com/apache/fory/go/fory/meta"
@@ -28,9 +27,9 @@ import (
 const (
 	SmallStringThreshold         = 16 // Maximum length for "small" strings
 	DefaultDynamicWriteMetaStrID = -1 // Default ID for dynamic strings
+	maxCachedMetaStrings         = 8192
+	smallMetaStringEncodingBits  = 4
 )
-
-type Encoding int8
 
 type MetaStringBytes struct {
 	Data                 []byte
@@ -60,14 +59,22 @@ func (a *MetaStringBytes) Hash() int64 {
 
 type pair [2]int64
 
+// Mirrors Java's small MetaString read cache key: two packed byte words plus one
+// compact length/encoding byte. The packed words are zero-padded and are not
+// exact byte identity by themselves.
+type smallMetaStringKey struct {
+	v1         int64
+	v2         int64
+	compactKey byte
+}
+
 type MetaStringResolver struct {
-	dynamicWriteStringID     int16                                 // Counter for dynamic string IDs
-	dynamicWrittenEnumString []*MetaStringBytes                    // Cache of written strings
-	dynamicIDToEnumString    []*MetaStringBytes                    // Cache of read strings by ID
-	hashToMetaStrBytes       map[int64]*MetaStringBytes            // Large string lookup
-	smallHashToMetaStrBytes  map[pair]*MetaStringBytes             // Small string lookup
-	enumStrSet               map[*MetaStringBytes]struct{}         // String set for deduplication
-	metaStrToMetaStrBytes    map[*meta.MetaString]*MetaStringBytes // Conversion cache
+	dynamicWriteStringID     int16                                   // Counter for dynamic string IDs
+	dynamicWrittenEnumString []*MetaStringBytes                      // Cache of written strings
+	dynamicIDToEnumString    []*MetaStringBytes                      // Cache of read strings by ID
+	hashToMetaStrBytes       map[int64]*MetaStringBytes              // Large string lookup
+	smallHashToMetaStrBytes  map[smallMetaStringKey]*MetaStringBytes // Small string lookup
+	metaStrToMetaStrBytes    map[*meta.MetaString]*MetaStringBytes   // Conversion cache
 }
 
 var emptyMetaStringBytes = NewMetaStringBytes([]byte{}, 256)
@@ -75,8 +82,7 @@ var emptyMetaStringBytes = NewMetaStringBytes([]byte{}, 256)
 func NewMetaStringResolver() *MetaStringResolver {
 	return &MetaStringResolver{
 		hashToMetaStrBytes:      make(map[int64]*MetaStringBytes),
-		smallHashToMetaStrBytes: make(map[pair]*MetaStringBytes),
-		enumStrSet:              make(map[*MetaStringBytes]struct{}),
+		smallHashToMetaStrBytes: make(map[smallMetaStringKey]*MetaStringBytes),
 		metaStrToMetaStrBytes:   make(map[*meta.MetaString]*MetaStringBytes),
 	}
 }
@@ -121,20 +127,27 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 		return nil, *ctxErr
 	}
 
-	length := int16(header >> 1)
+	lengthValue := header >> 1
 	if header&1 != 0 {
-		index := int(length) - 1
+		if lengthValue == 0 || uint64(lengthValue) > uint64(MaxInt) {
+			return nil, fmt.Errorf("invalid dynamic index: %d", lengthValue)
+		}
+		index := int(lengthValue) - 1
 		if index < 0 || index >= len(r.dynamicIDToEnumString) {
 			return nil, fmt.Errorf("invalid dynamic index: %d", index)
 		}
 		return r.dynamicIDToEnumString[index], nil
 	}
+	if lengthValue > uint32(MaxInt16) {
+		return nil, fmt.Errorf("meta string length %d exceeds maximum supported length %d", lengthValue, MaxInt16)
+	}
+	length := int(lengthValue)
 
 	var (
 		hashcode int64
-		key      pair
+		key      smallMetaStringKey
 		data     []byte
-		encoding Encoding
+		encoding meta.Encoding
 	)
 
 	// Small string optimization
@@ -143,9 +156,12 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 			r.dynamicIDToEnumString = append(r.dynamicIDToEnumString, emptyMetaStringBytes)
 			return emptyMetaStringBytes, nil
 		}
-		// ReadData encoding and data
 		encByte := buf.ReadByte(ctxErr)
-		encoding = Encoding(encByte)
+		var encErr error
+		encoding, encErr = meta.EncodingFromByte(encByte)
+		if encErr != nil {
+			return nil, encErr
+		}
 
 		data = make([]byte, length)
 		_, err := buf.Read(data)
@@ -153,28 +169,32 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 			return nil, err
 		}
 
-		// Compute composite hash key
-		if length <= 8 {
-			key[0] = bytesToInt64(data)
-		} else {
-			err := binary.Read(bytes.NewReader(data[:8]), binary.LittleEndian, &key[0])
-			if err != nil {
-				return nil, err
-			}
-			key[1] = bytesToInt64(data[8:])
+		words := smallMetaStringWords(data)
+		key = smallMetaStringKey{
+			v1:         words[0],
+			v2:         words[1],
+			compactKey: byte(((length - 1) << smallMetaStringEncodingBits) | int(encoding)),
 		}
-		hashcode = ((key[0]*31 + key[1]) >> 8 << 8) | int64(encoding)
+		hashcode = computeSmallMetaStringHash(words, length, encoding)
 	} else {
 		// Large string handling
 		err := binary.Read(buf, binary.LittleEndian, &hashcode)
 		if err != nil {
 			return nil, err
 		}
-		encoding = Encoding(hashcode & 0xFF)
+		var encErr error
+		encoding, encErr = meta.EncodingFromByte(byte(hashcode & 0xFF))
+		if encErr != nil {
+			return nil, encErr
+		}
 		data = make([]byte, length)
 		_, err = buf.Read(data)
 		if err != nil {
 			return nil, err
+		}
+		canonicalHashcode := ComputeMetaStringHash(data, encoding)
+		if canonicalHashcode != hashcode {
+			return nil, fmt.Errorf("meta string body hash mismatch")
 		}
 	}
 
@@ -191,14 +211,18 @@ func (r *MetaStringResolver) ReadMetaStringBytes(buf *ByteBuffer, ctxErr *Error)
 		}
 	}
 
-	// Create and cache new string instance
+	// Cache only after the current body has been parsed and, for large bodies, hash-validated.
+	// Header-keyed hits stay on the fast path; forged headers cannot poison the shared cache.
 	m := NewMetaStringBytes(data, hashcode)
 	if length <= SmallStringThreshold {
-		r.smallHashToMetaStrBytes[key] = m
+		if len(r.smallHashToMetaStrBytes) < maxCachedMetaStrings {
+			r.smallHashToMetaStrBytes[key] = m
+		}
 	} else {
-		r.hashToMetaStrBytes[hashcode] = m
+		if len(r.hashToMetaStrBytes) < maxCachedMetaStrings {
+			r.hashToMetaStrBytes[hashcode] = m
+		}
 	}
-	r.enumStrSet[m] = struct{}{}
 	r.dynamicIDToEnumString = append(r.dynamicIDToEnumString, m)
 
 	return m, nil
@@ -222,14 +246,8 @@ func (r *MetaStringResolver) GetMetaStrBytes(metastr *meta.MetaString) *MetaStri
 	}
 	if length <= SmallStringThreshold {
 		// Small string: use direct bytes as hash components
-		var v1, v2 int64
-		if length <= 8 {
-			v1 = bytesToInt64(data)
-		} else {
-			binary.Read(bytes.NewReader(data[:8]), binary.LittleEndian, &v1)
-			v2 = bytesToInt64(data[8:])
-		}
-		hashcode = ((v1*31 + v2) >> 8 << 8) | int64(metastr.GetEncoding())
+		words := smallMetaStringWords(data)
+		hashcode = computeSmallMetaStringHash(words, length, metastr.GetEncoding())
 	} else {
 		// Large string: use MurmurHash3
 		h64 := Murmur3Sum64WithSeed(data, 47)
@@ -253,14 +271,8 @@ func ComputeMetaStringHash(data []byte, encoding meta.Encoding) int64 {
 		hashcode |= int64(encoding)
 	} else if length <= SmallStringThreshold {
 		// Small string: use direct bytes as hash components
-		var v1, v2 int64
-		if length <= 8 {
-			v1 = bytesToInt64(data)
-		} else {
-			binary.Read(bytes.NewReader(data[:8]), binary.LittleEndian, &v1)
-			v2 = bytesToInt64(data[8:])
-		}
-		hashcode = ((v1*31 + v2) >> 8 << 8) | int64(encoding)
+		words := smallMetaStringWords(data)
+		hashcode = computeSmallMetaStringHash(words, length, encoding)
 	} else {
 		// Large string: use MurmurHash3
 		h64 := Murmur3Sum64WithSeed(data, 47)
@@ -315,4 +327,16 @@ func bytesToInt64(b []byte) int64 {
 		v |= int64(b[i]) << (8 * i)
 	}
 	return v
+}
+
+func smallMetaStringWords(data []byte) pair {
+	if len(data) <= 8 {
+		return pair{bytesToInt64(data), 0}
+	}
+	return pair{int64(binary.LittleEndian.Uint64(data[:8])), bytesToInt64(data[8:])}
+}
+
+func computeSmallMetaStringHash(words pair, length int, encoding meta.Encoding) int64 {
+	hash := uint64(words[0]*31+words[1]) ^ (uint64(length) << 56)
+	return int64((hash & 0xffffffffffffff00) | uint64(encoding))
 }

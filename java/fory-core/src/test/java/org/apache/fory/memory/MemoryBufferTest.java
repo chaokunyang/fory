@@ -20,6 +20,7 @@
 package org.apache.fory.memory;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
@@ -273,6 +274,24 @@ public class MemoryBufferTest {
       checkVarUInt32(buf, Short.MIN_VALUE);
       checkVarUInt32(buf, Integer.MIN_VALUE);
     }
+  }
+
+  @Test
+  public void testReadVarUInt32RejectsMalformedFifthByte() {
+    byte[] malformed = new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x10};
+    assertThrows(IllegalArgumentException.class, () -> MemoryUtils.wrap(malformed).readVarUInt32());
+    assertThrows(
+        IllegalArgumentException.class, () -> MemoryUtils.wrap(malformed).readVarUInt32Small7());
+    assertThrows(
+        IllegalArgumentException.class, () -> MemoryUtils.wrap(malformed).readVarUInt32Small14());
+    assertThrows(IllegalArgumentException.class, () -> MemoryUtils.wrap(malformed).readVarInt32());
+    assertThrows(
+        IllegalArgumentException.class, () -> MemoryUtils.wrap(malformed).readBinarySize());
+
+    byte[] maxUInt32 = new byte[] {(byte) 0xff, (byte) 0xff, (byte) 0xff, (byte) 0xff, 0x0f};
+    assertEquals(MemoryUtils.wrap(maxUInt32).readVarUInt32(), -1);
+    assertEquals(MemoryUtils.wrap(maxUInt32).readVarUInt32Small7(), -1);
+    assertEquals(MemoryUtils.wrap(maxUInt32).readVarUInt32Small14(), -1);
   }
 
   private void checkVarUInt32(MemoryBuffer buf, int value, int bytesWritten) {

@@ -19,7 +19,7 @@
 
 import { fromUint8Array } from '../packages/core/lib/platformBuffer';
 import { BinaryReader } from '../packages/core/lib/reader';
-import { Config, RefFlags } from '../packages/core/lib/type';
+import { Config, RefFlags, UTF8, UTF16 } from '../packages/core/lib/type';
 import { BinaryWriter } from '../packages/core/lib/writer';
 import { describe, expect, test } from '@jest/globals';
 
@@ -254,6 +254,19 @@ function num2Bin(num: number) {
             }
         });
 
+        test('should reject malformed string payloads', () => {
+            const reader = new BinaryReader(config);
+
+            reader.reset(new Uint8Array([(4 << 2) | UTF8, 0x61]));
+            expect(() => reader.stringWithHeader()).toThrow(/Insufficient bytes for UTF-8 string/);
+
+            reader.reset(new Uint8Array([(1 << 2) | UTF16, 0]));
+            expect(() => reader.stringWithHeader()).toThrow(/UTF-16LE string length must be even/);
+
+            reader.reset(new Uint8Array([3]));
+            expect(() => reader.stringWithHeader()).toThrow(/Unsupported string encoding/);
+        });
+
         test('should buffer work', () => {
             const writer = new BinaryWriter(config);
             writer.buffer(new Uint8Array([1, 2, 3, 4, 5]));
@@ -266,6 +279,14 @@ function num2Bin(num: number) {
             expect(ab[2]).toBe(3);
             expect(ab[3]).toBe(4);
             expect(ab[4]).toBe(5);
+        });
+
+        test('should reject truncated buffer payloads', () => {
+            const reader = new BinaryReader(config);
+            reader.reset(new Uint8Array([1, 2]));
+            expect(() => reader.buffer(3)).toThrow(/Insufficient bytes for buffer/);
+            expect(() => reader.bufferRef(3)).toThrow(/Insufficient bytes for buffer reference/);
+            expect(() => reader.bufferRefAt(1, 2)).toThrow(/Insufficient bytes for buffer reference/);
         });
 
         test('should bufferWithoutMemCheck work', () => {

@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotSame;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.io.ObjectStreamException;
@@ -31,6 +32,7 @@ import java.lang.reflect.Proxy;
 import java.util.function.Function;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.exception.InsecureException;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.testng.annotations.Test;
 
@@ -59,6 +61,30 @@ public class JdkProxySerializerTest extends ForyTestBase {
                 fory.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
     Function deserializedFunction = (Function) fory.deserialize(fory.serialize(function));
     assertEquals(deserializedFunction.apply(null), 1);
+  }
+
+  @Test
+  public void testJdkProxyInterfaceClassHonorsTypeCheckerFalse() {
+    Fory writer =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                writer.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
+    byte[] bytes = writer.serialize(function);
+
+    Fory reader =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withTypeChecker((resolver, className) -> !className.equals(Function.class.getName()))
+            .build();
+    assertThrows(InsecureException.class, () -> reader.deserialize(bytes));
   }
 
   @Test(dataProvider = "foryCopyConfig")

@@ -34,6 +34,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.apache.fory.builder.MetaSharedCodecBuilder;
 import org.apache.fory.config.ForyBuilder;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -114,12 +115,20 @@ public class TypeDef implements Serializable {
   }
 
   public static void skipTypeDef(MemoryBuffer buffer, long id) {
-    // Header-cache hits use the validated header as the cache key. The current body is skipped by
-    // its declared size; body hash validation belongs to the parse-before-cache-publication path.
+    // Header-cache hits intentionally treat the current body as opaque bytes and skip by the size
+    // in
+    // the current header. Parsed TypeDefs are published to the cache only after successful body
+    // parse
+    // and 52-bit body-hash validation; cache hits must not reparse or rehash that body.
     int size = (int) (id & META_SIZE_MASKS);
     if (size == META_SIZE_MASKS) {
-      size += buffer.readVarUInt32Small14();
+      int extendedSize = buffer.readVarUInt32Small14();
+      if (extendedSize < 0 || extendedSize > Integer.MAX_VALUE - size) {
+        throw new DeserializationException("Invalid TypeDef metadata size " + extendedSize);
+      }
+      size += extendedSize;
     }
+    buffer.checkReadableBytes(size);
     buffer.increaseReaderIndex(size);
   }
 

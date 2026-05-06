@@ -467,11 +467,13 @@ public final class ReadContext {
       } else {
         size = buffer.readVarUInt32();
       }
-      if (buffer.readerIndex() + size > buffer.size() && buffer.getStreamReader() != null) {
-        buffer.getStreamReader().fillBuffer(buffer.readerIndex() + size - buffer.size());
+      if (size < 0) {
+        throw new IllegalArgumentException("Buffer object size must be non-negative: " + size);
       }
-      MemoryBuffer slice = buffer.slice(buffer.readerIndex(), size);
-      buffer.readerIndex(buffer.readerIndex() + size);
+      buffer.checkReadableBytes(size);
+      int readerIndex = buffer.readerIndex();
+      MemoryBuffer slice = buffer.slice(readerIndex, size);
+      buffer.readerIndex(readerIndex + size);
       return slice;
     }
     Preconditions.checkArgument(outOfBandBuffers.hasNext());

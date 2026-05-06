@@ -1096,6 +1096,9 @@ impl TypeMeta {
         reader: &mut Reader,
         header: i64,
     ) -> Result<(), Error> {
+        // Header-cache hits intentionally treat the current body as opaque bytes and skip by the
+        // current header size. Parsed TypeMeta entries are cached only after body parse and hash
+        // validation; cache hits must not reparse or rehash that body.
         let mut meta_size = (header & META_SIZE_MASK) as usize;
         if meta_size == META_SIZE_MASK as usize {
             meta_size += reader.read_var_u32()? as usize;

@@ -67,6 +67,22 @@ impl std::hash::Hash for MetaString {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rejects_invalid_utf8_meta_string() {
+        let err = TYPE_NAME_DECODER
+            .decode(&[0xff], Encoding::Utf8)
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("invalid UTF-8 meta string"),
+            "unexpected error: {err}"
+        );
+    }
+}
+
 static EMPTY: OnceLock<MetaString> = OnceLock::new();
 
 impl MetaString {
@@ -478,7 +494,9 @@ impl MetaStringDecoder {
                     Encoding::AllToLowerSpecial => {
                         self.decode_rep_all_to_lower_special(encoded_data)
                     }
-                    Encoding::Utf8 => Ok(String::from_utf8_lossy(encoded_data).into_owned()),
+                    Encoding::Utf8 => std::str::from_utf8(encoded_data)
+                        .map(str::to_owned)
+                        .map_err(|_| Error::encoding_error("invalid UTF-8 meta string")),
                 }
             }
         }?;

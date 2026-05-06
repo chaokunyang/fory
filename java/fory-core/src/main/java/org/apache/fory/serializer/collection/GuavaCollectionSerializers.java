@@ -79,7 +79,7 @@ public class GuavaCollectionSerializers {
     @Override
     public Collection newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
     }
@@ -112,7 +112,7 @@ public class GuavaCollectionSerializers {
     @Override
     public Collection newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       return new CollectionContainer(numElements);
     }
@@ -146,7 +146,7 @@ public class GuavaCollectionSerializers {
     @Override
     public Collection newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       return new CollectionContainer<>(numElements);
     }
@@ -188,7 +188,7 @@ public class GuavaCollectionSerializers {
     @Override
     public Collection newCollection(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
       return new SortedCollectionContainer(comparator, numElements);
@@ -221,7 +221,7 @@ public class GuavaCollectionSerializers {
     @Override
     public Map newMap(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readMapSize(buffer);
       setNumElements(numElements);
       return new MapContainer(numElements);
     }
@@ -249,7 +249,7 @@ public class GuavaCollectionSerializers {
 
     @Override
     public T read(ReadContext readContext) {
-      int size = readContext.getBuffer().readVarUInt32Small7();
+      int size = readMapSize(readContext.getBuffer());
       Map map = new HashMap();
       readElements(readContext, size, map);
       return xnewInstance(map);
@@ -372,7 +372,7 @@ public class GuavaCollectionSerializers {
     @Override
     public Map newMap(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      int numElements = buffer.readVarUInt32Small7();
+      int numElements = readMapSize(buffer);
       setNumElements(numElements);
       Comparator comparator = (Comparator) readContext.readRef();
       return new SortedMapContainer<>(comparator, numElements);

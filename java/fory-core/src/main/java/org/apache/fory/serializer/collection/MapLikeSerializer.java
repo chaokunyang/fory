@@ -42,6 +42,7 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
@@ -80,6 +81,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   protected MethodHandle constructor;
   protected final Config config;
+  protected final int maxCollectionSize;
   protected final boolean supportCodegenHook;
   private final GenericType objType;
   // For subclass whose kv type are instantiated already, such as
@@ -107,6 +109,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
     super(typeResolver.getConfig(), cls, immutable);
     this.config = typeResolver.getConfig();
+    maxCollectionSize = config.maxCollectionSize();
     this.typeResolver = typeResolver;
     trackRef = typeResolver.getConfig().trackingRef();
     this.supportCodegenHook = supportCodegenHook;
@@ -954,7 +957,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
    */
   public Map newMap(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
-    numElements = buffer.readVarUInt32Small7();
+    numElements = readMapSize(buffer);
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -999,6 +1002,29 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
 
   public void setNumElements(int numElements) {
     this.numElements = numElements;
+  }
+
+  protected final int readMapSize(MemoryBuffer buffer) {
+    int numElements = buffer.readVarUInt32Small7();
+    checkMapSize(numElements);
+    return numElements;
+  }
+
+  protected final void checkMapSize(int numElements) {
+    // Keep this as direct primitive branches. Map reads are hot enough that
+    // Preconditions.checkArgument would add helper/varargs overhead on the valid path.
+    if (numElements < 0 || numElements > maxCollectionSize) {
+      throwInvalidMapSize(numElements);
+    }
+  }
+
+  private void throwInvalidMapSize(int numElements) {
+    if (numElements < 0) {
+      throw new DeserializationException("Map size must be non-negative: " + numElements);
+    } else {
+      throw new DeserializationException(
+          "Map size " + numElements + " exceeds max collection size " + maxCollectionSize);
+    }
   }
 
   public abstract T onMapCopy(Map map);

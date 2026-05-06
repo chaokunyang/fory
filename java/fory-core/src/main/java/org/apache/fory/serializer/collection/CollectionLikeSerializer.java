@@ -27,6 +27,7 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
@@ -46,6 +47,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private MethodHandle constructor;
   private int numElements;
   protected final Config config;
+  protected final int maxCollectionSize;
   protected final boolean supportCodegenHook;
   protected final TypeInfoHolder elementTypeInfoHolder;
   protected final TypeResolver typeResolver;
@@ -67,6 +69,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook) {
     super(typeResolver.getConfig(), cls);
     this.config = typeResolver.getConfig();
+    maxCollectionSize = config.maxCollectionSize();
     this.supportCodegenHook = supportCodegenHook;
     elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
     this.typeResolver = typeResolver;
@@ -76,6 +79,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       TypeResolver typeResolver, Class<T> cls, boolean supportCodegenHook, boolean immutable) {
     super(typeResolver.getConfig(), cls, immutable);
     this.config = typeResolver.getConfig();
+    maxCollectionSize = config.maxCollectionSize();
     this.supportCodegenHook = supportCodegenHook;
     elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
     this.typeResolver = typeResolver;
@@ -458,7 +462,7 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
    */
   public Collection newCollection(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
-    numElements = buffer.readVarUInt32Small7();
+    numElements = readCollectionSize(buffer);
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -535,6 +539,29 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
 
   protected void setNumElements(int numElements) {
     this.numElements = numElements;
+  }
+
+  protected final int readCollectionSize(MemoryBuffer buffer) {
+    int numElements = buffer.readVarUInt32Small7();
+    checkCollectionSize(numElements);
+    return numElements;
+  }
+
+  protected final void checkCollectionSize(int numElements) {
+    // Keep this as direct primitive branches. Collection reads are hot enough that
+    // Preconditions.checkArgument would add helper/varargs overhead on the valid path.
+    if (numElements < 0 || numElements > maxCollectionSize) {
+      throwInvalidCollectionSize(numElements);
+    }
+  }
+
+  private void throwInvalidCollectionSize(int numElements) {
+    if (numElements < 0) {
+      throw new DeserializationException("Collection size must be non-negative: " + numElements);
+    } else {
+      throw new DeserializationException(
+          "Collection size " + numElements + " exceeds max collection size " + maxCollectionSize);
+    }
   }
 
   public abstract T onCollectionRead(Collection collection);

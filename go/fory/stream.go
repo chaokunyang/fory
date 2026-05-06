@@ -92,41 +92,25 @@ func (is *InputStream) Shrink() {
 }
 
 // DeserializeFromStream reads the next object from the stream into the provided value.
-// It uses a shared ReadContext for the lifetime of the InputStream, clearing
-// temporary state between calls but preserving the buffer and TypeResolver state.
+// It preserves the stream buffer while clearing root-scoped read metadata between calls.
 func (f *Fory) DeserializeFromStream(is *InputStream, v any) error {
-
-	// We only reset the temporary read state (like refTracker and outOfBand buffers),
-	// NOT the buffer or the type mapping, which must persist.
-	defer func() {
-		f.readCtx.refReader.Reset()
-		f.readCtx.outOfBandBuffers = nil
-		f.readCtx.outOfBandIndex = 0
-		f.readCtx.err = Error{}
-		if f.readCtx.refResolver != nil {
-			f.readCtx.refResolver.resetRead()
-		}
-	}()
-
-	// Temporarily swap buffer
 	origBuffer := f.readCtx.buffer
 	f.readCtx.buffer = is.buffer
+	defer func() {
+		f.readCtx.buffer = origBuffer
+		f.resetReadState()
+	}()
 
 	readHeader(f.readCtx)
 	if f.readCtx.HasError() {
-		f.readCtx.buffer = origBuffer
 		return f.readCtx.TakeError()
 	}
 
 	target := reflect.ValueOf(v).Elem()
 	f.readCtx.ReadValue(target, RefModeTracking, true)
 	if f.readCtx.HasError() {
-		f.readCtx.buffer = origBuffer
 		return f.readCtx.TakeError()
 	}
-
-	// Restore original buffer
-	f.readCtx.buffer = origBuffer
 
 	return nil
 }

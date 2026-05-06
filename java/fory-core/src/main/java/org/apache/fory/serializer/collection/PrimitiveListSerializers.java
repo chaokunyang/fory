@@ -39,6 +39,7 @@ import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.resolver.TypeResolver;
@@ -52,10 +53,28 @@ import org.apache.fory.type.Types;
 /** Serializers for primitive list types. */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class PrimitiveListSerializers {
+  private static void throwBinarySizeLimitExceeded(long size, int maxBinarySize) {
+    throw new DeserializationException(
+        "Binary payload size " + size + " exceeds max binary size " + maxBinarySize);
+  }
+
+  private static void throwNegativeBinarySize(int size) {
+    throw new DeserializationException("Binary payload size must be non-negative: " + size);
+  }
+
+  private static void throwNegativeElementCount(int size) {
+    throw new DeserializationException("Primitive list size must be non-negative: " + size);
+  }
+
+  private static void throwUnalignedBinarySize(int size, int elemSize) {
+    throw new DeserializationException(
+        "Binary payload size " + size + " is not aligned to element size " + elemSize);
+  }
 
   private abstract static class PrimitiveListSerializer<T> extends CollectionLikeSerializer<T>
       implements Shareable {
     private final boolean denseArrayPayload;
+    protected final int maxBinarySize;
 
     private PrimitiveListSerializer(TypeResolver typeResolver, Class<T> cls) {
       this(typeResolver, cls, false);
@@ -65,6 +84,7 @@ public class PrimitiveListSerializers {
         TypeResolver typeResolver, Class<T> cls, boolean denseArrayPayload) {
       super(typeResolver, cls, false, false);
       this.denseArrayPayload = denseArrayPayload;
+      maxBinarySize = config.maxBinarySize();
     }
 
     @Override
@@ -104,6 +124,9 @@ public class PrimitiveListSerializers {
 
     protected final int readXlangListHeader(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
+      if (size < 0) {
+        throwNegativeElementCount(size);
+      }
       if (config.isXlang() && size > 0) {
         int flags = buffer.readByte();
         if (flags != CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL) {
@@ -114,21 +137,53 @@ public class PrimitiveListSerializers {
     }
 
     protected final int readOneByteHeader(MemoryBuffer buffer) {
+      int size;
       if (denseArrayPayload) {
-        return buffer.readVarUInt32Small7();
+        size = buffer.readVarUInt32Small7();
+      } else {
+        size = readXlangListHeader(buffer);
       }
-      return readXlangListHeader(buffer);
+      if (size < 0) {
+        throwNegativeBinarySize(size);
+      }
+      if (size > maxBinarySize) {
+        throwBinarySizeLimitExceeded(size, maxBinarySize);
+      }
+      if (size > buffer.remaining()) {
+        buffer.checkReadableBytes(size);
+      }
+      return size;
     }
 
     protected final int readFixedWidthHeader(MemoryBuffer buffer, int elemSize) {
+      int byteSize;
       if (denseArrayPayload) {
-        int byteSize = buffer.readVarUInt32Small7();
-        return byteSize / elemSize;
+        byteSize = buffer.readVarUInt32Small7();
+      } else if (config.isXlang()) {
+        int size = readXlangListHeader(buffer);
+        if (size > maxBinarySize / elemSize) {
+          throwBinarySizeLimitExceeded((long) size * elemSize, maxBinarySize);
+        }
+        byteSize = size * elemSize;
+        if (byteSize > buffer.remaining()) {
+          buffer.checkReadableBytes(byteSize);
+        }
+        return size;
+      } else {
+        byteSize = buffer.readVarUInt32Small7();
       }
-      if (config.isXlang()) {
-        return readXlangListHeader(buffer);
+      if (byteSize < 0) {
+        throwNegativeBinarySize(byteSize);
       }
-      int byteSize = buffer.readVarUInt32Small7();
+      if (byteSize % elemSize != 0) {
+        throwUnalignedBinarySize(byteSize, elemSize);
+      }
+      if (byteSize > maxBinarySize) {
+        throwBinarySizeLimitExceeded(byteSize, maxBinarySize);
+      }
+      if (byteSize > buffer.remaining()) {
+        buffer.checkReadableBytes(byteSize);
+      }
       return byteSize / elemSize;
     }
   }
@@ -306,6 +361,12 @@ public class PrimitiveListSerializers {
 
     private Int32List readInt32Compressed(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
+      if (size < 0) {
+        throwNegativeElementCount(size);
+      }
+      if (size > maxBinarySize / 4) {
+        throwBinarySizeLimitExceeded((long) size * 4, maxBinarySize);
+      }
       Int32List list = new Int32List(size);
       for (int i = 0; i < size; i++) {
         list.add(buffer.readVarInt32());
@@ -395,6 +456,12 @@ public class PrimitiveListSerializers {
 
     private Int64List readInt64Compressed(MemoryBuffer buffer, Int64Encoding longEncoding) {
       int size = buffer.readVarUInt32Small7();
+      if (size < 0) {
+        throwNegativeElementCount(size);
+      }
+      if (size > maxBinarySize / 8) {
+        throwBinarySizeLimitExceeded((long) size * 8, maxBinarySize);
+      }
       Int64List list = new Int64List(size);
       if (longEncoding == Int64Encoding.TAGGED) {
         for (int i = 0; i < size; i++) {
@@ -551,6 +618,12 @@ public class PrimitiveListSerializers {
 
     private UInt32List readUInt32Compressed(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
+      if (size < 0) {
+        throwNegativeElementCount(size);
+      }
+      if (size > maxBinarySize / 4) {
+        throwBinarySizeLimitExceeded((long) size * 4, maxBinarySize);
+      }
       UInt32List list = new UInt32List(size);
       for (int i = 0; i < size; i++) {
         list.add(buffer.readVarInt32());
@@ -640,6 +713,12 @@ public class PrimitiveListSerializers {
 
     private UInt64List readUInt64Compressed(MemoryBuffer buffer, Int64Encoding longEncoding) {
       int size = buffer.readVarUInt32Small7();
+      if (size < 0) {
+        throwNegativeElementCount(size);
+      }
+      if (size > maxBinarySize / 8) {
+        throwBinarySizeLimitExceeded((long) size * 8, maxBinarySize);
+      }
       UInt64List list = new UInt64List(size);
       if (longEncoding == Int64Encoding.TAGGED) {
         for (int i = 0; i < size; i++) {

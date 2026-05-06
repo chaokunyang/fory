@@ -133,6 +133,7 @@ test.md
 
 benchmarks/dart/profile_output
 **/*.fory.dart
+integration_tests/idl_tests/dart/.dart_tool/
 **/pubspec.lock
 
 **/tmp/*

@@ -25,7 +25,7 @@ import { describe, expect, test } from '@jest/globals';
 const skipableDescribe = (hps ? describe : describe.skip);
 
 skipableDescribe('hps', () => {
-    test.only('should isLatin1 work', () => {
+    test('should isLatin1 work', () => {
         const { serializeString } = hps!;
         for (let index = 0; index < 10000; index++) {
             const bf = Buffer.alloc(100);

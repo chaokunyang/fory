@@ -20,11 +20,13 @@
 package org.apache.fory.serializer;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -37,6 +39,10 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.test.bean.ArraysData;
 import org.apache.fory.type.BFloat16;
@@ -196,6 +202,21 @@ public class ArraySerializersTest extends ForyTestBase {
     copyCheck(fory, new Object[] {"str", 1});
   }
 
+  @Test
+  public void testObjectArrayReadRejectsOversizedElementCount() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withMaxCollectionSize(1)
+            .build();
+    assertThrows(
+        DeserializationException.class, () -> readObjectArrayPayload(fory, Object[].class, 2));
+    assertThrows(
+        DeserializationException.class, () -> readObjectArrayPayload(fory, String[].class, 2));
+  }
+
   @Test(dataProvider = "crossLanguageReferenceTrackingConfig")
   public void testMultiArraySerialization(boolean referenceTracking, boolean xlang) {
     if (xlang) {
@@ -277,6 +298,104 @@ public class ArraySerializersTest extends ForyTestBase {
     assertTrue(
         Arrays.equals(
             new double[] {1.0, 1.0}, (double[]) serDe(fory1, fory2, new double[] {1.0, 1.0})));
+  }
+
+  @Test
+  public void testPrimitiveArrayReadRejectsOversizedBinaryPayload() {
+    Fory fory =
+        Fory.builder()
+            .withMaxBinarySize(4)
+            .withIntArrayCompressed(true)
+            .withLongArrayCompressed(true)
+            .build();
+    for (Class<?> arrayType :
+        new Class<?>[] {
+          boolean[].class,
+          byte[].class,
+          char[].class,
+          short[].class,
+          int[].class,
+          long[].class,
+          float[].class,
+          double[].class
+        }) {
+      assertThrows(
+          DeserializationException.class,
+          () -> readPrimitiveArrayPayload(fory, arrayType, 8, false));
+    }
+    assertThrows(
+        DeserializationException.class,
+        () -> readPrimitiveArrayPayload(fory, byte[].class, 5, true));
+  }
+
+  @Test
+  public void testPrimitiveArrayReadRejectsUnalignedBinaryPayload() {
+    Fory fory = Fory.builder().withMaxBinarySize(64).build();
+    for (Class<?> arrayType :
+        new Class<?>[] {
+          char[].class, short[].class, int[].class, long[].class, float[].class, double[].class
+        }) {
+      assertThrows(
+          DeserializationException.class,
+          () -> readPrimitiveArrayPayload(fory, arrayType, 3, false));
+    }
+  }
+
+  @Test
+  public void testPrimitiveArrayReadRejectsNegativeDecodedBinaryPayload() {
+    Fory fixedWidthFory = Fory.builder().build();
+    assertThrows(
+        DeserializationException.class,
+        () -> readPrimitiveArrayRawPayload(fixedWidthFory, char[].class));
+
+    Fory compressedFory =
+        Fory.builder().withIntArrayCompressed(true).withLongArrayCompressed(true).build();
+    assertThrows(
+        DeserializationException.class,
+        () -> readPrimitiveArrayRawPayload(compressedFory, int[].class));
+    assertThrows(
+        DeserializationException.class,
+        () -> readPrimitiveArrayRawPayload(compressedFory, long[].class));
+  }
+
+  private static Object readPrimitiveArrayPayload(
+      Fory fory, Class<?> arrayType, int byteSize, boolean outOfBand) {
+    ReadContext readContext = fory.getReadContext();
+    if (outOfBand) {
+      MemoryBuffer control = MemoryBuffer.newHeapBuffer(1);
+      control.writeBoolean(false);
+      readContext.prepare(
+          control, Collections.singletonList(MemoryUtils.wrap(new byte[byteSize])), true);
+    } else {
+      MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
+      buffer.writeVarUInt32Small7(byteSize);
+      readContext.prepare(buffer, null, false);
+    }
+    return fory.getSerializer(arrayType).read(readContext);
+  }
+
+  private static Object readPrimitiveArrayRawPayload(Fory fory, Class<?> arrayType) {
+    ReadContext readContext = fory.getReadContext();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
+    writeNegativeDecodedVarUInt32(buffer);
+    readContext.prepare(buffer, null, false);
+    return fory.getSerializer(arrayType).read(readContext);
+  }
+
+  private static Object readObjectArrayPayload(Fory fory, Class<?> arrayType, int numElements) {
+    ReadContext readContext = fory.getReadContext();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
+    buffer.writeVarUInt32Small7(numElements);
+    readContext.prepare(buffer, null, false);
+    return fory.getSerializer(arrayType).read(readContext);
+  }
+
+  private static void writeNegativeDecodedVarUInt32(MemoryBuffer buffer) {
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x80);
+    buffer.writeByte(0x08);
   }
 
   @Test(dataProvider = "referenceTrackingConfig")

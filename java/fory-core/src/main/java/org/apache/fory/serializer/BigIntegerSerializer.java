@@ -23,16 +23,19 @@ import java.math.BigInteger;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 
 /** Serializer for {@link BigInteger} in native and xlang modes. */
 public final class BigIntegerSerializer extends ImmutableSerializer<BigInteger>
     implements Shareable {
   private final boolean xlang;
+  private final int maxBinarySize;
 
   public BigIntegerSerializer(Config config) {
     super(config, BigInteger.class);
     xlang = config.isXlang();
+    maxBinarySize = config.maxBinarySize();
   }
 
   @Override
@@ -62,6 +65,8 @@ public final class BigIntegerSerializer extends ImmutableSerializer<BigInteger>
   private BigInteger readNative(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
     int len = buffer.readVarUInt32Small7();
+    checkBinaryPayloadLength(len, maxBinarySize);
+    buffer.checkReadableBytes(len);
     byte[] bytes = buffer.readBytes(len);
     return new BigInteger(bytes);
   }
@@ -71,6 +76,16 @@ public final class BigIntegerSerializer extends ImmutableSerializer<BigInteger>
   }
 
   private BigInteger readXlang(ReadContext readContext) {
-    return DecimalSerializer.readXlangBigInteger(readContext.getBuffer());
+    return DecimalSerializer.readXlangBigInteger(readContext.getBuffer(), maxBinarySize);
+  }
+
+  private static void checkBinaryPayloadLength(int len, int maxBinarySize) {
+    if (len <= 0) {
+      throw new DeserializationException("BigInteger payload length must be positive: " + len);
+    }
+    if (len > maxBinarySize) {
+      throw new DeserializationException(
+          "BigInteger payload length " + len + " exceeds max binary size " + maxBinarySize);
+    }
   }
 }

@@ -1224,8 +1224,8 @@ func (b *ByteBuffer) ReadVarint32(err *Error) int32 {
 
 // UnsafeReadVarint32 reads a varint32 without bounds checking.
 // Caller must ensure remaining() >= 5 before calling.
-func (b *ByteBuffer) UnsafeReadVarint32() int32 {
-	u := b.readVarUint32Fast()
+func (b *ByteBuffer) UnsafeReadVarint32(err *Error) int32 {
+	u := b.readVarUint32Fast(err)
 	v := int32(u >> 1)
 	if u&1 != 0 {
 		v = ^v
@@ -1246,8 +1246,8 @@ func (b *ByteBuffer) UnsafeReadVarint64() int64 {
 
 // UnsafeReadVarUint32 reads a VarUint32 without bounds checking.
 // Caller must ensure remaining() >= 5 before calling.
-func (b *ByteBuffer) UnsafeReadVarUint32() uint32 {
-	return b.readVarUint32Fast()
+func (b *ByteBuffer) UnsafeReadVarUint32(err *Error) uint32 {
+	return b.readVarUint32Fast(err)
 }
 
 // UnsafeReadVarUint64 reads a VarUint64 without bounds checking.
@@ -1259,13 +1259,13 @@ func (b *ByteBuffer) UnsafeReadVarUint64() uint64 {
 // ReadVarUint32 reads a VarUint32 and sets error on bounds violation
 func (b *ByteBuffer) ReadVarUint32(err *Error) uint32 {
 	if b.remaining() >= 8 { // Need 8 bytes for bulk uint64 read in fast path
-		return b.readVarUint32Fast()
+		return b.readVarUint32Fast(err)
 	}
 	return b.readVarUint32Slow(err)
 }
 
 // Fast path reading (when the remaining bytes are sufficient)
-func (b *ByteBuffer) readVarUint32Fast() uint32 {
+func (b *ByteBuffer) readVarUint32Fast(err *Error) uint32 {
 	// Single instruction load using unsafe pointer cast (little-endian only)
 	// On big-endian systems, use binary.LittleEndian which the compiler optimizes
 	var bulk uint64
@@ -1288,6 +1288,13 @@ func (b *ByteBuffer) readVarUint32Fast() uint32 {
 				result |= uint32((bulk >> 3) & 0xFE00000)
 				readLength = 4
 				if (bulk & 0x80000000) != 0 {
+					fifth := byte(bulk >> 32)
+					if fifth > 0x0F {
+						if err != nil {
+							*err = DeserializationError("VarUint32 overflow")
+						}
+						return 0
+					}
 					result |= uint32((bulk >> 4) & 0xF0000000)
 					readLength = 5
 				}
@@ -1310,6 +1317,12 @@ func (b *ByteBuffer) readVarUint32Slow(err *Error) uint32 {
 		}
 		byteVal := b.data[b.readerIndex]
 		b.readerIndex++
+		if shift == 28 && byteVal > 0x0F {
+			if err != nil {
+				*err = DeserializationError("VarUint32 overflow")
+			}
+			return 0
+		}
 		result |= (uint32(byteVal) & 0x7F) << shift
 		if byteVal < 0x80 {
 			break
@@ -1475,16 +1488,16 @@ func (b *ByteBuffer) readVarUint32Small14(err *Error) uint32 {
 			readIdx++
 			value |= (four >> 1) & 0x3f80
 			if four&0x8000 != 0 {
-				return b.continueReadVarUint32(readIdx, four, value)
+				return b.continueReadVarUint32(readIdx, four, value, err)
 			}
 		}
 		b.readerIndex = readIdx
 		return value
 	}
-	return uint32(b.readVaruint36Slow(err))
+	return b.readVarUint32Slow(err)
 }
 
-func (b *ByteBuffer) continueReadVarUint32(readIdx int, bulkRead, value uint32) uint32 {
+func (b *ByteBuffer) continueReadVarUint32(readIdx int, bulkRead, value uint32, err *Error) uint32 {
 	readIdx++
 	value |= (bulkRead >> 2) & 0x1fc000
 	if bulkRead&0x800000 != 0 {
@@ -1492,6 +1505,12 @@ func (b *ByteBuffer) continueReadVarUint32(readIdx int, bulkRead, value uint32) 
 		value |= (bulkRead >> 3) & 0xfe00000
 		if bulkRead&0x80000000 != 0 {
 			v := b.data[readIdx]
+			if v > 0x0F {
+				if err != nil {
+					*err = DeserializationError("VarUint32 overflow")
+				}
+				return 0
+			}
 			readIdx++
 			value |= uint32(v&0x7F) << 28
 		}

@@ -771,18 +771,14 @@ pub mod buffer_rw_string {
 
     #[inline]
     pub fn read_utf8_standard(reader: &mut Reader, len: usize) -> Result<String, Error> {
-        unsafe {
-            let mut vec = Vec::with_capacity(len);
-            let src = reader.bf.as_ptr().add(reader.cursor);
-            let dst = vec.as_mut_ptr();
-            // Use fastest possible copy - copy_nonoverlapping compiles to memcpy
-            std::ptr::copy_nonoverlapping(src, dst, len);
-            vec.set_len(len);
-            reader.move_next(len);
-            // Use from_utf8_lossy for safety - handles invalid UTF-8 gracefully
-            // If you're certain the data is valid UTF-8, use from_utf8_unchecked for more performance
-            Ok(String::from_utf8_lossy(&vec).into_owned())
-        }
+        let slice = reader.sub_slice(reader.get_cursor(), reader.get_cursor() + len)?;
+        // Rust is the only runtime that checks UTF-8 string payloads by default; borrow first so
+        // the check adds no temporary Vec before constructing the final String.
+        let value = std::str::from_utf8(slice)
+            .map_err(|_| Error::encoding_error("invalid UTF-8 string"))?
+            .to_owned();
+        reader.move_next(len);
+        Ok(value)
     }
 
     #[inline]

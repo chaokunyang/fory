@@ -430,6 +430,8 @@ internal sealed class MetaStringDecoder
     {
         string value = encoding switch
         {
+            // C# intentionally preserves platform UTF-8 replacement behavior; Rust is the runtime
+            // that provides checked UTF-8 string reads by default.
             MetaStringEncoding.Utf8 => Encoding.UTF8.GetString(bytes),
             MetaStringEncoding.LowerSpecial => DecodeGeneric(bytes, 5, UnmapLowerSpecial),
             MetaStringEncoding.LowerUpperDigitSpecial => DecodeGeneric(bytes, 6, UnmapLowerUpperDigitSpecial),

@@ -449,13 +449,39 @@ public sealed class RuntimeEdgeCaseTests
 
         for (ulong header = 1; header <= 8192; header++)
         {
-            context.CacheReadTypeMeta(header, typeMeta, skipBytesAfterHeader: 0);
+            context.CacheReadTypeMeta(header, typeMeta);
         }
 
-        Assert.True(context.TryGetCachedReadTypeMeta(8192, out _, out _));
-        context.CacheReadTypeMeta(8193, typeMeta, skipBytesAfterHeader: 0);
+        Assert.True(context.TryGetCachedReadTypeMeta(8192, out _));
+        context.CacheReadTypeMeta(8193, typeMeta);
 
-        Assert.False(context.TryGetCachedReadTypeMeta(8193, out _, out _));
+        Assert.False(context.TryGetCachedReadTypeMeta(8193, out _));
+    }
+
+    [Fact]
+    public void TypeMetaHeaderCacheHitSkipsCurrentBodySize()
+    {
+        const ulong header = 0xffUL;
+        TypeMeta typeMeta = new(
+            (uint)TypeId.Struct,
+            902,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            []);
+
+        ByteWriter writer = new();
+        writer.WriteVarUInt32(0);
+        writer.WriteUInt64(header);
+        writer.WriteVarUInt32(0);
+        writer.WriteBytes(new byte[0xff]);
+        writer.WriteUInt8(0x7b);
+
+        ReadContext context = new(new ByteReader(writer.ToArray()), new TypeResolver(), trackRef: false);
+        context.CacheReadTypeMeta(header, typeMeta);
+
+        Assert.Same(typeMeta, context.ReadTypeMeta());
+        Assert.Equal(0x7b, context.Reader.ReadUInt8());
     }
 
     [Fact]

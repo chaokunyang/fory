@@ -64,6 +64,7 @@ import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.exception.InsecureException;
 import org.apache.fory.exception.SerializerUnregisteredException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
@@ -1113,7 +1114,10 @@ public abstract class TypeResolver {
 
   final Class<?> loadClass(
       String className, boolean isEnum, int arrayDims, boolean deserializeUnknownClass) {
-    extRegistry.typeChecker.checkType(this, className);
+    if (!extRegistry.typeChecker.checkType(this, className)) {
+      throw new InsecureException(
+          String.format("Class %s is forbidden for serialization.", className));
+    }
     Class<?> cls = extRegistry.registeredClasses.get(className);
     if (cls != null) {
       return cls;

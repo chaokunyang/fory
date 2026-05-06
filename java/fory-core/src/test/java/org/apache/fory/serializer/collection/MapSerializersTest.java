@@ -57,6 +57,9 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.LazyMap;
 import org.apache.fory.collection.MapEntry;
+import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.collection.CollectionSerializersTest.TestEnum;
@@ -553,6 +556,23 @@ public class MapSerializersTest extends ForyTestBase {
   public void testEmptyMap() {
     serDeCheckSerializer(getJavaFory(), Collections.EMPTY_MAP, "EmptyMapSerializer");
     serDeCheckSerializer(getJavaFory(), Collections.emptySortedMap(), "EmptySortedMap");
+  }
+
+  @Test
+  public void testMapReadRejectsOversizedElementCount() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .withMaxCollectionSize(1)
+            .build();
+    MapSerializers.HashMapSerializer serializer =
+        new MapSerializers.HashMapSerializer(fory.getTypeResolver());
+    MemoryBuffer buffer = MemoryUtils.buffer(8);
+    buffer.writeVarUInt32Small7(2);
+    Assert.expectThrows(
+        DeserializationException.class, () -> withReadContext(fory, buffer, serializer::newMap));
   }
 
   @Test(dataProvider = "foryCopyConfig")

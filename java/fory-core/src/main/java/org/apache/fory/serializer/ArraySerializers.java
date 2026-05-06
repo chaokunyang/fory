@@ -24,6 +24,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefMode;
@@ -45,6 +46,19 @@ import org.apache.fory.util.Preconditions;
  */
 public final class ArraySerializers {
   private ArraySerializers() {}
+
+  private static void throwObjectArraySizeLimitExceeded(int size, int maxCollectionSize) {
+    throw new DeserializationException(
+        "Object array size " + size + " exceeds max collection size " + maxCollectionSize);
+  }
+
+  private static void throwInvalidObjectArraySize(int size, int maxCollectionSize) {
+    if (size < 0) {
+      throw new DeserializationException("Object array size must be non-negative: " + size);
+    } else {
+      throwObjectArraySizeLimitExceeded(size, maxCollectionSize);
+    }
+  }
 
   /**
    * Returns the object-array serializer for {@code cls}.
@@ -85,6 +99,7 @@ public final class ArraySerializers {
   public static final class ObjectArraySerializer extends Serializer<Object[]> {
     private final TypeResolver typeResolver;
     private final TypeInfoHolder elementTypeInfoHolder;
+    private final int maxCollectionSize;
 
     public ObjectArraySerializer(TypeResolver typeResolver, Class<?> cls) {
       super(typeResolver.getConfig(), (Class) cls);
@@ -94,6 +109,7 @@ public final class ArraySerializers {
       }
       Preconditions.checkArgument(cls.isArray() && !cls.getComponentType().isPrimitive());
       elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
+      maxCollectionSize = typeResolver.getConfig().maxCollectionSize();
     }
 
     @Override
@@ -125,6 +141,11 @@ public final class ArraySerializers {
     public Object[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUInt32Small7();
+      // Keep this as direct primitive branches. Object-array reads allocate immediately; using
+      // Preconditions.checkArgument here would add helper/varargs overhead on the valid path.
+      if (numElements < 0 || numElements > maxCollectionSize) {
+        throwInvalidObjectArraySize(numElements, maxCollectionSize);
+      }
       Object[] value = newArray(numElements);
       readContext.reference(value);
       if (numElements != 0) {
@@ -158,6 +179,7 @@ public final class ArraySerializers {
     private final Class<?> componentType;
     private final Serializer elementSerializer;
     private final TypeInfoHolder elementTypeInfoHolder;
+    private final int maxCollectionSize;
 
     SameTypeObjectArraySerializer(
         TypeResolver typeResolver, Class<?> arrayType, Class<?> componentType) {
@@ -169,6 +191,7 @@ public final class ArraySerializers {
       }
       elementSerializer = typeResolver.getSerializer(componentType);
       elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
+      maxCollectionSize = typeResolver.getConfig().maxCollectionSize();
     }
 
     @Override
@@ -204,6 +227,11 @@ public final class ArraySerializers {
     public Object[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUInt32Small7();
+      // Keep this as direct primitive branches. Object-array reads allocate immediately; using
+      // Preconditions.checkArgument here would add helper/varargs overhead on the valid path.
+      if (numElements < 0 || numElements > maxCollectionSize) {
+        throwInvalidObjectArraySize(numElements, maxCollectionSize);
+      }
       Object[] value = newArray(numElements);
       readContext.reference(value);
       if (numElements != 0) {
@@ -616,6 +644,7 @@ public final class ArraySerializers {
     private final String className;
     private final TypeResolver typeResolver;
     private final TypeInfoHolder elementTypeInfoHolder;
+    private final int maxCollectionSize;
 
     public UnknownArraySerializer(TypeResolver typeResolver, Class<?> cls) {
       this(typeResolver, "Unknown", cls);
@@ -627,6 +656,7 @@ public final class ArraySerializers {
       this.className = className;
       this.typeResolver = typeResolver;
       elementTypeInfoHolder = typeResolver.nilTypeInfoHolder();
+      maxCollectionSize = typeResolver.getConfig().maxCollectionSize();
     }
 
     @Override
@@ -639,6 +669,11 @@ public final class ArraySerializers {
     public Object[] read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = buffer.readVarUInt32Small7();
+      // Keep this as direct primitive branches. Object-array reads allocate immediately; using
+      // Preconditions.checkArgument here would add helper/varargs overhead on the valid path.
+      if (numElements < 0 || numElements > maxCollectionSize) {
+        throwInvalidObjectArraySize(numElements, maxCollectionSize);
+      }
       Object[] value = newArray(numElements);
       readContext.reference(value);
       if (numElements != 0) {

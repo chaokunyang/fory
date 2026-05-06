@@ -284,6 +284,9 @@ func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64, err *Error) *Type
 }
 
 func skipTypeDef(buffer *ByteBuffer, header int64, err *Error) {
+	// Header-cache hits intentionally treat the current body as opaque bytes and skip by the size in
+	// the current header. Parsed TypeDefs are published to the cache only after successful body parse
+	// and 52-bit body-hash validation; cache hits must not reparse or rehash that body.
 	sz := int(header & META_SIZE_MASK)
 	if sz == META_SIZE_MASK {
 		sz += int(buffer.ReadVarUint32(err))
@@ -1178,7 +1181,9 @@ func decodeTypeDef(fory *Fory, buffer *ByteBuffer, header int64) (*TypeDef, erro
 			if fallbackInfo, fallbackExists := fory.typeResolver.namedTypeToTypeInfo[nameKey]; fallbackExists {
 				info = fallbackInfo
 				exists = true
-				fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}] = info
+				if len(fory.typeResolver.nsTypeToTypeInfo) < maxCachedNamedTypeInfos {
+					fory.typeResolver.nsTypeToTypeInfo[nsTypeKey{nsBytes.Hashcode, nameBytes.Hashcode}] = info
+				}
 			}
 		}
 		if exists {

@@ -135,6 +135,29 @@ func TestStreamDeserializationEOF(t *testing.T) {
 	}
 }
 
+func TestDeserializeFromStreamClearsReadMetadataOnError(t *testing.T) {
+	f := New(WithCompatible(true))
+	f.typeResolver.metaStringResolver.dynamicIDToEnumString =
+		append(f.typeResolver.metaStringResolver.dynamicIDToEnumString, emptyMetaStringBytes)
+	f.metaContext.readTypeInfos = append(f.metaContext.readTypeInfos, &TypeInfo{})
+
+	stream := NewInputStream(bytes.NewReader(nil))
+	var out int32
+	err := f.DeserializeFromStream(stream, &out)
+	if err == nil {
+		t.Fatal("Expected error on empty stream, got nil")
+	}
+	if len(f.typeResolver.metaStringResolver.dynamicIDToEnumString) != 0 {
+		t.Fatalf(
+			"expected stream root cleanup to clear metastring refs, got %d",
+			len(f.typeResolver.metaStringResolver.dynamicIDToEnumString),
+		)
+	}
+	if len(f.metaContext.readTypeInfos) != 0 {
+		t.Fatalf("expected stream root cleanup to clear type metadata, got %d", len(f.metaContext.readTypeInfos))
+	}
+}
+
 func TestInputStreamSequential(t *testing.T) {
 	f := New()
 	// Register type in compatible mode to test Meta Sharing across sequential reads

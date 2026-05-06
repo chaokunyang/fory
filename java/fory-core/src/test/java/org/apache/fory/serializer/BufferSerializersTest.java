@@ -73,4 +73,25 @@ public class BufferSerializersTest extends ForyTestBase {
     org.testng.Assert.assertThrows(
         DeserializationException.class, () -> readSerializer(fory, serializer, invalidOrder));
   }
+
+  @Test
+  public void testBufferObjectRejectsInvalidInBandSizeWithoutBinaryCap() {
+    Fory fory = Fory.builder().withXlang(true).build();
+    Serializer<ByteBuffer> serializer =
+        new BufferSerializers.ByteBufferSerializer(fory.getTypeResolver(), ByteBuffer.class);
+
+    MemoryBuffer negativeSize = MemoryBuffer.newHeapBuffer(16);
+    negativeSize.writeBoolean(true);
+    negativeSize.writeVarUInt32(-1);
+    org.testng.Assert.assertThrows(
+        IllegalArgumentException.class, () -> readSerializer(fory, serializer, negativeSize));
+
+    MemoryBuffer truncated = MemoryBuffer.newHeapBuffer(16);
+    truncated.writeBoolean(true);
+    truncated.writeVarUInt32(2);
+    truncated.writeByte(0);
+    MemoryBuffer truncatedPayload = truncated.slice(0, truncated.writerIndex());
+    org.testng.Assert.assertThrows(
+        IndexOutOfBoundsException.class, () -> readSerializer(fory, serializer, truncatedPayload));
+  }
 }

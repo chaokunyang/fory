@@ -46,7 +46,7 @@ func TestMetaStringResolver(t *testing.T) {
 
 	// Test 2: Manually constructed MetaStringBytes
 	data2 := []byte{0xBF, 0x05, 0xA4, 0x71, 0xA9, 0x92, 0x53, 0x96, 0xA6, 0x49, 0x4F, 0x72, 0x9C, 0x68, 0x29, 0x80}
-	metaBytes2 := fory.NewMetaStringBytes(data2, int64(-5456063526933366015))
+	metaBytes2 := fory.NewMetaStringBytes(data2, fory.ComputeMetaStringHash(data2, meta.LOWER_SPECIAL))
 	resolver.WriteMetaStringBytes(buffer, metaBytes2, &bufErr)
 	if bufErr.HasError() {
 		t.Fatalf("write failed: %v", bufErr.Error())

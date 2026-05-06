@@ -18,6 +18,7 @@
 package fory
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -110,4 +111,30 @@ func TestUnsafePutVarUint32PhysicalWriteWidth(t *testing.T) {
 		require.Equal(t, sentinelByte, backing[i],
 			"byte at index %d is outside the 8-byte reserved window and must not be written", i)
 	}
+}
+
+func TestReadVarUint32RejectsOverflowFifthByte(t *testing.T) {
+	for _, data := range [][]byte{
+		{0x80, 0x80, 0x80, 0x80, 0x10},
+		{0x80, 0x80, 0x80, 0x80, 0x10, 0, 0, 0},
+	} {
+		buf := NewByteBuffer(data)
+		var err Error
+		_ = buf.ReadVarUint32(&err)
+		require.True(t, err.HasError(), "expected overflow error for %v", data)
+	}
+}
+
+func TestReadVarUint32Small7RejectsOverflowFifthByte(t *testing.T) {
+	buf := NewByteBuffer([]byte{0x80, 0x80, 0x80, 0x80, 0x10})
+	var err Error
+	_ = buf.ReadVarUint32Small7(&err)
+	require.True(t, err.HasError())
+}
+
+func TestReadVarUint32Small7StreamRejectsOverflowFifthByte(t *testing.T) {
+	buf := NewByteBufferFromReader(bytes.NewReader([]byte{0x80, 0x80, 0x80, 0x80, 0x10}), 4)
+	var err Error
+	_ = buf.ReadVarUint32Small7(&err)
+	require.True(t, err.HasError())
 }

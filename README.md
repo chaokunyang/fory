@@ -118,7 +118,7 @@ For more detailed benchmarks and methodology, see [Go Benchmark](benchmarks/go).
 <img src="docs/benchmarks/python/throughput.png" width="95%">
 </p>
 
-For more detailed benchmarks and methodology, see [Pythonk](benchmarks/python).
+For more detailed benchmarks and methodology, see [Python](benchmarks/python).
 
 ### JavaScript/NodeJS Serialization Performance
 

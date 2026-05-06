@@ -952,6 +952,8 @@ impl<'a> Reader<'a> {
     pub fn read_utf8_string(&mut self, len: usize) -> Result<String, Error> {
         self.check_bound(len)?;
         let src = &self.bf[self.cursor..self.cursor + len];
+        // Rust is the only runtime that checks UTF-8 string payloads by default; other runtimes
+        // preserve their platform replacement behavior for invalid byte sequences.
         let string =
             std::str::from_utf8(src).map_err(|_| Error::encoding_error("invalid UTF-8 string"))?;
         let string = string.to_owned();

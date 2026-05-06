@@ -1541,13 +1541,13 @@ func (s *structSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 				}
 				switch field.DispatchId {
 				case PrimitiveVarint32DispatchId:
-					storeFieldValue(field.Kind, fieldPtr, optInfo, buf.UnsafeReadVarint32())
+					storeFieldValue(field.Kind, fieldPtr, optInfo, buf.UnsafeReadVarint32(err))
 				case PrimitiveVarint64DispatchId:
 					storeFieldValue(field.Kind, fieldPtr, optInfo, buf.UnsafeReadVarint64())
 				case PrimitiveIntDispatchId:
 					storeFieldValue(field.Kind, fieldPtr, optInfo, int(buf.UnsafeReadVarint64()))
 				case PrimitiveVarUint32DispatchId:
-					storeFieldValue(field.Kind, fieldPtr, optInfo, buf.UnsafeReadVarUint32())
+					storeFieldValue(field.Kind, fieldPtr, optInfo, buf.UnsafeReadVarUint32(err))
 				case PrimitiveVarUint64DispatchId:
 					storeFieldValue(field.Kind, fieldPtr, optInfo, buf.UnsafeReadVarUint64())
 				case PrimitiveUintDispatchId:

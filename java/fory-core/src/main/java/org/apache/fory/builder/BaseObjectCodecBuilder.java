@@ -2163,6 +2163,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   protected Expression deserializeField(
       Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
+    if (descriptor.getCompatibleReadMode() != Descriptor.COMPATIBLE_READ_NONE) {
+      Expression value = deserializeCompatibleListArrayField(descriptor);
+      return new ListExpression(value, callback.apply(value));
+    }
     TypeRef<?> typeRef = descriptor.getTypeRef();
     boolean nullable = descriptor.isNullable();
     // descriptor.isTrackingRef() already includes the needWriteRef check
@@ -2211,6 +2215,31 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       }
       return readNullableExpr;
     }
+  }
+
+  protected Expression deserializeCompatibleListArrayField(Descriptor descriptor) {
+    TypeExtMeta extMeta = descriptor.getTypeRef().getTypeExtMeta();
+    boolean nullable = extMeta == null ? descriptor.isNullable() : extMeta.nullable();
+    boolean trackingRef = extMeta == null ? descriptor.isTrackingRef() : extMeta.trackingRef();
+    Class<?> targetType =
+        descriptor.getField() == null ? descriptor.getRawType() : descriptor.getField().getType();
+    return new StaticInvoke(
+        MetaSharedSerializer.class,
+        "readCompatibleCollectionArrayField",
+        OBJECT_TYPE,
+        readContextRef(),
+        Literal.ofBoolean(trackingRef),
+        Literal.ofBoolean(nullable),
+        Literal.ofInt(descriptor.getCompatibleReadMode()),
+        Literal.ofInt(descriptor.getCompatibleArrayTypeId()),
+        Literal.ofInt(descriptor.getCompatibleElementTypeId()),
+        Literal.ofClass(targetType));
+  }
+
+  protected TypeRef<?> compatibleReadTargetTypeRef(Descriptor descriptor) {
+    return descriptor.getField() == null
+        ? descriptor.getTypeRef()
+        : TypeRef.of(descriptor.getField().getGenericType());
   }
 
   private Expression deserializeForNotNullForField(

@@ -182,6 +182,22 @@ canonical dynamic tags for `array<T>`:
 `ARRAY (42)` is reserved for a future generic or shaped-array descriptor and is
 not emitted for dense primitive arrays.
 
+In schema-compatible mode only, a matched struct/class field may read between
+direct top-level `list<T>` and direct top-level `array<T>` schemas when `T`
+belongs to the valid dense array element domains above. This is a read
+adaptation, not a schema-kind merge: writers keep emitting their local canonical
+`list<T>` or `array<T>` payload, and TypeDef/ClassDef encodings, fingerprints,
+dynamic root serialization, schema-consistent mode, and unknown-field skipping
+continue to treat `list<T>` and `array<T>` as distinct kinds.
+
+The adaptation is limited to the immediate schema of the matched compatible
+field. It does not apply when `list<T>` or `array<T>` appears inside another
+field type, including collection elements, map keys or values, array elements,
+union alternatives, or other generic/container positions. If the peer field is
+`list<T>` and the local field is `array<T>`, the reader must consume the list
+payload and reject the value when the list element header declares nullable
+elements. Null list elements must not be coerced to dense-array default values.
+
 Users can also provide meta hints for fields of a type, or the type whole. Here is an example in java which use
 annotation to provide such information.
 

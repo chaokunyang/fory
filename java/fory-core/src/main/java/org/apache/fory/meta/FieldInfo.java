@@ -29,6 +29,7 @@ import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
+import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.StringUtils;
 
@@ -103,6 +104,39 @@ public final class FieldInfo implements Serializable {
     boolean remoteTrackingRef = fieldType.trackingRef();
 
     if (descriptor != null) {
+      Class<?> rawType = typeRef.getRawType();
+      DescriptorBuilder builder =
+          new DescriptorBuilder(descriptor)
+              .typeName(typeName)
+              .trackingRef(remoteTrackingRef)
+              .nullable(remoteNullable)
+              .typeRef(typeRef)
+              .type(rawType);
+      int compatibleReadMode = getTopLevelListArrayCompatibleReadMode(resolver, descriptor);
+      if (compatibleReadMode != Descriptor.COMPATIBLE_READ_NONE) {
+        return builder
+            .compatibleReadMode(
+                compatibleReadMode,
+                getCompatibleArrayTypeId(resolver, fieldType, descriptor),
+                getCompatibleElementTypeId(resolver, fieldType, descriptor))
+            .build();
+      }
+      FieldTypes.FieldType localFieldType =
+          descriptor.getField() == null
+              ? null
+              : FieldTypes.buildFieldType(resolver, descriptor.getField());
+      int peerArrayTypeId = arrayTypeId(fieldType);
+      if (peerArrayTypeId != Types.UNKNOWN
+          && peerArrayTypeId == arrayTypeId(localFieldType)
+          && TypeAnnotationUtils.isArrayType(descriptor)) {
+        return new DescriptorBuilder(descriptor)
+            .trackingRef(remoteTrackingRef)
+            .nullable(remoteNullable)
+            .build();
+      }
+      if (localFieldType != null && hasListArrayShapeMismatch(fieldType, localFieldType)) {
+        return builder.field(null).build();
+      }
       if (remoteNullable == descriptor.isNullable()
           && remoteTrackingRef == descriptor.isTrackingRef()
           && typeRef.equals(descriptor.getTypeRef())) {
@@ -110,7 +144,6 @@ public final class FieldInfo implements Serializable {
           return descriptor;
         }
       }
-      Class<?> rawType = typeRef.getRawType();
       if (FieldTypes.useFieldType(rawType, descriptor)) {
         return new DescriptorBuilder(descriptor)
             .typeName(typeName)
@@ -119,13 +152,6 @@ public final class FieldInfo implements Serializable {
             .typeRef(typeRef)
             .build();
       }
-      DescriptorBuilder builder =
-          new DescriptorBuilder(descriptor)
-              .typeName(typeName)
-              .trackingRef(remoteTrackingRef)
-              .nullable(remoteNullable)
-              .typeRef(typeRef)
-              .type(rawType);
       // Local field exists - check if we need to update nullable/trackingRef
       boolean typeMismatch = !typeRef.equals(declared);
       if (typeMismatch) {
@@ -159,6 +185,142 @@ public final class FieldInfo implements Serializable {
         definedClass,
         remoteTrackingRef,
         remoteNullable);
+  }
+
+  private int getTopLevelListArrayCompatibleReadMode(
+      TypeResolver resolver, Descriptor localDescriptor) {
+    Field localField = localDescriptor.getField();
+    if (localField == null || !resolver.isCrossLanguage()) {
+      return Descriptor.COMPATIBLE_READ_NONE;
+    }
+    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localField);
+    int peerListElementTypeId = listElementTypeId(fieldType);
+    if (peerListElementTypeId != Types.UNKNOWN) {
+      int localArrayTypeId = arrayTypeId(localFieldType);
+      if (localArrayTypeId != Types.UNKNOWN
+          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
+        return Descriptor.COMPATIBLE_READ_LIST_TO_ARRAY;
+      }
+      return Descriptor.COMPATIBLE_READ_NONE;
+    }
+    int peerArrayTypeId = arrayTypeId(fieldType);
+    if (peerArrayTypeId != Types.UNKNOWN) {
+      int localListElementTypeId = listElementTypeId(localFieldType);
+      if (localListElementTypeId != Types.UNKNOWN
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+        return Descriptor.COMPATIBLE_READ_ARRAY_TO_LIST;
+      }
+    }
+    return Descriptor.COMPATIBLE_READ_NONE;
+  }
+
+  private static boolean hasListArrayShapeMismatch(
+      FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
+    boolean peerList = isListField(peerFieldType);
+    boolean localList = isListField(localFieldType);
+    boolean peerArray = arrayTypeId(peerFieldType) != Types.UNKNOWN;
+    boolean localArray = arrayTypeId(localFieldType) != Types.UNKNOWN;
+    if ((peerList && localArray) || (peerArray && localList)) {
+      return true;
+    }
+    if (peerList && localList) {
+      return hasListArrayShapeMismatch(
+          ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
+          ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
+    }
+    if (peerFieldType instanceof FieldTypes.MapFieldType
+        && localFieldType instanceof FieldTypes.MapFieldType) {
+      FieldTypes.MapFieldType peerMap = (FieldTypes.MapFieldType) peerFieldType;
+      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
+      return hasListArrayShapeMismatch(peerMap.getKeyType(), localMap.getKeyType())
+          || hasListArrayShapeMismatch(peerMap.getValueType(), localMap.getValueType());
+    }
+    return false;
+  }
+
+  private static boolean isListField(FieldTypes.FieldType fieldType) {
+    return fieldType instanceof FieldTypes.CollectionFieldType
+        && fieldType.getTypeId() == Types.LIST;
+  }
+
+  private static int getCompatibleArrayTypeId(
+      TypeResolver resolver, FieldTypes.FieldType peerFieldType, Descriptor localDescriptor) {
+    int peerArrayTypeId = arrayTypeId(peerFieldType);
+    if (peerArrayTypeId != Types.UNKNOWN) {
+      return peerArrayTypeId;
+    }
+    return arrayTypeId(FieldTypes.buildFieldType(resolver, localDescriptor.getField()));
+  }
+
+  private static int getCompatibleElementTypeId(
+      TypeResolver resolver, FieldTypes.FieldType peerFieldType, Descriptor localDescriptor) {
+    int peerListElementTypeId = listElementTypeId(peerFieldType);
+    if (peerListElementTypeId != Types.UNKNOWN) {
+      return peerListElementTypeId;
+    }
+    return listElementTypeId(FieldTypes.buildFieldType(resolver, localDescriptor.getField()));
+  }
+
+  private static int listElementTypeId(FieldTypes.FieldType fieldType) {
+    if (!(fieldType instanceof FieldTypes.CollectionFieldType)
+        || fieldType.getTypeId() != Types.LIST) {
+      return Types.UNKNOWN;
+    }
+    FieldTypes.FieldType elementType =
+        ((FieldTypes.CollectionFieldType) fieldType).getElementType();
+    if (elementType instanceof FieldTypes.RegisteredFieldType) {
+      return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
+    }
+    return Types.UNKNOWN;
+  }
+
+  private static int arrayTypeId(FieldTypes.FieldType fieldType) {
+    if (fieldType instanceof FieldTypes.RegisteredFieldType) {
+      int typeId = ((FieldTypes.RegisteredFieldType) fieldType).getTypeId();
+      if (Types.isPrimitiveArray(typeId)) {
+        return typeId;
+      }
+    }
+    return Types.UNKNOWN;
+  }
+
+  private static int denseArrayTypeId(int elementTypeId) {
+    switch (elementTypeId) {
+      case Types.BOOL:
+        return Types.BOOL_ARRAY;
+      case Types.INT8:
+        return Types.INT8_ARRAY;
+      case Types.UINT8:
+        return Types.UINT8_ARRAY;
+      case Types.INT16:
+        return Types.INT16_ARRAY;
+      case Types.UINT16:
+        return Types.UINT16_ARRAY;
+      case Types.INT32:
+      case Types.VARINT32:
+        return Types.INT32_ARRAY;
+      case Types.UINT32:
+      case Types.VAR_UINT32:
+        return Types.UINT32_ARRAY;
+      case Types.INT64:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
+        return Types.INT64_ARRAY;
+      case Types.UINT64:
+      case Types.VAR_UINT64:
+      case Types.TAGGED_UINT64:
+        return Types.UINT64_ARRAY;
+      case Types.FLOAT16:
+        return Types.FLOAT16_ARRAY;
+      case Types.BFLOAT16:
+        return Types.BFLOAT16_ARRAY;
+      case Types.FLOAT32:
+        return Types.FLOAT32_ARRAY;
+      case Types.FLOAT64:
+        return Types.FLOAT64_ARRAY;
+      default:
+        return Types.UNKNOWN;
+    }
   }
 
   @Override

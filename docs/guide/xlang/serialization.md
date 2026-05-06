@@ -32,6 +32,8 @@ Reduced-precision floating-point values are also part of the built-in xlang type
 
 Use the language-specific carrier types documented in the type mapping reference. Python uses `pyfory.Float16` and `pyfory.BFloat16` as annotation markers only; scalar values are native Python `float`, and dense reduced-precision arrays use `pyfory.Float16Array` and `pyfory.BFloat16Array`. Go uses the `float16` and `bfloat16` packages for scalar, slice, and array carriers; JavaScript uses `number` / `number[]` for `float16` and `BFloat16` / `BFloat16Array` for `bfloat16`; Java uses `@ArrayType` on supported reduced-precision carriers for `array<float16>` / `array<bfloat16>` schema, while general object arrays stay on the `list` path; C++, Rust, and C# provide their own dedicated scalar and array carriers.
 
+When `compatible=true`, a direct struct/class field can evolve between `list<T>` and `array<T>` for dense bool/numeric `T`. This applies only to the immediate matched field schema. It does not apply to nested collection, map, array, union, or generic positions. Reading peer `list<T>` data into a local `array<T>` field fails if that list payload declares nullable elements.
+
 ### Java
 
 ```java

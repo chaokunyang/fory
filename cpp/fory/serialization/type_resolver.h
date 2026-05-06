@@ -246,6 +246,77 @@ inline bool field_types_compatible(const FieldType &local,
          (local.generics.empty() || remote.generics.empty());
 }
 
+inline bool primitive_array_element_type_id(uint32_t array_type_id,
+                                            uint32_t &element_type_id) {
+  switch (static_cast<TypeId>(array_type_id)) {
+  case TypeId::BOOL_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::BOOL);
+    return true;
+  case TypeId::INT8_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::INT8);
+    return true;
+  case TypeId::INT16_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::INT16);
+    return true;
+  case TypeId::INT32_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::VARINT32);
+    return true;
+  case TypeId::INT64_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::VARINT64);
+    return true;
+  case TypeId::FLOAT16_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::FLOAT16);
+    return true;
+  case TypeId::FLOAT32_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::FLOAT32);
+    return true;
+  case TypeId::FLOAT64_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::FLOAT64);
+    return true;
+  case TypeId::UINT8_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::UINT8);
+    return true;
+  case TypeId::UINT16_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::UINT16);
+    return true;
+  case TypeId::UINT32_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::UINT32);
+    return true;
+  case TypeId::UINT64_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::UINT64);
+    return true;
+  case TypeId::BFLOAT16_ARRAY:
+    element_type_id = static_cast<uint32_t>(TypeId::BFLOAT16);
+    return true;
+  default:
+    return false;
+  }
+}
+
+inline bool field_types_compatible_top_level(const FieldType &local,
+                                             const FieldType &remote) {
+  if (field_types_compatible(local, remote)) {
+    return true;
+  }
+
+  uint32_t array_element_type_id = 0;
+  if (local.type_id == static_cast<uint32_t>(TypeId::LIST) &&
+      remote.generics.size() == 0 &&
+      primitive_array_element_type_id(remote.type_id, array_element_type_id) &&
+      local.generics.size() == 1) {
+    return compatible_fingerprint_type_id(local.generics[0].type_id) ==
+           compatible_fingerprint_type_id(array_element_type_id);
+  }
+  if (remote.type_id == static_cast<uint32_t>(TypeId::LIST) &&
+      local.generics.size() == 0 &&
+      primitive_array_element_type_id(local.type_id, array_element_type_id) &&
+      remote.generics.size() == 1) {
+    return compatible_fingerprint_type_id(remote.generics[0].type_id) ==
+           compatible_fingerprint_type_id(array_element_type_id);
+  }
+  return false;
+}
+
 // ============================================================================
 // FieldInfo - Field metadata (name, type, id)
 // ============================================================================

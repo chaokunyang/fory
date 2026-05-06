@@ -863,11 +863,11 @@ Container read_configured_list_data(ReadContext &ctx) {
   using Elem = element_type_t<Container>;
   uint32_t length = ctx.read_var_uint32(ctx.error());
   Container result;
-  if constexpr (has_reserve_v<Container>) {
-    result.reserve(length);
-  }
   if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
     return result;
+  }
+  if constexpr (has_reserve_v<Container>) {
+    result.reserve(length);
   }
   uint8_t bitmap = ctx.read_uint8(ctx.error());
   if (FORY_PREDICT_FALSE(ctx.has_error())) {
@@ -893,6 +893,60 @@ Container read_configured_list_data(ReadContext &ctx) {
       collection_insert(result, std::move(elem));
     } else {
       auto elem = Serializer<Elem>::read(ctx, elem_ref_mode, false);
+      collection_insert(result, std::move(elem));
+    }
+  }
+  return result;
+}
+
+template <typename Container, typename StructT, size_t Index, int8_t NodeIndex,
+          int8_t ElemNode>
+Container read_configured_list_data_as_array_field(ReadContext &ctx) {
+  using Elem = element_type_t<Container>;
+  uint32_t length = ctx.read_var_uint32(ctx.error());
+  Container result;
+  if (FORY_PREDICT_FALSE(ctx.has_error()) || length == 0) {
+    return result;
+  }
+  if (FORY_PREDICT_FALSE(length > ctx.config().max_collection_size)) {
+    ctx.set_error(
+        Error::invalid_data("Collection length exceeds max_collection_size"));
+    return result;
+  }
+  uint8_t bitmap = ctx.read_uint8(ctx.error());
+  if (FORY_PREDICT_FALSE(ctx.has_error())) {
+    return result;
+  }
+  const bool is_decl_type = (bitmap & COLL_DECL_ELEMENT_TYPE) != 0;
+  const bool is_same_type = (bitmap & COLL_IS_SAME_TYPE) != 0;
+  const bool track_ref = (bitmap & COLL_TRACKING_REF) != 0;
+  const bool has_null = (bitmap & COLL_HAS_NULL) != 0;
+  if (FORY_PREDICT_FALSE(track_ref || has_null)) {
+    ctx.set_error(Error::invalid_data(
+        "compatible list to array field requires non-null elements"));
+    return result;
+  }
+  if (FORY_PREDICT_FALSE(!is_same_type)) {
+    ctx.set_error(Error::invalid_data(
+        "compatible list to array field requires same-type elements"));
+    return result;
+  }
+  if (!is_decl_type) {
+    (void)ctx.read_any_type_info(ctx.error());
+    if (FORY_PREDICT_FALSE(ctx.has_error())) {
+      return result;
+    }
+  }
+  if constexpr (has_reserve_v<Container>) {
+    result.reserve(length);
+  }
+  for (uint32_t i = 0; i < length; ++i) {
+    if constexpr (ElemNode >= 0) {
+      auto elem = read_configured_value<Elem, StructT, Index, ElemNode>(
+          ctx, RefMode::None, false);
+      collection_insert(result, std::move(elem));
+    } else {
+      auto elem = Serializer<Elem>::read(ctx, RefMode::None, false);
       collection_insert(result, std::move(elem));
     }
   }
@@ -3199,6 +3253,45 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
           (obj.*field_ptr).value = std::optional<InnerType>(value);
         } else {
           obj.*field_ptr = std::optional<InnerType>(value);
+        }
+        return;
+      }
+    }
+  }
+
+  if constexpr (is_vector_v<FieldType>) {
+    constexpr FieldNodeKind configured_kind =
+        configured_node_kind<T, Index, 0>();
+    constexpr bool configured_as_array =
+        configured_kind == FieldNodeKind::Array;
+    constexpr bool configured_as_list = configured_kind == FieldNodeKind::List;
+    if constexpr (configured_as_array) {
+      if (remote_type_id == static_cast<uint32_t>(TypeId::LIST)) {
+        if (FORY_PREDICT_FALSE(remote_field_type.generics.size() != 1)) {
+          ctx.set_error(Error::invalid_data(
+              "compatible list to array field requires one element schema"));
+          return;
+        }
+        constexpr int8_t child = configured_node_child<T, Index, 0, 0>();
+        FieldType result =
+            read_configured_list_data_as_array_field<FieldType, T, Index, 0,
+                                                     child>(ctx);
+        if constexpr (is_fory_field_v<RawFieldType>) {
+          (obj.*field_ptr).value = std::move(result);
+        } else {
+          obj.*field_ptr = std::move(result);
+        }
+        return;
+      }
+    } else if constexpr (configured_as_list) {
+      uint32_t element_type_id = 0;
+      if (primitive_array_element_type_id(remote_type_id, element_type_id)) {
+        FieldType result =
+            Serializer<FieldType>::read(ctx, remote_ref_mode, false);
+        if constexpr (is_fory_field_v<RawFieldType>) {
+          (obj.*field_ptr).value = std::move(result);
+        } else {
+          obj.*field_ptr = std::move(result);
         }
         return;
       }

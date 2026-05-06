@@ -164,6 +164,9 @@ public class FieldGroups {
     public final boolean trackingRef;
     public final boolean isPrimitiveField;
     public final boolean isArray;
+    public final int compatibleReadMode;
+    public final int compatibleArrayTypeId;
+    public final int compatibleElementTypeId;
     // Use declared type for serialization/deserialization
     public final boolean useDeclaredTypeInfo;
 
@@ -179,6 +182,9 @@ public class FieldGroups {
       this.type = descriptor.getRawType();
       this.typeRef = d.getTypeRef();
       this.dispatchId = DispatchId.getDispatchId(resolver, d);
+      compatibleReadMode = d.getCompatibleReadMode();
+      compatibleArrayTypeId = d.getCompatibleArrayTypeId();
+      compatibleElementTypeId = d.getCompatibleElementTypeId();
       boolean primitiveListArray =
           TypeUtils.isPrimitiveListClass(typeRef.getRawType())
               && TypeAnnotationUtils.isArrayType(d);

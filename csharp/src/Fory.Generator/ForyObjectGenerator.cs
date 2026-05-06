@@ -687,6 +687,161 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"        return {resultVar};");
         sb.AppendLine("    }");
         sb.AppendLine();
+
+        sb.AppendLine(
+            $"    private static {member.TypeName} __ForyReadCompatible{memberId}Field(global::Apache.Fory.ReadContext context, global::Apache.Fory.TypeMetaFieldType remoteFieldType, global::Apache.Fory.RefMode refMode)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (remoteFieldType.TypeId == " + codec.TypeId + ")");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            return __ForyRead{memberId}Field(context, refMode);");
+        sb.AppendLine("        }");
+        if (TryBuildCompatibleListArrayReadCodec(codec, out FieldCodecModel? alternateCodec))
+        {
+            sb.AppendLine("        if (remoteFieldType.TypeId == " + alternateCodec.TypeId + ")");
+            sb.AppendLine("        {");
+            if (codec.Kind == FieldCodecKind.PackedArray)
+            {
+                sb.AppendLine("            if (remoteFieldType.Generics.Count != 1)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException(\"compatible list to array field requires one element schema\");");
+                sb.AppendLine("            }");
+            }
+
+            sb.AppendLine("            if (refMode == global::Apache.Fory.RefMode.NullOnly)");
+            sb.AppendLine("            {");
+            sb.AppendLine("                sbyte refFlag = context.Reader.ReadInt8();");
+            sb.AppendLine("                if (refFlag == (sbyte)global::Apache.Fory.RefFlag.Null)");
+            sb.AppendLine("                {");
+            sb.AppendLine($"                    return ({member.TypeName})default!;");
+            sb.AppendLine("                }");
+            sb.AppendLine();
+            sb.AppendLine("                if (refFlag != (sbyte)global::Apache.Fory.RefFlag.NotNullValue)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"invalid nullOnly ref flag {refFlag}\");");
+            sb.AppendLine("                }");
+            sb.AppendLine("            }");
+            id = 0;
+            string compatibleResultVar = $"__{memberId}CompatibleValue";
+            if (codec.Kind == FieldCodecKind.PackedArray && alternateCodec.Kind == FieldCodecKind.List)
+            {
+                EmitReadCompatibleListArrayPayload(sb, codec, compatibleResultVar, 3, ref id);
+            }
+            else
+            {
+                EmitReadPayload(sb, alternateCodec, compatibleResultVar, 3, ref id);
+            }
+
+            sb.AppendLine($"            return {compatibleResultVar};");
+            sb.AppendLine("        }");
+        }
+
+        sb.AppendLine("        throw new global::Apache.Fory.InvalidDataException($\"unsupported compatible field schema pair: local " + codec.TypeId + ", remote {remoteFieldType.TypeId}\");");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    private static bool TryBuildCompatibleListArrayReadCodec(FieldCodecModel codec, out FieldCodecModel compatibleCodec)
+    {
+        if (codec.Kind == FieldCodecKind.PackedArray)
+        {
+            uint elementTypeId = PackedArrayElementTypeId(codec.TypeId);
+            compatibleCodec = new FieldCodecModel(
+                FieldCodecKind.List,
+                22,
+                codec.TypeName,
+                codec.Nullable,
+                codec.NullableValueType,
+                codec.CarrierKind,
+                ImmutableArray.Create(new FieldCodecModel(
+                    FieldCodecKind.Scalar,
+                    elementTypeId,
+                    PackedArrayElementTypeName(codec.TypeId),
+                    false,
+                    false,
+                    CarrierKind.Value,
+                    ImmutableArray<FieldCodecModel>.Empty)));
+            return true;
+        }
+
+        if (codec.Kind == FieldCodecKind.List &&
+            codec.Generics.Length == 1 &&
+            TryResolveArrayTypeIdForElement(codec.Generics[0].TypeId) is uint arrayTypeId)
+        {
+            compatibleCodec = new FieldCodecModel(
+                FieldCodecKind.PackedArray,
+                arrayTypeId,
+                codec.TypeName,
+                codec.Nullable,
+                codec.NullableValueType,
+                codec.CarrierKind,
+                ImmutableArray<FieldCodecModel>.Empty);
+            return true;
+        }
+
+        compatibleCodec = codec;
+        return false;
+    }
+
+    private static void EmitReadCompatibleListArrayPayload(
+        StringBuilder sb,
+        FieldCodecModel codec,
+        string targetVar,
+        int indentLevel,
+        ref int id)
+    {
+        string indent = new(' ', indentLevel * 4);
+        string lengthVar = $"__foryLength{id++}";
+        string headerVar = $"__foryHeader{id++}";
+        string declaredVar = $"__foryDeclared{id++}";
+        string sameTypeVar = $"__forySameType{id++}";
+        sb.AppendLine($"{indent}int {lengthVar} = checked((int)context.Reader.ReadVarUInt32());");
+        sb.AppendLine($"{indent}if ({lengthVar} != 0)");
+        sb.AppendLine($"{indent}{{");
+        string innerIndent = indent + "    ";
+        sb.AppendLine($"{innerIndent}byte {headerVar} = context.Reader.ReadUInt8();");
+        sb.AppendLine($"{innerIndent}if (({headerVar} & 0b0000_0011) != 0)");
+        sb.AppendLine($"{innerIndent}{{");
+        sb.AppendLine($"{innerIndent}    throw new global::Apache.Fory.InvalidDataException(\"compatible list to array field requires non-null elements\");");
+        sb.AppendLine($"{innerIndent}}}");
+        sb.AppendLine($"{innerIndent}bool {declaredVar} = ({headerVar} & 0b0000_0100) != 0;");
+        sb.AppendLine($"{innerIndent}bool {sameTypeVar} = ({headerVar} & 0b0000_1000) != 0;");
+        sb.AppendLine($"{innerIndent}if (!{sameTypeVar})");
+        sb.AppendLine($"{innerIndent}{{");
+        sb.AppendLine($"{innerIndent}    throw new global::Apache.Fory.InvalidDataException(\"compatible list to array field requires same-type elements\");");
+        sb.AppendLine($"{innerIndent}}}");
+        sb.AppendLine($"{innerIndent}if (!{declaredVar})");
+        sb.AppendLine($"{innerIndent}{{");
+        sb.AppendLine($"{innerIndent}    uint __foryWireTypeId = context.Reader.ReadUInt8();");
+        sb.AppendLine($"{innerIndent}    if (__foryWireTypeId != remoteFieldType.Generics[0].TypeId)");
+        sb.AppendLine($"{innerIndent}    {{");
+        sb.AppendLine($"{innerIndent}        throw new global::Apache.Fory.TypeMismatchException(remoteFieldType.Generics[0].TypeId, __foryWireTypeId);");
+        sb.AppendLine($"{innerIndent}    }}");
+        sb.AppendLine($"{innerIndent}}}");
+        sb.AppendLine($"{indent}}}");
+        string indexVar = $"__foryIndex{id++}";
+        string elementTypeName = codec.CarrierKind == CarrierKind.Array ? ElementTypeName(codec.TypeName) : PackedArrayElementTypeName(codec.TypeId);
+        if (codec.CarrierKind == CarrierKind.Array)
+        {
+            sb.AppendLine($"{indent}{codec.TypeName} {targetVar} = new {ElementTypeName(codec.TypeName)}[{lengthVar}];");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}{codec.TypeName} {targetVar} = new({lengthVar});");
+        }
+
+        sb.AppendLine($"{indent}for (int {indexVar} = 0; {indexVar} < {lengthVar}; {indexVar}++)");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{innerIndent}object __foryItem = __ForyReadCompatiblePrimitivePayload((global::Apache.Fory.TypeId)remoteFieldType.Generics[0].TypeId, context);");
+        if (codec.CarrierKind == CarrierKind.Array)
+        {
+            sb.AppendLine($"{innerIndent}{targetVar}[{indexVar}] = ({elementTypeName})__foryItem;");
+        }
+        else
+        {
+            sb.AppendLine($"{innerIndent}{targetVar}.Add(({elementTypeName})__foryItem);");
+        }
+
+        sb.AppendLine($"{indent}}}");
     }
 
     private static void EmitWritePayload(
@@ -1248,6 +1403,28 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             : "object";
     }
 
+    private static string PackedArrayElementTypeName(uint typeId)
+    {
+        return typeId switch
+        {
+            41 => "byte",
+            43 => "bool",
+            44 => "sbyte",
+            45 => "short",
+            46 => "int",
+            47 => "long",
+            48 => "byte",
+            49 => "ushort",
+            50 => "uint",
+            51 => "ulong",
+            53 => "global::System.Half",
+            54 => "global::Apache.Fory.BFloat16",
+            55 => "float",
+            56 => "double",
+            _ => throw new InvalidOperationException($"unsupported packed array type id {typeId}"),
+        };
+    }
+
     private static int PackedArrayElementWidth(uint typeId)
     {
         return typeId switch
@@ -1420,8 +1597,17 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         if (member.FieldCodec is not null)
         {
-            sb.AppendLine(
-                $"{indent}{assignmentTarget} = __ForyRead{Sanitize(member.Name)}Field(context, {refModeExpr});");
+            if (variableSuffix == "Compat")
+            {
+                sb.AppendLine(
+                    $"{indent}{assignmentTarget} = __ForyReadCompatible{Sanitize(member.Name)}Field(context, remoteField.FieldType, {refModeExpr});");
+            }
+            else
+            {
+                sb.AppendLine(
+                    $"{indent}{assignmentTarget} = __ForyRead{Sanitize(member.Name)}Field(context, {refModeExpr});");
+            }
+
             return;
         }
 
@@ -2753,12 +2939,12 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             1 => 43,
             2 => 44,
             3 => 45,
-            5 => 46,
-            7 => 47,
+            4 or 5 => 46,
+            6 or 7 or 8 => 47,
             9 => 48,
             10 => 49,
-            12 => 50,
-            14 => 51,
+            11 or 12 => 50,
+            13 or 14 or 15 => 51,
             17 => 53,
             18 => 54,
             19 => 55,

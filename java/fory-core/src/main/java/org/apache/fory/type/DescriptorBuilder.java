@@ -40,6 +40,9 @@ public class DescriptorBuilder {
   boolean nullable;
   boolean trackingRef;
   FieldConverter fieldConverter;
+  int compatibleReadMode;
+  int compatibleArrayTypeId;
+  int compatibleElementTypeId;
 
   public DescriptorBuilder(Descriptor descriptor) {
     this.typeRef = descriptor.getTypeRef();
@@ -55,6 +58,9 @@ public class DescriptorBuilder {
     this.nullable = descriptor.isNullable();
     this.trackingRef = descriptor.isTrackingRef();
     this.fieldConverter = descriptor.getFieldConverter();
+    this.compatibleReadMode = descriptor.getCompatibleReadMode();
+    this.compatibleArrayTypeId = descriptor.getCompatibleArrayTypeId();
+    this.compatibleElementTypeId = descriptor.getCompatibleElementTypeId();
   }
 
   public DescriptorBuilder typeRef(TypeRef<?> typeRef) {
@@ -119,6 +125,21 @@ public class DescriptorBuilder {
 
   public DescriptorBuilder fieldConverter(FieldConverter fieldConverter) {
     this.fieldConverter = fieldConverter;
+    return this;
+  }
+
+  public DescriptorBuilder compatibleReadMode(int compatibleReadMode, int compatibleArrayTypeId) {
+    this.compatibleReadMode = compatibleReadMode;
+    this.compatibleArrayTypeId = compatibleArrayTypeId;
+    this.compatibleElementTypeId = Types.UNKNOWN;
+    return this;
+  }
+
+  public DescriptorBuilder compatibleReadMode(
+      int compatibleReadMode, int compatibleArrayTypeId, int compatibleElementTypeId) {
+    this.compatibleReadMode = compatibleReadMode;
+    this.compatibleArrayTypeId = compatibleArrayTypeId;
+    this.compatibleElementTypeId = compatibleElementTypeId;
     return this;
   }
 

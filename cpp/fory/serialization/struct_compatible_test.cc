@@ -33,7 +33,9 @@
 
 #include "fory/serialization/fory.h"
 #include "gtest/gtest.h"
+#include <algorithm>
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -215,6 +217,35 @@ struct ProductV2 {
            attributes == other.attributes;
   }
   FORY_STRUCT(ProductV2, name, price, tags, attributes);
+};
+
+struct CompatibleListField {
+  std::vector<int32_t> values;
+
+  FORY_STRUCT(CompatibleListField, (values, fory::F(1).list(fory::T::int32())));
+};
+
+struct CompatibleArrayField {
+  std::vector<int32_t> values;
+
+  FORY_STRUCT(CompatibleArrayField,
+              (values, fory::F(1).array(fory::T::int32())));
+};
+
+struct CompatibleNestedListField {
+  std::map<std::string, std::vector<int32_t>> values;
+
+  FORY_STRUCT(CompatibleNestedListField,
+              (values, fory::F(1).map(fory::T::string(),
+                                      fory::T::list(fory::T::int32()))));
+};
+
+struct CompatibleNestedArrayField {
+  std::map<std::string, std::vector<int32_t>> values;
+
+  FORY_STRUCT(CompatibleNestedArrayField,
+              (values, fory::F(1).map(fory::T::string(),
+                                      fory::T::array(fory::T::int32()))));
 };
 
 // ============================================================================
@@ -415,6 +446,80 @@ TEST(SchemaEvolutionTest, CollectionFieldEvolution) {
   EXPECT_EQ(prod_v2.price, 999.99);
   EXPECT_TRUE(prod_v2.tags.empty());       // Default empty vector
   EXPECT_TRUE(prod_v2.attributes.empty()); // Default empty map
+}
+
+TEST(SchemaEvolutionTest, ImmediateListFieldCanReadIntoArrayCarrier) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1005;
+  ASSERT_TRUE(writer.register_struct<CompatibleListField>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<CompatibleArrayField>(TYPE_ID).ok());
+
+  auto bytes = writer.serialize(CompatibleListField{{1, -2, 3}});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto decoded = reader.deserialize<CompatibleArrayField>(bytes.value().data(),
+                                                          bytes.value().size());
+
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{1, -2, 3}));
+}
+
+TEST(SchemaEvolutionTest, ImmediateArrayFieldCanReadIntoListCarrier) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1006;
+  ASSERT_TRUE(writer.register_struct<CompatibleArrayField>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<CompatibleListField>(TYPE_ID).ok());
+
+  auto bytes = writer.serialize(CompatibleArrayField{{4, 5, 6}});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto decoded = reader.deserialize<CompatibleListField>(bytes.value().data(),
+                                                         bytes.value().size());
+
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{4, 5, 6}));
+}
+
+TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1007;
+  ASSERT_TRUE(writer.register_struct<CompatibleListField>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<CompatibleArrayField>(TYPE_ID).ok());
+
+  auto bytes = writer.serialize(CompatibleListField{{1, 2}});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  std::vector<uint8_t> corrupted = std::move(bytes).value();
+  const std::vector<uint8_t> list_payload = {2, 0x0c, 2, 4};
+  auto payload_header = std::search(corrupted.begin(), corrupted.end(),
+                                    list_payload.begin(), list_payload.end());
+  ASSERT_NE(payload_header, corrupted.end());
+  *(payload_header + 1) = 0x0e;
+  auto decoded = reader.deserialize<CompatibleArrayField>(corrupted.data(),
+                                                          corrupted.size());
+
+  ASSERT_FALSE(decoded.ok());
+}
+
+TEST(SchemaEvolutionTest, NestedListArraySchemaPairsAreNotMatched) {
+  auto writer = Fory::builder().compatible(true).xlang(true).build();
+  auto reader = Fory::builder().compatible(true).xlang(true).build();
+
+  constexpr uint32_t TYPE_ID = 1008;
+  ASSERT_TRUE(writer.register_struct<CompatibleNestedListField>(TYPE_ID).ok());
+  ASSERT_TRUE(reader.register_struct<CompatibleNestedArrayField>(TYPE_ID).ok());
+
+  auto bytes = writer.serialize(
+      CompatibleNestedListField{{{"items", std::vector<int32_t>{7, 8}}}});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  auto decoded = reader.deserialize<CompatibleNestedArrayField>(
+      bytes.value().data(), bytes.value().size());
+
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_TRUE(decoded.value().values.empty());
 }
 
 TEST(SchemaEvolutionTest, RoundtripWithSameVersion) {

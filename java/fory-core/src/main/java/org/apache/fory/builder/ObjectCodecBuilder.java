@@ -673,6 +673,10 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           for (Descriptor d : group) {
             ExpressionVisitor.ExprHolder exprHolder = ExpressionVisitor.ExprHolder.of("bean", bean);
             walkPath.add(d.getDeclaringClass() + d.getName());
+            TypeRef<?> castTypeRef =
+                d.getCompatibleReadMode() == Descriptor.COMPATIBLE_READ_NONE
+                    ? d.getTypeRef()
+                    : compatibleReadTargetTypeRef(d);
             Expression action =
                 deserializeField(
                     buffer,
@@ -680,8 +684,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
                     // `bean` will be replaced by `Reference` to cut-off expr
                     // dependency.
                     expr ->
-                        setFieldValue(
-                            exprHolder.get("bean"), d, tryInlineCast(expr, d.getTypeRef())));
+                        setFieldValue(exprHolder.get("bean"), d, tryInlineCast(expr, castTypeRef)));
             walkPath.removeLast();
             groupExpressions.add(action);
           }
@@ -701,8 +704,15 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     // use Reference to cut-off expr dependency.
     for (Descriptor d : group) {
       boolean nullable = d.isNullable();
-      Expression v = deserializeForNullableField(buffer, d, expr -> expr, nullable);
-      Expression action = setFieldValue(bean, d, tryInlineCast(v, d.getTypeRef()));
+      Expression v =
+          d.getCompatibleReadMode() == Descriptor.COMPATIBLE_READ_NONE
+              ? deserializeForNullableField(buffer, d, expr -> expr, nullable)
+              : deserializeCompatibleListArrayField(d);
+      TypeRef<?> castTypeRef =
+          d.getCompatibleReadMode() == Descriptor.COMPATIBLE_READ_NONE
+              ? d.getTypeRef()
+              : compatibleReadTargetTypeRef(d);
+      Expression action = setFieldValue(bean, d, tryInlineCast(v, castTypeRef));
       groupExpressions.add(action);
     }
     return groupExpressions;

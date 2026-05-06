@@ -754,7 +754,7 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
             if (localIndex >= 0 &&
                 localMatch is not null &&
-                IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType))
+                IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true))
             {
                 remoteField.AssignedFieldId = localIndex;
             }
@@ -765,8 +765,13 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
     }
 
-    private static bool IsCompatibleFieldType(TypeMetaFieldType remote, TypeMetaFieldType local)
+    private static bool IsCompatibleFieldType(TypeMetaFieldType remote, TypeMetaFieldType local, bool topLevel)
     {
+        if (topLevel && IsCompatibleListArrayFieldPair(remote, local))
+        {
+            return true;
+        }
+
         if (NormalizeTypeIdForMatch(remote.TypeId) != NormalizeTypeIdForMatch(local.TypeId))
         {
             return false;
@@ -779,13 +784,73 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
 
         for (int i = 0; i < remote.Generics.Count; i++)
         {
-            if (!IsCompatibleFieldType(remote.Generics[i], local.Generics[i]))
+            if (!IsCompatibleFieldType(remote.Generics[i], local.Generics[i], topLevel: false))
             {
                 return false;
             }
         }
 
         return true;
+    }
+
+    private static bool IsCompatibleListArrayFieldPair(TypeMetaFieldType remote, TypeMetaFieldType local)
+    {
+        uint? localArrayElementTypeId = TryPackedArrayElementTypeId(local.TypeId);
+        uint? remoteArrayElementTypeId = TryPackedArrayElementTypeId(remote.TypeId);
+        bool remoteListLocalArray = remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
+                                    localArrayElementTypeId.HasValue &&
+                                    remote.Generics.Count == 1 &&
+                                    CompatibleScalarTypeId(localArrayElementTypeId.Value) ==
+                                    CompatibleScalarTypeId(remote.Generics[0].TypeId);
+        if (remoteListLocalArray)
+        {
+            return true;
+        }
+
+        return local.TypeId == (uint)global::Apache.Fory.TypeId.List &&
+               remoteArrayElementTypeId.HasValue &&
+               local.Generics.Count == 1 &&
+               CompatibleScalarTypeId(remoteArrayElementTypeId.Value) ==
+               CompatibleScalarTypeId(local.Generics[0].TypeId);
+    }
+
+    private static uint? TryPackedArrayElementTypeId(uint typeId)
+    {
+        return typeId switch
+        {
+            (uint)global::Apache.Fory.TypeId.BoolArray => (uint)global::Apache.Fory.TypeId.Bool,
+            (uint)global::Apache.Fory.TypeId.Int8Array => (uint)global::Apache.Fory.TypeId.Int8,
+            (uint)global::Apache.Fory.TypeId.Int16Array => (uint)global::Apache.Fory.TypeId.Int16,
+            (uint)global::Apache.Fory.TypeId.Int32Array => (uint)global::Apache.Fory.TypeId.VarInt32,
+            (uint)global::Apache.Fory.TypeId.Int64Array => (uint)global::Apache.Fory.TypeId.VarInt64,
+            (uint)global::Apache.Fory.TypeId.Float16Array => (uint)global::Apache.Fory.TypeId.Float16,
+            (uint)global::Apache.Fory.TypeId.Float32Array => (uint)global::Apache.Fory.TypeId.Float32,
+            (uint)global::Apache.Fory.TypeId.Float64Array => (uint)global::Apache.Fory.TypeId.Float64,
+            (uint)global::Apache.Fory.TypeId.UInt8Array => (uint)global::Apache.Fory.TypeId.UInt8,
+            (uint)global::Apache.Fory.TypeId.UInt16Array => (uint)global::Apache.Fory.TypeId.UInt16,
+            (uint)global::Apache.Fory.TypeId.UInt32Array => (uint)global::Apache.Fory.TypeId.UInt32,
+            (uint)global::Apache.Fory.TypeId.UInt64Array => (uint)global::Apache.Fory.TypeId.UInt64,
+            (uint)global::Apache.Fory.TypeId.BFloat16Array => (uint)global::Apache.Fory.TypeId.BFloat16,
+            _ => null,
+        };
+    }
+
+    private static uint CompatibleScalarTypeId(uint typeId)
+    {
+        return typeId switch
+        {
+            (uint)global::Apache.Fory.TypeId.Int32 or
+            (uint)global::Apache.Fory.TypeId.VarInt32 => (uint)global::Apache.Fory.TypeId.VarInt32,
+            (uint)global::Apache.Fory.TypeId.Int64 or
+            (uint)global::Apache.Fory.TypeId.VarInt64 or
+            (uint)global::Apache.Fory.TypeId.TaggedInt64 => (uint)global::Apache.Fory.TypeId.VarInt64,
+            (uint)global::Apache.Fory.TypeId.UInt32 or
+            (uint)global::Apache.Fory.TypeId.VarUInt32 => (uint)global::Apache.Fory.TypeId.VarUInt32,
+            (uint)global::Apache.Fory.TypeId.UInt64 or
+            (uint)global::Apache.Fory.TypeId.VarUInt64 or
+            (uint)global::Apache.Fory.TypeId.TaggedUInt64 => (uint)global::Apache.Fory.TypeId.VarUInt64,
+            _ => NormalizeTypeIdForMatch(typeId),
+        };
     }
 
     private static uint NormalizeTypeIdForMatch(uint typeId)

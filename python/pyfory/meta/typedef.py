@@ -642,6 +642,8 @@ def _list_array_element_type_matches(list_field_type: FieldType, array_field_typ
 
 
 def _is_root_list_array_pair(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+    if local_field_type is None:
+        return False
     if remote_field_type.type_id == TypeId.LIST and local_field_type.type_id in _ARRAY_TYPE_IDS:
         return _list_array_element_type_matches(remote_field_type, local_field_type)
     if local_field_type.type_id == TypeId.LIST and remote_field_type.type_id in _ARRAY_TYPE_IDS:

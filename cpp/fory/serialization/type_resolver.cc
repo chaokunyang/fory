@@ -1104,8 +1104,9 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
       if (local_uses_field_ids && remote_field.field_id >= 0) {
         auto id_it = local_field_id_map.find(remote_field.field_id);
         if (id_it != local_field_id_map.end() &&
-            field_types_compatible(local_fields[id_it->second].field_type,
-                                   remote_field.field_type)) {
+            field_types_compatible_top_level(
+                local_fields[id_it->second].field_type,
+                remote_field.field_type)) {
           local_index = id_it->second;
         }
       }
@@ -1132,8 +1133,8 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
       if (it != local_field_index_map.end()) {
         size_t idx = it->second;
         const FieldInfo &local_field = local_fields[idx];
-        if (field_types_compatible(local_field.field_type,
-                                   remote_field.field_type)) {
+        if (field_types_compatible_top_level(local_field.field_type,
+                                             remote_field.field_type)) {
           local_index = idx;
         }
       }
@@ -1146,8 +1147,8 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
         if (used[i]) {
           continue;
         }
-        if (field_types_compatible(local_fields[i].field_type,
-                                   remote_field.field_type)) {
+        if (field_types_compatible_top_level(local_fields[i].field_type,
+                                             remote_field.field_type)) {
           local_index = i;
           break;
         }

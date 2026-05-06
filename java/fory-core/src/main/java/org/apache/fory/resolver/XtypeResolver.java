@@ -76,6 +76,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BigIntegerSerializer;
@@ -1292,6 +1293,10 @@ public class XtypeResolver extends TypeResolver {
   }
 
   private byte getInternalTypeId(Descriptor descriptor) {
+    TypeExtMeta extMeta = descriptor.getTypeRef().getTypeExtMeta();
+    if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {
+      return (byte) extMeta.typeId();
+    }
     if (TypeAnnotationUtils.isBoxedListArrayType(descriptor.getField())) {
       return (byte) TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField());
     }

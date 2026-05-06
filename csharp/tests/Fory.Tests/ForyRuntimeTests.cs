@@ -116,6 +116,62 @@ public sealed class ExplicitArraySchema
 }
 
 [ForyObject]
+public sealed class CompatibleListSchema
+{
+    [ForyField(Type = typeof(S.List<S.Int32>))]
+    public List<int> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleNullableListSchema
+{
+    [ForyField(Type = typeof(S.List<S.Int32>))]
+    public List<int?> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleArraySchema
+{
+    [ForyField(Type = typeof(S.Array<S.Int32>))]
+    public int[] Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleUInt32ListSchema
+{
+    [ForyField(Type = typeof(S.List<S.UInt32>))]
+    public List<uint> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleUInt32ArraySchema
+{
+    [ForyField(Type = typeof(S.Array<S.UInt32>))]
+    public uint[] Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleUInt32ArrayListCarrierSchema
+{
+    [ForyField(Type = typeof(S.Array<S.UInt32>))]
+    public List<uint> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleNestedListSchema
+{
+    [ForyField(Type = typeof(S.Map<S.String, S.List<S.Int32>>))]
+    public Dictionary<string, List<int>> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleNestedArraySchema
+{
+    [ForyField(Type = typeof(S.Map<S.String, S.Array<S.Int32>>))]
+    public Dictionary<string, int[]> Values { get; set; } = [];
+}
+
+[ForyObject]
 public sealed class SemanticScalarSchema
 {
     [ForyField(Type = typeof(S.Int32))]
@@ -952,6 +1008,124 @@ public sealed class ForyRuntimeTests
         ExplicitArraySchema decoded = fory.Deserialize<ExplicitArraySchema>(fory.Serialize(value));
 
         Assert.Equal(value.Values, decoded.Values);
+    }
+
+    [Fact]
+    public void CompatibleReadAllowsImmediateListFieldIntoArrayCarrier()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<CompatibleListSchema>(306);
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<CompatibleArraySchema>(306);
+
+        CompatibleArraySchema decoded = reader.Deserialize<CompatibleArraySchema>(
+            writer.Serialize(new CompatibleListSchema { Values = [1, -2, int.MaxValue] }));
+
+        Assert.Equal([1, -2, int.MaxValue], decoded.Values);
+    }
+
+    [Fact]
+    public void CompatibleReadAllowsImmediateArrayFieldIntoListCarrier()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<CompatibleArraySchema>(307);
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<CompatibleListSchema>(307);
+
+        CompatibleListSchema decoded = reader.Deserialize<CompatibleListSchema>(
+            writer.Serialize(new CompatibleArraySchema { Values = [3, 4, 5] }));
+
+        Assert.Equal([3, 4, 5], decoded.Values);
+    }
+
+    [Fact]
+    public void CompatibleReadSupportsUInt32ListArrayFieldPairs()
+    {
+        ForyRuntime listWriter = ForyRuntime.Builder().Compatible(true).Build();
+        listWriter.Register<CompatibleUInt32ListSchema>(309);
+        ForyRuntime arrayReader = ForyRuntime.Builder().Compatible(true).Build();
+        arrayReader.Register<CompatibleUInt32ArraySchema>(309);
+
+        CompatibleUInt32ArraySchema decodedArray = arrayReader.Deserialize<CompatibleUInt32ArraySchema>(
+            listWriter.Serialize(new CompatibleUInt32ListSchema { Values = [1u, uint.MaxValue] }));
+
+        Assert.Equal([1u, uint.MaxValue], decodedArray.Values);
+
+        ForyRuntime arrayListCarrierReader = ForyRuntime.Builder().Compatible(true).Build();
+        arrayListCarrierReader.Register<CompatibleUInt32ArrayListCarrierSchema>(309);
+        CompatibleUInt32ArrayListCarrierSchema decodedArrayListCarrier =
+            arrayListCarrierReader.Deserialize<CompatibleUInt32ArrayListCarrierSchema>(
+                listWriter.Serialize(new CompatibleUInt32ListSchema { Values = [7u, 8u] }));
+
+        Assert.Equal([7u, 8u], decodedArrayListCarrier.Values);
+
+        ForyRuntime arrayWriter = ForyRuntime.Builder().Compatible(true).Build();
+        arrayWriter.Register<CompatibleUInt32ArraySchema>(310);
+        ForyRuntime listReader = ForyRuntime.Builder().Compatible(true).Build();
+        listReader.Register<CompatibleUInt32ListSchema>(310);
+
+        CompatibleUInt32ListSchema decodedList = listReader.Deserialize<CompatibleUInt32ListSchema>(
+            arrayWriter.Serialize(new CompatibleUInt32ArraySchema { Values = [9u, uint.MaxValue] }));
+
+        Assert.Equal([9u, uint.MaxValue], decodedList.Values);
+    }
+
+    [Fact]
+    public void CompatibleReadRejectsNullableListElementsIntoArrayCarrier()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
+        writer.Register<CompatibleNullableListSchema>(308);
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
+        reader.Register<CompatibleArraySchema>(308);
+
+        Assert.Throws<InvalidDataException>(() => reader.Deserialize<CompatibleArraySchema>(
+            writer.Serialize(new CompatibleNullableListSchema { Values = [1, null] })));
+    }
+
+    [Fact]
+    public void CompatibleReadDoesNotMatchNestedListArraySchemaPairs()
+    {
+        List<TypeMetaFieldInfo> localFields =
+        [
+            new TypeMetaFieldInfo(
+                null,
+                "values",
+                new TypeMetaFieldType(
+                    (uint)TypeId.Map,
+                    false,
+                    false,
+                    [
+                        new TypeMetaFieldType((uint)TypeId.String, false),
+                        new TypeMetaFieldType((uint)TypeId.Int32Array, false),
+                    ])),
+        ];
+        TypeMeta remoteTypeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            0,
+            MetaString.Empty('_', '_'),
+            new MetaString("remote", MetaStringEncoding.Utf8, '_', '_', "remote"u8.ToArray()),
+            false,
+            [
+                new TypeMetaFieldInfo(
+                    null,
+                    "values",
+                    new TypeMetaFieldType(
+                        (uint)TypeId.Map,
+                        false,
+                        false,
+                        [
+                            new TypeMetaFieldType((uint)TypeId.String, false),
+                            new TypeMetaFieldType(
+                                (uint)TypeId.List,
+                                false,
+                                false,
+                                [new TypeMetaFieldType((uint)TypeId.VarInt32, false)]),
+                        ])),
+            ]);
+
+        TypeMeta.AssignFieldIds(remoteTypeMeta, localFields);
+
+        Assert.Equal(-1, remoteTypeMeta.Fields[0].AssignedFieldId);
     }
 
     [Fact]

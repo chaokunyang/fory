@@ -123,6 +123,12 @@ Notes:
   of the current xlang type-mapping surface.
 - Current xlang uses `*_ARRAY` for one-dimensional primitive arrays and nested `list` for
   multi-dimensional arrays.
+- `list<T>` and `array<T>` remain distinct schema kinds. In schema-compatible struct/class field
+  matching only, a direct top-level `list<T>` field may be read as a direct top-level `array<T>`
+  field, and a direct top-level `array<T>` field may be read as a direct top-level `list<T>` field,
+  when `T` is one of the dense bool/numeric array domains. The rule does not apply inside nested
+  collection, map, array, union, or generic positions. Reading peer `list<T>` data into a local
+  `array<T>` field fails if the list payload declares nullable elements.
 
 ## Type info
 

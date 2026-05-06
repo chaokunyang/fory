@@ -209,6 +209,50 @@ fn collection_type_with_fallback_generics(type_id: u32) -> bool {
 }
 
 #[inline(always)]
+fn primitive_array_element_type_id(type_id: u32) -> Option<u32> {
+    match type_id {
+        type_id::BOOL_ARRAY => Some(type_id::BOOL),
+        type_id::INT8_ARRAY => Some(type_id::INT8),
+        type_id::INT16_ARRAY => Some(type_id::INT16),
+        type_id::INT32_ARRAY => Some(type_id::INT32),
+        type_id::INT64_ARRAY => Some(type_id::INT64),
+        type_id::UINT8_ARRAY => Some(type_id::UINT8),
+        type_id::UINT16_ARRAY => Some(type_id::UINT16),
+        type_id::UINT32_ARRAY => Some(type_id::UINT32),
+        type_id::UINT64_ARRAY => Some(type_id::UINT64),
+        type_id::FLOAT16_ARRAY => Some(type_id::FLOAT16),
+        type_id::BFLOAT16_ARRAY => Some(type_id::BFLOAT16),
+        type_id::FLOAT32_ARRAY => Some(type_id::FLOAT32),
+        type_id::FLOAT64_ARRAY => Some(type_id::FLOAT64),
+        _ => None,
+    }
+}
+
+#[inline(always)]
+fn list_element_type_matches_array(list: &FieldType, array: &FieldType) -> bool {
+    primitive_array_element_type_id(array.type_id).is_some_and(|element_type_id| {
+        list.type_id == type_id::LIST
+            && list.generics.len() == 1
+            && primitive_array_element_type_matches(element_type_id, list.generics[0].type_id)
+            && !list.generics[0].track_ref
+    })
+}
+
+#[inline(always)]
+fn primitive_array_element_type_matches(
+    array_element_type_id: u32,
+    list_element_type_id: u32,
+) -> bool {
+    match array_element_type_id {
+        type_id::INT32 => list_element_type_id == type_id::VARINT32,
+        type_id::INT64 => list_element_type_id == type_id::VARINT64,
+        type_id::UINT32 => list_element_type_id == type_id::VAR_UINT32,
+        type_id::UINT64 => list_element_type_id == type_id::VAR_UINT64,
+        _ => array_element_type_id == list_element_type_id,
+    }
+}
+
+#[inline(always)]
 pub fn field_types_compatible(local: &FieldType, remote: &FieldType) -> bool {
     if local.compatible_fingerprint() == remote.compatible_fingerprint() {
         return true;
@@ -233,6 +277,53 @@ fn generic_field_type<'a>(
             "{owner} field metadata is missing generic type at index {index}"
         ))
     })
+}
+
+fn read_non_nullable_list_data_with_type<T>(
+    context: &mut ReadContext,
+    remote_field_type: &FieldType,
+) -> Result<Vec<T>, Error>
+where
+    T: Serializer + ForyDefault,
+{
+    let len = context.reader.read_var_u32()?;
+    if len == 0 {
+        return Ok(Vec::new());
+    }
+    let max = context.max_collection_size();
+    if len > max {
+        return Err(Error::size_limit_exceeded(format!(
+            "Collection size {} exceeds limit {}",
+            len, max
+        )));
+    }
+    let header = context.reader.read_u8()?;
+    if (header & HAS_NULL) != 0 {
+        return Err(Error::type_error(
+            "array-compatible list declares nullable elements",
+        ));
+    }
+    if (header & TRACKING_REF) != 0 {
+        return Err(Error::type_error(
+            "array-compatible list declares reference-tracked elements",
+        ));
+    }
+    if (header & IS_SAME_TYPE) == 0 {
+        return Err(Error::type_error(
+            "array-compatible list must declare same-type elements",
+        ));
+    }
+    let _element_type = if (header & DECL_ELEMENT_TYPE) != 0 {
+        generic_field_type(remote_field_type, 0, "list")?.clone()
+    } else {
+        T::fory_read_type_info(context)?;
+        generic_field_type(remote_field_type, 0, "list")?.clone()
+    };
+    let mut vec = Vec::with_capacity(len as usize);
+    for _ in 0..len {
+        vec.push(T::fory_read_data(context)?);
+    }
+    Ok(vec)
 }
 
 #[inline(always)]
@@ -1241,7 +1332,7 @@ pub struct VecCodec<T, C, const NULLABLE: bool, const TRACK_REF: bool>(PhantomDa
 impl<T, C, const NULLABLE: bool, const TRACK_REF: bool> Codec<Vec<T>>
     for VecCodec<T, C, NULLABLE, TRACK_REF>
 where
-    T: 'static,
+    T: Serializer + ForyDefault,
     C: Codec<T>,
 {
     #[inline(always)]
@@ -1277,6 +1368,38 @@ where
             }
         }
         Self::read_data(context)
+    }
+
+    fn read_compatible(
+        context: &mut ReadContext,
+        local_field_type: &FieldType,
+        remote_field_type: &FieldType,
+    ) -> Result<Option<Vec<T>>, Error> {
+        if local_field_type.compatible_fingerprint() == remote_field_type.compatible_fingerprint()
+            || (local_field_type.type_id == remote_field_type.type_id
+                && collection_type_with_fallback_generics(local_field_type.type_id)
+                && (local_field_type.generics.is_empty() || remote_field_type.generics.is_empty()))
+        {
+            return Self::read_field_with_type(context, remote_field_type).map(Some);
+        }
+        if local_field_type.type_id == type_id::LIST
+            && list_element_type_matches_array(local_field_type, remote_field_type)
+        {
+            if field_ref_mode(remote_field_type) != RefMode::None {
+                let ref_flag = context.reader.read_i8()?;
+                if ref_flag == RefFlag::Null as i8 {
+                    return Ok(Some(Vec::new()));
+                }
+            }
+            if crate::serializer::util::field_need_read_type_info(remote_field_type.type_id) {
+                let remote = context.reader.read_u8()? as u32;
+                if remote != remote_field_type.type_id {
+                    return Err(Error::type_mismatch(remote_field_type.type_id, remote));
+                }
+            }
+            return primitive_list::fory_read_data(context).map(Some);
+        }
+        Ok(None)
     }
 
     fn write_data(value: &Vec<T>, context: &mut WriteContext) -> Result<(), Error> {
@@ -1545,6 +1668,31 @@ where
             }
         }
         Self::read_data(context)
+    }
+
+    fn read_compatible(
+        context: &mut ReadContext,
+        local_field_type: &FieldType,
+        remote_field_type: &FieldType,
+    ) -> Result<Option<Vec<T>>, Error> {
+        if local_field_type.compatible_fingerprint() == remote_field_type.compatible_fingerprint() {
+            return Self::read_field_with_type(context, remote_field_type).map(Some);
+        }
+        if remote_field_type.type_id == type_id::LIST
+            && !remote_field_type.generics.is_empty()
+            && !remote_field_type.generics[0].nullable
+            && list_element_type_matches_array(remote_field_type, local_field_type)
+        {
+            if field_ref_mode(remote_field_type) != RefMode::None {
+                let ref_flag = context.reader.read_i8()?;
+                if ref_flag == RefFlag::Null as i8 {
+                    return Ok(Some(Vec::new()));
+                }
+            }
+            return read_non_nullable_list_data_with_type::<T>(context, remote_field_type)
+                .map(Some);
+        }
+        Ok(None)
     }
 
     #[inline(always)]

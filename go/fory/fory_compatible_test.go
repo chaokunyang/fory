@@ -131,6 +131,26 @@ type ByteFamilyInt8ArrayDataClass struct {
 	Payload []int8 `fory:"type=array(element=int8)"`
 }
 
+type Int32ListPayloadDataClass struct {
+	Payload []int32 `fory:"type=list(element=int32(nullable=false,encoding=fixed))"`
+}
+
+type NullableInt32ListPayloadDataClass struct {
+	Payload []*int32 `fory:"type=list(element=int32(nullable=true,encoding=fixed))"`
+}
+
+type Int32ArrayPayloadDataClass struct {
+	Payload [3]int32 `fory:"type=array(element=int32)"`
+}
+
+type NestedInt32ListPayloadDataClass struct {
+	Payload [][]int32 `fory:"type=list(element=list(element=int32(nullable=false,encoding=fixed)))"`
+}
+
+type NestedInt32ArrayPayloadDataClass struct {
+	Payload [][2]int32 `fory:"type=list(element=array(element=int32))"`
+}
+
 func TestMetaShareEnabled(t *testing.T) {
 	fory := NewForyWithOptions(WithXlang(true), WithCompatible(true))
 
@@ -232,7 +252,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				assert.Equal(t, in.F8, out.F8)
 				assert.Equal(t, in.F9, out.F9)
 				assert.Equal(t, in.F10, out.F10)
-				assert.Equal(t, in.F11, out.F11)
+				assert.Equal(t, [2]int16{}, out.F11)
 				assert.Equal(t, in.F12, out.F12)
 			},
 		},
@@ -528,6 +548,58 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			},
 			assertFunc: func(t *testing.T, input any, output any) {
 				out := output.(ByteFamilyBinaryDataClass)
+				assert.Nil(t, out.Payload)
+			},
+		},
+		{
+			name:      "Int32ListToArray",
+			tag:       "Int32Sequence",
+			writeType: Int32ListPayloadDataClass{},
+			readType:  Int32ArrayPayloadDataClass{},
+			input: Int32ListPayloadDataClass{
+				Payload: []int32{1, 2, 3},
+			},
+			assertFunc: func(t *testing.T, input any, output any) {
+				out := output.(Int32ArrayPayloadDataClass)
+				assert.Equal(t, [3]int32{1, 2, 3}, out.Payload)
+			},
+		},
+		{
+			name:      "Int32ArrayToList",
+			tag:       "Int32Sequence",
+			writeType: Int32ArrayPayloadDataClass{},
+			readType:  Int32ListPayloadDataClass{},
+			input: Int32ArrayPayloadDataClass{
+				Payload: [3]int32{1, 2, 3},
+			},
+			assertFunc: func(t *testing.T, input any, output any) {
+				out := output.(Int32ListPayloadDataClass)
+				assert.Equal(t, []int32{1, 2, 3}, out.Payload)
+			},
+		},
+		{
+			name:      "NullableInt32ListDoesNotMatchArray",
+			tag:       "Int32Sequence",
+			writeType: NullableInt32ListPayloadDataClass{},
+			readType:  Int32ArrayPayloadDataClass{},
+			input: NullableInt32ListPayloadDataClass{
+				Payload: []*int32{ptr(int32(1)), ptr(int32(2)), ptr(int32(3))},
+			},
+			assertFunc: func(t *testing.T, input any, output any) {
+				out := output.(Int32ArrayPayloadDataClass)
+				assert.Equal(t, [3]int32{}, out.Payload)
+			},
+		},
+		{
+			name:      "NestedListArrayMismatch",
+			tag:       "NestedInt32Sequence",
+			writeType: NestedInt32ListPayloadDataClass{},
+			readType:  NestedInt32ArrayPayloadDataClass{},
+			input: NestedInt32ListPayloadDataClass{
+				Payload: [][]int32{{1, 2}, {3, 4}},
+			},
+			assertFunc: func(t *testing.T, input any, output any) {
+				out := output.(NestedInt32ArrayPayloadDataClass)
 				assert.Nil(t, out.Payload)
 			},
 		},

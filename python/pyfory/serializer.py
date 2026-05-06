@@ -732,6 +732,92 @@ class ForyArrayFieldSerializer(Serializer):
         return self.wrapper_serializer.read(buffer)
 
 
+class CompatibleArrayToListFieldSerializer(Serializer):
+    def __init__(self, type_resolver, remote_array_serializer, elem_serializer):
+        super().__init__(type_resolver, list)
+        self.remote_array_serializer = remote_array_serializer
+        self.elem_serializer = elem_serializer
+        self.need_to_write_ref = False
+
+    def write(self, buffer, value):
+        raise TypeError("compatible array-to-list field serializer is read-only")
+
+    def read(self, read_context):
+        return list(self.remote_array_serializer.read(read_context))
+
+
+class CompatibleListToArrayFieldSerializer(Serializer):
+    def __init__(self, type_resolver, wrapper_type, wrapper_serializer, elem_serializer, field_name=None):
+        super().__init__(type_resolver, wrapper_type)
+        self.wrapper_type = wrapper_type
+        self.wrapper_serializer = wrapper_serializer
+        self.elem_serializer = elem_serializer
+        self.field_name = field_name or "<array>"
+        self.list_adapter_serializer = ForyArrayListAdapterSerializer(
+            type_resolver,
+            wrapper_type,
+            wrapper_serializer,
+            self.field_name,
+        )
+        self.need_to_write_ref = False
+
+    def write(self, buffer, value):
+        raise TypeError("compatible list-to-array field serializer is read-only")
+
+    def read(self, read_context):
+        from pyfory.collection import (
+            COLL_HAS_NULL,
+            COLL_IS_DECL_ELEMENT_TYPE,
+            COLL_IS_SAME_TYPE,
+            COLL_TRACKING_REF,
+            get_next_element,
+        )
+        from pyfory.error import TypeNotCompatibleError
+        from pyfory.resolver import NOT_NULL_VALUE_FLAG
+
+        length = read_context.read_var_uint32()
+        if length > read_context.max_collection_size:
+            raise ValueError(f"Collection size {length} exceeds the configured limit of {read_context.max_collection_size}")
+        if length == 0:
+            return self.wrapper_type()
+        collect_flag = read_context.read_int8()
+        if (collect_flag & COLL_HAS_NULL) != 0:
+            raise TypeNotCompatibleError(
+                f"Field {self.field_name!r} cannot read nullable list elements as array<T>",
+            )
+
+        values = []
+        if (collect_flag & COLL_IS_SAME_TYPE) != 0:
+            if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
+                typeinfo = self.type_resolver.read_type_info(read_context)
+                elem_serializer = typeinfo.serializer
+            else:
+                elem_serializer = self.elem_serializer
+            if (collect_flag & COLL_TRACKING_REF) != 0:
+                ref_reader = read_context.ref_reader
+                for _ in range(length):
+                    ref_id = ref_reader.try_preserve_ref_id(read_context)
+                    if ref_id < NOT_NULL_VALUE_FLAG:
+                        values.append(ref_reader.get_read_ref())
+                    else:
+                        obj = elem_serializer.read(read_context)
+                        ref_reader.set_read_ref(ref_id, obj)
+                        values.append(obj)
+            else:
+                for _ in range(length):
+                    values.append(read_context.read_no_ref(serializer=elem_serializer))
+            return self.list_adapter_serializer._copy_list_to_wrapper(values)
+
+        if (collect_flag & COLL_TRACKING_REF) != 0:
+            for _ in range(length):
+                values.append(get_next_element(read_context))
+        else:
+            for _ in range(length):
+                typeinfo = self.type_resolver.read_type_info(read_context)
+                values.append(read_context.read_no_ref(serializer=typeinfo.serializer))
+        return self.list_adapter_serializer._copy_list_to_wrapper(values)
+
+
 class DynamicPyArraySerializer(Serializer):
     """Serializer for dynamic Python arrays that handles any typecode."""
 

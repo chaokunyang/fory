@@ -27,6 +27,11 @@ type primitiveListSerializer struct {
 	elemTypeID TypeId
 }
 
+type compatiblePrimitiveListToArraySerializer struct {
+	arrayType  reflect.Type
+	listReader primitiveListSerializer
+}
+
 func newPrimitiveListSerializer(type_ reflect.Type, elemTypeID TypeId) (Serializer, bool) {
 	if type_.Kind() != reflect.Slice {
 		return nil, false
@@ -175,6 +180,68 @@ func (s primitiveListSerializer) ReadData(ctx *ReadContext, value reflect.Value)
 	}
 	hasNull := (collectFlag & CollectionHasNull) != 0
 	s.readValues(buf, err, value, length, hasNull)
+}
+
+func (s compatiblePrimitiveListToArraySerializer) WriteData(ctx *WriteContext, value reflect.Value) {
+	ctx.SetError(SerializationErrorf("compatible list-to-array field serializer is read-only"))
+}
+
+func (s compatiblePrimitiveListToArraySerializer) Write(ctx *WriteContext, refMode RefMode, writeType bool, hasGenerics bool, value reflect.Value) {
+	ctx.SetError(SerializationErrorf("compatible list-to-array field serializer is read-only"))
+}
+
+func (s compatiblePrimitiveListToArraySerializer) Read(ctx *ReadContext, refMode RefMode, readType bool, hasGenerics bool, value reflect.Value) {
+	done, typeID := readSliceRefAndType(ctx, refMode, readType, value)
+	if done || ctx.HasError() {
+		return
+	}
+	if readType && typeID != uint32(LIST) {
+		ctx.SetError(DeserializationErrorf("array-compatible list type mismatch: expected LIST (%d), got %d", LIST, typeID))
+		return
+	}
+	s.ReadData(ctx, value)
+}
+
+func (s compatiblePrimitiveListToArraySerializer) ReadData(ctx *ReadContext, value reflect.Value) {
+	buf := ctx.Buffer()
+	err := ctx.Err()
+	length := ctx.ReadCollectionLength()
+	if ctx.HasError() {
+		return
+	}
+	if length != value.Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match serialized list length %d", value.Len(), length))
+		return
+	}
+	if length == 0 {
+		return
+	}
+	collectFlag := buf.ReadInt8(err)
+	if (collectFlag & CollectionIsSameType) != 0 {
+		if (collectFlag & CollectionIsDeclElementType) == 0 {
+			ctx.TypeResolver().ReadTypeInfo(buf, err)
+		}
+	}
+	if (collectFlag & CollectionTrackingRef) != 0 {
+		ctx.SetError(DeserializationErrorf("array-compatible list does not support reference-tracked elements"))
+		return
+	}
+	if (collectFlag & CollectionHasNull) != 0 {
+		ctx.SetError(DeserializationErrorf("array-compatible list declares nullable elements"))
+		return
+	}
+	temp := reflect.New(reflect.SliceOf(s.arrayType.Elem())).Elem()
+	s.listReader.readValues(buf, err, temp, length, false)
+	if ctx.HasError() {
+		return
+	}
+	for i := 0; i < length; i++ {
+		value.Index(i).Set(temp.Index(i))
+	}
+}
+
+func (s compatiblePrimitiveListToArraySerializer) ReadWithTypeInfo(ctx *ReadContext, refMode RefMode, typeInfo *TypeInfo, value reflect.Value) {
+	s.Read(ctx, refMode, false, false, value)
 }
 
 func (s primitiveListSerializer) readValues(buf *ByteBuffer, err *Error, value reflect.Value, length int, hasNull bool) {

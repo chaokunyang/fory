@@ -70,6 +70,85 @@ fn simple() {
 }
 
 #[test]
+fn compatible_list_array_field_pairs() {
+    #[derive(ForyStruct, Debug)]
+    struct ListPayload {
+        payload: Vec<i32>,
+    }
+
+    #[derive(ForyStruct, Debug)]
+    struct NullableListPayload {
+        #[fory(list(element(nullable = true)))]
+        payload: Vec<Option<i32>>,
+    }
+
+    #[derive(ForyStruct, Debug)]
+    struct ArrayPayload {
+        #[fory(array)]
+        payload: Vec<i32>,
+    }
+
+    #[derive(ForyStruct, Debug)]
+    struct NestedListPayload {
+        payload: Vec<Vec<i32>>,
+    }
+
+    #[derive(ForyStruct, Debug)]
+    struct NestedArrayPayload {
+        #[fory(list(element(array)))]
+        payload: Vec<Vec<i32>>,
+    }
+
+    let mut writer = Fory::builder().compatible(true).build();
+    let mut reader = Fory::builder().compatible(true).build();
+    writer.register::<ListPayload>(991).unwrap();
+    reader.register::<ArrayPayload>(991).unwrap();
+    let bytes = writer
+        .serialize(&ListPayload {
+            payload: vec![1, 2, 3],
+        })
+        .unwrap();
+    let decoded: ArrayPayload = reader.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.payload, vec![1, 2, 3]);
+
+    let mut writer = Fory::builder().compatible(true).build();
+    let mut reader = Fory::builder().compatible(true).build();
+    writer.register::<ArrayPayload>(992).unwrap();
+    reader.register::<ListPayload>(992).unwrap();
+    let bytes = writer
+        .serialize(&ArrayPayload {
+            payload: vec![1, 2, 3],
+        })
+        .unwrap();
+    let decoded: ListPayload = reader.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.payload, vec![1, 2, 3]);
+
+    let mut writer = Fory::builder().compatible(true).build();
+    let mut reader = Fory::builder().compatible(true).build();
+    writer.register::<NullableListPayload>(993).unwrap();
+    reader.register::<ArrayPayload>(993).unwrap();
+    let bytes = writer
+        .serialize(&NullableListPayload {
+            payload: vec![Some(1), Some(2), Some(3)],
+        })
+        .unwrap();
+    let decoded: ArrayPayload = reader.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.payload, Vec::<i32>::default());
+
+    let mut writer = Fory::builder().compatible(true).build();
+    let mut reader = Fory::builder().compatible(true).build();
+    writer.register::<NestedListPayload>(994).unwrap();
+    reader.register::<NestedArrayPayload>(994).unwrap();
+    let bytes = writer
+        .serialize(&NestedListPayload {
+            payload: vec![vec![1, 2], vec![3]],
+        })
+        .unwrap();
+    let decoded: NestedArrayPayload = reader.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.payload, Vec::<Vec<i32>>::default());
+}
+
+#[test]
 fn skip_option() {
     #[derive(ForyStruct, Debug)]
     struct Item1 {

@@ -1003,10 +1003,6 @@ func elementTypesCompatible(actual, expected reflect.Type) bool {
 	if expected.Kind() == reflect.Ptr && actual.Kind() != reflect.Ptr {
 		return elementTypesCompatible(actual, expected.Elem())
 	}
-	if (actual.Kind() == reflect.Array && expected.Kind() == reflect.Slice) ||
-		(actual.Kind() == reflect.Slice && expected.Kind() == reflect.Array) {
-		return elementTypesCompatible(actual.Elem(), expected.Elem())
-	}
 	return false
 }
 

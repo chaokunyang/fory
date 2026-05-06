@@ -379,12 +379,7 @@ fn field_dispatch_for(
 ) -> syn::Result<FieldDispatch> {
     if meta.array {
         let codec_ty = codec_type_for(ty, meta, nullable, track_ref)?;
-        return Ok(FieldDispatch::Serializer {
-            field_type: quote! {
-                <#codec_ty as fory_core::serializer::codec::Codec<#ty>>::field_type(type_resolver)?
-            },
-            has_generics: true,
-        });
+        return Ok(FieldDispatch::Codec { codec_ty });
     }
     if meta.encoding.is_none()
         && meta.list.is_none()

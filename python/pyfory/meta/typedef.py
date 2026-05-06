@@ -503,7 +503,7 @@ class CollectionFieldType(FieldType):
             if declared_root_type:
                 declared_root_type, *extra = declared_root_type
                 elem_type = extra[0] if extra else None
-        elif type_ and len(type_) >= 2:
+        elif type_ and not isinstance(type_, ArrayMeta) and len(type_) >= 2:
             elem_type = type_[1]
         elem_serializer = self.element_type.create_serializer(resolver, elem_type)
         elem_override = getattr(self.element_type, "tracking_ref_override", None)
@@ -613,42 +613,92 @@ _ARRAY_TYPE_IDS = frozenset(
     )
 )
 
+_ARRAY_ELEMENT_TYPE_IDS = {
+    TypeId.BOOL_ARRAY: TypeId.BOOL,
+    TypeId.INT8_ARRAY: TypeId.INT8,
+    TypeId.INT16_ARRAY: TypeId.INT16,
+    TypeId.INT32_ARRAY: TypeId.INT32,
+    TypeId.INT64_ARRAY: TypeId.INT64,
+    TypeId.UINT8_ARRAY: TypeId.UINT8,
+    TypeId.UINT16_ARRAY: TypeId.UINT16,
+    TypeId.UINT32_ARRAY: TypeId.UINT32,
+    TypeId.UINT64_ARRAY: TypeId.UINT64,
+    TypeId.FLOAT16_ARRAY: TypeId.FLOAT16,
+    TypeId.BFLOAT16_ARRAY: TypeId.BFLOAT16,
+    TypeId.FLOAT32_ARRAY: TypeId.FLOAT32,
+    TypeId.FLOAT64_ARRAY: TypeId.FLOAT64,
+}
 
-def _payload_shape_matches(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+
+def _list_array_element_type_matches(list_field_type: FieldType, array_field_type: FieldType) -> bool:
+    array_element_type_id = _ARRAY_ELEMENT_TYPE_IDS.get(array_field_type.type_id)
+    if array_element_type_id is None:
+        return False
+    return (
+        list_field_type.type_id == TypeId.LIST
+        and list_field_type.element_type.type_id == array_element_type_id
+        and not list_field_type.element_type.is_tracking_ref
+    )
+
+
+def _is_root_list_array_pair(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+    if remote_field_type.type_id == TypeId.LIST and local_field_type.type_id in _ARRAY_TYPE_IDS:
+        return _list_array_element_type_matches(remote_field_type, local_field_type)
+    if local_field_type.type_id == TypeId.LIST and remote_field_type.type_id in _ARRAY_TYPE_IDS:
+        return _list_array_element_type_matches(local_field_type, remote_field_type)
+    return False
+
+
+def _remote_list_to_local_array_allowed(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+    return (
+        remote_field_type.type_id == TypeId.LIST
+        and local_field_type.type_id in _ARRAY_TYPE_IDS
+        and _list_array_element_type_matches(remote_field_type, local_field_type)
+        and not remote_field_type.element_type.is_nullable
+    )
+
+
+def _payload_shape_matches(remote_field_type: FieldType, local_field_type: FieldType, top_level: bool = True) -> bool:
     if local_field_type is None:
         return False
     remote_type_id = remote_field_type.type_id
     local_type_id = local_field_type.type_id
     if _is_bytes_uint8_array_pair(remote_type_id, local_type_id):
         return True
+    if top_level and _is_root_list_array_pair(remote_field_type, local_field_type):
+        return True
     if remote_type_id != local_type_id:
         return False
     if remote_type_id in (TypeId.LIST, TypeId.SET):
-        return _payload_shape_matches(remote_field_type.element_type, local_field_type.element_type)
+        return _payload_shape_matches(remote_field_type.element_type, local_field_type.element_type, False)
     if remote_type_id == TypeId.MAP:
-        return _payload_shape_matches(remote_field_type.key_type, local_field_type.key_type) and _payload_shape_matches(
+        return _payload_shape_matches(remote_field_type.key_type, local_field_type.key_type, False) and _payload_shape_matches(
             remote_field_type.value_type,
             local_field_type.value_type,
+            False,
         )
     return True
 
 
-def _payload_shape_needs_local_carrier(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+def _payload_shape_needs_local_carrier(remote_field_type: FieldType, local_field_type: FieldType, top_level: bool = True) -> bool:
     remote_type_id = remote_field_type.type_id
     local_type_id = local_field_type.type_id
     if _is_bytes_uint8_array_pair(remote_type_id, local_type_id):
+        return True
+    if top_level and _is_root_list_array_pair(remote_field_type, local_field_type):
         return True
     if remote_type_id != local_type_id:
         return False
     if remote_type_id in _ARRAY_TYPE_IDS:
         return True
     if remote_type_id in (TypeId.LIST, TypeId.SET):
-        return _payload_shape_needs_local_carrier(remote_field_type.element_type, local_field_type.element_type)
+        return _payload_shape_needs_local_carrier(remote_field_type.element_type, local_field_type.element_type, False)
     if remote_type_id == TypeId.MAP:
         return _payload_shape_needs_local_carrier(
             remote_field_type.key_type,
             local_field_type.key_type,
-        ) or _payload_shape_needs_local_carrier(remote_field_type.value_type, local_field_type.value_type)
+            False,
+        ) or _payload_shape_needs_local_carrier(remote_field_type.value_type, local_field_type.value_type, False)
     return False
 
 
@@ -668,6 +718,39 @@ def _create_compatible_field_serializer(
     local_field_type: typing.Optional[FieldType],
     local_declared_type,
 ):
+    if _is_root_list_array_pair(remote_field_type, local_field_type):
+        from pyfory.serializer import (
+            CompatibleArrayToListFieldSerializer,
+            CompatibleListToArrayFieldSerializer,
+            ForyArrayFieldSerializer,
+            fory_array_serializer_type,
+            fory_array_wrapper_type,
+        )
+
+        if remote_field_type.type_id == TypeId.LIST:
+            if not _remote_list_to_local_array_allowed(remote_field_type, local_field_type):
+                return remote_field_type.create_serializer(resolver, local_declared_type)
+            wrapper_type = fory_array_wrapper_type(local_field_type.type_id)
+            wrapper_serializer = fory_array_serializer_type(local_field_type.type_id)(resolver, wrapper_type)
+            elem_serializer = remote_field_type.element_type.create_serializer(resolver, None)
+            return CompatibleListToArrayFieldSerializer(
+                resolver,
+                wrapper_type,
+                wrapper_serializer,
+                elem_serializer,
+                field_name,
+            )
+
+        remote_wrapper_type = fory_array_wrapper_type(remote_field_type.type_id)
+        remote_serializer = ForyArrayFieldSerializer(
+            resolver,
+            remote_wrapper_type,
+            remote_field_type.type_id,
+            field_name,
+        )
+        elem_serializer = local_field_type.element_type.create_serializer(resolver, None)
+        return CompatibleArrayToListFieldSerializer(resolver, remote_serializer, elem_serializer)
+
     if _payload_shape_matches(remote_field_type, local_field_type) and _payload_shape_needs_local_carrier(remote_field_type, local_field_type):
         serializer = _create_local_typehint_serializer(resolver, field_name, type_hint)
         if serializer is not None:
@@ -701,7 +784,7 @@ def _is_bytes_uint8_array_pair(remote_type_id: int, local_type_id: int) -> bool:
     )
 
 
-def _field_type_assignment(remote_field_type: FieldType, local_field_type: FieldType) -> typing.Tuple[bool, bool]:
+def _field_type_assignment(remote_field_type: FieldType, local_field_type: FieldType, top_level: bool = True) -> typing.Tuple[bool, bool]:
     if local_field_type is None:
         return False, False
     needs_validation = _requires_nullable_validation(remote_field_type, local_field_type)
@@ -711,12 +794,17 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
         return True, needs_validation
     if remote_type_id == TypeId.UNKNOWN:
         return True, True
+    if top_level and _is_root_list_array_pair(remote_field_type, local_field_type):
+        if remote_type_id == TypeId.LIST and not _remote_list_to_local_array_allowed(remote_field_type, local_field_type):
+            return False, False
+        return True, True
     if remote_type_id in (TypeId.LIST, TypeId.SET):
         if local_type_id != remote_type_id:
             return False, False
         child_assignable, child_needs_validation = _field_type_assignment(
             remote_field_type.element_type,
             local_field_type.element_type,
+            False,
         )
         return child_assignable, needs_validation or child_needs_validation
     if remote_type_id == TypeId.MAP:
@@ -725,10 +813,12 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
         key_assignable, key_needs_validation = _field_type_assignment(
             remote_field_type.key_type,
             local_field_type.key_type,
+            False,
         )
         value_assignable, value_needs_validation = _field_type_assignment(
             remote_field_type.value_type,
             local_field_type.value_type,
+            False,
         )
         return (
             key_assignable and value_assignable,

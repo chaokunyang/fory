@@ -2163,7 +2163,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   protected Expression deserializeField(
       Expression buffer, Descriptor descriptor, Function<Expression, Expression> callback) {
-    if (descriptor.getCompatibleReadMode() != Descriptor.COMPATIBLE_READ_NONE) {
+    if (hasCompatibleCollectionArrayRead(descriptor)) {
       Expression value = deserializeCompatibleListArrayField(descriptor);
       return new ListExpression(value, callback.apply(value));
     }
@@ -2230,10 +2230,17 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         readContextRef(),
         Literal.ofBoolean(trackingRef),
         Literal.ofBoolean(nullable),
-        Literal.ofInt(descriptor.getCompatibleReadMode()),
-        Literal.ofInt(descriptor.getCompatibleArrayTypeId()),
-        Literal.ofInt(descriptor.getCompatibleElementTypeId()),
+        Literal.ofInt(
+            MetaSharedSerializer.compatibleCollectionArrayReadMode(typeResolver, descriptor)),
+        Literal.ofInt(
+            MetaSharedSerializer.compatibleCollectionArrayTypeId(typeResolver, descriptor)),
+        Literal.ofInt(
+            MetaSharedSerializer.compatibleCollectionElementTypeId(typeResolver, descriptor)),
         Literal.ofClass(targetType));
+  }
+
+  protected boolean hasCompatibleCollectionArrayRead(Descriptor descriptor) {
+    return MetaSharedSerializer.hasCompatibleCollectionArrayRead(typeResolver, descriptor);
   }
 
   protected TypeRef<?> compatibleReadTargetTypeRef(Descriptor descriptor) {

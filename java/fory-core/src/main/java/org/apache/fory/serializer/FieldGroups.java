@@ -41,6 +41,7 @@ import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.StringUtils;
 
 public class FieldGroups {
@@ -182,9 +183,15 @@ public class FieldGroups {
       this.type = descriptor.getRawType();
       this.typeRef = d.getTypeRef();
       this.dispatchId = DispatchId.getDispatchId(resolver, d);
-      compatibleReadMode = d.getCompatibleReadMode();
-      compatibleArrayTypeId = d.getCompatibleArrayTypeId();
-      compatibleElementTypeId = d.getCompatibleElementTypeId();
+      compatibleReadMode = CompatibleCollectionArrayReader.readMode(resolver, d);
+      if (compatibleReadMode == CompatibleCollectionArrayReader.READ_NONE) {
+        compatibleArrayTypeId = Types.UNKNOWN;
+        compatibleElementTypeId = Types.UNKNOWN;
+      } else {
+        compatibleArrayTypeId = CompatibleCollectionArrayReader.compatibleArrayTypeId(resolver, d);
+        compatibleElementTypeId =
+            CompatibleCollectionArrayReader.compatibleElementTypeId(resolver, d);
+      }
       boolean primitiveListArray =
           TypeUtils.isPrimitiveListClass(typeRef.getRawType())
               && TypeAnnotationUtils.isArrayType(d);

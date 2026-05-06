@@ -42,7 +42,11 @@ import org.apache.fory.context.RefReader;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.meta.FieldTypes;
+import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
+import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.type.BFloat16;
@@ -50,10 +54,61 @@ import org.apache.fory.type.BFloat16Array;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Float16Array;
+import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 
 final class CompatibleCollectionArrayReader {
+  static final int READ_NONE = 0;
+  static final int READ_LIST_TO_ARRAY = 1;
+  static final int READ_ARRAY_TO_LIST = 2;
+
   private CompatibleCollectionArrayReader() {}
+
+  static int readMode(TypeResolver resolver, Descriptor descriptor) {
+    Field field = descriptor.getField();
+    if (field == null || !resolver.isCrossLanguage()) {
+      return READ_NONE;
+    }
+    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, field);
+    int peerListElementTypeId = listElementTypeId(descriptor.getTypeRef());
+    if (peerListElementTypeId != Types.UNKNOWN) {
+      int localArrayTypeId = arrayTypeId(localFieldType);
+      if (localArrayTypeId != Types.UNKNOWN
+          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
+        return READ_LIST_TO_ARRAY;
+      }
+      return READ_NONE;
+    }
+    int peerArrayTypeId = arrayTypeId(descriptor.getTypeRef());
+    if (peerArrayTypeId != Types.UNKNOWN) {
+      int localListElementTypeId = listElementTypeId(localFieldType);
+      if (localListElementTypeId != Types.UNKNOWN
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+        return READ_ARRAY_TO_LIST;
+      }
+    }
+    return READ_NONE;
+  }
+
+  static int compatibleArrayTypeId(TypeResolver resolver, Descriptor descriptor) {
+    int peerArrayTypeId = arrayTypeId(descriptor.getTypeRef());
+    if (peerArrayTypeId != Types.UNKNOWN) {
+      return peerArrayTypeId;
+    }
+    Field field = descriptor.getField();
+    return field == null ? Types.UNKNOWN : arrayTypeId(FieldTypes.buildFieldType(resolver, field));
+  }
+
+  static int compatibleElementTypeId(TypeResolver resolver, Descriptor descriptor) {
+    int peerListElementTypeId = listElementTypeId(descriptor.getTypeRef());
+    if (peerListElementTypeId != Types.UNKNOWN) {
+      return peerListElementTypeId;
+    }
+    Field field = descriptor.getField();
+    return field == null
+        ? Types.UNKNOWN
+        : listElementTypeId(FieldTypes.buildFieldType(resolver, field));
+  }
 
   static Object read(ReadContext readContext, SerializationFieldInfo fieldInfo) {
     Field field = fieldInfo.fieldAccessor.getField();
@@ -133,17 +188,96 @@ final class CompatibleCollectionArrayReader {
       int compatibleArrayTypeId,
       int compatibleElementTypeId,
       Class<?> targetType) {
-    if (compatibleReadMode == Descriptor.COMPATIBLE_READ_LIST_TO_ARRAY) {
+    if (compatibleReadMode == READ_LIST_TO_ARRAY) {
       Object array =
           readListPayloadAsPrimitiveArray(
               readContext, compatibleArrayTypeId, compatibleElementTypeId);
       return materializeTarget(array, compatibleArrayTypeId, targetType);
     }
-    if (compatibleReadMode == Descriptor.COMPATIBLE_READ_ARRAY_TO_LIST) {
+    if (compatibleReadMode == READ_ARRAY_TO_LIST) {
       Object array = readDenseArrayPayload(readContext, compatibleArrayTypeId);
       return materializeTarget(array, compatibleArrayTypeId, targetType);
     }
     throw new IllegalStateException("Unexpected compatible read mode " + compatibleReadMode);
+  }
+
+  private static int listElementTypeId(FieldTypes.FieldType fieldType) {
+    if (!(fieldType instanceof FieldTypes.CollectionFieldType)
+        || fieldType.getTypeId() != Types.LIST) {
+      return Types.UNKNOWN;
+    }
+    FieldTypes.FieldType elementType =
+        ((FieldTypes.CollectionFieldType) fieldType).getElementType();
+    if (elementType instanceof FieldTypes.RegisteredFieldType) {
+      return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
+    }
+    return Types.UNKNOWN;
+  }
+
+  private static int listElementTypeId(TypeRef<?> typeRef) {
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta == null || extMeta.typeId() != Types.LIST) {
+      return Types.UNKNOWN;
+    }
+    TypeExtMeta elementExtMeta = TypeUtils.getElementType(typeRef).getTypeExtMeta();
+    return elementExtMeta == null ? Types.UNKNOWN : elementExtMeta.typeId();
+  }
+
+  private static int arrayTypeId(FieldTypes.FieldType fieldType) {
+    if (fieldType instanceof FieldTypes.RegisteredFieldType) {
+      int typeId = ((FieldTypes.RegisteredFieldType) fieldType).getTypeId();
+      if (Types.isPrimitiveArray(typeId)) {
+        return typeId;
+      }
+    }
+    return Types.UNKNOWN;
+  }
+
+  private static int arrayTypeId(TypeRef<?> typeRef) {
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (extMeta != null && Types.isPrimitiveArray(extMeta.typeId())) {
+      return extMeta.typeId();
+    }
+    return Types.UNKNOWN;
+  }
+
+  private static int denseArrayTypeId(int elementTypeId) {
+    switch (elementTypeId) {
+      case Types.BOOL:
+        return Types.BOOL_ARRAY;
+      case Types.INT8:
+        return Types.INT8_ARRAY;
+      case Types.UINT8:
+        return Types.UINT8_ARRAY;
+      case Types.INT16:
+        return Types.INT16_ARRAY;
+      case Types.UINT16:
+        return Types.UINT16_ARRAY;
+      case Types.INT32:
+      case Types.VARINT32:
+        return Types.INT32_ARRAY;
+      case Types.UINT32:
+      case Types.VAR_UINT32:
+        return Types.UINT32_ARRAY;
+      case Types.INT64:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
+        return Types.INT64_ARRAY;
+      case Types.UINT64:
+      case Types.VAR_UINT64:
+      case Types.TAGGED_UINT64:
+        return Types.UINT64_ARRAY;
+      case Types.FLOAT16:
+        return Types.FLOAT16_ARRAY;
+      case Types.BFLOAT16:
+        return Types.BFLOAT16_ARRAY;
+      case Types.FLOAT32:
+        return Types.FLOAT32_ARRAY;
+      case Types.FLOAT64:
+        return Types.FLOAT64_ARRAY;
+      default:
+        return Types.UNKNOWN;
+    }
   }
 
   private static Object readListPayloadAsPrimitiveArray(

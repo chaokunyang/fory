@@ -112,14 +112,16 @@ public final class FieldInfo implements Serializable {
               .nullable(remoteNullable)
               .typeRef(typeRef)
               .type(rawType);
-      int compatibleReadMode = getTopLevelListArrayCompatibleReadMode(resolver, descriptor);
-      if (compatibleReadMode != Descriptor.COMPATIBLE_READ_NONE) {
-        return builder
-            .compatibleReadMode(
-                compatibleReadMode,
-                getCompatibleArrayTypeId(resolver, fieldType, descriptor),
-                getCompatibleElementTypeId(resolver, fieldType, descriptor))
-            .build();
+      if (isTopLevelListArrayCompatibleReadPair(resolver, descriptor)) {
+        if (listElementTypeId(fieldType) != Types.UNKNOWN) {
+          TypeRef<?> peerListTypeRef = fieldType.toTypeToken(resolver, null);
+          return builder
+              .typeName(fieldType.getTypeName(resolver, peerListTypeRef))
+              .typeRef(peerListTypeRef)
+              .type(peerListTypeRef.getRawType())
+              .build();
+        }
+        return builder.build();
       }
       FieldTypes.FieldType localFieldType =
           descriptor.getField() == null
@@ -187,31 +189,26 @@ public final class FieldInfo implements Serializable {
         remoteNullable);
   }
 
-  private int getTopLevelListArrayCompatibleReadMode(
+  private boolean isTopLevelListArrayCompatibleReadPair(
       TypeResolver resolver, Descriptor localDescriptor) {
     Field localField = localDescriptor.getField();
     if (localField == null || !resolver.isCrossLanguage()) {
-      return Descriptor.COMPATIBLE_READ_NONE;
+      return false;
     }
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localField);
     int peerListElementTypeId = listElementTypeId(fieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
       int localArrayTypeId = arrayTypeId(localFieldType);
-      if (localArrayTypeId != Types.UNKNOWN
-          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
-        return Descriptor.COMPATIBLE_READ_LIST_TO_ARRAY;
-      }
-      return Descriptor.COMPATIBLE_READ_NONE;
+      return localArrayTypeId != Types.UNKNOWN
+          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId);
     }
     int peerArrayTypeId = arrayTypeId(fieldType);
     if (peerArrayTypeId != Types.UNKNOWN) {
       int localListElementTypeId = listElementTypeId(localFieldType);
-      if (localListElementTypeId != Types.UNKNOWN
-          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
-        return Descriptor.COMPATIBLE_READ_ARRAY_TO_LIST;
-      }
+      return localListElementTypeId != Types.UNKNOWN
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId);
     }
-    return Descriptor.COMPATIBLE_READ_NONE;
+    return false;
   }
 
   private static boolean hasListArrayShapeMismatch(
@@ -241,24 +238,6 @@ public final class FieldInfo implements Serializable {
   private static boolean isListField(FieldTypes.FieldType fieldType) {
     return fieldType instanceof FieldTypes.CollectionFieldType
         && fieldType.getTypeId() == Types.LIST;
-  }
-
-  private static int getCompatibleArrayTypeId(
-      TypeResolver resolver, FieldTypes.FieldType peerFieldType, Descriptor localDescriptor) {
-    int peerArrayTypeId = arrayTypeId(peerFieldType);
-    if (peerArrayTypeId != Types.UNKNOWN) {
-      return peerArrayTypeId;
-    }
-    return arrayTypeId(FieldTypes.buildFieldType(resolver, localDescriptor.getField()));
-  }
-
-  private static int getCompatibleElementTypeId(
-      TypeResolver resolver, FieldTypes.FieldType peerFieldType, Descriptor localDescriptor) {
-    int peerListElementTypeId = listElementTypeId(peerFieldType);
-    if (peerListElementTypeId != Types.UNKNOWN) {
-      return peerListElementTypeId;
-    }
-    return listElementTypeId(FieldTypes.buildFieldType(resolver, localDescriptor.getField()));
   }
 
   private static int listElementTypeId(FieldTypes.FieldType fieldType) {

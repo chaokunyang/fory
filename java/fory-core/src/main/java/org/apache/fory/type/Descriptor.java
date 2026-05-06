@@ -74,10 +74,6 @@ import org.apache.fory.util.record.RecordUtils;
  * @see Ignore
  */
 public class Descriptor {
-  public static final int COMPATIBLE_READ_NONE = 0;
-  public static final int COMPATIBLE_READ_LIST_TO_ARRAY = 1;
-  public static final int COMPATIBLE_READ_ARRAY_TO_LIST = 2;
-
   private static Cache<
           Class<?>, Tuple2<SortedMap<Member, Descriptor>, SortedMap<Member, Descriptor>>>
       descCache = CacheBuilder.newBuilder().weakKeys().softValues().concurrencyLevel(64).build();
@@ -110,9 +106,6 @@ public class Descriptor {
   // If no annotation or ref not specified, trackingRef stays false and type-based tracking applies
   private final boolean trackingRef;
   private FieldConverter<?> fieldConverter;
-  private final int compatibleReadMode;
-  private final int compatibleArrayTypeId;
-  private final int compatibleElementTypeId;
 
   public Descriptor(Field field, TypeRef<?> typeRef, Method readMethod, Method writeMethod) {
     this.field = field;
@@ -132,9 +125,6 @@ public class Descriptor {
       this.nullable = foryField == null || foryField.nullable();
     }
     this.trackingRef = foryField != null && foryField.ref();
-    this.compatibleReadMode = COMPATIBLE_READ_NONE;
-    this.compatibleArrayTypeId = 0;
-    this.compatibleElementTypeId = Types.UNKNOWN;
   }
 
   public Descriptor(
@@ -157,9 +147,6 @@ public class Descriptor {
     typeAnnotation = null;
     this.nullable = nullable;
     this.trackingRef = trackingRef;
-    this.compatibleReadMode = COMPATIBLE_READ_NONE;
-    this.compatibleArrayTypeId = 0;
-    this.compatibleElementTypeId = Types.UNKNOWN;
   }
 
   private Descriptor(Field field, Method readMethod) {
@@ -180,9 +167,6 @@ public class Descriptor {
       this.nullable = foryField == null || foryField.nullable();
     }
     this.trackingRef = foryField != null && foryField.ref();
-    this.compatibleReadMode = COMPATIBLE_READ_NONE;
-    this.compatibleArrayTypeId = 0;
-    this.compatibleElementTypeId = Types.UNKNOWN;
   }
 
   private Descriptor(Method readMethod) {
@@ -203,9 +187,6 @@ public class Descriptor {
       this.nullable = foryField == null || foryField.nullable();
     }
     this.trackingRef = foryField != null && foryField.ref();
-    this.compatibleReadMode = COMPATIBLE_READ_NONE;
-    this.compatibleArrayTypeId = 0;
-    this.compatibleElementTypeId = Types.UNKNOWN;
   }
 
   public Descriptor(DescriptorBuilder builder) {
@@ -226,9 +207,6 @@ public class Descriptor {
     this.nullable = builder.nullable;
     this.type = builder.type;
     this.fieldConverter = builder.fieldConverter;
-    this.compatibleReadMode = builder.compatibleReadMode;
-    this.compatibleArrayTypeId = builder.compatibleArrayTypeId;
-    this.compatibleElementTypeId = builder.compatibleElementTypeId;
   }
 
   public DescriptorBuilder copyBuilder() {
@@ -337,18 +315,6 @@ public class Descriptor {
 
   public FieldConverter<?> getFieldConverter() {
     return fieldConverter;
-  }
-
-  public int getCompatibleReadMode() {
-    return compatibleReadMode;
-  }
-
-  public int getCompatibleArrayTypeId() {
-    return compatibleArrayTypeId;
-  }
-
-  public int getCompatibleElementTypeId() {
-    return compatibleElementTypeId;
   }
 
   @Override

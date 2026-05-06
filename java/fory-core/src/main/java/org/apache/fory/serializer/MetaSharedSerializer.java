@@ -159,6 +159,30 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         targetType);
   }
 
+  /** Used by generated meta-shared serializers to cache a top-level list/array read action. */
+  public static int compatibleCollectionArrayReadMode(
+      TypeResolver resolver, Descriptor descriptor) {
+    return CompatibleCollectionArrayReader.readMode(resolver, descriptor);
+  }
+
+  /** Used by generated meta-shared serializers to cache the dense array carrier type. */
+  public static int compatibleCollectionArrayTypeId(TypeResolver resolver, Descriptor descriptor) {
+    return CompatibleCollectionArrayReader.compatibleArrayTypeId(resolver, descriptor);
+  }
+
+  /** Used by generated meta-shared serializers to cache the peer or local element type. */
+  public static int compatibleCollectionElementTypeId(
+      TypeResolver resolver, Descriptor descriptor) {
+    return CompatibleCollectionArrayReader.compatibleElementTypeId(resolver, descriptor);
+  }
+
+  /** Returns whether a descriptor has a top-level list/array compatible read action. */
+  public static boolean hasCompatibleCollectionArrayRead(
+      TypeResolver resolver, Descriptor descriptor) {
+    return compatibleCollectionArrayReadMode(resolver, descriptor)
+        != CompatibleCollectionArrayReader.READ_NONE;
+  }
+
   @Override
   public void write(WriteContext writeContext, T value) {
     MemoryBuffer buffer = writeContext.getBuffer();
@@ -205,7 +229,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       }
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldAccessor != null) {
-        if (fieldInfo.compatibleReadMode != Descriptor.COMPATIBLE_READ_NONE) {
+        if (fieldInfo.compatibleReadMode != CompatibleCollectionArrayReader.READ_NONE) {
           fieldAccessor.putObject(
               targetObject, CompatibleCollectionArrayReader.read(readContext, fieldInfo));
         } else {
@@ -227,7 +251,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          fieldInfo.compatibleReadMode == Descriptor.COMPATIBLE_READ_NONE
+          fieldInfo.compatibleReadMode == CompatibleCollectionArrayReader.READ_NONE
               ? AbstractObjectSerializer.readContainerFieldValue(
                   readContext, typeResolver, refReader, generics, fieldInfo, buffer)
               : CompatibleCollectionArrayReader.read(readContext, fieldInfo);
@@ -241,7 +265,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          fieldInfo.compatibleReadMode == Descriptor.COMPATIBLE_READ_NONE
+          fieldInfo.compatibleReadMode == CompatibleCollectionArrayReader.READ_NONE
               ? AbstractObjectSerializer.readField(
                   readContext, typeResolver, refReader, fieldInfo, buffer)
               : CompatibleCollectionArrayReader.read(readContext, fieldInfo);
@@ -273,7 +297,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       }
       if (fieldInfo.fieldAccessor != null) {
         fields[counter++] =
-            fieldInfo.compatibleReadMode == Descriptor.COMPATIBLE_READ_NONE
+            fieldInfo.compatibleReadMode == CompatibleCollectionArrayReader.READ_NONE
                 ? AbstractObjectSerializer.readBuildInFieldValue(
                     readContext, typeResolver, refReader, fieldInfo, buffer)
                 : CompatibleCollectionArrayReader.read(readContext, fieldInfo);
@@ -292,7 +316,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          fieldInfo.compatibleReadMode == Descriptor.COMPATIBLE_READ_NONE
+          fieldInfo.compatibleReadMode == CompatibleCollectionArrayReader.READ_NONE
               ? AbstractObjectSerializer.readContainerFieldValue(
                   readContext, typeResolver, refReader, generics, fieldInfo, buffer)
               : CompatibleCollectionArrayReader.read(readContext, fieldInfo);
@@ -303,7 +327,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          fieldInfo.compatibleReadMode == Descriptor.COMPATIBLE_READ_NONE
+          fieldInfo.compatibleReadMode == CompatibleCollectionArrayReader.READ_NONE
               ? AbstractObjectSerializer.readField(
                   readContext, typeResolver, refReader, fieldInfo, buffer)
               : CompatibleCollectionArrayReader.read(readContext, fieldInfo);

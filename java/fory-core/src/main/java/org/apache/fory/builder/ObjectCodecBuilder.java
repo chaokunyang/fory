@@ -674,9 +674,9 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
             ExpressionVisitor.ExprHolder exprHolder = ExpressionVisitor.ExprHolder.of("bean", bean);
             walkPath.add(d.getDeclaringClass() + d.getName());
             TypeRef<?> castTypeRef =
-                d.getCompatibleReadMode() == Descriptor.COMPATIBLE_READ_NONE
-                    ? d.getTypeRef()
-                    : compatibleReadTargetTypeRef(d);
+                hasCompatibleCollectionArrayRead(d)
+                    ? compatibleReadTargetTypeRef(d)
+                    : d.getTypeRef();
             Expression action =
                 deserializeField(
                     buffer,
@@ -704,14 +704,13 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     // use Reference to cut-off expr dependency.
     for (Descriptor d : group) {
       boolean nullable = d.isNullable();
+      boolean compatibleCollectionArrayRead = hasCompatibleCollectionArrayRead(d);
       Expression v =
-          d.getCompatibleReadMode() == Descriptor.COMPATIBLE_READ_NONE
-              ? deserializeForNullableField(buffer, d, expr -> expr, nullable)
-              : deserializeCompatibleListArrayField(d);
+          compatibleCollectionArrayRead
+              ? deserializeCompatibleListArrayField(d)
+              : deserializeForNullableField(buffer, d, expr -> expr, nullable);
       TypeRef<?> castTypeRef =
-          d.getCompatibleReadMode() == Descriptor.COMPATIBLE_READ_NONE
-              ? d.getTypeRef()
-              : compatibleReadTargetTypeRef(d);
+          compatibleCollectionArrayRead ? compatibleReadTargetTypeRef(d) : d.getTypeRef();
       Expression action = setFieldValue(bean, d, tryInlineCast(v, castTypeRef));
       groupExpressions.add(action);
     }

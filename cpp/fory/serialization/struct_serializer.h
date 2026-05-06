@@ -953,6 +953,15 @@ Container read_configured_list_data_as_array_field(ReadContext &ctx) {
   return result;
 }
 
+template <typename Container>
+Container read_configured_array_data_as_list_field(ReadContext &ctx,
+                                                   RefMode ref_mode) {
+  if (ref_mode == RefMode::None) {
+    return Serializer<Container>::read_data(ctx);
+  }
+  return Serializer<Container>::read(ctx, ref_mode, false);
+}
+
 template <typename MapType, typename StructT, size_t Index, int8_t KeyNode,
           int8_t ValueNode>
 void write_configured_map_data(const MapType &map, WriteContext &ctx) {
@@ -3292,8 +3301,8 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
     } else if constexpr (configured_as_list) {
       uint32_t element_type_id = 0;
       if (primitive_array_element_type_id(remote_type_id, element_type_id)) {
-        FieldType result =
-            Serializer<FieldType>::read(ctx, remote_ref_mode, false);
+        FieldType result = read_configured_array_data_as_list_field<FieldType>(
+            ctx, remote_ref_mode);
         if constexpr (is_fory_field_v<RawFieldType>) {
           (obj.*field_ptr).value = std::move(result);
         } else {

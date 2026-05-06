@@ -732,20 +732,25 @@ def _create_compatible_field_serializer(
             CompatibleArrayToListFieldSerializer,
             CompatibleListToArrayFieldSerializer,
             ForyArrayFieldSerializer,
-            fory_array_serializer_type,
             fory_array_wrapper_type,
         )
 
         if remote_field_type.type_id == TypeId.LIST:
             if not _remote_list_to_local_array_allowed(remote_field_type, local_field_type):
                 return remote_field_type.create_serializer(resolver, local_declared_type)
-            wrapper_type = fory_array_wrapper_type(local_field_type.type_id)
-            wrapper_serializer = fory_array_serializer_type(local_field_type.type_id)(resolver, wrapper_type)
+            target_serializer = _create_local_typehint_serializer(resolver, field_name, type_hint)
+            if target_serializer is None:
+                wrapper_type = fory_array_wrapper_type(local_field_type.type_id)
+                target_serializer = ForyArrayFieldSerializer(
+                    resolver,
+                    wrapper_type,
+                    local_field_type.type_id,
+                    field_name,
+                )
             elem_serializer = remote_field_type.element_type.create_serializer(resolver, None)
             return CompatibleListToArrayFieldSerializer(
                 resolver,
-                wrapper_type,
-                wrapper_serializer,
+                target_serializer,
                 elem_serializer,
                 field_name,
             )

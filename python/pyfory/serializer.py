@@ -747,22 +747,39 @@ class CompatibleArrayToListFieldSerializer(Serializer):
 
 
 class CompatibleListToArrayFieldSerializer(Serializer):
-    def __init__(self, type_resolver, wrapper_type, wrapper_serializer, elem_serializer, field_name=None):
-        super().__init__(type_resolver, wrapper_type)
-        self.wrapper_type = wrapper_type
-        self.wrapper_serializer = wrapper_serializer
+    def __init__(self, type_resolver, target_serializer, elem_serializer, field_name=None):
+        super().__init__(type_resolver, target_serializer.type_)
+        self.target_serializer = target_serializer
         self.elem_serializer = elem_serializer
         self.field_name = field_name or "<array>"
-        self.list_adapter_serializer = ForyArrayListAdapterSerializer(
-            type_resolver,
-            wrapper_type,
-            wrapper_serializer,
-            self.field_name,
-        )
         self.need_to_write_ref = False
 
     def write(self, buffer, value):
         raise TypeError("compatible list-to-array field serializer is read-only")
+
+    def _empty_target(self):
+        if isinstance(self.target_serializer, ForyArrayFieldSerializer):
+            return self.target_serializer.wrapper_type()
+        if isinstance(self.target_serializer, PyArraySerializer):
+            return array.array(self.target_serializer.typecode)
+        if np is not None and isinstance(self.target_serializer, Numpy1DArraySerializer):
+            return np.empty(0, dtype=self.target_serializer.dtype)
+        raise TypeError(f"Field {self.field_name!r} has unsupported array target serializer {type(self.target_serializer)!r}")
+
+    def _copy_list_to_target(self, values):
+        if isinstance(self.target_serializer, ForyArrayFieldSerializer):
+            return self.target_serializer.list_adapter_serializer._copy_list_to_wrapper(values)
+        if isinstance(self.target_serializer, PyArraySerializer):
+            target = array.array(self.target_serializer.typecode)
+            for index, item in enumerate(values):
+                try:
+                    target.append(item)
+                except (TypeError, ValueError, OverflowError) as exc:
+                    raise type(exc)(f"{self.field_name}[{index}] invalid for array.array typecode {target.typecode!r}: {exc}") from exc
+            return target
+        if np is not None and isinstance(self.target_serializer, Numpy1DArraySerializer):
+            return np.array(values, dtype=self.target_serializer.dtype)
+        raise TypeError(f"Field {self.field_name!r} has unsupported array target serializer {type(self.target_serializer)!r}")
 
     def read(self, read_context):
         from pyfory.collection import (
@@ -779,7 +796,7 @@ class CompatibleListToArrayFieldSerializer(Serializer):
         if length > read_context.max_collection_size:
             raise ValueError(f"Collection size {length} exceeds the configured limit of {read_context.max_collection_size}")
         if length == 0:
-            return self.wrapper_type()
+            return self._empty_target()
         collect_flag = read_context.read_int8()
         if (collect_flag & COLL_HAS_NULL) != 0:
             raise TypeNotCompatibleError(
@@ -806,7 +823,7 @@ class CompatibleListToArrayFieldSerializer(Serializer):
             else:
                 for _ in range(length):
                     values.append(read_context.read_no_ref(serializer=elem_serializer))
-            return self.list_adapter_serializer._copy_list_to_wrapper(values)
+            return self._copy_list_to_target(values)
 
         if (collect_flag & COLL_TRACKING_REF) != 0:
             for _ in range(length):
@@ -815,7 +832,7 @@ class CompatibleListToArrayFieldSerializer(Serializer):
             for _ in range(length):
                 typeinfo = self.type_resolver.read_type_info(read_context)
                 values.append(read_context.read_no_ref(serializer=typeinfo.serializer))
-        return self.list_adapter_serializer._copy_list_to_wrapper(values)
+        return self._copy_list_to_target(values)
 
 
 class DynamicPyArraySerializer(Serializer):

@@ -787,10 +787,8 @@ class CompatibleListToArrayFieldSerializer(Serializer):
             COLL_IS_DECL_ELEMENT_TYPE,
             COLL_IS_SAME_TYPE,
             COLL_TRACKING_REF,
-            get_next_element,
         )
         from pyfory.error import TypeNotCompatibleError
-        from pyfory.resolver import NOT_NULL_VALUE_FLAG
 
         length = read_context.read_var_uint32()
         if length > read_context.max_collection_size:
@@ -798,40 +796,18 @@ class CompatibleListToArrayFieldSerializer(Serializer):
         if length == 0:
             return self._empty_target()
         collect_flag = read_context.read_int8()
-        if (collect_flag & COLL_HAS_NULL) != 0:
+        if (collect_flag & (COLL_HAS_NULL | COLL_TRACKING_REF)) != 0:
             raise TypeNotCompatibleError(
-                f"Field {self.field_name!r} cannot read nullable list elements as array<T>",
+                f"Field {self.field_name!r} cannot read nullable or ref-tracked list elements as array<T>",
+            )
+        if (collect_flag & (COLL_IS_SAME_TYPE | COLL_IS_DECL_ELEMENT_TYPE)) != (COLL_IS_SAME_TYPE | COLL_IS_DECL_ELEMENT_TYPE):
+            raise TypeNotCompatibleError(
+                f"Field {self.field_name!r} requires declared same-type list elements for array<T> compatible read",
             )
 
         values = []
-        if (collect_flag & COLL_IS_SAME_TYPE) != 0:
-            if (collect_flag & COLL_IS_DECL_ELEMENT_TYPE) == 0:
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                elem_serializer = typeinfo.serializer
-            else:
-                elem_serializer = self.elem_serializer
-            if (collect_flag & COLL_TRACKING_REF) != 0:
-                ref_reader = read_context.ref_reader
-                for _ in range(length):
-                    ref_id = ref_reader.try_preserve_ref_id(read_context)
-                    if ref_id < NOT_NULL_VALUE_FLAG:
-                        values.append(ref_reader.get_read_ref())
-                    else:
-                        obj = elem_serializer.read(read_context)
-                        ref_reader.set_read_ref(ref_id, obj)
-                        values.append(obj)
-            else:
-                for _ in range(length):
-                    values.append(read_context.read_no_ref(serializer=elem_serializer))
-            return self._copy_list_to_target(values)
-
-        if (collect_flag & COLL_TRACKING_REF) != 0:
-            for _ in range(length):
-                values.append(get_next_element(read_context))
-        else:
-            for _ in range(length):
-                typeinfo = self.type_resolver.read_type_info(read_context)
-                values.append(read_context.read_no_ref(serializer=typeinfo.serializer))
+        for _ in range(length):
+            values.append(read_context.read_no_ref(serializer=self.elem_serializer))
         return self._copy_list_to_target(values)
 
 

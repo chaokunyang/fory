@@ -392,4 +392,14 @@ public class PythonXlangTest extends XlangTestBase {
   public void testManualSchemaKindStruct(boolean enableCodegen) throws java.io.IOException {
     super.testManualSchemaKindStruct(enableCodegen);
   }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testListArrayCompatibleRead(boolean enableCodegen) throws java.io.IOException {
+    super.testListArrayCompatibleRead(enableCodegen);
+    assertCompatibleListToArrayPeerCarrier(
+        "test_list_array_compatible_list_to_ndarray", enableCodegen);
+    assertCompatibleListToArrayPeerCarrier(
+        "test_list_array_compatible_list_to_pyarray", enableCodegen);
+  }
 }

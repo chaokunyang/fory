@@ -209,11 +209,10 @@ func (s compatiblePrimitiveListToArraySerializer) ReadData(ctx *ReadContext, val
 	if ctx.HasError() {
 		return
 	}
-	if length != value.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match serialized list length %d", value.Len(), length))
-		return
-	}
 	if length == 0 {
+		if value.Kind() == reflect.Slice {
+			value.Set(reflect.MakeSlice(value.Type(), 0, 0))
+		}
 		return
 	}
 	collectFlag := buf.ReadInt8(err)
@@ -228,6 +227,23 @@ func (s compatiblePrimitiveListToArraySerializer) ReadData(ctx *ReadContext, val
 	}
 	if (collectFlag & CollectionHasNull) != 0 {
 		ctx.SetError(DeserializationErrorf("array-compatible list declares nullable elements"))
+		return
+	}
+	if (collectFlag & (CollectionIsSameType | CollectionIsDeclElementType)) != (CollectionIsSameType | CollectionIsDeclElementType) {
+		ctx.SetError(DeserializationErrorf("array-compatible list requires declared same-type elements"))
+		return
+	}
+	if value.Kind() == reflect.Slice {
+		temp := reflect.New(value.Type()).Elem()
+		s.listReader.readValues(buf, err, temp, length, false)
+		if ctx.HasError() {
+			return
+		}
+		value.Set(temp)
+		return
+	}
+	if length != value.Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match serialized list length %d", value.Len(), length))
 		return
 	}
 	temp := reflect.New(reflect.SliceOf(s.arrayType.Elem())).Elem()

@@ -714,9 +714,7 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     matchesDenseArrayTypeID arrayTypeID: UInt32
   ) -> Bool {
     guard listType.typeID == TypeId.list.rawValue,
-      let elementType = listType.generics.first,
-      !elementType.nullable,
-      !elementType.trackRef
+      let elementType = listType.generics.first
     else {
       return false
     }

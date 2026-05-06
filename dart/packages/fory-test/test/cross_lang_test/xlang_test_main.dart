@@ -401,6 +401,27 @@ void _runCircularRoundTrip({required bool compatible, required int id}) {
   _writeFile(fory.serialize(value, trackRef: true));
 }
 
+void _runListArrayCompatibleRoundTrip(Type type) {
+  final fory = _newFory(compatible: true);
+  registerXlangType(fory, type, id: 901);
+  final value = fory.deserializeFrom<Object?>(Buffer.wrap(_readFile()));
+  _writeFile(fory.serialize(value));
+}
+
+void _runListArrayCompatibleNullableListToArrayError() {
+  final fory = _newFory(compatible: true);
+  registerXlangType(fory, CompatibleInt32ArrayField, id: 901);
+  final bytes = _readFile();
+  try {
+    fory.deserialize<CompatibleInt32ArrayField>(bytes);
+  } catch (_) {
+    _writeFile(bytes);
+    return;
+  }
+  throw StateError(
+      'Expected nullable list payload to fail compatible array read.');
+}
+
 void _runCase(String caseName) {
   switch (caseName) {
     case 'test_buffer':
@@ -638,6 +659,15 @@ void _runCase(String caseName) {
       final fory = _newFory(compatible: true);
       registerXlangType(fory, EmptyStruct, id: 213);
       _roundTripFory(fory);
+      return;
+    case 'test_list_array_compatible_list_to_array':
+      _runListArrayCompatibleRoundTrip(CompatibleInt32ArrayField);
+      return;
+    case 'test_list_array_compatible_array_to_list':
+      _runListArrayCompatibleRoundTrip(CompatibleInt32ListField);
+      return;
+    case 'test_list_array_compatible_nullable_list_to_array_error':
+      _runListArrayCompatibleNullableListToArrayError();
       return;
     default:
       throw UnsupportedError('Unknown Dart xlang case: $caseName');

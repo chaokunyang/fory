@@ -25,8 +25,9 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeResolver};
-use crate::serializer::{primitive_list, skip::skip_field_value, ForyDefault, Serializer};
+use crate::serializer::{primitive_list, ForyDefault, Serializer};
 use crate::type_id::{self, need_to_write_type_for_field, TypeId, SIZE_OF_REF_AND_TYPE, UNKNOWN};
+use crate::types::{bfloat16::bfloat16, float16::float16};
 use std::any::Any;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -248,7 +249,6 @@ fn list_element_type_matches_array(list: &FieldType, array: &FieldType) -> bool 
         list.type_id == type_id::LIST
             && list.generics.len() == 1
             && primitive_array_element_type_matches(element_type_id, list.generics[0].type_id)
-            && !list.generics[0].track_ref
     })
 }
 
@@ -257,13 +257,8 @@ fn primitive_array_element_type_matches(
     array_element_type_id: u32,
     list_element_type_id: u32,
 ) -> bool {
-    match array_element_type_id {
-        type_id::INT32 => list_element_type_id == type_id::VARINT32,
-        type_id::INT64 => list_element_type_id == type_id::VARINT64,
-        type_id::UINT32 => list_element_type_id == type_id::VAR_UINT32,
-        type_id::UINT64 => list_element_type_id == type_id::VAR_UINT64,
-        _ => array_element_type_id == list_element_type_id,
-    }
+    array_element_type_id == list_element_type_id
+        || same_numeric_family(array_element_type_id, list_element_type_id)
 }
 
 #[inline(always)]
@@ -334,12 +329,150 @@ where
     Ok(vec)
 }
 
+trait CompatibleListArrayElement: Serializer + ForyDefault {
+    fn read_list_array_element(
+        context: &mut ReadContext,
+        remote_type_id: u32,
+    ) -> Result<Self, Error>;
+}
+
+macro_rules! compatible_exact_element {
+    ($ty:ty, $type_id:expr, $reader:ident) => {
+        impl CompatibleListArrayElement for $ty {
+            #[inline(always)]
+            fn read_list_array_element(
+                context: &mut ReadContext,
+                remote_type_id: u32,
+            ) -> Result<Self, Error> {
+                if remote_type_id == $type_id {
+                    context.reader.$reader()
+                } else {
+                    Err(Error::type_mismatch(
+                        <$ty as Serializer>::fory_static_type_id() as u32,
+                        remote_type_id,
+                    ))
+                }
+            }
+        }
+    };
+}
+
+macro_rules! compatible_integer_element {
+    ($ty:ty, $fixed_type:expr, $var_type:expr, $fixed_reader:ident, $var_reader:ident) => {
+        impl CompatibleListArrayElement for $ty {
+            #[inline(always)]
+            fn read_list_array_element(
+                context: &mut ReadContext,
+                remote_type_id: u32,
+            ) -> Result<Self, Error> {
+                match remote_type_id {
+                    x if x == $fixed_type => context.reader.$fixed_reader(),
+                    x if x == $var_type => context.reader.$var_reader(),
+                    _ => Err(Error::type_mismatch(
+                        <$ty as Serializer>::fory_static_type_id() as u32,
+                        remote_type_id,
+                    )),
+                }
+            }
+        }
+    };
+}
+
+macro_rules! compatible_tagged_integer_element {
+    (
+        $ty:ty,
+        $fixed_type:expr,
+        $var_type:expr,
+        $tagged_type:expr,
+        $fixed_reader:ident,
+        $var_reader:ident,
+        $tagged_reader:ident
+    ) => {
+        impl CompatibleListArrayElement for $ty {
+            #[inline(always)]
+            fn read_list_array_element(
+                context: &mut ReadContext,
+                remote_type_id: u32,
+            ) -> Result<Self, Error> {
+                match remote_type_id {
+                    x if x == $fixed_type => context.reader.$fixed_reader(),
+                    x if x == $var_type => context.reader.$var_reader(),
+                    x if x == $tagged_type => context.reader.$tagged_reader(),
+                    _ => Err(Error::type_mismatch(
+                        <$ty as Serializer>::fory_static_type_id() as u32,
+                        remote_type_id,
+                    )),
+                }
+            }
+        }
+    };
+}
+
+impl CompatibleListArrayElement for bool {
+    #[inline(always)]
+    fn read_list_array_element(
+        context: &mut ReadContext,
+        remote_type_id: u32,
+    ) -> Result<Self, Error> {
+        if remote_type_id == type_id::BOOL {
+            Ok(context.reader.read_u8()? == 1)
+        } else {
+            Err(Error::type_mismatch(type_id::BOOL, remote_type_id))
+        }
+    }
+}
+
+compatible_exact_element!(i8, type_id::INT8, read_i8);
+compatible_exact_element!(i16, type_id::INT16, read_i16);
+compatible_integer_element!(
+    i32,
+    type_id::INT32,
+    type_id::VARINT32,
+    read_i32,
+    read_var_i32
+);
+compatible_tagged_integer_element!(
+    i64,
+    type_id::INT64,
+    type_id::VARINT64,
+    type_id::TAGGED_INT64,
+    read_i64,
+    read_var_i64,
+    read_tagged_i64
+);
+compatible_exact_element!(u8, type_id::UINT8, read_u8);
+compatible_exact_element!(u16, type_id::UINT16, read_u16);
+compatible_integer_element!(
+    u32,
+    type_id::UINT32,
+    type_id::VAR_UINT32,
+    read_u32,
+    read_var_u32
+);
+compatible_tagged_integer_element!(
+    u64,
+    type_id::UINT64,
+    type_id::VAR_UINT64,
+    type_id::TAGGED_UINT64,
+    read_u64,
+    read_var_u64,
+    read_tagged_u64
+);
+compatible_exact_element!(float16, type_id::FLOAT16, read_f16);
+compatible_exact_element!(bfloat16, type_id::BFLOAT16, read_bf16);
+compatible_exact_element!(f32, type_id::FLOAT32, read_f32);
+compatible_exact_element!(f64, type_id::FLOAT64, read_f64);
+compatible_exact_element!(i128, type_id::INT128, read_i128);
+compatible_exact_element!(u128, type_id::U128, read_u128);
+compatible_exact_element!(isize, type_id::ISIZE, read_isize);
+compatible_exact_element!(usize, type_id::USIZE, read_usize);
+
 fn read_non_nullable_list_data_with_type<T>(
     context: &mut ReadContext,
     remote_field_type: &FieldType,
 ) -> Result<Vec<T>, Error>
 where
-    T: Serializer + ForyDefault,
+    T: CompatibleListArrayElement,
 {
     let len = context.reader.read_var_u32()?;
     if len == 0 {
@@ -368,15 +501,15 @@ where
             "array-compatible list must declare same-type elements",
         ));
     }
-    let _element_type = if (header & DECL_ELEMENT_TYPE) != 0 {
-        generic_field_type(remote_field_type, 0, "list")?.clone()
-    } else {
-        T::fory_read_type_info(context)?;
-        generic_field_type(remote_field_type, 0, "list")?.clone()
-    };
+    if (header & DECL_ELEMENT_TYPE) == 0 {
+        return Err(Error::type_error(
+            "array-compatible list must declare element type",
+        ));
+    }
+    let element_type = generic_field_type(remote_field_type, 0, "list")?.clone();
     let mut vec = Vec::with_capacity(len as usize);
     for _ in 0..len {
-        vec.push(T::fory_read_data(context)?);
+        vec.push(T::read_list_array_element(context, element_type.type_id)?);
     }
     Ok(vec)
 }
@@ -1690,7 +1823,7 @@ pub struct PrimitiveArrayVecCodec<T, const TYPE_ID: u8, const NULLABLE: bool, co
 impl<T, const TYPE_ID: u8, const NULLABLE: bool, const TRACK_REF: bool> Codec<Vec<T>>
     for PrimitiveArrayVecCodec<T, TYPE_ID, NULLABLE, TRACK_REF>
 where
-    T: Serializer + ForyDefault,
+    T: CompatibleListArrayElement,
 {
     #[inline(always)]
     fn field_type(_: &TypeResolver) -> Result<FieldType, Error> {
@@ -1738,14 +1871,6 @@ where
             && !remote_field_type.generics.is_empty()
             && list_element_type_matches_array(remote_field_type, local_field_type)
         {
-            if remote_field_type.generics[0].nullable {
-                skip_field_value(
-                    context,
-                    remote_field_type,
-                    field_ref_mode(remote_field_type) != RefMode::None,
-                )?;
-                return Ok(Some(Vec::new()));
-            }
             if field_ref_mode(remote_field_type) != RefMode::None {
                 let ref_flag = context.reader.read_i8()?;
                 if ref_flag == RefFlag::Null as i8 {

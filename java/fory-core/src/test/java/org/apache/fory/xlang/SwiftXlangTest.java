@@ -415,4 +415,10 @@ public class SwiftXlangTest extends XlangTestBase {
   public void testManualSchemaKindStruct(boolean enableCodegen) throws java.io.IOException {
     super.testManualSchemaKindStruct(enableCodegen);
   }
+
+  @Override
+  @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
+  public void testListArrayCompatibleRead(boolean enableCodegen) throws java.io.IOException {
+    super.testListArrayCompatibleRead(enableCodegen);
+  }
 }

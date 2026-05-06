@@ -235,7 +235,7 @@ describe("typemeta", () => {
     expect(result).toEqual({ values: [1, 2, 3] });
   });
 
-  test("skips compatible list to dense array when remote elements are nullable", () => {
+  test("rejects compatible list to dense array when payload has nullable elements", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -249,12 +249,10 @@ describe("typemeta", () => {
     });
 
     const bytes = writerFory.register(writerType).serialize({
-      values: [1, 2, 3],
+      values: [1, null, 3],
     });
 
-    expect(readerFory.register(readerType).deserialize(bytes)).toEqual({
-      values: null,
-    });
+    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow();
   });
 
   test("keeps compatible named schema evolution working when field count differs", () => {

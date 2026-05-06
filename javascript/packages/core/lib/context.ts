@@ -106,16 +106,28 @@ function typeInfoForElementTypeId(typeId: number): TypeInfo {
       return Type.int16();
     case TypeId.INT32:
       return Type.int32({ encoding: "fixed" });
+    case TypeId.VARINT32:
+      return Type.int32();
     case TypeId.INT64:
       return Type.int64({ encoding: "fixed" });
+    case TypeId.VARINT64:
+      return Type.int64();
+    case TypeId.TAGGED_INT64:
+      return Type.int64({ encoding: "tagged" });
     case TypeId.UINT8:
       return Type.uint8();
     case TypeId.UINT16:
       return Type.uint16();
     case TypeId.UINT32:
       return Type.uint32({ encoding: "fixed" });
+    case TypeId.VAR_UINT32:
+      return Type.uint32();
     case TypeId.UINT64:
       return Type.uint64({ encoding: "fixed" });
+    case TypeId.VAR_UINT64:
+      return Type.uint64();
+    case TypeId.TAGGED_UINT64:
+      return Type.uint64({ encoding: "tagged" });
     case TypeId.FLOAT16:
       return Type.float16();
     case TypeId.BFLOAT16:
@@ -162,12 +174,16 @@ function typeInfoForDenseArrayElementTypeId(typeId: number): TypeInfo {
   }
 }
 
-function compatibleListToArrayTypeInfo(elementTypeId: number): TypeInfo {
-  const typeInfo = Type.list(typeInfoForElementTypeId(elementTypeId));
+function compatibleListToArrayTypeInfo(
+  remoteElementTypeId: number,
+  targetElementTypeId: number,
+): TypeInfo {
+  const typeInfo = Type.list(typeInfoForElementTypeId(remoteElementTypeId));
   typeInfo.options = {
     ...typeInfo.options,
     compatibleReadTarget: "array",
-    compatibleReadElementTypeId: elementTypeId,
+    compatibleReadElementTypeId: targetElementTypeId,
+    rejectNullableCompatibleListPayload: true,
   };
   return typeInfo;
 }
@@ -722,20 +738,10 @@ export class ReadContext {
     const remoteElement = remoteListElementType(remote);
     const localElement = denseArrayElementTypeId(local.typeId);
     if (remoteElement !== undefined && localElement !== undefined) {
-      if (remoteElement.nullable) {
-        return skipCompatibleField(
-          this.fieldInfoToTypeInfo(remote, undefined, false),
-        );
-      }
-      if (remoteElement.trackingRef) {
-        return skipCompatibleField(
-          this.fieldInfoToTypeInfo(remote, undefined, false),
-        );
-      }
       if (compatibleArrayElementTypeId(remoteElement.typeId) !== localElement) {
         return undefined;
       }
-      return compatibleListToArrayTypeInfo(localElement);
+      return compatibleListToArrayTypeInfo(remoteElement.typeId, localElement);
     }
     const remoteArrayElement = denseArrayElementTypeId(remote.typeId);
     if (
@@ -924,13 +930,4 @@ export class ReadContext {
   get maxCollectionSize() {
     return this._maxCollectionSize;
   }
-}
-
-function skipCompatibleField(typeInfo: TypeInfo): TypeInfo {
-  const skipped = typeInfo.clone();
-  skipped.options = {
-    ...skipped.options,
-    skipCompatibleField: true,
-  };
-  return skipped;
 }

@@ -195,10 +195,10 @@ and `array<T>` as distinct kinds.
 The adaptation is limited to the immediate schema of the matched compatible
 field. It does not apply when `list<T>` or `array<T>` appears inside another
 field type, including collection elements, map keys or values, array elements,
-union alternatives, or other generic/container positions. A peer nullable
-`list<T>` field does not match a local `array<T>` field and follows the existing
-schema-compatible skipped/default field behavior. Null list elements must not be
-coerced to dense-array default values.
+union alternatives, or other generic/container positions. When a peer `list<T>`
+payload declares nullable or ref-tracked elements, a local matched `array<T>`
+field must raise a compatible-read error. Null list elements must not be coerced
+to dense-array default values.
 
 Users can also provide meta hints for fields of a type, or the type whole. Here is an example in java which use
 annotation to provide such information.

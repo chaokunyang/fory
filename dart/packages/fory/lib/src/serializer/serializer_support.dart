@@ -26,6 +26,7 @@ import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/meta/field_type.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
+import 'package:fory/src/serializer/collection_flags.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/types/bfloat16.dart';
 import 'package:fory/src/types/bool_list.dart';
@@ -313,12 +314,12 @@ Object? readCompatibleMatchedField(
       throw StateError(
           'Compatible list-to-array field ${localField.name} is unsupported.');
     }
-    if (elementType.nullable || elementType.ref) {
-      readCompatibleField(context, remoteField);
-      return null;
-    }
-    final raw = readCompatibleField(context, remoteField);
-    return _listToArrayValue(localType.typeId, raw);
+    return _readCompatibleListAsArrayField(
+      context,
+      elementType,
+      localType.typeId,
+      localField.name,
+    );
   }
   if (localType.typeId == TypeIds.list && _isArrayType(remoteType.typeId)) {
     final localElementType =
@@ -333,6 +334,45 @@ Object? readCompatibleMatchedField(
     return _arrayToListValue(raw);
   }
   return readFieldValue<Object?>(context, localField);
+}
+
+Object _readCompatibleListAsArrayField(
+  ReadContext context,
+  FieldType elementType,
+  int arrayTypeId,
+  String fieldName,
+) {
+  final size = context.buffer.readVarUint32();
+  if (size > context.config.maxCollectionSize) {
+    throw StateError(
+      'Collection size $size exceeds ${context.config.maxCollectionSize}.',
+    );
+  }
+  if (size == 0) {
+    return _listToArrayValue(arrayTypeId, const <Object?>[]);
+  }
+  final header = context.buffer.readUint8();
+  final trackRef = (header & CollectionFlags.trackingRef) != 0;
+  final hasNull = (header & CollectionFlags.hasNull) != 0;
+  final usesDeclaredType =
+      (header & CollectionFlags.isDeclaredElementType) != 0;
+  final sameType = (header & CollectionFlags.isSameType) != 0;
+  if (hasNull || trackRef) {
+    throw StateError(
+      'Compatible list-to-array field $fieldName cannot read nullable or ref-tracked elements.',
+    );
+  }
+  if (!sameType || !usesDeclaredType) {
+    throw StateError(
+      'Compatible list-to-array field $fieldName requires declared same-type elements.',
+    );
+  }
+  final elementResolved = context.typeResolver.resolveFieldType(elementType);
+  final values = List<Object?>.filled(size, null, growable: false);
+  for (var index = 0; index < size; index += 1) {
+    values[index] = context.readResolvedValue(elementResolved, elementType);
+  }
+  return _listToArrayValue(arrayTypeId, values);
 }
 
 TypeInfo? _compatibleFieldDeclaredTypeInfo(

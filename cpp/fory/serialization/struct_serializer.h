@@ -97,6 +97,30 @@ inline constexpr bool is_primitive_type_id(TypeId type_id) {
          type_id == TypeId::TAGGED_UINT64;
 }
 
+/// Type trait to check if a type is a raw primitive (not a wrapper like
+/// optional, shared_ptr, etc.)
+template <typename T> struct is_raw_primitive : std::false_type {};
+template <> struct is_raw_primitive<bool> : std::true_type {};
+template <> struct is_raw_primitive<int8_t> : std::true_type {};
+template <> struct is_raw_primitive<uint8_t> : std::true_type {};
+template <> struct is_raw_primitive<int16_t> : std::true_type {};
+template <> struct is_raw_primitive<uint16_t> : std::true_type {};
+template <> struct is_raw_primitive<int32_t> : std::true_type {};
+template <> struct is_raw_primitive<uint32_t> : std::true_type {};
+template <> struct is_raw_primitive<int64_t> : std::true_type {};
+template <> struct is_raw_primitive<uint64_t> : std::true_type {};
+template <> struct is_raw_primitive<float16_t> : std::true_type {};
+template <> struct is_raw_primitive<bfloat16_t> : std::true_type {};
+template <> struct is_raw_primitive<float> : std::true_type {};
+template <> struct is_raw_primitive<double> : std::true_type {};
+template <typename T>
+inline constexpr bool is_raw_primitive_v = is_raw_primitive<T>::value;
+
+template <typename TargetType>
+FORY_ALWAYS_INLINE TargetType read_primitive_by_type_id(ReadContext &ctx,
+                                                        uint32_t type_id,
+                                                        Error &error);
+
 /// write a primitive value to buffer at given offset WITHOUT updating
 /// writer_index. Returns the number of bytes written. Caller must ensure buffer
 /// has sufficient capacity.
@@ -901,7 +925,9 @@ Container read_configured_list_data(ReadContext &ctx) {
 
 template <typename Container, typename StructT, size_t Index, int8_t NodeIndex,
           int8_t ElemNode>
-Container read_configured_list_data_as_array_field(ReadContext &ctx) {
+Container
+read_configured_list_data_as_array_field(ReadContext &ctx,
+                                         uint32_t remote_element_type_id) {
   using Elem = element_type_t<Container>;
   uint32_t length = ctx.read_var_uint32(ctx.error());
   Container result;
@@ -941,13 +967,17 @@ Container read_configured_list_data_as_array_field(ReadContext &ctx) {
     result.reserve(length);
   }
   for (uint32_t i = 0; i < length; ++i) {
-    if constexpr (ElemNode >= 0) {
-      auto elem = read_configured_value<Elem, StructT, Index, ElemNode>(
-          ctx, RefMode::None, false);
-      collection_insert(result, std::move(elem));
+    if constexpr (is_raw_primitive_v<Elem>) {
+      auto elem = read_primitive_by_type_id<Elem>(ctx, remote_element_type_id,
+                                                  ctx.error());
+      if (FORY_PREDICT_FALSE(ctx.has_error())) {
+        return result;
+      }
+      collection_insert(result, elem);
     } else {
-      auto elem = Serializer<Elem>::read(ctx, RefMode::None, false);
-      collection_insert(result, std::move(elem));
+      ctx.set_error(Error::type_error(
+          "compatible list to array field requires primitive elements"));
+      return result;
     }
   }
   return result;
@@ -2791,26 +2821,6 @@ void write_struct_fields_impl(const T &obj, WriteContext &ctx,
     (write_field_at_sorted_position<T, Indices>(obj, ctx, has_generics), ...);
   }
 }
-
-/// Type trait to check if a type is a raw primitive (not a wrapper like
-/// optional, shared_ptr, etc.)
-template <typename T> struct is_raw_primitive : std::false_type {};
-template <> struct is_raw_primitive<bool> : std::true_type {};
-template <> struct is_raw_primitive<int8_t> : std::true_type {};
-template <> struct is_raw_primitive<uint8_t> : std::true_type {};
-template <> struct is_raw_primitive<int16_t> : std::true_type {};
-template <> struct is_raw_primitive<uint16_t> : std::true_type {};
-template <> struct is_raw_primitive<int32_t> : std::true_type {};
-template <> struct is_raw_primitive<uint32_t> : std::true_type {};
-template <> struct is_raw_primitive<int64_t> : std::true_type {};
-template <> struct is_raw_primitive<uint64_t> : std::true_type {};
-template <> struct is_raw_primitive<float16_t> : std::true_type {};
-template <> struct is_raw_primitive<bfloat16_t> : std::true_type {};
-template <> struct is_raw_primitive<float> : std::true_type {};
-template <> struct is_raw_primitive<double> : std::true_type {};
-template <typename T>
-inline constexpr bool is_raw_primitive_v = is_raw_primitive<T>::value;
-
 /// Read a primitive value based on remote type_id (for compatible mode).
 /// Returns the value as a uint64_t (or int64_t for signed types).
 /// The caller must convert to the correct local type.
@@ -2865,6 +2875,8 @@ FORY_ALWAYS_INLINE TargetType read_primitive_by_type_id(ReadContext &ctx,
     return static_cast<TargetType>(ctx.read_tagged_uint64(error));
   case TypeId::FLOAT16:
     return static_cast<TargetType>(ctx.read_f16(error).to_float());
+  case TypeId::BFLOAT16:
+    return static_cast<TargetType>(ctx.read_bf16(error).to_float());
   case TypeId::FLOAT32:
     return static_cast<TargetType>(ctx.read_float(error));
   case TypeId::FLOAT64:
@@ -3282,15 +3294,9 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
           return;
         }
         const auto &remote_element_type = remote_field_type.generics[0];
-        if (FORY_PREDICT_FALSE(remote_element_type.nullable ||
-                               remote_element_type.track_ref)) {
-          skip_field_value(ctx, remote_field_type, remote_ref_mode);
-          return;
-        }
         constexpr int8_t child = configured_node_child<T, Index, 0, 0>();
-        FieldType result =
-            read_configured_list_data_as_array_field<FieldType, T, Index, 0,
-                                                     child>(ctx);
+        FieldType result = read_configured_list_data_as_array_field<
+            FieldType, T, Index, 0, child>(ctx, remote_element_type.type_id);
         if constexpr (is_fory_field_v<RawFieldType>) {
           (obj.*field_ptr).value = std::move(result);
         } else {

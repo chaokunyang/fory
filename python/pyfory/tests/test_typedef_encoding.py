@@ -46,6 +46,7 @@ from pyfory.meta.typedef_decoder import decode_typedef
 from pyfory.serializer import PyArraySerializer
 from pyfory.types import TypeId
 from pyfory import Fory
+from pyfory.error import TypeNotCompatibleError
 
 try:
     import numpy as np
@@ -540,16 +541,14 @@ def test_compatible_int32_pyarray_assigns_to_list():
     assert decoded.payload == [1, 2, 3]
 
 
-def test_compatible_nullable_int32_list_does_not_assign_to_array():
+def test_compatible_nullable_int32_list_payload_rejects_array_read():
     writer = Fory(xlang=True, compatible=True)
     reader = Fory(xlang=True, compatible=True)
     _register_int32_payload(writer, NullableInt32ListPayload)
     _register_int32_payload(reader, Int32ArrayPayload)
 
-    decoded = reader.deserialize(writer.serialize(NullableInt32ListPayload(payload=[1, 2, 3])))
-
-    assert isinstance(decoded, Int32ArrayPayload)
-    assert decoded.payload is None
+    with pytest.raises(TypeNotCompatibleError):
+        reader.deserialize(writer.serialize(NullableInt32ListPayload(payload=[1, None, 3])))
 
 
 def test_compatible_nested_list_array_mismatch_not_assigned():

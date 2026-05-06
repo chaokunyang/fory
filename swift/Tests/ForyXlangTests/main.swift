@@ -125,6 +125,27 @@ private struct ReducedPrecisionFloatStruct {
 }
 
 @ForyStruct
+private struct CompatibleInt32ListField {
+    @ForyField(id: 1)
+    @ListField(element: .int32(encoding: .fixed))
+    var values: [Int32] = []
+}
+
+@ForyStruct
+private struct CompatibleNullableInt32ListField {
+    @ForyField(id: 1)
+    @ListField(element: .int32(nullable: true, encoding: .fixed))
+    var values: [Int32?] = []
+}
+
+@ForyStruct
+private struct CompatibleInt32ArrayField {
+    @ForyField(id: 1)
+    @ArrayField(element: .int32())
+    var values: [Int32] = []
+}
+
+@ForyStruct
 private struct OneEnumFieldStruct {
     var f1: PeerTestEnum = .valueA
 }
@@ -1079,6 +1100,31 @@ private func handleReducedPrecisionFloatStructCompatibleSkip(_ bytes: [UInt8]) t
     return try roundTripSingle(bytes, fory: fory, as: EmptyStructEvolution.self)
 }
 
+private func handleListArrayCompatibleListToArray(_ bytes: [UInt8]) throws -> [UInt8] {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    fory.register(CompatibleInt32ArrayField.self, id: 901)
+    return try roundTripSingle(bytes, fory: fory, as: CompatibleInt32ArrayField.self)
+}
+
+private func handleListArrayCompatibleArrayToList(_ bytes: [UInt8]) throws -> [UInt8] {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    fory.register(CompatibleInt32ListField.self, id: 901)
+    return try roundTripSingle(bytes, fory: fory, as: CompatibleInt32ListField.self)
+}
+
+private func handleListArrayCompatibleNullableListToArrayError(_ bytes: [UInt8]) throws -> [UInt8] {
+    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    fory.register(CompatibleInt32ArrayField.self, id: 901)
+    do {
+        let _: CompatibleInt32ArrayField = try fory.deserialize(Data(bytes))
+    } catch {
+        return bytes
+    }
+    throw PeerError.invalidFieldValue(
+        "Expected nullable list payload to fail compatible array read"
+    )
+}
+
 private func rewritePayload(caseName: String, bytes: [UInt8]) throws -> [UInt8] {
     switch caseName {
     case "test_buffer", "test_buffer_var":
@@ -1175,6 +1221,12 @@ private func rewritePayload(caseName: String, bytes: [UInt8]) throws -> [UInt8] 
         return try handleReducedPrecisionFloatStruct(bytes)
     case "test_reduced_precision_float_struct_compatible_skip":
         return try handleReducedPrecisionFloatStructCompatibleSkip(bytes)
+    case "test_list_array_compatible_list_to_array":
+        return try handleListArrayCompatibleListToArray(bytes)
+    case "test_list_array_compatible_array_to_list":
+        return try handleListArrayCompatibleArrayToList(bytes)
+    case "test_list_array_compatible_nullable_list_to_array_error":
+        return try handleListArrayCompatibleNullableListToArrayError(bytes)
     default:
         throw PeerError.unsupportedCase(caseName)
     }

@@ -308,6 +308,18 @@ struct ReducedPrecisionFloatStruct {
               (bfloat16_array, fory::F().list(fory::T::bfloat16())));
 };
 
+struct CompatibleInt32ListField {
+  std::vector<int32_t> values;
+  FORY_STRUCT(CompatibleInt32ListField,
+              (values, fory::F(1).list(fory::T::int32())));
+};
+
+struct CompatibleInt32ArrayField {
+  std::vector<int32_t> values;
+  FORY_STRUCT(CompatibleInt32ArrayField,
+              (values, fory::F(1).array(fory::T::int32())));
+};
+
 enum class TestEnum : int32_t { VALUE_A = 0, VALUE_B = 1, VALUE_C = 2 };
 FORY_ENUM(TestEnum, VALUE_A, VALUE_B, VALUE_C);
 
@@ -951,6 +963,10 @@ void run_test_schema_evolution_compatible_reverse(const std::string &data_file);
 void run_test_reduced_precision_float_struct(const std::string &data_file);
 void run_test_reduced_precision_float_struct_compatible_skip(
     const std::string &data_file);
+void run_test_list_array_compatible_list_to_array(const std::string &data_file);
+void run_test_list_array_compatible_array_to_list(const std::string &data_file);
+void run_test_list_array_compatible_nullable_list_to_array_error(
+    const std::string &data_file);
 void run_test_one_enum_field_schema(const std::string &data_file);
 void run_test_one_enum_field_compatible(const std::string &data_file);
 void run_test_two_enum_field_compatible(const std::string &data_file);
@@ -1060,6 +1076,13 @@ int main(int argc, char **argv) {
     } else if (case_name ==
                "test_reduced_precision_float_struct_compatible_skip") {
       run_test_reduced_precision_float_struct_compatible_skip(data_file);
+    } else if (case_name == "test_list_array_compatible_list_to_array") {
+      run_test_list_array_compatible_list_to_array(data_file);
+    } else if (case_name == "test_list_array_compatible_array_to_list") {
+      run_test_list_array_compatible_array_to_list(data_file);
+    } else if (case_name ==
+               "test_list_array_compatible_nullable_list_to_array_error") {
+      run_test_list_array_compatible_nullable_list_to_array_error(data_file);
     } else if (case_name == "test_one_enum_field_schema") {
       run_test_one_enum_field_schema(data_file);
     } else if (case_name == "test_one_enum_field_compatible") {
@@ -2283,6 +2306,51 @@ void run_test_reduced_precision_float_struct_compatible_skip(
   std::vector<uint8_t> out;
   append_serialized(fory, value, out);
   write_file(data_file, out);
+}
+
+void run_test_list_array_compatible_list_to_array(
+    const std::string &data_file) {
+  auto bytes = read_file(data_file);
+  auto fory = build_fory(true, true);
+  ensure_ok(fory.register_struct<CompatibleInt32ArrayField>(901),
+            "register CompatibleInt32ArrayField");
+
+  Buffer buffer = make_buffer(bytes);
+  auto value = read_next<CompatibleInt32ArrayField>(fory, buffer);
+
+  std::vector<uint8_t> out;
+  append_serialized(fory, value, out);
+  write_file(data_file, out);
+}
+
+void run_test_list_array_compatible_array_to_list(
+    const std::string &data_file) {
+  auto bytes = read_file(data_file);
+  auto fory = build_fory(true, true);
+  ensure_ok(fory.register_struct<CompatibleInt32ListField>(901),
+            "register CompatibleInt32ListField");
+
+  Buffer buffer = make_buffer(bytes);
+  auto value = read_next<CompatibleInt32ListField>(fory, buffer);
+
+  std::vector<uint8_t> out;
+  append_serialized(fory, value, out);
+  write_file(data_file, out);
+}
+
+void run_test_list_array_compatible_nullable_list_to_array_error(
+    const std::string &data_file) {
+  auto bytes = read_file(data_file);
+  auto fory = build_fory(true, true);
+  ensure_ok(fory.register_struct<CompatibleInt32ArrayField>(901),
+            "register CompatibleInt32ArrayField nullable-list error");
+
+  Buffer buffer = make_buffer(bytes);
+  auto result = fory.deserialize<CompatibleInt32ArrayField>(buffer);
+  if (result.ok()) {
+    fail("Expected nullable list payload to fail compatible array read");
+  }
+  write_file(data_file, bytes);
 }
 
 // ============================================================================

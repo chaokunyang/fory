@@ -319,6 +319,18 @@ type ReducedPrecisionFloatStruct struct {
 	Bfloat16Array []bfloat16.BFloat16
 }
 
+type CompatibleInt32ListField struct {
+	Values []int32 `fory:"id=1,type=list(element=int32(nullable=false,encoding=fixed))"`
+}
+
+type CompatibleNullableInt32ListField struct {
+	Values []*int32 `fory:"id=1,type=list(element=int32(nullable=true,encoding=fixed))"`
+}
+
+type CompatibleInt32ArrayField struct {
+	Values []int32 `fory:"id=1,type=array(element=int32)"`
+}
+
 type StructWithList struct {
 	Items []string
 }
@@ -1596,6 +1608,59 @@ func testReducedPrecisionFloatStructCompatibleSkip() {
 	}
 
 	writeFile(dataFile, serialized)
+}
+
+func testListArrayCompatibleListToArray() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterStruct(CompatibleInt32ArrayField{}, 901)
+
+	var result CompatibleInt32ArrayField
+	if err := f.Deserialize(data, &result); err != nil {
+		panic(fmt.Sprintf("Failed to deserialize compatible list as array: %v", err))
+	}
+	serialized, err := f.Serialize(&result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize compatible array field: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testListArrayCompatibleArrayToList() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterStruct(CompatibleInt32ListField{}, 901)
+
+	var result CompatibleInt32ListField
+	if err := f.Deserialize(data, &result); err != nil {
+		panic(fmt.Sprintf("Failed to deserialize compatible array as list: %v", err))
+	}
+	serialized, err := f.Serialize(&result)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to serialize compatible list field: %v", err))
+	}
+
+	writeFile(dataFile, serialized)
+}
+
+func testListArrayCompatibleNullableListToArrayError() {
+	dataFile := getDataFile()
+	data := readFile(dataFile)
+
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+	f.RegisterStruct(CompatibleInt32ArrayField{}, 901)
+
+	var result CompatibleInt32ArrayField
+	if err := f.Deserialize(data, &result); err == nil {
+		panic("Expected nullable list payload to fail compatible array read")
+	}
+
+	writeFile(dataFile, data)
 }
 
 // Enum field tests
@@ -2887,6 +2952,12 @@ func main() {
 		testReducedPrecisionFloatStruct()
 	case "test_reduced_precision_float_struct_compatible_skip":
 		testReducedPrecisionFloatStructCompatibleSkip()
+	case "test_list_array_compatible_list_to_array":
+		testListArrayCompatibleListToArray()
+	case "test_list_array_compatible_array_to_list":
+		testListArrayCompatibleArrayToList()
+	case "test_list_array_compatible_nullable_list_to_array_error":
+		testListArrayCompatibleNullableListToArrayError()
 	case "test_one_enum_field_schema":
 		testOneEnumFieldSchemaConsistent()
 	case "test_one_enum_field_compatible":

@@ -902,6 +902,24 @@ struct ReducedPrecisionFloatStruct {
     bfloat16_array: Vec<BFloat16>,
 }
 
+#[derive(ForyStruct, Debug, PartialEq)]
+struct CompatibleInt32ListField {
+    #[fory(id = 1, list(element(encoding = fixed)))]
+    values: Vec<i32>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct CompatibleNullableInt32ListField {
+    #[fory(id = 1, list(element(nullable = true, encoding = fixed)))]
+    values: Vec<Option<i32>>,
+}
+
+#[derive(ForyStruct, Debug, PartialEq)]
+struct CompatibleInt32ArrayField {
+    #[fory(id = 1, array)]
+    values: Vec<i32>,
+}
+
 #[allow(non_camel_case_types)]
 #[derive(ForyEnum, Debug, PartialEq, Default, Clone)]
 enum TestEnum {
@@ -1406,6 +1424,50 @@ fn test_reduced_precision_float_struct_compatible_skip() {
 
     let new_bytes = fory.serialize(&value).unwrap();
     fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_list_array_compatible_list_to_array() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::builder().compatible(true).xlang(true).build();
+    fory.register::<CompatibleInt32ArrayField>(901).unwrap();
+    let value: CompatibleInt32ArrayField = fory.deserialize(&bytes).unwrap();
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_list_array_compatible_array_to_list() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::builder().compatible(true).xlang(true).build();
+    fory.register::<CompatibleInt32ListField>(901).unwrap();
+    let value: CompatibleInt32ListField = fory.deserialize(&bytes).unwrap();
+    let new_bytes = fory.serialize(&value).unwrap();
+    fs::write(&data_file_path, new_bytes).unwrap();
+}
+
+#[test]
+#[ignore]
+fn test_list_array_compatible_nullable_list_to_array_error() {
+    let data_file_path = get_data_file();
+    let bytes = fs::read(&data_file_path).unwrap();
+
+    let mut fory = Fory::builder().compatible(true).xlang(true).build();
+    fory.register::<CompatibleInt32ArrayField>(901).unwrap();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        fory.deserialize::<CompatibleInt32ArrayField>(&bytes)
+    }));
+    assert!(
+        result.is_err() || result.is_ok_and(|value| value.is_err()),
+        "Expected nullable list payload to fail compatible array read"
+    );
+    fs::write(&data_file_path, bytes).unwrap();
 }
 
 // ============================================================================

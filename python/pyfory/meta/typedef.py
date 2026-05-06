@@ -663,7 +663,6 @@ def _remote_list_to_local_array_allowed(remote_field_type: FieldType, local_fiel
         remote_field_type.type_id == TypeId.LIST
         and local_field_type.type_id in _ARRAY_TYPE_IDS
         and _list_array_element_type_matches(remote_field_type, local_field_type)
-        and not remote_field_type.element_type.is_nullable
     )
 
 
@@ -809,8 +808,6 @@ def _field_type_assignment(remote_field_type: FieldType, local_field_type: Field
     if remote_type_id == TypeId.UNKNOWN:
         return True, True
     if top_level and _is_root_list_array_pair(remote_field_type, local_field_type):
-        if remote_type_id == TypeId.LIST and not _remote_list_to_local_array_allowed(remote_field_type, local_field_type):
-            return False, False
         return True, True
     if remote_type_id in (TypeId.LIST, TypeId.SET):
         if local_type_id != remote_type_id:

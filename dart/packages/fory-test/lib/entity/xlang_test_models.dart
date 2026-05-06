@@ -19,6 +19,8 @@
 
 library;
 
+import 'dart:typed_data';
+
 import 'package:fory/fory.dart';
 
 import 'xlang_test_manual.dart' as manual;
@@ -334,6 +336,33 @@ class ReducedPrecisionFloatStruct {
   Bfloat16 bfloat16Value = const Bfloat16.fromBits(0);
   List<Float16> float16Array = <Float16>[];
   List<Bfloat16> bfloat16Array = <Bfloat16>[];
+}
+
+@ForyStruct()
+class CompatibleInt32ListField {
+  CompatibleInt32ListField();
+
+  @ListField(id: 1, element: Int32Type(encoding: Encoding.fixed))
+  List<int> values = <int>[];
+}
+
+@ForyStruct()
+class CompatibleNullableInt32ListField {
+  CompatibleNullableInt32ListField();
+
+  @ListField(
+    id: 1,
+    element: Int32Type(nullable: true, encoding: Encoding.fixed),
+  )
+  List<int?> values = <int?>[];
+}
+
+@ForyStruct()
+class CompatibleInt32ArrayField {
+  CompatibleInt32ArrayField();
+
+  @ArrayField(id: 1, element: Int32Type())
+  Int32List values = Int32List(0);
 }
 
 @ForyStruct()

@@ -28,12 +28,19 @@ import logging
 import math
 import os
 import decimal
+import array
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set
 
 import pyfory
 from pyfory import Ref
+from pyfory.error import TypeNotCompatibleError
 from pyfory.meta.meta_compressor import NoOpMetaCompressor
+
+try:
+    import numpy as np
+except ImportError:
+    np = None
 
 
 def debug_print(*params):
@@ -69,6 +76,12 @@ def decimal_values() -> List[decimal.Decimal]:
         decimal_from_parts(123456789012345678901234567890123456789, 37),
         decimal_from_parts(-123456789012345678901234567890123456789, -17),
     ]
+
+
+def empty_int32_ndarray():
+    if np is None:
+        raise RuntimeError("numpy is required for pyfory.NDArray fields")
+    return np.empty(0, dtype=np.int32)
 
 
 # ============================================================================
@@ -194,6 +207,31 @@ class ReducedPrecisionFloatStruct:
     bfloat16_value: pyfory.BFloat16 = None
     float16_array: List[pyfory.Float16] = None
     bfloat16_array: List[pyfory.BFloat16] = None
+
+
+@dataclass
+class CompatibleInt32ListField:
+    values: List[pyfory.FixedInt32] = pyfory.field(1, default_factory=list)
+
+
+@dataclass
+class CompatibleNullableInt32ListField:
+    values: List[Optional[pyfory.FixedInt32]] = pyfory.field(1, default_factory=list)
+
+
+@dataclass
+class CompatibleInt32ArrayField:
+    values: pyfory.Array[pyfory.Int32] = pyfory.field(1, default_factory=pyfory.Int32Array)
+
+
+@dataclass
+class CompatibleInt32NDArrayField:
+    values: pyfory.NDArray[pyfory.Int32] = pyfory.field(1, default_factory=empty_int32_ndarray)
+
+
+@dataclass
+class CompatibleInt32PyArrayField:
+    values: pyfory.PyArray[pyfory.Int32] = pyfory.field(1, default_factory=lambda: array.array("i"))
 
 
 class TestEnum(enum.Enum):
@@ -877,6 +915,53 @@ def test_reduced_precision_float_struct_compatible_skip():
     assert isinstance(obj, EmptyStruct)
 
     new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def _round_trip_compatible_list_array_field(local_type):
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(local_type, type_id=901)
+    obj = fory.deserialize(data_bytes)
+    new_bytes = fory.serialize(obj)
+    with open(data_file, "wb") as f:
+        f.write(new_bytes)
+
+
+def test_list_array_compatible_list_to_array():
+    _round_trip_compatible_list_array_field(CompatibleInt32ArrayField)
+
+
+def test_list_array_compatible_list_to_ndarray():
+    _round_trip_compatible_list_array_field(CompatibleInt32NDArrayField)
+
+
+def test_list_array_compatible_list_to_pyarray():
+    _round_trip_compatible_list_array_field(CompatibleInt32PyArrayField)
+
+
+def test_list_array_compatible_array_to_list():
+    _round_trip_compatible_list_array_field(CompatibleInt32ListField)
+
+
+def test_list_array_compatible_nullable_list_to_array_error():
+    data_file = get_data_file()
+    with open(data_file, "rb") as f:
+        data_bytes = f.read()
+
+    fory = pyfory.Fory(xlang=True, compatible=True)
+    fory.register_type(CompatibleInt32ArrayField, type_id=901)
+    try:
+        fory.deserialize(data_bytes)
+    except TypeNotCompatibleError:
+        pass
+    else:
+        raise AssertionError("Expected nullable list payload to fail compatible array read")
+    new_bytes = data_bytes
     with open(data_file, "wb") as f:
         f.write(new_bytes)
 

@@ -811,12 +811,15 @@ func listFieldCanReadLocalArray(remoteSpec *TypeSpec, remoteNullable bool, remot
 }
 
 func compatibleListFieldCanReadLocalArray(remoteSpec *TypeSpec, localSpec *TypeSpec, localType reflect.Type) bool {
-	if remoteSpec == nil || localSpec == nil || localType == nil || localType.Kind() != reflect.Array {
+	if remoteSpec == nil || localSpec == nil || localType == nil {
+		return false
+	}
+	if localType.Kind() != reflect.Array && localType.Kind() != reflect.Slice {
 		return false
 	}
 	remoteSpec.normalizeChildren()
 	localSpec.normalizeChildren()
-	if remoteSpec.TypeID != LIST || remoteSpec.Element == nil || remoteSpec.Element.Nullable || remoteSpec.Element.TrackRef {
+	if remoteSpec.TypeID != LIST || remoteSpec.Element == nil {
 		return false
 	}
 	if !isPrimitiveArrayType(localSpec.TypeID) {

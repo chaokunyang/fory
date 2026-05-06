@@ -711,14 +711,6 @@ public enum ArrayFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
            let element = remoteFieldType.generics.first,
            let localArrayTypeID = packedArrayTypeID(for: ElementCodec.self),
            TypeId.listElementTypeID(element.typeID, matchesDenseArrayTypeID: localArrayTypeID.rawValue) {
-            if element.nullable {
-                try context.skipFieldValue(remoteFieldType)
-                return defaultValue
-            }
-            if element.trackRef {
-                try context.skipFieldValue(remoteFieldType)
-                return defaultValue
-            }
             return try readListPayloadAsArray(
                 context,
                 refMode: refMode,

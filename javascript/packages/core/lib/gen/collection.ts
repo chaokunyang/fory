@@ -370,6 +370,16 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const elemSerializer = this.scope.uniqueName("elemSerializer");
     const anyHelper = this.builder.getExternal(AnyHelper.name);
     const readContextName = this.builder.getReadContextName();
+    const rejectCompatiblePayload = this.typeInfo.options?.rejectNullableCompatibleListPayload
+      ? `
+                if (${flags} & (${CollectionFlags.HAS_NULL} | ${CollectionFlags.TRACKING_REF})) {
+                    throw new Error("compatible list-to-array field cannot read nullable or ref-tracked elements");
+                }
+                if ((${flags} & (${CollectionFlags.SAME_TYPE} | ${CollectionFlags.DECL_ELEMENT_TYPE})) !== (${CollectionFlags.SAME_TYPE} | ${CollectionFlags.DECL_ELEMENT_TYPE})) {
+                    throw new Error("compatible list-to-array field requires declared same-type elements");
+                }
+        `
+      : "";
     // Skip depth tracking for leaf element types (primitives, string, enum, time, typed arrays).
     const innerIsLeaf = TypeId.isLeafTypeId(this.innerGenerator.getTypeId()!);
     const readInnerElement = (
@@ -387,6 +397,7 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
             ${this.maybeReference(result, refState)}
             if (${len} > 0) {
                 const ${flags} = ${this.builder.reader.readUint8()};
+                ${rejectCompatiblePayload}
                 let ${elemSerializer} = null;
                 if (!(${flags} & ${CollectionFlags.DECL_ELEMENT_TYPE})) {
                     ${elemSerializer} = ${anyHelper}.detectSerializer(${readContextName});

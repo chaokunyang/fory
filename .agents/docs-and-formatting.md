@@ -37,6 +37,10 @@ Load this file when changing documentation, public APIs, protocol specs, benchma
 - Python code, including `compiler/`, `benchmarks/`, `integration_tests/`, and `python/`:
   `python -m ruff format <changed-python-files>` and
   `python -m ruff check --fix <changed-python-files>`
+- JavaScript/TypeScript under `javascript/`: use the package's ESLint-owned formatting path
+  (`npm run lint -- --fix` when fixing style, `npm run lint -- --quiet` when checking). Do not run
+  Prettier on JavaScript or TypeScript files unless that package has an explicit Prettier config or
+  script; otherwise it creates unrelated formatting churn.
 - Repo-wide format and lint sweep: `bash ci/format.sh --all`
 
 When code changes touch `compiler/` or `benchmarks/`, format those changed source files with the

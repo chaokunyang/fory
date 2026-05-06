@@ -220,6 +220,9 @@ internal static class Program
             "test_schema_evolution_compatible_reverse" => CaseSchemaEvolutionCompatibleReverse(input),
             "test_reduced_precision_float_struct" => CaseReducedPrecisionFloatStruct(input),
             "test_reduced_precision_float_struct_compatible_skip" => CaseReducedPrecisionFloatStructCompatibleSkip(input),
+            "test_list_array_compatible_list_to_array" => CaseListArrayCompatibleListToArray(input),
+            "test_list_array_compatible_array_to_list" => CaseListArrayCompatibleArrayToList(input),
+            "test_list_array_compatible_nullable_list_to_array_error" => CaseListArrayCompatibleNullableListToArrayError(input),
             "test_one_enum_field_schema" => CaseOneEnumFieldSchema(input),
             "test_one_enum_field_compatible" => CaseOneEnumFieldCompatible(input),
             "test_two_enum_field_compatible" => CaseTwoEnumFieldCompatible(input),
@@ -819,6 +822,37 @@ internal static class Program
         return RoundTripSingle<EmptyStruct>(input, fory);
     }
 
+    private static byte[] CaseListArrayCompatibleListToArray(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: true);
+        fory.Register<CompatibleInt32ArrayField>(901);
+        return RoundTripSingle<CompatibleInt32ArrayField>(input, fory);
+    }
+
+    private static byte[] CaseListArrayCompatibleArrayToList(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: true);
+        fory.Register<CompatibleInt32ListField>(901);
+        return RoundTripSingle<CompatibleInt32ListField>(input, fory);
+    }
+
+    private static byte[] CaseListArrayCompatibleNullableListToArrayError(byte[] input)
+    {
+        ForyRuntime fory = BuildFory(compatible: true);
+        fory.Register<CompatibleInt32ArrayField>(901);
+
+        ReadOnlySequence<byte> sequence = new(input);
+        try
+        {
+            _ = fory.Deserialize<CompatibleInt32ArrayField>(ref sequence);
+        }
+        catch (Apache.Fory.InvalidDataException)
+        {
+            return input;
+        }
+        throw new InvalidOperationException("Expected nullable list payload to fail compatible array read");
+    }
+
     private static byte[] CaseOneEnumFieldSchema(byte[] input)
     {
         ForyRuntime fory = BuildFory(compatible: false);
@@ -1277,6 +1311,27 @@ public sealed class ReducedPrecisionFloatStruct
     public BFloat16 BFloat16Value { get; set; }
     public List<Half> Float16Array { get; set; } = [];
     public List<BFloat16> BFloat16Array { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleInt32ListField
+{
+    [ForyField(1, Type = typeof(S.List<S.Fixed<S.Int32>>))]
+    public List<int> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleNullableInt32ListField
+{
+    [ForyField(1, Type = typeof(S.List<S.Fixed<S.Int32>>))]
+    public List<int?> Values { get; set; } = [];
+}
+
+[ForyObject]
+public sealed class CompatibleInt32ArrayField
+{
+    [ForyField(1, Type = typeof(S.Array<S.Int32>))]
+    public int[] Values { get; set; } = [];
 }
 
 [ForyObject]

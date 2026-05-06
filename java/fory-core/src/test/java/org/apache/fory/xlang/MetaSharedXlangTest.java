@@ -20,6 +20,7 @@
 package org.apache.fory.xlang;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.util.Arrays;
@@ -146,7 +147,7 @@ public class MetaSharedXlangTest extends ForyTestBase {
   }
 
   @Test
-  public void testNullableListElementsSkippedForArrayCompatibleRead() {
+  public void testNullableListElementsRejectedForArrayCompatibleRead() {
     for (boolean codegen : new boolean[] {false, true}) {
       Fory listFory = compatibleFory(DirectListField.class, codegen);
       DirectListField listStruct = new DirectListField();
@@ -154,8 +155,7 @@ public class MetaSharedXlangTest extends ForyTestBase {
       byte[] listBytes = listFory.serialize(listStruct);
 
       Fory arrayFory = compatibleFory(DirectArrayField.class, codegen);
-      DirectArrayField arrayStruct = (DirectArrayField) arrayFory.deserialize(listBytes);
-      assertEquals(arrayStruct.values, null);
+      assertThrows(DeserializationException.class, () -> arrayFory.deserialize(listBytes));
     }
   }
 

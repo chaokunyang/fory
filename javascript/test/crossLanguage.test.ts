@@ -1394,6 +1394,43 @@ describe("bool", () => {
     const serializedData = fory.serialize(deserializedStruct);
     writeToFile(serializedData as Buffer);
   });
+
+  test("test_list_array_compatible_list_to_array", () => {
+    const fory = new Fory({ compatible: true });
+    const serializer = fory.register(
+      Type.struct(901, {
+        values: Type.int32Array().setId(1),
+      }),
+    );
+
+    const value = serializer.deserialize(content);
+    writeToFile(serializer.serialize(value) as Buffer);
+  });
+
+  test("test_list_array_compatible_array_to_list", () => {
+    const fory = new Fory({ compatible: true });
+    const serializer = fory.register(
+      Type.struct(901, {
+        values: Type.list(Type.int32({ encoding: "fixed" })).setId(1),
+      }),
+    );
+
+    const value = serializer.deserialize(content);
+    writeToFile(serializer.serialize(value) as Buffer);
+  });
+
+  test("test_list_array_compatible_nullable_list_to_array_error", () => {
+    const fory = new Fory({ compatible: true });
+    const serializer = fory.register(
+      Type.struct(901, {
+        values: Type.int32Array().setId(1),
+      }),
+    );
+
+    expect(() => serializer.deserialize(content)).toThrow();
+    writeToFile(content);
+  });
+
   test("test_one_enum_field_schema", () => {
     const fory = new Fory({
       compatible: false,

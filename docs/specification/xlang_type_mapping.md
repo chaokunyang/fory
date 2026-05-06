@@ -128,9 +128,9 @@ Notes:
   field, and a direct top-level `array<T>` field may be read as a direct top-level `list<T>` field,
   when `T` is one of the dense bool/numeric array domains. Integer list element encodings in the
   same signedness and width domain match the corresponding dense array element domain. The rule does
-  not apply inside nested collection, map, array, union, or generic positions. A peer nullable
-  `list<T>` field does not match a local `array<T>` field and follows the existing compatible-mode
-  skipped/default field behavior.
+  not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>`
+  payload that declares nullable or ref-tracked elements must raise a compatible-read error when the
+  local matched field is `array<T>`.
 
 ## Type info
 

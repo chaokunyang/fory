@@ -574,7 +574,7 @@ public class CollectionSerializers {
       int refId = readContext.lastPreservedRefId();
       Set set;
       if (buffer.readBoolean()) {
-        readContext.preserveRefId();
+        readContext.preserveRefId(refId);
         set = Collections.newSetFromMap(mapSerializer.newMap(readContext));
         setNumElements(mapSerializer.getAndClearNumElements());
       } else {

@@ -925,8 +925,7 @@ public class CollectionSerializersTest extends ForyTestBase {
 
     Set<String> set = Collections.newSetFromMap(new ConcurrentHashMap<>());
     RefMarker marker = new RefMarker("after-set");
-    ExternalizableSetFromMapHolder holder =
-        new ExternalizableSetFromMapHolder(set, marker, marker);
+    ExternalizableSetFromMapHolder holder = new ExternalizableSetFromMapHolder(set, marker, marker);
 
     ExternalizableSetFromMapHolder deserialized = serDe(fory, holder);
     assertSame(deserialized.after, deserialized.afterAgain);

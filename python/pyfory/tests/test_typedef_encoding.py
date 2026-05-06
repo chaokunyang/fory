@@ -162,7 +162,7 @@ def test_dynamic_field_type():
 
 def test_encode_decode_typedef():
     """Test encoding and decoding a TypeDef."""
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(SimpleTypeDef, namespace="example", typename="SimpleTypeDef")
     fory.register(TestTypeDef, namespace="example", typename="TestTypeDef")
     # Create a mock resolver
@@ -196,7 +196,7 @@ def test_encode_decode_typedef():
 
 
 def test_decode_typedef_rejects_parsed_body_with_mismatched_hash():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(SimpleTypeDef, namespace="example", typename="SimpleTypeDef")
     typedef = encode_typedef(fory.type_resolver, SimpleTypeDef)
     malformed = _corrupt_encoded_field_name(typedef, "value")
@@ -206,7 +206,7 @@ def test_decode_typedef_rejects_parsed_body_with_mismatched_hash():
 
 
 def test_decode_typedef_rejects_hash_consistent_malformed_body():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     encoded = prepend_header(b"\x00", False)
 
     with pytest.raises(Exception):
@@ -214,7 +214,7 @@ def test_decode_typedef_rejects_hash_consistent_malformed_body():
 
 
 def test_decode_typedef_rejects_compressed_xlang_metadata():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(SimpleTypeDef, namespace="example", typename="SimpleTypeDef")
     typedef = encode_typedef(fory.type_resolver, SimpleTypeDef)
     source = Buffer(typedef.encoded)
@@ -229,7 +229,7 @@ def test_decode_typedef_rejects_compressed_xlang_metadata():
 
 def test_id_registered_typedef_extended_field_count_header():
     many_fields_type = make_dataclass("ManyTypeDefFields", [(f"field_{i}", int) for i in range(32)])
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(many_fields_type, type_id=701)
     typedef = encode_typedef(fory.type_resolver, many_fields_type)
     body_offset = _typedef_body_offset(typedef.encoded)
@@ -278,7 +278,7 @@ def _typedef_body_offset(encoded):
 
 
 def test_nested_container_typedef_preserves_declared_encoding():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(NestedEncodingTypeDef, namespace="example", typename="NestedEncodingTypeDef")
 
     typedef = encode_typedef(fory.type_resolver, NestedEncodingTypeDef)
@@ -297,7 +297,7 @@ def test_nested_container_typedef_preserves_declared_encoding():
 
 
 def test_python_array_typehint_lowering_keeps_list_schema_distinct():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(PythonArrayTypeHints, namespace="example", typename="PythonArrayTypeHints")
 
     typedef = encode_typedef(fory.type_resolver, PythonArrayTypeHints)
@@ -318,7 +318,7 @@ def test_python_array_typehint_lowering_keeps_list_schema_distinct():
 
 
 def test_python_array_typehint_rejects_scalar_encoding_modifier():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(
         InvalidArrayModifierTypeDef,
         namespace="example",

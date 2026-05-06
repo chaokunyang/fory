@@ -90,7 +90,7 @@ final bytes = fory.serialize(Person()
 
 ```java
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .build();
 
 fory.register(Person.class, 100);
@@ -147,7 +147,7 @@ type Person struct {
     Age  int32
 }
 
-f := fory.New(fory.WithXlang(true))
+f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 _ = f.RegisterStruct(Person{}, 100)
 
 var person Person

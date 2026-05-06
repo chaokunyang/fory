@@ -744,12 +744,14 @@ public class ArraySerializersTest extends ForyTestBase {
     Fory intFixed =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .withIntArrayCompressed(false)
             .build();
     Fory intCompressed =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .withIntArrayCompressed(true)
             .build();
@@ -763,12 +765,14 @@ public class ArraySerializersTest extends ForyTestBase {
     Fory longFixed =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .withLongArrayCompressed(false)
             .build();
     Fory longCompressed =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .withLongArrayCompressed(true)
             .withLongCompressed(Int64Encoding.VARINT)

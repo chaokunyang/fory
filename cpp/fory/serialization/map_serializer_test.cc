@@ -29,7 +29,7 @@ using namespace fory::serialization;
 // Helper function to test roundtrip serialization
 template <typename T> void test_map_roundtrip(const T &original) {
   // Create Fory instance with default config
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
 
   // Serialize
   auto serialize_result = fory.serialize(original);
@@ -103,7 +103,8 @@ TEST(MapSerializerTest, NestedMapRoundtrip) {
 
 TEST(MapSerializerTest, MapWithOptionalValues) {
   // Config with ref tracking enabled for nullability
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 
   std::map<std::string, std::optional<int32_t>> map{
       {"has_value", 42}, {"no_value", std::nullopt}, {"another_value", 100}};
@@ -134,7 +135,8 @@ TEST(MapSerializerTest, MapWithOptionalValues) {
 
 TEST(MapSerializerTest, MapWithSharedPtrValues) {
   // Config with ref tracking enabled
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 
   auto ptr1 = std::make_shared<int32_t>(42);
   auto ptr2 = std::make_shared<int32_t>(100);
@@ -169,7 +171,8 @@ TEST(MapSerializerTest, MapWithSharedPtrValues) {
 
 TEST(MapSerializerTest, MapWithNullSharedPtrValues) {
   // Config with ref tracking enabled
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 
   std::map<std::string, std::shared_ptr<std::string>> map{
       {"valid", std::make_shared<std::string>("hello")},
@@ -199,7 +202,8 @@ TEST(MapSerializerTest, MapWithNullSharedPtrValues) {
 
 TEST(MapSerializerTest, MapWithCircularReferences) {
   // This tests that circular references within map values are handled correctly
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 
   auto shared_value = std::make_shared<int32_t>(999);
 
@@ -252,7 +256,7 @@ TEST(MapSerializerTest, MultipleChunks) {
 
 TEST(MapSerializerTest, VerifyChunkedEncoding) {
   // This test verifies the chunked encoding format
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
 
   std::map<int32_t, int32_t> map{{1, 10}, {2, 20}, {3, 30}};
 
@@ -302,7 +306,7 @@ TEST(MapSerializerTest, UnorderedMapOrdering) {
     map[i] = "value_" + std::to_string(i);
   }
 
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
 
   auto serialize_result = fory.serialize(map);
   ASSERT_TRUE(serialize_result.ok());
@@ -425,7 +429,7 @@ TEST(MapSerializerTest, PolymorphicValueTypes) {
   using namespace polymorphic_test;
 
   auto fory =
-      Fory::builder().xlang(true).track_ref(true).compatible(true).build();
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
 
   // Register concrete derived types for polymorphic serialization
   ASSERT_TRUE(
@@ -486,7 +490,7 @@ TEST(MapSerializerTest, PolymorphicKeyTypes) {
   using namespace polymorphic_test;
 
   auto fory =
-      Fory::builder().xlang(true).track_ref(true).compatible(true).build();
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
 
   // Register concrete derived types for polymorphic serialization
   ASSERT_TRUE(fory.register_struct<DerivedKeyA>(DERIVED_KEY_A_TYPE_ID).ok());
@@ -551,7 +555,7 @@ TEST(MapSerializerTest, PolymorphicKeyAndValueTypes) {
   using namespace polymorphic_test;
 
   auto fory =
-      Fory::builder().xlang(true).track_ref(true).compatible(true).build();
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
 
   // Register concrete derived types for polymorphic serialization
   ASSERT_TRUE(fory.register_struct<DerivedKeyA>(DERIVED_KEY_A_TYPE_ID).ok());
@@ -616,7 +620,7 @@ TEST(MapSerializerTest, PolymorphicTypesWithNulls) {
   using namespace polymorphic_test;
 
   auto fory =
-      Fory::builder().xlang(true).track_ref(true).compatible(true).build();
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
 
   // Register concrete derived types for polymorphic serialization
   ASSERT_TRUE(
@@ -664,7 +668,7 @@ TEST(MapSerializerTest, PolymorphicTypesWithSharedReferences) {
   using namespace polymorphic_test;
 
   auto fory =
-      Fory::builder().xlang(true).track_ref(true).compatible(true).build();
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
 
   // Register concrete derived types for polymorphic serialization
   ASSERT_TRUE(
@@ -728,7 +732,7 @@ TEST(MapSerializerTest, LargeMapWithPolymorphicValues) {
   using namespace polymorphic_test;
 
   auto fory =
-      Fory::builder().xlang(true).track_ref(true).compatible(true).build();
+      Fory::builder().xlang(true).compatible(true).track_ref(true).build();
 
   // Register concrete derived types for polymorphic serialization
   ASSERT_TRUE(
@@ -781,7 +785,11 @@ TEST(MapSerializerTest, LargeMapWithPolymorphicValues) {
 }
 
 TEST(MapSerializerTest, MaxMapSizeGuardrail) {
-  auto fory = Fory::builder().xlang(true).max_collection_size(2).build();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .max_collection_size(2)
+                  .build();
 
   std::map<std::string, int32_t> large_map = {{"a", 1}, {"b", 2}, {"c", 3}};
 

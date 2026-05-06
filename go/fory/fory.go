@@ -104,6 +104,7 @@ func WithXlang(enabled bool) Option {
 func WithCompatible(enabled bool) Option {
 	return func(f *Fory) {
 		f.config.Compatible = enabled
+		f.compatibleSet = true
 	}
 }
 
@@ -135,8 +136,9 @@ func WithMaxTypeFields(size int) Option {
 // Fory is the main serialization instance.
 // Note: Fory is NOT thread-safe. Use ThreadSafeFory for concurrent use.
 type Fory struct {
-	config      Config
-	metaContext *MetaContext
+	config        Config
+	metaContext   *MetaContext
+	compatibleSet bool
 
 	// Reusable contexts - avoid allocation on each SerializeWithCallback/DeserializeWithCallbackBuffers call
 	writeCtx *WriteContext
@@ -156,6 +158,9 @@ func New(opts ...Option) *Fory {
 	// Apply options
 	for _, opt := range opts {
 		opt(f)
+	}
+	if f.config.IsXlang && !f.compatibleSet {
+		f.config.Compatible = true
 	}
 
 	// Initialize meta context if compatible mode is enabled

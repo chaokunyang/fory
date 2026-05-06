@@ -551,8 +551,8 @@ public class XlangExample {
   public record Person(String name, int age) {}
 
   public static void main(String[] args) {
-    // Create Fory instance with XLANG mode
-    Fory fory = Fory.builder().withXlang(true).build();
+    // Create Fory instance with XLANG mode. Compatible mode is the xlang default.
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
     // Register with cross-language type id/name
     fory.register(Person.class, 1);
     // fory.register(Person.class, "example.Person");
@@ -577,7 +577,7 @@ struct Person {
 }
 
 fn main() -> Result<(), Error> {
-    let mut fory = Fory::builder().xlang(true).build();
+    let mut fory = Fory::builder().xlang(true).compatible(true).build();
     fory.register::<Person>(1)?;
     // fory.register_by_name::<Person>("example.Person")?;
     let person = Person {
@@ -594,6 +594,8 @@ fn main() -> Result<(), Error> {
 **Key Points for Cross-Language Serialization**:
 
 - Enable xlang mode in all languages, for example `withXlang(true)` in Java
+- Compatible mode defaults to `true` when xlang mode is enabled and is recommended for
+  cross-language services because schemas can diverge more easily across languages.
 - Register types with **consistent IDs or names** across all languages:
   - **By ID** (`fory.register(Person.class, 1)`): Faster serialization, more compact encoding, but requires coordination to avoid ID conflicts
   - **By name** (`fory.register(Person.class, "example.Person")`): More flexible, less prone to conflicts, easier to manage across teams, but slightly larger encoding
@@ -736,11 +738,11 @@ For more details on row format, see [Row Format Specification](docs/specificatio
 
 ### Schema Compatibility
 
-Apache Fory™ supports class schema forward/backward compatibility across **Java, Python, Rust, and Golang**, enabling seamless schema evolution in production systems without requiring coordinated upgrades across all services. Fory provides two schema compatibility modes:
+Apache Fory™ supports class schema forward/backward compatibility across languages, enabling seamless schema evolution in production systems without requiring coordinated upgrades across all services. Fory provides two schema compatibility modes:
 
-1. **Schema Consistent Mode (Default)**: Assumes identical class schemas between serialization and deserialization peers. This mode offers minimal serialization overhead, smallest data size, and fastest performance: ideal for stable schemas or controlled environments.
+1. **Compatible Mode (xlang default)**: Supports independent schema evolution with forward and backward compatibility. This mode enables field addition/deletion, limited type evolution, and graceful handling of schema mismatches. It is recommended for `xlang=true` because different languages can diverge on schemas more easily. Enable explicitly using `withCompatible(true)` in Java, `compatible=True` in Python, `compatible(true)` in Rust, `WithCompatible(true)` in Go, or the equivalent runtime option.
 
-2. **Compatible Mode**: Supports independent schema evolution with forward and backward compatibility. This mode enables field addition/deletion, limited type evolution, and graceful handling of schema mismatches. Enable using `withCompatible(true)` in Java, `compatible=True` in Python, `compatible_mode(true)` in Rust, or `NewFory(true)` in Go.
+2. **Schema Consistent Mode**: Assumes identical class schemas between serialization and deserialization peers. This mode offers minimal serialization overhead, smallest data size, and fastest performance. Use it only when schemas do not change, or when all services deploy schema changes at the same time. Disable compatible mode explicitly, for example `withCompatible(false)` in Java.
 
 ### Binary Compatibility
 

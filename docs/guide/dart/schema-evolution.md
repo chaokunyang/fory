@@ -33,12 +33,12 @@ final fory = Fory(compatible: true);
 
 In compatible mode, Fory includes enough field metadata in each message so that the reader can skip unknown fields and use defaults for missing ones. Use stable field IDs (see below) to anchor the schema across changes.
 
-### Schema-Consistent Mode (default)
+### Schema-Consistent Mode
 
 Both sides must have the same model. Fory validates that the schemas match and will reject messages from a different schema version. Use this when all services are always updated together and you want schema mismatches to be caught as fast errors.
 
 ```dart
-final fory = Fory(); // compatible: false by default
+final fory = Fory(compatible: false);
 ```
 
 ## Setting Up for Evolution

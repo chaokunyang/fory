@@ -31,6 +31,8 @@ import (
 	"golang.org/x/tools/go/packages"
 )
 
+var logger = log.New(os.Stdout, "", 0)
+
 // GeneratorOptions contains configuration for the code generator
 type GeneratorOptions struct {
 	TypeList   string // comma-separated list of types to generate code for
@@ -43,9 +45,9 @@ type GeneratorOptions struct {
 func Run(opts *GeneratorOptions) error {
 	// If force flag is set, clean up existing files first
 	if opts.Force {
-		log.Printf("Force flag detected, cleaning up existing generated files...")
+		logger.Printf("Force flag detected, cleaning up existing generated files...")
 		if cleanupErr := cleanupGeneratedFiles(opts); cleanupErr != nil {
-			log.Printf("Warning: Failed to cleanup generated files: %v", cleanupErr)
+			logger.Printf("Warning: Failed to cleanup generated files: %v", cleanupErr)
 		}
 	}
 
@@ -53,15 +55,15 @@ func Run(opts *GeneratorOptions) error {
 
 	// Check if the error is due to compile-time guard conflicts
 	if err != nil && isCompileGuardError(err.Error()) {
-		log.Printf("Detected compile-time guard conflict. Attempting to regenerate...")
+		logger.Printf("Detected compile-time guard conflict. Attempting to regenerate...")
 
 		// Try to clean up and regenerate
 		if cleanupErr := cleanupGeneratedFiles(opts); cleanupErr != nil {
-			log.Printf("Warning: Failed to cleanup generated files: %v", cleanupErr)
+			logger.Printf("Warning: Failed to cleanup generated files: %v", cleanupErr)
 		}
 
 		// Retry generation
-		log.Printf("Retrying code generation...")
+		logger.Printf("Retrying code generation...")
 		return run(opts)
 	}
 
@@ -198,7 +200,7 @@ func processPackageFile(pkg *packages.Package, sourceFile string, typeList strin
 	// Also check if there are any compilation errors
 	if len(pkg.Errors) > 0 {
 		for _, err := range pkg.Errors {
-			log.Printf("package error: %s", err)
+			logger.Printf("package error: %s", err)
 		}
 	}
 
@@ -212,20 +214,20 @@ func processPackageFile(pkg *packages.Package, sourceFile string, typeList strin
 		if len(targetTypes) > 0 {
 			scope := pkg.Types.Scope()
 			allNames := scope.Names()
-			log.Printf("Warning: No matching structs found for target types: %v", targetTypes)
-			log.Printf("Available types in package: %v", allNames)
+			logger.Printf("Warning: No matching structs found for target types: %v", targetTypes)
+			logger.Printf("Available types in package: %v", allNames)
 			return fmt.Errorf("no matching structs found for target types: %v", targetTypes)
 		}
-		log.Printf("No structs to generate (no target types specified)")
+		logger.Printf("No structs to generate (no target types specified)")
 		return nil
 	}
 
 	// Generate code with file-based naming
-	log.Printf("Generating code for %d struct(s) from %s: %v", len(structs), sourceFile, getStructNames(structs))
+	logger.Printf("Generating code for %d struct(s) from %s: %v", len(structs), sourceFile, getStructNames(structs))
 	if err := generateCodeForFile(pkg, structs, sourceFile); err != nil {
 		return err
 	}
-	log.Printf("Successfully generated code for %s", sourceFile)
+	logger.Printf("Successfully generated code for %s", sourceFile)
 	return nil
 }
 
@@ -239,7 +241,7 @@ func processPackage(pkg *packages.Package, typeList string) error {
 	// Also check if there are any compilation errors
 	if len(pkg.Errors) > 0 {
 		for _, err := range pkg.Errors {
-			log.Printf("package error: %s", err)
+			logger.Printf("package error: %s", err)
 		}
 	}
 
@@ -253,20 +255,20 @@ func processPackage(pkg *packages.Package, typeList string) error {
 		if len(targetTypes) > 0 {
 			scope := pkg.Types.Scope()
 			allNames := scope.Names()
-			log.Printf("Warning: No matching structs found for target types: %v", targetTypes)
-			log.Printf("Available types in package: %v", allNames)
+			logger.Printf("Warning: No matching structs found for target types: %v", targetTypes)
+			logger.Printf("Available types in package: %v", allNames)
 			return fmt.Errorf("no matching structs found for target types: %v", targetTypes)
 		}
-		log.Printf("No structs to generate (no target types specified)")
+		logger.Printf("No structs to generate (no target types specified)")
 		return nil
 	}
 
 	// Generate code (legacy package mode)
-	log.Printf("Generating code for %d struct(s): %v", len(structs), getStructNames(structs))
+	logger.Printf("Generating code for %d struct(s): %v", len(structs), getStructNames(structs))
 	if err := generateCode(pkg, structs); err != nil {
 		return err
 	}
-	log.Printf("Successfully generated code for package %s", pkg.Name)
+	logger.Printf("Successfully generated code for package %s", pkg.Name)
 	return nil
 }
 
@@ -383,13 +385,13 @@ func cleanupGeneratedFiles(opts *GeneratorOptions) error {
 		genFile := filepath.Join(filepath.Dir(opts.SourceFile), fmt.Sprintf("%s_fory_gen.go", base))
 
 		if _, err := os.Stat(genFile); err == nil {
-			log.Printf("Removing generated file: %s", genFile)
+			logger.Printf("Removing generated file: %s", genFile)
 			return os.Remove(genFile)
 		}
 	} else {
 		// Package-based mode: need to load package to find generated file
 		// This is more complex and might need package analysis
-		log.Printf("Package-based cleanup not yet implemented")
+		logger.Printf("Package-based cleanup not yet implemented")
 	}
 
 	return nil

@@ -29,16 +29,17 @@ public struct Config {
   public init(
     xlang: Bool = true,
     trackRef: Bool = false,
-    compatible: Bool = false,
+    compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxCollectionSize: Int = 1_000_000,
     maxBinarySize: Int = 64 * 1024 * 1024,
     maxDepth: Int = 5
   ) {
-    let effectiveCheckClassVersion = checkClassVersion ?? (xlang && !compatible)
+    let effectiveCompatible = compatible ?? xlang
+    let effectiveCheckClassVersion = checkClassVersion ?? (xlang && !effectiveCompatible)
     self.xlang = xlang
     self.trackRef = trackRef
-    self.compatible = compatible
+    self.compatible = effectiveCompatible
     self.checkClassVersion = effectiveCheckClassVersion
     self.maxCollectionSize = maxCollectionSize
     self.maxBinarySize = maxBinarySize
@@ -59,8 +60,8 @@ public final class Fory {
 
   public convenience init(
     xlang: Bool = true,
-    trackRef: Bool = false,
-    compatible: Bool = false,
+    ref: Bool = false,
+    compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
     maxCollectionSize: Int = 1_000_000,
     maxBinarySize: Int = 64 * 1024 * 1024,
@@ -69,7 +70,7 @@ public final class Fory {
     self.init(
       config: Config(
         xlang: xlang,
-        trackRef: trackRef,
+        trackRef: ref,
         compatible: compatible,
         checkClassVersion: checkClassVersion,
         maxCollectionSize: maxCollectionSize,

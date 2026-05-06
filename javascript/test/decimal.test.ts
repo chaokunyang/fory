@@ -29,7 +29,7 @@ function decimal(
 
 describe("decimal", () => {
   test("round-trips root decimal edge cases", () => {
-    const fory = new Fory();
+    const fory = new Fory({ compatible: false });
     const values = [
       decimal(0n, 0),
       decimal(0n, 3),
@@ -54,7 +54,7 @@ describe("decimal", () => {
   });
 
   test("round-trips struct decimal fields", () => {
-    const fory = new Fory();
+    const fory = new Fory({ compatible: false });
     const serializer = fory.register(
       Type.struct(
         {
@@ -85,7 +85,7 @@ describe("decimal", () => {
   });
 
   test("rejects non-canonical big decimal payloads", () => {
-    const fory = new Fory();
+    const fory = new Fory({ compatible: false });
     const zeroBigEncoding = Buffer.from([0x01, 0xff, 0x28, 0x00, 0x01]);
     const trailingZeroPayload = Buffer.from([
       0x01, 0xff, 0x28, 0x00, 0x09, 0x01, 0x00,

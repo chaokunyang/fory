@@ -31,7 +31,7 @@ import org.apache.fory.config.*;
 
 // Create Fory instance with XLANG mode
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)  // Enable reference tracking for complex graphs
     .build();
 ```
@@ -85,7 +85,7 @@ public record Person(String name, int age) {}
 public class Example {
     public static void main(String[] args) {
         Fory fory = Fory.builder()
-            .withXlang(true)
+            .withXlang(true).withCompatible(true)
             .withRefTracking(true)
             .build();
 
@@ -112,7 +112,7 @@ class Person:
     age: pyfory.Int32
 
 # Create Fory in xlang mode
-fory = pyfory.Fory(xlang=True, ref=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
 
 # Register with the SAME name as Java
 fory.register_type(Person, typename="example.Person")
@@ -134,7 +134,7 @@ public class Node {
 }
 
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)  // Required for circular references
     .build();
 

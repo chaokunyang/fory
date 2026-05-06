@@ -192,7 +192,8 @@ TEST(NamespaceMacros, FieldConfigInNamespace) {
 }
 
 TEST(NamespaceMacros, UnionInNamespace) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   ASSERT_TRUE(fory.register_union<macro_test::Choice>(1001).ok());
 
   auto bytes = fory.serialize(macro_test::Choice::text("hello"));
@@ -205,7 +206,8 @@ TEST(NamespaceMacros, UnionInNamespace) {
 }
 
 TEST(NamespaceMacros, NestedUnionPayloadSpec) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   ASSERT_TRUE(fory.register_union<macro_test::NestedChoice>(1002).ok());
 
   macro_test::NestedChoice::Values values = {{4000000000u, {7u, 1000000000u}},

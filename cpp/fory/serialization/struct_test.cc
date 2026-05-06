@@ -550,7 +550,8 @@ inline FieldInfo make_test_field_info(std::string name, int16_t field_id,
 }
 
 template <typename T> void test_roundtrip(const T &original) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   register_all_test_types(fory);
 
   auto serialize_result = fory.serialize(original);
@@ -661,7 +662,8 @@ TEST(StructComprehensiveTest, VectorBoolStruct) {
 TEST(StructComprehensiveTest, NamedStructElementTypeInfo) {
   std::vector<NamedItem> items{{1, "alpha"}, {2, "beta"}};
 
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   ASSERT_TRUE(fory.register_struct<NamedItem>("test", "NamedItem").ok());
 
   auto ser_result = fory.serialize(items);
@@ -1041,7 +1043,7 @@ TEST(StructComprehensiveTest, LargeVectorOfStructs) {
     points.push_back({i, i * 2});
   }
 
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   // Register Point2D for the vector elements
   fory.register_struct<Point2D>(1);
 

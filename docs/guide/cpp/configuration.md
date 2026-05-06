@@ -60,7 +60,7 @@ auto fory = Fory::builder()
 
 // Cross-language mode
 auto fory = Fory::builder()
-    .xlang(true)
+    .xlang(true).compatible(true)
     .build();
 
 // Full configuration
@@ -81,7 +81,7 @@ Enable/disable cross-language (xlang) serialization mode.
 
 ```cpp
 auto fory = Fory::builder()
-    .xlang(true)  // Enable cross-language compatibility
+    .xlang(true).compatible(true)  // Enable cross-language compatibility
     .build();
 ```
 
@@ -156,7 +156,7 @@ When enabled, validates type hashes to detect schema mismatches.
 
 ```cpp
 auto fory = Fory::builder()
-    .xlang(true)
+    .xlang(true).compatible(true)
     .build();  // Returns Fory
 ```
 
@@ -166,7 +166,7 @@ Single-threaded `Fory` is the fastest option, but NOT thread-safe. Use one insta
 
 ```cpp
 auto fory = Fory::builder()
-    .xlang(true)
+    .xlang(true).compatible(true)
     .build_thread_safe();  // Returns ThreadSafeFory
 ```
 

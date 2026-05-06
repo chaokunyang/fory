@@ -240,7 +240,7 @@ func macroAnyHashableSetFieldsRoundTrip() throws {
 
 @Test
 func macroCoreAnyFieldsRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true))
+    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
     fory.register(AnyHashableDynamicValue.self, id: 425)
     fory.register(AnyObjectDynamicNode.self, id: 426)
     fory.register(AnyCoreFieldHolder.self, id: 427)
@@ -281,7 +281,7 @@ func macroCoreAnyFieldsRoundTrip() throws {
 
 @Test
 func macroAnyHashableValueFieldRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true))
+    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
     fory.register(AnyHashableDynamicKey.self, id: 428)
     fory.register(AnyHashableValueHolder.self, id: 429)
 
@@ -321,7 +321,7 @@ func dynamicAnyMapNormalizationForAnyHashableKeys() throws {
 
 @Test
 func topLevelAllSupportedAnyTypesRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true))
+    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
     fory.register(AnyHashableDynamicKey.self, id: 500)
     fory.register(AnyHashableDynamicValue.self, id: 501)
     fory.register(AnyObjectDynamicNode.self, id: 502)
@@ -429,7 +429,7 @@ func topLevelAnyHomogeneousListAndMapRoundTrip() throws {
 
 @Test
 func dynamicAnyListTracksRefs() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true))
+    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
     fory.register(AnyObjectDynamicGraphNode.self, id: 503)
 
     let shared = AnyObjectDynamicGraphNode(value: 17)
@@ -446,7 +446,7 @@ func dynamicAnyListTracksRefs() throws {
 
 @Test
 func dynamicAnyObjectTracksCycle() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true))
+    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
     fory.register(AnyObjectDynamicGraphNode.self, id: 504)
 
     let node = AnyObjectDynamicGraphNode(value: 21)

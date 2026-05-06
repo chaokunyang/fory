@@ -29,7 +29,7 @@ fn decimal(unscaled: &str, scale: i32) -> Decimal {
 
 #[test]
 fn test_decimal_round_trip() {
-    let fory = Fory::builder().xlang(true).build();
+    let fory = Fory::builder().xlang(true).compatible(false).build();
     let values = vec![
         Decimal::new(BigInt::from(0), 0),
         Decimal::new(BigInt::from(0), 3),
@@ -53,7 +53,7 @@ fn test_decimal_round_trip() {
 
 #[test]
 fn test_decimal_wire_format() {
-    let fory = Fory::builder().xlang(true).build();
+    let fory = Fory::builder().xlang(true).compatible(false).build();
     let bytes = fory.serialize(&Decimal::new(BigInt::from(0), 2)).unwrap();
     let mut reader = Reader::new(bytes.as_slice());
     assert_eq!(reader.read_u8().unwrap(), IS_CROSS_LANGUAGE_FLAG);
@@ -73,7 +73,7 @@ fn test_decimal_wire_format() {
 
 #[test]
 fn test_decimal_rejects_non_canonical_big_payload() {
-    let fory = Fory::builder().xlang(true).build();
+    let fory = Fory::builder().xlang(true).compatible(false).build();
 
     let payload = vec![
         IS_CROSS_LANGUAGE_FLAG,

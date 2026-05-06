@@ -837,7 +837,7 @@ cdef class Fory:
         xlang=False,
         ref=False,
         strict=True,
-        compatible=False,
+        compatible=None,
         max_depth=50,
         policy=None,
         field_nullable=False,
@@ -852,7 +852,8 @@ cdef class Fory:
             xlang: Enable cross-language serialization mode.
             ref: Enable reference tracking for shared and circular references.
             strict: Require registered types on dynamic resolution paths.
-            compatible: Enable compatible mode and meta-share type exchange.
+            compatible: Enable compatible mode and meta-share type exchange. Defaults to
+                True when xlang=True and False otherwise.
             max_depth: Maximum allowed read depth before rejecting payloads.
             policy: Optional deserialization policy implementation.
             field_nullable: Treat struct fields as nullable by default.
@@ -860,6 +861,7 @@ cdef class Fory:
             max_collection_size: Maximum allowed declared collection/map size.
             max_binary_size: Maximum allowed binary payload size for one read.
         """
+        compatible = xlang if compatible is None else compatible
         self.xlang = xlang
         self.track_ref = ref
         self.strict = strict

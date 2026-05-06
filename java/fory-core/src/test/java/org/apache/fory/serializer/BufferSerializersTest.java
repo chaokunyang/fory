@@ -76,7 +76,7 @@ public class BufferSerializersTest extends ForyTestBase {
 
   @Test
   public void testBufferObjectRejectsInvalidInBandSizeWithoutBinaryCap() {
-    Fory fory = Fory.builder().withXlang(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).build();
     Serializer<ByteBuffer> serializer =
         new BufferSerializers.ByteBufferSerializer(fory.getTypeResolver(), ByteBuffer.class);
 

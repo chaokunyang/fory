@@ -302,7 +302,7 @@ def test_cross_language_serializer(data_file_path):
     with open(data_file_path, "rb") as f:
         data_bytes = f.read()
         buffer = pyfory.Buffer(data_bytes)
-        fory = pyfory.Fory(xlang=True, ref=True)
+        fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
         objects = []
         assert _deserialize_and_append(fory, buffer, objects) is True
         assert _deserialize_and_append(fory, buffer, objects) is False
@@ -375,7 +375,7 @@ def test_cross_language_reference(data_file_path):
     with open(data_file_path, "rb") as f:
         data_bytes = f.read()
         buffer = pyfory.Buffer(data_bytes)
-        fory = pyfory.Fory(xlang=True, ref=True)
+        fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
         new_list = fory.deserialize(buffer)
         assert new_list[0] is new_list
         new_map = new_list[1]
@@ -417,7 +417,7 @@ class ComplexObject2:
 
 
 def test_serialize_simple_struct_local():
-    fory = pyfory.Fory(xlang=True, ref=True)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(ComplexObject2, namespace="test", typename="ComplexObject2")
     obj = ComplexObject2(f1=True, f2={-1: 2})
     new_buf = fory.serialize(obj)
@@ -509,7 +509,7 @@ def test_struct_hash(data_file_path):
         data_bytes = f.read()
     debug_print(f"len {len(data_bytes)}")
     read_hash = pyfory.Buffer(data_bytes).read_int32()
-    fory = pyfory.Fory(xlang=True, ref=True)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(ComplexObject1, typename="ComplexObject1")
     serializer = fory.type_resolver.get_serializer(ComplexObject1)._replace()
     from pyfory.struct import compute_struct_meta
@@ -633,7 +633,7 @@ def test_register_serializer(data_file_path):
         data_bytes = f.read()
     buffer = pyfory.Buffer(data_bytes)
 
-    fory = pyfory.Fory(xlang=True, ref=True)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(
         ComplexObject1,
         typename="test.ComplexObject1",
@@ -665,7 +665,7 @@ def test_oob_buffer(in_band_file_path, out_of_band_file_path):
         in_band_bytes = f.read()
     with open(out_of_band_file_path, "rb") as f:
         out_of_band_buffer = pyfory.Buffer(f.read())
-    fory = pyfory.Fory(xlang=True, ref=True)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
     n_buffers = out_of_band_buffer.read_int32()
     buffers = []
     for i in range(n_buffers):

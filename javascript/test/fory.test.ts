@@ -22,14 +22,19 @@ import { describe, expect, test } from '@jest/globals';
 import { fromUint8Array } from '../packages/core/lib/platformBuffer';
 
 describe('fory', () => {
+    test('defaults to compatible mode unless explicitly set', () => {
+        expect(new Fory().config.compatible).toBe(true);
+        expect(new Fory({ compatible: false }).config.compatible).toBe(false);
+    });
+
     test('should deserialize null work', () => {
-        const fory = new Fory();
+        const fory = new Fory({ compatible: false });
 
         expect(fory.deserialize(new Uint8Array([1, 253]))).toBe(null)
     });
 
     test('should deserialize xlang disable work', () => {
-        const fory = new Fory();
+        const fory = new Fory({ compatible: false });
         try {
             // bit 0 = xlang flag, bit 1 = oob flag
             // value 0 means xlang is disabled
@@ -41,7 +46,7 @@ describe('fory', () => {
     });
 
     test('should deserialize oob mode work', () => {
-        const fory = new Fory();
+        const fory = new Fory({ compatible: false });
         try {
             // bit 0 = xlang flag, bit 1 = oob flag
             // value 3 = xlang (1) + oob (2)
@@ -80,7 +85,7 @@ describe('fory', () => {
     })
 
     function testTypeInfo(typeinfo: TypeInfo, input: any, expected?: any) {
-        const fory = new Fory();
+        const fory = new Fory({ compatible: false });
         const serialize = fory.register(typeinfo);
         const result = serialize.deserialize(
             serialize.serialize(input)

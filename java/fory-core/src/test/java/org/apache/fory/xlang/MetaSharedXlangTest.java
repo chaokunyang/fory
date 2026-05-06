@@ -31,7 +31,7 @@ public class MetaSharedXlangTest extends ForyTestBase {
 
   @Test
   public void testMetaSharedBasic() {
-    Fory fory = Fory.builder().withXlang(true).withCodegen(false).withCompatible(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).withCodegen(false).build();
     fory.register(Foo.class, "example.foo");
     fory.register(Bar.class, "example.bar");
     serDeCheck(fory, Bar.create());
@@ -40,7 +40,7 @@ public class MetaSharedXlangTest extends ForyTestBase {
 
   @Test
   public void testMetaSharedComplex1() {
-    Fory fory = Fory.builder().withXlang(true).withCodegen(false).withCompatible(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).withCodegen(false).build();
     fory.register(BeanB.class, "example.b");
     serDeCheck(fory, BeanB.createBeanB(2));
   }
@@ -52,7 +52,7 @@ public class MetaSharedXlangTest extends ForyTestBase {
 
   @Test
   public void testMDArrayField() {
-    Fory fory = Fory.builder().withXlang(true).withCodegen(false).withCompatible(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).withCodegen(false).build();
     fory.register(MDArrayFieldStruct.class, "example.a");
     MDArrayFieldStruct s = new MDArrayFieldStruct();
     s.arr = new int[][] {{1, 2}, {3, 4}};

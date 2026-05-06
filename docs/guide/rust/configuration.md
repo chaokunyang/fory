@@ -25,17 +25,26 @@ This page covers Fory configuration options and serialization modes.
 
 Apache Fory™ supports two serialization modes:
 
-### SchemaConsistent Mode (Default)
+### Compatible Mode (xlang default)
+
+Compatible mode is recommended for cross-language services because schemas can diverge more
+easily across languages:
+
+```rust
+let fory = Fory::builder().xlang(true).compatible(true).build();
+```
+
+### SchemaConsistent Mode
 
 Type declarations must match exactly between peers:
 
 ```rust
-let fory = Fory::default(); // SchemaConsistent by default
+let fory = Fory::builder().xlang(true).compatible(false).build();
 ```
 
 ### Compatible Mode
 
-Allows independent schema evolution:
+For native Rust-only payloads, compatible mode is still explicit:
 
 ```rust
 let fory = Fory::builder().compatible(true).build();

@@ -23,46 +23,46 @@ import { describe, expect, test } from '@jest/globals';
 describe('depth-limit', () => {
   describe('configuration', () => {
     test('should have default maxDepth of 50', () => {
-      const fory = new Fory();
+      const fory = new Fory({ compatible: false });
       expect(fory.readContext.maxDepth).toBe(50);
     });
 
     test('should accept custom maxDepth', () => {
-      const fory = new Fory({ maxDepth: 100 });
+      const fory = new Fory({ compatible: false, maxDepth: 100 });
       expect(fory.readContext.maxDepth).toBe(100);
     });
 
     test('should initialize depth counter to 0', () => {
-      const fory = new Fory();
+      const fory = new Fory({ compatible: false });
       expect(fory.readContext.depth).toBe(0);
     });
 
     test('should reject maxDepth < 2', () => {
-      expect(() => new Fory({ maxDepth: 1 })).toThrow(
+      expect(() => new Fory({ compatible: false, maxDepth: 1 })).toThrow(
         'maxDepth must be an integer >= 2 but got 1'
       );
     });
 
     test('should reject maxDepth = 0', () => {
-      expect(() => new Fory({ maxDepth: 0 })).toThrow(
+      expect(() => new Fory({ compatible: false, maxDepth: 0 })).toThrow(
         'maxDepth must be an integer >= 2'
       );
     });
 
     test('should reject negative maxDepth', () => {
-      expect(() => new Fory({ maxDepth: -5 })).toThrow(
+      expect(() => new Fory({ compatible: false, maxDepth: -5 })).toThrow(
         'maxDepth must be an integer >= 2'
       );
     });
 
     test('should reject NaN maxDepth', () => {
-      expect(() => new Fory({ maxDepth: Number.NaN })).toThrow(
+      expect(() => new Fory({ compatible: false, maxDepth: Number.NaN })).toThrow(
         'maxDepth must be an integer >= 2'
       );
     });
 
     test('should reject non-integer maxDepth', () => {
-      expect(() => new Fory({ maxDepth: 2.5 })).toThrow(
+      expect(() => new Fory({ compatible: false, maxDepth: 2.5 })).toThrow(
         'maxDepth must be an integer >= 2'
       );
     });
@@ -70,17 +70,17 @@ describe('depth-limit', () => {
 
   describe('depth operations', () => {
     test('should have incReadDepth method', () => {
-      const fory = new Fory();
+      const fory = new Fory({ compatible: false });
       expect(typeof fory.readContext.incReadDepth).toBe('function');
     });
 
     test('should have decReadDepth method', () => {
-      const fory = new Fory();
+      const fory = new Fory({ compatible: false });
       expect(typeof fory.readContext.decReadDepth).toBe('function');
     });
 
     test('incReadDepth should increment depth', () => {
-      const fory = new Fory({ maxDepth: 100 });
+      const fory = new Fory({ compatible: false, maxDepth: 100 });
       expect(fory.readContext.depth).toBe(0);
       fory.readContext.incReadDepth();
       expect(fory.readContext.depth).toBe(1);
@@ -89,7 +89,7 @@ describe('depth-limit', () => {
     });
 
     test('decReadDepth should decrement depth', () => {
-      const fory = new Fory({ maxDepth: 100 });
+      const fory = new Fory({ compatible: false, maxDepth: 100 });
       fory.readContext.incReadDepth();
       fory.readContext.incReadDepth();
       expect(fory.readContext.depth).toBe(2);
@@ -100,7 +100,7 @@ describe('depth-limit', () => {
     });
 
     test('incReadDepth should throw when depth exceeds limit', () => {
-      const fory = new Fory({ maxDepth: 2 });
+      const fory = new Fory({ compatible: false, maxDepth: 2 });
       fory.readContext.incReadDepth(); // depth = 1
       fory.readContext.incReadDepth(); // depth = 2
       expect(() => fory.readContext.incReadDepth()).toThrow(
@@ -109,7 +109,7 @@ describe('depth-limit', () => {
     });
 
     test('depth error message should mention limit and hint', () => {
-      const fory = new Fory({ maxDepth: 5 });
+      const fory = new Fory({ compatible: false, maxDepth: 5 });
       try {
         for (let i = 0; i < 6; i++) {
           fory.readContext.incReadDepth();
@@ -125,7 +125,7 @@ describe('depth-limit', () => {
 
   describe('deserialization with depth tracking', () => {
     test('should deserialize simple struct without depth error', () => {
-      const fory = new Fory({ maxDepth: 50 });
+      const fory = new Fory({ compatible: false, maxDepth: 50 });
       const typeInfo = Type.struct({
         typeName: 'simple.struct',
       }, {
@@ -143,7 +143,7 @@ describe('depth-limit', () => {
     });
 
     test('should deserialize nested struct within depth limit', () => {
-      const fory = new Fory({ maxDepth: 10 });
+      const fory = new Fory({ compatible: false, maxDepth: 10 });
       const nestedType = Type.struct({
         typeName: 'nested.outer',
       }, {
@@ -165,7 +165,7 @@ describe('depth-limit', () => {
     });
 
     test('should deserialize list of primitives within depth limit', () => {
-      const fory = new Fory({ maxDepth: 10 });
+      const fory = new Fory({ compatible: false, maxDepth: 10 });
       const arrayType = Type.list(Type.int32());
 
       const { serialize, deserialize } = fory.register(arrayType);
@@ -178,7 +178,7 @@ describe('depth-limit', () => {
     });
 
     test('should deserialize map within depth limit', () => {
-      const fory = new Fory({ maxDepth: 10 });
+      const fory = new Fory({ compatible: false, maxDepth: 10 });
       const mapType = Type.map(Type.string(), Type.int32());
 
       const { serialize, deserialize } = fory.register(mapType);
@@ -191,7 +191,7 @@ describe('depth-limit', () => {
     });
 
     test('should throw when nested lists exceed maxDepth', () => {
-      const fory = new Fory({ maxDepth: 2 });
+      const fory = new Fory({ compatible: false, maxDepth: 2 });
       const nestedArrayType = Type.list(Type.list(Type.list(Type.int32())));
       const { serialize, deserialize } = fory.register(nestedArrayType);
       const serialized = serialize([[[1]]]);
@@ -202,7 +202,7 @@ describe('depth-limit', () => {
     });
 
     test('should throw when nested monomorphic struct fields exceed maxDepth', () => {
-      const fory = new Fory({ maxDepth: 2 });
+      const fory = new Fory({ compatible: false, maxDepth: 2 });
       const leaf = Type.struct({
         typeName: 'depth.leaf',
       }, {
@@ -228,7 +228,7 @@ describe('depth-limit', () => {
     });
 
     test('should reset depth at start of each deserialization', () => {
-      const fory = new Fory({ maxDepth: 50 });
+      const fory = new Fory({ compatible: false, maxDepth: 50 });
       const typeInfo = Type.struct({
         typeName: 'test.reset',
       }, {
@@ -260,14 +260,14 @@ describe('depth-limit', () => {
       });
 
       // Serialize with high limit
-      const forySerialize = new Fory({ maxDepth: 100 });
+      const forySerialize = new Fory({ compatible: false, maxDepth: 100 });
       const { serialize } = forySerialize.register(serializeType);
 
       const data = { value: 1, next: { innerValue: 2 } };
       const serialized = serialize(data);
 
       // Deserialize with different instance
-      const foryDeserialize = new Fory({ maxDepth: 50 });
+      const foryDeserialize = new Fory({ compatible: false, maxDepth: 50 });
       const { deserialize } = foryDeserialize.register(serializeType);
 
       const deserialized = deserialize(serialized);
@@ -275,8 +275,8 @@ describe('depth-limit', () => {
     });
 
     test('should have independent depth tracking per Fory instance', () => {
-      const fory1 = new Fory({ maxDepth: 50 });
-      const fory2 = new Fory({ maxDepth: 100 });
+      const fory1 = new Fory({ compatible: false, maxDepth: 50 });
+      const fory2 = new Fory({ compatible: false, maxDepth: 100 });
 
       fory1.readContext.incReadDepth();
       fory1.readContext.incReadDepth();
@@ -293,7 +293,7 @@ describe('depth-limit', () => {
 
   describe('error scenarios', () => {
     test('error message should include helpful suggestion', () => {
-      const fory = new Fory({ maxDepth: 2 });
+      const fory = new Fory({ compatible: false, maxDepth: 2 });
       try {
         for (let i = 0; i < 3; i++) {
           fory.readContext.incReadDepth();
@@ -311,7 +311,7 @@ describe('depth-limit', () => {
         a: Type.int32(),
       });
 
-      const fory = new Fory({ maxDepth: 50 });
+      const fory = new Fory({ compatible: false, maxDepth: 50 });
       const { serialize, deserialize } = fory.register(typeInfo);
 
       // First deserialization
@@ -334,7 +334,7 @@ describe('depth-limit', () => {
         a: Type.int32(),
       });
 
-      const fory = new Fory({ maxDepth: 2 });
+      const fory = new Fory({ compatible: false, maxDepth: 2 });
       const { serialize, deserialize } = fory.register(typeInfo);
       // Should deserialize without error
       const result = deserialize(serialize({ a: 42 }));
@@ -342,7 +342,7 @@ describe('depth-limit', () => {
     });
 
     test('should handle large maxDepth values', () => {
-      const fory = new Fory({ maxDepth: 10000 });
+      const fory = new Fory({ compatible: false, maxDepth: 10000 });
       expect(fory.readContext.maxDepth).toBe(10000);
     });
 
@@ -353,7 +353,7 @@ describe('depth-limit', () => {
         a: Type.int32(),
       });
 
-      const fory = new Fory({ maxDepth: 2 });
+      const fory = new Fory({ compatible: false, maxDepth: 2 });
       expect(fory.readContext.maxDepth).toBe(2);
       const { serialize, deserialize } = fory.register(typeInfo);
       // Should deserialize without error
@@ -365,6 +365,7 @@ describe('depth-limit', () => {
   describe('configuration with other options', () => {
     test('should work with ref enabled', () => {
       const fory = new Fory({
+        compatible: false,
         maxDepth: 50,
         ref: true,
       });
@@ -381,6 +382,7 @@ describe('depth-limit', () => {
 
     test('should work with useSliceString option', () => {
       const fory = new Fory({
+        compatible: false,
         maxDepth: 50,
         useSliceString: true,
       });

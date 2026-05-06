@@ -90,7 +90,7 @@ Serialize and deserialize Python objects with a simple API. This example shows s
 import pyfory
 
 # Create Fory instance
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 
 # Serialize any Python object
 data = fory.dumps({"name": "Alice", "age": 30, "scores": [95, 87, 92]})
@@ -440,11 +440,11 @@ for buffer_obj in buffer_objects:
 
 The binary protocol and API are similar to `pyfory`'s python-native mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
-To use xlang mode, create `Fory` with `xlang=True`. This mode is for xlang serialization applications:
+To use xlang mode, create `Fory` with `xlang=True, compatible=True`. This mode is for xlang serialization applications:
 
 ```python
 import pyfory
-fory = pyfory.Fory(xlang=True, ref=False, strict=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=False, strict=True)
 ```
 
 ### Cross-Language Sserialization
@@ -458,7 +458,7 @@ from dataclasses import dataclass
 import pyfory
 
 # Cross-language mode for interoperability
-f = pyfory.Fory(xlang=True, ref=True)
+f = pyfory.Fory(xlang=True, compatible=True, ref=True)
 
 # Register type for cross-language compatibility
 @dataclass
@@ -487,7 +487,7 @@ public class Person {
 }
 
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)
     .build();
 
@@ -738,7 +738,7 @@ for t in threads: t.join()
 - **`xlang`** (`bool`, default=`False`): Enable cross-language serialization. When `False`, enables Python-native mode supporting all Python objects. When `True`, enables cross-language mode compatible with Java, Go, Rust, etc.
 - **`ref`** (`bool`, default=`False`): Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.
 - **`strict`** (`bool`, default=`True`): Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.
-- **`compatible`** (`bool`, default=`False`): Enable schema evolution in cross-language mode, allowing fields to be added/removed while maintaining compatibility.
+- **`compatible`** (`bool`, default follows `xlang`): Enable schema evolution in cross-language mode, allowing fields to be added/removed while maintaining compatibility. Cross-language mode defaults to `compatible=True`; set `compatible=False` only for schema-consistent deployments.
 - **`max_depth`** (`int`, default=`50`): Maximum deserialization depth for security, preventing stack overflow attacks.
 
 **Key Methods:**
@@ -763,17 +763,17 @@ fory.register(MyClass, typename="my.package.MyClass", serializer=custom_serializ
 
 ### Language Modes Comparison
 
-| Feature               | Python Mode (`xlang=False`)          | Cross-Language Mode (`xlang=True`)    |
-| --------------------- | ------------------------------------ | ------------------------------------- |
-| **Use Case**          | Pure Python applications             | Multi-language systems                |
-| **Compatibility**     | Python only                          | Java, Go, Rust, C++, JavaScript, etc. |
-| **Supported Types**   | All Python types                     | Cross-language compatible types only  |
-| **Functions/Lambdas** | ✓ Supported                          | ✗ Not allowed                         |
-| **Local Classes**     | ✓ Supported                          | ✗ Not allowed                         |
-| **Dynamic Classes**   | ✓ Supported                          | ✗ Not allowed                         |
-| **Schema Evolution**  | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`)  |
-| **Performance**       | Extremely fast                       | Very fast                             |
-| **Data Size**         | Compact                              | Compact with type metadata            |
+| Feature               | Python Mode (`xlang=False`)          | Cross-Language Mode (`xlang=True, compatible=True`) |
+| --------------------- | ------------------------------------ | --------------------------------------------------- |
+| **Use Case**          | Pure Python applications             | Multi-language systems                              |
+| **Compatibility**     | Python only                          | Java, Go, Rust, C++, JavaScript, etc.               |
+| **Supported Types**   | All Python types                     | Cross-language compatible types only                |
+| **Functions/Lambdas** | ✓ Supported                          | ✗ Not allowed                                       |
+| **Local Classes**     | ✓ Supported                          | ✗ Not allowed                                       |
+| **Dynamic Classes**   | ✓ Supported                          | ✗ Not allowed                                       |
+| **Schema Evolution**  | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`)                |
+| **Performance**       | Extremely fast                       | Very fast                                           |
+| **Data Size**         | Compact                              | Compact with type metadata                          |
 
 #### Python Mode (`xlang=False`)
 
@@ -805,7 +805,7 @@ print(f"Fory: {timeit.timeit(lambda: fory.dumps(obj), number=1000):.3f}s")
 print(f"Pickle: {timeit.timeit(lambda: pickle.dumps(obj), number=1000):.3f}s")
 ```
 
-#### Cross-Language Mode (`xlang=True`)
+#### Cross-Language Mode (`xlang=True, compatible=True`)
 
 Cross-language mode restricts types to those compatible across all Fory implementations. Use for multi-language systems:
 
@@ -813,7 +813,7 @@ Cross-language mode restricts types to those compatible across all Fory implemen
 import pyfory
 
 # Cross-language compatibility mode
-f = pyfory.Fory(xlang=True, ref=True)
+f = pyfory.Fory(xlang=True, compatible=True, ref=True)
 
 # Only supports cross-language compatible types
 f.register(MyDataClass, typename="com.example.MyDataClass")
@@ -960,7 +960,7 @@ fory = pyfory.Fory(
     xlang=False,        # Use True if you need cross-language support
     ref=False,           # Enable if you have shared/circular references
     strict=True,        # CRITICAL: Always True in production
-    compatible=False,   # Enable only if you need schema evolution
+    compatible=False,   # Native mode; xlang=True defaults to compatible=True
     max_depth=20       # Adjust based on your data structure depth
 )
 
@@ -1231,7 +1231,7 @@ import pyfory  # Now uses pure Python mode
 
 ```python
 # A: Use explicit type registration with consistent naming
-f = pyfory.Fory(xlang=True)
+f = pyfory.Fory(xlang=True, compatible=True)
 f.register(MyClass, typename="com.package.MyClass")  # Use same name in all languages
 ```
 

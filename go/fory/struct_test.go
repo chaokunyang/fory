@@ -621,7 +621,7 @@ func TestSkipAnyValueReadsSharedTypeMeta(t *testing.T) {
 }
 
 func TestReadHeaderRejectsOutOfBandWithoutBuffers(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	f.readCtx.SetData([]byte{XLangFlag | OutOfBandFlag})
 
 	readHeader(f.readCtx)
@@ -638,7 +638,7 @@ func TestFloat16StructField(t *testing.T) {
 		ArrayF16 [3]float16.Float16
 	}
 
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	require.NoError(t, f.RegisterStruct(StructWithFloat16{}, 3001))
 
 	val := &StructWithFloat16{

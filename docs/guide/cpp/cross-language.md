@@ -33,7 +33,7 @@ Apache Fory™ enables seamless data exchange between C++, Java, Python, Go, Rus
 using namespace fory::serialization;
 
 auto fory = Fory::builder()
-    .xlang(true)  // Enable cross-language mode
+    .xlang(true).compatible(true)  // Enable cross-language mode
     .build();
 ```
 
@@ -61,7 +61,7 @@ struct Message {
 FORY_STRUCT(Message, topic, timestamp, headers, payload);
 
 int main() {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
   fory.register_struct<Message>(100);
 
   Message msg{
@@ -97,7 +97,7 @@ public class Message {
 public class Consumer {
     public static void main(String[] args) throws Exception {
         Fory fory = Fory.builder()
-            .withXlang(true)
+            .withXlang(true).withCompatible(true)
             .build();
         fory.register(Message.class, 100);  // Same ID as C++
 
@@ -121,7 +121,7 @@ class Message:
     headers: dict[str, str]
     payload: bytes
 
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 fory.register(Message, type_id=100)  # Same ID as C++
 
 with open("message.bin", "rb") as f:

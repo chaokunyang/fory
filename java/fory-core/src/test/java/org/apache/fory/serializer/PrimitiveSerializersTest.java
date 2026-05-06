@@ -51,7 +51,12 @@ import org.testng.annotations.Test;
 public class PrimitiveSerializersTest extends ForyTestBase {
   @Test
   public void testUInt8Serializer() {
-    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .requireClassRegistration(false)
+            .build();
     PrimitiveSerializers.UInt8Serializer serializer =
         new PrimitiveSerializers.UInt8Serializer(fory.getConfig());
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(8);
@@ -67,7 +72,12 @@ public class PrimitiveSerializersTest extends ForyTestBase {
 
   @Test
   public void testUInt16Serializer() {
-    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .requireClassRegistration(false)
+            .build();
     PrimitiveSerializers.UInt16Serializer serializer =
         new PrimitiveSerializers.UInt16Serializer(fory.getConfig());
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(16);

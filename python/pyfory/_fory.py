@@ -17,7 +17,7 @@
 
 import os
 from abc import ABC, abstractmethod
-from typing import Union, Iterable, TypeVar
+from typing import Iterable, Optional, TypeVar, Union
 
 _ENABLE_TYPE_REGISTRATION_FORCIBLY = os.getenv("ENABLE_TYPE_REGISTRATION_FORCIBLY", "0") in {
     "1",
@@ -91,7 +91,7 @@ class Fory:
     including dataclasses, classes with custom serialization methods, and local
     functions/classes, making it a drop-in replacement for pickle.
 
-    In cross-language mode (xlang=True), Fory serializes objects in a format that
+    In cross-language mode (xlang=True, compatible=True), Fory serializes objects in a format that
     can be deserialized by other Fory-supported languages (Java, Go, Rust, C++, etc).
 
     Examples:
@@ -110,7 +110,7 @@ class Fory:
         >>> person = fory.deserialize(data)
         >>>
         >>> # Cross-language mode
-        >>> fory_xlang = pyfory.Fory(xlang=True)
+        >>> fory_xlang = pyfory.Fory(xlang=True, compatible=True)
         >>> fory_xlang.register(Person)
         >>> data = fory_xlang.serialize(Person("Bob", 25))
 
@@ -140,7 +140,7 @@ class Fory:
         xlang: bool = False,
         ref: bool = False,
         strict: bool = True,
-        compatible: bool = False,
+        compatible: Optional[bool] = None,
         max_depth: int = 50,
         policy: DeserializationPolicy = None,
         field_nullable: bool = False,
@@ -171,9 +171,9 @@ class Fory:
                 are allowed. We are not responsible for security risks when this option
                 is disabled without proper policy controls.
 
-            compatible: Enable schema evolution for cross-language serialization. When
-                enabled, supports forward/backward compatibility for dataclass field
-                additions and removals.
+            compatible: Enable schema evolution for cross-language serialization. Defaults
+                to True when xlang=True and False otherwise. When enabled, supports
+                forward/backward compatibility for dataclass field additions and removals.
 
             max_depth: Maximum nesting depth for deserialization (default: 50). Raises
                 an exception if exceeded to prevent malicious deeply-nested data attacks.
@@ -203,6 +203,7 @@ class Fory:
             >>> # Cross-language mode with schema evolution
             >>> fory = Fory(xlang=True, compatible=True)
         """
+        compatible = xlang if compatible is None else compatible
         self.xlang = xlang
         self.track_ref = ref
         self.strict = _ENABLE_TYPE_REGISTRATION_FORCIBLY or strict
@@ -271,7 +272,7 @@ class Fory:
 
         Example:
             >>> # Register with type_id (recommended for performance)
-            >>> fory = Fory(xlang=True)
+            >>> fory = Fory(xlang=True, compatible=True)
             >>> fory.register(Person, type_id=100)
             >>>
             >>> # Register with namespace and typename (more flexible)
@@ -322,7 +323,7 @@ class Fory:
 
         Example:
             >>> # Register with type_id (recommended for performance)
-            >>> fory = Fory(xlang=True)
+            >>> fory = Fory(xlang=True, compatible=True)
             >>> fory.register_type(Person, type_id=100)
             >>>
             >>> # Register with namespace and typename (more flexible)
@@ -616,7 +617,8 @@ class ThreadSafeFory:
         xlang (bool): Whether to enable cross-language serialization. Defaults to False.
         ref (bool): Whether to enable reference tracking. Defaults to False.
         strict (bool): Whether to require type registration. Defaults to True.
-        compatible (bool): Whether to enable compatible mode. Defaults to False.
+        compatible (bool): Whether to enable compatible mode. Defaults to True when
+            xlang=True and False otherwise.
         max_depth (int): Maximum depth for deserialization. Defaults to 50.
         max_collection_size (int): Maximum allowed size for collections and maps during
             deserialization. Defaults to 1,000,000.

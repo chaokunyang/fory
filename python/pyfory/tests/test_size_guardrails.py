@@ -108,9 +108,9 @@ class TestCollectionSizeLimit:
         class Container:
             items: List[pyfory.Int32]
 
-        writer = Fory(xlang=True)
+        writer = Fory(xlang=True, compatible=False)
         writer.register(Container)
-        reader = Fory(xlang=True, max_collection_size=5)
+        reader = Fory(xlang=True, compatible=False, max_collection_size=5)
         reader.register(Container)
 
         with pytest.raises(ValueError, match="exceeds the configured limit"):
@@ -200,4 +200,4 @@ class TestBinarySizeLimit:
     def test_malformed_metastring_ref_raises_value_error(self):
         payload = bytes([1, 255, TypeId.NAMED_STRUCT, 3])
         with pytest.raises(ValueError, match="Invalid dynamic metastring id"):
-            Fory(xlang=True, strict=False).deserialize(payload)
+            Fory(xlang=True, compatible=False, strict=False).deserialize(payload)

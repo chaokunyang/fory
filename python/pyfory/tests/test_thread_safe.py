@@ -96,7 +96,7 @@ def test_thread_safe_fory_registration():
 
 
 def test_thread_safe_fory_xlang_mode():
-    fory = ThreadSafeFory(xlang=True, ref=True)
+    fory = ThreadSafeFory(xlang=True, compatible=False, ref=True)
     fory.register(Person)
 
     person = Person(name="Charlie", age=35)

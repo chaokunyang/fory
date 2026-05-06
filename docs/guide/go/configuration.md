@@ -123,7 +123,7 @@ f := fory.New(fory.WithMaxDepth(30))
 Enable cross-language serialization mode:
 
 ```go
-f := fory.New(fory.WithXlang(true))
+f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 ```
 
 **When enabled:**

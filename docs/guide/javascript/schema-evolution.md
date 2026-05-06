@@ -23,8 +23,8 @@ Schema evolution lets different versions of your service exchange messages safel
 
 ## Two Modes
 
-- **Schema-consistent mode** (default): more compact, but both sides must have exactly the same schema. Good when all services update together.
-- **Compatible mode**: writes extra field metadata so readers can skip unknown fields and tolerate missing ones. Good for independent deployments or rolling upgrades.
+- **Compatible mode** (default): writes extra field metadata so readers can skip unknown fields and tolerate missing ones. Good for independent deployments, rolling upgrades, and xlang services.
+- **Schema-consistent mode**: more compact, but both sides must have exactly the same schema. Use it only when schemas do not change, or when all services update together.
 
 ## Enable Compatible Mode
 

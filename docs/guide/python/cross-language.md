@@ -23,11 +23,11 @@ license: |
 
 ## Enable Cross-Language Mode
 
-To use xlang mode, create `Fory` with `xlang=True`:
+To use xlang mode, create `Fory` with `xlang=True, compatible=True`:
 
 ```python
 import pyfory
-fory = pyfory.Fory(xlang=True, ref=False, strict=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=False, strict=True)
 ```
 
 ## Cross-Language Example
@@ -39,7 +39,7 @@ import pyfory
 from dataclasses import dataclass
 
 # Cross-language mode for interoperability
-f = pyfory.Fory(xlang=True, ref=True)
+f = pyfory.Fory(xlang=True, compatible=True, ref=True)
 
 # Register type for cross-language compatibility
 @dataclass
@@ -65,7 +65,7 @@ public class Person {
 }
 
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)
     .build();
 

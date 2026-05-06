@@ -69,7 +69,7 @@ public class Person {
 }
 
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .build();
 fory.register(Person.class, "example.Person");
 
@@ -91,7 +91,7 @@ class Person:
     name: str
     age: pyfory.Int32
 
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 fory.register_type(Person, typename="example.Person")
 
 # Receive bytes from Java

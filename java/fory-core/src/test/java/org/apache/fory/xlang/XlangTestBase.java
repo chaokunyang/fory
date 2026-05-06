@@ -814,7 +814,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   public void testInteger(boolean enableCodegen) throws java.io.IOException {
     String caseName = "test_integer";
     Fory fory =
-        Fory.builder().withXlang(true).withCodegen(enableCodegen).withCompatible(true).build();
+        Fory.builder().withXlang(true).withCompatible(true).withCodegen(enableCodegen).build();
     fory.register(Item1.class, 101);
     Item1 item1 = new Item1();
     int f1 = 1;
@@ -864,7 +864,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   public void testDecimal(boolean enableCodegen) throws java.io.IOException {
     String caseName = "test_decimal";
     Fory fory =
-        Fory.builder().withXlang(true).withCodegen(enableCodegen).withCompatible(true).build();
+        Fory.builder().withXlang(true).withCompatible(true).withCodegen(enableCodegen).build();
     List<BigDecimal> values = decimalValues();
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     for (BigDecimal value : values) {

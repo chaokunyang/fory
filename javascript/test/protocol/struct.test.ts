@@ -24,7 +24,7 @@ import { describe, expect, test } from '@jest/globals';
 describe('protocol', () => {
     test('should polymorphic work', () => {
 
-        const fory = new Fory({ ref: true });
+        const fory = new Fory({ compatible: false, ref: true });
         const { serialize, deserialize } = fory.register(Type.struct({
             typeName: "example.foo"
         }, {
@@ -45,7 +45,7 @@ describe('protocol', () => {
     });
 
     test('should enforce nullable flag for schema-based structs', () => {
-        const fory = new Fory();
+        const fory = new Fory({ compatible: false });
 
         // 1) nullable: false => null must throw
         const nonNullable = Type.struct({

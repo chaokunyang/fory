@@ -82,6 +82,7 @@ import org.apache.fory.config.*;
 
 Fory fory = Fory.builder()
     .withXlang(true)  // Enable cross-language mode
+    .withCompatible(true)  // Recommended xlang default
     .withRefTracking(true)          // Optional: for circular references
     .build();
 ```
@@ -91,11 +92,11 @@ Fory fory = Fory.builder()
 ```python
 import pyfory
 
-# Cross-language mode must be enabled explicitly
-fory = pyfory.Fory(xlang=True)
+# Cross-language mode uses compatible=True by default; set it explicitly in examples.
+fory = pyfory.Fory(xlang=True, compatible=True)
 
 # Enable reference tracking when needed
-fory = pyfory.Fory(xlang=True, ref=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
 ```
 
 ### Go
@@ -103,9 +104,9 @@ fory = pyfory.Fory(xlang=True, ref=True)
 ```go
 import forygo "github.com/apache/fory/go/fory"
 
-fory := forygo.NewFory(forygo.WithXlang(true))
+fory := forygo.NewFory(forygo.WithXlang(true), forygo.WithCompatible(true))
 // Or with reference tracking
-fory := forygo.NewFory(forygo.WithXlang(true), forygo.WithTrackRef(true))
+fory := forygo.NewFory(forygo.WithXlang(true), forygo.WithCompatible(true), forygo.WithTrackRef(true))
 ```
 
 ### Rust
@@ -113,7 +114,7 @@ fory := forygo.NewFory(forygo.WithXlang(true), forygo.WithTrackRef(true))
 ```rust
 use fory::Fory;
 
-let fory = Fory::builder().xlang(true).build();
+let fory = Fory::builder().xlang(true).compatible(true).build();
 ```
 
 ### JavaScript
@@ -121,7 +122,7 @@ let fory = Fory::builder().xlang(true).build();
 ```javascript
 import Fory from "@apache-fory/fory";
 
-const fory = new Fory();
+const fory = new Fory({ compatible: true });
 ```
 
 ### C++
@@ -133,6 +134,7 @@ using namespace fory::serialization;
 
 auto fory = Fory::builder()
     .xlang(true)
+    .compatible(true)
     .build();
 ```
 
@@ -173,7 +175,7 @@ struct Person {
     age: i32,
 }
 
-let mut fory = Fory::builder().xlang(true).build();
+let mut fory = Fory::builder().xlang(true).compatible(true).build();
 fory
     .register_by_namespace::<Person>("example", "Person")
     .expect("register Person");
@@ -246,7 +248,7 @@ public class Person {
 public class HelloWorld {
     public static void main(String[] args) throws Exception {
         Fory fory = Fory.builder()
-            .withXlang(true)
+            .withXlang(true).withCompatible(true)
             .build();
         fory.register(Person.class, "example.Person");
 
@@ -272,7 +274,7 @@ class Person:
     name: str
     age: pyfory.Int32
 
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 fory.register_type(Person, typename="example.Person")
 
 with open("person.bin", "rb") as f:

@@ -91,7 +91,12 @@ public class SerializersTest extends ForyTestBase {
         () -> readSerializer(fory, fory.getSerializer(BigDecimal.class), bigDecimalPayload(2)));
 
     Fory xlangFory =
-        Fory.builder().withXlang(true).withMaxBinarySize(1).requireClassRegistration(false).build();
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .withMaxBinarySize(1)
+            .requireClassRegistration(false)
+            .build();
     assertThrows(
         DeserializationException.class,
         () ->
@@ -134,6 +139,7 @@ public class SerializersTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(referenceTracking)
             .requireClassRegistration(false);
     Fory fory1 = builder.build();
@@ -198,7 +204,12 @@ public class SerializersTest extends ForyTestBase {
   @Test
   public void testDecimalSerializerSelectionByLanguage() {
     Fory nativeFory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
-    Fory xlangFory = Fory.builder().withXlang(true).requireClassRegistration(false).build();
+    Fory xlangFory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .requireClassRegistration(false)
+            .build();
     assertEquals(nativeFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
     assertEquals(xlangFory.getSerializer(BigDecimal.class).getClass(), DecimalSerializer.class);
     assertEquals(nativeFory.getSerializer(BigInteger.class).getClass(), BigIntegerSerializer.class);

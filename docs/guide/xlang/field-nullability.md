@@ -107,7 +107,7 @@ public class Person {
 }
 
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .build();
 fory.register(Person.class, "example.Person");
 ```
@@ -130,7 +130,7 @@ class Person:
     nickname: Optional[str] = None  # Can be None
     bio: Optional[str] = None       # Can be None
 
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 fory.register_type(Person, typename="example.Person")
 ```
 
@@ -166,7 +166,7 @@ type Person struct {
     Bio      *string  // Can be nil
 }
 
-fory := forygo.NewFory(forygo.WithXlang(true))
+fory := forygo.NewFory(forygo.WithXlang(true), forygo.WithCompatible(true))
 fory.RegisterNamedStruct(Person{}, "example.Person")
 ```
 

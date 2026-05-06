@@ -185,7 +185,7 @@ def test_union_with_bytes():
 
 def test_union_cross_language():
     """Test Union with cross-language serialization"""
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
 
     # Test with int value
     value_int: Union[int, str] = 42

@@ -71,7 +71,7 @@ byte[] payload = fory.Serialize(person);
 
 ```java
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)
     .build();
 
@@ -84,7 +84,7 @@ Person value = (Person) fory.deserialize(payloadFromCSharp);
 ```python
 import pyfory
 
-fory = pyfory.Fory(xlang=True, ref=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
 fory.register_type(Person, type_id=100)
 value = fory.deserialize(payload_from_csharp)
 ```

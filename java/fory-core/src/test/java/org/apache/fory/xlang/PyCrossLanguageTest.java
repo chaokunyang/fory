@@ -236,6 +236,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -328,6 +329,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -408,6 +410,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -473,6 +476,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .withCodegen(false)
             .requireClassRegistration(false)
@@ -652,6 +656,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -694,6 +699,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -770,7 +776,8 @@ public class PyCrossLanguageTest extends ForyTestBase {
 
   @Test
   public void testStructArrayField() {
-    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(true).build();
+    Fory fory =
+        Fory.builder().withXlang(true).withCompatible(false).requireClassRegistration(true).build();
     fory.register(ArrayStruct.class, "example.bar");
     fory.register(ArrayField.class, "example.foo");
 
@@ -786,6 +793,7 @@ public class PyCrossLanguageTest extends ForyTestBase {
     ForyBuilder builder =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(referenceTracking)
             .requireClassRegistration(false);
     Fory fory1 = builder.build();

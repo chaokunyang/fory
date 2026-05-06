@@ -230,7 +230,7 @@ fn test_tuple_type_id() {
 // Test tuples in xlang mode
 #[test]
 fn test_tuple_xlang_mode() {
-    let fory = Fory::builder().xlang(true).build();
+    let fory = Fory::builder().xlang(true).compatible(false).build();
 
     // Test homogeneous tuple
     let homogeneous = (1i32, 2i32, 3i32);

@@ -118,7 +118,11 @@ fn test_buffer() {
 #[test]
 #[allow(deprecated)]
 fn test_naive_date_uses_var_i64_day_count() {
-    let fory = Fory::builder().xlang(true).track_ref(false).build();
+    let fory = Fory::builder()
+        .xlang(true)
+        .compatible(false)
+        .track_ref(false)
+        .build();
     let day = NaiveDate::from_ymd_opt(1969, 12, 31).unwrap();
     let mut buf = Vec::new();
     fory.serialize_to(&mut buf, &day).unwrap();

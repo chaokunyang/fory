@@ -212,7 +212,7 @@ Compatible mode supports:
 Enable cross-language mode for interoperability with Java, Python, C++, Rust,
 and JavaScript:
 
-	f := fory.New(fory.WithXlang(true))
+	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	f.RegisterStruct(User{}, 1)  // Use same ID across all languages
 
 	data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})

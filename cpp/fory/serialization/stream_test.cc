@@ -157,7 +157,8 @@ static inline void register_stream_types(Fory &fory) {
 }
 
 TEST(StreamSerializationTest, PrimitiveAndStringRoundTrip) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
 
   auto number_bytes_result = fory.serialize<int64_t>(-9876543212345LL);
   ASSERT_TRUE(number_bytes_result.ok())
@@ -179,7 +180,8 @@ TEST(StreamSerializationTest, PrimitiveAndStringRoundTrip) {
 }
 
 TEST(StreamSerializationTest, StructRoundTrip) {
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
   register_stream_types(fory);
 
   StreamEnvelope original{
@@ -201,7 +203,8 @@ TEST(StreamSerializationTest, StructRoundTrip) {
 }
 
 TEST(StreamSerializationTest, SequentialDeserializeFromSingleStream) {
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
   register_stream_types(fory);
 
   StreamEnvelope envelope{
@@ -238,7 +241,8 @@ TEST(StreamSerializationTest, SequentialDeserializeFromSingleStream) {
 }
 
 TEST(StreamSerializationTest, SharedPointerIdentityRoundTrip) {
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
   register_stream_types(fory);
 
   auto shared = std::make_shared<int32_t>(2026);
@@ -258,7 +262,8 @@ TEST(StreamSerializationTest, SharedPointerIdentityRoundTrip) {
 }
 
 TEST(StreamSerializationTest, TruncatedStreamReturnsError) {
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
   register_stream_types(fory);
 
   StreamEnvelope original{
@@ -278,7 +283,8 @@ TEST(StreamSerializationTest, TruncatedStreamReturnsError) {
 }
 
 TEST(StreamSerializationTest, SerializeToOutputStreamRoundTrip) {
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
   register_stream_types(fory);
 
   StreamEnvelope original{
@@ -298,7 +304,8 @@ TEST(StreamSerializationTest, SerializeToOutputStreamRoundTrip) {
 }
 
 TEST(StreamSerializationTest, SerializeToOStreamOverloadParity) {
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
   register_stream_types(fory);
 
   StreamEnvelope original{
@@ -316,7 +323,8 @@ TEST(StreamSerializationTest, SerializeToOStreamOverloadParity) {
 
 TEST(StreamSerializationTest,
      StructDeserializeFromStreamBackedBufferShrinksAfterEachStruct) {
-  auto fory = Fory::builder().xlang(true).track_ref(true).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(true).build();
   register_stream_types(fory);
 
   std::vector<int32_t> first_values;

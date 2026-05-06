@@ -45,7 +45,7 @@ struct Person {
 FORY_STRUCT(Person, name, age);
 
 int main() {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
 
   // Register with a unique type ID
   fory.register_struct<Person>(100);
@@ -112,7 +112,7 @@ fory.register_enum<LegacyStatus>(2);
 For `ThreadSafeFory`, register types before spawning threads:
 
 ```cpp
-auto fory = Fory::builder().xlang(true).build_thread_safe();
+auto fory = Fory::builder().xlang(true).compatible(true).build_thread_safe();
 
 // Register all types first
 fory.register_struct<TypeA>(100);
@@ -137,7 +137,7 @@ For cross-language compatibility, ensure:
 ### Java
 
 ```java
-Fory fory = Fory.builder().withXlang(true).build();
+Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
 fory.register(Person.class, 100);
 fory.register(Address.class, 101);
 ```
@@ -147,7 +147,7 @@ fory.register(Address.class, 101);
 ```python
 import pyfory
 
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 fory.register(Person, type_id=100)
 fory.register(Address, type_id=101)
 ```
@@ -155,7 +155,7 @@ fory.register(Address, type_id=101)
 ### C++
 
 ```cpp
-auto fory = Fory::builder().xlang(true).build();
+auto fory = Fory::builder().xlang(true).compatible(true).build();
 fory.register_struct<Person>(100);
 fory.register_struct<Address>(101);
 ```

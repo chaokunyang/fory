@@ -349,7 +349,8 @@ struct NestedContainerHolder {
 
 TEST(SmartPtrSerializerTest, MaxDynDepthExceeded) {
   // Create Fory with max_dyn_depth=2
-  auto fory = Fory::builder().xlang(true).max_dyn_depth(2).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).max_dyn_depth(2).build();
   fory.register_struct<NestedContainerHolder>(300);
   fory.register_struct<NestedContainer>("test", "NestedContainer");
 
@@ -388,7 +389,8 @@ TEST(SmartPtrSerializerTest, MaxDynDepthExceeded) {
 
 TEST(SmartPtrSerializerTest, MaxDynDepthSufficient) {
   // Create Fory with max_dyn_depth=5 (sufficient for 3 levels)
-  auto fory = Fory::builder().xlang(true).max_dyn_depth(5).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).max_dyn_depth(5).build();
   fory.register_struct<NestedContainerHolder>(300);
   fory.register_struct<NestedContainer>("test", "NestedContainer");
 
@@ -430,7 +432,7 @@ TEST(SmartPtrSerializerTest, MaxDynDepthSufficient) {
 
 TEST(SmartPtrSerializerTest, MaxDynDepthDefault) {
   // Default max_dyn_depth is 5
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   EXPECT_EQ(fory.config().max_dyn_depth, 5);
 }
 

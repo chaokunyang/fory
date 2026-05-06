@@ -24,7 +24,7 @@ Fory Swift can exchange payloads with other Fory runtimes using the xlang protoc
 ## Recommended Cross-language Configuration
 
 ```swift
-let fory = Fory(xlang: true, trackRef: false, compatible: true)
+let fory = Fory(xlang: true, ref: false, compatible: true)
 ```
 
 ## Register Types with Shared Identity
@@ -95,7 +95,7 @@ Generated Swift code includes:
 Use generated registration before cross-language serialization:
 
 ```swift
-let fory = Fory(xlang: true, trackRef: true, compatible: true)
+let fory = Fory(xlang: true, ref: true, compatible: true)
 try Addressbook.ForyRegistration.register(fory)
 
 let payload = try fory.serialize(book)

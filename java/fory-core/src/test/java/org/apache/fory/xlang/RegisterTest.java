@@ -127,7 +127,12 @@ public class RegisterTest extends ForyTestBase {
 
   @Test
   public void testXlangBuiltInAliasTypeIdsKeepCanonicalTypeInfo() {
-    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .requireClassRegistration(false)
+            .build();
     TypeResolver typeResolver = fory.getTypeResolver();
 
     typeResolver.getSerializer(StringBuffer.class);
@@ -147,7 +152,8 @@ public class RegisterTest extends ForyTestBase {
 
   @Test
   public void testShareableSerializerOverrideStaysLocal() {
-    ForyBuilder builder = Fory.builder().withXlang(true).requireClassRegistration(true);
+    ForyBuilder builder =
+        Fory.builder().withXlang(true).withCompatible(false).requireClassRegistration(true);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, RegisterTest.class.getClassLoader(), sharedRegistry);
@@ -167,7 +173,8 @@ public class RegisterTest extends ForyTestBase {
 
   @Test
   public void testShareableInternalSerializerSharedAcrossRuntimes() {
-    ForyBuilder builder = Fory.builder().withXlang(true).requireClassRegistration(true);
+    ForyBuilder builder =
+        Fory.builder().withXlang(true).withCompatible(false).requireClassRegistration(true);
     finishBuilder(builder);
     SharedRegistry sharedRegistry = new SharedRegistry();
     Fory fory1 = new Fory(builder, RegisterTest.class.getClassLoader(), sharedRegistry);

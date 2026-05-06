@@ -26,6 +26,13 @@ import 'package:test/test.dart';
 // package:fory API; the Java-driven xlang harness covers cross-runtime wire
 // compatibility separately.
 void main() {
+  group('configuration', () {
+    test('defaults to compatible mode unless explicitly set', () {
+      expect(const Config().compatible, isTrue);
+      expect(const Config(compatible: false).compatible, isFalse);
+    });
+  });
+
   group('generated registration', () {
     test('round-trips struct and enum data', () {
       final fory = Fory();

@@ -292,15 +292,15 @@ When fields are missing, C++ default initialization is used:
 | `std::optional<T>`     | `std::nullopt`      |
 | Struct types           | Default-constructed |
 
-## Schema Consistent Mode (Default)
+## Schema Consistent Mode
 
-Without compatible mode, schemas must match exactly:
+Without compatible mode, schemas must match exactly. In xlang mode, compatible mode is the default, so disable it explicitly only when schemas do not change or all services deploy schema changes at the same time:
 
 ```cpp
-// Strict mode (default)
+// Strict schema-consistent mode
 auto fory = Fory::builder()
-    .compatible(false)  // Default: schema must match
     .xlang(true)
+    .compatible(false)
     .build();
 
 // Serialization/deserialization requires identical schemas

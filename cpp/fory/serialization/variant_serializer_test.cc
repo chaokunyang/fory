@@ -51,7 +51,7 @@ Fory create_fory() {
 }
 
 Fory create_xlang_fory() {
-  return Fory::builder().xlang(true).track_ref(true).build();
+  return Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 }
 
 // Test basic variant serialization with primitive types

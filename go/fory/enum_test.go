@@ -29,7 +29,7 @@ type otherAuditEnum int32
 type namedAuditEnum int32
 
 func TestEnumReadConsumesRegisteredTypeInfo(t *testing.T) {
-	f := NewFory(WithXlang(true))
+	f := NewFory(WithXlang(true), WithCompatible(false))
 	require.NoError(t, f.RegisterEnum(auditEnum(0), 101))
 	enumType := reflect.TypeOf(auditEnum(0))
 	serializer, err := f.typeResolver.getSerializerByType(enumType, false)
@@ -52,7 +52,7 @@ func TestEnumReadConsumesRegisteredTypeInfo(t *testing.T) {
 }
 
 func TestEnumReadRejectsMismatchedRegisteredTypeInfo(t *testing.T) {
-	f := NewFory(WithXlang(true))
+	f := NewFory(WithXlang(true), WithCompatible(false))
 	require.NoError(t, f.RegisterEnum(auditEnum(0), 101))
 	require.NoError(t, f.RegisterEnum(otherAuditEnum(0), 102))
 	enumType := reflect.TypeOf(auditEnum(0))
@@ -75,7 +75,7 @@ func TestEnumReadRejectsMismatchedRegisteredTypeInfo(t *testing.T) {
 }
 
 func TestNamedEnumReadConsumesNamedTypeInfo(t *testing.T) {
-	f := NewFory(WithXlang(true))
+	f := NewFory(WithXlang(true), WithCompatible(false))
 	require.NoError(t, f.RegisterNamedEnum(namedAuditEnum(0), "example.NamedAuditEnum"))
 	enumType := reflect.TypeOf(namedAuditEnum(0))
 	serializer, err := f.typeResolver.getSerializerByType(enumType, false)

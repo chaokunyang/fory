@@ -36,7 +36,7 @@ func TestDateUsesVarint64InXlangAndInt32InNative(t *testing.T) {
 	}{
 		{
 			name: "xlang",
-			fory: NewFory(WithTrackRef(false), WithXlang(true)),
+			fory: NewFory(WithTrackRef(false), WithXlang(true), WithCompatible(false)),
 			check: func(t *testing.T, buf *ByteBuffer) {
 				var err Error
 				require.Equal(t, byte(XLangFlag), buf.ReadByte(&err))
@@ -77,7 +77,7 @@ func TestDateUsesVarint64InXlangAndInt32InNative(t *testing.T) {
 }
 
 func TestXlangDateSupportsWideRange(t *testing.T) {
-	fory := NewFory(WithTrackRef(false), WithXlang(true))
+	fory := NewFory(WithTrackRef(false), WithXlang(true), WithCompatible(false))
 	date := Date{Year: 200000, Month: time.January, Day: 1}
 
 	expectedDays, err := DateToEpochDay(date)

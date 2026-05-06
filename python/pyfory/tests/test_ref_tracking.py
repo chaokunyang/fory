@@ -263,7 +263,7 @@ def test_struct_self_cycle_and_nested_alias_python_mode():
 
 
 def test_collection_mixed_type_primitive_ref_value_regression():
-    fory = pyfory.Fory(xlang=True, ref=True, strict=False)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True, strict=False)
     buffer = pyfory.Buffer.allocate(256)
     write_context = fory.write_context
     write_context.prepare(buffer)
@@ -292,7 +292,7 @@ def test_collection_mixed_type_primitive_ref_value_regression():
 
 
 def test_invalid_top_level_ref_id_raises_value_error():
-    fory = pyfory.Fory(xlang=True, ref=True, strict=False)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True, strict=False)
     buffer = pyfory.Buffer.allocate(32)
 
     buffer.write_int8(0b1)
@@ -305,7 +305,7 @@ def test_invalid_top_level_ref_id_raises_value_error():
 
 
 def test_invalid_collection_element_ref_id_raises_value_error():
-    fory = pyfory.Fory(xlang=True, ref=True, strict=False)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True, strict=False)
     buffer = pyfory.Buffer.allocate(64)
     write_context = fory.write_context
     write_context.prepare(buffer)

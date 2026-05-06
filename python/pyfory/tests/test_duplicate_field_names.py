@@ -38,7 +38,7 @@ class ChildWithShadow(Parent):
 
 def test_shadowed_fields_serialization():
     """Serialization with shadowed and inherited fields."""
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register(Parent, namespace="test", typename="Parent")
     fory.register(ChildWithShadow, namespace="test", typename="ChildWithShadow")
 

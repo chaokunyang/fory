@@ -137,7 +137,7 @@ assert(decoded == person)
 Enable reference tracking for class/reference graphs:
 
 ```swift
-let fory = Fory(xlang: true, trackRef: true, compatible: false)
+let fory = Fory(xlang: true, ref: true, compatible: false)
 ```
 
 Shared reference identity is preserved:
@@ -169,7 +169,7 @@ final class AnimalPair {
     }
 }
 
-let fory = Fory(xlang: true, trackRef: true)
+let fory = Fory(xlang: true, ref: true, compatible: true)
 fory.register(Animal.self, id: 200)
 fory.register(AnimalPair.self, id: 201)
 
@@ -375,7 +375,7 @@ See `../docs/guide/swift/custom-serializers.md` for a complete example.
 Recommended xlang preset:
 
 ```swift
-let fory = Fory(xlang: true, trackRef: false, compatible: true)
+let fory = Fory(xlang: true, ref: false, compatible: true)
 ```
 
 Type registration can be ID-based or name-based:

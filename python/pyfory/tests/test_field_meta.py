@@ -159,7 +159,7 @@ class TestValidation:
             field1: str = pyfory.field(0)
             field2: Int32 = pyfory.field(0)  # Duplicate ID
 
-        fory = Fory(xlang=True)
+        fory = Fory(xlang=True, compatible=False)
         fory.register_type(TestClass, typename="test.TestClass")
         obj = TestClass(field1="a", field2=1)
         # Validation happens when serializer is created
@@ -174,7 +174,7 @@ class TestValidation:
             # This should raise because Optional requires nullable=True
             name: Optional[str] = pyfory.field(0, nullable=False)
 
-        fory = Fory(xlang=True)
+        fory = Fory(xlang=True, compatible=False)
         fory.register_type(TestClass, typename="test.TestClass")
         obj = TestClass(name="test")
         # Validation happens when serializer is created
@@ -203,7 +203,7 @@ class TestSerialization:
             id: Int32 = pyfory.field(0)
             name: str = pyfory.field(1)
 
-        fory = Fory(xlang=True, ref=True)
+        fory = Fory(xlang=True, compatible=False, ref=True)
         fory.register_type(User, typename="test.User")
 
         user = User(id=42, name="Alice")
@@ -221,7 +221,7 @@ class TestSerialization:
             name: str = pyfory.field(0)
             email: Optional[str] = pyfory.field(1, nullable=True)
 
-        fory = Fory(xlang=True, ref=True)
+        fory = Fory(xlang=True, compatible=False, ref=True)
         fory.register_type(Profile, typename="test.Profile")
 
         # Test with value
@@ -244,7 +244,7 @@ class TestSerialization:
             value: Int32 = pyfory.field(0)
             _cache: dict = pyfory.field(-1, ignore=True, default_factory=dict)
 
-        fory = Fory(xlang=True, ref=True)
+        fory = Fory(xlang=True, compatible=False, ref=True)
         fory.register_type(CachedData, typename="test.CachedData")
 
         obj = CachedData(value=100)
@@ -267,7 +267,7 @@ class TestSerialization:
             name: str = pyfory.field(0)
             items: List[str] = pyfory.field(1, ref=True, default_factory=list)
 
-        fory = Fory(xlang=True, ref=True)
+        fory = Fory(xlang=True, compatible=False, ref=True)
         fory.register_type(Container, typename="test.Container")
 
         # Create shared list reference
@@ -292,7 +292,7 @@ class TestSerialization:
             # No pyfory.field() - uses defaults
             count: int = 0
 
-        fory = Fory(xlang=True, ref=True)
+        fory = Fory(xlang=True, compatible=False, ref=True)
         fory.register_type(MixedClass, typename="test.MixedClass")
 
         obj = MixedClass(id=1, description="test", count=5)
@@ -318,7 +318,7 @@ class TestInheritance:
         class Child(Parent):
             child_field: Int32 = pyfory.field(1)
 
-        fory = Fory(xlang=True, ref=True)
+        fory = Fory(xlang=True, compatible=False, ref=True)
         fory.register_type(Child, typename="test.Child")
 
         obj = Child(parent_field="parent", child_field=42)
@@ -343,8 +343,8 @@ class TestFingerprint:
         class V2:
             name: str = pyfory.field(1)  # Different tag ID
 
-        fory1 = Fory(xlang=True)
-        fory2 = Fory(xlang=True)
+        fory1 = Fory(xlang=True, compatible=False)
+        fory2 = Fory(xlang=True, compatible=False)
 
         fory1.register_type(V1, typename="test.Type")
         fory2.register_type(V2, typename="test.Type")
@@ -371,8 +371,8 @@ class TestFingerprint:
         class WithoutRef:
             items: List[int] = pyfory.field(0, ref=False, default_factory=list)
 
-        fory1 = Fory(xlang=True, ref=True)
-        fory2 = Fory(xlang=True, ref=True)
+        fory1 = Fory(xlang=True, compatible=False, ref=True)
+        fory2 = Fory(xlang=True, compatible=False, ref=True)
 
         fory1.register_type(WithRef, typename="test.Type")
         fory2.register_type(WithoutRef, typename="test.Type")

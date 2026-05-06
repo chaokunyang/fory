@@ -65,7 +65,7 @@ class ComplexObject:
 
 
 def test_struct():
-    fory = Fory(xlang=True, ref=True)
+    fory = Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(SimpleObject, typename="SimpleObject")
     fory.register_type(ComplexObject, typename="example.ComplexObject")
     o = SimpleObject(f1={1: 1.0 / 3})
@@ -283,7 +283,7 @@ def test_sort_fields():
         f14: Set[pyfory.Int32]
         f15: datetime.datetime
 
-    fory = Fory(xlang=True, ref=True)
+    fory = Fory(xlang=True, compatible=False, ref=True)
     serializer = DataClassSerializer(fory.type_resolver, TestClass)
     # Sorting order:
     # 1. Non-compressed primitives (compress=0) by -size, then ascending type_id, then name:
@@ -306,7 +306,7 @@ def test_tagged_fields_keep_grouped_payload_order():
         middle_map: Dict[str, pyfory.Int64] = pyfory.field(id=15, default_factory=dict)
         first_bool: bool = pyfory.field(id=1, default=False)
 
-    fory = Fory(xlang=True, ref=True)
+    fory = Fory(xlang=True, compatible=False, ref=True)
     serializer = DataClassSerializer(fory.type_resolver, TaggedClass)
     assert serializer._field_names == [
         "first_bool",
@@ -322,7 +322,7 @@ def test_duration_and_decimal_fields_use_declared_serializers():
         duration: datetime.timedelta = pyfory.field(id=1, default=None)
         decimal_value: decimal.Decimal = pyfory.field(id=2, default=decimal.Decimal("0"))
 
-    fory = Fory(xlang=True, ref=True)
+    fory = Fory(xlang=True, compatible=False, ref=True)
     serializer = DataClassSerializer(fory.type_resolver, TemporalNumberClass)
     serializers = dict(zip(serializer._field_names, serializer._serializers))
     assert serializers["duration"].type_ is datetime.timedelta
@@ -381,7 +381,7 @@ def test_numeric_serializer_need_to_write_ref_disabled(numeric_type):
 
 
 def test_data_class_serializer_xlang():
-    fory = Fory(xlang=True, ref=True)
+    fory = Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(ComplexObject, typename="example.ComplexObject")
     fory.register_type(DataClassObject, typename="example.TestDataClassObject")
 
@@ -447,7 +447,7 @@ def test_dataclass_with_typed_tuple_field(track_ref):
 
 @pytest.mark.parametrize("track_ref", [False, True])
 def test_xlang_dataclass_tuple_field(track_ref):
-    fory = Fory(xlang=True, ref=track_ref, strict=False)
+    fory = Fory(xlang=True, compatible=False, ref=track_ref, strict=False)
     fory.register_type(XlangTupleFieldObject, typename="example.XlangTupleFieldObject")
     obj = XlangTupleFieldObject(bar=("a", 1))
     result = ser_de(fory, obj)
@@ -457,7 +457,7 @@ def test_xlang_dataclass_tuple_field(track_ref):
 
 @pytest.mark.parametrize("track_ref", [False, True])
 def test_xlang_nested_tuple_container_fields(track_ref):
-    fory = Fory(xlang=True, ref=track_ref, strict=False)
+    fory = Fory(xlang=True, compatible=False, ref=track_ref, strict=False)
     fory.register_type(XlangNestedTupleObject, typename="example.XlangNestedTupleObject")
     obj = XlangNestedTupleObject(
         tuple_field=([1, 2], {"a": 1, "b": 2}),
@@ -505,7 +505,7 @@ def test_struct_evolving_override():
 
 def test_data_class_serializer_xlang_serializer():
     """Test DataClassSerializer round-trip behavior in xlang mode."""
-    fory = Fory(xlang=True, ref=True)
+    fory = Fory(xlang=True, compatible=False, ref=True)
 
     # Register types first
     fory.register_type(ComplexObject, typename="example.ComplexObject")
@@ -550,7 +550,7 @@ def test_data_class_serializer_xlang_serializer():
 
 def test_data_class_serializer_xlang_vs_non_xlang():
     """Test that xlang and non-xlang modes use the same dataclass serializer behavior."""
-    fory_xlang = Fory(xlang=True, ref=True)
+    fory_xlang = Fory(xlang=True, compatible=False, ref=True)
     fory_python = Fory(xlang=False, ref=True, strict=False)
 
     # Register types for xlang
@@ -1077,7 +1077,7 @@ def test_dynamic_with_inheritance():
 
 def test_dynamic_with_inheritance_xlang():
     """Test dynamic=True allows polymorphic serialization in xlang mode."""
-    fory = Fory(xlang=True, ref=True)
+    fory = Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(Animal, typename="example.Animal")
     fory.register_type(Dog, typename="example.Dog")
     fory.register_type(Zoo, typename="example.Zoo")

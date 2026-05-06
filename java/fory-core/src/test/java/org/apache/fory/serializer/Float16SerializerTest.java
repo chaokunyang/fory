@@ -121,6 +121,7 @@ public class Float16SerializerTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withCodegen(codegen)
             .withRefTracking(true)
             .requireClassRegistration(false)
@@ -243,6 +244,7 @@ public class Float16SerializerTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();
@@ -273,6 +275,7 @@ public class Float16SerializerTest extends ForyTestBase {
     Fory fory =
         Fory.builder()
             .withXlang(true)
+            .withCompatible(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .build();

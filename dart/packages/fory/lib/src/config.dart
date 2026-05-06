@@ -19,7 +19,7 @@
 
 /// Runtime configuration for the Dart xlang implementation.
 ///
-/// The defaults favor schema-consistent mode with conservative safety limits.
+/// The defaults favor compatible mode with conservative safety limits.
 final class Config {
   /// Default maximum nesting depth for a single serialization or
   /// deserialization operation.
@@ -57,7 +57,7 @@ final class Config {
   /// Invalid numeric limits fail fast. When [compatible] is `true`,
   /// [checkStructVersion] is normalized to `false`.
   const Config({
-    this.compatible = false,
+    this.compatible = true,
     bool checkStructVersion = true,
     this.maxDepth = defaultMaxDepth,
     this.maxCollectionSize = defaultMaxCollectionSize,

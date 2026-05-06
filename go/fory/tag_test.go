@@ -28,7 +28,7 @@ func mustParseFieldSpec(t *testing.T, field reflect.StructField) FieldSpec {
 	t.Helper()
 	spec, err := parseFieldSpec(field, true, true)
 	require.NoError(t, err)
-	spec.Type = bindResolvedTypeSpec(New(WithXlang(true)).typeResolver, field.Type, spec.Type)
+	spec.Type = bindResolvedTypeSpec(New(WithXlang(true), WithCompatible(false)).typeResolver, field.Type, spec.Type)
 	return spec
 }
 
@@ -124,7 +124,7 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 		Bytes       []byte   `fory:"id=6,type=bytes"`
 	}
 
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	typ := reflect.TypeOf(Example{})
 
 	defaultListSpec := mustParseFieldSpec(t, typ.Field(0))

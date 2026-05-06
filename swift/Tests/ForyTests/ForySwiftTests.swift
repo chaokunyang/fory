@@ -336,11 +336,11 @@ func namedInitializerBuildsConfig() {
   let defaultConfig = Fory()
   #expect(defaultConfig.config.xlang == true)
   #expect(defaultConfig.config.trackRef == false)
-  #expect(defaultConfig.config.compatible == false)
-  #expect(defaultConfig.config.checkClassVersion == true)
+  #expect(defaultConfig.config.compatible == true)
+  #expect(defaultConfig.config.checkClassVersion == false)
   #expect(defaultConfig.config.maxDepth == 5)
 
-  let explicitConfig = Fory(xlang: false, trackRef: true, compatible: true, maxDepth: 7)
+  let explicitConfig = Fory(xlang: false, ref: true, compatible: true, maxDepth: 7)
   #expect(explicitConfig.config.xlang == false)
   #expect(explicitConfig.config.trackRef == true)
   #expect(explicitConfig.config.compatible == true)
@@ -354,7 +354,7 @@ func namedInitializerBuildsConfig() {
   #expect(configInit.config.checkClassVersion == false)
   #expect(configInit.config.maxDepth == 9)
 
-  let nativeDirect = Fory(xlang: false, trackRef: true, compatible: false)
+  let nativeDirect = Fory(xlang: false, ref: true, compatible: false)
   let nativeViaConfig = Fory(config: Config(xlang: false, trackRef: true, compatible: false))
   #expect(nativeDirect.config.checkClassVersion == false)
   #expect(nativeViaConfig.config.checkClassVersion == false)
@@ -538,7 +538,7 @@ func macroStructRoundTrip() throws {
 
 @Test
 func macroClassRefTracking() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true))
+  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
   fory.register(Node.self, id: 200)
 
   let node = Node(value: 7)
@@ -553,7 +553,7 @@ func macroClassRefTracking() throws {
 
 @Test
 func macroClassWeakRefTracking() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true))
+  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
   fory.register(WeakNode.self, id: 201)
 
   let node = WeakNode(value: 13)
@@ -678,7 +678,7 @@ func rootBufferHonorsCursor() throws {
 
 @Test
 func topLevelAnyObjectRoundTrip() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true))
+  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
   fory.register(Node.self, id: 210)
 
   let value: AnyObject = Node(value: 123)
@@ -715,7 +715,7 @@ func topLevelAnySerializerRoundTrip() throws {
 
 @Test
 func macroDynamicAnyObjectAndAnySerializerFieldsRoundTrip() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true))
+  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
   fory.register(Node.self, id: 220)
   fory.register(Address.self, id: 221)
   fory.register(AnyObjectHolder.self, id: 222)
@@ -756,7 +756,7 @@ func macroDynamicAnyObjectAndAnySerializerFieldsRoundTrip() throws {
 
 @Test
 func dynamicAnySerializerTracksRefs() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true))
+  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
   fory.register(Node.self, id: 226)
   fory.register(AnySerializerHolder.self, id: 227)
 
@@ -824,7 +824,7 @@ func macroAnyFieldsRoundTrip() throws {
 
 @Test
 func collectionAndMapRefTracking() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true))
+  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
   fory.register(Node.self, id: 200)
 
   let shared = Node(value: 11)
@@ -938,7 +938,7 @@ func macroFieldEncodingOverridesForUnsignedTypes() throws {
 
 @Test
 func macroEnumUsesExplicitIntegerRawValue() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: false))
+  let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
   fory.register(SparseStatus.self, id: 302)
 
   let data = try fory.serialize(SparseStatus.ok)

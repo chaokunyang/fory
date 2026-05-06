@@ -87,17 +87,17 @@ fory.register(MyClass, typename="my.package.MyClass", serializer=custom_serializ
 
 ## Language Modes Comparison
 
-| Feature               | Python Mode (`xlang=False`)          | Cross-Language Mode (`xlang=True`)    |
-| --------------------- | ------------------------------------ | ------------------------------------- |
-| **Use Case**          | Pure Python applications             | Multi-language systems                |
-| **Compatibility**     | Python only                          | Java, Go, Rust, C++, JavaScript, etc. |
-| **Supported Types**   | All Python types                     | Cross-language compatible types only  |
-| **Functions/Lambdas** | ✓ Supported                          | ✗ Not allowed                         |
-| **Local Classes**     | ✓ Supported                          | ✗ Not allowed                         |
-| **Dynamic Classes**   | ✓ Supported                          | ✗ Not allowed                         |
-| **Schema Evolution**  | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`)  |
-| **Performance**       | Extremely fast                       | Very fast                             |
-| **Data Size**         | Compact                              | Compact with type metadata            |
+| Feature               | Python Mode (`xlang=False`)          | Cross-Language Mode (`xlang=True, compatible=True`) |
+| --------------------- | ------------------------------------ | --------------------------------------------------- |
+| **Use Case**          | Pure Python applications             | Multi-language systems                              |
+| **Compatibility**     | Python only                          | Java, Go, Rust, C++, JavaScript, etc.               |
+| **Supported Types**   | All Python types                     | Cross-language compatible types only                |
+| **Functions/Lambdas** | ✓ Supported                          | ✗ Not allowed                                       |
+| **Local Classes**     | ✓ Supported                          | ✗ Not allowed                                       |
+| **Dynamic Classes**   | ✓ Supported                          | ✗ Not allowed                                       |
+| **Schema Evolution**  | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`)                |
+| **Performance**       | Extremely fast                       | Very fast                                           |
+| **Data Size**         | Compact                              | Compact with type metadata                          |
 
 ## Python Mode (`xlang=False`)
 
@@ -123,7 +123,7 @@ obj = [1, 2, {"nested": [3, 4]}]
 assert fory.loads(fory.dumps(obj)) == pickle.loads(pickle.dumps(obj))
 ```
 
-## Cross-Language Mode (`xlang=True`)
+## Cross-Language Mode (`xlang=True, compatible=True`)
 
 Cross-language mode restricts types to those compatible across all Fory implementations:
 
@@ -131,7 +131,7 @@ Cross-language mode restricts types to those compatible across all Fory implemen
 import pyfory
 
 # Cross-language compatibility mode
-f = pyfory.Fory(xlang=True, ref=True)
+f = pyfory.Fory(xlang=True, compatible=True, ref=True)
 
 # Only supports cross-language compatible types
 f.register(MyDataClass, typename="com.example.MyDataClass")
@@ -152,7 +152,7 @@ fory = pyfory.Fory(
     xlang=False,        # Use True if you need cross-language support
     ref=False,          # Enable if you have shared/circular references
     strict=True,        # CRITICAL: Always True in production
-    compatible=False,   # Enable only if you need schema evolution
+    compatible=False,   # Native mode; xlang=True defaults to compatible=True
     max_depth=20        # Adjust based on your data structure depth
 )
 

@@ -79,7 +79,7 @@ public final class ForyBuilder {
   boolean compressLongArray = false;
   boolean compressString = false;
   Boolean writeNumUtf16BytesForUtf8Encoding;
-  boolean compatible = false;
+  Boolean compatible;
   boolean checkJdkClassSerializable = true;
   Class<? extends Serializer> defaultJDKStreamSerializerType = ObjectStreamSerializer.class;
   boolean requireClassRegistration = true;
@@ -313,12 +313,16 @@ public final class ForyBuilder {
     return this;
   }
 
+  boolean isCompatible() {
+    return compatible != null ? compatible : xlang;
+  }
+
   /**
    * Whether check class schema consistency. This is disabled automatically when compatible mode is
    * enabled. Do not disable this option unless you can ensure the class won't evolve.
    */
   public ForyBuilder withClassVersionCheck(boolean checkClassVersion) {
-    if (xlang && !compatible && !checkClassVersion) {
+    if (xlang && !isCompatible() && !checkClassVersion) {
       throw new IllegalArgumentException(
           "XLANG Schema consistent mode must enable class version check");
     }
@@ -581,6 +585,8 @@ public final class ForyBuilder {
     if (writeNumUtf16BytesForUtf8Encoding == null) {
       writeNumUtf16BytesForUtf8Encoding = !xlang;
     }
+    boolean compatible = isCompatible();
+    this.compatible = compatible;
     if (compatible) {
       checkClassVersion = false;
       if (deserializeUnknownClass == null) {

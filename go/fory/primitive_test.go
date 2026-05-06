@@ -26,7 +26,7 @@ import (
 )
 
 func TestFloat16Primitive(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	f16 := float16.Float16FromFloat32(3.14)
 
 	// Directly serialize a float16 value
@@ -45,7 +45,7 @@ func TestFloat16Primitive(t *testing.T) {
 
 func TestFloat16PrimitiveSliceDirect(t *testing.T) {
 	// Tests serializing a slice as a root object
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	f16 := float16.Float16FromFloat32(3.14)
 
 	slice := []float16.Float16{f16, float16.Zero}
@@ -59,7 +59,7 @@ func TestFloat16PrimitiveSliceDirect(t *testing.T) {
 }
 
 func TestSignedIntegerDynamicTypeIDsUseVarintEncoding(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 
 	data, err := f.Serialize(int32(-12))
 	require.NoError(t, err)
@@ -87,7 +87,7 @@ func requireRootTypeID(t *testing.T, data []byte, typeID TypeId) {
 }
 
 func TestBFloat16Primitive(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	bf16 := bfloat16.BFloat16FromFloat32(3.14)
 
 	// Directly serialize a bfloat16 value
@@ -106,7 +106,7 @@ func TestBFloat16Primitive(t *testing.T) {
 
 func TestBFloat16PrimitiveSliceDirect(t *testing.T) {
 	// Tests serializing a slice as a root object
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	bf16 := bfloat16.BFloat16FromFloat32(3.14)
 
 	slice := []bfloat16.BFloat16{bf16, bfloat16.BFloat16(0)}

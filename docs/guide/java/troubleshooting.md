@@ -41,7 +41,7 @@ Fory fory = Fory.builder()
   .build();
 ```
 
-**Note**: compatible mode has more performance and space cost. Do not set it by default if your classes are always consistent between serialization and deserialization.
+**Note**: compatible mode has more performance and space cost. For xlang mode it is the default and recommended setting. Use schema-consistent mode only if your classes are always consistent between serialization and deserialization, or if all services deploy schema changes at the same time.
 
 ## Using Wrong API for Deserialization
 

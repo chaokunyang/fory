@@ -89,7 +89,7 @@ public class Config implements Serializable {
     registerGuavaTypes = builder.registerGuavaTypes;
     codeGenEnabled = builder.codeGenEnabled;
     checkClassVersion = builder.checkClassVersion;
-    compatible = builder.compatible;
+    compatible = builder.isCompatible();
     checkJdkClassSerializable = builder.checkJdkClassSerializable;
     defaultJDKStreamSerializerType = builder.defaultJDKStreamSerializerType;
     metaShareEnabled = builder.metaShareEnabled;

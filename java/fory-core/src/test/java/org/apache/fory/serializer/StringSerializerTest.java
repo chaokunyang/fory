@@ -389,6 +389,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -427,6 +428,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -466,6 +468,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -506,6 +509,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -542,6 +546,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -584,6 +589,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -621,6 +627,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -656,6 +663,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -687,6 +695,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 
@@ -722,7 +731,12 @@ public class StringSerializerTest extends ForyTestBase {
       // readBytesUTF8ForXlang will be invoked only in java9+
       return;
     }
-    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .requireClassRegistration(false)
+            .build();
 
     // Direct test with raw UTF-8 bytes - bypasses full serialization
     // This tests the method directly with known UTF-8 byte sequences
@@ -805,6 +819,7 @@ public class StringSerializerTest extends ForyTestBase {
         Fory.builder()
             .withStringCompressed(true)
             .withXlang(true)
+            .withCompatible(false)
             .requireClassRegistration(false)
             .build();
 

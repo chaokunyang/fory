@@ -48,7 +48,7 @@ func TestDecimalRoundTrip(t *testing.T) {
 		mustDecimal("-123456789012345678901234567890123456789", -17),
 	}
 	for _, referenceTracking := range []bool{false, true} {
-		f := New(WithXlang(true), WithRefTracking(referenceTracking))
+		f := New(WithXlang(true), WithCompatible(false), WithRefTracking(referenceTracking))
 		for _, value := range values {
 			data, err := Serialize(f, value)
 			require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestDecimalRoundTrip(t *testing.T) {
 }
 
 func TestDecimalDynamicAnyRoundTrip(t *testing.T) {
-	f := New(WithXlang(true), WithRefTracking(true))
+	f := New(WithXlang(true), WithCompatible(false), WithRefTracking(true))
 	value := mustDecimal("9223372036854775808", 4)
 	payload := []any{"marker", value, []any{value, mustDecimal("-12345678901234567890", 2)}}
 	data, err := Serialize(f, payload)
@@ -84,7 +84,7 @@ func TestDecimalDynamicAnyRoundTrip(t *testing.T) {
 }
 
 func TestDecimalWireEncoding(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	data, err := Serialize(f, NewDecimal(big.NewInt(0), 2))
 	require.NoError(t, err)
 
@@ -106,7 +106,7 @@ func TestDecimalWireEncoding(t *testing.T) {
 }
 
 func TestDecimalRejectsNonCanonicalBigPayload(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 
 	buffer := NewByteBuffer(nil)
 	buffer.WriteByte_(XLangFlag)
@@ -148,7 +148,7 @@ func TestDecimalOOM(t *testing.T) {
 
 	data := buffer.Bytes()
 
-	f := New(WithXlang(true), WithMaxBinarySize(1024*1024))
+	f := New(WithXlang(true), WithCompatible(false), WithMaxBinarySize(1024*1024))
 
 	var decoded Decimal
 	err := f.DeserializeFromReader(bytes.NewReader(data), &decoded)

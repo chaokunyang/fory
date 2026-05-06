@@ -66,7 +66,8 @@ struct AnyHolderStruct {
 };
 
 TEST(AnySerializerTest, RoundTripStructFields) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
 
   ASSERT_TRUE(fory.register_struct<AnyInnerStruct>(1).ok());
   ASSERT_TRUE(fory.register_struct<AnyHolderStruct>(2).ok());

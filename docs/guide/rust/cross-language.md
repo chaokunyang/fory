@@ -101,7 +101,7 @@ public class Person {
 }
 
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)
     .build();
 
@@ -121,7 +121,7 @@ class Person:
     name: str
     age: pyfory.Int32
 
-fory = pyfory.Fory(xlang=True, ref=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
 fory.register_type(Person, type_id=100)  # Same ID as Rust
 
 person = fory.deserialize(bytes_from_rust)

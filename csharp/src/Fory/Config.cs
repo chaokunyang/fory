@@ -62,7 +62,7 @@ public sealed class Config
 public sealed class ForyBuilder
 {
     private bool _trackRef;
-    private bool _compatible;
+    private bool? _compatible;
     private bool _checkStructVersion;
     private int _maxDepth = 20;
 
@@ -118,10 +118,13 @@ public sealed class ForyBuilder
 
     private Config BuildConfig()
     {
+        bool compatible = _compatible ?? true;
+        // Compatible mode carries field metadata for evolution; schema hash checks
+        // belong only to schema-consistent mode.
         return new Config(
             trackRef: _trackRef,
-            compatible: _compatible,
-            checkStructVersion: _checkStructVersion,
+            compatible: compatible,
+            checkStructVersion: compatible ? false : _checkStructVersion,
             maxDepth: _maxDepth);
     }
 

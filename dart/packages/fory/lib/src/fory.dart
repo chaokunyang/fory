@@ -54,7 +54,7 @@ final class Fory {
   /// The same instance can be reused across many operations. Each operation
   /// resets its transient read/write state before work starts.
   Fory({
-    bool compatible = false,
+    bool compatible = true,
     bool checkStructVersion = true,
     int maxDepth = Config.defaultMaxDepth,
     int maxCollectionSize = Config.defaultMaxCollectionSize,

@@ -144,7 +144,12 @@ public class ForyFieldTagIdTest extends ForyTestBase {
   @Test
   public void testIdMinusOneOptOutBehavior() {
     // Test that id=-1 explicitly opts out of tag ID usage
-    Fory fory = Fory.builder().withXlang(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .requireClassRegistration(false)
+            .build();
     fory.register(TestClass.class, "test.TestClass");
 
     TestClass obj = new TestClass();

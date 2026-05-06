@@ -46,7 +46,8 @@ public class XlangCollectionSerializerTest extends ForyTestBase {
 
   @Test(dataProvider = "enableCodegen")
   public void testContainerType(boolean enableCodegen) {
-    Fory fory = Fory.builder().withXlang(true).withCodegen(enableCodegen).build();
+    Fory fory =
+        Fory.builder().withXlang(true).withCompatible(false).withCodegen(enableCodegen).build();
     fory.register(SomeClass.class, "SomeClass");
 
     SomeClass someClass = new SomeClass();
@@ -62,7 +63,7 @@ public class XlangCollectionSerializerTest extends ForyTestBase {
 
   @Test
   public void testSerializeListWithNullElements() {
-    Fory fory = Fory.builder().withXlang(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).build();
     ArrayList<String> strList = new ArrayList<>();
     strList.add(null);
     byte[] serialized = fory.serialize(strList);

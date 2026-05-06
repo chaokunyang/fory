@@ -29,7 +29,7 @@ Serialize and deserialize Python objects with a simple API:
 import pyfory
 
 # Create Fory instance
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 
 # Serialize any Python object
 data = fory.dumps({"name": "Alice", "age": 30, "scores": [95, 87, 92]})

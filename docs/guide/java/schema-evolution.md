@@ -25,13 +25,15 @@ This page covers schema evolution, meta sharing, and handling non-existent/unkno
 
 In many systems, the schema of a class used for serialization may change over time. For instance, fields within a class may be added or removed. When serialization and deserialization processes use different versions of jars, the schema of the class being deserialized may differ from the one used during serialization.
 
-### Default Mode: Schema Consistent
+### Default Mode
 
-By default, Fory serializes objects using schema-consistent mode. This mode assumes that the deserialization process uses the same class schema as the serialization process, minimizing payload overhead. However, if there is a schema inconsistency, deserialization will fail.
+In Java-native mode (`xlang=false`), Fory serializes objects using schema-consistent mode by default. This mode assumes that the deserialization process uses the same class schema as the serialization process, minimizing payload overhead. However, if there is a schema inconsistency, deserialization will fail.
+
+In cross-language mode (`xlang=true`), Fory defaults to compatible mode because schemas can diverge more easily across independently deployed services and language implementations.
 
 ### Compatible Mode
 
-If the schema is expected to change, to make deserialization succeed (i.e., schema forward/backward compatibility), users must configure Fory with `ForyBuilder#withCompatible(true)`.
+If the schema is expected to change, to make deserialization succeed (i.e., schema forward/backward compatibility), users must configure Fory with `ForyBuilder#withCompatible(true)`. Cross-language mode already uses this setting by default; it is still recommended to set it explicitly in examples and service configuration.
 
 In this compatible mode, deserialization can handle schema changes such as missing or extra fields, allowing it to succeed even when the serialization and deserialization processes have different class schemas.
 

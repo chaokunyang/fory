@@ -48,7 +48,7 @@ print(pyfory.ENABLE_FORY_CYTHON_SERIALIZATION)  # Should be True
 
 ```python
 # Use explicit type registration with consistent naming
-f = pyfory.Fory(xlang=True)
+f = pyfory.Fory(xlang=True, compatible=True)
 f.register(MyClass, typename="com.package.MyClass")  # Use same name in all languages
 ```
 

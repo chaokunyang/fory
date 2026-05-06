@@ -148,7 +148,7 @@ func TestRefTrackingLargeCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			f := New(WithXlang(true), WithRefTracking(true))
+			f := New(WithXlang(true), WithCompatible(false), WithRefTracking(true))
 
 			err := f.RegisterNamedStruct(&Inner{}, fmt.Sprintf("RefTest_Inner_%d", tt.count))
 			require.NoError(t, err)

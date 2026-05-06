@@ -35,7 +35,7 @@ Reference tracking enables:
 
 ```java
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)
     .build();
 ```
@@ -43,14 +43,14 @@ Fory fory = Fory.builder()
 ### Python
 
 ```python
-fory = pyfory.Fory(xlang=True, ref=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
 ```
 
 ### Go
 
 ```go
 fory := forygo.NewFory(
-    forygo.WithXlang(true),
+    forygo.WithXlang(true), forygo.WithCompatible(true),
     forygo.WithTrackRef(true),
 )
 ```
@@ -58,14 +58,14 @@ fory := forygo.NewFory(
 ### C++
 
 ```cpp
-auto fory = fory::Fory::builder().xlang(true).track_ref(true).build();
+auto fory = fory::Fory::builder().xlang(true).compatible(true).track_ref(true).build();
 ```
 
 ### Rust
 
 ```rust
 let fory = Fory::builder()
-    .xlang(true)
+    .xlang(true).compatible(true)
     .track_ref(true).build();
 ```
 
@@ -103,7 +103,7 @@ Key behavior:
 ```java
 // Reference tracking enabled, but non-nullable fields still skip ref flags
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)
     .build();
 ```

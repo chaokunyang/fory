@@ -26,7 +26,7 @@ Fory Go enables seamless data exchange with Java, Python, C++, Rust, and JavaScr
 Cross-language (xlang) mode must be explicitly enabled:
 
 ```go
-f := fory.New(fory.WithXlang(true))
+f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 ```
 
 ## Type Registration for Cross-Language
@@ -41,7 +41,7 @@ type User struct {
     Name string
 }
 
-f := fory.New(fory.WithXlang(true))
+f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 f.RegisterStruct(User{}, 1)
 data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 ```
@@ -53,7 +53,7 @@ public class User {
     public long id;
     public String name;
 }
-Fory fory = Fory.builder().withXlang(true).build();
+Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
 fory.register(User.class, 1);
 User user = fory.deserialize(data, User.class);
 ```
@@ -69,7 +69,7 @@ class User:
     id: pyfory.Int64
     name: str
 
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 fory.register(User, type_id=1)
 user = fory.deserialize(data)
 ```
@@ -118,7 +118,7 @@ type Order struct {
     Items    []string
 }
 
-f := fory.New(fory.WithXlang(true))
+f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 f.RegisterStruct(Order{}, 1)
 
 order := &Order{
@@ -141,7 +141,7 @@ public class Order {
     public List<String> items;
 }
 
-Fory fory = Fory.builder().withXlang(true).build();
+Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
 fory.register(Order.class, 1);
 
 Order order = fory.deserialize(data, Order.class);
@@ -161,7 +161,7 @@ class Message:
     content: str
     timestamp: pyfory.Int64
 
-fory = pyfory.Fory(xlang=True)
+fory = pyfory.Fory(xlang=True, compatible=True)
 fory.register(Message, type_id=1)
 
 msg = Message(id=1, content="Hello from Python", timestamp=1234567890)
@@ -177,7 +177,7 @@ type Message struct {
     Timestamp int64
 }
 
-f := fory.New(fory.WithXlang(true))
+f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 f.RegisterStruct(Message{}, 1)
 
 var msg Message
@@ -226,7 +226,7 @@ type Company struct {
     Address Address
 }
 
-f := fory.New(fory.WithXlang(true))
+f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 f.RegisterStruct(Address{}, 1)
 f.RegisterStruct(Company{}, 2)
 ```

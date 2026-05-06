@@ -24,7 +24,7 @@ import (
 )
 
 func TestSkipEnumConsumesSmall7Ordinal(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	buf := NewByteBuffer(nil)
 	buf.WriteVarUint32Small7(128)
 	buf.WriteByte(0x7f)
@@ -92,7 +92,7 @@ func TestSkipPrimitiveConsumesExactEncoding(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			f := New(WithXlang(true))
+			f := New(WithXlang(true), WithCompatible(false))
 			buf := NewByteBuffer(nil)
 			tc.write(buf)
 			wantIndex := buf.WriterIndex()
@@ -114,7 +114,7 @@ func TestSkipPrimitiveConsumesExactEncoding(t *testing.T) {
 }
 
 func TestSkipMapRejectsInvalidChunkSize(t *testing.T) {
-	f := New(WithXlang(true))
+	f := New(WithXlang(true), WithCompatible(false))
 	buf := NewByteBuffer(nil)
 	buf.WriteLength(1)
 	buf.WriteByte(KEY_DECL_TYPE | VALUE_DECL_TYPE)

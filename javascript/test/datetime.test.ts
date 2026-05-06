@@ -23,7 +23,7 @@ import { TypeId } from "../packages/core/lib/type";
 
 describe("datetime", () => {
   test("should date work", () => {
-    const fory = new Fory({ ref: true });
+    const fory = new Fory({ compatible: false, ref: true });
     const now = new Date();
     const input = fory.serialize(now);
     const result: Date | null = fory.deserialize(input);
@@ -35,7 +35,7 @@ describe("datetime", () => {
       a: Type.timestamp(),
       b: Type.duration(),
     });
-    const fory = new Fory({ ref: true });
+    const fory = new Fory({ compatible: false, ref: true });
     const serializer = fory.register(typeinfo).serializer;
     const d = new Date("2021/10/20 09:13");
     const input = fory.serialize({ a: d, b: d }, serializer);
@@ -43,7 +43,7 @@ describe("datetime", () => {
     expect(result).toEqual({ a: d, b: d.getTime() });
   });
   test("should use signed varint64 for date payloads", () => {
-    const fory = new Fory({ ref: true });
+    const fory = new Fory({ compatible: false, ref: true });
     const serializer = fory.register(Type.date()).serializer;
     const value = new Date(1969, 11, 31);
 

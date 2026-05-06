@@ -146,7 +146,7 @@ The `type_id` constant should be set to `TypeId::EXT` for custom extension types
 Register your custom serializer with Fory before use:
 
 ```cpp
-auto fory = Fory::builder().xlang(true).build();
+auto fory = Fory::builder().xlang(true).compatible(true).build();
 
 // Register with numeric type ID (must match across languages)
 auto result = fory.register_extension_type<MyExt>(103);
@@ -255,7 +255,7 @@ struct Serializer<CustomType> {
 } // namespace fory
 
 int main() {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
   fory.register_extension_type<CustomType>(100);
 
   CustomType original{42, "test"};

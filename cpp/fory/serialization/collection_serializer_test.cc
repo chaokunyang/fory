@@ -68,7 +68,7 @@ struct VectorHomogeneousHolder {
 namespace {
 
 Fory create_fory() {
-  return Fory::builder().xlang(true).track_ref(true).build();
+  return Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 }
 
 void register_types(Fory &fory) {
@@ -295,7 +295,7 @@ struct VectorIntHolder {
 };
 
 TEST(CollectionSerializerTest, VectorStringRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<VectorStringHolder>(200);
 
   VectorStringHolder original;
@@ -317,7 +317,7 @@ TEST(CollectionSerializerTest, VectorStringRoundTrip) {
 }
 
 TEST(CollectionSerializerTest, VectorIntRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<VectorIntHolder>(201);
 
   VectorIntHolder original;
@@ -347,7 +347,7 @@ struct VectorOptionalHolder {
 };
 
 TEST(CollectionSerializerTest, VectorOptionalWithNulls) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<VectorOptionalHolder>(202);
 
   VectorOptionalHolder original;
@@ -387,7 +387,7 @@ struct ListIntHolder {
 };
 
 TEST(CollectionSerializerTest, ListStringRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<ListStringHolder>(300);
 
   ListStringHolder original;
@@ -411,7 +411,7 @@ TEST(CollectionSerializerTest, ListStringRoundTrip) {
 }
 
 TEST(CollectionSerializerTest, ListIntRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<ListIntHolder>(301);
 
   ListIntHolder original;
@@ -436,7 +436,7 @@ TEST(CollectionSerializerTest, ListIntRoundTrip) {
 }
 
 TEST(CollectionSerializerTest, ListEmptyRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<ListStringHolder>(302);
 
   ListStringHolder original;
@@ -469,7 +469,7 @@ struct DequeIntHolder {
 };
 
 TEST(CollectionSerializerTest, DequeStringRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<DequeStringHolder>(400);
 
   DequeStringHolder original;
@@ -492,7 +492,7 @@ TEST(CollectionSerializerTest, DequeStringRoundTrip) {
 }
 
 TEST(CollectionSerializerTest, DequeIntRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<DequeIntHolder>(401);
 
   DequeIntHolder original;
@@ -516,7 +516,7 @@ TEST(CollectionSerializerTest, DequeIntRoundTrip) {
 }
 
 TEST(CollectionSerializerTest, DequeEmptyRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<DequeStringHolder>(402);
 
   DequeStringHolder original;
@@ -549,7 +549,7 @@ struct ForwardListIntHolder {
 };
 
 TEST(CollectionSerializerTest, ForwardListStringRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<ForwardListStringHolder>(500);
 
   ForwardListStringHolder original;
@@ -575,7 +575,7 @@ TEST(CollectionSerializerTest, ForwardListStringRoundTrip) {
 }
 
 TEST(CollectionSerializerTest, ForwardListIntRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<ForwardListIntHolder>(501);
 
   ForwardListIntHolder original;
@@ -602,7 +602,7 @@ TEST(CollectionSerializerTest, ForwardListIntRoundTrip) {
 }
 
 TEST(CollectionSerializerTest, ForwardListEmptyRoundTrip) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   fory.register_struct<ForwardListStringHolder>(502);
 
   ForwardListStringHolder original;

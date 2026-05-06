@@ -55,9 +55,9 @@ When `compatible: true`:
 - Adding or removing fields on one side does not break the other.
 - Peers must still use the same `namespace` + `typeName` (or numeric `id`) to identify types.
 
-When `compatible: false` (default):
+When `compatible: false`:
 
-- Both sides must have exactly the same schema. This is slightly faster and is fine when you deploy Dart-only services or always update all sides together.
+- Both sides must have exactly the same schema. This is slightly faster and is fine when schemas do not change or all services deploy schema changes at the same time.
 
 ### `checkStructVersion`
 

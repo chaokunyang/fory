@@ -178,7 +178,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithDuplicateTagIds() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithDuplicateTagIds.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -195,7 +195,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithDuplicateTagIdsZero() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithDuplicateTagIdsZero.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -211,7 +211,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithValidTagIds() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithValidTagIds.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -242,7 +242,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithMixedAnnotations() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithMixedAnnotations.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -279,7 +279,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithMixedDuplicateTagIds() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithMixedDuplicateTagIds.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -298,7 +298,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithSingleField() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithSingleField.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -315,7 +315,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithNoAnnotations() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithNoAnnotations.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -338,7 +338,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithAllFieldNames() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithAllFieldNames.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -361,7 +361,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithLargeTagIds() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithLargeTagIds.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -384,7 +384,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testBuildFieldsInfoWithEmptyFieldList() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithValidTagIds.class);
     TypeResolver resolver = fory.getTypeResolver();
 
@@ -398,7 +398,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testXlangTypeDefIsNotCompressed() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithNoAnnotations.class);
 
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
@@ -407,7 +407,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testExtendedFieldCountHeaderDoesNotSetRegisterByName() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ManyFields.class, 6002);
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ManyFields.class);
     byte bodyHeader = typeDef.getEncoded()[typeDefBodyOffset(typeDef.getEncoded())];
@@ -422,7 +422,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testDecodeRejectsCompressedXlangTypeDef() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithNoAnnotations.class);
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
     byte[] body = Arrays.copyOfRange(typeDef.getEncoded(), Long.BYTES, typeDef.getEncoded().length);
@@ -436,7 +436,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testDecodeRejectsReservedGlobalBits() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithNoAnnotations.class);
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
     MemoryBuffer encoded = MemoryBuffer.fromByteArray(typeDef.getEncoded());
@@ -453,7 +453,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testDecodeRejectsTrailingTypeDefBodyBytes() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithNoAnnotations.class);
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
     MemoryBuffer encoded = MemoryBuffer.fromByteArray(typeDef.getEncoded());
@@ -473,7 +473,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testDecodeRejectsParsedTypeDefWithMismatchedHash() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ClassWithNoAnnotations.class);
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
     byte[] malformed = corruptEncodedBody(typeDef, "field1");
@@ -485,7 +485,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testDecodeRejectsHashConsistentMalformedTypeDefBody() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     MemoryBuffer body = MemoryBuffer.newHeapBuffer(1);
     body.writeByte(0);
     MemoryBuffer encoded = NativeTypeDefEncoder.prependHeader(body, false);
@@ -504,7 +504,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testDecodeRejectsRegisteredTypeDefKindMismatch() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(EmptyStruct.class, 6001);
     MemoryBuffer body = MemoryBuffer.newHeapBuffer(8);
     body.writeByte(0);
@@ -517,7 +517,7 @@ public class TypeDefEncoderTest {
 
   @Test
   public void testDecodePreservesCompatibleStructKindForRegisteredStruct() {
-    Fory fory = Fory.builder().withXlang(true).withMetaShare(true).withCompatible(false).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(EmptyStruct.class, 6001);
     MemoryBuffer body = MemoryBuffer.newHeapBuffer(8);
     body.writeByte(TypeDefEncoder.STRUCT_FLAG | TypeDefEncoder.COMPATIBLE_FLAG);

@@ -157,7 +157,7 @@ FORY_STRUCT(Person, name, age, hobbies);
 int main() {
   // Create a Fory instance
   auto fory = Fory::builder()
-      .xlang(true)          // Enable cross-language mode
+      .xlang(true).compatible(true)          // Enable cross-language mode
       .track_ref(false)     // Disable reference tracking for simple types
       .build();
 
@@ -215,7 +215,7 @@ Apache Fory™ C++ provides two variants for different threading needs:
 ```cpp
 // Single-threaded Fory - fastest, NOT thread-safe
 auto fory = Fory::builder()
-    .xlang(true)
+    .xlang(true).compatible(true)
     .build();
 ```
 
@@ -224,7 +224,7 @@ auto fory = Fory::builder()
 ```cpp
 // Thread-safe Fory - uses context pools
 auto fory = Fory::builder()
-    .xlang(true)
+    .xlang(true).compatible(true)
     .build_thread_safe();
 
 // Can be used from multiple threads safely

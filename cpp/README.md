@@ -47,7 +47,7 @@ struct Person {
 int main() {
   // Create Fory instance
   auto fory = apache::fory::ForyBuilder()
-      .xlang(true)
+      .xlang(true).compatible(true)
       .track_ref(true)
       .build();
 

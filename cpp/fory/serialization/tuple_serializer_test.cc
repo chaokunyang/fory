@@ -93,7 +93,7 @@ struct TupleNestedHolder {
 };
 
 Fory create_fory() {
-  return Fory::builder().xlang(true).track_ref(true).build();
+  return Fory::builder().xlang(true).compatible(false).track_ref(true).build();
 }
 
 // ============================================================================

@@ -180,14 +180,14 @@ StackOverflowError or RecursionError
 ```java
 // Java
 Fory fory = Fory.builder()
-    .withXlang(true)
+    .withXlang(true).withCompatible(true)
     .withRefTracking(true)
     .build();
 ```
 
 ```python
 # Python
-fory = pyfory.Fory(xlang=True, ref=True)
+fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
 ```
 
 ### Duplicate Objects
@@ -224,6 +224,28 @@ public Set<Status> statuses;
 ```
 
 ## Version Compatibility
+
+### Schema Hash Mismatch
+
+**Symptom:** Deserialization fails with an error such as `class version hash mismatch`,
+`schema version mismatch`, `struct version mismatch`, or `hash mismatch`.
+
+**Cause:** The writer and reader are using schema-consistent mode while their struct/class
+schemas differ. In xlang mode this can happen even when each language made a reasonable local
+change, because field names, type annotations, field IDs, nullability, and generated schema
+metadata must still align exactly.
+
+**Solution:**
+
+1. Align the schemas carefully on every service and language: field names or field IDs,
+   field order where schema-consistent mode requires it, type annotations, nullability,
+   and type registration IDs/names.
+2. Or use compatible mode on every peer, for example `withCompatible(true)` in Java,
+   `compatible=True` in Python, `compatible(true)` in Rust, or `WithCompatible(true)` in Go.
+   Compatible mode writes extra schema metadata, so payloads are larger, but it is recommended
+   for `xlang=true` services that may evolve independently.
+3. Use schema-consistent mode only when schemas do not change, or when all services deploy the
+   schema change at the same time.
 
 ### Serialization Format Changed
 
@@ -290,7 +312,7 @@ python deserializer.py data.bin
 
 1. **Not registering types**: Always register custom types before use
 2. **Inconsistent type names/IDs**: Use the same names/IDs across all languages
-3. **Forgetting xlang mode**: Use `.withXlang(true)` in Java
+3. **Forgetting xlang mode**: Use `.withXlang(true).withCompatible(true)` in Java
 4. **Wrong type annotations**: Use markers such as `pyfory.Int32` in Python
 5. **Ignoring reference tracking**: Enable for circular/shared references
 

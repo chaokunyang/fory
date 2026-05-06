@@ -22,8 +22,8 @@ import {describe, expect, test} from '@jest/globals';
 
 describe('bool', () => {
   test('should false work', () => {
-    
-    const fory = new Fory({ ref: true });    
+
+    const fory = new Fory({ compatible: false, ref: true });
     const input = fory.serialize(false);
     const result = fory.deserialize(
         input
@@ -31,8 +31,8 @@ describe('bool', () => {
     expect(result).toEqual(false)
   });
   test('should true work', () => {
-    
-    const fory = new Fory({ ref: true });    
+
+    const fory = new Fory({ compatible: false, ref: true });
     const input = fory.serialize(true);
     const result = fory.deserialize(
         input

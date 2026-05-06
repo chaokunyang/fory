@@ -234,7 +234,7 @@ fn test_tuple_struct_with_tuple_field() {
 
 #[test]
 fn test_tuple_struct_xlang_mode() {
-    let mut fory = Fory::builder().xlang(true).build();
+    let mut fory = Fory::builder().xlang(true).compatible(false).build();
     fory.register::<Point>(100).unwrap();
     fory.register::<Wrapper>(102).unwrap();
     fory.register::<Triple>(103).unwrap();

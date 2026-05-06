@@ -64,11 +64,13 @@ class ThreadSafeFory;
 /// // Single-threaded Fory (fastest, not thread-safe)
 /// auto fory = Fory::builder()
 ///     .xlang(true)
+///     .compatible(true)
 ///     .build();
 ///
 /// // Thread-safe Fory (uses context pools)
 /// auto fory = Fory::builder()
 ///     .xlang(true)
+///     .compatible(true)
 ///     .build_thread_safe();
 /// ```
 class ForyBuilder {
@@ -79,6 +81,7 @@ public:
   /// Enable/disable compatible mode for schema evolution.
   ForyBuilder &compatible(bool enable) {
     config_.compatible = enable;
+    compatible_set_ = true;
     return *this;
   }
 
@@ -138,7 +141,20 @@ public:
   }
 
 private:
+  const Config &normalized_config() {
+    if (config_.xlang && !compatible_set_) {
+      config_.compatible = true;
+    }
+    // Compatible mode carries field metadata for evolution; schema hash checks
+    // belong only to schema-consistent mode.
+    if (config_.compatible) {
+      config_.check_struct_version = false;
+    }
+    return config_;
+  }
+
   Config config_;
+  bool compatible_set_ = false;
   std::shared_ptr<TypeResolver> type_resolver_;
 
   /// Helper to get or create type resolver and finalize it
@@ -486,7 +502,7 @@ protected:
 ///
 /// Example:
 /// ```cpp
-/// auto fory = Fory::builder().xlang(true).build();
+/// auto fory = Fory::builder().xlang(true).compatible(true).build();
 /// fory.register_struct<MyStruct>(1);
 ///
 /// MyStruct obj{...};
@@ -856,7 +872,10 @@ private:
 ///
 /// Example:
 /// ```cpp
-/// auto fory = Fory::builder().xlang(true).build_thread_safe();
+/// auto fory = Fory::builder()
+///                 .xlang(true)
+///                 .compatible(true)
+///                 .build_thread_safe();
 /// fory.register_struct<MyStruct>(1);
 ///
 /// // Can be used from multiple threads safely
@@ -958,7 +977,7 @@ inline std::shared_ptr<TypeResolver> ForyBuilder::get_finalized_resolver() {
   if (!type_resolver_) {
     type_resolver_ = std::make_shared<TypeResolver>();
   }
-  type_resolver_->apply_config(config_);
+  type_resolver_->apply_config(normalized_config());
   auto final_result = type_resolver_->build_final_type_resolver();
   FORY_CHECK(final_result.ok()) << "Failed to build finalized TypeResolver: "
                                 << final_result.error().to_string();
@@ -969,7 +988,7 @@ inline Fory ForyBuilder::build() {
   if (!type_resolver_) {
     type_resolver_ = std::make_shared<TypeResolver>();
   }
-  type_resolver_->apply_config(config_);
+  type_resolver_->apply_config(normalized_config());
   // Don't finalize yet - allow type registration, finalize on first use
   return Fory(config_, type_resolver_);
 }
@@ -978,7 +997,7 @@ inline ThreadSafeFory ForyBuilder::build_thread_safe() {
   if (!type_resolver_) {
     type_resolver_ = std::make_shared<TypeResolver>();
   }
-  type_resolver_->apply_config(config_);
+  type_resolver_->apply_config(normalized_config());
   // ThreadSafeFory builds finalized resolver lazily
   return ThreadSafeFory(config_, type_resolver_);
 }

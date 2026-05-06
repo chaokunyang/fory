@@ -27,7 +27,7 @@ import (
 )
 
 func TestTypeResolver(t *testing.T) {
-	fory := NewFory(WithTrackRef(false), WithXlang(true))
+	fory := NewFory(WithTrackRef(false), WithXlang(true), WithCompatible(false))
 	typeResolver := fory.typeResolver
 	type A struct {
 		F1 string
@@ -184,7 +184,7 @@ func TestGetArraySerializerReducedPrecisionTypes(t *testing.T) {
 }
 
 func TestGetTypeInfoReducedPrecisionArrayTypeIDs(t *testing.T) {
-	fory := NewFory(WithXlang(true))
+	fory := NewFory(WithXlang(true), WithCompatible(false))
 	r := newTypeResolver(fory)
 
 	float16Info, err := r.GetTypeInfo(reflect.ValueOf([2]float16.Float16{}), true)

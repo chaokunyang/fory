@@ -86,7 +86,7 @@ class NestedDenseArrays:
 
 
 def test_unsigned_array_typedef_type_ids():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(UnsignedArrays, namespace="test", typename="UnsignedArrays")
 
     typedef = encode_typedef(fory.type_resolver, UnsignedArrays)
@@ -101,7 +101,7 @@ def test_unsigned_array_typedef_type_ids():
 
 
 def test_unsigned_array_fingerprint_type_ids():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     serializer = DataClassSerializer(fory.type_resolver, UnsignedArrays)
 
     fingerprint = compute_struct_fingerprint(
@@ -117,7 +117,7 @@ def test_unsigned_array_fingerprint_type_ids():
 
 
 def test_array_typehint_roundtrips_public_dense_wrappers():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(DenseListArray, namespace="test", typename="DenseListArray")
     obj = DenseListArray(values=pyfory.Int32Array([1, -2, 3]), flags=pyfory.BoolArray([True, False, True]))
 
@@ -132,7 +132,7 @@ def test_array_typehint_roundtrips_public_dense_wrappers():
 
 
 def test_array_typehint_roundtrips_list_value_through_adapter():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(DenseListArray, namespace="test", typename="DenseListArray")
     obj = DenseListArray(values=[1, -2, 3], flags=[True, False, True])
 
@@ -145,7 +145,7 @@ def test_array_typehint_roundtrips_list_value_through_adapter():
 
 
 def test_array_typehint_roundtrips_array_array_value():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(DenseListArray, namespace="test", typename="DenseListArray")
     obj = DenseListArray(values=array.array("i", [1, -2, 3]), flags=[True])
 
@@ -157,7 +157,7 @@ def test_array_typehint_roundtrips_array_array_value():
 
 @pytest.mark.skipif(np is None, reason="Requires numpy")
 def test_array_typehint_roundtrips_ndarray_value():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(DenseListArray, namespace="test", typename="DenseListArray")
     obj = DenseListArray(values=np.array([1, -2, 3], dtype=np.int32), flags=[True])
 
@@ -169,7 +169,7 @@ def test_array_typehint_roundtrips_ndarray_value():
 
 @pytest.mark.skipif(np is None, reason="Requires numpy")
 def test_nested_array_typehint_uses_declared_carrier_dispatch():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(NestedDenseArrays, namespace="test", typename="NestedDenseArrays")
     obj = NestedDenseArrays(
         values=[
@@ -188,7 +188,7 @@ def test_nested_array_typehint_uses_declared_carrier_dispatch():
 
 
 def test_array_typehint_uses_distinct_carrier_serializers():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     serializer = DataClassSerializer(fory.type_resolver, DenseListArray)
     value_serializer = serializer._serializers[serializer._field_names.index("values")]
 
@@ -204,7 +204,7 @@ def test_array_typehint_uses_distinct_carrier_serializers():
 
 
 def test_array_typehint_list_adapter_reports_invalid_index():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(DenseListArray, namespace="test", typename="DenseListArray")
     obj = DenseListArray(values=[1, 2**31], flags=[True])
 
@@ -213,7 +213,7 @@ def test_array_typehint_list_adapter_reports_invalid_index():
 
 
 def test_array_typehint_rejects_wrong_array_array_typecode():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(DenseListArray, namespace="test", typename="DenseListArray")
     obj = DenseListArray(values=array.array("h", [1, 2, 3]), flags=[True])
 
@@ -223,7 +223,7 @@ def test_array_typehint_rejects_wrong_array_array_typecode():
 
 @pytest.mark.skipif(np is None, reason="Requires numpy")
 def test_float16_ndarray_and_array_typehints_roundtrip():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(ReducedPrecisionArrays, namespace="test", typename="ReducedPrecisionArrays")
     obj = ReducedPrecisionArrays(
         halves=np.array([0.0, 1.0, -2.0], dtype=np.float16),
@@ -240,7 +240,7 @@ def test_float16_ndarray_and_array_typehints_roundtrip():
 
 
 def test_pyarray_typehint_roundtrips_python_array_carrier():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(PyDenseArray, namespace="test", typename="PyDenseArray")
     obj = PyDenseArray(values=array.array("i", [1, -2, 3]))
 
@@ -305,7 +305,7 @@ def test_compatible_pyarray_field_reads_as_fory_array_carrier():
     ],
 )
 def test_unsigned_numpy_array_roundtrip_top_level(dtype, values, wrapper_type):
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     arr = np.array(values, dtype=dtype)
     data = fory.serialize(arr)
     out = fory.deserialize(data)
@@ -316,7 +316,7 @@ def test_unsigned_numpy_array_roundtrip_top_level(dtype, values, wrapper_type):
 
 @pytest.mark.skipif(np is None, reason="Requires numpy")
 def test_unsigned_numpy_array_roundtrip_struct():
-    fory = Fory(xlang=True)
+    fory = Fory(xlang=True, compatible=False)
     fory.register_type(UnsignedArrays, namespace="test", typename="UnsignedArrays")
     obj = UnsignedArrays(
         u8=np.array([0, 1, 255], dtype=np.uint8),

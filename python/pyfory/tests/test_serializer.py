@@ -51,6 +51,16 @@ from pyfory.utils import lazy_import
 pa = lazy_import("pyarrow")
 
 
+def test_xlang_defaults_to_compatible_unless_explicitly_set():
+    default_xlang = Fory(xlang=True)
+    explicit_schema_consistent = Fory(compatible=False, xlang=True)
+    explicit_schema_consistent_reverse_order = Fory(xlang=True, compatible=False)
+
+    assert default_xlang.compatible is True
+    assert explicit_schema_consistent.compatible is False
+    assert explicit_schema_consistent_reverse_order.compatible is False
+
+
 def test_float():
     fory = Fory(xlang=False, ref=True)
     assert ser_de(fory, -1.0) == -1.0
@@ -175,7 +185,7 @@ def test_basic_serializer(xlang):
 
 
 def test_float16_round_trip():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     typeinfo = fory.type_resolver.get_type_info(pyfory.Float16)
     assert isinstance(typeinfo.serializer, pyfory.Float16Serializer)
     assert typeinfo.type_id == TypeId.FLOAT16
@@ -185,7 +195,7 @@ def test_float16_round_trip():
 
 
 def test_bfloat16_round_trip():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     typeinfo = fory.type_resolver.get_type_info(pyfory.BFloat16)
     assert isinstance(typeinfo.serializer, pyfory.BFloat16Serializer)
     assert typeinfo.type_id == TypeId.BFLOAT16
@@ -245,7 +255,7 @@ def test_dense_array_carriers_support_pickle(array_type, values):
     ],
 )
 def test_dense_array_carriers_use_distinct_serializers(array_type, type_id):
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     typeinfo = fory.type_resolver.get_type_info(array_type)
 
     assert typeinfo.type_id == type_id
@@ -253,7 +263,7 @@ def test_dense_array_carriers_use_distinct_serializers(array_type, type_id):
 
 
 def test_float16_array_round_trip():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     values = pyfory.Float16Array.from_values([0.0, 1.0, -2.0])
     typeinfo = fory.type_resolver.get_type_info(pyfory.Float16Array)
     assert isinstance(typeinfo.serializer, fory_array_serializer_type(TypeId.FLOAT16_ARRAY))
@@ -295,7 +305,7 @@ def test_float16_array_is_list_compatible():
 
 
 def test_bfloat16_array_round_trip():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     values = pyfory.BFloat16Array.from_values([0.0, 1.0, -2.0])
     typeinfo = fory.type_resolver.get_type_info(pyfory.BFloat16Array)
     assert isinstance(typeinfo.serializer, fory_array_serializer_type(TypeId.BFLOAT16_ARRAY))
@@ -367,7 +377,7 @@ def test_decimal_round_trip(xlang):
 
 
 def test_decimal_codec_canonical_round_trip():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     buffer = Buffer.allocate(256)
     values = [
         decimal.Decimal("0"),
@@ -391,7 +401,7 @@ def test_decimal_codec_canonical_round_trip():
 
 
 def test_decimal_codec_rejects_non_canonical_big_payloads():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     serializer = DecimalSerializer(fory.type_resolver, decimal.Decimal)
 
     zero_big_encoding = Buffer.allocate(32)
@@ -411,7 +421,7 @@ def test_decimal_codec_rejects_non_canonical_big_payloads():
 
 
 def test_decimal_rejects_non_finite_values():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     serializer = DecimalSerializer(fory.type_resolver, decimal.Decimal)
     buffer = Buffer.allocate(32)
     with pytest.raises(ValueError, match="must be finite"):
@@ -774,7 +784,7 @@ def test_enum():
 
 
 def test_xlang_enum_uses_sparse_integer_values():
-    fory = Fory(xlang=True, ref=False)
+    fory = Fory(xlang=True, compatible=False, ref=False)
     fory.register_type(SparseIntEnum, type_id=301)
     assert ser_de(fory, SparseIntEnum.A) == SparseIntEnum.A
     assert ser_de(fory, SparseIntEnum.B) == SparseIntEnum.B

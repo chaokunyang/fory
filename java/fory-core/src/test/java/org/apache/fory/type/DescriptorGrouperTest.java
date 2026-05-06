@@ -165,7 +165,7 @@ public class DescriptorGrouperTest extends ForyTestBase {
 
   @Test
   public void testXlangPrimitiveComparatorUsesAscendingTypeIdTieBreaker() {
-    Fory fory = Fory.builder().withXlang(true).build();
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).build();
     List<Descriptor> descriptors = new ArrayList<>();
     descriptors.add(
         createDescriptor(TypeRef.of(Short.class), "shortValue", -1, "TestClass", false));

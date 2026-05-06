@@ -85,4 +85,21 @@ public class ForyBuilderTest {
 
     assertFalse(schemaConsistent.getConfig().isCompatible());
   }
+
+  @Test
+  public void testXlangDefaultsToCompatibleUnlessExplicitlySet() {
+    Fory defaultXlang = new ForyBuilder().withXlang(true).build();
+    Fory explicitSchemaConsistent =
+        new ForyBuilder().withCompatible(false).withXlang(true).withClassVersionCheck(true).build();
+    Fory explicitSchemaConsistentReverseOrder =
+        new ForyBuilder().withXlang(true).withCompatible(false).withClassVersionCheck(true).build();
+
+    assertTrue(defaultXlang.getConfig().isCompatible());
+    assertFalse(defaultXlang.getConfig().checkClassVersion());
+
+    assertFalse(explicitSchemaConsistent.getConfig().isCompatible());
+    assertTrue(explicitSchemaConsistent.getConfig().checkClassVersion());
+    assertFalse(explicitSchemaConsistentReverseOrder.getConfig().isCompatible());
+    assertTrue(explicitSchemaConsistentReverseOrder.getConfig().checkClassVersion());
+  }
 }

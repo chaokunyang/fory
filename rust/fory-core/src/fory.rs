@@ -61,6 +61,7 @@ thread_local! {
 #[derive(Default)]
 pub struct ForyBuilder {
     config: Config,
+    compatible_set: bool,
 }
 
 impl ForyBuilder {
@@ -92,11 +93,14 @@ impl ForyBuilder {
     /// let fory = Fory::builder().compatible(true).build();
     /// ```
     pub fn compatible(mut self, compatible: bool) -> Self {
+        self.compatible_set = true;
         // Setting share_meta individually is not supported currently
         self.config.share_meta = compatible;
         self.config.compatible = compatible;
         if compatible {
             self.config.check_struct_version = false;
+        } else if self.config.xlang {
+            self.config.check_struct_version = true;
         }
         self
     }
@@ -123,7 +127,7 @@ impl ForyBuilder {
     /// use fory_core::Fory;
     ///
     /// // For cross-language use (default)
-    /// let fory = Fory::builder().xlang(true).build();
+    /// let fory = Fory::builder().xlang(true).compatible(true).build();
     ///
     /// // For Rust-only optimization, this mode is faster and more compact since it avoids
     /// // cross-language metadata and type system costs.
@@ -131,6 +135,12 @@ impl ForyBuilder {
     /// ```
     pub fn xlang(mut self, xlang: bool) -> Self {
         self.config.xlang = xlang;
+        if xlang && !self.compatible_set {
+            self.config.share_meta = true;
+            self.config.compatible = true;
+            self.config.check_struct_version = false;
+            return self;
+        }
         if !self.config.check_struct_version {
             self.config.check_struct_version = !self.config.compatible;
         }
@@ -352,6 +362,30 @@ impl ForyBuilder {
     /// Builds a [`Fory`] runtime with the current builder configuration.
     pub fn build(self) -> Fory {
         Fory::from_config(self.config)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Fory;
+
+    #[test]
+    fn xlang_defaults_to_compatible_unless_explicitly_set() {
+        let default_xlang = Fory::builder().xlang(true).build();
+        let explicit_schema_consistent = Fory::builder().compatible(false).xlang(true).build();
+        let explicit_schema_consistent_reverse_order =
+            Fory::builder().xlang(true).compatible(false).build();
+
+        assert!(default_xlang.is_compatible());
+        assert!(default_xlang.is_share_meta());
+        assert!(!default_xlang.is_check_struct_version());
+
+        assert!(!explicit_schema_consistent.is_compatible());
+        assert!(!explicit_schema_consistent.is_share_meta());
+        assert!(explicit_schema_consistent.is_check_struct_version());
+        assert!(!explicit_schema_consistent_reverse_order.is_compatible());
+        assert!(!explicit_schema_consistent_reverse_order.is_share_meta());
+        assert!(explicit_schema_consistent_reverse_order.is_check_struct_version());
     }
 }
 

@@ -125,7 +125,8 @@ inline std::vector<uint8_t> buffer_bytes(Buffer &buffer) {
 
 template <typename T>
 void test_roundtrip(const T &original, bool should_equal = true) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   register_test_types(fory);
 
   // Serialize
@@ -208,7 +209,8 @@ TEST(SerializationTest, StringRoundtrip) {
 }
 
 TEST(SerializationTest, DurationRoundtrip) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   std::vector<Duration> values = {
       Duration(0),
       std::chrono::seconds(12) + Duration(345678901),
@@ -231,7 +233,8 @@ TEST(SerializationTest, DurationRoundtrip) {
 }
 
 TEST(SerializationTest, DateExposesDaysSinceEpochAccessorAndRoundTrips) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   Date original(-1);
 
   EXPECT_EQ(original.days_since_epoch(), -1);
@@ -255,7 +258,8 @@ TEST(SerializationTest, DateExposesDaysSinceEpochAccessorAndRoundTrips) {
 }
 
 TEST(SerializationTest, DateRejectsXlangDayCountsOutsideInt32Range) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
   write_ctx.write_var_int64(
       static_cast<int64_t>(std::numeric_limits<int32_t>::max()) + 1);
@@ -271,7 +275,8 @@ TEST(SerializationTest, DateRejectsXlangDayCountsOutsideInt32Range) {
 }
 
 TEST(SerializationTest, DateSkipConsumesVarInt64DayCount) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
   Serializer<Date>::write_data(Date(18954), write_ctx);
   ASSERT_FALSE(write_ctx.has_error()) << write_ctx.error().to_string();
@@ -287,7 +292,8 @@ TEST(SerializationTest, DateSkipConsumesVarInt64DayCount) {
 }
 
 TEST(SerializationTest, DecimalRoundTripsEdgeCases) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   std::vector<Decimal> values = {
       Decimal::from_int64(0, 0),
       Decimal::from_int64(0, 3),
@@ -323,7 +329,8 @@ TEST(SerializationTest, DecimalRoundTripsEdgeCases) {
 }
 
 TEST(SerializationTest, DecimalRejectsNonCanonicalBigPayloads) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
 
   Buffer zero_big_encoding;
   zero_big_encoding.write_uint8(0b1);
@@ -355,7 +362,8 @@ TEST(SerializationTest, DecimalRejectsNonCanonicalBigPayloads) {
 }
 
 TEST(SerializationTest, DecimalSkipConsumesScaleHeaderAndPayload) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
   Serializer<Decimal>::write_data(
       Decimal::from_bytes(37, false,
@@ -381,7 +389,8 @@ TEST(SerializationTest, DurationUsesSecondsAndNanosecondsPayload) {
     int32_t expected_nanos;
   };
 
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   std::vector<TestCase> cases = {
       {Duration(1234567890), 1, 234567890},
       {Duration(-1234567890), -1, -234567890},
@@ -409,7 +418,8 @@ TEST(SerializationTest, DurationUsesSecondsAndNanosecondsPayload) {
 }
 
 TEST(SerializationTest, DurationSkipConsumesSecondsAndNanosecondsPayload) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   WriteContext write_ctx(fory.config(), fory.type_resolver().clone());
   Serializer<Duration>::write_data(Duration(-1), write_ctx);
   ASSERT_FALSE(write_ctx.has_error()) << write_ctx.error().to_string();
@@ -476,7 +486,8 @@ TEST(SerializationTest, SparseEnumRoundtrip) {
 }
 
 TEST(SerializationTest, EnumSerializesOrdinalValue) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   fory.register_enum<SignedScopedStatus>(1);
 
   auto bytes_result = fory.serialize(SignedScopedStatus::LARGE);
@@ -498,7 +509,8 @@ TEST(SerializationTest, EnumSerializesOrdinalValue) {
 }
 
 TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   fory.register_enum<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_POS);
@@ -517,7 +529,8 @@ TEST(SerializationTest, OldEnumSerializesOrdinalValue) {
 }
 
 TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   fory.register_enum<SignedScopedStatus>(1);
 
   auto bytes_result = fory.serialize(SignedScopedStatus::NEG);
@@ -542,7 +555,8 @@ TEST(SerializationTest, EnumOrdinalMappingHandlesNonZeroStart) {
 }
 
 TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   fory.register_enum<SignedScopedStatus>(1);
 
   auto bytes_result = fory.serialize(SignedScopedStatus::NEG);
@@ -561,7 +575,8 @@ TEST(SerializationTest, EnumOrdinalMappingRejectsInvalidOrdinal) {
 }
 
 TEST(SerializationTest, SparseEnumSerializesExplicitValue) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   fory.register_enum<SparseStatus>(1);
 
   auto bytes_result = fory.serialize(SparseStatus::OK);
@@ -584,7 +599,8 @@ TEST(SerializationTest, SparseEnumSerializesExplicitValue) {
 }
 
 TEST(SerializationTest, OldEnumOrdinalMappingHandlesNonZeroStart) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   fory.register_enum<OldStatus>(1);
 
   auto bytes_result = fory.serialize(OldStatus::OLD_NEG);
@@ -693,7 +709,7 @@ TEST(SerializationTest, DeserializeZeroSize) {
 }
 
 TEST(SerializationTest, DeserializeRejectsXlangProtocolMismatch) {
-  auto writer = Fory::builder().xlang(true).build();
+  auto writer = Fory::builder().xlang(true).compatible(false).build();
   auto reader = Fory::builder().xlang(false).build();
 
   auto bytes_result = writer.serialize<int32_t>(123);
@@ -710,7 +726,7 @@ TEST(SerializationTest, DeserializeRejectsXlangProtocolMismatch) {
 }
 
 TEST(SerializationTest, RootHeaderUsesXlangBitZero) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   auto bytes_result = fory.serialize<int32_t>(123);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
@@ -719,7 +735,7 @@ TEST(SerializationTest, RootHeaderUsesXlangBitZero) {
 }
 
 TEST(SerializationTest, DeserializeRejectsRootHeaderReservedBits) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   auto bytes_result = fory.serialize<int32_t>(123);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
@@ -732,7 +748,7 @@ TEST(SerializationTest, DeserializeRejectsRootHeaderReservedBits) {
 }
 
 TEST(SerializationTest, DeserializeRejectsOutOfBandRootHeader) {
-  auto fory = Fory::builder().xlang(true).build();
+  auto fory = Fory::builder().xlang(true).compatible(false).build();
   auto bytes_result = fory.serialize<int32_t>(123);
   ASSERT_TRUE(bytes_result.ok())
       << "Serialization failed: " << bytes_result.error().to_string();
@@ -745,7 +761,8 @@ TEST(SerializationTest, DeserializeRejectsOutOfBandRootHeader) {
 }
 
 TEST(SerializationTest, RegistrationByIdFailureDoesNotLeakTypeInfo) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   TypeResolver &resolver = fory.type_resolver();
 
   ASSERT_TRUE(fory.register_struct<::SimpleStruct>(1).ok());
@@ -767,7 +784,8 @@ TEST(SerializationTest, RegistrationByIdFailureDoesNotLeakTypeInfo) {
 }
 
 TEST(SerializationTest, RegistrationByNameFailureDoesNotLeakTypeInfo) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build();
+  auto fory =
+      Fory::builder().xlang(true).compatible(false).track_ref(false).build();
   TypeResolver &resolver = fory.type_resolver();
 
   ASSERT_TRUE(fory.register_struct<::SimpleStruct>("demo", "SharedType").ok());
@@ -967,9 +985,23 @@ TEST(SerializationTest, ConfigurationBuilder) {
 
   EXPECT_TRUE(fory1.config().compatible);
   EXPECT_FALSE(fory1.config().xlang);
-  EXPECT_TRUE(fory1.config().check_struct_version);
+  EXPECT_FALSE(fory1.config().check_struct_version);
   EXPECT_EQ(fory1.config().max_dyn_depth, 10);
   EXPECT_FALSE(fory1.config().track_ref);
+
+  auto default_xlang = Fory::builder().xlang(true).build();
+  auto explicit_schema_consistent =
+      Fory::builder().compatible(false).xlang(true).build();
+  auto explicit_schema_consistent_reverse_order =
+      Fory::builder().xlang(true).compatible(false).build();
+  auto compatible_with_version_check =
+      Fory::builder().compatible(true).check_struct_version(true).build();
+
+  EXPECT_TRUE(default_xlang.config().compatible);
+  EXPECT_FALSE(default_xlang.config().check_struct_version);
+  EXPECT_FALSE(explicit_schema_consistent.config().compatible);
+  EXPECT_FALSE(explicit_schema_consistent_reverse_order.config().compatible);
+  EXPECT_FALSE(compatible_with_version_check.config().check_struct_version);
 }
 
 // ============================================================================
@@ -977,7 +1009,11 @@ TEST(SerializationTest, ConfigurationBuilder) {
 // ============================================================================
 
 TEST(SerializationTest, ThreadSafeForyMultiThread) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build_thread_safe();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .build_thread_safe();
   fory.register_struct<::ComplexStruct>(1);
 
   constexpr int k_num_threads = 8;
@@ -1014,7 +1050,11 @@ TEST(SerializationTest, ThreadSafeForyMultiThread) {
 }
 
 TEST(SerializationTest, ThreadSafeForyRejectsRegistrationAfterFirstSerialize) {
-  auto fory = Fory::builder().xlang(true).track_ref(false).build_thread_safe();
+  auto fory = Fory::builder()
+                  .xlang(true)
+                  .compatible(false)
+                  .track_ref(false)
+                  .build_thread_safe();
   ASSERT_TRUE(fory.register_struct<::ComplexStruct>(1).ok());
 
   ::ComplexStruct original{"Alice", 30, {"reading", "coding"}};

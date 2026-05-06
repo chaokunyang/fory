@@ -24,7 +24,7 @@ Fory supports schema evolution through compatible mode.
 ## Enable Compatible Mode
 
 ```swift
-let fory = Fory(xlang: true, trackRef: false, compatible: true)
+let fory = Fory(xlang: true, ref: false, compatible: true)
 ```
 
 ## Example: Evolving a Struct

@@ -45,7 +45,7 @@ fn test_unsigned_arrays() {
 
 #[test]
 fn test_unsigned_arrays_when_xlang() {
-    let fory = Fory::builder().xlang(true).build();
+    let fory = Fory::builder().xlang(true).compatible(false).build();
     // u8, u16, u32, u64 arrays are now supported in xlang mode
     assert!(fory.serialize(&vec![u8::MAX]).is_ok());
     assert!(fory.serialize(&vec![u16::MAX]).is_ok());
@@ -58,7 +58,7 @@ fn test_unsigned_arrays_when_xlang() {
 
 #[test]
 fn test_binary_when_xlang() {
-    let mut fory = Fory::builder().xlang(true).build();
+    let mut fory = Fory::builder().xlang(true).compatible(false).build();
     #[derive(ForyStruct, Debug, PartialEq)]
     struct UnsignedData {
         binary: Vec<u8>,

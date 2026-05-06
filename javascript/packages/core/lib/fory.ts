@@ -82,7 +82,7 @@ export default class Fory {
       maxBinarySize: config?.maxBinarySize,
       maxCollectionSize: config?.maxCollectionSize,
       hooks: config?.hooks || {},
-      compatible: Boolean(config?.compatible),
+      compatible: config?.compatible ?? true,
     };
   }
 

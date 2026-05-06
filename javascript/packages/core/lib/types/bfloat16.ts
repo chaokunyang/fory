@@ -70,7 +70,7 @@ export function fromBFloat16Bits(bits: number): number {
 export class BFloat16Array {
   static readonly BYTES_PER_ELEMENT = 2;
   readonly BYTES_PER_ELEMENT = 2;
-  private readonly _data: Uint16Array;
+  private _data: Uint16Array;
 
   constructor(length: number);
   constructor(source: BFloat16Array | Uint16Array | ArrayLike<BFloat16 | number>);
@@ -143,11 +143,7 @@ export class BFloat16Array {
 
   static fromRaw(data: Uint16Array): BFloat16Array {
     const array = Object.create(BFloat16Array.prototype) as BFloat16Array;
-    Object.defineProperty(array, "_data", {
-      value: data,
-      enumerable: false,
-      writable: false,
-    });
+    array._data = data;
     return array;
   }
 

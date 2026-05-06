@@ -817,14 +817,14 @@ func compatibleListFieldCanReadLocalArray(remoteSpec *TypeSpec, localSpec *TypeS
 	if localType.Kind() != reflect.Array && localType.Kind() != reflect.Slice {
 		return false
 	}
-	remoteSpec.normalizeChildren()
-	localSpec.normalizeChildren()
 	if remoteSpec.TypeID != LIST || remoteSpec.Element == nil {
 		return false
 	}
 	if !isPrimitiveArrayType(localSpec.TypeID) {
 		return false
 	}
+	remoteSpec.normalizeChildren()
+	localSpec.normalizeChildren()
 	if _, ok := primitiveArrayElementTypeID(localSpec.TypeID); !ok {
 		return false
 	}

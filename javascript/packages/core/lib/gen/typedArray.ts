@@ -158,12 +158,28 @@ class BoolArraySerializerGenerator extends BaseSerializerGenerator {
   read(accessor: (expr: string) => string, refState: string): string {
     const result = this.scope.uniqueName("result");
     const len = this.scope.uniqueName("len");
+    const idx = this.scope.uniqueName("idx");
+    const raw = this.scope.uniqueName("raw");
+    const bits = this.scope.uniqueName("bits");
     const copied = this.scope.uniqueName("copied");
+    const readByte = this.builder.reader.readUint8();
     return `
                 const ${len} = ${this.builder.reader.readVarUInt32()};
                 ${this.builder.getReadContextName()}.checkCollectionSize(${len});
-                const ${copied} = ${this.builder.reader.buffer(len)}
-                const ${result} = external.BoolArray.fromRaw(${copied});
+                let ${result};
+                if (${len} === 4) {
+                  const ${bits} = ${this.builder.reader.readUint32()};
+                  ${result} = external.BoolArray.fromPacked4(${bits});
+                } else if (${len} <= 32) {
+                  ${result} = new external.BoolArray(${len});
+                  const ${raw} = ${result}.raw;
+                  for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+                    ${raw}[${idx}] = ${readByte};
+                  }
+                } else {
+                  const ${copied} = ${this.builder.reader.buffer(len)}
+                  ${result} = external.BoolArray.fromRaw(${copied});
+                }
                 ${this.maybeReference(result, refState)}
                 ${accessor(result)}
              `;

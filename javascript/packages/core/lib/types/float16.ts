@@ -66,7 +66,7 @@ type Float16Source = ForyFloat16Array | Uint16Array | ArrayLike<number>;
 export class ForyFloat16Array {
   static readonly BYTES_PER_ELEMENT = 2;
   readonly BYTES_PER_ELEMENT = 2;
-  private readonly _data: Uint16Array;
+  private _data: Uint16Array;
 
   constructor(length: number);
   constructor(source: Float16Source);
@@ -150,11 +150,7 @@ export class ForyFloat16Array {
 
   static fromRaw(data: Uint16Array): ForyFloat16Array {
     const array = Object.create(ForyFloat16Array.prototype) as ForyFloat16Array;
-    Object.defineProperty(array, "_data", {
-      value: data,
-      enumerable: false,
-      writable: false,
-    });
+    array._data = data;
     return array;
   }
 

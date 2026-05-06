@@ -177,6 +177,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             }
         }
 
+        EmitCompatibleFieldCodecMethods(sb, model);
+
         sb.AppendLine("    private static bool __ForyCanReadCompatiblePrimitive(global::Apache.Fory.TypeId typeId)");
         sb.AppendLine("    {");
         sb.AppendLine("        return typeId switch");
@@ -687,57 +689,93 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         sb.AppendLine($"        return {resultVar};");
         sb.AppendLine("    }");
         sb.AppendLine();
+    }
 
-        sb.AppendLine(
-            $"    private static {member.TypeName} __ForyReadCompatible{memberId}Field(global::Apache.Fory.ReadContext context, global::Apache.Fory.TypeMetaFieldType remoteFieldType, global::Apache.Fory.RefMode refMode)");
-        sb.AppendLine("    {");
-        sb.AppendLine("        if (remoteFieldType.TypeId == " + codec.TypeId + ")");
-        sb.AppendLine("        {");
-        sb.AppendLine($"            return __ForyRead{memberId}Field(context, refMode);");
-        sb.AppendLine("        }");
-        if (TryBuildCompatibleListArrayReadCodec(codec, out FieldCodecModel? alternateCodec))
+    private static void EmitCompatibleFieldCodecMethods(StringBuilder sb, TypeModel model)
+    {
+        bool hasCompatibleField = false;
+        foreach (MemberModel member in model.SortedMembers)
         {
-            sb.AppendLine("        if (remoteFieldType.TypeId == " + alternateCodec.TypeId + ")");
-            sb.AppendLine("        {");
-            if (codec.Kind == FieldCodecKind.PackedArray)
+            if (member.FieldCodec is not null &&
+                TryBuildCompatibleListArrayReadCodec(member.FieldCodec, out _))
             {
-                sb.AppendLine("            if (remoteFieldType.Generics.Count != 1)");
-                sb.AppendLine("            {");
-                sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException(\"compatible list to array field requires one element schema\");");
-                sb.AppendLine("            }");
+                hasCompatibleField = true;
+                break;
             }
-
-            sb.AppendLine("            if (refMode == global::Apache.Fory.RefMode.NullOnly)");
-            sb.AppendLine("            {");
-            sb.AppendLine("                sbyte refFlag = context.Reader.ReadInt8();");
-            sb.AppendLine("                if (refFlag == (sbyte)global::Apache.Fory.RefFlag.Null)");
-            sb.AppendLine("                {");
-            sb.AppendLine($"                    return ({member.TypeName})default!;");
-            sb.AppendLine("                }");
-            sb.AppendLine();
-            sb.AppendLine("                if (refFlag != (sbyte)global::Apache.Fory.RefFlag.NotNullValue)");
-            sb.AppendLine("                {");
-            sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"invalid nullOnly ref flag {refFlag}\");");
-            sb.AppendLine("                }");
-            sb.AppendLine("            }");
-            id = 0;
-            string compatibleResultVar = $"__{memberId}CompatibleValue";
-            if (codec.Kind == FieldCodecKind.PackedArray && alternateCodec.Kind == FieldCodecKind.List)
-            {
-                EmitReadCompatibleListArrayPayload(sb, codec, compatibleResultVar, 3, ref id);
-            }
-            else
-            {
-                EmitReadPayload(sb, alternateCodec, compatibleResultVar, 3, ref id);
-            }
-
-            sb.AppendLine($"            return {compatibleResultVar};");
-            sb.AppendLine("        }");
         }
 
-        sb.AppendLine("        throw new global::Apache.Fory.InvalidDataException($\"unsupported compatible field schema pair: local " + codec.TypeId + ", remote {remoteFieldType.TypeId}\");");
+        if (!hasCompatibleField)
+        {
+            return;
+        }
+
+        sb.AppendLine("    private static class __ForyCompatibleFieldReaders");
+        sb.AppendLine("    {");
+        foreach (MemberModel member in model.SortedMembers)
+        {
+            if (member.FieldCodec is not null &&
+                TryBuildCompatibleListArrayReadCodec(member.FieldCodec, out FieldCodecModel? alternateCodec))
+            {
+                EmitCompatibleFieldCodecMethod(sb, member, member.FieldCodec, alternateCodec);
+            }
+        }
+
         sb.AppendLine("    }");
         sb.AppendLine();
+    }
+
+    private static void EmitCompatibleFieldCodecMethod(
+        StringBuilder sb,
+        MemberModel member,
+        FieldCodecModel codec,
+        FieldCodecModel alternateCodec)
+    {
+        string memberId = Sanitize(member.Name);
+        sb.AppendLine(
+            $"        internal static {member.TypeName} Read{memberId}(global::Apache.Fory.ReadContext context, global::Apache.Fory.TypeMetaFieldType remoteFieldType, global::Apache.Fory.RefMode refMode)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (remoteFieldType.TypeId == " + codec.TypeId + ")");
+        sb.AppendLine("            {");
+        sb.AppendLine($"                return __ForyRead{memberId}Field(context, refMode);");
+        sb.AppendLine("            }");
+        sb.AppendLine("            if (remoteFieldType.TypeId == " + alternateCodec.TypeId + ")");
+        sb.AppendLine("            {");
+        if (codec.Kind == FieldCodecKind.PackedArray)
+        {
+            sb.AppendLine("                if (remoteFieldType.Generics.Count != 1)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException(\"compatible list to array field requires one element schema\");");
+            sb.AppendLine("                }");
+        }
+
+        sb.AppendLine("                if (refMode == global::Apache.Fory.RefMode.NullOnly)");
+        sb.AppendLine("                {");
+        sb.AppendLine("                    sbyte refFlag = context.Reader.ReadInt8();");
+        sb.AppendLine("                    if (refFlag == (sbyte)global::Apache.Fory.RefFlag.Null)");
+        sb.AppendLine("                    {");
+        sb.AppendLine($"                        return ({member.TypeName})default!;");
+        sb.AppendLine("                    }");
+        sb.AppendLine();
+        sb.AppendLine("                    if (refFlag != (sbyte)global::Apache.Fory.RefFlag.NotNullValue)");
+        sb.AppendLine("                    {");
+        sb.AppendLine("                        throw new global::Apache.Fory.InvalidDataException($\"invalid nullOnly ref flag {refFlag}\");");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                }");
+        int id = 0;
+        string compatibleResultVar = $"__{memberId}CompatibleValue";
+        if (codec.Kind == FieldCodecKind.PackedArray && alternateCodec.Kind == FieldCodecKind.List)
+        {
+            EmitReadCompatibleListArrayPayload(sb, codec, compatibleResultVar, 4, ref id);
+        }
+        else
+        {
+            EmitReadPayload(sb, alternateCodec, compatibleResultVar, 4, ref id);
+        }
+
+        sb.AppendLine($"                return {compatibleResultVar};");
+        sb.AppendLine("            }");
+        sb.AppendLine("            throw new global::Apache.Fory.InvalidDataException($\"unsupported compatible field schema pair: local " + codec.TypeId + ", remote {remoteFieldType.TypeId}\");");
+        sb.AppendLine("        }");
     }
 
     private static bool TryBuildCompatibleListArrayReadCodec(FieldCodecModel codec, out FieldCodecModel compatibleCodec)
@@ -1597,10 +1635,11 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         if (member.FieldCodec is not null)
         {
-            if (variableSuffix == "Compat")
+            if (variableSuffix == "Compat" &&
+                TryBuildCompatibleListArrayReadCodec(member.FieldCodec, out _))
             {
                 sb.AppendLine(
-                    $"{indent}{assignmentTarget} = __ForyReadCompatible{Sanitize(member.Name)}Field(context, remoteField.FieldType, {refModeExpr});");
+                    $"{indent}{assignmentTarget} = __ForyCompatibleFieldReaders.Read{Sanitize(member.Name)}(context, remoteField.FieldType, {refModeExpr});");
             }
             else
             {

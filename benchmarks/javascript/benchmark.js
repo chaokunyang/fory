@@ -29,7 +29,7 @@ const core = require(path.join(JS_ROOT, "packages", "core", "dist", "index.js"))
 const protobuf = require(path.join(JS_ROOT, "node_modules", "protobufjs"));
 
 const Fory = core.default;
-const { Type } = core;
+const { BoolArray, Type } = core;
 
 const DEFAULT_DURATION_SECONDS = 3;
 const SERIALIZER_ORDER = ["fory", "protobuf", "json"];
@@ -664,6 +664,26 @@ function normalizeForyValue(datasetKey, value) {
   }
 }
 
+function normalizeForyRoundTripValue(datasetKey, value) {
+  switch (datasetKey) {
+    case "sample":
+      return {
+        ...value,
+        boolean_array: value.boolean_array instanceof BoolArray
+          ? Array.from(value.boolean_array)
+          : value.boolean_array,
+      };
+    case "samplelist":
+      return {
+        sample_list: value.sample_list.map((item) =>
+          normalizeForyRoundTripValue("sample", item)
+        ),
+      };
+    default:
+      return value;
+  }
+}
+
 function normalizeProtobufValue(datasetKey, value) {
   switch (datasetKey) {
     case "sample":
@@ -687,7 +707,10 @@ function ensureSerializationWorks(dataset) {
   const foryValue = normalizeForyValue(dataset.key, value);
   const foryBytes = dataset.forySerializer.serialize(foryValue);
   const foryRoundTrip = dataset.forySerializer.deserialize(foryBytes);
-  assert.deepStrictEqual(foryRoundTrip, foryValue);
+  assert.deepStrictEqual(
+    normalizeForyRoundTripValue(dataset.key, foryRoundTrip),
+    foryValue
+  );
 
   const protoPayload = dataset.toProto(value);
   const protoBytes = dataset.protoType.encode(dataset.protoType.create(protoPayload)).finish();

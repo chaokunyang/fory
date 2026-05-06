@@ -20,19 +20,26 @@
 export class BoolArray {
   static readonly BYTES_PER_ELEMENT = 1;
   readonly BYTES_PER_ELEMENT = 1;
-  private readonly _data: Uint8Array;
+  private _data: Uint8Array | null;
+  private _length: number;
+  private _packedBits: number;
 
   constructor(length: number);
   constructor(source: BoolArray | Uint8Array | ArrayLike<boolean>);
   constructor(lengthOrSource: number | BoolArray | Uint8Array | ArrayLike<boolean>) {
+    this._packedBits = 0;
     if (typeof lengthOrSource === "number") {
       this._data = new Uint8Array(lengthOrSource);
+      this._length = lengthOrSource;
     } else if (lengthOrSource instanceof BoolArray) {
       this._data = new Uint8Array(lengthOrSource.raw);
+      this._length = this._data.length;
     } else if (lengthOrSource instanceof Uint8Array) {
       this._data = new Uint8Array(lengthOrSource);
+      this._length = this._data.length;
     } else {
       this._data = new Uint8Array(lengthOrSource.length);
+      this._length = lengthOrSource.length;
       for (let i = 0; i < lengthOrSource.length; i++) {
         this._data[i] = lengthOrSource[i] ? 1 : 0;
       }
@@ -40,27 +47,43 @@ export class BoolArray {
   }
 
   get length(): number {
-    return this._data.length;
+    return this._length;
   }
 
   get byteLength(): number {
-    return this._data.byteLength;
+    return this._length;
   }
 
   get byteOffset(): number {
-    return this._data.byteOffset;
+    return this._data === null ? 0 : this._data.byteOffset;
   }
 
   get buffer(): ArrayBufferLike {
-    return this._data.buffer;
+    return this.raw.buffer;
   }
 
   get raw(): Uint8Array {
-    return this._data;
+    let data = this._data;
+    if (data !== null) {
+      return data;
+    }
+    data = new Uint8Array(this._length);
+    let bits = this._packedBits;
+    for (let i = 0; i < this._length; i++) {
+      data[i] = bits & 0xFF;
+      bits >>>= 8;
+    }
+    this._data = data;
+    this._packedBits = 0;
+    return data;
   }
 
   get(index: number): boolean {
-    return this._data[index] !== 0;
+    const data = this._data;
+    if (data !== null) {
+      return data[index] !== 0;
+    }
+    return ((this._packedBits >>> (index * 8)) & 0xFF) !== 0;
   }
 
   at(index: number): boolean | undefined {
@@ -72,30 +95,31 @@ export class BoolArray {
   }
 
   set(values: BoolArray | ArrayLike<boolean>, offset = 0): void {
+    const data = this.raw;
     if (values instanceof BoolArray) {
-      this._data.set(values.raw, offset);
+      data.set(values.raw, offset);
       return;
     }
     for (let i = 0; i < values.length; i++) {
-      this._data[offset + i] = values[i] ? 1 : 0;
+      data[offset + i] = values[i] ? 1 : 0;
     }
   }
 
   setValue(index: number, value: boolean): void {
-    this._data[index] = value ? 1 : 0;
+    this.raw[index] = value ? 1 : 0;
   }
 
   fill(value: boolean, start?: number, end?: number): this {
-    this._data.fill(value ? 1 : 0, start, end);
+    this.raw.fill(value ? 1 : 0, start, end);
     return this;
   }
 
   slice(start?: number, end?: number): BoolArray {
-    return BoolArray.fromRaw(this._data.slice(start, end));
+    return BoolArray.fromRaw(this.raw.slice(start, end));
   }
 
   subarray(begin?: number, end?: number): BoolArray {
-    return BoolArray.fromRaw(this._data.subarray(begin, end));
+    return BoolArray.fromRaw(this.raw.subarray(begin, end));
   }
 
   toArray(): boolean[] {
@@ -104,22 +128,32 @@ export class BoolArray {
 
   static fromRaw(data: Uint8Array): BoolArray {
     const array = Object.create(BoolArray.prototype) as BoolArray;
-    Object.defineProperty(array, "_data", {
-      value: data,
-      enumerable: false,
-      writable: false,
-    });
+    array._data = data;
+    array._length = data.length;
+    array._packedBits = 0;
+    return array;
+  }
+
+  static fromPacked4(bits: number): BoolArray {
+    const array = Object.create(BoolArray.prototype) as BoolArray;
+    array._data = null;
+    array._length = 4;
+    array._packedBits = bits;
     return array;
   }
 
   [Symbol.iterator](): IterableIterator<boolean> {
     let i = 0;
     const data = this._data;
-    const len = data.length;
+    const len = this._length;
+    const bits = this._packedBits;
     return {
       next(): IteratorResult<boolean> {
         if (i < len) {
-          return { value: data[i++] !== 0, done: false };
+          const value = data === null
+            ? ((bits >>> ((i++) * 8)) & 0xFF) !== 0
+            : data[i++] !== 0;
+          return { value, done: false };
         }
         return { value: undefined as unknown as boolean, done: true };
       },

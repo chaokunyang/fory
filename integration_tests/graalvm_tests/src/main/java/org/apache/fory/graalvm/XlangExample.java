@@ -28,7 +28,12 @@ public class XlangExample {
   static Fory fory;
 
   static {
-    fory = Fory.builder().withName(XlangExample.class.getName()).withXlang(true).withCompatible(false).build();
+    fory =
+        Fory.builder()
+            .withName(XlangExample.class.getName())
+            .withXlang(true)
+            .withCompatible(false)
+            .build();
     // register and generate serializer code.
     fory.register(Foo.class);
     fory.ensureSerializersCompiled();

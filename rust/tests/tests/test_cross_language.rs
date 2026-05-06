@@ -909,12 +909,6 @@ struct CompatibleInt32ListField {
 }
 
 #[derive(ForyStruct, Debug, PartialEq)]
-struct CompatibleNullableInt32ListField {
-    #[fory(id = 1, list(element(nullable = true, encoding = fixed)))]
-    values: Vec<Option<i32>>,
-}
-
-#[derive(ForyStruct, Debug, PartialEq)]
 struct CompatibleInt32ArrayField {
     #[fory(id = 1, array)]
     values: Vec<i32>,

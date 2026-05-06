@@ -211,6 +211,27 @@ describe("typemeta", () => {
     });
     const result = readerFory.register(readerType).deserialize(bytes);
 
+    expect(result.values).toBeInstanceOf(Int32Array);
+    expect(Array.from(result.values)).toEqual([1, 2, 3]);
+  });
+
+  test("adapts compatible dense array field to immediate list field", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const writerType = Type.struct(7213, {
+      values: Type.int32Array().setId(1),
+    });
+    const readerType = Type.struct(7213, {
+      values: Type.list(Type.int32({ encoding: "fixed" })).setId(1),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      values: new Int32Array([1, 2, 3]),
+    });
+    const result = readerFory.register(readerType).deserialize(bytes);
+
+    expect(Array.isArray(result.values)).toBe(true);
     expect(result).toEqual({ values: [1, 2, 3] });
   });
 
@@ -219,7 +240,9 @@ describe("typemeta", () => {
     const readerFory = new Fory({ compatible: true });
 
     const writerType = Type.struct(7212, {
-      values: Type.list(Type.int32({ encoding: "fixed" }).setNullable(true)).setId(1),
+      values: Type.list(
+        Type.int32({ encoding: "fixed" }).setNullable(true),
+      ).setId(1),
     });
     const readerType = Type.struct(7212, {
       values: Type.int32Array().setId(1),

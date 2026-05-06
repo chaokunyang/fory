@@ -547,6 +547,30 @@ void main() {
           decoded.values, Int32List.fromList(<int>[1, 2, 3]));
     });
 
+    test('adapts immediate compatible dense array and list fields', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestFory.register(
+        writer,
+        CompatibleArrayEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleListArrayEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestFory.register(
+        reader,
+        CompatibleListEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleListArrayEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleArrayEnvelope()..values = Int32List.fromList(<int>[1, 2, 3]),
+      );
+      final decoded = reader.deserialize<CompatibleListEnvelope>(bytes);
+
+      expect(decoded.values, orderedEquals(<int>[1, 2, 3]));
+    });
+
     test('skips nullable compatible list elements for dense array fields', () {
       final writer = Fory();
       final reader = Fory();

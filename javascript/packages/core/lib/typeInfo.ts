@@ -50,6 +50,8 @@ interface TypeInfoOptions {
   cases?: { [caseIndex: number]: TypeInfo };
   scalarEncoding?: ScalarEncoding;
   skipCompatibleField?: boolean;
+  compatibleReadTarget?: "array" | "list";
+  compatibleReadElementTypeId?: number;
 }
 
 /**

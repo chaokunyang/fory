@@ -162,6 +162,26 @@ function typeInfoForDenseArrayElementTypeId(typeId: number): TypeInfo {
   }
 }
 
+function compatibleListToArrayTypeInfo(elementTypeId: number): TypeInfo {
+  const typeInfo = Type.list(typeInfoForElementTypeId(elementTypeId));
+  typeInfo.options = {
+    ...typeInfo.options,
+    compatibleReadTarget: "array",
+    compatibleReadElementTypeId: elementTypeId,
+  };
+  return typeInfo;
+}
+
+function compatibleArrayToListTypeInfo(elementTypeId: number): TypeInfo {
+  const typeInfo = typeInfoForDenseArrayElementTypeId(elementTypeId);
+  typeInfo.options = {
+    ...typeInfo.options,
+    compatibleReadTarget: "list",
+    compatibleReadElementTypeId: elementTypeId,
+  };
+  return typeInfo;
+}
+
 class MetaStringBytes {
   dynamicWriteStringId = -1;
 
@@ -715,7 +735,7 @@ export class ReadContext {
       if (compatibleArrayElementTypeId(remoteElement.typeId) !== localElement) {
         return undefined;
       }
-      return Type.list(typeInfoForElementTypeId(localElement));
+      return compatibleListToArrayTypeInfo(localElement);
     }
     const remoteArrayElement = denseArrayElementTypeId(remote.typeId);
     if (
@@ -724,7 +744,7 @@ export class ReadContext {
       && local.options?.inner
       && compatibleArrayElementTypeId(local.options.inner.typeId) === remoteArrayElement
     ) {
-      return typeInfoForDenseArrayElementTypeId(remoteArrayElement);
+      return compatibleArrayToListTypeInfo(remoteArrayElement);
     }
     return undefined;
   }

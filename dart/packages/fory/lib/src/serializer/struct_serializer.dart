@@ -410,6 +410,12 @@ final class CollectionArrayCompatibleStructSerializer extends StructSerializer {
       }
       final topLevelListArrayPair =
           _topLevelListArrayPair(localField.field, remoteField);
+      if (_topLevelListArrayRootPair(localField.field, remoteField) &&
+          !topLevelListArrayPair) {
+        fields.add(null);
+        topLevelListArrayPairs?.add(false);
+        continue;
+      }
       if (topLevelListArrayPair) {
         topLevelListArrayPairs ??=
             List<bool>.filled(fields.length, false, growable: true);
@@ -450,6 +456,10 @@ bool _hasTopLevelCollectionArrayField(TypeDef typeDef) {
 }
 
 bool _topLevelListArrayPair(FieldInfo localField, FieldInfo remoteField) {
+  return isCompatibleCollectionArrayFieldPair(localField, remoteField);
+}
+
+bool _topLevelListArrayRootPair(FieldInfo localField, FieldInfo remoteField) {
   final localType = localField.fieldType.typeId;
   final remoteType = remoteField.fieldType.typeId;
   return (localType == TypeIds.list && isCompatibleArrayType(remoteType)) ||

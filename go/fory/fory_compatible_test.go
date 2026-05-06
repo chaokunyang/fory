@@ -582,6 +582,14 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			},
 		},
 		{
+			name:                 "EmptyInt32ListDoesNotMatchFixedArrayLength",
+			tag:                  "Int32Sequence",
+			writeType:            Int32ListPayloadDataClass{},
+			readType:             Int32ArrayPayloadDataClass{},
+			input:                Int32ListPayloadDataClass{Payload: []int32{}},
+			unmarshalErrContains: "array length 3 does not match serialized list length 0",
+		},
+		{
 			name:      "Int32ArrayToList",
 			tag:       "Int32Sequence",
 			writeType: Int32ArrayPayloadDataClass{},

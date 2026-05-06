@@ -209,6 +209,10 @@ func (s compatiblePrimitiveListToArraySerializer) ReadData(ctx *ReadContext, val
 	if ctx.HasError() {
 		return
 	}
+	if value.Kind() != reflect.Slice && length != value.Len() {
+		ctx.SetError(DeserializationErrorf("array length %d does not match serialized list length %d", value.Len(), length))
+		return
+	}
 	if length == 0 {
 		if value.Kind() == reflect.Slice {
 			value.Set(reflect.MakeSlice(value.Type(), 0, 0))
@@ -240,10 +244,6 @@ func (s compatiblePrimitiveListToArraySerializer) ReadData(ctx *ReadContext, val
 			return
 		}
 		value.Set(temp)
-		return
-	}
-	if length != value.Len() {
-		ctx.SetError(DeserializationErrorf("array length %d does not match serialized list length %d", value.Len(), length))
 		return
 	}
 	temp := reflect.New(reflect.SliceOf(s.arrayType.Elem())).Elem()

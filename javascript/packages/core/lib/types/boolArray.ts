@@ -134,10 +134,10 @@ export class BoolArray {
     return array;
   }
 
-  static fromPacked4(bits: number): BoolArray {
+  static fromPackedBytes(bits: number, length: number): BoolArray {
     const array = Object.create(BoolArray.prototype) as BoolArray;
     array._data = null;
-    array._length = 4;
+    array._length = length;
     array._packedBits = bits;
     return array;
   }

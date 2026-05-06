@@ -78,6 +78,31 @@ bool isCompatibleArrayType(int typeId) =>
     typeId <= TypeIds.float64Array &&
     typeId != 52;
 
+bool isCompatibleCollectionArrayFieldPair(
+  FieldInfo localField,
+  FieldInfo remoteField,
+) {
+  final localType = localField.fieldType;
+  final remoteType = remoteField.fieldType;
+  if (isCompatibleArrayType(localType.typeId) &&
+      remoteType.typeId == TypeIds.list) {
+    return _listElementMatchesArray(remoteType, localType.typeId);
+  }
+  if (localType.typeId == TypeIds.list &&
+      isCompatibleArrayType(remoteType.typeId)) {
+    return _listElementMatchesArray(localType, remoteType.typeId);
+  }
+  return false;
+}
+
+bool _listElementMatchesArray(FieldType listType, int arrayTypeId) {
+  final elementType =
+      listType.arguments.isEmpty ? null : listType.arguments.single;
+  return elementType != null &&
+      _arrayElementTypeId(arrayTypeId) ==
+          _compatibleArrayElementTypeId(elementType.typeId);
+}
+
 Object _readCompatibleListAsArrayField(
   ReadContext context,
   FieldType elementType,

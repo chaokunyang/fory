@@ -96,6 +96,14 @@ class CompatibleNullableListEnvelope {
   List<int?> values = <int?>[];
 }
 
+@ForyStruct()
+class CompatibleStringListEnvelope {
+  CompatibleStringListEnvelope();
+
+  @ListField(element: StringType())
+  List<String> values = <String>[];
+}
+
 void _registerScalarTypes(Fory fory) {
   ScalarAndTypedArraySerializerTestFory.register(
     fory,
@@ -597,6 +605,31 @@ void main() {
         () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
         throwsStateError,
       );
+    });
+
+    test('defaults incompatible compatible list and dense array element fields',
+        () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestFory.register(
+        writer,
+        CompatibleStringListEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleMismatchedListArrayEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestFory.register(
+        reader,
+        CompatibleArrayEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleMismatchedListArrayEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleStringListEnvelope()..values = <String>['1', '2'],
+      );
+      final decoded = reader.deserialize<CompatibleArrayEnvelope>(bytes);
+
+      expect(decoded.values, isEmpty);
     });
 
     test('enforces maxBinarySize on write and read', () {

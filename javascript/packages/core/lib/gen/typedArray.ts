@@ -167,9 +167,26 @@ class BoolArraySerializerGenerator extends BaseSerializerGenerator {
                 const ${len} = ${this.builder.reader.readVarUInt32()};
                 ${this.builder.getReadContextName()}.checkCollectionSize(${len});
                 let ${result};
-                if (${len} === 4) {
-                  const ${bits} = ${this.builder.reader.readUint32()};
-                  ${result} = external.BoolArray.fromPacked4(${bits});
+                if (${len} <= 4) {
+                  let ${bits};
+                  switch (${len}) {
+                    case 4:
+                      ${bits} = ${this.builder.reader.readUint32()};
+                      break;
+                    case 3:
+                      ${bits} = ${readByte} | (${readByte} << 8) | (${readByte} << 16);
+                      break;
+                    case 2:
+                      ${bits} = ${this.builder.reader.readUint16()};
+                      break;
+                    case 1:
+                      ${bits} = ${readByte};
+                      break;
+                    default:
+                      ${bits} = 0;
+                      break;
+                  }
+                  ${result} = external.BoolArray.fromPackedBytes(${bits}, ${len});
                 } else if (${len} <= 32) {
                   ${result} = new external.BoolArray(${len});
                   const ${raw} = ${result}.raw;

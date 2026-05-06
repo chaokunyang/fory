@@ -109,4 +109,71 @@ public enum TypeId: UInt32, CaseIterable, Sendable {
             return false
         }
     }
+
+    internal var denseArrayElementTypeID: TypeId? {
+        switch self {
+        case .boolArray:
+            return .bool
+        case .int8Array:
+            return .int8
+        case .int16Array:
+            return .int16
+        case .int32Array:
+            return .int32
+        case .int64Array:
+            return .int64
+        case .uint8Array:
+            return .uint8
+        case .uint16Array:
+            return .uint16
+        case .uint32Array:
+            return .uint32
+        case .uint64Array:
+            return .uint64
+        case .float16Array:
+            return .float16
+        case .bfloat16Array:
+            return .bfloat16
+        case .float32Array:
+            return .float32
+        case .float64Array:
+            return .float64
+        default:
+            return nil
+        }
+    }
+
+    internal static func listElementTypeID(
+        _ listElementTypeID: UInt32,
+        matchesDenseArrayTypeID arrayTypeID: UInt32
+    ) -> Bool {
+        guard
+            let listElementType = TypeId(rawValue: listElementTypeID),
+            let arrayElementType = TypeId(rawValue: arrayTypeID)?.denseArrayElementTypeID
+        else {
+            return false
+        }
+        if listElementType == arrayElementType {
+            return true
+        }
+        guard let listDomain = listElementType.compatibleIntegerEncodingDomain else {
+            return false
+        }
+        return listDomain == arrayElementType.compatibleIntegerEncodingDomain
+    }
+
+    private var compatibleIntegerEncodingDomain: UInt8? {
+        switch self {
+        case .int32, .varint32:
+            return 1
+        case .int64, .varint64, .taggedInt64:
+            return 2
+        case .uint32, .varUInt32:
+            return 3
+        case .uint64, .varUInt64, .taggedUInt64:
+            return 4
+        default:
+            return nil
+        }
+    }
 }

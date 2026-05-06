@@ -49,6 +49,7 @@ interface TypeInfoOptions {
   enumProps?: { [key: string]: number };
   cases?: { [caseIndex: number]: TypeInfo };
   scalarEncoding?: ScalarEncoding;
+  skipCompatibleField?: boolean;
 }
 
 /**

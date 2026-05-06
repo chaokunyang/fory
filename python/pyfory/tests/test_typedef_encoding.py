@@ -108,6 +108,11 @@ class Int32ListPayload:
 
 
 @dataclass
+class Int32VarintListPayload:
+    payload: List[pyfory.Int32]
+
+
+@dataclass
 class NullableInt32ListPayload:
     payload: List[Optional[pyfory.FixedInt32]]
 
@@ -407,6 +412,19 @@ def test_compatible_int32_list_assigns_to_array():
     assert isinstance(decoded, Int32ArrayPayload)
     assert isinstance(decoded.payload, pyfory.Int32Array)
     assert list(decoded.payload) == [1, 2, 3]
+
+
+def test_compatible_varint_int32_list_assigns_to_array():
+    writer = Fory(xlang=True, compatible=True)
+    reader = Fory(xlang=True, compatible=True)
+    _register_int32_payload(writer, Int32VarintListPayload)
+    _register_int32_payload(reader, Int32ArrayPayload)
+
+    decoded = reader.deserialize(writer.serialize(Int32VarintListPayload(payload=[-1, 2, 3])))
+
+    assert isinstance(decoded, Int32ArrayPayload)
+    assert isinstance(decoded.payload, pyfory.Int32Array)
+    assert list(decoded.payload) == [-1, 2, 3]
 
 
 def test_compatible_int32_array_assigns_to_list():

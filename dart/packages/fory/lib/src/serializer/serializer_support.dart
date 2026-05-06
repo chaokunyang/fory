@@ -308,12 +308,14 @@ Object? readCompatibleMatchedField(
     final elementType =
         remoteType.arguments.isEmpty ? null : remoteType.arguments.single;
     if (elementType == null ||
-        elementType.nullable ||
-        elementType.ref ||
         _arrayElementTypeId(localType.typeId) !=
             _compatibleArrayElementTypeId(elementType.typeId)) {
       throw StateError(
           'Compatible list-to-array field ${localField.name} is unsupported.');
+    }
+    if (elementType.nullable || elementType.ref) {
+      readCompatibleField(context, remoteField);
+      return null;
     }
     final raw = readCompatibleField(context, remoteField);
     return _listToArrayValue(localType.typeId, raw);

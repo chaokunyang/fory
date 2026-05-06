@@ -192,6 +192,9 @@ final class CompatibleCollectionArrayReader {
       Object array =
           readListPayloadAsPrimitiveArray(
               readContext, compatibleArrayTypeId, compatibleElementTypeId);
+      if (array == null) {
+        return null;
+      }
       return materializeTarget(array, compatibleArrayTypeId, targetType);
     }
     if (compatibleReadMode == READ_ARRAY_TO_LIST) {
@@ -288,19 +291,99 @@ final class CompatibleCollectionArrayReader {
     validateElementStorageSize(readContext.getConfig(), numElements, elementSize(arrayTypeId));
     if (numElements > 0) {
       int flags = buffer.readByte();
-      if ((flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL) {
-        throw new DeserializationException(
-            "Cannot read peer list<T> with nullable elements into local array<T> field");
+      boolean hasNull = (flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL;
+      boolean trackingRef = (flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF;
+      boolean sameType = (flags & CollectionFlags.IS_SAME_TYPE) == CollectionFlags.IS_SAME_TYPE;
+      boolean declared =
+          (flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) == CollectionFlags.IS_DECL_ELEMENT_TYPE;
+      if (hasNull || trackingRef) {
+        skipListElements(readContext, elementTypeId, numElements, flags);
+        return null;
       }
-      if ((flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF
-          || (flags & CollectionFlags.IS_SAME_TYPE) != CollectionFlags.IS_SAME_TYPE
-          || (flags & CollectionFlags.IS_DECL_ELEMENT_TYPE)
-              != CollectionFlags.IS_DECL_ELEMENT_TYPE) {
+      if (!sameType || !declared) {
         throw new DeserializationException(
             "Cannot read peer list<T> payload into local array<T> field");
       }
     }
     return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId);
+  }
+
+  private static void skipListElements(
+      ReadContext readContext, int elementTypeId, int numElements, int flags) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    boolean sameType = (flags & CollectionFlags.IS_SAME_TYPE) == CollectionFlags.IS_SAME_TYPE;
+    boolean declared =
+        (flags & CollectionFlags.IS_DECL_ELEMENT_TYPE) == CollectionFlags.IS_DECL_ELEMENT_TYPE;
+    boolean hasNull = (flags & CollectionFlags.HAS_NULL) == CollectionFlags.HAS_NULL;
+    boolean trackingRef = (flags & CollectionFlags.TRACKING_REF) == CollectionFlags.TRACKING_REF;
+    if (!sameType) {
+      throw new DeserializationException("Cannot skip dynamic peer list<T> as local array<T>");
+    }
+    if (!declared) {
+      readContext.getTypeResolver().readTypeInfo(readContext);
+    }
+    for (int i = 0; i < numElements; i++) {
+      if (trackingRef) {
+        int refFlag = buffer.readByte();
+        if (refFlag == Fory.NULL_FLAG) {
+          continue;
+        }
+        if (refFlag == Fory.REF_FLAG) {
+          buffer.readVarUInt32Small7();
+          continue;
+        }
+      } else if (hasNull && buffer.readByte() == Fory.NULL_FLAG) {
+        continue;
+      }
+      skipPrimitiveListElement(buffer, elementTypeId);
+    }
+  }
+
+  private static void skipPrimitiveListElement(MemoryBuffer buffer, int elementTypeId) {
+    switch (elementTypeId) {
+      case Types.BOOL:
+      case Types.INT8:
+      case Types.UINT8:
+        buffer.increaseReaderIndex(1);
+        return;
+      case Types.INT16:
+      case Types.UINT16:
+      case Types.FLOAT16:
+      case Types.BFLOAT16:
+        buffer.increaseReaderIndex(2);
+        return;
+      case Types.INT32:
+      case Types.UINT32:
+      case Types.FLOAT32:
+        buffer.increaseReaderIndex(4);
+        return;
+      case Types.INT64:
+      case Types.UINT64:
+      case Types.FLOAT64:
+        buffer.increaseReaderIndex(8);
+        return;
+      case Types.VARINT32:
+        buffer.readVarInt32();
+        return;
+      case Types.VAR_UINT32:
+        buffer.readVarUInt32();
+        return;
+      case Types.VARINT64:
+        buffer.readVarInt64();
+        return;
+      case Types.VAR_UINT64:
+        buffer.readVarUInt64();
+        return;
+      case Types.TAGGED_INT64:
+        buffer.readTaggedInt64();
+        return;
+      case Types.TAGGED_UINT64:
+        buffer.readTaggedUInt64();
+        return;
+      default:
+        throw new DeserializationException(
+            "Unsupported peer list<T> element type id " + elementTypeId);
+    }
   }
 
   private static Object readDenseArrayPayload(ReadContext readContext, int arrayTypeId) {

@@ -132,7 +132,8 @@ fn compatible_list_array_field_pairs() {
             payload: vec![Some(1), Some(2), Some(3)],
         })
         .unwrap();
-    assert!(reader.deserialize::<ArrayPayload>(&bytes).is_err());
+    let decoded: ArrayPayload = reader.deserialize(&bytes).unwrap();
+    assert_eq!(decoded.payload, Vec::<i32>::default());
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();

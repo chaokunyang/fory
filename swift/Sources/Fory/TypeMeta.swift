@@ -676,8 +676,12 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
   private static func isCompatibleFieldType(
     _ remoteType: FieldType,
-    _ localType: FieldType
+    _ localType: FieldType,
+    topLevel: Bool = true
   ) -> Bool {
+    if topLevel, isCompatibleTopLevelListArrayFieldType(remoteType, localType) {
+      return true
+    }
     if normalizeCompatibleTypeIDForComparison(remoteType.typeID)
       != normalizeCompatibleTypeIDForComparison(localType.typeID) {
       return false
@@ -686,10 +690,37 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
       return false
     }
     for (remoteGeneric, localGeneric) in zip(remoteType.generics, localType.generics)
-    where !isCompatibleFieldType(remoteGeneric, localGeneric) {
+    where !isCompatibleFieldType(remoteGeneric, localGeneric, topLevel: false) {
       return false
     }
     return true
+  }
+
+  private static func isCompatibleTopLevelListArrayFieldType(
+    _ remoteType: FieldType,
+    _ localType: FieldType
+  ) -> Bool {
+    if remoteType.typeID == TypeId.list.rawValue {
+      return listFieldType(remoteType, matchesDenseArrayTypeID: localType.typeID)
+    }
+    if localType.typeID == TypeId.list.rawValue {
+      return listFieldType(localType, matchesDenseArrayTypeID: remoteType.typeID)
+    }
+    return false
+  }
+
+  private static func listFieldType(
+    _ listType: FieldType,
+    matchesDenseArrayTypeID arrayTypeID: UInt32
+  ) -> Bool {
+    guard listType.typeID == TypeId.list.rawValue,
+      let elementType = listType.generics.first,
+      !elementType.nullable,
+      !elementType.trackRef
+    else {
+      return false
+    }
+    return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)
   }
 
   private static func normalizeCompatibleTypeIDForComparison(_ typeID: UInt32) -> UInt32 {

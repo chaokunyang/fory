@@ -432,6 +432,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 
 		if exists {
 			shouldRead := false
+			usesCompatibleCollectionArrayReader := false
 			isPolymorphicField := def.typeSpec.TypeId() == UNKNOWN
 			defTypeId := def.typeSpec.TypeId()
 			internalDefTypeId := defTypeId
@@ -521,8 +522,20 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			} else if defTypeId == SET && isSetReflectType(localType) {
 				shouldRead = true
 				fieldType = localType
+			} else if defTypeId == LIST && localFieldSpec != nil && listFieldCanReadLocalArray(
+				def.typeSpec,
+				def.nullable,
+				def.trackRef,
+				localFieldSpec.Type,
+				localNullableByIndex[fieldIndex],
+				localTrackRefByIndex[fieldIndex],
+				localType,
+			) {
+				shouldRead = true
+				fieldType = localType
 			} else if defTypeId == LIST && localFieldSpec != nil && compatibleListFieldCanReadLocalArray(def.typeSpec, localFieldSpec.Type, localType) {
 				shouldRead = true
+				usesCompatibleCollectionArrayReader = true
 				fieldType = localType
 				sliceType := reflect.SliceOf(localType.Elem())
 				if listReader, ok := newPrimitiveListSerializer(sliceType, def.typeSpec.Element.TypeID); ok {
@@ -539,7 +552,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			}
 
 			if shouldRead {
-				if localType != nil {
+				if localType != nil && !usesCompatibleCollectionArrayReader {
 					localSerializer, localErr := serializerForTypeSpec(typeResolver, localType, def.typeSpec)
 					if localErr == nil && localSerializer != nil {
 						fieldSerializer = localSerializer
@@ -787,6 +800,16 @@ func fieldSpecEqualForDiff(remoteSpec *TypeSpec, remoteNullable bool, remoteTrac
 	return remote.EqualForDiff(local)
 }
 
+func listFieldCanReadLocalArray(remoteSpec *TypeSpec, remoteNullable bool, remoteTrackRef bool, localSpec *TypeSpec, localNullable bool, localTrackRef bool, localType reflect.Type) bool {
+	if localType == nil || localType.Kind() != reflect.Array || remoteSpec == nil || localSpec == nil {
+		return false
+	}
+	if remoteSpec.TypeID != LIST || localSpec.TypeID != LIST {
+		return false
+	}
+	return fieldSpecEqualForDiff(remoteSpec, remoteNullable, remoteTrackRef, localSpec, localNullable, localTrackRef)
+}
+
 func compatibleListFieldCanReadLocalArray(remoteSpec *TypeSpec, localSpec *TypeSpec, localType reflect.Type) bool {
 	if remoteSpec == nil || localSpec == nil || localType == nil || localType.Kind() != reflect.Array {
 		return false
@@ -799,12 +822,11 @@ func compatibleListFieldCanReadLocalArray(remoteSpec *TypeSpec, localSpec *TypeS
 	if !isPrimitiveArrayType(localSpec.TypeID) {
 		return false
 	}
-	localElementTypeID, ok := primitiveArrayElementTypeID(localSpec.TypeID)
-	if !ok || localElementTypeID != remoteSpec.Element.TypeID {
+	if _, ok := primitiveArrayElementTypeID(localSpec.TypeID); !ok {
 		return false
 	}
 	sliceType := reflect.SliceOf(localType.Elem())
-	_, ok = newPrimitiveListSerializer(sliceType, remoteSpec.Element.TypeID)
+	_, ok := newPrimitiveListSerializer(sliceType, remoteSpec.Element.TypeID)
 	return ok
 }
 

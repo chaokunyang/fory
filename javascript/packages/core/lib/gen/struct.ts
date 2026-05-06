@@ -247,6 +247,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           throw new Error(`${typeInfo.typeId} generator not exists`);
         }
         const innerGenerator = new InnerGeneratorClass(typeInfo, this.builder, this.scope);
+        if (typeInfo.options?.skipCompatibleField) {
+          return `
+          ${this.readField(typeInfo, expr => `${expr};`, innerGenerator.readEmbed())}
+        `;
+        }
         return `
           ${this.readField(typeInfo, expr => `${result}${CodecBuilder.safePropAccessor(key)} = ${expr}`, innerGenerator.readEmbed())}
         `;

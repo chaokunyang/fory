@@ -128,6 +128,14 @@ private struct CompatibleListFieldV1: Equatable {
 }
 
 @ForyStruct
+private struct CompatibleVarintListFieldV1: Equatable {
+    @ListField(element: .int32())
+    var values: [Int32] = []
+
+    var extra: Int32 = 0
+}
+
+@ForyStruct
 private struct CompatibleArrayFieldV2: Equatable {
     @ArrayField(element: .int32())
     var values: [Int32] = []
@@ -390,18 +398,45 @@ func compatibleReadAdaptsImmediateListAndArrayFieldPair() throws {
 }
 
 @Test
-func compatibleReadRejectsNullableListElementsForArrayField() throws {
+func compatibleReadAdaptsDefaultVarintListAndArrayFieldPair() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleVarintListFieldV1.self, id: 9924)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleArrayFieldV2.self, id: 9924)
+
+    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(
+        try writer.serialize(CompatibleVarintListFieldV1(values: [-1, 2, 3], extra: 9))
+    )
+    #expect(decoded.values == [-1, 2, 3])
+}
+
+@Test
+func compatibleReadAdaptsArrayFieldToDefaultVarintListField() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleArrayFieldV2.self, id: 9925)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleVarintListFieldV1.self, id: 9925)
+
+    let decoded: CompatibleVarintListFieldV1 = try reader.deserialize(
+        try writer.serialize(CompatibleArrayFieldV2(values: [-1, 2, 3]))
+    )
+    #expect(decoded.values == [-1, 2, 3])
+}
+
+@Test
+func compatibleReadSkipsNullableListElementsForArrayField() throws {
     let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     writer.register(CompatibleNullableListFieldV1.self, id: 9923)
 
     let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     reader.register(CompatibleArrayFieldV2.self, id: 9923)
 
-    #expect(throws: ForyError.self) {
-        let _: CompatibleArrayFieldV2 = try reader.deserialize(
-            try writer.serialize(CompatibleNullableListFieldV1(values: [1, 2, 3], extra: 9))
-        )
-    }
+    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(
+        try writer.serialize(CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
+    )
+    #expect(decoded.values.isEmpty)
 }
 
 @Test

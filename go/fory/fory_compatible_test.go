@@ -135,6 +135,10 @@ type Int32ListPayloadDataClass struct {
 	Payload []int32 `fory:"type=list(element=int32(nullable=false,encoding=fixed))"`
 }
 
+type Int32VarintListPayloadDataClass struct {
+	Payload []int32 `fory:"type=list(element=int32(nullable=false))"`
+}
+
 type NullableInt32ListPayloadDataClass struct {
 	Payload []*int32 `fory:"type=list(element=int32(nullable=true,encoding=fixed))"`
 }
@@ -252,7 +256,7 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 				assert.Equal(t, in.F8, out.F8)
 				assert.Equal(t, in.F9, out.F9)
 				assert.Equal(t, in.F10, out.F10)
-				assert.Equal(t, [2]int16{}, out.F11)
+				assert.Equal(t, in.F11, out.F11)
 				assert.Equal(t, in.F12, out.F12)
 			},
 		},
@@ -562,6 +566,19 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			assertFunc: func(t *testing.T, input any, output any) {
 				out := output.(Int32ArrayPayloadDataClass)
 				assert.Equal(t, [3]int32{1, 2, 3}, out.Payload)
+			},
+		},
+		{
+			name:      "Int32VarintListToArray",
+			tag:       "Int32Sequence",
+			writeType: Int32VarintListPayloadDataClass{},
+			readType:  Int32ArrayPayloadDataClass{},
+			input: Int32VarintListPayloadDataClass{
+				Payload: []int32{-1, 2, 3},
+			},
+			assertFunc: func(t *testing.T, input any, output any) {
+				out := output.(Int32ArrayPayloadDataClass)
+				assert.Equal(t, [3]int32{-1, 2, 3}, out.Payload)
 			},
 		},
 		{

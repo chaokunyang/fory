@@ -25,7 +25,7 @@ use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::meta::FieldType;
 use crate::resolver::{RefFlag, RefMode, TypeResolver};
-use crate::serializer::{primitive_list, ForyDefault, Serializer};
+use crate::serializer::{primitive_list, skip::skip_field_value, ForyDefault, Serializer};
 use crate::type_id::{self, need_to_write_type_for_field, TypeId, SIZE_OF_REF_AND_TYPE, UNKNOWN};
 use std::any::Any;
 use std::collections::HashMap;
@@ -1739,9 +1739,12 @@ where
             && list_element_type_matches_array(remote_field_type, local_field_type)
         {
             if remote_field_type.generics[0].nullable {
-                return Err(Error::type_error(
-                    "array-compatible list declares nullable elements",
-                ));
+                skip_field_value(
+                    context,
+                    remote_field_type,
+                    field_ref_mode(remote_field_type) != RefMode::None,
+                )?;
+                return Ok(Some(Vec::new()));
             }
             if field_ref_mode(remote_field_type) != RefMode::None {
                 let ref_flag = context.reader.read_i8()?;

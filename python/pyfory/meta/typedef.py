@@ -636,9 +636,16 @@ def _list_array_element_type_matches(list_field_type: FieldType, array_field_typ
         return False
     return (
         list_field_type.type_id == TypeId.LIST
-        and list_field_type.element_type.type_id == array_element_type_id
+        and _list_element_type_matches_array_element(list_field_type.element_type.type_id, array_element_type_id)
         and not list_field_type.element_type.is_tracking_ref
     )
+
+
+def _list_element_type_matches_array_element(list_element_type_id: TypeId, array_element_type_id: TypeId) -> bool:
+    if list_element_type_id == array_element_type_id:
+        return True
+    list_domain = _INT_TYPE_DOMAINS.get(list_element_type_id)
+    return list_domain is not None and list_domain == _INT_TYPE_DOMAINS.get(array_element_type_id)
 
 
 def _is_root_list_array_pair(remote_field_type: FieldType, local_field_type: FieldType) -> bool:

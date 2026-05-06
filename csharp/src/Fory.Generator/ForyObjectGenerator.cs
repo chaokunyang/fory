@@ -705,6 +705,11 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                 sb.AppendLine("            {");
                 sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException(\"compatible list to array field requires one element schema\");");
                 sb.AppendLine("            }");
+                sb.AppendLine("            if (remoteFieldType.Generics[0].Nullable || remoteFieldType.Generics[0].TrackRef)");
+                sb.AppendLine("            {");
+                sb.AppendLine("                global::Apache.Fory.FieldSkipper.SkipFieldValue(context, remoteFieldType);");
+                sb.AppendLine($"                return ({member.TypeName})default!;");
+                sb.AppendLine("            }");
             }
 
             sb.AppendLine("            if (refMode == global::Apache.Fory.RefMode.NullOnly)");

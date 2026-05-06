@@ -660,8 +660,8 @@ public enum ListFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
         remoteFieldType: TypeMeta.FieldType,
         refMode: RefMode
     ) throws -> Value {
-        if isPackedArrayTypeID(remoteFieldType.typeID, elementCodec: ElementCodec.self) {
-            return try ArrayFieldCodec<ElementCodec>.read(context, refMode: refMode, readTypeInfo: false)
+        if isCompatiblePackedArrayTypeID(remoteFieldType.typeID, elementCodec: ElementCodec.self) {
+            return try readCompatiblePackedArrayField(context, refMode: refMode, elementCodec: ElementCodec.self)
         }
         return try FieldCodecDefault.readCompatibleField(
             codec: Self.self,
@@ -709,14 +709,22 @@ public enum ArrayFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
     ) throws -> Value {
         if remoteFieldType.typeID == TypeId.list.rawValue,
            let element = remoteFieldType.generics.first,
-           element.typeID == ElementCodec.typeId.rawValue {
+           let localArrayTypeID = packedArrayTypeID(for: ElementCodec.self),
+           TypeId.listElementTypeID(element.typeID, matchesDenseArrayTypeID: localArrayTypeID.rawValue) {
             if element.nullable {
-                throw ForyError.invalidData("compatible list-to-array field cannot read nullable elements")
+                try context.skipFieldValue(remoteFieldType)
+                return defaultValue
             }
             if element.trackRef {
-                throw ForyError.invalidData("compatible list-to-array field cannot read ref-tracked elements")
+                try context.skipFieldValue(remoteFieldType)
+                return defaultValue
             }
-            return try readListPayloadAsArray(context, refMode: refMode, elementCodec: ElementCodec.self)
+            return try readListPayloadAsArray(
+                context,
+                refMode: refMode,
+                elementCodec: ElementCodec.self,
+                remoteElementTypeID: element.typeID
+            )
         }
         return try FieldCodecDefault.readCompatibleField(
             codec: Self.self,
@@ -1117,6 +1125,12 @@ private func uncheckedPackedArrayCast<From, To>(_ array: [From], to _: To.Type) 
     return unsafeBitCast(array, to: [To].self)
 }
 
+@inline(__always)
+private func uncheckedScalarCast<From, To>(_ value: From, to _: To.Type) -> To {
+    assert(From.self == To.self)
+    return unsafeBitCast(value, to: To.self)
+}
+
 private func packedArrayTypeID<ElementCodec: FieldCodec>(for _: ElementCodec.Type) -> TypeId? {
     if ElementCodec.isNullableType {
         return nil
@@ -1163,11 +1177,11 @@ private func packedArrayTypeID<ElementCodec: FieldCodec>(for _: ElementCodec.Typ
     return nil
 }
 
-private func isPackedArrayTypeID<ElementCodec: FieldCodec>(
+private func isCompatiblePackedArrayTypeID<ElementCodec: FieldCodec>(
     _ typeID: UInt32,
-    elementCodec: ElementCodec.Type
+    elementCodec _: ElementCodec.Type
 ) -> Bool {
-    packedArrayTypeID(for: elementCodec)?.rawValue == typeID
+    TypeId.listElementTypeID(ElementCodec.typeId.rawValue, matchesDenseArrayTypeID: typeID)
 }
 
 private func writePackedArrayPayload<ElementCodec: FieldCodec>(
@@ -1324,6 +1338,169 @@ private func readUIntArrayPayload(_ context: ReadContext) throws -> [UInt] {
     return values
 }
 
+private func readCompatiblePackedArrayField<ElementCodec: FieldCodec>(
+    _ context: ReadContext,
+    refMode: RefMode,
+    elementCodec _: ElementCodec.Type
+) throws -> [ElementCodec.Value] {
+    switch refMode {
+    case .none:
+        return try readCompatiblePackedArrayPayload(context, elementCodec: ElementCodec.self)
+    case .nullOnly, .tracking:
+        let rawFlag = try context.buffer.readInt8()
+        guard rawFlag != RefFlag.null.rawValue else {
+            return []
+        }
+        if rawFlag == RefFlag.ref.rawValue {
+            let refID = try context.buffer.readVarUInt32()
+            return try context.refReader.readRef(refID, as: [ElementCodec.Value].self)
+        }
+        let reservedRefID = (rawFlag == RefFlag.refValue.rawValue && context.trackRef)
+            ? context.refReader.reserveRefID()
+            : nil
+        let value = try readCompatiblePackedArrayPayload(context, elementCodec: ElementCodec.self)
+        if let reservedRefID {
+            context.refReader.storeRef(value, at: reservedRefID)
+        }
+        return value
+    }
+}
+
+private func readCompatiblePackedArrayPayload<ElementCodec: FieldCodec>(
+    _ context: ReadContext,
+    elementCodec _: ElementCodec.Type
+) throws -> [ElementCodec.Value] {
+    if ElementCodec.self == BoolCodec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Bool], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == Int8Codec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Int8], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == Int16Codec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Int16], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == Int32FixedCodec.self || ElementCodec.self == Int32VarintCodec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Int32], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == Int64FixedCodec.self || ElementCodec.self == Int64VarintCodec.self || ElementCodec.self == Int64TaggedCodec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Int64], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == IntFixedCodec.self || ElementCodec.self == IntVarintCodec.self || ElementCodec.self == IntTaggedCodec.self {
+        return uncheckedPackedArrayCast(try readIntArrayPayload(context), to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == UInt8Codec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [UInt8], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == UInt16Codec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [UInt16], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == UInt32FixedCodec.self || ElementCodec.self == UInt32VarintCodec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [UInt32], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == UInt64FixedCodec.self || ElementCodec.self == UInt64VarintCodec.self || ElementCodec.self == UInt64TaggedCodec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [UInt64], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == UIntFixedCodec.self || ElementCodec.self == UIntVarintCodec.self || ElementCodec.self == UIntTaggedCodec.self {
+        return uncheckedPackedArrayCast(try readUIntArrayPayload(context), to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == Float16Codec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Float16], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == BFloat16Codec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [BFloat16], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == FloatCodec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Float], to: ElementCodec.Value.self)
+    }
+    if ElementCodec.self == DoubleCodec.self {
+        return uncheckedPackedArrayCast(try readPrimitiveArray(context) as [Double], to: ElementCodec.Value.self)
+    }
+    throw ForyError.invalidData("unsupported compatible array-to-list field element codec \(ElementCodec.self)")
+}
+
+private func readCompatibleElementPayload<ElementCodec: FieldCodec>(
+    _ context: ReadContext,
+    elementCodec _: ElementCodec.Type,
+    remoteElementTypeID: UInt32?
+) throws -> ElementCodec.Value {
+    guard let remoteElementTypeID,
+          remoteElementTypeID != ElementCodec.typeId.rawValue,
+          let remoteTypeID = TypeId(rawValue: remoteElementTypeID)
+    else {
+        return try ElementCodec.readPayload(context)
+    }
+
+    if ElementCodec.self == Int32FixedCodec.self || ElementCodec.self == Int32VarintCodec.self {
+        switch remoteTypeID {
+        case .int32:
+            return uncheckedScalarCast(try context.buffer.readInt32() as Int32, to: ElementCodec.Value.self)
+        case .varint32:
+            return uncheckedScalarCast(try context.buffer.readVarInt32() as Int32, to: ElementCodec.Value.self)
+        default:
+            break
+        }
+    }
+    if ElementCodec.self == Int64FixedCodec.self || ElementCodec.self == Int64VarintCodec.self || ElementCodec.self == Int64TaggedCodec.self {
+        switch remoteTypeID {
+        case .int64:
+            return uncheckedScalarCast(try context.buffer.readInt64() as Int64, to: ElementCodec.Value.self)
+        case .varint64:
+            return uncheckedScalarCast(try context.buffer.readVarInt64() as Int64, to: ElementCodec.Value.self)
+        case .taggedInt64:
+            return uncheckedScalarCast(try context.buffer.readTaggedInt64() as Int64, to: ElementCodec.Value.self)
+        default:
+            break
+        }
+    }
+    if ElementCodec.self == IntFixedCodec.self || ElementCodec.self == IntVarintCodec.self || ElementCodec.self == IntTaggedCodec.self {
+        switch remoteTypeID {
+        case .int64:
+            return uncheckedScalarCast(Int(try context.buffer.readInt64()), to: ElementCodec.Value.self)
+        case .varint64:
+            return uncheckedScalarCast(Int(try context.buffer.readVarInt64()), to: ElementCodec.Value.self)
+        case .taggedInt64:
+            return uncheckedScalarCast(Int(try context.buffer.readTaggedInt64()), to: ElementCodec.Value.self)
+        default:
+            break
+        }
+    }
+    if ElementCodec.self == UInt32FixedCodec.self || ElementCodec.self == UInt32VarintCodec.self {
+        switch remoteTypeID {
+        case .uint32:
+            return uncheckedScalarCast(try context.buffer.readUInt32() as UInt32, to: ElementCodec.Value.self)
+        case .varUInt32:
+            return uncheckedScalarCast(try context.buffer.readVarUInt32() as UInt32, to: ElementCodec.Value.self)
+        default:
+            break
+        }
+    }
+    if ElementCodec.self == UInt64FixedCodec.self || ElementCodec.self == UInt64VarintCodec.self || ElementCodec.self == UInt64TaggedCodec.self {
+        switch remoteTypeID {
+        case .uint64:
+            return uncheckedScalarCast(try context.buffer.readUInt64() as UInt64, to: ElementCodec.Value.self)
+        case .varUInt64:
+            return uncheckedScalarCast(try context.buffer.readVarUInt64() as UInt64, to: ElementCodec.Value.self)
+        case .taggedUInt64:
+            return uncheckedScalarCast(try context.buffer.readTaggedUInt64() as UInt64, to: ElementCodec.Value.self)
+        default:
+            break
+        }
+    }
+    if ElementCodec.self == UIntFixedCodec.self || ElementCodec.self == UIntVarintCodec.self || ElementCodec.self == UIntTaggedCodec.self {
+        switch remoteTypeID {
+        case .uint64:
+            return uncheckedScalarCast(UInt(try context.buffer.readUInt64()), to: ElementCodec.Value.self)
+        case .varUInt64:
+            return uncheckedScalarCast(UInt(try context.buffer.readVarUInt64()), to: ElementCodec.Value.self)
+        case .taggedUInt64:
+            return uncheckedScalarCast(UInt(try context.buffer.readTaggedUInt64()), to: ElementCodec.Value.self)
+        default:
+            break
+        }
+    }
+    throw ForyError.typeMismatch(expected: ElementCodec.typeId.rawValue, actual: remoteElementTypeID)
+}
+
 private func readPackedArrayElementCount(
     _ context: ReadContext,
     width: Int,
@@ -1403,17 +1580,28 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
     _ context: ReadContext,
     elementCodec _: ElementCodec.Type
 ) throws -> [ElementCodec.Value] {
-    try readCollectionPayload(context, elementCodec: ElementCodec.self, rejectNullElements: false)
+    try readCollectionPayload(
+        context,
+        elementCodec: ElementCodec.self,
+        rejectNullElements: false,
+        remoteElementTypeID: nil
+    )
 }
 
 private func readListPayloadAsArray<ElementCodec: FieldCodec>(
     _ context: ReadContext,
     refMode: RefMode,
-    elementCodec _: ElementCodec.Type
+    elementCodec _: ElementCodec.Type,
+    remoteElementTypeID: UInt32
 ) throws -> [ElementCodec.Value] {
     switch refMode {
     case .none:
-        return try readCollectionPayload(context, elementCodec: ElementCodec.self, rejectNullElements: true)
+        return try readCollectionPayload(
+            context,
+            elementCodec: ElementCodec.self,
+            rejectNullElements: true,
+            remoteElementTypeID: remoteElementTypeID
+        )
     case .nullOnly, .tracking:
         let rawFlag = try context.buffer.readInt8()
         guard rawFlag != RefFlag.null.rawValue else {
@@ -1426,7 +1614,12 @@ private func readListPayloadAsArray<ElementCodec: FieldCodec>(
         let reservedRefID = (rawFlag == RefFlag.refValue.rawValue && context.trackRef)
             ? context.refReader.reserveRefID()
             : nil
-        let value = try readCollectionPayload(context, elementCodec: ElementCodec.self, rejectNullElements: true)
+        let value = try readCollectionPayload(
+            context,
+            elementCodec: ElementCodec.self,
+            rejectNullElements: true,
+            remoteElementTypeID: remoteElementTypeID
+        )
         if let reservedRefID {
             context.refReader.storeRef(value, at: reservedRefID)
         }
@@ -1437,7 +1630,8 @@ private func readListPayloadAsArray<ElementCodec: FieldCodec>(
 private func readCollectionPayload<ElementCodec: FieldCodec>(
     _ context: ReadContext,
     elementCodec _: ElementCodec.Type,
-    rejectNullElements: Bool
+    rejectNullElements: Bool,
+    remoteElementTypeID: UInt32?
 ) throws -> [ElementCodec.Value] {
     let buffer = context.buffer
     let length = Int(try buffer.readVarUInt32())
@@ -1463,6 +1657,9 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
     result.reserveCapacity(length)
 
     if !sameType {
+        if remoteElementTypeID != nil {
+            throw ForyError.invalidData("compatible list-to-array field requires same-type elements")
+        }
         let refMode = RefMode.from(nullable: hasNull, trackRef: trackRef)
         for _ in 0..<length {
             result.append(try ElementCodec.read(context, refMode: refMode, readTypeInfo: true))
@@ -1470,7 +1667,17 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
         return result
     }
 
-    let elementTypeInfo = declared ? nil : try ElementCodec.readTypeInfo(context)
+    if remoteElementTypeID != nil && trackRef {
+        throw ForyError.invalidData("compatible list-to-array field cannot read ref-tracked elements")
+    }
+    let elementTypeInfo: TypeInfo?
+    if declared {
+        elementTypeInfo = nil
+    } else if let remoteElementTypeID, let typeID = TypeId(rawValue: remoteElementTypeID) {
+        elementTypeInfo = try context.readStaticTypeInfo(typeID)
+    } else {
+        elementTypeInfo = try ElementCodec.readTypeInfo(context)
+    }
     return try ElementCodec.withTypeInfo(elementTypeInfo, context) {
         if trackRef {
             for _ in 0..<length {
@@ -1482,14 +1689,22 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
                 if refFlag == RefFlag.null.rawValue {
                     result.append(ElementCodec.defaultValue)
                 } else if refFlag == RefFlag.notNullValue.rawValue {
-                    result.append(try ElementCodec.readPayload(context))
+                    result.append(try readCompatibleElementPayload(
+                        context,
+                        elementCodec: ElementCodec.self,
+                        remoteElementTypeID: remoteElementTypeID
+                    ))
                 } else {
                     throw ForyError.refError("invalid nullability flag \(refFlag)")
                 }
             }
         } else {
             for _ in 0..<length {
-                result.append(try ElementCodec.readPayload(context))
+                result.append(try readCompatibleElementPayload(
+                    context,
+                    elementCodec: ElementCodec.self,
+                    remoteElementTypeID: remoteElementTypeID
+                ))
             }
         }
         return result

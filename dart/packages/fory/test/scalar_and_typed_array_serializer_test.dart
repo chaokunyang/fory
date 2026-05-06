@@ -547,8 +547,7 @@ void main() {
           decoded.values, Int32List.fromList(<int>[1, 2, 3]));
     });
 
-    test('rejects nullable compatible list elements for dense array fields',
-        () {
+    test('skips nullable compatible list elements for dense array fields', () {
       final writer = Fory();
       final reader = Fory();
       ScalarAndTypedArraySerializerTestFory.register(
@@ -568,10 +567,8 @@ void main() {
         CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
       );
 
-      expect(
-        () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
-        throwsA(isA<StateError>()),
-      );
+      final decoded = reader.deserialize<CompatibleArrayEnvelope>(bytes);
+      _expectInt32ListEquals(decoded.values, Int32List(0));
     });
 
     test('enforces maxBinarySize on write and read', () {

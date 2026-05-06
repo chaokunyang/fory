@@ -126,9 +126,11 @@ Notes:
 - `list<T>` and `array<T>` remain distinct schema kinds. In schema-compatible struct/class field
   matching only, a direct top-level `list<T>` field may be read as a direct top-level `array<T>`
   field, and a direct top-level `array<T>` field may be read as a direct top-level `list<T>` field,
-  when `T` is one of the dense bool/numeric array domains. The rule does not apply inside nested
-  collection, map, array, union, or generic positions. Reading peer `list<T>` data into a local
-  `array<T>` field fails if the list payload declares nullable elements.
+  when `T` is one of the dense bool/numeric array domains. Integer list element encodings in the
+  same signedness and width domain match the corresponding dense array element domain. The rule does
+  not apply inside nested collection, map, array, union, or generic positions. A peer nullable
+  `list<T>` field does not match a local `array<T>` field and follows the existing compatible-mode
+  skipped/default field behavior.
 
 ## Type info
 

@@ -703,13 +703,13 @@ export class ReadContext {
     const localElement = denseArrayElementTypeId(local.typeId);
     if (remoteElement !== undefined && localElement !== undefined) {
       if (remoteElement.nullable) {
-        throw new Error(
-          "compatible list-to-array field cannot read nullable elements",
+        return skipCompatibleField(
+          this.fieldInfoToTypeInfo(remote, undefined, false),
         );
       }
       if (remoteElement.trackingRef) {
-        throw new Error(
-          "compatible list-to-array field cannot read ref-tracked elements",
+        return skipCompatibleField(
+          this.fieldInfoToTypeInfo(remote, undefined, false),
         );
       }
       if (compatibleArrayElementTypeId(remoteElement.typeId) !== localElement) {
@@ -904,4 +904,13 @@ export class ReadContext {
   get maxCollectionSize() {
     return this._maxCollectionSize;
   }
+}
+
+function skipCompatibleField(typeInfo: TypeInfo): TypeInfo {
+  const skipped = typeInfo.clone();
+  skipped.options = {
+    ...skipped.options,
+    skipCompatibleField: true,
+  };
+  return skipped;
 }

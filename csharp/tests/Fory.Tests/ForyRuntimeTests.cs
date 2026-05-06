@@ -1071,15 +1071,17 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void CompatibleReadRejectsNullableListElementsIntoArrayCarrier()
+    public void CompatibleReadSkipsNullableListElementsIntoArrayCarrier()
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
         writer.Register<CompatibleNullableListSchema>(308);
         ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
         reader.Register<CompatibleArraySchema>(308);
 
-        Assert.Throws<InvalidDataException>(() => reader.Deserialize<CompatibleArraySchema>(
-            writer.Serialize(new CompatibleNullableListSchema { Values = [1, null] })));
+        CompatibleArraySchema decoded = reader.Deserialize<CompatibleArraySchema>(
+            writer.Serialize(new CompatibleNullableListSchema { Values = [1, null] }));
+
+        Assert.Null(decoded.Values);
     }
 
     [Fact]

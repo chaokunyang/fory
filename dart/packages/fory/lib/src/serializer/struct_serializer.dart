@@ -20,6 +20,7 @@
 import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/field_info.dart';
+import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/meta/type_def.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
 import 'package:fory/src/serializer/compatible_struct_metadata.dart';
@@ -182,7 +183,11 @@ final class StructSerializer extends Serializer<Object?> {
         compatibleReadersBySlot[localField.slot](
           context,
           value,
-          readFieldValue<Object?>(context, localField),
+          readCompatibleMatchedField(
+            context,
+            localField,
+            layout.remoteFields[index],
+          ),
         );
       }
       if (needsSentinel &&
@@ -202,9 +207,10 @@ final class StructSerializer extends Serializer<Object?> {
         continue;
       }
       final slot = localField.slot;
-      compatibleValues[slot] = readFieldValue(
+      compatibleValues[slot] = readCompatibleMatchedField(
         context,
         localField,
+        layout.remoteFields[index],
       );
       presentSlots[slot] = true;
     }
@@ -238,10 +244,12 @@ final class StructSerializer extends Serializer<Object?> {
         fields.add(null);
         continue;
       }
-      final mergedField = _typeResolver.serializationFieldInfo(
-        mergeCompatibleReadField(localField.field, remoteField),
-        slot: localField.slot,
-      );
+      final mergedField = _topLevelListArrayPair(localField.field, remoteField)
+          ? localField
+          : _typeResolver.serializationFieldInfo(
+              mergeCompatibleReadField(localField.field, remoteField),
+              slot: localField.slot,
+            );
       fields.add(mergedField);
     }
     final layout = _CompatibleReadLayout(
@@ -263,6 +271,18 @@ final class StructSerializer extends Serializer<Object?> {
     }
   }
 }
+
+bool _topLevelListArrayPair(FieldInfo localField, FieldInfo remoteField) {
+  final localType = localField.fieldType.typeId;
+  final remoteType = remoteField.fieldType.typeId;
+  return (localType == TypeIds.list && _isArrayType(remoteType)) ||
+      (_isArrayType(localType) && remoteType == TypeIds.list);
+}
+
+bool _isArrayType(int typeId) =>
+    typeId >= TypeIds.boolArray &&
+    typeId <= TypeIds.float64Array &&
+    typeId != 52;
 
 final class _CompatibleReadLayout {
   final List<FieldInfo> remoteFields;

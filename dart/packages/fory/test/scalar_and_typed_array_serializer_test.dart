@@ -72,6 +72,30 @@ class ExplicitArrayEnvelope {
   List<int> normalList = <int>[];
 }
 
+@ForyStruct()
+class CompatibleListEnvelope {
+  CompatibleListEnvelope();
+
+  @ListField(element: Int32Type(encoding: Encoding.fixed))
+  List<int> values = <int>[];
+}
+
+@ForyStruct()
+class CompatibleArrayEnvelope {
+  CompatibleArrayEnvelope();
+
+  @ArrayField(element: Int32Type())
+  Int32List values = Int32List(0);
+}
+
+@ForyStruct()
+class CompatibleNullableListEnvelope {
+  CompatibleNullableListEnvelope();
+
+  @ListField(element: Int32Type(nullable: true, encoding: Encoding.fixed))
+  List<int?> values = <int?>[];
+}
+
 void _registerScalarTypes(Fory fory) {
   ScalarAndTypedArraySerializerTestFory.register(
     fory,
@@ -496,6 +520,58 @@ void main() {
       expect(fieldsByName['dense_ids'], equals(TypeIds.int32Array));
       expect(fieldsByName['pixels'], equals(TypeIds.uint8Array));
       expect(fieldsByName['normal_list'], equals(TypeIds.list));
+    });
+
+    test('adapts immediate compatible list and dense array fields', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestFory.register(
+        writer,
+        CompatibleListEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleListArrayEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestFory.register(
+        reader,
+        CompatibleArrayEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleListArrayEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleListEnvelope()..values = <int>[1, 2, 3],
+      );
+      final decoded = reader.deserialize<CompatibleArrayEnvelope>(bytes);
+
+      _expectInt32ListEquals(
+          decoded.values, Int32List.fromList(<int>[1, 2, 3]));
+    });
+
+    test('rejects nullable compatible list elements for dense array fields',
+        () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestFory.register(
+        writer,
+        CompatibleNullableListEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleNullableListArrayEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestFory.register(
+        reader,
+        CompatibleArrayEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleNullableListArrayEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
+      );
+
+      expect(
+        () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
+        throwsA(isA<StateError>()),
+      );
     });
 
     test('enforces maxBinarySize on write and read', () {

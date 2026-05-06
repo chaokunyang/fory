@@ -120,6 +120,28 @@ private struct LocalNestedVarintMapV2: Equatable {
 }
 
 @ForyStruct
+private struct CompatibleListFieldV1: Equatable {
+    @ListField(element: .int32(encoding: .fixed))
+    var values: [Int32] = []
+
+    var extra: Int32 = 0
+}
+
+@ForyStruct
+private struct CompatibleArrayFieldV2: Equatable {
+    @ArrayField(element: .int32())
+    var values: [Int32] = []
+}
+
+@ForyStruct
+private struct CompatibleNullableListFieldV1: Equatable {
+    @ListField(element: .int32(nullable: true, encoding: .fixed))
+    var values: [Int32?] = []
+
+    var extra: Int32 = 0
+}
+
+@ForyStruct
 private struct SchemaVersionV1: Equatable {
     var id: Int32 = 0
     var name: String = ""
@@ -351,6 +373,35 @@ func compatibleSkipUsesRemoteMetadataForNestedMapListSetFields() throws {
     #expect(decoded.data.isEmpty)
     #expect(decoded.keep == source.keep)
     #expect(decoded.ids.isEmpty)
+}
+
+@Test
+func compatibleReadAdaptsImmediateListAndArrayFieldPair() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleListFieldV1.self, id: 9922)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleArrayFieldV2.self, id: 9922)
+
+    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(
+        try writer.serialize(CompatibleListFieldV1(values: [1, 2, 3], extra: 9))
+    )
+    #expect(decoded.values == [1, 2, 3])
+}
+
+@Test
+func compatibleReadRejectsNullableListElementsForArrayField() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleNullableListFieldV1.self, id: 9923)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleArrayFieldV2.self, id: 9923)
+
+    #expect(throws: ForyError.self) {
+        let _: CompatibleArrayFieldV2 = try reader.deserialize(
+            try writer.serialize(CompatibleNullableListFieldV1(values: [1, 2, 3], extra: 9))
+        )
+    }
 }
 
 @Test

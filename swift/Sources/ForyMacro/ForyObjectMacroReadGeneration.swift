@@ -386,7 +386,13 @@ private func buildCompatibleReadCases(
             refModeExpr: "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
             readTypeInfoExpr: "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
         )
-        return assignCase(sortedIndex, field, valueExpr)
+        let indexedCase = assignCase(sortedIndex, field, valueExpr)
+        let namedCase = assignCase(-1, field, valueExpr)
+            .replacingOccurrences(
+                of: "case -1:",
+                with: "case _ where remoteField.fieldName == \"\(field.name)\":"
+            )
+        return "\(indexedCase)\n\(indent)\(namedCase)"
     }.joined(separator: "\n\(indent)")
 }
 
@@ -404,6 +410,15 @@ private func readFieldExpr(
     }
     if let codecType = field.customCodecType {
         let fieldCodec = field.isOptional ? "OptionalFieldCodec<\(codecType)>" : codecType
+        if readTypeInfoExpr.contains("remoteField.fieldType") {
+            return """
+            try \(fieldCodec).readCompatibleField(
+                context,
+                remoteFieldType: remoteField.fieldType,
+                refMode: \(refModeExpr)
+            )
+            """
+        }
         return "try \(fieldCodec).read(context, refMode: \(refModeExpr), readTypeInfo: false)"
     }
     return "try \(field.typeText).foryRead(context, refMode: \(refModeExpr), readTypeInfo: \(readTypeInfoExpr))"

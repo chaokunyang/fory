@@ -195,6 +195,45 @@ describe("typemeta", () => {
     });
   });
 
+  test("adapts only immediate compatible list and dense array field pairs", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const writerType = Type.struct(7211, {
+      values: Type.list(Type.int32({ encoding: "fixed" })).setId(1),
+    });
+    const readerType = Type.struct(7211, {
+      values: Type.int32Array().setId(1),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      values: [1, 2, 3],
+    });
+    const result = readerFory.register(readerType).deserialize(bytes);
+
+    expect(result).toEqual({ values: [1, 2, 3] });
+  });
+
+  test("rejects compatible list to dense array when remote elements are nullable", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const writerType = Type.struct(7212, {
+      values: Type.list(Type.int32({ encoding: "fixed" }).setNullable(true)).setId(1),
+    });
+    const readerType = Type.struct(7212, {
+      values: Type.int32Array().setId(1),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      values: [1, 2, 3],
+    });
+
+    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow(
+      "compatible list-to-array field cannot read nullable elements",
+    );
+  });
+
   test("keeps compatible named schema evolution working when field count differs", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });

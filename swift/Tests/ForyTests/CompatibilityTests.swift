@@ -426,17 +426,17 @@ func compatibleReadAdaptsArrayFieldToDefaultVarintListField() throws {
 }
 
 @Test
-func compatibleReadSkipsNullableListElementsForArrayField() throws {
+func compatibleReadRejectsNullableListElementsForArrayField() throws {
     let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     writer.register(CompatibleNullableListFieldV1.self, id: 9923)
 
     let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     reader.register(CompatibleArrayFieldV2.self, id: 9923)
 
-    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(
-        try writer.serialize(CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
-    )
-    #expect(decoded.values.isEmpty)
+    let bytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
+    #expect(throws: ForyError.invalidData("compatible list-to-array field cannot read nullable elements")) {
+        let _: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
+    }
 }
 
 @Test

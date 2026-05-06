@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import Fory, { Type } from '../packages/core/index';
+import Fory, { Type, BoolArray } from '../packages/core/index';
 import { describe, expect, test } from '@jest/globals';
 
 describe('size-limit guardrails', () => {
@@ -274,7 +274,8 @@ describe('size-limit guardrails', () => {
       }));
       const data = { flags: [true, false, true] };
       const result = deserialize(serialize(data));
-      expect(result!.flags).toEqual([true, false, true]);
+      expect(result!.flags).toBeInstanceOf(BoolArray);
+      expect(Array.from(result!.flags)).toEqual([true, false, true]);
     });
 
     test('should throw when bool array exceeds maxCollectionSize', () => {

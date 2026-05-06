@@ -22,6 +22,9 @@ import { Gen } from "./gen";
 import { Dynamic, Type, TypeInfo } from "./typeInfo";
 import { ReadContext, WriteContext } from "./context";
 import { Decimal } from "./types/decimal";
+import { BFloat16Array } from "./types/bfloat16";
+import { BoolArray } from "./types/boolArray";
+import { isFloat16Array } from "./types/float16";
 
 const uninitSerialize = {
   _initialized: false,
@@ -108,6 +111,9 @@ export default class TypeResolver {
   private int16ArraySerializer: null | Serializer = null;
   private int32ArraySerializer: null | Serializer = null;
   private int64ArraySerializer: null | Serializer = null;
+  private boolArraySerializer: null | Serializer = null;
+  private float16ArraySerializer: null | Serializer = null;
+  private bfloat16ArraySerializer: null | Serializer = null;
   private float32ArraySerializer: null | Serializer = null;
   private float64ArraySerializer: null | Serializer = null;
 
@@ -231,6 +237,9 @@ export default class TypeResolver {
     this.int16ArraySerializer = this.getSerializerById(TypeId.INT16_ARRAY);
     this.int32ArraySerializer = this.getSerializerById(TypeId.INT32_ARRAY);
     this.int64ArraySerializer = this.getSerializerById(TypeId.INT64_ARRAY);
+    this.boolArraySerializer = this.getSerializerById(TypeId.BOOL_ARRAY);
+    this.float16ArraySerializer = this.getSerializerById(TypeId.FLOAT16_ARRAY);
+    this.bfloat16ArraySerializer = this.getSerializerById(TypeId.BFLOAT16_ARRAY);
     this.float32ArraySerializer = this.getSerializerById(TypeId.FLOAT32_ARRAY);
     this.float64ArraySerializer = this.getSerializerById(TypeId.FLOAT64_ARRAY);
   }
@@ -337,6 +346,18 @@ export default class TypeResolver {
 
     if (v instanceof Decimal) {
       return this.decimalSerializer;
+    }
+
+    if (v instanceof BoolArray) {
+      return this.boolArraySerializer;
+    }
+
+    if (isFloat16Array(v)) {
+      return this.float16ArraySerializer;
+    }
+
+    if (v instanceof BFloat16Array) {
+      return this.bfloat16ArraySerializer;
     }
 
     if (v instanceof Uint8Array) {

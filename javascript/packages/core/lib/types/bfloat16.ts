@@ -57,24 +57,35 @@ export class BFloat16 {
   }
 }
 
+export function toBFloat16Bits(value: BFloat16 | number): number {
+  return value instanceof BFloat16 ? value.toBits() : BFloat16.fromFloat32(value).toBits();
+}
+
+export function fromBFloat16Bits(bits: number): number {
+  float32View[0] = 0;
+  uint32View[0] = (bits & 0xffff) << 16;
+  return float32View[0];
+}
+
 export class BFloat16Array {
+  static readonly BYTES_PER_ELEMENT = 2;
+  readonly BYTES_PER_ELEMENT = 2;
   private readonly _data: Uint16Array;
 
   constructor(length: number);
-  constructor(source: Uint16Array | BFloat16[] | number[]);
-  constructor(lengthOrSource: number | Uint16Array | BFloat16[] | number[]) {
+  constructor(source: BFloat16Array | Uint16Array | ArrayLike<BFloat16 | number>);
+  constructor(lengthOrSource: number | BFloat16Array | Uint16Array | ArrayLike<BFloat16 | number>) {
     if (typeof lengthOrSource === "number") {
       this._data = new Uint16Array(lengthOrSource);
+    } else if (lengthOrSource instanceof BFloat16Array) {
+      this._data = new Uint16Array(lengthOrSource.raw);
     } else if (lengthOrSource instanceof Uint16Array) {
       this._data = new Uint16Array(lengthOrSource.length);
       this._data.set(lengthOrSource);
     } else {
-      const arr = lengthOrSource as (BFloat16 | number)[];
-      this._data = new Uint16Array(arr.length);
-      for (let i = 0; i < arr.length; i++) {
-        const v = arr[i];
-        this._data[i]
-          = v instanceof BFloat16 ? v.toBits() : BFloat16.fromFloat32(v).toBits();
+      this._data = new Uint16Array(lengthOrSource.length);
+      for (let i = 0; i < lengthOrSource.length; i++) {
+        this._data[i] = toBFloat16Bits(lengthOrSource[i]);
       }
     }
   }
@@ -83,13 +94,47 @@ export class BFloat16Array {
     return this._data.length;
   }
 
-  get(index: number): BFloat16 {
-    return BFloat16.fromBits(this._data[index]);
+  get byteLength(): number {
+    return this._data.byteLength;
   }
 
-  set(index: number, value: BFloat16 | number): void {
-    this._data[index]
-      = value instanceof BFloat16 ? value.toBits() : BFloat16.fromFloat32(value).toBits();
+  get byteOffset(): number {
+    return this._data.byteOffset;
+  }
+
+  get buffer(): ArrayBufferLike {
+    return this._data.buffer;
+  }
+
+  get(index: number): number {
+    return fromBFloat16Bits(this._data[index]);
+  }
+
+  at(index: number): number | undefined {
+    const normalized = index < 0 ? this.length + index : index;
+    if (normalized < 0 || normalized >= this.length) {
+      return undefined;
+    }
+    return this.get(normalized);
+  }
+
+  set(values: BFloat16Array | ArrayLike<BFloat16 | number>, offset = 0): void {
+    if (values instanceof BFloat16Array) {
+      this._data.set(values.raw, offset);
+      return;
+    }
+    for (let i = 0; i < values.length; i++) {
+      this._data[offset + i] = toBFloat16Bits(values[i]);
+    }
+  }
+
+  setValue(index: number, value: BFloat16 | number): void {
+    this._data[index] = toBFloat16Bits(value);
+  }
+
+  fill(value: BFloat16 | number, start?: number, end?: number): this {
+    this._data.fill(toBFloat16Bits(value), start, end);
+    return this;
   }
 
   get raw(): Uint16Array {
@@ -97,21 +142,37 @@ export class BFloat16Array {
   }
 
   static fromRaw(data: Uint16Array): BFloat16Array {
-    const arr = new BFloat16Array(data.length);
-    arr._data.set(data);
-    return arr;
+    const array = Object.create(BFloat16Array.prototype) as BFloat16Array;
+    Object.defineProperty(array, "_data", {
+      value: data,
+      enumerable: false,
+      writable: false,
+    });
+    return array;
   }
 
-  [Symbol.iterator](): IterableIterator<BFloat16> {
+  slice(start?: number, end?: number): BFloat16Array {
+    return BFloat16Array.fromRaw(this._data.slice(start, end));
+  }
+
+  subarray(begin?: number, end?: number): BFloat16Array {
+    return BFloat16Array.fromRaw(this._data.subarray(begin, end));
+  }
+
+  toArray(): number[] {
+    return Array.from(this);
+  }
+
+  [Symbol.iterator](): IterableIterator<number> {
     let i = 0;
     const data = this._data;
     const len = data.length;
     return {
-      next(): IteratorResult<BFloat16> {
+      next(): IteratorResult<number> {
         if (i < len) {
-          return { value: BFloat16.fromBits(data[i++]), done: false };
+          return { value: fromBFloat16Bits(data[i++]), done: false };
         }
-        return { value: undefined as unknown as BFloat16, done: true };
+        return { value: undefined as unknown as number, done: true };
       },
       [Symbol.iterator]() {
         return this;

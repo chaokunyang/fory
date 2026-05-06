@@ -17,7 +17,13 @@
  * under the License.
  */
 
-import Fory, { Type, BFloat16Array } from '../packages/core/index';
+import Fory, {
+  Type,
+  BFloat16Array,
+  BoolArray,
+  Float16Array,
+  ForyFloat16Array,
+} from '../packages/core/index';
 import { TypeId } from '../packages/core/lib/type';
 import { describe, expect, test } from '@jest/globals';
 import * as beautify from 'js-beautify';
@@ -79,13 +85,12 @@ describe('array', () => {
     const result = fory.deserialize(
       input
     );
-    expect(result).toEqual({
-      a: [true, false],
-      a2: new Int16Array([1, 2, 3]),
-      a3: new Int32Array([3, 5, 76]),
-      a4: new BigInt64Array([634n, 564n, 76n]),
-      a6: new Float64Array([234243.555, 55654.679]),
-    })
+    expect(result.a).toBeInstanceOf(BoolArray);
+    expect(Array.from(result.a)).toEqual([true, false]);
+    expect(result.a2).toEqual(new Int16Array([1, 2, 3]));
+    expect(result.a3).toEqual(new Int32Array([3, 5, 76]));
+    expect(result.a4).toEqual(new BigInt64Array([634n, 564n, 76n]));
+    expect(result.a6).toEqual(new Float64Array([234243.555, 55654.679]));
   });
 
 
@@ -122,9 +127,10 @@ describe('array', () => {
     const result = fory.deserialize(
       input
     );
-    expect(result.a6[0]).toBeCloseTo(1.5, 1)
-    expect(result.a6[1]).toBeCloseTo(2.5, 1)
-    expect(result.a6[2]).toBeCloseTo(-4.5, 1)
+    expect(result.a6).toBeInstanceOf(Float16Array as any);
+    expect(Array.from(result.a6 as Iterable<number>)[0]).toBeCloseTo(1.5, 1)
+    expect(Array.from(result.a6 as Iterable<number>)[1]).toBeCloseTo(2.5, 1)
+    expect(Array.from(result.a6 as Iterable<number>)[2]).toBeCloseTo(-4.5, 1)
   });
 
   test('should bfloat16Array work', () => {
@@ -139,10 +145,11 @@ describe('array', () => {
       a7: [1.5, 2.5, -4.5],
     }, serialize);
     const result = fory.deserialize(input);
+    expect(result.a7).toBeInstanceOf(BFloat16Array);
     expect(result.a7).toHaveLength(3);
-    expect(result.a7[0].toFloat32()).toBeCloseTo(1.5, 2);
-    expect(result.a7[1].toFloat32()).toBeCloseTo(2.5, 2);
-    expect(result.a7[2].toFloat32()).toBeCloseTo(-4.5, 2);
+    expect(result.a7.get(0)).toBeCloseTo(1.5, 2);
+    expect(result.a7.get(1)).toBeCloseTo(2.5, 2);
+    expect(result.a7.get(2)).toBeCloseTo(-4.5, 2);
   });
 
   test('should bfloat16Array accept BFloat16Array', () => {
@@ -156,9 +163,68 @@ describe('array', () => {
     const arr = new BFloat16Array([1.25, -2.5, 0]);
     const input = fory.serialize({ a7: arr }, serialize);
     const result = fory.deserialize(input);
+    expect(result.a7).toBeInstanceOf(BFloat16Array);
     expect(result.a7).toHaveLength(3);
-    expect(result.a7[0].toFloat32()).toBeCloseTo(1.25, 2);
-    expect(result.a7[1].toFloat32()).toBeCloseTo(-2.5, 2);
-    expect(result.a7[2].toFloat32()).toBe(0);
+    expect(result.a7.get(0)).toBeCloseTo(1.25, 2);
+    expect(result.a7.get(1)).toBeCloseTo(-2.5, 2);
+    expect(result.a7.get(2)).toBe(0);
+  });
+
+  test('should expose bool and reduced-precision array carriers', () => {
+    const bools = new BoolArray([true, false, true]);
+    bools.setValue(1, true);
+    expect(Array.from(bools)).toEqual([true, true, true]);
+    expect(bools.raw).toEqual(new Uint8Array([1, 1, 1]));
+
+    const f16 = new ForyFloat16Array([1.5, -2]);
+    expect(f16.get(0)).toBeCloseTo(1.5, 1);
+    expect(f16.get(1)).toBeCloseTo(-2, 1);
+
+    const bf16 = new BFloat16Array([1.5, -2]);
+    expect(Array.from(bf16)).toEqual([1.5, -2]);
+  });
+
+  test('should write dense array protocol bytes in little-endian order', () => {
+    const fory = new Fory({ compatible: false, ref: true });
+
+    const uint16Type = Type.struct({ typeName: 'example.uint16array' }, {
+      values: Type.uint16Array(),
+    });
+    const uint16Serializer = fory.register(uint16Type).serializer;
+    const uint16Bytes = fory.serialize({
+      values: new Uint16Array([0x1234, 0xabcd]),
+    }, uint16Serializer);
+    expect(containsBytes(uint16Bytes, [0x34, 0x12, 0xcd, 0xab])).toBe(true);
+
+    const float16Type = Type.struct({ typeName: 'example.float16array' }, {
+      values: Type.float16Array(),
+    });
+    const float16Serializer = fory.register(float16Type).serializer;
+    const float16Bytes = fory.serialize({
+      values: new ForyFloat16Array([1, -2]),
+    }, float16Serializer);
+    expect(containsBytes(float16Bytes, [0x00, 0x3c, 0x00, 0xc0])).toBe(true);
+
+    const bfloat16Type = Type.struct({ typeName: 'example.bfloat16array' }, {
+      values: Type.bfloat16Array(),
+    });
+    const bfloat16Serializer = fory.register(bfloat16Type).serializer;
+    const bfloat16Bytes = fory.serialize({
+      values: new BFloat16Array([1, -2]),
+    }, bfloat16Serializer);
+    expect(containsBytes(bfloat16Bytes, [0x80, 0x3f, 0x00, 0xc0])).toBe(true);
   });
 });
+
+function containsBytes(bytes: Uint8Array, needle: number[]) {
+  outer:
+  for (let i = 0; i <= bytes.length - needle.length; i++) {
+    for (let j = 0; j < needle.length; j++) {
+      if (bytes[i + j] !== needle[j]) {
+        continue outer;
+      }
+    }
+    return true;
+  }
+  return false;
+}

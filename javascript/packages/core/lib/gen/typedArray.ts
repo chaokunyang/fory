@@ -23,8 +23,47 @@ import { BaseSerializerGenerator } from "./serializer";
 import { CodegenRegistry } from "./router";
 import { Scope } from "./scope";
 import { TypeId } from "../type";
+import { BFloat16Array } from "../types/bfloat16";
+import { BoolArray } from "../types/boolArray";
+import {
+  createFloat16ArrayFromRaw,
+  getFloat16Raw,
+} from "../types/float16";
 
-function build(inner: TypeInfo, creator: string, size: number) {
+const endianProbe = new Uint16Array([0x00ff]);
+const IS_LITTLE_ENDIAN = new Uint8Array(endianProbe.buffer)[0] === 0xff;
+
+type TypedArrayReadMethod =
+  | "readFloat32"
+  | "readFloat64"
+  | "readInt8"
+  | "readInt16"
+  | "readInt32"
+  | "readInt64"
+  | "readUint8"
+  | "readUint16"
+  | "readUint32"
+  | "readUint64";
+
+type TypedArrayWriteMethod =
+  | "writeFloat32"
+  | "writeFloat64"
+  | "writeInt8"
+  | "writeInt16"
+  | "writeInt32"
+  | "writeInt64"
+  | "writeUint8"
+  | "writeUint16"
+  | "writeUint32"
+  | "writeUint64";
+
+function build(
+  inner: TypeInfo,
+  creator: string,
+  size: number,
+  readMethod: TypedArrayReadMethod,
+  writeMethod: TypedArrayWriteMethod,
+) {
   return class TypedArraySerializerGenerator extends BaseSerializerGenerator {
     typeInfo: TypeInfo;
 
@@ -34,6 +73,16 @@ function build(inner: TypeInfo, creator: string, size: number) {
     }
 
     write(accessor: string): string {
+      if (size !== 1 && !IS_LITTLE_ENDIAN) {
+        const idx = this.scope.uniqueName("idx");
+        return `
+                ${this.builder.writer.writeVarUInt32(`${accessor}.length * ${size}`)}
+                ${this.builder.writer.reserve(`${accessor}.length * ${size}`)};
+                for (let ${idx} = 0; ${idx} < ${accessor}.length; ${idx}++) {
+                  ${this.builder.writer[writeMethod](`${accessor}[${idx}]`)}
+                }
+            `;
+      }
       return `
                 ${this.builder.writer.writeVarUInt32(`${accessor}.byteLength`)}
                 ${this.builder.writer.arrayBuffer(`${accessor}.buffer`, `${accessor}.byteOffset`, `${accessor}.byteLength`)}
@@ -45,6 +94,24 @@ function build(inner: TypeInfo, creator: string, size: number) {
       const len = this.scope.uniqueName("len");
       const copied = this.scope.uniqueName("copied");
 
+      if (size !== 1 && !IS_LITTLE_ENDIAN) {
+        const rawLen = this.scope.uniqueName("rawLen");
+        const idx = this.scope.uniqueName("idx");
+        return `
+                const ${rawLen} = ${this.builder.reader.readVarUInt32()};
+                ${this.builder.getReadContextName()}.checkBinarySize(${rawLen});
+                if ((${rawLen} % ${size}) !== 0) {
+                  throw new Error("dense array byte length is not divisible by element size");
+                }
+                const ${len} = ${rawLen} / ${size};
+                const ${result} = new ${creator}(${len});
+                ${this.maybeReference(result, refState)}
+                for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+                  ${result}[${idx}] = ${this.builder.reader[readMethod]()};
+                }
+                ${accessor(result)}
+             `;
+      }
       return `
                 const ${len} = ${this.builder.reader.readVarUInt32()};
                 ${this.builder.getReadContextName()}.checkBinarySize(${len});
@@ -71,11 +138,18 @@ class BoolArraySerializerGenerator extends BaseSerializerGenerator {
 
   write(accessor: string): string {
     const item = this.scope.uniqueName("item");
+    const raw = this.scope.uniqueName("raw");
     return `
-                ${this.builder.writer.writeVarUInt32(`${accessor}.length`)}
-                ${this.builder.writer.reserve(`${accessor}.length`)};
-                for (const ${item} of ${accessor}) {
-                  ${this.builder.writer.writeUint8(`${item} ? 1 : 0`)}
+                if (${accessor} instanceof external.BoolArray) {
+                  const ${raw} = ${accessor}.raw;
+                  ${this.builder.writer.writeVarUInt32(`${raw}.byteLength`)}
+                  ${this.builder.writer.buffer(raw)}
+                } else {
+                  ${this.builder.writer.writeVarUInt32(`${accessor}.length`)}
+                  ${this.builder.writer.reserve(`${accessor}.length`)};
+                  for (const ${item} of ${accessor}) {
+                    ${this.builder.writer.writeUint8(`${item} ? 1 : 0`)}
+                  }
                 }
             `;
   }
@@ -83,15 +157,13 @@ class BoolArraySerializerGenerator extends BaseSerializerGenerator {
   read(accessor: (expr: string) => string, refState: string): string {
     const result = this.scope.uniqueName("result");
     const len = this.scope.uniqueName("len");
-    const idx = this.scope.uniqueName("idx");
+    const copied = this.scope.uniqueName("copied");
     return `
                 const ${len} = ${this.builder.reader.readVarUInt32()};
                 ${this.builder.getReadContextName()}.checkCollectionSize(${len});
-                const ${result} = new Array(${len});
+                const ${copied} = ${this.builder.reader.buffer(len)}
+                const ${result} = external.BoolArray.fromRaw(${copied});
                 ${this.maybeReference(result, refState)}
-                for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                  ${result}[${idx}] = ${this.builder.reader.readUint8()} === 1;
-                }
                 ${accessor(result)}
              `;
   }
@@ -111,11 +183,22 @@ class Float16ArraySerializerGenerator extends BaseSerializerGenerator {
 
   write(accessor: string): string {
     const item = this.scope.uniqueName("item");
+    const raw = this.scope.uniqueName("raw");
+    const idx = this.scope.uniqueName("idx");
     return `
-        ${this.builder.writer.writeVarUInt32(`${accessor}.length * 2`)}
-        ${this.builder.writer.reserve(`${accessor}.length * 2`)};
-        for (const ${item} of ${accessor}) {
-          ${this.builder.writer.writeFloat16(item)}
+        const ${raw} = external.getFloat16Raw(${accessor});
+        if (${raw} !== null) {
+          ${this.builder.writer.writeVarUInt32(`${raw}.byteLength`)}
+          ${this.builder.writer.reserve(`${raw}.byteLength`)};
+          for (let ${idx} = 0; ${idx} < ${raw}.length; ${idx}++) {
+            ${this.builder.writer.writeUint16(`${raw}[${idx}]`)}
+          }
+        } else {
+          ${this.builder.writer.writeVarUInt32(`${accessor}.length * 2`)}
+          ${this.builder.writer.reserve(`${accessor}.length * 2`)};
+          for (const ${item} of ${accessor}) {
+            ${this.builder.writer.writeFloat16(item)}
+          }
         }
     `;
   }
@@ -125,15 +208,20 @@ class Float16ArraySerializerGenerator extends BaseSerializerGenerator {
     const rawLen = this.scope.uniqueName("rawLen");
     const len = this.scope.uniqueName("len");
     const idx = this.scope.uniqueName("idx");
+    const raw = this.scope.uniqueName("raw");
     return `
         const ${rawLen} = ${this.builder.reader.readVarUInt32()};
         ${this.builder.getReadContextName()}.checkBinarySize(${rawLen});
-        const ${len} = ${rawLen} / 2;
-        const ${result} = new Array(${len});
-        ${this.maybeReference(result, refState)}
-        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-          ${result}[${idx}] = ${this.builder.reader.readFloat16()};
+        if ((${rawLen} % 2) !== 0) {
+          throw new Error("float16 array byte length is not divisible by element size");
         }
+        const ${len} = ${rawLen} / 2;
+        const ${raw} = new Uint16Array(${len});
+        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+          ${raw}[${idx}] = ${this.builder.reader.readUint16()};
+        }
+        const ${result} = external.createFloat16ArrayFromRaw(${raw});
+        ${this.maybeReference(result, refState)}
         ${accessor(result)}
       `;
   }
@@ -153,11 +241,22 @@ class BFloat16ArraySerializerGenerator extends BaseSerializerGenerator {
 
   write(accessor: string): string {
     const item = this.scope.uniqueName("item");
+    const raw = this.scope.uniqueName("raw");
+    const idx = this.scope.uniqueName("idx");
     return `
-        ${this.builder.writer.writeVarUInt32(`${accessor}.length * 2`)}
-        ${this.builder.writer.reserve(`${accessor}.length * 2`)};
-        for (const ${item} of ${accessor}) {
-          ${this.builder.writer.writeBfloat16(item)}
+        if (${accessor} instanceof external.BFloat16Array) {
+          const ${raw} = ${accessor}.raw;
+          ${this.builder.writer.writeVarUInt32(`${raw}.byteLength`)}
+          ${this.builder.writer.reserve(`${raw}.byteLength`)};
+          for (let ${idx} = 0; ${idx} < ${raw}.length; ${idx}++) {
+            ${this.builder.writer.writeUint16(`${raw}[${idx}]`)}
+          }
+        } else {
+          ${this.builder.writer.writeVarUInt32(`${accessor}.length * 2`)}
+          ${this.builder.writer.reserve(`${accessor}.length * 2`)};
+          for (const ${item} of ${accessor}) {
+            ${this.builder.writer.writeBfloat16(item)}
+          }
         }
     `;
   }
@@ -167,15 +266,20 @@ class BFloat16ArraySerializerGenerator extends BaseSerializerGenerator {
     const rawLen = this.scope.uniqueName("rawLen");
     const len = this.scope.uniqueName("len");
     const idx = this.scope.uniqueName("idx");
+    const raw = this.scope.uniqueName("raw");
     return `
         const ${rawLen} = ${this.builder.reader.readVarUInt32()};
         ${this.builder.getReadContextName()}.checkBinarySize(${rawLen});
-        const ${len} = ${rawLen} / 2;
-        const ${result} = new Array(${len});
-        ${this.maybeReference(result, refState)}
-        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-          ${result}[${idx}] = ${this.builder.reader.readBfloat16()};
+        if ((${rawLen} % 2) !== 0) {
+          throw new Error("bfloat16 array byte length is not divisible by element size");
         }
+        const ${len} = ${rawLen} / 2;
+        const ${raw} = new Uint16Array(${len});
+        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
+          ${raw}[${idx}] = ${this.builder.reader.readUint16()};
+        }
+        const ${result} = external.BFloat16Array.fromRaw(${raw});
+        ${this.maybeReference(result, refState)}
         ${accessor(result)}
       `;
   }
@@ -186,16 +290,20 @@ class BFloat16ArraySerializerGenerator extends BaseSerializerGenerator {
 }
 
 CodegenRegistry.register(TypeId.BOOL_ARRAY, BoolArraySerializerGenerator);
-CodegenRegistry.register(TypeId.BINARY, build(Type.uint8(), `Uint8Array`, 1));
-CodegenRegistry.register(TypeId.INT8_ARRAY, build(Type.int8(), `Int8Array`, 1));
-CodegenRegistry.register(TypeId.INT16_ARRAY, build(Type.int16(), `Int16Array`, 2));
-CodegenRegistry.register(TypeId.INT32_ARRAY, build(Type.int32(), `Int32Array`, 4));
-CodegenRegistry.register(TypeId.INT64_ARRAY, build(Type.int64(), `BigInt64Array`, 8));
-CodegenRegistry.register(TypeId.UINT8_ARRAY, build(Type.uint8(), `Uint8Array`, 1));
-CodegenRegistry.register(TypeId.UINT16_ARRAY, build(Type.uint16(), `Uint16Array`, 2));
-CodegenRegistry.register(TypeId.UINT32_ARRAY, build(Type.uint32(), `Uint32Array`, 4));
-CodegenRegistry.register(TypeId.UINT64_ARRAY, build(Type.uint64(), `BigUint64Array`, 8));
+CodegenRegistry.register(TypeId.BINARY, build(Type.uint8(), `Uint8Array`, 1, "readUint8", "writeUint8"));
+CodegenRegistry.register(TypeId.INT8_ARRAY, build(Type.int8(), `Int8Array`, 1, "readInt8", "writeInt8"));
+CodegenRegistry.register(TypeId.INT16_ARRAY, build(Type.int16(), `Int16Array`, 2, "readInt16", "writeInt16"));
+CodegenRegistry.register(TypeId.INT32_ARRAY, build(Type.int32(), `Int32Array`, 4, "readInt32", "writeInt32"));
+CodegenRegistry.register(TypeId.INT64_ARRAY, build(Type.int64(), `BigInt64Array`, 8, "readInt64", "writeInt64"));
+CodegenRegistry.register(TypeId.UINT8_ARRAY, build(Type.uint8(), `Uint8Array`, 1, "readUint8", "writeUint8"));
+CodegenRegistry.register(TypeId.UINT16_ARRAY, build(Type.uint16(), `Uint16Array`, 2, "readUint16", "writeUint16"));
+CodegenRegistry.register(TypeId.UINT32_ARRAY, build(Type.uint32(), `Uint32Array`, 4, "readUint32", "writeUint32"));
+CodegenRegistry.register(TypeId.UINT64_ARRAY, build(Type.uint64(), `BigUint64Array`, 8, "readUint64", "writeUint64"));
 CodegenRegistry.register(TypeId.FLOAT16_ARRAY, Float16ArraySerializerGenerator);
 CodegenRegistry.register(TypeId.BFLOAT16_ARRAY, BFloat16ArraySerializerGenerator);
-CodegenRegistry.register(TypeId.FLOAT32_ARRAY, build(Type.float32(), `Float32Array`, 4));
-CodegenRegistry.register(TypeId.FLOAT64_ARRAY, build(Type.float64(), `Float64Array`, 8));
+CodegenRegistry.register(TypeId.FLOAT32_ARRAY, build(Type.float32(), `Float32Array`, 4, "readFloat32", "writeFloat32"));
+CodegenRegistry.register(TypeId.FLOAT64_ARRAY, build(Type.float64(), `Float64Array`, 8, "readFloat64", "writeFloat64"));
+CodegenRegistry.registerExternal(BFloat16Array);
+CodegenRegistry.registerExternal(BoolArray);
+CodegenRegistry.registerExternal(createFloat16ArrayFromRaw);
+CodegenRegistry.registerExternal(getFloat16Raw);

@@ -1237,7 +1237,9 @@ can be taken as an example.
 #### primitive array
 
 Primitive array are taken as a binary buffer, serialization will just write the length of array size as an unsigned int,
-then copy the whole buffer into the stream.
+then copy the whole buffer into the stream. Multi-byte element arrays are always encoded in little-endian element order;
+runtimes whose native typed-array storage uses another byte order must swap or write elements explicitly instead of
+copying native storage bytes unchanged.
 
 Such serialization won't compress the array. If users want to compress primitive array, users need to register custom
 serializers for such types or mark it as list type.

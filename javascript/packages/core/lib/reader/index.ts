@@ -22,6 +22,7 @@ import { isNodeEnv } from "../util";
 import { PlatformBuffer, alloc, fromUint8Array } from "../platformBuffer";
 import { readLatin1String } from "./string";
 import { BFloat16 } from "../types/bfloat16";
+import { fromFloat16Bits } from "../types/float16";
 
 export class BinaryReader {
   private sliceStringEnable;
@@ -549,34 +550,7 @@ export class BinaryReader {
   }
 
   readFloat16() {
-    const asUint16 = this.readUint16();
-    const sign = asUint16 >> 15;
-    const exponent = (asUint16 >> 10) & 0x1f;
-    const mantissa = asUint16 & 0x3ff;
-
-    // IEEE 754-2008
-    if (exponent === 0) {
-      if (mantissa === 0) {
-        // +-0
-        return sign === 0 ? 0 : -0;
-      } else {
-        // Denormalized number
-        return (sign === 0 ? 1 : -1) * mantissa * 2 ** (1 - 15 - 10);
-      }
-    } else if (exponent === 31) {
-      if (mantissa === 0) {
-        // Infinity
-        return sign === 0 ? Infinity : -Infinity;
-      } else {
-        // NaN
-        return NaN;
-      }
-    } else {
-      // Normalized number
-      return (
-        (sign === 0 ? 1 : -1) * (1 + mantissa * 2 ** -10) * 2 ** (exponent - 15)
-      );
-    }
+    return fromFloat16Bits(this.readUint16());
   }
 
   readBfloat16(): BFloat16 {

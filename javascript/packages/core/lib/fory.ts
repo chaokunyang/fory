@@ -48,6 +48,11 @@ export default class Fory {
     (data: any) => PlatformBuffer
   >();
 
+  private readonly rootDeserializers = new WeakMap<
+    Serializer,
+    (bytes: Uint8Array) => any
+  >();
+
   constructor(config?: Partial<Config>) {
     this.config = this.initConfig(config);
     const maxDepth = this.config.maxDepth ?? DEFAULT_DEPTH_LIMIT;
@@ -135,12 +140,7 @@ export default class Fory {
     return {
       serializer,
       serialize: this.getRootSerializer(serializer),
-      deserialize: (bytes: Uint8Array) => {
-        if (TypeId.polymorphicType(serializer.getTypeId())) {
-          return this.deserialize(bytes, serializer);
-        }
-        return this.deserialize(bytes);
-      },
+      deserialize: this.getRootDeserializer(serializer),
     };
   }
 
@@ -188,6 +188,29 @@ export default class Fory {
     };
     this.rootSerializers.set(serializer, rootSerializer);
     return rootSerializer;
+  }
+
+  private getRootDeserializer(serializer: Serializer) {
+    let rootDeserializer = this.rootDeserializers.get(serializer);
+    if (rootDeserializer !== undefined) {
+      return rootDeserializer;
+    }
+    const readContext = this.readContext;
+    const reader = readContext.reader;
+    const rootSerializer = TypeId.polymorphicType(serializer.getTypeId())
+      ? serializer
+      : this.anySerializer;
+    const rootHeader = ConfigFlags.isCrossLanguageFlag;
+    rootDeserializer = (bytes: Uint8Array) => {
+      readContext.reset(bytes);
+      const bitmap = reader.readUint8();
+      if (bitmap !== rootHeader) {
+        this.throwInvalidRootHeader(bitmap);
+      }
+      return rootSerializer.readRef();
+    };
+    this.rootDeserializers.set(serializer, rootDeserializer);
+    return rootDeserializer;
   }
 
   serialize<T = any>(data: T, serializer: Serializer = this.anySerializer) {

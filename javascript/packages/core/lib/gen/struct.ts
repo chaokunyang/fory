@@ -128,6 +128,11 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     this.ownTypeInfoExpr = `${this.serializerExpr}.getTypeInfo()`;
   }
 
+  private isDepthFreeStruct(): boolean {
+    return this.sortedProps.length > 0
+      && this.sortedProps.every(({ typeInfo }) => isDepthFreeField(typeInfo));
+  }
+
   readField(fieldTypeInfo: TypeInfo, assignStmt: (expr: string) => string, embedGenerator: SerializerGenerator) {
     const { nullable = false, dynamic, trackingRef } = fieldTypeInfo;
     const refMode = toRefMode(trackingRef, nullable);
@@ -375,6 +380,20 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         ${this.builder.getReadContextName()}.incReadDepth();
         let ${result} = ${this.serializerExpr}.read(${refState});
         ${this.builder.getReadContextName()}.decReadDepth();
+        ${assignStmt(result)};
+      `;
+    }
+    if (this.isDepthFreeStruct()) {
+      return `
+        ${this.readTypeInfo()}
+        let ${result};
+        if (${this.metaChangedSerializer} !== null) {
+          ${this.builder.getReadContextName()}.incReadDepth();
+          ${result} = ${this.metaChangedSerializer}.read(${refState});
+          ${this.builder.getReadContextName()}.decReadDepth();
+        } else {
+          ${this.read(v => `${result} = ${v}`, refState)};
+        }
         ${assignStmt(result)};
       `;
     }

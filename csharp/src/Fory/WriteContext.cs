@@ -25,6 +25,7 @@ public sealed class WriteContext
     private uint _nextTypeMetaIndex;
 
     private readonly Dictionary<MetaString, uint> _metaStringIndexByKey = [];
+    private bool _hasMetaStringIndexes;
     private uint _nextMetaStringIndex;
 
     public WriteContext(
@@ -101,6 +102,7 @@ public sealed class WriteContext
         uint index = _nextMetaStringIndex;
         _nextMetaStringIndex += 1;
         _metaStringIndexByKey[value] = index;
+        _hasMetaStringIndexes = true;
         return (index, true);
     }
 
@@ -125,12 +127,20 @@ public sealed class WriteContext
 
     internal void Reset()
     {
-        RefWriter.Reset();
+        if (TrackRef)
+        {
+            RefWriter.Reset();
+        }
+
         _firstTypeMetaKey = 0;
         _hasFirstTypeMeta = false;
         _typeMetaIndexByType?.ClearKeys();
         _nextTypeMetaIndex = 0;
-        _metaStringIndexByKey.Clear();
-        _nextMetaStringIndex = 0;
+        if (_hasMetaStringIndexes)
+        {
+            _metaStringIndexByKey.Clear();
+            _hasMetaStringIndexes = false;
+            _nextMetaStringIndex = 0;
+        }
     }
 }

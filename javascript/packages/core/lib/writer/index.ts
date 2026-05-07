@@ -50,6 +50,7 @@ export class BinaryWriter {
 
   private hpsEnable = false;
   private internalStringDetector: (((content: string) => boolean) | null) = null;
+  private writeNonEmptyStringWithHeader: (v: string) => void;
 
   constructor(config: {
     hps?: Hps;
@@ -58,6 +59,13 @@ export class BinaryWriter {
     this.config = config;
     this.hpsEnable = Boolean(config?.hps);
     this.internalStringDetector = getInternalStringDetector();
+    if (this.hpsEnable) {
+      this.writeNonEmptyStringWithHeader = v => this.stringWithHeaderFast(v);
+    } else if (this.internalStringDetector !== null) {
+      this.writeNonEmptyStringWithHeader = v => this.stringWithHeaderWithDetector(v);
+    } else {
+      this.writeNonEmptyStringWithHeader = v => this.stringWithHeaderCompatibly(v);
+    }
   }
 
   private initPoll() {
@@ -543,12 +551,6 @@ export class BinaryWriter {
       this.platformBuffer[this.cursor++] = 0;
       return;
     }
-    if (this.hpsEnable) {
-      return this.stringWithHeaderFast(v);
-    }
-    if (this.internalStringDetector !== null) {
-      return this.stringWithHeaderWithDetector(v);
-    }
-    return this.stringWithHeaderCompatibly(v);
+    return this.writeNonEmptyStringWithHeader(v);
   }
 }

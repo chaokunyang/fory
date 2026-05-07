@@ -303,10 +303,17 @@ export class BinaryWriter {
       }
       this.cursor += len;
     } else {
-      const len = v.length * 2;
+      const strLen = v.length;
+      const len = strLen * 2;
       this.writeVarUInt32((len << 2) | UTF16);
       this.reserve(len);
-      this.platformBuffer.write(v, this.cursor, "utf16le");
+      if (strLen < 40) {
+        for (let index = 0; index < strLen; index++) {
+          this.dataView.setUint16(this.cursor + index * 2, v.charCodeAt(index), true);
+        }
+      } else {
+        this.platformBuffer.write(v, this.cursor, "utf16le");
+      }
       this.cursor += len;
     }
   }
@@ -532,6 +539,10 @@ export class BinaryWriter {
   }
 
   stringWithHeader(v: string) {
+    if (v.length === 0) {
+      this.platformBuffer[this.cursor++] = 0;
+      return;
+    }
     if (this.hpsEnable) {
       return this.stringWithHeaderFast(v);
     }

@@ -846,6 +846,10 @@ class StructFieldSerializerVisitor(TypeVisitor):
         if carrier == "ndarray":
             for dtype, (_itemsize, _format, ftype, dtype_type_id) in Numpy1DArraySerializer.dtypes_dict.items():
                 if dtype_type_id == type_id:
+                    if ENABLE_FORY_CYTHON_SERIALIZATION:
+                        from pyfory.serialization import Numpy1DArraySerializer as Numpy1DArrayRuntimeSerializer
+
+                        return Numpy1DArrayRuntimeSerializer(self.type_resolver, ftype, dtype)
                     return Numpy1DArraySerializer(self.type_resolver, ftype, dtype)
             raise TypeError(f"pyfory.NDArray does not support array type id {type_id}")
         raise TypeError(f"Unknown array carrier {carrier!r}")

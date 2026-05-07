@@ -219,6 +219,7 @@ if ENABLE_FORY_CYTHON_SERIALIZATION:
         SliceSerializer,
         BFloat16Serializer,
         BFloat16ArraySerializer,
+        Numpy1DArraySerializer as _RuntimeNumpy1DArraySerializer,
     )
     from pyfory.union import UnionSerializer  # noqa: F401
 else:
@@ -274,6 +275,8 @@ else:
         SetSerializer,
         MapSerializer,
     )
+
+    _RuntimeNumpy1DArraySerializer = None
 
 from pyfory.types import TypeId
 from pyfory.annotation import (
@@ -762,7 +765,7 @@ class CompatibleListToArrayFieldSerializer(Serializer):
             return self.target_serializer.wrapper_type()
         if isinstance(self.target_serializer, PyArraySerializer):
             return array.array(self.target_serializer.typecode)
-        if np is not None and isinstance(self.target_serializer, Numpy1DArraySerializer):
+        if np is not None and _is_numpy_1d_array_serializer(self.target_serializer):
             return np.empty(0, dtype=self.target_serializer.dtype)
         raise TypeError(f"Field {self.field_name!r} has unsupported array target serializer {type(self.target_serializer)!r}")
 
@@ -771,7 +774,7 @@ class CompatibleListToArrayFieldSerializer(Serializer):
             return self.target_serializer.wrapper_type()
         if isinstance(self.target_serializer, PyArraySerializer):
             return array.array(self.target_serializer.typecode)
-        if np is not None and isinstance(self.target_serializer, Numpy1DArraySerializer):
+        if np is not None and _is_numpy_1d_array_serializer(self.target_serializer):
             return np.empty(length, dtype=self.target_serializer.dtype)
         raise TypeError(f"Field {self.field_name!r} has unsupported array target serializer {type(self.target_serializer)!r}")
 
@@ -800,7 +803,7 @@ class CompatibleListToArrayFieldSerializer(Serializer):
             )
 
         target = self._new_target(length)
-        append = None if np is not None and isinstance(self.target_serializer, Numpy1DArraySerializer) else target.append
+        append = None if np is not None and _is_numpy_1d_array_serializer(self.target_serializer) else target.append
         for index in range(length):
             item = read_context.read_no_ref(serializer=self.elem_serializer)
             try:
@@ -936,6 +939,12 @@ class Numpy1DArraySerializer(Serializer):
                 # Convert from little-endian to native byte order.
                 arr = arr.astype(self.dtype)
         return arr
+
+
+def _is_numpy_1d_array_serializer(serializer):
+    return isinstance(serializer, Numpy1DArraySerializer) or (
+        _RuntimeNumpy1DArraySerializer is not None and isinstance(serializer, _RuntimeNumpy1DArraySerializer)
+    )
 
 
 class NDArraySerializer(Serializer):

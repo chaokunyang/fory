@@ -18,6 +18,8 @@
 import array as _py_array
 import operator as _operator
 from collections.abc import MutableSequence as _MutableSequence
+from cpython.buffer cimport Py_buffer, PyBUF_SIMPLE, PyObject_GetBuffer, PyBuffer_Release
+from cpython.object cimport PyObject_Length
 from libc.string cimport memcpy
 from pyfory.utils import is_little_endian
 
@@ -1150,6 +1152,63 @@ cdef inline void _read_double_vector(ReadContext read_context, vector[double]& v
     else:
         for i in range(count):
             values[i] = read_context.c_buffer.read_double(read_context.buffer._error)
+
+
+@cython.final
+cdef class Numpy1DArraySerializer(Serializer):
+    dtypes_dict = {}
+
+    cdef public object dtype
+    cdef object wire_dtype
+    cdef object frombuffer
+    cdef int32_t itemsize
+
+    def __init__(self, type_resolver, type_, dtype):
+        super().__init__(type_resolver, type_)
+        import numpy as np
+
+        self.dtype = dtype
+        self.wire_dtype = dtype.newbyteorder("<")
+        self.frombuffer = np.frombuffer
+        self.itemsize = dtype.itemsize
+        self.need_to_write_ref = False
+
+    cpdef write(self, WriteContext write_context, value):
+        cdef Py_ssize_t length
+        cdef uint32_t nbytes
+        cdef Py_buffer py_buffer
+        if (value.dtype is not self.dtype and value.dtype != self.dtype) or value.ndim != 1:
+            raise TypeError(
+                f"Expected 1D ndarray dtype {self.dtype}, got dtype={value.dtype}, ndim={value.ndim}"
+            )
+        length = PyObject_Length(value)
+        if length < 0 or length > (<Py_ssize_t>0xFFFFFFFF // self.itemsize):
+            raise ValueError(f"ndarray byte size exceeds uint32: length={length}, itemsize={self.itemsize}")
+        nbytes = <uint32_t>(length * self.itemsize)
+        write_context.write_var_uint32(nbytes)
+        if nbytes == 0:
+            return
+        if (is_little_endian or self.itemsize == 1) and value.flags.c_contiguous:
+            if PyObject_GetBuffer(value, &py_buffer, PyBUF_SIMPLE) != 0:
+                raise BufferError(f"Cannot access buffer for {type(value)!r}")
+            try:
+                write_context.c_buffer.write_bytes(<const void *>py_buffer.buf, nbytes)
+            finally:
+                PyBuffer_Release(&py_buffer)
+            return
+        if not is_little_endian and self.itemsize > 1:
+            write_context.write_bytes(value.astype(value.dtype.newbyteorder("<")).tobytes())
+            return
+        write_context.write_bytes(value.tobytes())
+
+    cpdef read(self, ReadContext read_context):
+        cdef bytes data = read_context.read_bytes_and_size()
+        cdef object arr = self.frombuffer(data, dtype=self.wire_dtype)
+        if self.itemsize > 1:
+            if is_little_endian:
+                return arr.view(self.dtype)
+            return arr.astype(self.dtype)
+        return arr
 
 
 cdef class _DenseArraySerializer(Serializer):

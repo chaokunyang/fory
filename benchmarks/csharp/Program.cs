@@ -297,7 +297,7 @@ internal static class Program
         AddCases("struct", BenchmarkDataFactory.CreateNumericStruct(), options, cases);
         AddCases("sample", BenchmarkDataFactory.CreateSample(), options, cases);
         AddCases("mediacontent", BenchmarkDataFactory.CreateMediaContent(), options, cases);
-        AddCases("structlist", BenchmarkDataFactory.CreateStructList(), options, cases);
+        AddCases("structlist", BenchmarkDataFactory.CreateNumericStructList(), options, cases);
         AddCases("samplelist", BenchmarkDataFactory.CreateSampleList(), options, cases);
         AddCases("mediacontentlist", BenchmarkDataFactory.CreateMediaContentList(), options, cases);
 

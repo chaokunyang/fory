@@ -65,7 +65,7 @@ internal static class BenchmarkTypeRegistry
         fory.Register<Media>(3);
         fory.Register<Image>(4);
         fory.Register<MediaContent>(5);
-        fory.Register<StructList>(6);
+        fory.Register<NumericStructList>(6);
         fory.Register<SampleList>(7);
         fory.Register<MediaContentList>(8);
         fory.Register<Player>(9);

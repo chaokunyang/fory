@@ -57,12 +57,28 @@ public sealed class NumericStruct
     [ForyField(Id = 8)]
     [ProtoMember(8)]
     public int F8 { get; set; }
+
+    [ForyField(Id = 9)]
+    [ProtoMember(9)]
+    public int F9 { get; set; }
+
+    [ForyField(Id = 10)]
+    [ProtoMember(10)]
+    public int F10 { get; set; }
+
+    [ForyField(Id = 11)]
+    [ProtoMember(11)]
+    public int F11 { get; set; }
+
+    [ForyField(Id = 12)]
+    [ProtoMember(12)]
+    public int F12 { get; set; }
 }
 
 [ForyObject]
 [MessagePackObject(keyAsPropertyName: true)]
 [ProtoContract]
-public sealed class StructList
+public sealed class NumericStructList
 {
     [ForyField(Id = 1)]
     [ProtoMember(1)]
@@ -313,6 +329,10 @@ public static class BenchmarkDataFactory
             F6 = 1000000,
             F7 = -999999999,
             F8 = 42,
+            F9 = 123456789,
+            F10 = -42,
+            F11 = 31415926,
+            F12 = -27182818,
         };
     }
 
@@ -394,9 +414,9 @@ public static class BenchmarkDataFactory
         };
     }
 
-    public static StructList CreateStructList()
+    public static NumericStructList CreateNumericStructList()
     {
-        StructList list = new();
+        NumericStructList list = new();
         for (int i = 0; i < ListSize; i++)
         {
             list.Values.Add(CreateNumericStruct());

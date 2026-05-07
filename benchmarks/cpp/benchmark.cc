@@ -41,17 +41,23 @@ struct NumericStruct {
   int32_t f6;
   int32_t f7;
   int32_t f8;
+  int32_t f9;
+  int32_t f10;
+  int32_t f11;
+  int32_t f12;
 
   bool operator==(const NumericStruct &other) const {
     return f1 == other.f1 && f2 == other.f2 && f3 == other.f3 &&
            f4 == other.f4 && f5 == other.f5 && f6 == other.f6 &&
-           f7 == other.f7 && f8 == other.f8;
+           f7 == other.f7 && f8 == other.f8 && f9 == other.f9 &&
+           f10 == other.f10 && f11 == other.f11 && f12 == other.f12;
   }
-  MSGPACK_DEFINE_MAP(f1, f2, f3, f4, f5, f6, f7, f8);
+  MSGPACK_DEFINE_MAP(f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12);
 };
 FORY_STRUCT(NumericStruct, (f1, fory::F(1)), (f2, fory::F(2)), (f3, fory::F(3)),
             (f4, fory::F(4)), (f5, fory::F(5)), (f6, fory::F(6)),
-            (f7, fory::F(7)), (f8, fory::F(8)));
+            (f7, fory::F(7)), (f8, fory::F(8)), (f9, fory::F(9)),
+            (f10, fory::F(10)), (f11, fory::F(11)), (f12, fory::F(12)));
 
 struct Sample {
   int32_t int_value;
@@ -180,15 +186,15 @@ struct MediaContent {
 };
 FORY_STRUCT(MediaContent, (media, fory::F(1)), (images, fory::F(2)));
 
-struct StructList {
+struct NumericStructList {
   std::vector<NumericStruct> struct_list;
 
-  bool operator==(const StructList &other) const {
+  bool operator==(const NumericStructList &other) const {
     return struct_list == other.struct_list;
   }
   MSGPACK_DEFINE_MAP(struct_list);
 };
-FORY_STRUCT(StructList, (struct_list, fory::F(1)));
+FORY_STRUCT(NumericStructList, (struct_list, fory::F(1)));
 
 struct SampleList {
   std::vector<Sample> sample_list;
@@ -224,7 +230,11 @@ NumericStruct create_numeric_struct() {
       -32000,     // f5: negative (near int16 min)
       1000000,    // f6: medium positive
       -999999999, // f7: large negative
-      42          // f8: small positive
+      42,         // f8: small positive
+      123456789,  // f9: positive
+      -42,        // f10: small negative
+      31415926,   // f11: positive
+      -27182818   // f12: negative
   };
 }
 
@@ -236,8 +246,8 @@ constexpr int kListSize = 5;
 // ============================================================================
 
 /// Convert plain C++ struct to protobuf message (for serialization)
-inline protobuf::Struct to_pb_struct(const NumericStruct &obj) {
-  protobuf::Struct pb;
+inline protobuf::NumericStruct to_pb_struct(const NumericStruct &obj) {
+  protobuf::NumericStruct pb;
   pb.set_f1(obj.f1);
   pb.set_f2(obj.f2);
   pb.set_f3(obj.f3);
@@ -246,11 +256,15 @@ inline protobuf::Struct to_pb_struct(const NumericStruct &obj) {
   pb.set_f6(obj.f6);
   pb.set_f7(obj.f7);
   pb.set_f8(obj.f8);
+  pb.set_f9(obj.f9);
+  pb.set_f10(obj.f10);
+  pb.set_f11(obj.f11);
+  pb.set_f12(obj.f12);
   return pb;
 }
 
 /// Convert protobuf message to plain C++ struct (for deserialization)
-inline NumericStruct from_pb_struct(const protobuf::Struct &pb) {
+inline NumericStruct from_pb_struct(const protobuf::NumericStruct &pb) {
   NumericStruct obj;
   obj.f1 = pb.f1();
   obj.f2 = pb.f2();
@@ -260,10 +274,14 @@ inline NumericStruct from_pb_struct(const protobuf::Struct &pb) {
   obj.f6 = pb.f6();
   obj.f7 = pb.f7();
   obj.f8 = pb.f8();
+  obj.f9 = pb.f9();
+  obj.f10 = pb.f10();
+  obj.f11 = pb.f11();
+  obj.f12 = pb.f12();
   return obj;
 }
 
-protobuf::Struct create_proto_struct() {
+protobuf::NumericStruct create_proto_struct() {
   return to_pb_struct(create_numeric_struct());
 }
 
@@ -499,8 +517,8 @@ protobuf::MediaContent create_proto_media_content() {
   return to_pb_mediaContent(create_media_content());
 }
 
-StructList create_struct_list() {
-  StructList list;
+NumericStructList create_numeric_struct_list() {
+  NumericStructList list;
   list.struct_list.reserve(kListSize);
   for (int i = 0; i < kListSize; ++i) {
     list.struct_list.push_back(create_numeric_struct());
@@ -526,16 +544,18 @@ MediaContentList create_media_content_list() {
   return list;
 }
 
-inline protobuf::StructList to_pb_struct_list(const StructList &obj) {
-  protobuf::StructList pb;
+inline protobuf::NumericStructList
+to_pb_numeric_struct_list(const NumericStructList &obj) {
+  protobuf::NumericStructList pb;
   for (const auto &item : obj.struct_list) {
     *pb.add_struct_list() = to_pb_struct(item);
   }
   return pb;
 }
 
-inline StructList from_pb_struct_list(const protobuf::StructList &pb) {
-  StructList list;
+inline NumericStructList
+from_pb_numeric_struct_list(const protobuf::NumericStructList &pb) {
+  NumericStructList list;
   list.struct_list.reserve(pb.struct_list_size());
   for (const auto &item : pb.struct_list()) {
     list.struct_list.push_back(from_pb_struct(item));
@@ -579,8 +599,8 @@ from_pb_media_content_list(const protobuf::MediaContentList &pb) {
   return list;
 }
 
-protobuf::StructList create_proto_struct_list() {
-  return to_pb_struct_list(create_struct_list());
+protobuf::NumericStructList create_proto_numeric_struct_list() {
+  return to_pb_numeric_struct_list(create_numeric_struct_list());
 }
 
 protobuf::SampleList create_proto_sample_list() {
@@ -601,7 +621,7 @@ void register_fory_types(fory::serialization::Fory &fory) {
   fory.register_struct<Media>(3);
   fory.register_struct<Image>(4);
   fory.register_struct<MediaContent>(5);
-  fory.register_struct<StructList>(6);
+  fory.register_struct<NumericStructList>(6);
   fory.register_struct<SampleList>(7);
   fory.register_struct<MediaContentList>(8);
 }
@@ -645,10 +665,11 @@ void run_msgpack_deserialize_benchmark(benchmark::State &state,
   }                                                                            \
   BENCHMARK(BM_Msgpack_##name##_Deserialize)
 
-DEFINE_MSGPACK_BENCHMARKS(Struct, NumericStruct, create_numeric_struct);
+DEFINE_MSGPACK_BENCHMARKS(NumericStruct, NumericStruct, create_numeric_struct);
 DEFINE_MSGPACK_BENCHMARKS(Sample, Sample, create_sample);
 DEFINE_MSGPACK_BENCHMARKS(MediaContent, MediaContent, create_media_content);
-DEFINE_MSGPACK_BENCHMARKS(StructList, StructList, create_struct_list);
+DEFINE_MSGPACK_BENCHMARKS(NumericStructList, NumericStructList,
+                          create_numeric_struct_list);
 DEFINE_MSGPACK_BENCHMARKS(SampleList, SampleList, create_sample_list);
 DEFINE_MSGPACK_BENCHMARKS(MediaContentList, MediaContentList,
                           create_media_content_list);
@@ -656,10 +677,10 @@ DEFINE_MSGPACK_BENCHMARKS(MediaContentList, MediaContentList,
 #undef DEFINE_MSGPACK_BENCHMARKS
 
 // ============================================================================
-// Struct benchmarks (simple object with 8 int32 fields)
+// NumericStruct benchmarks (simple object with 12 int32 fields)
 // ============================================================================
 
-static void BM_Fory_Struct_Serialize(benchmark::State &state) {
+static void BM_Fory_NumericStruct_Serialize(benchmark::State &state) {
   auto fory = fory::serialization::Fory::builder()
                   .xlang(true)
                   .compatible(true)
@@ -678,13 +699,13 @@ static void BM_Fory_Struct_Serialize(benchmark::State &state) {
     benchmark::DoNotOptimize(buffer.data());
   }
 }
-BENCHMARK(BM_Fory_Struct_Serialize);
+BENCHMARK(BM_Fory_NumericStruct_Serialize);
 
 // Fair comparison: convert plain C++ struct to protobuf, then serialize
 // (Same pattern as Java benchmark's buildPBStruct().toByteArray())
-static void BM_Protobuf_Struct_Serialize(benchmark::State &state) {
+static void BM_Protobuf_NumericStruct_Serialize(benchmark::State &state) {
   NumericStruct obj = create_numeric_struct();
-  protobuf::Struct pb = to_pb_struct(obj);
+  protobuf::NumericStruct pb = to_pb_struct(obj);
   std::vector<uint8_t> output;
   output.resize(pb.ByteSizeLong());
 
@@ -694,9 +715,9 @@ static void BM_Protobuf_Struct_Serialize(benchmark::State &state) {
     benchmark::DoNotOptimize(output);
   }
 }
-BENCHMARK(BM_Protobuf_Struct_Serialize);
+BENCHMARK(BM_Protobuf_NumericStruct_Serialize);
 
-static void BM_Fory_Struct_Deserialize(benchmark::State &state) {
+static void BM_Fory_NumericStruct_Deserialize(benchmark::State &state) {
   auto fory = fory::serialization::Fory::builder()
                   .xlang(true)
                   .compatible(true)
@@ -724,23 +745,23 @@ static void BM_Fory_Struct_Deserialize(benchmark::State &state) {
     benchmark::DoNotOptimize(result);
   }
 }
-BENCHMARK(BM_Fory_Struct_Deserialize);
+BENCHMARK(BM_Fory_NumericStruct_Deserialize);
 
 // Fair comparison: deserialize and convert protobuf to plain C++ struct
 // (Same pattern as Java benchmark's fromPBObject())
-static void BM_Protobuf_Struct_Deserialize(benchmark::State &state) {
-  protobuf::Struct obj = create_proto_struct();
+static void BM_Protobuf_NumericStruct_Deserialize(benchmark::State &state) {
+  protobuf::NumericStruct obj = create_proto_struct();
   std::string serialized;
   obj.SerializeToString(&serialized);
 
   for (auto _ : state) {
-    protobuf::Struct pb_result;
+    protobuf::NumericStruct pb_result;
     pb_result.ParseFromString(serialized);
     NumericStruct result = from_pb_struct(pb_result);
     benchmark::DoNotOptimize(result);
   }
 }
-BENCHMARK(BM_Protobuf_Struct_Deserialize);
+BENCHMARK(BM_Protobuf_NumericStruct_Deserialize);
 
 // ============================================================================
 // Sample benchmarks (complex object with various types and arrays)
@@ -906,17 +927,17 @@ static void BM_Protobuf_MediaContent_Deserialize(benchmark::State &state) {
 BENCHMARK(BM_Protobuf_MediaContent_Deserialize);
 
 // ============================================================================
-// List benchmarks (StructList, SampleList, MediaContentList)
+// List benchmarks (NumericStructList, SampleList, MediaContentList)
 // ============================================================================
 
-static void BM_Fory_StructList_Serialize(benchmark::State &state) {
+static void BM_Fory_NumericStructList_Serialize(benchmark::State &state) {
   auto fory = fory::serialization::Fory::builder()
                   .xlang(true)
                   .compatible(true)
                   .track_ref(false)
                   .build();
   register_fory_types(fory);
-  StructList obj = create_struct_list();
+  NumericStructList obj = create_numeric_struct_list();
 
   fory::Buffer buffer;
   buffer.reserve(65536);
@@ -928,30 +949,30 @@ static void BM_Fory_StructList_Serialize(benchmark::State &state) {
     benchmark::DoNotOptimize(buffer.data());
   }
 }
-BENCHMARK(BM_Fory_StructList_Serialize);
+BENCHMARK(BM_Fory_NumericStructList_Serialize);
 
-static void BM_Protobuf_StructList_Serialize(benchmark::State &state) {
-  StructList obj = create_struct_list();
-  protobuf::StructList pb = to_pb_struct_list(obj);
+static void BM_Protobuf_NumericStructList_Serialize(benchmark::State &state) {
+  NumericStructList obj = create_numeric_struct_list();
+  protobuf::NumericStructList pb = to_pb_numeric_struct_list(obj);
   std::vector<uint8_t> output;
   output.resize(pb.ByteSizeLong());
 
   for (auto _ : state) {
-    pb = to_pb_struct_list(obj);
+    pb = to_pb_numeric_struct_list(obj);
     pb.SerializeToArray(output.data(), static_cast<int>(output.size()));
     benchmark::DoNotOptimize(output);
   }
 }
-BENCHMARK(BM_Protobuf_StructList_Serialize);
+BENCHMARK(BM_Protobuf_NumericStructList_Serialize);
 
-static void BM_Fory_StructList_Deserialize(benchmark::State &state) {
+static void BM_Fory_NumericStructList_Deserialize(benchmark::State &state) {
   auto fory = fory::serialization::Fory::builder()
                   .xlang(true)
                   .compatible(true)
                   .track_ref(false)
                   .build();
   register_fory_types(fory);
-  StructList obj = create_struct_list();
+  NumericStructList obj = create_numeric_struct_list();
   auto serialized = fory.serialize(obj);
   if (!serialized.ok()) {
     state.SkipWithError("Serialization failed");
@@ -959,32 +980,34 @@ static void BM_Fory_StructList_Deserialize(benchmark::State &state) {
   }
   auto &bytes = serialized.value();
 
-  auto test_result = fory.deserialize<StructList>(bytes.data(), bytes.size());
+  auto test_result =
+      fory.deserialize<NumericStructList>(bytes.data(), bytes.size());
   if (!test_result.ok()) {
     state.SkipWithError("Deserialization test failed");
     return;
   }
 
   for (auto _ : state) {
-    auto result = fory.deserialize<StructList>(bytes.data(), bytes.size());
+    auto result =
+        fory.deserialize<NumericStructList>(bytes.data(), bytes.size());
     benchmark::DoNotOptimize(result);
   }
 }
-BENCHMARK(BM_Fory_StructList_Deserialize);
+BENCHMARK(BM_Fory_NumericStructList_Deserialize);
 
-static void BM_Protobuf_StructList_Deserialize(benchmark::State &state) {
-  protobuf::StructList obj = create_proto_struct_list();
+static void BM_Protobuf_NumericStructList_Deserialize(benchmark::State &state) {
+  protobuf::NumericStructList obj = create_proto_numeric_struct_list();
   std::string serialized;
   obj.SerializeToString(&serialized);
 
   for (auto _ : state) {
-    protobuf::StructList pb_result;
+    protobuf::NumericStructList pb_result;
     pb_result.ParseFromString(serialized);
-    StructList result = from_pb_struct_list(pb_result);
+    NumericStructList result = from_pb_numeric_struct_list(pb_result);
     benchmark::DoNotOptimize(result);
   }
 }
-BENCHMARK(BM_Protobuf_StructList_Deserialize);
+BENCHMARK(BM_Protobuf_NumericStructList_Deserialize);
 
 static void BM_Fory_SampleList_Serialize(benchmark::State &state) {
   auto fory = fory::serialization::Fory::builder()
@@ -1158,7 +1181,7 @@ static void BM_PrintSerializedSizes(benchmark::State &state) {
   NumericStruct fory_struct = create_numeric_struct();
   Sample fory_sample = create_sample();
   MediaContent fory_media = create_media_content();
-  StructList fory_struct_list = create_struct_list();
+  NumericStructList fory_struct_list = create_numeric_struct_list();
   SampleList fory_sample_list = create_sample_list();
   MediaContentList fory_media_list = create_media_content_list();
 
@@ -1170,10 +1193,11 @@ static void BM_PrintSerializedSizes(benchmark::State &state) {
   auto fory_media_list_bytes = fory.serialize(fory_media_list).value();
 
   // Protobuf
-  protobuf::Struct proto_struct = create_proto_struct();
+  protobuf::NumericStruct proto_struct = create_proto_struct();
   protobuf::Sample proto_sample = create_proto_sample();
   protobuf::MediaContent proto_media = create_proto_media_content();
-  protobuf::StructList proto_struct_list = create_proto_struct_list();
+  protobuf::NumericStructList proto_struct_list =
+      create_proto_numeric_struct_list();
   protobuf::SampleList proto_sample_list = create_proto_sample_list();
   protobuf::MediaContentList proto_media_list =
       create_proto_media_content_list();

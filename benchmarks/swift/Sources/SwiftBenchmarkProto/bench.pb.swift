@@ -473,7 +473,7 @@ public struct Protobuf_Image: @unchecked Sendable {
   fileprivate var _storage = _StorageClass.defaultInstance
 }
 
-public struct Protobuf_Struct: Sendable {
+public struct Protobuf_NumericStruct: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -494,17 +494,25 @@ public struct Protobuf_Struct: Sendable {
 
   public var f8: Int32 = 0
 
+  public var f9: Int32 = 0
+
+  public var f10: Int32 = 0
+
+  public var f11: Int32 = 0
+
+  public var f12: Int32 = 0
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
 
-public struct Protobuf_StructList: Sendable {
+public struct Protobuf_NumericStructList: Sendable {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var structList: [Protobuf_Struct] = []
+  public var structList: [Protobuf_NumericStruct] = []
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -1147,9 +1155,9 @@ extension Protobuf_Image: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
   }
 }
 
-extension Protobuf_Struct: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".Struct"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}f1\0\u{1}f2\0\u{1}f3\0\u{1}f4\0\u{1}f5\0\u{1}f6\0\u{1}f7\0\u{1}f8\0")
+extension Protobuf_NumericStruct: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".NumericStruct"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{1}f1\0\u{1}f2\0\u{1}f3\0\u{1}f4\0\u{1}f5\0\u{1}f6\0\u{1}f7\0\u{1}f8\0\u{1}f9\0\u{1}f10\0\u{1}f11\0\u{1}f12\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
@@ -1165,6 +1173,10 @@ extension Protobuf_Struct: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
       case 6: try { try decoder.decodeSingularInt32Field(value: &self.f6) }()
       case 7: try { try decoder.decodeSingularInt32Field(value: &self.f7) }()
       case 8: try { try decoder.decodeSingularInt32Field(value: &self.f8) }()
+      case 9: try { try decoder.decodeSingularInt32Field(value: &self.f9) }()
+      case 10: try { try decoder.decodeSingularInt32Field(value: &self.f10) }()
+      case 11: try { try decoder.decodeSingularInt32Field(value: &self.f11) }()
+      case 12: try { try decoder.decodeSingularInt32Field(value: &self.f12) }()
       default: break
       }
     }
@@ -1195,10 +1207,22 @@ extension Protobuf_Struct: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
     if self.f8 != 0 {
       try visitor.visitSingularInt32Field(value: self.f8, fieldNumber: 8)
     }
+    if self.f9 != 0 {
+      try visitor.visitSingularInt32Field(value: self.f9, fieldNumber: 9)
+    }
+    if self.f10 != 0 {
+      try visitor.visitSingularInt32Field(value: self.f10, fieldNumber: 10)
+    }
+    if self.f11 != 0 {
+      try visitor.visitSingularInt32Field(value: self.f11, fieldNumber: 11)
+    }
+    if self.f12 != 0 {
+      try visitor.visitSingularInt32Field(value: self.f12, fieldNumber: 12)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Protobuf_Struct, rhs: Protobuf_Struct) -> Bool {
+  public static func ==(lhs: Protobuf_NumericStruct, rhs: Protobuf_NumericStruct) -> Bool {
     if lhs.f1 != rhs.f1 {return false}
     if lhs.f2 != rhs.f2 {return false}
     if lhs.f3 != rhs.f3 {return false}
@@ -1207,13 +1231,17 @@ extension Protobuf_Struct: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
     if lhs.f6 != rhs.f6 {return false}
     if lhs.f7 != rhs.f7 {return false}
     if lhs.f8 != rhs.f8 {return false}
+    if lhs.f9 != rhs.f9 {return false}
+    if lhs.f10 != rhs.f10 {return false}
+    if lhs.f11 != rhs.f11 {return false}
+    if lhs.f12 != rhs.f12 {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension Protobuf_StructList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = _protobuf_package + ".StructList"
+extension Protobuf_NumericStructList: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = _protobuf_package + ".NumericStructList"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap(bytecode: "\0\u{3}struct_list\0")
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1235,7 +1263,7 @@ extension Protobuf_StructList: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: Protobuf_StructList, rhs: Protobuf_StructList) -> Bool {
+  public static func ==(lhs: Protobuf_NumericStructList, rhs: Protobuf_NumericStructList) -> Bool {
     if lhs.structList != rhs.structList {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

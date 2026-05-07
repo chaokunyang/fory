@@ -27,14 +27,14 @@ Note: Protobuf is fetched automatically via CMake FetchContent, so no manual ins
 
 ![Throughput](../../docs/benchmarks/cpp/throughput.png)
 
-| Datatype     | Operation   | Fory TPS  | Protobuf TPS | Faster      |
-| ------------ | ----------- | --------- | ------------ | ----------- |
-| Mediacontent | Serialize   | 2,254,915 | 504,410      | Fory (4.5x) |
-| Mediacontent | Deserialize | 741,303   | 396,013      | Fory (1.9x) |
-| Sample       | Serialize   | 4,248,973 | 3,229,102    | Fory (1.3x) |
-| Sample       | Deserialize | 935,709   | 715,837      | Fory (1.3x) |
-| Struct       | Serialize   | 9,143,618 | 5,881,005    | Fory (1.6x) |
-| Struct       | Deserialize | 7,746,787 | 6,202,164    | Fory (1.2x) |
+| Datatype      | Operation   | Fory TPS  | Protobuf TPS | Faster      |
+| ------------- | ----------- | --------- | ------------ | ----------- |
+| Mediacontent  | Serialize   | 2,254,915 | 504,410      | Fory (4.5x) |
+| Mediacontent  | Deserialize | 741,303   | 396,013      | Fory (1.9x) |
+| Sample        | Serialize   | 4,248,973 | 3,229,102    | Fory (1.3x) |
+| Sample        | Deserialize | 935,709   | 715,837      | Fory (1.3x) |
+| NumericStruct | Serialize   | 9,143,618 | 5,881,005    | Fory (1.6x) |
+| NumericStruct | Deserialize | 7,746,787 | 6,202,164    | Fory (1.2x) |
 
 ## Quick Start
 
@@ -60,7 +60,7 @@ Options:
 Examples:
 
 ```bash
-# Run only Struct benchmarks
+# Run only NumericStruct benchmarks
 ./run.sh --data struct
 
 # Run only Fory benchmarks
@@ -91,8 +91,8 @@ cmake --build . -j$(nproc)
 ### Filter specific benchmarks
 
 ```bash
-# Run only Struct benchmarks
-./fory_benchmark --benchmark_filter="Struct"
+# Run only NumericStruct benchmarks
+./fory_benchmark --benchmark_filter="NumericStruct"
 
 # Run only Fory benchmarks
 ./fory_benchmark --benchmark_filter="Fory"
@@ -113,27 +113,27 @@ cmake --build . -j$(nproc)
 
 ## Benchmark Cases
 
-| Benchmark                              | Description                                                         |
-| -------------------------------------- | ------------------------------------------------------------------- |
-| `BM_Fory_Struct_Serialize`             | Serialize a simple struct with 8 int32 fields using Fory            |
-| `BM_Protobuf_Struct_Serialize`         | Serialize the same struct using Protobuf                            |
-| `BM_Fory_Struct_Deserialize`           | Deserialize a simple struct using Fory                              |
-| `BM_Protobuf_Struct_Deserialize`       | Deserialize the same struct using Protobuf                          |
-| `BM_Fory_Sample_Serialize`             | Serialize a complex object with various types and arrays using Fory |
-| `BM_Protobuf_Sample_Serialize`         | Serialize the same object using Protobuf                            |
-| `BM_Fory_Sample_Deserialize`           | Deserialize a complex object using Fory                             |
-| `BM_Protobuf_Sample_Deserialize`       | Deserialize the same object using Protobuf                          |
-| `BM_Fory_MediaContent_Serialize`       | Serialize a complex object with Media and Images using Fory         |
-| `BM_Protobuf_MediaContent_Serialize`   | Serialize the same object using Protobuf                            |
-| `BM_Fory_MediaContent_Deserialize`     | Deserialize a complex object with Media and Images using Fory       |
-| `BM_Protobuf_MediaContent_Deserialize` | Deserialize the same object using Protobuf                          |
-| `BM_PrintSerializedSizes`              | Just compares the serialization sizes of Fory and Protobuf          |
+| Benchmark                               | Description                                                         |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `BM_Fory_NumericStruct_Serialize`       | Serialize a simple struct with 12 int32 fields using Fory           |
+| `BM_Protobuf_NumericStruct_Serialize`   | Serialize the same struct using Protobuf                            |
+| `BM_Fory_NumericStruct_Deserialize`     | Deserialize a simple struct using Fory                              |
+| `BM_Protobuf_NumericStruct_Deserialize` | Deserialize the same struct using Protobuf                          |
+| `BM_Fory_Sample_Serialize`              | Serialize a complex object with various types and arrays using Fory |
+| `BM_Protobuf_Sample_Serialize`          | Serialize the same object using Protobuf                            |
+| `BM_Fory_Sample_Deserialize`            | Deserialize a complex object using Fory                             |
+| `BM_Protobuf_Sample_Deserialize`        | Deserialize the same object using Protobuf                          |
+| `BM_Fory_MediaContent_Serialize`        | Serialize a complex object with Media and Images using Fory         |
+| `BM_Protobuf_MediaContent_Serialize`    | Serialize the same object using Protobuf                            |
+| `BM_Fory_MediaContent_Deserialize`      | Deserialize a complex object with Media and Images using Fory       |
+| `BM_Protobuf_MediaContent_Deserialize`  | Deserialize the same object using Protobuf                          |
+| `BM_PrintSerializedSizes`               | Just compares the serialization sizes of Fory and Protobuf          |
 
 ## Data Structures
 
-### Struct (Simple)
+### NumericStruct (Simple)
 
-A simple structure with 8 int32 fields, useful for measuring baseline serialization overhead.
+A simple structure with 12 int32 fields, useful for measuring baseline serialization overhead.
 
 ### Sample (Complex)
 

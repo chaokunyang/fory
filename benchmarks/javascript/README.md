@@ -6,10 +6,10 @@ It mirrors the benchmark layout used by [`benchmarks/cpp`](benchmarks/cpp/README
 
 ## Coverage
 
-- `Struct`
+- `NumericStruct`
 - `Sample`
 - `MediaContent`
-- `StructList`
+- `NumericStructList`
 - `SampleList`
 - `MediaContentList`
 

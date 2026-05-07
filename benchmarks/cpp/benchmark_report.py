@@ -103,7 +103,7 @@ def get_system_info():
 def parse_benchmark_name(name):
     """
     Parse benchmark names like:
-    - BM_Fory_Struct_Serialize
+    - BM_Fory_NumericStruct_Serialize
     - BM_Protobuf_Sample_Deserialize
     - BM_Msgpack_MediaContent_Deserialize
     Returns: (library, datatype, operation)
@@ -116,6 +116,10 @@ def parse_benchmark_name(name):
     if len(parts) >= 3:
         library = parts[0].lower()
         datatype = parts[1].lower()
+        if datatype == "numericstruct":
+            datatype = "struct"
+        elif datatype == "numericstructlist":
+            datatype = "structlist"
         operation = parts[2].lower()
         return library, datatype, operation
     return None, None, None

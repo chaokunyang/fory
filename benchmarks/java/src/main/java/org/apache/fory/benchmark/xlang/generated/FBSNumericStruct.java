@@ -23,6 +23,10 @@ public final class FBSNumericStruct extends Table {
   public int f6() { int o = __offset(14); return o != 0 ? bb.getInt(o + bb_pos) : 0; }
   public int f7() { int o = __offset(16); return o != 0 ? bb.getInt(o + bb_pos) : 0; }
   public int f8() { int o = __offset(18); return o != 0 ? bb.getInt(o + bb_pos) : 0; }
+  public int f9() { int o = __offset(20); return o != 0 ? bb.getInt(o + bb_pos) : 0; }
+  public int f10() { int o = __offset(22); return o != 0 ? bb.getInt(o + bb_pos) : 0; }
+  public int f11() { int o = __offset(24); return o != 0 ? bb.getInt(o + bb_pos) : 0; }
+  public int f12() { int o = __offset(26); return o != 0 ? bb.getInt(o + bb_pos) : 0; }
 
   public static int createFBSNumericStruct(FlatBufferBuilder builder,
       int f1,
@@ -32,8 +36,16 @@ public final class FBSNumericStruct extends Table {
       int f5,
       int f6,
       int f7,
-      int f8) {
-    builder.startTable(8);
+      int f8,
+      int f9,
+      int f10,
+      int f11,
+      int f12) {
+    builder.startTable(12);
+    FBSNumericStruct.addF12(builder, f12);
+    FBSNumericStruct.addF11(builder, f11);
+    FBSNumericStruct.addF10(builder, f10);
+    FBSNumericStruct.addF9(builder, f9);
     FBSNumericStruct.addF8(builder, f8);
     FBSNumericStruct.addF7(builder, f7);
     FBSNumericStruct.addF6(builder, f6);
@@ -45,7 +57,7 @@ public final class FBSNumericStruct extends Table {
     return FBSNumericStruct.endFBSNumericStruct(builder);
   }
 
-  public static void startFBSNumericStruct(FlatBufferBuilder builder) { builder.startTable(8); }
+  public static void startFBSNumericStruct(FlatBufferBuilder builder) { builder.startTable(12); }
   public static void addF1(FlatBufferBuilder builder, int f1) { builder.addInt(0, f1, 0); }
   public static void addF2(FlatBufferBuilder builder, int f2) { builder.addInt(1, f2, 0); }
   public static void addF3(FlatBufferBuilder builder, int f3) { builder.addInt(2, f3, 0); }
@@ -54,6 +66,10 @@ public final class FBSNumericStruct extends Table {
   public static void addF6(FlatBufferBuilder builder, int f6) { builder.addInt(5, f6, 0); }
   public static void addF7(FlatBufferBuilder builder, int f7) { builder.addInt(6, f7, 0); }
   public static void addF8(FlatBufferBuilder builder, int f8) { builder.addInt(7, f8, 0); }
+  public static void addF9(FlatBufferBuilder builder, int f9) { builder.addInt(8, f9, 0); }
+  public static void addF10(FlatBufferBuilder builder, int f10) { builder.addInt(9, f10, 0); }
+  public static void addF11(FlatBufferBuilder builder, int f11) { builder.addInt(10, f11, 0); }
+  public static void addF12(FlatBufferBuilder builder, int f12) { builder.addInt(11, f12, 0); }
   public static int endFBSNumericStruct(FlatBufferBuilder builder) {
     int o = builder.endTable();
     return o;

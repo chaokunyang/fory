@@ -112,6 +112,10 @@ class NumericStruct:
     f6: pyfory.Int32 = pyfory.field(id=6)
     f7: pyfory.Int32 = pyfory.field(id=7)
     f8: pyfory.Int32 = pyfory.field(id=8)
+    f9: pyfory.Int32 = pyfory.field(id=9)
+    f10: pyfory.Int32 = pyfory.field(id=10)
+    f11: pyfory.Int32 = pyfory.field(id=11)
+    f12: pyfory.Int32 = pyfory.field(id=12)
 
 
 @dataclass
@@ -172,7 +176,7 @@ class MediaContent:
 
 
 @dataclass
-class StructList:
+class NumericStructList:
     struct_list: List[NumericStruct] = pyfory.field(id=1)
 
 
@@ -196,6 +200,10 @@ def create_numeric_struct() -> NumericStruct:
         f6=1000000,
         f7=-999999999,
         f8=42,
+        f9=123456789,
+        f10=-42,
+        f11=31415926,
+        f12=-27182818,
     )
 
 
@@ -216,15 +224,9 @@ def create_sample() -> Sample:
         char_value_boxed=ord("$"),
         boolean_value_boxed=False,
         int_array=int32_array([-1234, -123, -12, -1, 0, 1, 12, 123, 1234]),
-        long_array=int64_array(
-            [-123400, -12300, -1200, -100, 0, 100, 1200, 12300, 123400]
-        ),
-        float_array=float32_array(
-            [-12.34, -12.3, -12.0, -1.0, 0.0, 1.0, 12.0, 12.3, 12.34]
-        ),
-        double_array=float64_array(
-            [-1.234, -1.23, -12.0, -1.0, 0.0, 1.0, 12.0, 1.23, 1.234]
-        ),
+        long_array=int64_array([-123400, -12300, -1200, -100, 0, 100, 1200, 12300, 123400]),
+        float_array=float32_array([-12.34, -12.3, -12.0, -1.0, 0.0, 1.0, 12.0, 12.3, 12.34]),
+        double_array=float64_array([-1.234, -1.23, -12.0, -1.0, 0.0, 1.0, 12.0, 1.23, 1.234]),
         short_array=int32_array([-1234, -123, -12, -1, 0, 1, 12, 123, 1234]),
         char_array=int32_array([ord(c) for c in "asdfASDF"]),
         boolean_array=bool_array([True, False, False, True]),
@@ -273,8 +275,8 @@ def create_media_content() -> MediaContent:
     return MediaContent(media=media, images=images)
 
 
-def create_struct_list() -> StructList:
-    return StructList(struct_list=[create_numeric_struct() for _ in range(LIST_SIZE)])
+def create_numeric_struct_list() -> NumericStructList:
+    return NumericStructList(struct_list=[create_numeric_struct() for _ in range(LIST_SIZE)])
 
 
 def create_sample_list() -> SampleList:
@@ -282,9 +284,7 @@ def create_sample_list() -> SampleList:
 
 
 def create_media_content_list() -> MediaContentList:
-    return MediaContentList(
-        media_content_list=[create_media_content() for _ in range(LIST_SIZE)]
-    )
+    return MediaContentList(media_content_list=[create_media_content() for _ in range(LIST_SIZE)])
 
 
 def create_benchmark_data() -> Dict[str, Any]:
@@ -292,7 +292,7 @@ def create_benchmark_data() -> Dict[str, Any]:
         "struct": create_numeric_struct(),
         "sample": create_sample(),
         "mediacontent": create_media_content(),
-        "structlist": create_struct_list(),
+        "structlist": create_numeric_struct_list(),
         "samplelist": create_sample_list(),
         "mediacontentlist": create_media_content_list(),
     }
@@ -301,9 +301,7 @@ def create_benchmark_data() -> Dict[str, Any]:
 def load_bench_pb2(proto_dir: Path):
     bench_pb2_path = proto_dir / "bench_pb2.py"
     if not bench_pb2_path.exists():
-        raise FileNotFoundError(
-            f"{bench_pb2_path} does not exist. Run benchmarks/python/run.sh first to generate protobuf bindings."
-        )
+        raise FileNotFoundError(f"{bench_pb2_path} does not exist. Run benchmarks/python/run.sh first to generate protobuf bindings.")
     proto_dir_abs = str(proto_dir.resolve())
     if proto_dir_abs not in sys.path:
         sys.path.insert(0, proto_dir_abs)
@@ -313,7 +311,7 @@ def load_bench_pb2(proto_dir: Path):
 
 
 def to_pb_struct(bench_pb2, obj: NumericStruct):
-    pb = bench_pb2.Struct()
+    pb = bench_pb2.NumericStruct()
     pb.f1 = obj.f1
     pb.f2 = obj.f2
     pb.f3 = obj.f3
@@ -322,6 +320,10 @@ def to_pb_struct(bench_pb2, obj: NumericStruct):
     pb.f6 = obj.f6
     pb.f7 = obj.f7
     pb.f8 = obj.f8
+    pb.f9 = obj.f9
+    pb.f10 = obj.f10
+    pb.f11 = obj.f11
+    pb.f12 = obj.f12
     return pb
 
 
@@ -335,6 +337,10 @@ def from_pb_struct(pb_obj) -> NumericStruct:
         f6=pb_obj.f6,
         f7=pb_obj.f7,
         f8=pb_obj.f8,
+        f9=pb_obj.f9,
+        f10=pb_obj.f10,
+        f11=pb_obj.f11,
+        f12=pb_obj.f12,
     )
 
 
@@ -465,15 +471,15 @@ def from_pb_mediacontent(pb_obj) -> MediaContent:
     )
 
 
-def to_pb_structlist(bench_pb2, obj: StructList):
-    pb = bench_pb2.StructList()
+def to_pb_numeric_struct_list(bench_pb2, obj: NumericStructList):
+    pb = bench_pb2.NumericStructList()
     for item in obj.struct_list:
         pb.struct_list.add().CopyFrom(to_pb_struct(bench_pb2, item))
     return pb
 
 
-def from_pb_structlist(pb_obj) -> StructList:
-    return StructList(struct_list=[from_pb_struct(item) for item in pb_obj.struct_list])
+def from_pb_numeric_struct_list(pb_obj) -> NumericStructList:
+    return NumericStructList(struct_list=[from_pb_struct(item) for item in pb_obj.struct_list])
 
 
 def to_pb_samplelist(bench_pb2, obj: SampleList):
@@ -495,18 +501,14 @@ def to_pb_mediacontentlist(bench_pb2, obj: MediaContentList):
 
 
 def from_pb_mediacontentlist(pb_obj) -> MediaContentList:
-    return MediaContentList(
-        media_content_list=[
-            from_pb_mediacontent(item) for item in pb_obj.media_content_list
-        ]
-    )
+    return MediaContentList(media_content_list=[from_pb_mediacontent(item) for item in pb_obj.media_content_list])
 
 
 PROTO_CONVERTERS = {
-    "struct": (to_pb_struct, from_pb_struct, "Struct"),
+    "struct": (to_pb_struct, from_pb_struct, "NumericStruct"),
     "sample": (to_pb_sample, from_pb_sample, "Sample"),
     "mediacontent": (to_pb_mediacontent, from_pb_mediacontent, "MediaContent"),
-    "structlist": (to_pb_structlist, from_pb_structlist, "StructList"),
+    "structlist": (to_pb_numeric_struct_list, from_pb_numeric_struct_list, "NumericStructList"),
     "samplelist": (to_pb_samplelist, from_pb_samplelist, "SampleList"),
     "mediacontentlist": (
         to_pb_mediacontentlist,
@@ -525,7 +527,7 @@ def build_fory() -> pyfory.Fory:
     fory.register_type(Media, type_id=3)
     fory.register_type(Image, type_id=4)
     fory.register_type(MediaContent, type_id=5)
-    fory.register_type(StructList, type_id=6)
+    fory.register_type(NumericStructList, type_id=6)
     fory.register_type(SampleList, type_id=7)
     fory.register_type(MediaContentList, type_id=8)
     return fory
@@ -616,9 +618,7 @@ def build_case(
     if serializer == "pickle":
         if operation == "serialize":
             return pickle_serialize, (obj,)
-        return pickle_deserialize, (
-            pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL),
-        )
+        return pickle_deserialize, (pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL),)
 
     if serializer == "protobuf":
         if operation == "serialize":
@@ -643,9 +643,7 @@ def calculate_serialized_sizes(
         datatype_sizes: Dict[str, int] = {}
 
         datatype_sizes["fory"] = len(fory.serialize(obj))
-        datatype_sizes["pickle"] = len(
-            pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL)
-        )
+        datatype_sizes["pickle"] = len(pickle.dumps(obj, protocol=pickle.HIGHEST_PROTOCOL))
 
         to_pb, _, _ = PROTO_CONVERTERS[datatype]
         datatype_sizes["protobuf"] = len(to_pb(bench_pb2, obj).SerializeToString())
@@ -660,9 +658,7 @@ def parse_csv_list(value: str, allowed: Iterable[str], default: List[str]) -> Li
     selected = [item.strip().lower() for item in value.split(",") if item.strip()]
     invalid = [item for item in selected if item not in allowed]
     if invalid:
-        raise ValueError(
-            f"Invalid values: {', '.join(invalid)}. Allowed: {', '.join(sorted(allowed))}"
-        )
+        raise ValueError(f"Invalid values: {', '.join(invalid)}. Allowed: {', '.join(sorted(allowed))}")
     ordered = [item for item in default if item in selected]
     return ordered
 
@@ -680,9 +676,7 @@ def benchmark_number(base_number: int, datatype: str) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Comprehensive Fory/Pickle/Protobuf benchmark for Python"
-    )
+    parser = argparse.ArgumentParser(description="Comprehensive Fory/Pickle/Protobuf benchmark for Python")
     parser.add_argument(
         "--operation",
         default="all",
@@ -743,22 +737,14 @@ def main() -> int:
     bench_pb2 = load_bench_pb2(proto_dir)
 
     selected_datatypes = parse_csv_list(args.data, DATA_TYPE_ORDER, DATA_TYPE_ORDER)
-    selected_serializers = parse_csv_list(
-        args.serializer, SERIALIZER_ORDER, SERIALIZER_ORDER
-    )
-    selected_operations = (
-        OPERATION_ORDER if args.operation == "all" else [args.operation]
-    )
+    selected_serializers = parse_csv_list(args.serializer, SERIALIZER_ORDER, SERIALIZER_ORDER)
+    selected_operations = OPERATION_ORDER if args.operation == "all" else [args.operation]
 
     benchmark_data = create_benchmark_data()
     fory = build_fory()
 
-    print(
-        f"Benchmarking {len(selected_datatypes)} data type(s), {len(selected_serializers)} serializer(s), {len(selected_operations)} operation(s)"
-    )
-    print(
-        f"Warmup={args.warmup}, Iterations={args.iterations}, Repeat={args.repeat}, Number={args.number}"
-    )
+    print(f"Benchmarking {len(selected_datatypes)} data type(s), {len(selected_serializers)} serializer(s), {len(selected_operations)} operation(s)")
+    print(f"Warmup={args.warmup}, Iterations={args.iterations}, Repeat={args.repeat}, Number={args.number}")
     print("=" * 96)
 
     results = []

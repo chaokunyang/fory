@@ -24,7 +24,8 @@ pub mod generated {
 
 use criterion::{black_box, Criterion};
 use data::{
-    BenchmarkCase, MediaContent, MediaContentList, NumericStruct, Sample, SampleList, StructList,
+    BenchmarkCase, MediaContent, MediaContentList, NumericStruct, NumericStructList, Sample,
+    SampleList,
 };
 use serializers::{
     fory::ForySerializer, msgpack::MsgpackSerializer, protobuf::ProtobufSerializer,
@@ -54,7 +55,7 @@ pub fn run_serialization_benchmarks(c: &mut Criterion) {
         &protobuf_serializer,
         &msgpack_serializer,
     );
-    run_benchmark_case::<StructList>(
+    run_benchmark_case::<NumericStructList>(
         c,
         &fory_serializer,
         &protobuf_serializer,
@@ -194,17 +195,17 @@ mod tests {
         assert_round_trip::<NumericStruct>();
         assert_round_trip::<Sample>();
         assert_round_trip::<MediaContent>();
-        assert_round_trip::<StructList>();
+        assert_round_trip::<NumericStructList>();
         assert_round_trip::<SampleList>();
         assert_round_trip::<MediaContentList>();
     }
 
     #[test]
     fn benchmark_serialized_sizes_match_baseline() {
-        assert_serialized_size::<NumericStruct>(57, 61, 55);
+        assert_serialized_size::<NumericStruct>(78, 93, 87);
         assert_serialized_size::<Sample>(445, 375, 590);
         assert_serialized_size::<MediaContent>(362, 301, 500);
-        assert_serialized_size::<StructList>(182, 315, 289);
+        assert_serialized_size::<NumericStructList>(255, 475, 449);
         assert_serialized_size::<SampleList>(1978, 1890, 2964);
         assert_serialized_size::<MediaContentList>(1531, 1520, 2521);
     }

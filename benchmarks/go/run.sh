@@ -85,22 +85,22 @@ FILTER=""
 if [[ -n "$DATA_TYPE" ]]; then
     case "$DATA_TYPE" in
         struct)
-            FILTER="Struct"
+            FILTER="NumericStruct_"
             ;;
         structlist|struct-list)
-            FILTER="StructList"
+            FILTER="NumericStructList_"
             ;;
         sample)
-            FILTER="Sample"
+            FILTER="Sample_"
             ;;
         samplelist|sample-list)
-            FILTER="SampleList"
+            FILTER="SampleList_"
             ;;
         mediacontent|media)
-            FILTER="MediaContent"
+            FILTER="MediaContent_"
             ;;
         mediacontentlist|medialist|media-list)
-            FILTER="MediaContentList"
+            FILTER="MediaContentList_"
             ;;
         *)
             echo "Unknown data type: $DATA_TYPE"

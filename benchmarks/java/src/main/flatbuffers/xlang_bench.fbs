@@ -26,6 +26,10 @@ table FBSNumericStruct {
   f6:int;
   f7:int;
   f8:int;
+  f9:int;
+  f10:int;
+  f11:int;
+  f12:int;
 }
 
 table FBSSample {
@@ -91,7 +95,7 @@ table FBSMediaContent {
   images:[FBSImage];
 }
 
-table FBSStructList {
+table FBSNumericStructList {
   struct_list:[FBSNumericStruct];
 }
 

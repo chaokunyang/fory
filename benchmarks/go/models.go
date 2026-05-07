@@ -17,17 +17,21 @@
 
 package benchmark
 
-// NumericStruct is a simple struct with 8 int32 fields
-// Matches the C++ NumericStruct and protobuf Struct message
+// NumericStruct is a simple struct with 12 int32 fields.
+// Matches the C++ NumericStruct and protobuf NumericStruct message.
 type NumericStruct struct {
-	F1 int32 `msgpack:"1" fory:"id=1"`
-	F2 int32 `msgpack:"2" fory:"id=2"`
-	F3 int32 `msgpack:"3" fory:"id=3"`
-	F4 int32 `msgpack:"4" fory:"id=4"`
-	F5 int32 `msgpack:"5" fory:"id=5"`
-	F6 int32 `msgpack:"6" fory:"id=6"`
-	F7 int32 `msgpack:"7" fory:"id=7"`
-	F8 int32 `msgpack:"8" fory:"id=8"`
+	F1  int32 `msgpack:"1" fory:"id=1"`
+	F2  int32 `msgpack:"2" fory:"id=2"`
+	F3  int32 `msgpack:"3" fory:"id=3"`
+	F4  int32 `msgpack:"4" fory:"id=4"`
+	F5  int32 `msgpack:"5" fory:"id=5"`
+	F6  int32 `msgpack:"6" fory:"id=6"`
+	F7  int32 `msgpack:"7" fory:"id=7"`
+	F8  int32 `msgpack:"8" fory:"id=8"`
+	F9  int32 `msgpack:"9" fory:"id=9"`
+	F10 int32 `msgpack:"10" fory:"id=10"`
+	F11 int32 `msgpack:"11" fory:"id=11"`
+	F12 int32 `msgpack:"12" fory:"id=12"`
 }
 
 // Sample is a complex struct with various types and arrays
@@ -104,8 +108,8 @@ type MediaContent struct {
 	Images []Image `msgpack:"2" fory:"id=2"`
 }
 
-type StructList struct {
-	StructList []NumericStruct `msgpack:"1" fory:"id=1"`
+type NumericStructList struct {
+	NumericStructs []NumericStruct `msgpack:"1" fory:"id=1"`
 }
 
 type SampleList struct {
@@ -119,14 +123,18 @@ type MediaContentList struct {
 // CreateNumericStruct creates test data matching C++ benchmark
 func CreateNumericStruct() NumericStruct {
 	return NumericStruct{
-		F1: -12345,
-		F2: 987654321,
-		F3: -31415,
-		F4: 27182818,
-		F5: -32000,
-		F6: 1000000,
-		F7: -999999999,
-		F8: 42,
+		F1:  -12345,
+		F2:  987654321,
+		F3:  -31415,
+		F4:  27182818,
+		F5:  -32000,
+		F6:  1000000,
+		F7:  -999999999,
+		F8:  42,
+		F9:  123456789,
+		F10: -42,
+		F11: 31415926,
+		F12: -27182818,
 	}
 }
 
@@ -201,12 +209,12 @@ func CreateMediaContent() MediaContent {
 	}
 }
 
-func CreateStructList() StructList {
+func CreateNumericStructList() NumericStructList {
 	list := make([]NumericStruct, 20)
 	for i := range list {
 		list[i] = CreateNumericStruct()
 	}
-	return StructList{StructList: list}
+	return NumericStructList{NumericStructs: list}
 }
 
 func CreateSampleList() SampleList {

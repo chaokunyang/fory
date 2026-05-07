@@ -17,8 +17,8 @@
 
 use clap::{Parser, ValueEnum};
 use fory_benchmarks::data::{
-    BenchmarkCase, DataKind, MediaContent, MediaContentList, NumericStruct, Sample, SampleList,
-    StructList,
+    BenchmarkCase, DataKind, MediaContent, MediaContentList, NumericStruct, NumericStructList,
+    Sample, SampleList,
 };
 use fory_benchmarks::serializers::{
     fory::ForySerializer, msgpack::MsgpackSerializer, protobuf::ProtobufSerializer,
@@ -138,7 +138,7 @@ fn print_all_serialized_sizes() {
     print_size_row::<NumericStruct>(DataKind::Struct.display_name());
     print_size_row::<Sample>(DataKind::Sample.display_name());
     print_size_row::<MediaContent>(DataKind::MediaContent.display_name());
-    print_size_row::<StructList>(DataKind::StructList.display_name());
+    print_size_row::<NumericStructList>(DataKind::NumericStructList.display_name());
     print_size_row::<SampleList>(DataKind::SampleList.display_name());
     print_size_row::<MediaContentList>(DataKind::MediaContentList.display_name());
 }
@@ -160,7 +160,7 @@ fn main() {
             profile_case::<MediaContent>(cli.iterations, cli.serializer, cli.operation)
         }
         DataType::Structlist => {
-            profile_case::<StructList>(cli.iterations, cli.serializer, cli.operation)
+            profile_case::<NumericStructList>(cli.iterations, cli.serializer, cli.operation)
         }
         DataType::Samplelist => {
             profile_case::<SampleList>(cli.iterations, cli.serializer, cli.operation)

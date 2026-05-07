@@ -53,7 +53,7 @@ func newFory() *fory.Fory {
 	if err := f.RegisterStruct(MediaContent{}, 5); err != nil {
 		panic(err)
 	}
-	if err := f.RegisterStruct(StructList{}, 8); err != nil {
+	if err := f.RegisterStruct(NumericStructList{}, 8); err != nil {
 		panic(err)
 	}
 	if err := f.RegisterStruct(SampleList{}, 9); err != nil {
@@ -75,7 +75,7 @@ func newFory() *fory.Fory {
 // NumericStruct Benchmarks
 // ============================================================================
 
-func BenchmarkFory_Struct_Serialize(b *testing.B) {
+func BenchmarkFory_NumericStruct_Serialize(b *testing.B) {
 	f := newFory()
 	obj := CreateNumericStruct()
 	buf := fory.NewByteBuffer(make([]byte, 0, 128))
@@ -90,7 +90,7 @@ func BenchmarkFory_Struct_Serialize(b *testing.B) {
 	}
 }
 
-func BenchmarkProtobuf_Struct_Serialize(b *testing.B) {
+func BenchmarkProtobuf_NumericStruct_Serialize(b *testing.B) {
 	obj := CreateNumericStruct()
 
 	b.ResetTimer()
@@ -104,7 +104,7 @@ func BenchmarkProtobuf_Struct_Serialize(b *testing.B) {
 	}
 }
 
-func BenchmarkMsgpack_Struct_Serialize(b *testing.B) {
+func BenchmarkMsgpack_NumericStruct_Serialize(b *testing.B) {
 	obj := CreateNumericStruct()
 
 	b.ResetTimer()
@@ -116,7 +116,7 @@ func BenchmarkMsgpack_Struct_Serialize(b *testing.B) {
 	}
 }
 
-func BenchmarkFory_Struct_Deserialize(b *testing.B) {
+func BenchmarkFory_NumericStruct_Deserialize(b *testing.B) {
 	f := newFory()
 	obj := CreateNumericStruct()
 	data, err := f.Serialize(&obj)
@@ -134,7 +134,7 @@ func BenchmarkFory_Struct_Deserialize(b *testing.B) {
 	}
 }
 
-func BenchmarkProtobuf_Struct_Deserialize(b *testing.B) {
+func BenchmarkProtobuf_NumericStruct_Deserialize(b *testing.B) {
 	obj := CreateNumericStruct()
 	pbObj := ToPbStruct(obj)
 	data, err := proto.Marshal(pbObj)
@@ -146,7 +146,7 @@ func BenchmarkProtobuf_Struct_Deserialize(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Fair comparison: deserialize and convert protobuf to plain struct
 		// (Same pattern as C++ benchmark's ParseFromString -> FromPbStruct)
-		var pbResult pb.Struct
+		var pbResult pb.NumericStruct
 		err := proto.Unmarshal(data, &pbResult)
 		if err != nil {
 			b.Fatal(err)
@@ -155,7 +155,7 @@ func BenchmarkProtobuf_Struct_Deserialize(b *testing.B) {
 	}
 }
 
-func BenchmarkMsgpack_Struct_Deserialize(b *testing.B) {
+func BenchmarkMsgpack_NumericStruct_Deserialize(b *testing.B) {
 	obj := CreateNumericStruct()
 	data, err := msgpack.Marshal(obj)
 	if err != nil {
@@ -173,12 +173,12 @@ func BenchmarkMsgpack_Struct_Deserialize(b *testing.B) {
 }
 
 // ============================================================================
-// StructList Benchmarks
+// NumericStructList Benchmarks
 // ============================================================================
 
-func BenchmarkFory_StructList_Serialize(b *testing.B) {
+func BenchmarkFory_NumericStructList_Serialize(b *testing.B) {
 	f := newFory()
-	obj := CreateStructList()
+	obj := CreateNumericStructList()
 	buf := fory.NewByteBuffer(make([]byte, 0, 65536))
 
 	b.ResetTimer()
@@ -191,12 +191,12 @@ func BenchmarkFory_StructList_Serialize(b *testing.B) {
 	}
 }
 
-func BenchmarkProtobuf_StructList_Serialize(b *testing.B) {
-	obj := CreateStructList()
+func BenchmarkProtobuf_NumericStructList_Serialize(b *testing.B) {
+	obj := CreateNumericStructList()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		pbObj := ToPbStructList(obj)
+		pbObj := ToPbNumericStructList(obj)
 		_, err := proto.Marshal(pbObj)
 		if err != nil {
 			b.Fatal(err)
@@ -204,8 +204,8 @@ func BenchmarkProtobuf_StructList_Serialize(b *testing.B) {
 	}
 }
 
-func BenchmarkMsgpack_StructList_Serialize(b *testing.B) {
-	obj := CreateStructList()
+func BenchmarkMsgpack_NumericStructList_Serialize(b *testing.B) {
+	obj := CreateNumericStructList()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -216,9 +216,9 @@ func BenchmarkMsgpack_StructList_Serialize(b *testing.B) {
 	}
 }
 
-func BenchmarkFory_StructList_Deserialize(b *testing.B) {
+func BenchmarkFory_NumericStructList_Deserialize(b *testing.B) {
 	f := newFory()
-	obj := CreateStructList()
+	obj := CreateNumericStructList()
 	data, err := f.Serialize(&obj)
 	if err != nil {
 		b.Fatal(err)
@@ -226,7 +226,7 @@ func BenchmarkFory_StructList_Deserialize(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		var result StructList
+		var result NumericStructList
 		err := f.Deserialize(data, &result)
 		if err != nil {
 			b.Fatal(err)
@@ -234,9 +234,9 @@ func BenchmarkFory_StructList_Deserialize(b *testing.B) {
 	}
 }
 
-func BenchmarkProtobuf_StructList_Deserialize(b *testing.B) {
-	obj := CreateStructList()
-	pbObj := ToPbStructList(obj)
+func BenchmarkProtobuf_NumericStructList_Deserialize(b *testing.B) {
+	obj := CreateNumericStructList()
+	pbObj := ToPbNumericStructList(obj)
 	data, err := proto.Marshal(pbObj)
 	if err != nil {
 		b.Fatal(err)
@@ -244,17 +244,17 @@ func BenchmarkProtobuf_StructList_Deserialize(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		var pbResult pb.StructList
+		var pbResult pb.NumericStructList
 		err := proto.Unmarshal(data, &pbResult)
 		if err != nil {
 			b.Fatal(err)
 		}
-		_ = FromPbStructList(&pbResult)
+		_ = FromPbNumericStructList(&pbResult)
 	}
 }
 
-func BenchmarkMsgpack_StructList_Deserialize(b *testing.B) {
-	obj := CreateStructList()
+func BenchmarkMsgpack_NumericStructList_Deserialize(b *testing.B) {
+	obj := CreateNumericStructList()
 	data, err := msgpack.Marshal(obj)
 	if err != nil {
 		b.Fatal(err)
@@ -262,7 +262,7 @@ func BenchmarkMsgpack_StructList_Deserialize(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		var result StructList
+		var result NumericStructList
 		err := msgpack.Unmarshal(data, &result)
 		if err != nil {
 			b.Fatal(err)
@@ -687,10 +687,10 @@ func TestPrintSerializedSizes(t *testing.T) {
 	pbMediaData, _ := proto.Marshal(ToPbMediaContent(mediaContent))
 	msgpackMediaData, _ := msgpack.Marshal(mediaContent)
 
-	// StructList sizes
-	structList := CreateStructList()
+	// NumericStructList sizes
+	structList := CreateNumericStructList()
 	foryStructListData, _ := f.Serialize(&structList)
-	pbStructListData, _ := proto.Marshal(ToPbStructList(structList))
+	pbStructListData, _ := proto.Marshal(ToPbNumericStructList(structList))
 	msgpackStructListData, _ := msgpack.Marshal(structList)
 
 	// SampleList sizes
@@ -720,7 +720,7 @@ func TestPrintSerializedSizes(t *testing.T) {
 	fmt.Printf("  Fory:     %d bytes\n", len(foryMediaData))
 	fmt.Printf("  Protobuf: %d bytes\n", len(pbMediaData))
 	fmt.Printf("  Msgpack:  %d bytes\n", len(msgpackMediaData))
-	fmt.Printf("StructList:\n")
+	fmt.Printf("NumericStructList:\n")
 	fmt.Printf("  Fory:     %d bytes\n", len(foryStructListData))
 	fmt.Printf("  Protobuf: %d bytes\n", len(pbStructListData))
 	fmt.Printf("  Msgpack:  %d bytes\n", len(msgpackStructListData))

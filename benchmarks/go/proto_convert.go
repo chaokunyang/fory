@@ -21,53 +21,61 @@ import (
 	pb "github.com/apache/fory/benchmarks/go/proto"
 )
 
-// ToPbStruct converts NumericStruct to protobuf Struct
-func ToPbStruct(obj NumericStruct) *pb.Struct {
-	return &pb.Struct{
-		F1: obj.F1,
-		F2: obj.F2,
-		F3: obj.F3,
-		F4: obj.F4,
-		F5: obj.F5,
-		F6: obj.F6,
-		F7: obj.F7,
-		F8: obj.F8,
+// ToPbStruct converts NumericStruct to protobuf NumericStruct.
+func ToPbStruct(obj NumericStruct) *pb.NumericStruct {
+	return &pb.NumericStruct{
+		F1:  obj.F1,
+		F2:  obj.F2,
+		F3:  obj.F3,
+		F4:  obj.F4,
+		F5:  obj.F5,
+		F6:  obj.F6,
+		F7:  obj.F7,
+		F8:  obj.F8,
+		F9:  obj.F9,
+		F10: obj.F10,
+		F11: obj.F11,
+		F12: obj.F12,
 	}
 }
 
-// FromPbStruct converts protobuf Struct to NumericStruct
-func FromPbStruct(pb *pb.Struct) NumericStruct {
+// FromPbStruct converts protobuf NumericStruct to NumericStruct.
+func FromPbStruct(pb *pb.NumericStruct) NumericStruct {
 	return NumericStruct{
-		F1: pb.F1,
-		F2: pb.F2,
-		F3: pb.F3,
-		F4: pb.F4,
-		F5: pb.F5,
-		F6: pb.F6,
-		F7: pb.F7,
-		F8: pb.F8,
+		F1:  pb.F1,
+		F2:  pb.F2,
+		F3:  pb.F3,
+		F4:  pb.F4,
+		F5:  pb.F5,
+		F6:  pb.F6,
+		F7:  pb.F7,
+		F8:  pb.F8,
+		F9:  pb.F9,
+		F10: pb.F10,
+		F11: pb.F11,
+		F12: pb.F12,
 	}
 }
 
-// ToPbStructList converts StructList to protobuf StructList
-func ToPbStructList(obj StructList) *pb.StructList {
-	list := make([]*pb.Struct, len(obj.StructList))
-	for i, item := range obj.StructList {
+// ToPbNumericStructList converts NumericStructList to protobuf NumericStructList.
+func ToPbNumericStructList(obj NumericStructList) *pb.NumericStructList {
+	list := make([]*pb.NumericStruct, len(obj.NumericStructs))
+	for i, item := range obj.NumericStructs {
 		list[i] = ToPbStruct(item)
 	}
-	return &pb.StructList{StructList: list}
+	return &pb.NumericStructList{StructList: list}
 }
 
-// FromPbStructList converts protobuf StructList to StructList
-func FromPbStructList(pbList *pb.StructList) StructList {
+// FromPbNumericStructList converts protobuf NumericStructList to NumericStructList.
+func FromPbNumericStructList(pbList *pb.NumericStructList) NumericStructList {
 	if pbList == nil {
-		return StructList{}
+		return NumericStructList{}
 	}
 	list := make([]NumericStruct, len(pbList.StructList))
 	for i, item := range pbList.StructList {
 		list[i] = FromPbStruct(item)
 	}
-	return StructList{StructList: list}
+	return NumericStructList{NumericStructs: list}
 }
 
 // ToPbSample converts Sample to protobuf Sample

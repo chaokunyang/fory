@@ -49,7 +49,7 @@ DATATYPE_ORDER = [
 OPERATIONS = ["serialize", "deserialize"]
 BENCHMARK_PATTERN = re.compile(
     r"(?:^|[.])BM_(?P<serializer>Fory|Protobuf|Flatbuffer)_"
-    r"(?P<datatype>Struct|Sample|MediaContent|StructList|SampleList|MediaContentList)_"
+    r"(?P<datatype>NumericStruct|Sample|MediaContent|NumericStructList|SampleList|MediaContentList)_"
     r"(?P<operation>Serialize|Deserialize)$"
 )
 
@@ -77,7 +77,12 @@ def load_json(path: str) -> Any:
 
 
 def datatype_key(name: str) -> str:
-    return name.lower()
+    key = name.lower()
+    if key == "numericstruct":
+        return "struct"
+    if key == "numericstructlist":
+        return "structlist"
+    return key
 
 
 def datatype_title(datatype: str) -> str:

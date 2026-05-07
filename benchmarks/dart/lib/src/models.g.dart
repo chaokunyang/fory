@@ -16,6 +16,10 @@ NumericStruct _$NumericStructFromJson(Map<String, dynamic> json) =>
       f6: (json['f6'] as num).toInt(),
       f7: (json['f7'] as num).toInt(),
       f8: (json['f8'] as num).toInt(),
+      f9: (json['f9'] as num).toInt(),
+      f10: (json['f10'] as num).toInt(),
+      f11: (json['f11'] as num).toInt(),
+      f12: (json['f12'] as num).toInt(),
     );
 
 Map<String, dynamic> _$NumericStructToJson(NumericStruct instance) =>
@@ -28,6 +32,10 @@ Map<String, dynamic> _$NumericStructToJson(NumericStruct instance) =>
       'f6': instance.f6,
       'f7': instance.f7,
       'f8': instance.f8,
+      'f9': instance.f9,
+      'f10': instance.f10,
+      'f11': instance.f11,
+      'f12': instance.f12,
     };
 
 Sample _$SampleFromJson(Map<String, dynamic> json) => Sample(
@@ -150,13 +158,14 @@ Map<String, dynamic> _$MediaContentToJson(MediaContent instance) =>
       'images': instance.images,
     };
 
-StructList _$StructListFromJson(Map<String, dynamic> json) => StructList(
+NumericStructList _$NumericStructListFromJson(Map<String, dynamic> json) =>
+    NumericStructList(
       structList: (json['structList'] as List<dynamic>)
           .map((e) => NumericStruct.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
 
-Map<String, dynamic> _$StructListToJson(StructList instance) =>
+Map<String, dynamic> _$NumericStructListToJson(NumericStructList instance) =>
     <String, dynamic>{
       'structList': instance.structList,
     };

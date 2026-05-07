@@ -10,14 +10,14 @@ This benchmark compares serialization and deserialization performance between Ap
 
 ## Benchmarked Data Types
 
-| Data Type        | Description                                      |
-| ---------------- | ------------------------------------------------ |
-| Struct           | Simple struct with 8 int32 fields                |
-| Sample           | Complex struct with primitives and array fields  |
-| MediaContent     | Nested object graph with strings, enums, and ids |
-| StructList       | List of `Struct` entries                         |
-| SampleList       | List of `Sample` entries                         |
-| MediaContentList | List of `MediaContent` entries                   |
+| Data Type         | Description                                      |
+| ----------------- | ------------------------------------------------ |
+| NumericStruct     | Simple struct with 12 int32 fields               |
+| Sample            | Complex struct with primitives and array fields  |
+| MediaContent      | Nested object graph with strings, enums, and ids |
+| NumericStructList | List of `NumericStruct` entries                  |
+| SampleList        | List of `Sample` entries                         |
+| MediaContentList  | List of `MediaContent` entries                   |
 
 Benchmark data is aligned with `benchmarks/cpp_benchmark` for cross-language comparison.
 
@@ -44,7 +44,7 @@ Supported flags:
 Examples:
 
 ```bash
-# Run only Struct benchmarks
+# Run only NumericStruct benchmarks
 ./run.sh --data struct
 
 # Run only protobuf benchmarks

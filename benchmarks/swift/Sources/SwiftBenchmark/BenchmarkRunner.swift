@@ -95,8 +95,8 @@ final class BenchmarkSuite {
             sizeEntries: &sizeEntries
         )
         try runBenchmarks(
-            dataKind: .structList,
-            value: BenchmarkDataFactory.makeStructList(),
+            dataKind: .numericStructList,
+            value: BenchmarkDataFactory.makeNumericStructList(),
             entries: &entries,
             sizeEntries: &sizeEntries
         )
@@ -129,7 +129,7 @@ final class BenchmarkSuite {
         fory.register(Media.self, id: 3)
         fory.register(Image.self, id: 4)
         fory.register(MediaContent.self, id: 5)
-        fory.register(StructList.self, id: 6)
+        fory.register(NumericStructList.self, id: 6)
         fory.register(SampleList.self, id: 7)
         fory.register(MediaContentList.self, id: 8)
     }

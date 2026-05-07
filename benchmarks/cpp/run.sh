@@ -99,7 +99,7 @@ if [[ -n "$DATA" ]]; then
     DATA_LOWER="$(echo "$DATA" | tr '[:upper:]' '[:lower:]')"
     case "$DATA_LOWER" in
         struct)
-            DATA_PATTERN="Struct"
+            DATA_PATTERN="NumericStruct"
             ;;
         sample)
             DATA_PATTERN="Sample"
@@ -108,7 +108,7 @@ if [[ -n "$DATA" ]]; then
             DATA_PATTERN="MediaContent"
             ;;
         structlist)
-            DATA_PATTERN="StructList"
+            DATA_PATTERN="NumericStructList"
             ;;
         samplelist)
             DATA_PATTERN="SampleList"

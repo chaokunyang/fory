@@ -82,20 +82,28 @@ def display_name(datatype):
     return DISPLAY_NAMES.get(datatype, datatype.title())
 
 
+def normalize_datatype(datatype):
+    if datatype == "numericstruct":
+        return "struct"
+    if datatype == "numericstructlist":
+        return "structlist"
+    return datatype
+
+
 def parse_benchmark_txt(filepath):
     """Parse Go benchmark text output format."""
     results = defaultdict(lambda: defaultdict(dict))
 
     with open(filepath, "r") as f:
         for line in f:
-            # Match lines like: BenchmarkFory_Struct_Serialize-10    1234567    789.0 ns/op
+            # Match lines like: BenchmarkFory_NumericStruct_Serialize-10    1234567    789.0 ns/op
             match = re.match(
                 r"Benchmark(\w+)_(\w+)_(Serialize|Deserialize)-\d+\s+\d+\s+([\d.]+)\s+ns/op",
                 line,
             )
             if match:
                 serializer = match.group(1).lower()
-                datatype = match.group(2).lower()
+                datatype = normalize_datatype(match.group(2).lower())
                 operation = match.group(3).lower()
                 ns_per_op = float(match.group(4))
 
@@ -123,7 +131,7 @@ def parse_benchmark_json(filepath):
                     )
                     if match:
                         serializer = match.group(1).lower()
-                        datatype = match.group(2).lower()
+                        datatype = normalize_datatype(match.group(2).lower())
                         operation = match.group(3).lower()
                         ns_per_op = float(match.group(4))
 
@@ -429,7 +437,7 @@ def generate_markdown_report(results, output_dir):
             "NumericStruct": "NumericStruct",
             "Sample": "Sample",
             "MediaContent": "MediaContent",
-            "StructList": "NumericStructList",
+            "NumericStructList": "NumericStructList",
             "SampleList": "SampleList",
             "MediaContentList": "MediaContentList",
         }
@@ -437,7 +445,7 @@ def generate_markdown_report(results, output_dir):
             "NumericStruct",
             "Sample",
             "MediaContent",
-            "StructList",
+            "NumericStructList",
             "SampleList",
             "MediaContentList",
         ]

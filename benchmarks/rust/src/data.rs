@@ -26,7 +26,7 @@ pub enum DataKind {
     Struct,
     Sample,
     MediaContent,
-    StructList,
+    NumericStructList,
     SampleList,
     MediaContentList,
 }
@@ -36,7 +36,7 @@ impl DataKind {
         Self::Struct,
         Self::Sample,
         Self::MediaContent,
-        Self::StructList,
+        Self::NumericStructList,
         Self::SampleList,
         Self::MediaContentList,
     ];
@@ -46,7 +46,7 @@ impl DataKind {
             Self::Struct => "struct",
             Self::Sample => "sample",
             Self::MediaContent => "mediacontent",
-            Self::StructList => "structlist",
+            Self::NumericStructList => "structlist",
             Self::SampleList => "samplelist",
             Self::MediaContentList => "mediacontentlist",
         }
@@ -57,7 +57,7 @@ impl DataKind {
             Self::Struct => "NumericStruct",
             Self::Sample => "Sample",
             Self::MediaContent => "MediaContent",
-            Self::StructList => "NumericStructList",
+            Self::NumericStructList => "NumericStructList",
             Self::SampleList => "SampleList",
             Self::MediaContentList => "MediaContentList",
         }
@@ -88,6 +88,14 @@ pub struct NumericStruct {
     pub f7: i32,
     #[fory(id = 8)]
     pub f8: i32,
+    #[fory(id = 9)]
+    pub f9: i32,
+    #[fory(id = 10)]
+    pub f10: i32,
+    #[fory(id = 11)]
+    pub f11: i32,
+    #[fory(id = 12)]
+    pub f12: i32,
 }
 
 #[derive(Debug, Clone, PartialEq, ForyStruct, Serialize, Deserialize)]
@@ -205,7 +213,7 @@ pub struct MediaContent {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, ForyStruct, Serialize, Deserialize)]
-pub struct StructList {
+pub struct NumericStructList {
     #[fory(id = 1)]
     pub struct_list: Vec<NumericStruct>,
 }
@@ -246,11 +254,11 @@ impl BenchmarkCase for MediaContent {
     }
 }
 
-impl BenchmarkCase for StructList {
-    const KIND: DataKind = DataKind::StructList;
+impl BenchmarkCase for NumericStructList {
+    const KIND: DataKind = DataKind::NumericStructList;
 
     fn create() -> Self {
-        StructList {
+        NumericStructList {
             struct_list: (0..LIST_SIZE).map(|_| create_numeric_struct()).collect(),
         }
     }
@@ -284,7 +292,7 @@ pub fn register_fory_types(fory: &mut Fory) -> Result<(), Error> {
     fory.register::<MediaContent>(5)?;
     fory.register::<Player>(6)?;
     fory.register::<Size>(7)?;
-    fory.register::<StructList>(8)?;
+    fory.register::<NumericStructList>(8)?;
     fory.register::<SampleList>(9)?;
     fory.register::<MediaContentList>(10)?;
     Ok(())
@@ -300,6 +308,10 @@ fn create_numeric_struct() -> NumericStruct {
         f6: 1_000_000,
         f7: -999_999_999,
         f8: 42,
+        f9: 123_456_789,
+        f10: -42,
+        f11: 31_415_926,
+        f12: -27_182_818,
     }
 }
 

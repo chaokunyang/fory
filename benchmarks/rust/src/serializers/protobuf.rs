@@ -16,8 +16,8 @@
 // under the License.
 
 use crate::data::{
-    Image, Media, MediaContent, MediaContentList, NumericStruct, Player, Sample, SampleList, Size,
-    StructList,
+    Image, Media, MediaContent, MediaContentList, NumericStruct, NumericStructList, Player, Sample,
+    SampleList, Size,
 };
 use crate::generated as pb;
 use crate::serializers::{BenchmarkSerializer, BoxError};
@@ -56,7 +56,7 @@ where
 }
 
 impl ProtobufModel for NumericStruct {
-    type Proto = pb::Struct;
+    type Proto = pb::NumericStruct;
 
     fn to_proto(&self) -> Self::Proto {
         Self::Proto {
@@ -68,6 +68,10 @@ impl ProtobufModel for NumericStruct {
             f6: self.f6,
             f7: self.f7,
             f8: self.f8,
+            f9: self.f9,
+            f10: self.f10,
+            f11: self.f11,
+            f12: self.f12,
         }
     }
 
@@ -81,6 +85,10 @@ impl ProtobufModel for NumericStruct {
             f6: proto.f6,
             f7: proto.f7,
             f8: proto.f8,
+            f9: proto.f9,
+            f10: proto.f10,
+            f11: proto.f11,
+            f12: proto.f12,
         }
     }
 }
@@ -227,8 +235,8 @@ impl ProtobufModel for MediaContent {
     }
 }
 
-impl ProtobufModel for StructList {
-    type Proto = pb::StructList;
+impl ProtobufModel for NumericStructList {
+    type Proto = pb::NumericStructList;
 
     fn to_proto(&self) -> Self::Proto {
         Self::Proto {

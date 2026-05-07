@@ -39,9 +39,9 @@ void main() {
       createMediaContent(),
       toPbMediaContent,
     );
-    expectRoundTrip<StructList, protobuf.GeneratedMessage>(
-      createStructList(),
-      toPbStructList,
+    expectRoundTrip<NumericStructList, protobuf.GeneratedMessage>(
+      createNumericStructList(),
+      toPbNumericStructList,
     );
     expectRoundTrip<SampleList, protobuf.GeneratedMessage>(
       createSampleList(),
@@ -57,10 +57,10 @@ void main() {
     final fory = newBenchmarkFory();
     final definitions = buildBenchmarkDefinitions();
     final expectedSizes = <String, int>{
-      'struct': 57,
+      'struct': 78,
       'sample': 445,
       'mediacontent': 362,
-      'structlist': 182,
+      'structlist': 255,
       'samplelist': 1978,
       'mediacontentlist': 1531,
     };

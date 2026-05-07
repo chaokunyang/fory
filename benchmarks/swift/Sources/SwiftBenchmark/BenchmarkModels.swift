@@ -22,20 +22,20 @@ enum DataKind: String, CaseIterable {
     case numericStruct = "struct"
     case sample = "sample"
     case mediaContent = "mediacontent"
-    case structList = "structlist"
+    case numericStructList = "structlist"
     case sampleList = "samplelist"
     case mediaContentList = "mediacontentlist"
 
     var title: String {
         switch self {
         case .numericStruct:
-            return "Struct"
+            return "NumericStruct"
         case .sample:
             return "Sample"
         case .mediaContent:
             return "MediaContent"
-        case .structList:
-            return "StructList"
+        case .numericStructList:
+            return "NumericStructList"
         case .sampleList:
             return "SampleList"
         case .mediaContentList:
@@ -81,6 +81,14 @@ struct NumericStruct: Codable, Equatable {
     var f7: Int32 = 0
     @ForyField(id: 8)
     var f8: Int32 = 0
+    @ForyField(id: 9)
+    var f9: Int32 = 0
+    @ForyField(id: 10)
+    var f10: Int32 = 0
+    @ForyField(id: 11)
+    var f11: Int32 = 0
+    @ForyField(id: 12)
+    var f12: Int32 = 0
 }
 
 @ForyStruct
@@ -194,7 +202,7 @@ struct MediaContent: Codable, Equatable {
 }
 
 @ForyStruct
-struct StructList: Codable, Equatable {
+struct NumericStructList: Codable, Equatable {
     @ForyField(id: 1)
     var structList: [NumericStruct] = []
 }
@@ -223,7 +231,11 @@ enum BenchmarkDataFactory {
             f5: -32_000,
             f6: 1_000_000,
             f7: -999_999_999,
-            f8: 42
+            f8: 42,
+            f9: 123_456_789,
+            f10: -42,
+            f11: 31_415_926,
+            f12: -27_182_818
         )
     }
 
@@ -296,8 +308,8 @@ enum BenchmarkDataFactory {
         )
     }
 
-    static func makeStructList() -> StructList {
-        StructList(structList: Array(repeating: makeNumericStruct(), count: listSize))
+    static func makeNumericStructList() -> NumericStructList {
+        NumericStructList(structList: Array(repeating: makeNumericStruct(), count: listSize))
     }
 
     static func makeSampleList() -> SampleList {

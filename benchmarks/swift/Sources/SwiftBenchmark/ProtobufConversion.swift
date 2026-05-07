@@ -71,8 +71,8 @@ extension Size {
 }
 
 extension NumericStruct: ProtobufConvertible {
-    func toProtobuf() -> Protobuf_Struct {
-        var pb = Protobuf_Struct()
+    func toProtobuf() -> Protobuf_NumericStruct {
+        var pb = Protobuf_NumericStruct()
         pb.f1 = f1
         pb.f2 = f2
         pb.f3 = f3
@@ -81,10 +81,14 @@ extension NumericStruct: ProtobufConvertible {
         pb.f6 = f6
         pb.f7 = f7
         pb.f8 = f8
+        pb.f9 = f9
+        pb.f10 = f10
+        pb.f11 = f11
+        pb.f12 = f12
         return pb
     }
 
-    static func fromProtobuf(_ pb: Protobuf_Struct) -> NumericStruct {
+    static func fromProtobuf(_ pb: Protobuf_NumericStruct) -> NumericStruct {
         NumericStruct(
             f1: pb.f1,
             f2: pb.f2,
@@ -93,7 +97,11 @@ extension NumericStruct: ProtobufConvertible {
             f5: pb.f5,
             f6: pb.f6,
             f7: pb.f7,
-            f8: pb.f8
+            f8: pb.f8,
+            f9: pb.f9,
+            f10: pb.f10,
+            f11: pb.f11,
+            f12: pb.f12
         )
     }
 }
@@ -232,15 +240,15 @@ extension MediaContent: ProtobufConvertible {
     }
 }
 
-extension StructList: ProtobufConvertible {
-    func toProtobuf() -> Protobuf_StructList {
-        var pb = Protobuf_StructList()
+extension NumericStructList: ProtobufConvertible {
+    func toProtobuf() -> Protobuf_NumericStructList {
+        var pb = Protobuf_NumericStructList()
         pb.structList = structList.map { $0.toProtobuf() }
         return pb
     }
 
-    static func fromProtobuf(_ pb: Protobuf_StructList) -> StructList {
-        StructList(structList: pb.structList.map { NumericStruct.fromProtobuf($0) })
+    static func fromProtobuf(_ pb: Protobuf_NumericStructList) -> NumericStructList {
+        NumericStructList(structList: pb.structList.map { NumericStruct.fromProtobuf($0) })
     }
 }
 

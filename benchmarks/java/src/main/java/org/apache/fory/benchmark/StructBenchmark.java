@@ -132,8 +132,8 @@ public class StructBenchmark {
       return structList;
     }
 
-    public static ProtoMessage.StructList buildPBStruct(NumericStructList struct) {
-      ProtoMessage.StructList.Builder builder = ProtoMessage.StructList.newBuilder();
+    public static ProtoMessage.NumericStructList buildPBStruct(NumericStructList struct) {
+      ProtoMessage.NumericStructList.Builder builder = ProtoMessage.NumericStructList.newBuilder();
       for (NumericStruct numericStruct : struct.list) {
         builder.addStructList(NumericStruct.buildPBStruct(numericStruct));
       }
@@ -142,10 +142,10 @@ public class StructBenchmark {
 
     public static NumericStructList fromPBBytes(byte[] pbBytes) {
       try {
-        ProtoMessage.StructList pbList = ProtoMessage.StructList.parseFrom(pbBytes);
+        ProtoMessage.NumericStructList pbList = ProtoMessage.NumericStructList.parseFrom(pbBytes);
         NumericStructList structList = new NumericStructList();
         structList.list = new ArrayList<>();
-        for (ProtoMessage.Struct struct : pbList.getStructListList()) {
+        for (ProtoMessage.NumericStruct struct : pbList.getStructListList()) {
           structList.list.add(NumericStruct.fromPBObject(struct));
         }
         return structList;
@@ -164,6 +164,10 @@ public class StructBenchmark {
     public int f6;
     public int f7;
     public int f8;
+    public int f9;
+    public int f10;
+    public int f11;
+    public int f12;
 
     public static NumericStruct build() {
       NumericStruct struct = new NumericStruct();
@@ -175,11 +179,15 @@ public class StructBenchmark {
       struct.f6 = 6;
       struct.f7 = 7;
       struct.f8 = 8;
+      struct.f9 = 9;
+      struct.f10 = 10;
+      struct.f11 = 11;
+      struct.f12 = 12;
       return struct;
     }
 
-    public static ProtoMessage.Struct buildPBStruct(NumericStruct struct) {
-      ProtoMessage.Struct.Builder builder = ProtoMessage.Struct.newBuilder();
+    public static ProtoMessage.NumericStruct buildPBStruct(NumericStruct struct) {
+      ProtoMessage.NumericStruct.Builder builder = ProtoMessage.NumericStruct.newBuilder();
       builder.setF1(struct.f1);
       builder.setF2(struct.f2);
       builder.setF3(struct.f3);
@@ -188,10 +196,14 @@ public class StructBenchmark {
       builder.setF6(struct.f6);
       builder.setF7(struct.f7);
       builder.setF8(struct.f8);
+      builder.setF9(struct.f9);
+      builder.setF10(struct.f10);
+      builder.setF11(struct.f11);
+      builder.setF12(struct.f12);
       return builder.build();
     }
 
-    public static NumericStruct fromPBObject(ProtoMessage.Struct pbObject) {
+    public static NumericStruct fromPBObject(ProtoMessage.NumericStruct pbObject) {
       NumericStruct struct = new NumericStruct();
       struct.f1 = pbObject.getF1();
       struct.f2 = pbObject.getF2();
@@ -201,6 +213,10 @@ public class StructBenchmark {
       struct.f6 = pbObject.getF6();
       struct.f7 = pbObject.getF7();
       struct.f8 = pbObject.getF8();
+      struct.f9 = pbObject.getF9();
+      struct.f10 = pbObject.getF10();
+      struct.f11 = pbObject.getF11();
+      struct.f12 = pbObject.getF12();
       return struct;
     }
   }

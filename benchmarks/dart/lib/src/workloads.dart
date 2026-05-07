@@ -121,14 +121,15 @@ final class InstantiatedBenchmark {
 List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
     buildBenchmarkDefinitions() {
   return <BenchmarkDefinition<Object, protobuf.GeneratedMessage>>[
-    BenchmarkDefinition<NumericStruct, pb.Struct>(
+    BenchmarkDefinition<NumericStruct, pb.NumericStruct>(
       dataType: 'struct',
       createModel: createNumericStruct,
       toProto: toPbStruct,
       serializeProtobuf: (model, _) => toPbStruct(model).writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<NumericStruct>(bytes),
-      parseProtobuf: (bytes) => fromPbStruct(pb.Struct.fromBuffer(bytes)),
+      parseProtobuf: (bytes) =>
+          fromPbStruct(pb.NumericStruct.fromBuffer(bytes)),
       parseJson: (text) => NumericStruct.fromJson(jsonDecode(text)),
     ),
     BenchmarkDefinition<Sample, pb.Sample>(
@@ -153,16 +154,17 @@ List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
           fromPbMediaContent(pb.MediaContent.fromBuffer(bytes)),
       parseJson: (text) => MediaContent.fromJson(jsonDecode(text)),
     ),
-    BenchmarkDefinition<StructList, pb.StructList>(
+    BenchmarkDefinition<NumericStructList, pb.NumericStructList>(
       dataType: 'structlist',
-      createModel: createStructList,
-      toProto: toPbStructList,
-      serializeProtobuf: (model, _) => toPbStructList(model).writeToBuffer(),
+      createModel: createNumericStructList,
+      toProto: toPbNumericStructList,
+      serializeProtobuf: (model, _) =>
+          toPbNumericStructList(model).writeToBuffer(),
       serializeJson: (model) => jsonEncode(model.toJson()),
-      parseFory: (fory, bytes) => fory.deserialize<StructList>(bytes),
+      parseFory: (fory, bytes) => fory.deserialize<NumericStructList>(bytes),
       parseProtobuf: (bytes) =>
-          fromPbStructList(pb.StructList.fromBuffer(bytes)),
-      parseJson: (text) => StructList.fromJson(jsonDecode(text)),
+          fromPbNumericStructList(pb.NumericStructList.fromBuffer(bytes)),
+      parseJson: (text) => NumericStructList.fromJson(jsonDecode(text)),
     ),
     BenchmarkDefinition<SampleList, pb.SampleList>(
       dataType: 'samplelist',

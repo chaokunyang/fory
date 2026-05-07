@@ -36,7 +36,7 @@ import org.apache.fory.benchmark.xlang.generated.FBSMediaContentList;
 import org.apache.fory.benchmark.xlang.generated.FBSNumericStruct;
 import org.apache.fory.benchmark.xlang.generated.FBSSample;
 import org.apache.fory.benchmark.xlang.generated.FBSSampleList;
-import org.apache.fory.benchmark.xlang.generated.FBSStructList;
+import org.apache.fory.benchmark.xlang.generated.FBSNumericStructList;
 import org.apache.fory.integration_tests.state.generated.ProtoMessage;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -67,35 +67,35 @@ public class XlangBenchmark {
     public NumericStruct numericStruct;
     public Sample sample;
     public MediaContent mediaContent;
-    public StructList structList;
+    public NumericStructList numericStructList;
     public SampleList sampleList;
     public MediaContentList mediaContentList;
 
     public byte[] foryNumericStructBytes;
     public byte[] forySampleBytes;
     public byte[] foryMediaContentBytes;
-    public byte[] foryStructListBytes;
+    public byte[] foryNumericStructListBytes;
     public byte[] forySampleListBytes;
     public byte[] foryMediaContentListBytes;
 
     public byte[] protobufNumericStructBytes;
     public byte[] protobufSampleBytes;
     public byte[] protobufMediaContentBytes;
-    public byte[] protobufStructListBytes;
+    public byte[] protobufNumericStructListBytes;
     public byte[] protobufSampleListBytes;
     public byte[] protobufMediaContentListBytes;
 
     public byte[] flatbufferNumericStructBytes;
     public byte[] flatbufferSampleBytes;
     public byte[] flatbufferMediaContentBytes;
-    public byte[] flatbufferStructListBytes;
+    public byte[] flatbufferNumericStructListBytes;
     public byte[] flatbufferSampleListBytes;
     public byte[] flatbufferMediaContentListBytes;
 
     public ByteBuffer flatbufferNumericStructBuffer;
     public ByteBuffer flatbufferSampleBuffer;
     public ByteBuffer flatbufferMediaContentBuffer;
-    public ByteBuffer flatbufferStructListBuffer;
+    public ByteBuffer flatbufferNumericStructListBuffer;
     public ByteBuffer flatbufferSampleListBuffer;
     public ByteBuffer flatbufferMediaContentListBuffer;
 
@@ -114,35 +114,35 @@ public class XlangBenchmark {
       numericStruct = createNumericStruct();
       sample = createSample();
       mediaContent = createMediaContent();
-      structList = createStructList();
+      numericStructList = createNumericStructList();
       sampleList = createSampleList();
       mediaContentList = createMediaContentList();
 
       foryNumericStructBytes = fory.serialize(numericStruct);
       forySampleBytes = fory.serialize(sample);
       foryMediaContentBytes = fory.serialize(mediaContent);
-      foryStructListBytes = fory.serialize(structList);
+      foryNumericStructListBytes = fory.serialize(numericStructList);
       forySampleListBytes = fory.serialize(sampleList);
       foryMediaContentListBytes = fory.serialize(mediaContentList);
 
       protobufNumericStructBytes = toProto(numericStruct).toByteArray();
       protobufSampleBytes = toProto(sample).toByteArray();
       protobufMediaContentBytes = toProto(mediaContent).toByteArray();
-      protobufStructListBytes = toProto(structList).toByteArray();
+      protobufNumericStructListBytes = toProto(numericStructList).toByteArray();
       protobufSampleListBytes = toProto(sampleList).toByteArray();
       protobufMediaContentListBytes = toProto(mediaContentList).toByteArray();
 
       flatbufferNumericStructBytes = toFlatBuffer(numericStruct);
       flatbufferSampleBytes = toFlatBuffer(sample);
       flatbufferMediaContentBytes = toFlatBuffer(mediaContent);
-      flatbufferStructListBytes = toFlatBuffer(structList);
+      flatbufferNumericStructListBytes = toFlatBuffer(numericStructList);
       flatbufferSampleListBytes = toFlatBuffer(sampleList);
       flatbufferMediaContentListBytes = toFlatBuffer(mediaContentList);
 
       flatbufferNumericStructBuffer = ByteBuffer.wrap(flatbufferNumericStructBytes);
       flatbufferSampleBuffer = ByteBuffer.wrap(flatbufferSampleBytes);
       flatbufferMediaContentBuffer = ByteBuffer.wrap(flatbufferMediaContentBytes);
-      flatbufferStructListBuffer = ByteBuffer.wrap(flatbufferStructListBytes);
+      flatbufferNumericStructListBuffer = ByteBuffer.wrap(flatbufferNumericStructListBytes);
       flatbufferSampleListBuffer = ByteBuffer.wrap(flatbufferSampleListBytes);
       flatbufferMediaContentListBuffer = ByteBuffer.wrap(flatbufferMediaContentListBytes);
 
@@ -162,7 +162,7 @@ public class XlangBenchmark {
     fory.register(Media.class, 3);
     fory.register(Image.class, 4);
     fory.register(MediaContent.class, 5);
-    fory.register(StructList.class, 6);
+    fory.register(NumericStructList.class, 6);
     fory.register(SampleList.class, 7);
     fory.register(MediaContentList.class, 8);
     fory.register(Player.class, 101);
@@ -260,33 +260,33 @@ public class XlangBenchmark {
   }
 
   @Benchmark
-  public Object BM_Fory_StructList_Serialize(XlangState state) {
-    return state.fory.serialize(state.structList);
+  public Object BM_Fory_NumericStructList_Serialize(XlangState state) {
+    return state.fory.serialize(state.numericStructList);
   }
 
   @Benchmark
-  public Object BM_Fory_StructList_Deserialize(XlangState state) {
-    return state.fory.deserialize(state.foryStructListBytes);
+  public Object BM_Fory_NumericStructList_Deserialize(XlangState state) {
+    return state.fory.deserialize(state.foryNumericStructListBytes);
   }
 
   @Benchmark
-  public Object BM_Protobuf_StructList_Serialize(XlangState state) {
-    return toProto(state.structList).toByteArray();
+  public Object BM_Protobuf_NumericStructList_Serialize(XlangState state) {
+    return toProto(state.numericStructList).toByteArray();
   }
 
   @Benchmark
-  public Object BM_Protobuf_StructList_Deserialize(XlangState state) {
-    return fromProtoStructList(state.protobufStructListBytes);
+  public Object BM_Protobuf_NumericStructList_Deserialize(XlangState state) {
+    return fromProtoNumericStructList(state.protobufNumericStructListBytes);
   }
 
   @Benchmark
-  public Object BM_Flatbuffer_StructList_Serialize(XlangState state) {
-    return toFlatBuffer(state.structList);
+  public Object BM_Flatbuffer_NumericStructList_Serialize(XlangState state) {
+    return toFlatBuffer(state.numericStructList);
   }
 
   @Benchmark
-  public Object BM_Flatbuffer_StructList_Deserialize(XlangState state) {
-    return fromFlatBufferStructList(state.flatbufferStructListBuffer);
+  public Object BM_Flatbuffer_NumericStructList_Deserialize(XlangState state) {
+    return fromFlatBufferNumericStructList(state.flatbufferNumericStructListBuffer);
   }
 
   @Benchmark
@@ -359,6 +359,10 @@ public class XlangBenchmark {
     struct.f6 = 1000000;
     struct.f7 = -999999999;
     struct.f8 = 42;
+    struct.f9 = 123456789;
+    struct.f10 = -42;
+    struct.f11 = 31415926;
+    struct.f12 = -27182818;
     return struct;
   }
 
@@ -431,8 +435,8 @@ public class XlangBenchmark {
     return image;
   }
 
-  private static StructList createStructList() {
-    StructList list = new StructList();
+  private static NumericStructList createNumericStructList() {
+    NumericStructList list = new NumericStructList();
     list.struct_list = new ArrayList<>(LIST_SIZE);
     for (int i = 0; i < LIST_SIZE; i++) {
       list.struct_list.add(createNumericStruct());
@@ -458,8 +462,8 @@ public class XlangBenchmark {
     return list;
   }
 
-  private static ProtoMessage.Struct toProto(NumericStruct struct) {
-    return ProtoMessage.Struct.newBuilder()
+  private static ProtoMessage.NumericStruct toProto(NumericStruct struct) {
+    return ProtoMessage.NumericStruct.newBuilder()
         .setF1(struct.f1)
         .setF2(struct.f2)
         .setF3(struct.f3)
@@ -468,6 +472,10 @@ public class XlangBenchmark {
         .setF6(struct.f6)
         .setF7(struct.f7)
         .setF8(struct.f8)
+        .setF9(struct.f9)
+        .setF10(struct.f10)
+        .setF11(struct.f11)
+        .setF12(struct.f12)
         .build();
   }
 
@@ -548,9 +556,9 @@ public class XlangBenchmark {
     return builder.build();
   }
 
-  private static ProtoMessage.StructList toProto(StructList structList) {
-    ProtoMessage.StructList.Builder builder = ProtoMessage.StructList.newBuilder();
-    for (NumericStruct struct : structList.struct_list) {
+  private static ProtoMessage.NumericStructList toProto(NumericStructList numericStructList) {
+    ProtoMessage.NumericStructList.Builder builder = ProtoMessage.NumericStructList.newBuilder();
+    for (NumericStruct struct : numericStructList.struct_list) {
       builder.addStructList(toProto(struct));
     }
     return builder.build();
@@ -574,7 +582,7 @@ public class XlangBenchmark {
 
   private static NumericStruct fromProtoStruct(byte[] bytes) {
     try {
-      return fromProto(ProtoMessage.Struct.parseFrom(bytes));
+      return fromProto(ProtoMessage.NumericStruct.parseFrom(bytes));
     } catch (InvalidProtocolBufferException e) {
       throw new IllegalStateException(e);
     }
@@ -596,9 +604,9 @@ public class XlangBenchmark {
     }
   }
 
-  private static StructList fromProtoStructList(byte[] bytes) {
+  private static NumericStructList fromProtoNumericStructList(byte[] bytes) {
     try {
-      return fromProto(ProtoMessage.StructList.parseFrom(bytes));
+      return fromProto(ProtoMessage.NumericStructList.parseFrom(bytes));
     } catch (InvalidProtocolBufferException e) {
       throw new IllegalStateException(e);
     }
@@ -620,7 +628,7 @@ public class XlangBenchmark {
     }
   }
 
-  private static NumericStruct fromProto(ProtoMessage.Struct proto) {
+  private static NumericStruct fromProto(ProtoMessage.NumericStruct proto) {
     NumericStruct struct = new NumericStruct();
     struct.f1 = proto.getF1();
     struct.f2 = proto.getF2();
@@ -630,6 +638,10 @@ public class XlangBenchmark {
     struct.f6 = proto.getF6();
     struct.f7 = proto.getF7();
     struct.f8 = proto.getF8();
+    struct.f9 = proto.getF9();
+    struct.f10 = proto.getF10();
+    struct.f11 = proto.getF11();
+    struct.f12 = proto.getF12();
     return struct;
   }
 
@@ -718,10 +730,10 @@ public class XlangBenchmark {
     return image;
   }
 
-  private static StructList fromProto(ProtoMessage.StructList proto) {
-    StructList list = new StructList();
+  private static NumericStructList fromProto(ProtoMessage.NumericStructList proto) {
+    NumericStructList list = new NumericStructList();
     list.struct_list = new ArrayList<>(proto.getStructListCount());
-    for (ProtoMessage.Struct struct : proto.getStructListList()) {
+    for (ProtoMessage.NumericStruct struct : proto.getStructListList()) {
       list.struct_list.add(fromProto(struct));
     }
     return list;
@@ -766,14 +778,14 @@ public class XlangBenchmark {
     return builder.sizedByteArray();
   }
 
-  private static byte[] toFlatBuffer(StructList structList) {
+  private static byte[] toFlatBuffer(NumericStructList numericStructList) {
     FlatBufferBuilder builder = new FlatBufferBuilder(512);
-    int[] offsets = new int[structList.struct_list.size()];
+    int[] offsets = new int[numericStructList.struct_list.size()];
     for (int i = 0; i < offsets.length; i++) {
-      offsets[i] = buildFlatBuffer(builder, structList.struct_list.get(i));
+      offsets[i] = buildFlatBuffer(builder, numericStructList.struct_list.get(i));
     }
-    int vector = FBSStructList.createStructListVector(builder, offsets);
-    int root = FBSStructList.createFBSStructList(builder, vector);
+    int vector = FBSNumericStructList.createStructListVector(builder, offsets);
+    int root = FBSNumericStructList.createFBSNumericStructList(builder, vector);
     builder.finish(root);
     return builder.sizedByteArray();
   }
@@ -805,7 +817,7 @@ public class XlangBenchmark {
   private static int buildFlatBuffer(FlatBufferBuilder builder, NumericStruct struct) {
     return FBSNumericStruct.createFBSNumericStruct(
         builder, struct.f1, struct.f2, struct.f3, struct.f4, struct.f5, struct.f6, struct.f7,
-        struct.f8);
+        struct.f8, struct.f9, struct.f10, struct.f11, struct.f12);
   }
 
   private static int buildFlatBuffer(FlatBufferBuilder builder, Sample sample) {
@@ -898,9 +910,9 @@ public class XlangBenchmark {
     return fromFlatBuffer(FBSMediaContent.getRootAsFBSMediaContent(buffer));
   }
 
-  private static StructList fromFlatBufferStructList(ByteBuffer buffer) {
-    FBSStructList fbsList = FBSStructList.getRootAsFBSStructList(buffer);
-    StructList list = new StructList();
+  private static NumericStructList fromFlatBufferNumericStructList(ByteBuffer buffer) {
+    FBSNumericStructList fbsList = FBSNumericStructList.getRootAsFBSNumericStructList(buffer);
+    NumericStructList list = new NumericStructList();
     list.struct_list = new ArrayList<>(fbsList.structListLength());
     for (int i = 0; i < fbsList.structListLength(); i++) {
       list.struct_list.add(fromFlatBuffer(fbsList.structList(i)));
@@ -938,6 +950,10 @@ public class XlangBenchmark {
     struct.f6 = fbsStruct.f6();
     struct.f7 = fbsStruct.f7();
     struct.f8 = fbsStruct.f8();
+    struct.f9 = fbsStruct.f9();
+    struct.f10 = fbsStruct.f10();
+    struct.f11 = fbsStruct.f11();
+    struct.f12 = fbsStruct.f12();
     return struct;
   }
 
@@ -1064,6 +1080,18 @@ public class XlangBenchmark {
 
     @ForyField(id = 8)
     public int f8;
+
+    @ForyField(id = 9)
+    public int f9;
+
+    @ForyField(id = 10)
+    public int f10;
+
+    @ForyField(id = 11)
+    public int f11;
+
+    @ForyField(id = 12)
+    public int f12;
   }
 
   @ForyStruct
@@ -1202,7 +1230,7 @@ public class XlangBenchmark {
   }
 
   @ForyStruct
-  public static class StructList {
+  public static class NumericStructList {
     @ForyField(id = 1)
     public List<NumericStruct> struct_list;
   }

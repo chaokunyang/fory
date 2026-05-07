@@ -84,6 +84,10 @@ class NumericStruct {
     required this.f6,
     required this.f7,
     required this.f8,
+    required this.f9,
+    required this.f10,
+    required this.f11,
+    required this.f12,
   });
 
   @ForyField(id: 1, type: Int32Type())
@@ -102,6 +106,14 @@ class NumericStruct {
   final int f7;
   @ForyField(id: 8, type: Int32Type())
   final int f8;
+  @ForyField(id: 9, type: Int32Type())
+  final int f9;
+  @ForyField(id: 10, type: Int32Type())
+  final int f10;
+  @ForyField(id: 11, type: Int32Type())
+  final int f11;
+  @ForyField(id: 12, type: Int32Type())
+  final int f12;
 
   factory NumericStruct.fromJson(Map<String, dynamic> json) =>
       _$NumericStructFromJson(json);
@@ -292,18 +304,18 @@ class MediaContent {
 
 @ForyStruct()
 @JsonSerializable()
-class StructList {
-  StructList({
+class NumericStructList {
+  NumericStructList({
     required this.structList,
   });
 
   @ForyField(id: 1)
   final List<NumericStruct> structList;
 
-  factory StructList.fromJson(Map<String, dynamic> json) =>
-      _$StructListFromJson(json);
+  factory NumericStructList.fromJson(Map<String, dynamic> json) =>
+      _$NumericStructListFromJson(json);
 
-  Map<String, dynamic> toJson() => _$StructListToJson(this);
+  Map<String, dynamic> toJson() => _$NumericStructListToJson(this);
 }
 
 @ForyStruct()
@@ -344,7 +356,7 @@ void registerBenchmarkTypes(Fory fory) {
   ModelsFory.register(fory, Media, id: 3);
   ModelsFory.register(fory, Image, id: 4);
   ModelsFory.register(fory, MediaContent, id: 5);
-  ModelsFory.register(fory, StructList, id: 6);
+  ModelsFory.register(fory, NumericStructList, id: 6);
   ModelsFory.register(fory, SampleList, id: 7);
   ModelsFory.register(fory, MediaContentList, id: 8);
   ModelsFory.register(fory, Player, id: 9);
@@ -361,6 +373,10 @@ NumericStruct createNumericStruct() {
     f6: 1000000,
     f7: -999999999,
     f8: 42,
+    f9: 123456789,
+    f10: -42,
+    f11: 31415926,
+    f12: -27182818,
   );
 }
 
@@ -492,8 +508,8 @@ MediaContent createMediaContent() {
   );
 }
 
-StructList createStructList() {
-  return StructList(
+NumericStructList createNumericStructList() {
+  return NumericStructList(
     structList: List<NumericStruct>.generate(
       _kListSize,
       (_) => createNumericStruct(),

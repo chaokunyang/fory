@@ -73,10 +73,10 @@ serializer_regex() {
 data_regex() {
   case "$(lower "$1")" in
     "")
-      printf '%s' "Struct|Sample|MediaContent|StructList|SampleList|MediaContentList"
+      printf '%s' "NumericStruct|Sample|MediaContent|NumericStructList|SampleList|MediaContentList"
       ;;
     struct)
-      printf '%s' "Struct"
+      printf '%s' "NumericStruct"
       ;;
     sample)
       printf '%s' "Sample"
@@ -85,7 +85,7 @@ data_regex() {
       printf '%s' "MediaContent"
       ;;
     structlist)
-      printf '%s' "StructList"
+      printf '%s' "NumericStructList"
       ;;
     samplelist)
       printf '%s' "SampleList"

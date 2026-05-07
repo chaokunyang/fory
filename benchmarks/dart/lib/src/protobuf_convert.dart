@@ -27,8 +27,8 @@ import 'generated/bench.pb.dart' as pb;
 import 'generated/bench.pbenum.dart' as pbenum;
 import 'models.dart';
 
-pb.Struct toPbStruct(NumericStruct value) {
-  return pb.Struct(
+pb.NumericStruct toPbStruct(NumericStruct value) {
+  return pb.NumericStruct(
     f1: value.f1,
     f2: value.f2,
     f3: value.f3,
@@ -37,10 +37,14 @@ pb.Struct toPbStruct(NumericStruct value) {
     f6: value.f6,
     f7: value.f7,
     f8: value.f8,
+    f9: value.f9,
+    f10: value.f10,
+    f11: value.f11,
+    f12: value.f12,
   );
 }
 
-NumericStruct fromPbStruct(pb.Struct value) {
+NumericStruct fromPbStruct(pb.NumericStruct value) {
   return NumericStruct(
     f1: value.f1,
     f2: value.f2,
@@ -50,17 +54,21 @@ NumericStruct fromPbStruct(pb.Struct value) {
     f6: value.f6,
     f7: value.f7,
     f8: value.f8,
+    f9: value.f9,
+    f10: value.f10,
+    f11: value.f11,
+    f12: value.f12,
   );
 }
 
-pb.StructList toPbStructList(StructList value) {
-  return pb.StructList(
+pb.NumericStructList toPbNumericStructList(NumericStructList value) {
+  return pb.NumericStructList(
     structList: value.structList.map(toPbStruct),
   );
 }
 
-StructList fromPbStructList(pb.StructList value) {
-  return StructList(
+NumericStructList fromPbNumericStructList(pb.NumericStructList value) {
+  return NumericStructList(
     structList: value.structList.map(fromPbStruct).toList(growable: false),
   );
 }

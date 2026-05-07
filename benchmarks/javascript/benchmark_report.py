@@ -93,7 +93,12 @@ def parse_benchmark_name(name):
         name = name[3:]
     parts = name.split("_")
     if len(parts) >= 3:
-        return parts[0].lower(), parts[1].lower(), parts[2].lower()
+        datatype = parts[1].lower()
+        if datatype == "numericstruct":
+            datatype = "struct"
+        elif datatype == "numericstructlist":
+            datatype = "structlist"
+        return parts[0].lower(), datatype, parts[2].lower()
     return None, None, None
 
 

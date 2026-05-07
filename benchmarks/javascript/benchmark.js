@@ -173,6 +173,10 @@ function createSchemas() {
       f6: int32Field(6),
       f7: int32Field(7),
       f8: int32Field(8),
+      f9: int32Field(9),
+      f10: int32Field(10),
+      f11: int32Field(11),
+      f12: int32Field(12),
     }),
     Sample: Type.struct(2, {
       int_value: int32Field(1),
@@ -223,7 +227,7 @@ function createSchemas() {
       media: structField(1, 3),
       images: listField(2, Type.struct(4)),
     }),
-    StructList: Type.struct(6, {
+    NumericStructList: Type.struct(6, {
       struct_list: listField(1, Type.struct(1)),
     }),
     SampleList: Type.struct(7, {
@@ -245,6 +249,10 @@ function createNumericStruct() {
     f6: 1000000,
     f7: -999999999,
     f8: 42,
+    f9: 123456789,
+    f10: -42,
+    f11: 31415926,
+    f12: -27182818,
   };
 }
 
@@ -321,7 +329,7 @@ function repeat(factory) {
   return Array.from({ length: LIST_SIZE }, () => factory());
 }
 
-function createStructList() {
+function createNumericStructList() {
   return {
     struct_list: repeat(createNumericStruct),
   };
@@ -353,6 +361,10 @@ function fromProtoStruct(value) {
     f6: value.f6,
     f7: value.f7,
     f8: value.f8,
+    f9: value.f9,
+    f10: value.f10,
+    f11: value.f11,
+    f12: value.f12,
   };
 }
 
@@ -478,13 +490,13 @@ function fromProtoMediaContent(value) {
   };
 }
 
-function toProtoStructList(value) {
+function toProtoNumericStructList(value) {
   return {
     structList: value.struct_list.map(toProtoStruct),
   };
 }
 
-function fromProtoStructList(value) {
+function fromProtoNumericStructList(value) {
   return {
     struct_list: (value.structList || []).map(fromProtoStruct),
   };
@@ -526,7 +538,7 @@ function createForyBenchmarks() {
     media: fory.register(schemas.Media),
     image: fory.register(schemas.Image),
     mediacontent: fory.register(schemas.MediaContent),
-    structlist: fory.register(schemas.StructList),
+    structlist: fory.register(schemas.NumericStructList),
     samplelist: fory.register(schemas.SampleList),
     mediacontentlist: fory.register(schemas.MediaContentList),
   };
@@ -534,10 +546,10 @@ function createForyBenchmarks() {
 }
 
 function createDatasets(root) {
-  const StructType = root.lookupType("protobuf.Struct");
+  const StructType = root.lookupType("protobuf.NumericStruct");
   const SampleType = root.lookupType("protobuf.Sample");
   const MediaContentType = root.lookupType("protobuf.MediaContent");
-  const StructListType = root.lookupType("protobuf.StructList");
+  const StructListType = root.lookupType("protobuf.NumericStructList");
   const SampleListType = root.lookupType("protobuf.SampleList");
   const MediaContentListType = root.lookupType("protobuf.MediaContentList");
 
@@ -546,7 +558,7 @@ function createDatasets(root) {
   return [
     {
       key: "struct",
-      label: "Struct",
+      label: "NumericStruct",
       createValue: createNumericStruct,
       toProto: toProtoStruct,
       fromProto: fromProtoStruct,
@@ -576,10 +588,10 @@ function createDatasets(root) {
     },
     {
       key: "structlist",
-      label: "StructList",
-      createValue: createStructList,
-      toProto: toProtoStructList,
-      fromProto: fromProtoStructList,
+      label: "NumericStructList",
+      createValue: createNumericStructList,
+      toProto: toProtoNumericStructList,
+      fromProto: fromProtoNumericStructList,
       protoType: StructListType,
       forySerializer: serializers.structlist,
       sizeKey: "struct_list",
@@ -864,7 +876,7 @@ function main() {
   datasets.forEach(ensureSerializationWorks);
 
   const structSize = serializeBytes("fory", datasets.find((item) => item.key === "struct"), createNumericStruct()).length;
-  console.log(`Fory Struct serialized size: ${structSize} bytes`);
+  console.log(`Fory NumericStruct serialized size: ${structSize} bytes`);
 
   const result = {
     context: {

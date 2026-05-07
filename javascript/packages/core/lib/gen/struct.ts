@@ -101,6 +101,58 @@ function isDirectVarInt32Field(
     && typeResolver.isMonomorphic(typeInfo, typeInfo.dynamic);
 }
 
+function directNumericFieldReadExpr(
+  typeInfo: TypeInfo,
+  builder: CodecBuilder,
+): string | null {
+  if (
+    toRefMode(typeInfo.trackingRef, typeInfo.nullable) !== RefMode.NONE
+    || !builder.resolver.isMonomorphic(typeInfo, typeInfo.dynamic)
+  ) {
+    return null;
+  }
+  switch (typeInfo.typeId) {
+    case TypeId.INT8:
+      return builder.reader.readInt8();
+    case TypeId.INT16:
+      return builder.reader.readInt16();
+    case TypeId.INT32:
+      return builder.reader.readInt32();
+    case TypeId.VARINT32:
+      return builder.reader.readVarInt32();
+    case TypeId.INT64:
+      return builder.reader.readInt64();
+    case TypeId.VARINT64:
+      return builder.reader.readVarInt64();
+    case TypeId.TAGGED_INT64:
+      return builder.reader.readTaggedInt64();
+    case TypeId.UINT8:
+      return builder.reader.readUint8();
+    case TypeId.UINT16:
+      return builder.reader.readUint16();
+    case TypeId.UINT32:
+      return builder.reader.readUint32();
+    case TypeId.VAR_UINT32:
+      return builder.reader.readVarUInt32();
+    case TypeId.UINT64:
+      return builder.reader.readUint64();
+    case TypeId.VAR_UINT64:
+      return builder.reader.readVarUInt64();
+    case TypeId.TAGGED_UINT64:
+      return builder.reader.readTaggedUInt64();
+    case TypeId.FLOAT16:
+      return builder.reader.readFloat16();
+    case TypeId.BFLOAT16:
+      return builder.reader.readBfloat16();
+    case TypeId.FLOAT32:
+      return builder.reader.readFloat32();
+    case TypeId.FLOAT64:
+      return builder.reader.readFloat64();
+    default:
+      return null;
+  }
+}
+
 class StructSerializerGenerator extends BaseSerializerGenerator {
   typeInfo: TypeInfo;
   sortedProps: { key: string; typeInfo: TypeInfo }[];
@@ -322,6 +374,19 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       `;
     }
     const hash = this.typeMeta.computeStructHash();
+    const directNumericObjectRead = this.readDirectNumericObject(accessor, refState);
+    if (directNumericObjectRead !== null) {
+      return `
+        ${!this.builder.resolver.isCompatible()
+? `
+        if(${this.builder.reader.readInt32()} !== ${hash}) {
+          throw new Error("Read class version is not consistent with ${hash} ")
+        }
+      `
+: ""}
+        ${directNumericObjectRead}
+      `;
+    }
     return `
       ${!this.builder.resolver.isCompatible()
 ? `
@@ -353,6 +418,31 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           ${this.readField(typeInfo, expr => `${result}${CodecBuilder.safePropAccessor(key)} = ${expr}`, innerGenerator.readEmbed())}
         `;
       }).join(";\n")}
+      ${accessor(result)}
+    `;
+  }
+
+  private readDirectNumericObject(
+    accessor: (expr: string) => string,
+    refState: string,
+  ): string | null {
+    if (this.typeInfo.options!.withConstructor || this.sortedProps.length === 0) {
+      return null;
+    }
+    const fields: Array<{ key: string; expr: string }> = [];
+    for (const { key, typeInfo } of this.sortedProps) {
+      const expr = directNumericFieldReadExpr(typeInfo, this.builder);
+      if (expr === null) {
+        return null;
+      }
+      fields.push({ key, expr });
+    }
+    const result = this.scope.uniqueName("result");
+    return `
+      const ${result} = {
+        ${fields.map(({ key, expr }) => `${CodecBuilder.safePropName(key)}: ${expr}`).join(",\n")}
+      };
+      ${this.maybeReference(result, refState)}
       ${accessor(result)}
     `;
   }

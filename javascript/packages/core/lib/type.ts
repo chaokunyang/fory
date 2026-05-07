@@ -238,7 +238,7 @@ export type Serializer<T = any> = {
   readRef: () => T;
   readRefWithoutTypeInfo: () => T;
   readNoRef: (fromRef: boolean) => T;
-  readTypeInfo: () => void;
+  readTypeInfo: () => Serializer | void;
 };
 
 export enum RefFlags {

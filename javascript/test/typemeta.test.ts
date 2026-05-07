@@ -175,6 +175,33 @@ describe("typemeta", () => {
     expect(result).toEqual({ value: "hello" });
   });
 
+  test("does not retain regenerated compatible serializer after a schema mismatch read", () => {
+    const changedWriterFory = new Fory({ compatible: true });
+    const localWriterFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const changedWriterType = Type.struct(7302, {
+      value: Type.string().setId(1),
+    });
+    const localWriterType = Type.struct(7302, {
+      value: Type.int32().setId(1),
+    });
+    const readerType = Type.struct(7302, {
+      value: Type.int32().setId(1),
+    });
+
+    const changedBytes = changedWriterFory.register(changedWriterType).serialize({
+      value: "hello",
+    });
+    const localBytes = localWriterFory.register(localWriterType).serialize({
+      value: 123,
+    });
+    const reader = readerFory.register(readerType);
+
+    expect(reader.deserialize(changedBytes)).toEqual({ value: "hello" });
+    expect(reader.deserialize(localBytes)).toEqual({ value: 123 });
+  });
+
   test("remaps compatible tag-id fields onto local property names during regeneration", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });

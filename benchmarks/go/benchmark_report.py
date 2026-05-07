@@ -192,7 +192,6 @@ def generate_plots(results, output_dir):
         fig.suptitle(
             f"{display_name(datatype)} Serialization Benchmark",
             fontsize=14,
-            fontweight="bold",
         )
 
         for idx, op in enumerate(OPERATIONS):
@@ -253,7 +252,6 @@ def generate_plots(results, output_dir):
                         va="top",
                         fontsize=9,
                         color="green",
-                        fontweight="bold",
                         bbox=dict(
                             boxstyle="round,pad=0.25",
                             facecolor="white",
@@ -325,7 +323,6 @@ def generate_combined_plot(results, output_dir):
     fig.suptitle(
         "Go Serialization Throughput",
         fontsize=16,
-        fontweight="bold",
     )
 
     for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPES)):

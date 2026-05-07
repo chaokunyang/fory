@@ -1,6 +1,6 @@
 # Go Serialization Benchmark Report
 
-Generated: 2026-05-07 18:51:06
+Generated: 2026-05-07 19:19:47
 
 ## System Information
 

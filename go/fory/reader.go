@@ -877,28 +877,40 @@ func (c *ReadContext) ReadStruct(value reflect.Value) {
 		structType = valueType
 	}
 
-	// Read ref flag
-	refID, err := c.RefResolver().TryPreserveRefId(c.buffer)
-	if err != nil {
-		c.SetError(FromError(err))
-		return
-	}
-
-	// Handle null
-	if refID == int32(NullFlag) {
-		if isPtr {
-			value.Set(reflect.Zero(valueType))
+	refResolver := c.RefResolver()
+	refID := int32(NotNullValueFlag)
+	if refResolver.refTracking {
+		var err error
+		refID, err = refResolver.TryPreserveRefId(c.buffer)
+		if err != nil {
+			c.SetError(FromError(err))
+			return
 		}
-		return
-	}
-
-	// Handle reference to existing object
-	if refID < int32(NotNullValueFlag) {
-		obj := c.RefResolver().GetReadObject(refID)
-		if obj.IsValid() {
-			value.Set(obj)
+		if refID == int32(NullFlag) {
+			if isPtr {
+				value.Set(reflect.Zero(valueType))
+			}
+			return
 		}
-		return
+		if refID < int32(NotNullValueFlag) {
+			obj := refResolver.GetReadObject(refID)
+			if obj.IsValid() {
+				value.Set(obj)
+			}
+			return
+		}
+	} else {
+		refFlag := c.buffer.ReadInt8(c.Err())
+		if refFlag == NullFlag {
+			if isPtr {
+				value.Set(reflect.Zero(valueType))
+			}
+			return
+		}
+		if refFlag == RefFlag {
+			c.buffer.ReadVarUint32(c.Err())
+			return
+		}
 	}
 
 	// Use ReadTypeInfoForType to get serializer directly by type - avoids map lookups
@@ -919,12 +931,12 @@ func (c *ReadContext) ReadStruct(value reflect.Value) {
 		}
 		readTarget = value.Elem()
 		// Register reference before reading (for circular references)
-		c.RefResolver().SetReadObject(refID, value)
+		refResolver.SetReadObject(refID, value)
 	} else {
 		readTarget = value
 		// For non-pointer structs, register a pointer to enable circular ref resolution
 		if value.CanAddr() {
-			c.RefResolver().SetReadObject(refID, value.Addr())
+			refResolver.SetReadObject(refID, value.Addr())
 		}
 	}
 

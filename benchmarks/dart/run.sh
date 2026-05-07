@@ -37,7 +37,7 @@ usage() {
   echo ""
   echo "Options:"
   echo "  --data <type>        Filter by data type."
-  echo "  --serializer <name>  Filter by serializer: fory, protobuf."
+  echo "  --serializer <name>  Filter by serializer: fory, protobuf, json."
   echo "  --operation <name>   Filter by operation: serialize, deserialize."
   echo "  --samples <n>        Number of measured samples (default: 5)."
   echo "  --duration <sec>     Seconds per sample (default: 1.5)."
@@ -142,4 +142,3 @@ echo "============================================"
 echo "Benchmark complete!"
 echo "============================================"
 echo "Results saved to: $OUTPUT_DIR"
-

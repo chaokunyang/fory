@@ -17,6 +17,7 @@
  * under the License.
  */
 
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
@@ -28,22 +29,27 @@ import 'protobuf_convert.dart';
 
 Object? benchmarkSink;
 
-final class BenchmarkDefinition<TModel, TProto extends protobuf.GeneratedMessage> {
+final class BenchmarkDefinition<TModel,
+    TProto extends protobuf.GeneratedMessage> {
   final String dataType;
   final TModel Function() createModel;
   final TProto Function(TModel value) toProto;
   final Object? Function(TModel value, TProto protobufMessage)
       serializeProtobuf;
+  final Object? Function(TModel value) serializeJson;
   final TModel Function(Fory fory, Uint8List bytes) parseFory;
   final Object? Function(Uint8List bytes) parseProtobuf;
+  final Object? Function(String text) parseJson;
 
   const BenchmarkDefinition({
     required this.dataType,
     required this.createModel,
     required this.toProto,
     required this.serializeProtobuf,
+    required this.serializeJson,
     required this.parseFory,
     required this.parseProtobuf,
+    required this.parseJson,
   });
 
   InstantiatedBenchmark instantiate(Fory fory) {
@@ -51,6 +57,7 @@ final class BenchmarkDefinition<TModel, TProto extends protobuf.GeneratedMessage
     final buffer = Buffer();
     final protobufMessage = toProto(model);
     final protobufBytes = protobufMessage.writeToBuffer();
+    final jsonText = serializeJson(model) as String;
 
     fory.serializeTo(model, buffer);
     final foryBytes = Uint8List.sublistView(buffer.toBytes());
@@ -60,6 +67,7 @@ final class BenchmarkDefinition<TModel, TProto extends protobuf.GeneratedMessage
       dataType: dataType,
       forySize: forySize,
       protobufSize: protobufBytes.length,
+      jsonSize: utf8.encode(jsonText).length,
       forySerialize: () {
         buffer.clear();
         fory.serializeTo(model, buffer);
@@ -68,11 +76,17 @@ final class BenchmarkDefinition<TModel, TProto extends protobuf.GeneratedMessage
       protobufSerialize: () {
         benchmarkSink = serializeProtobuf(model, protobufMessage);
       },
+      jsonSerialize: () {
+        benchmarkSink = serializeJson(model);
+      },
       foryDeserialize: () {
         benchmarkSink = parseFory(fory, foryBytes);
       },
       protobufDeserialize: () {
         benchmarkSink = parseProtobuf(protobufBytes);
+      },
+      jsonDeserialize: () {
+        benchmarkSink = parseJson(jsonText);
       },
     );
   }
@@ -82,67 +96,84 @@ final class InstantiatedBenchmark {
   final String dataType;
   final int forySize;
   final int protobufSize;
+  final int jsonSize;
   final void Function() forySerialize;
   final void Function() protobufSerialize;
+  final void Function() jsonSerialize;
   final void Function() foryDeserialize;
   final void Function() protobufDeserialize;
+  final void Function() jsonDeserialize;
 
   const InstantiatedBenchmark({
     required this.dataType,
     required this.forySize,
     required this.protobufSize,
+    required this.jsonSize,
     required this.forySerialize,
     required this.protobufSerialize,
+    required this.jsonSerialize,
     required this.foryDeserialize,
     required this.protobufDeserialize,
+    required this.jsonDeserialize,
   });
 }
 
 List<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>
-buildBenchmarkDefinitions() {
+    buildBenchmarkDefinitions() {
   return <BenchmarkDefinition<Object, protobuf.GeneratedMessage>>[
     BenchmarkDefinition<NumericStruct, pb.Struct>(
       dataType: 'struct',
       createModel: createNumericStruct,
       toProto: toPbStruct,
       serializeProtobuf: (model, _) => toPbStruct(model).writeToBuffer(),
+      serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<NumericStruct>(bytes),
       parseProtobuf: (bytes) => fromPbStruct(pb.Struct.fromBuffer(bytes)),
+      parseJson: (text) => NumericStruct.fromJson(jsonDecode(text)),
     ),
     BenchmarkDefinition<Sample, pb.Sample>(
       dataType: 'sample',
       createModel: createSample,
       toProto: toPbSample,
-      serializeProtobuf: (_, protobufMessage) => protobufMessage.writeToBuffer(),
+      serializeProtobuf: (_, protobufMessage) =>
+          protobufMessage.writeToBuffer(),
+      serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<Sample>(bytes),
       parseProtobuf: pb.Sample.fromBuffer,
+      parseJson: (text) => Sample.fromJson(jsonDecode(text)),
     ),
     BenchmarkDefinition<MediaContent, pb.MediaContent>(
       dataType: 'mediacontent',
       createModel: createMediaContent,
       toProto: toPbMediaContent,
       serializeProtobuf: (model, _) => toPbMediaContent(model).writeToBuffer(),
+      serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<MediaContent>(bytes),
       parseProtobuf: (bytes) =>
           fromPbMediaContent(pb.MediaContent.fromBuffer(bytes)),
+      parseJson: (text) => MediaContent.fromJson(jsonDecode(text)),
     ),
     BenchmarkDefinition<StructList, pb.StructList>(
       dataType: 'structlist',
       createModel: createStructList,
       toProto: toPbStructList,
       serializeProtobuf: (model, _) => toPbStructList(model).writeToBuffer(),
+      serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<StructList>(bytes),
       parseProtobuf: (bytes) =>
           fromPbStructList(pb.StructList.fromBuffer(bytes)),
+      parseJson: (text) => StructList.fromJson(jsonDecode(text)),
     ),
     BenchmarkDefinition<SampleList, pb.SampleList>(
       dataType: 'samplelist',
       createModel: createSampleList,
       toProto: toPbSampleList,
       serializeProtobuf: (model, _) => toPbSampleList(model).writeToBuffer(),
+      serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<SampleList>(bytes),
       parseProtobuf: (bytes) =>
           fromPbSampleList(pb.SampleList.fromBuffer(bytes)),
+      parseJson: (text) => SampleList.fromJson(jsonDecode(text)),
     ),
     BenchmarkDefinition<MediaContentList, pb.MediaContentList>(
       dataType: 'mediacontentlist',
@@ -150,9 +181,11 @@ buildBenchmarkDefinitions() {
       toProto: toPbMediaContentList,
       serializeProtobuf: (model, _) =>
           toPbMediaContentList(model).writeToBuffer(),
+      serializeJson: (model) => jsonEncode(model.toJson()),
       parseFory: (fory, bytes) => fory.deserialize<MediaContentList>(bytes),
       parseProtobuf: (bytes) =>
           fromPbMediaContentList(pb.MediaContentList.fromBuffer(bytes)),
+      parseJson: (text) => MediaContentList.fromJson(jsonDecode(text)),
     ),
   ].cast<BenchmarkDefinition<Object, protobuf.GeneratedMessage>>();
 }

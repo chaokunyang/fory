@@ -38,7 +38,7 @@ usage() {
     echo "Options:"
     echo "  --data <type>       Filter by data type: struct, sample, mediacontent,"
     echo "                      structlist, samplelist, mediacontentlist, all"
-    echo "  --serializer <name> Filter by serializer: fory, protobuf"
+    echo "  --serializer <name> Filter by serializer: fory, protobuf, msgpack"
     echo "  --filter <regex>    Custom criterion filter regex (overrides --data/--serializer)"
     echo "  --no-report         Skip report generation"
     echo "  -h, --help          Show this help message"
@@ -122,7 +122,7 @@ build_filter() {
 
     if [[ -n "$SERIALIZER_FILTER" ]]; then
         case "$SERIALIZER_FILTER" in
-            fory|protobuf) ;;
+            fory|protobuf|msgpack) ;;
             *)
                 echo "Unknown serializer: $SERIALIZER_FILTER"
                 exit 1

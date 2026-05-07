@@ -27,6 +27,7 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 try:
     import psutil
@@ -38,11 +39,13 @@ except ImportError:
 COLORS = {
     "fory": "#FF6f01",
     "protobuf": "#55BCC2",
+    "msgpack": (0.55, 0.40, 0.45),
 }
-SERIALIZER_ORDER = ["fory", "protobuf"]
+SERIALIZER_ORDER = ["fory", "protobuf", "msgpack"]
 SERIALIZER_LABELS = {
     "fory": "fory",
     "protobuf": "protobuf",
+    "msgpack": "msgpack",
 }
 DATATYPE_ORDER = [
     "struct",
@@ -91,6 +94,10 @@ def parse_args():
 
 
 def datatype_title(datatype):
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStructList"
     if datatype == "mediacontent":
         return "MediaContent"
     if datatype == "mediacontentlist":
@@ -101,6 +108,10 @@ def datatype_title(datatype):
 
 
 def datatype_plot_label(datatype):
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStruct\nList"
     if datatype == "mediacontent":
         return "MediaContent"
     if datatype == "mediacontentlist":
@@ -163,19 +174,20 @@ def load_serialized_sizes(size_file):
     if not os.path.exists(size_file):
         return {}
 
-    pattern = re.compile(r"^\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|$")
+    pattern = re.compile(r"^\|\s*([^|]+?)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|\s*(\d+)\s*\|$")
     sizes = {}
     with open(size_file, "r", encoding="utf-8") as file:
         for line in file:
             match = pattern.match(line.strip())
             if not match:
                 continue
-            datatype, fory_size, protobuf_size = match.groups()
+            datatype, fory_size, protobuf_size, msgpack_size = match.groups()
             if datatype == "Datatype":
                 continue
             sizes[datatype] = {
                 "fory": int(fory_size),
                 "protobuf": int(protobuf_size),
+                "msgpack": int(msgpack_size),
             }
     return sizes
 
@@ -188,6 +200,10 @@ def format_tps_label(tps):
     if tps >= 1e3:
         return f"{tps / 1e3:.2f}K"
     return f"{tps:.0f}"
+
+
+def format_tps_tick(tps, _position):
+    return format_tps_label(tps)
 
 
 def plot_datatype(ax, results, datatype, operation):
@@ -229,9 +245,9 @@ def plot_datatype(ax, results, datatype, operation):
         )
 
 
-def plot_combined_subplot(ax, results, datatypes, operation, title):
-    if not datatypes:
-        ax.set_title(f"{title}\nNo Data")
+def plot_throughput_grid_subplot(ax, results, datatype):
+    if datatype not in results:
+        ax.set_title(f"{datatype_title(datatype)}\nNo Data")
         ax.axis("off")
         return
 
@@ -240,19 +256,19 @@ def plot_combined_subplot(ax, results, datatypes, operation, title):
         for serializer in SERIALIZER_ORDER
         if any(
             results[datatype][operation].get(serializer, 0) > 0
-            for datatype in datatypes
+            for operation in OPERATIONS
         )
     ]
     if not available:
-        ax.set_title(f"{title}\nNo Data")
+        ax.set_title(f"{datatype_title(datatype)}\nNo Data")
         ax.axis("off")
         return
 
-    x = np.arange(len(datatypes))
+    x = np.arange(len(OPERATIONS))
     width = 0.8 / len(available)
     for index, serializer in enumerate(available):
         throughput = []
-        for datatype in datatypes:
+        for operation in OPERATIONS:
             time_ns = results[datatype][operation].get(serializer, 0)
             throughput.append(1e9 / time_ns if time_ns > 0 else 0)
         offset = (index - (len(available) - 1) / 2) * width
@@ -264,12 +280,12 @@ def plot_combined_subplot(ax, results, datatypes, operation, title):
             color=COLORS.get(serializer, "#888888"),
         )
 
-    ax.set_title(title)
+    ax.set_title(datatype_title(datatype))
     ax.set_xticks(x)
-    ax.set_xticklabels([datatype_plot_label(datatype) for datatype in datatypes])
+    ax.set_xticklabels(["Serialize", "Deserialize"])
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
-    ax.legend()
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
+    ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def generate_plots(results, output_dir):
@@ -289,39 +305,15 @@ def generate_plots(results, output_dir):
         plt.close(fig)
         plot_images.append((datatype, plot_path))
 
-    non_list = [
-        datatype
-        for datatype in DATATYPE_ORDER
-        if datatype in results and not datatype.endswith("list")
-    ]
-    list_only = [
-        datatype
-        for datatype in DATATYPE_ORDER
-        if datatype in results and datatype.endswith("list")
-    ]
-
-    fig, axes = plt.subplots(1, 4, figsize=(28, 6))
-    fig.supylabel("Throughput (ops/sec)")
-    plot_combined_subplot(
-        axes[0],
-        results,
-        non_list,
-        "serialize",
-        "Serialize Throughput (higher is better)",
-    )
-    plot_combined_subplot(
-        axes[1],
-        results,
-        non_list,
-        "deserialize",
-        "Deserialize Throughput (higher is better)",
-    )
-    plot_combined_subplot(
-        axes[2], results, list_only, "serialize", "Serialize Throughput (*List)"
-    )
-    plot_combined_subplot(
-        axes[3], results, list_only, "deserialize", "Deserialize Throughput (*List)"
-    )
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPE_ORDER)):
+        plot_throughput_grid_subplot(ax, results, datatype)
+        if index % 3 == 0:
+            ax.set_ylabel("Throughput (ops/sec)")
+        else:
+            ax.tick_params(axis="y", labelleft=False)
+            ax.yaxis.get_offset_text().set_visible(False)
+    fig.suptitle("Rust Serialization Throughput", fontsize=14)
     fig.tight_layout()
     throughput_path = os.path.join(output_dir, "throughput.png")
     plt.savefig(throughput_path, dpi=150)
@@ -363,8 +355,12 @@ def write_report(system_info, results, sizes, plot_images, output_dir, plot_pref
 
     report.append("\n## Benchmark Results\n\n")
     report.append("### Timing Results (nanoseconds)\n\n")
-    report.append("| Datatype | Operation | fory (ns) | protobuf (ns) | Fastest |\n")
-    report.append("|----------|-----------|-----------|---------------|---------|\n")
+    report.append(
+        "| Datatype | Operation | fory (ns) | protobuf (ns) | msgpack (ns) | Fastest |\n"
+    )
+    report.append(
+        "|----------|-----------|-----------|---------------|--------------|---------|\n"
+    )
 
     for datatype in DATATYPE_ORDER:
         if datatype not in results:
@@ -387,8 +383,12 @@ def write_report(system_info, results, sizes, plot_images, output_dir, plot_pref
             )
 
     report.append("\n### Throughput Results (ops/sec)\n\n")
-    report.append("| Datatype | Operation | fory TPS | protobuf TPS | Fastest |\n")
-    report.append("|----------|-----------|----------|--------------|---------|\n")
+    report.append(
+        "| Datatype | Operation | fory TPS | protobuf TPS | msgpack TPS | Fastest |\n"
+    )
+    report.append(
+        "|----------|-----------|----------|--------------|-------------|---------|\n"
+    )
 
     for datatype in DATATYPE_ORDER:
         if datatype not in results:
@@ -414,14 +414,16 @@ def write_report(system_info, results, sizes, plot_images, output_dir, plot_pref
 
     if sizes:
         report.append("\n### Serialized Data Sizes (bytes)\n\n")
-        report.append("| Datatype | fory | protobuf |\n")
-        report.append("|----------|------|----------|\n")
+        report.append("| Datatype | fory | protobuf | msgpack |\n")
+        report.append("|----------|------|----------|---------|\n")
         for datatype in DATATYPE_ORDER:
             title = datatype_title(datatype)
             if title not in sizes:
                 continue
             entry = sizes[title]
-            report.append(f"| {title} | {entry['fory']} | {entry['protobuf']} |\n")
+            report.append(
+                f"| {title} | {entry['fory']} | {entry['protobuf']} | {entry['msgpack']} |\n"
+            )
 
     report_path = os.path.join(output_dir, "README.md")
     with open(report_path, "w", encoding="utf-8") as file:

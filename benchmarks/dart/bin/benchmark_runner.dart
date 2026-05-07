@@ -105,6 +105,7 @@ void main(List<String> arguments) {
     sizes[benchmark.dataType] = <String, int>{
       'fory': benchmark.forySize,
       'protobuf': benchmark.protobufSize,
+      'json': benchmark.jsonSize,
     };
 
     if (_matches(selectedSerializers, 'fory') &&
@@ -157,6 +158,34 @@ void main(List<String> arguments) {
           dataType: benchmark.dataType,
           operation: 'deserialize',
           action: benchmark.protobufDeserialize,
+          samples: samples,
+          duration: duration,
+          warmup: warmup,
+        ),
+      );
+    }
+    if (_matches(selectedSerializers, 'json') &&
+        _matches(selectedOperations, 'serialize')) {
+      records.add(
+        _runCase(
+          serializer: 'json',
+          dataType: benchmark.dataType,
+          operation: 'serialize',
+          action: benchmark.jsonSerialize,
+          samples: samples,
+          duration: duration,
+          warmup: warmup,
+        ),
+      );
+    }
+    if (_matches(selectedSerializers, 'json') &&
+        _matches(selectedOperations, 'deserialize')) {
+      records.add(
+        _runCase(
+          serializer: 'json',
+          dataType: benchmark.dataType,
+          operation: 'deserialize',
+          action: benchmark.jsonDeserialize,
           samples: samples,
           duration: duration,
           warmup: warmup,
@@ -294,7 +323,8 @@ void _printSizes(Map<String, Map<String, int>> sizes) {
     stdout.writeln(
       '${entry.key.padRight(16)} '
       'fory=${entry.value['fory']} '
-      'protobuf=${entry.value['protobuf']}',
+      'protobuf=${entry.value['protobuf']} '
+      'json=${entry.value['json']}',
     );
   }
 }
@@ -307,7 +337,8 @@ String _sizeTableText(Map<String, Map<String, int>> sizes) {
     buffer.writeln(
       '${entry.key}: '
       'fory=${entry.value['fory']} '
-      'protobuf=${entry.value['protobuf']}',
+      'protobuf=${entry.value['protobuf']} '
+      'json=${entry.value['json']}',
     );
   }
   return buffer.toString();

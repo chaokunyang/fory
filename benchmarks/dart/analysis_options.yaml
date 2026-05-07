@@ -20,4 +20,5 @@ include: package:lints/recommended.yaml
 analyzer:
   exclude:
     - lib/src/*.fory.dart
+    - lib/src/*.g.dart
     - lib/src/generated/**

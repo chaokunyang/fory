@@ -26,12 +26,15 @@ from collections import defaultdict
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 
 COLORS = {
     "fory": "#FF6F01",
     "protobuf": "#55BCC2",
+    "json": (0.55, 0.40, 0.45),
 }
+SERIALIZERS = ["fory", "protobuf", "json"]
 
 DATA_TYPES = [
     "struct",
@@ -43,10 +46,10 @@ DATA_TYPES = [
 ]
 
 DISPLAY_NAMES = {
-    "struct": "Struct",
+    "struct": "NumericStruct",
     "sample": "Sample",
     "mediacontent": "MediaContent",
-    "structlist": "StructList",
+    "structlist": "NumericStructList",
     "samplelist": "SampleList",
     "mediacontentlist": "MediaContentList",
 }
@@ -81,11 +84,19 @@ def format_label(value: float) -> str:
     return f"{value:.2f}"
 
 
+def format_tick(value: float, _position) -> str:
+    return format_label(value)
+
+
 def format_int(value: float) -> str:
     return f"{int(round(value)):,}"
 
 
 def datatype_plot_label(data_type: str) -> str:
+    if data_type == "struct":
+        return "NumericStruct"
+    if data_type == "structlist":
+        return "NumericStruct\nList"
     if data_type == "mediacontent":
         return "MediaContent"
     if data_type == "mediacontentlist":
@@ -95,18 +106,18 @@ def datatype_plot_label(data_type: str) -> str:
     return data_type.capitalize()
 
 
-def fastest_entry(fory_value: float, protobuf_value: float) -> str:
-    if protobuf_value <= 0 and fory_value <= 0:
+def fastest_entry(values: dict[str, float]) -> str:
+    positive = {serializer: value for serializer, value in values.items() if value > 0}
+    if not positive:
         return "n/a"
-    if protobuf_value <= 0:
-        return "fory"
-    if fory_value <= 0:
-        return "protobuf"
-    if math.isclose(fory_value, protobuf_value):
+    ranked = sorted(positive.items(), key=lambda entry: entry[1], reverse=True)
+    best_serializer, best_value = ranked[0]
+    if len(ranked) == 1:
+        return best_serializer
+    second_value = ranked[1][1]
+    if math.isclose(best_value, second_value):
         return "tie (1.00x)"
-    if fory_value > protobuf_value:
-        return f"fory ({fory_value / protobuf_value:.2f}x)"
-    return f"protobuf ({protobuf_value / fory_value:.2f}x)"
+    return f"{best_serializer} ({best_value / second_value:.2f}x)"
 
 
 def detect_memory_gb() -> str:
@@ -134,33 +145,32 @@ def system_info(metadata: dict) -> list[tuple[str, str]]:
     ]
 
 
-def plot_summary_group(
-    ax, results: dict, grouped_data_types: list[str], operation: str, title: str
-) -> None:
-    if not grouped_data_types:
-        ax.set_title(f"{title}\nNo Data")
+def plot_summary_group(ax, results: dict, data_type: str) -> None:
+    if data_type not in results:
+        ax.set_title(f"{DISPLAY_NAMES[data_type]}\nNo Data")
         ax.axis("off")
         return
 
     serializers = [
         serializer
-        for serializer in ["fory", "protobuf"]
+        for serializer in SERIALIZERS
         if any(
             results.get(data_type, {}).get(operation, {}).get(serializer, 0.0) > 0
-            for data_type in grouped_data_types
+            for operation in ["serialize", "deserialize"]
         )
     ]
     if not serializers:
-        ax.set_title(f"{title}\nNo Data")
+        ax.set_title(f"{DISPLAY_NAMES[data_type]}\nNo Data")
         ax.axis("off")
         return
 
-    x_positions = np.arange(len(grouped_data_types))
+    operations = ["serialize", "deserialize"]
+    x_positions = np.arange(len(operations))
     bar_width = 0.8 / len(serializers)
     for index, serializer in enumerate(serializers):
         values = [
             results.get(data_type, {}).get(operation, {}).get(serializer, 0.0)
-            for data_type in grouped_data_types
+            for operation in operations
         ]
         offset = (index - (len(serializers) - 1) / 2) * bar_width
         ax.bar(
@@ -171,60 +181,25 @@ def plot_summary_group(
             color=COLORS[serializer],
         )
 
-    ax.set_title(title)
+    ax.set_title(DISPLAY_NAMES[data_type])
     ax.set_xticks(x_positions)
-    ax.set_xticklabels(
-        [datatype_plot_label(data_type) for data_type in grouped_data_types]
-    )
-    ax.set_ylabel("Throughput (ops/sec)")
+    ax.set_xticklabels(["Serialize", "Deserialize"])
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
-    ax.legend()
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
+    ax.yaxis.set_major_formatter(FuncFormatter(format_tick))
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def save_summary_plot(results: dict, output_dir: str) -> str:
-    non_list_data_types = [
-        data_type
-        for data_type in DATA_TYPES
-        if data_type in results and not data_type.endswith("list")
-    ]
-    list_data_types = [
-        data_type
-        for data_type in DATA_TYPES
-        if data_type in results and data_type.endswith("list")
-    ]
-
-    figure, axes = plt.subplots(1, 4, figsize=(28, 6))
+    figure, axes = plt.subplots(2, 3, figsize=(18, 10))
     figure.suptitle("Dart Serialization Throughput", fontsize=14)
 
-    plot_summary_group(
-        axes[0],
-        results,
-        non_list_data_types,
-        "serialize",
-        "Serialize Throughput (higher is better)",
-    )
-    plot_summary_group(
-        axes[1],
-        results,
-        non_list_data_types,
-        "deserialize",
-        "Deserialize Throughput (higher is better)",
-    )
-    plot_summary_group(
-        axes[2],
-        results,
-        list_data_types,
-        "serialize",
-        "Serialize Throughput (*List)",
-    )
-    plot_summary_group(
-        axes[3],
-        results,
-        list_data_types,
-        "deserialize",
-        "Deserialize Throughput (*List)",
-    )
+    for index, (ax, data_type) in enumerate(zip(axes.flat, DATA_TYPES)):
+        plot_summary_group(ax, results, data_type)
+        if index % 3 == 0:
+            ax.set_ylabel("Throughput (ops/sec)")
+        else:
+            ax.tick_params(axis="y", labelleft=False)
+            ax.yaxis.get_offset_text().set_visible(False)
 
     figure.tight_layout()
 
@@ -242,7 +217,7 @@ def save_per_type_plots(results: dict, output_dir: str) -> list[tuple[str, str]]
             continue
         figure, axes = plt.subplots(1, 2, figsize=(12, 5))
         for index, operation in enumerate(["serialize", "deserialize"]):
-            serializers = ["fory", "protobuf"]
+            serializers = SERIALIZERS
             values = [
                 operations.get(operation, {}).get(serializer, 0.0)
                 for serializer in serializers
@@ -283,7 +258,7 @@ def write_report(
         handle.write("# Fory Dart Benchmark\n\n")
         handle.write(
             "This benchmark compares serialization and deserialization throughput for "
-            "Apache Fory and Protocol Buffers in Dart.\n\n"
+            "Apache Fory, Protocol Buffers, and JSON in Dart.\n\n"
         )
         handle.write("## Hardware and Runtime Info\n\n")
         handle.write("| Key | Value |\n")
@@ -293,30 +268,36 @@ def write_report(
 
         handle.write("\n## Throughput Results\n\n")
         handle.write("![Throughput](throughput.png)\n\n")
-        handle.write("| Datatype | Operation | Fory TPS | Protobuf TPS | Fastest |\n")
-        handle.write("| --- | --- | ---: | ---: | --- |\n")
+        handle.write(
+            "| Datatype | Operation | Fory TPS | Protobuf TPS | JSON TPS | Fastest |\n"
+        )
+        handle.write("| --- | --- | ---: | ---: | ---: | --- |\n")
         for data_type in DATA_TYPES:
             operations = results.get(data_type, {})
             if not operations:
                 continue
             for operation in ["serialize", "deserialize"]:
-                fory_value = operations.get(operation, {}).get("fory", 0.0)
-                protobuf_value = operations.get(operation, {}).get("protobuf", 0.0)
+                values = {
+                    serializer: operations.get(operation, {}).get(serializer, 0.0)
+                    for serializer in SERIALIZERS
+                }
                 handle.write(
                     f"| {DISPLAY_NAMES[data_type]} | {operation.capitalize()} | "
-                    f"{format_int(fory_value)} | {format_int(protobuf_value)} | "
-                    f"{fastest_entry(fory_value, protobuf_value)} |\n"
+                    + " | ".join(
+                        format_int(values[serializer]) for serializer in SERIALIZERS
+                    )
+                    + f" | {fastest_entry(values)} |\n"
                 )
 
         handle.write("\n## Serialized Size (bytes)\n\n")
-        handle.write("| Datatype | Fory | Protobuf |\n")
-        handle.write("| --- | ---: | ---: |\n")
+        handle.write("| Datatype | Fory | Protobuf | JSON |\n")
+        handle.write("| --- | ---: | ---: | ---: |\n")
         for data_type in DATA_TYPES:
             sizes = payload["sizes"].get(data_type)
             if sizes is None:
                 continue
             handle.write(
-                f"| {DISPLAY_NAMES[data_type]} | {sizes['fory']} | {sizes['protobuf']} |\n"
+                f"| {DISPLAY_NAMES[data_type]} | {sizes['fory']} | {sizes['protobuf']} | {sizes['json']} |\n"
             )
 
         if plot_paths:

@@ -6,7 +6,7 @@ This benchmark compares serialization and deserialization throughput for Apache 
 
 | Key                   | Value                         |
 | --------------------- | ----------------------------- |
-| Timestamp             | 2026-03-10T06:25:16Z          |
+| Timestamp             | 2026-05-07T10:50:24Z          |
 | OS                    | Version 15.7.2 (Build 24G325) |
 | Host                  | macbook-pro.local             |
 | CPU Cores (Logical)   | 12                            |
@@ -17,28 +17,28 @@ This benchmark compares serialization and deserialization throughput for Apache 
 
 ![Throughput](throughput.png)
 
-| Datatype         | Operation   |   Fory TPS | Protobuf TPS | Msgpack TPS | Fastest      |
-| ---------------- | ----------- | ---------: | -----------: | ----------: | ------------ |
-| Struct           | Serialize   |  9,727,950 |    6,572,406 |     141,248 | fory (1.48x) |
-| Struct           | Deserialize | 11,889,570 |    8,584,510 |      99,792 | fory (1.39x) |
-| Sample           | Serialize   |  3,496,305 |    1,281,983 |      17,188 | fory (2.73x) |
-| Sample           | Deserialize |  1,045,018 |      765,706 |      12,767 | fory (1.36x) |
-| MediaContent     | Serialize   |  1,425,354 |      678,542 |      29,048 | fory (2.10x) |
-| MediaContent     | Deserialize |    614,447 |      478,298 |      12,711 | fory (1.28x) |
-| StructList       | Serialize   |  3,307,962 |    1,028,210 |      24,781 | fory (3.22x) |
-| StructList       | Deserialize |  2,788,200 |      708,596 |       8,160 | fory (3.93x) |
-| SampleList       | Serialize   |    715,734 |      205,380 |       3,361 | fory (3.48x) |
-| SampleList       | Deserialize |    199,317 |      133,425 |       1,498 | fory (1.49x) |
-| MediaContentList | Serialize   |    364,097 |      103,721 |       5,538 | fory (3.51x) |
-| MediaContentList | Deserialize |    103,421 |       86,331 |       1,529 | fory (1.20x) |
+| Datatype          | Operation   |   Fory TPS | Protobuf TPS | Msgpack TPS | Fastest      |
+| ----------------- | ----------- | ---------: | -----------: | ----------: | ------------ |
+| NumericStruct     | Serialize   |  9,541,057 |    6,781,103 |     141,072 | fory (1.41x) |
+| NumericStruct     | Deserialize | 11,374,958 |    9,588,318 |      97,167 | fory (1.19x) |
+| Sample            | Serialize   |  3,675,875 |    1,320,469 |      16,848 | fory (2.78x) |
+| Sample            | Deserialize |  1,015,246 |      756,711 |      12,260 | fory (1.34x) |
+| MediaContent      | Serialize   |  1,583,205 |      679,730 |      28,409 | fory (2.33x) |
+| MediaContent      | Deserialize |    606,616 |      471,716 |      12,071 | fory (1.29x) |
+| NumericStructList | Serialize   |  3,151,469 |    1,021,936 |      24,904 | fory (3.08x) |
+| NumericStructList | Deserialize |  2,646,486 |      829,685 |       8,731 | fory (3.19x) |
+| SampleList        | Serialize   |    778,581 |      204,687 |       3,314 | fory (3.80x) |
+| SampleList        | Deserialize |    187,868 |      135,953 |       1,459 | fory (1.38x) |
+| MediaContentList  | Serialize   |    347,965 |      101,570 |       5,435 | fory (3.43x) |
+| MediaContentList  | Deserialize |    114,695 |       85,530 |       1,455 | fory (1.34x) |
 
 ## Serialized Size (bytes)
 
-| Datatype         | Fory | Protobuf | Msgpack |
-| ---------------- | ---: | -------: | ------: |
-| MediaContent     |  365 |      301 |     524 |
-| MediaContentList | 1535 |     1520 |    2639 |
-| Sample           |  446 |      375 |     737 |
-| SampleList       | 1980 |     1890 |    3698 |
-| Struct           |   58 |       61 |      65 |
-| StructList       |  184 |      315 |     338 |
+| Datatype          | Fory | Protobuf | Msgpack |
+| ----------------- | ---: | -------: | ------: |
+| MediaContent      |  362 |      301 |     524 |
+| MediaContentList  | 1531 |     1520 |    2639 |
+| Sample            |  445 |      375 |     737 |
+| SampleList        | 1978 |     1890 |    3698 |
+| NumericStruct     |   57 |       61 |      65 |
+| NumericStructList |  182 |      315 |     338 |

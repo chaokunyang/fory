@@ -34,6 +34,7 @@ from pathlib import Path
 
 try:
     import matplotlib.pyplot as plt
+    from matplotlib.ticker import FuncFormatter
 
     HAS_MATPLOTLIB = True
 except ImportError:
@@ -45,18 +46,40 @@ except ImportError:
 COLORS = {
     "fory": "#FF6f01",  # Orange
     "protobuf": "#55BCC2",  # Teal
-    "msgpack": "#9B59B6",  # Purple
+    "msgpack": (0.55, 0.40, 0.45),
 }
 DATATYPES = [
     "struct",
-    "structlist",
     "sample",
-    "samplelist",
     "mediacontent",
+    "structlist",
+    "samplelist",
     "mediacontentlist",
 ]
+DISPLAY_NAMES = {
+    "struct": "NumericStruct",
+    "sample": "Sample",
+    "mediacontent": "MediaContent",
+    "structlist": "NumericStructList",
+    "samplelist": "SampleList",
+    "mediacontentlist": "MediaContentList",
+}
 OPERATIONS = ["serialize", "deserialize"]
 SERIALIZERS = ["fory", "protobuf", "msgpack"]
+
+
+def format_ops_per_sec(value):
+    if value >= 1e6:
+        return f"{value / 1e6:.2f}M"
+    return f"{value / 1e3:.0f}K"
+
+
+def format_ops_tick(value, _position):
+    return format_ops_per_sec(value)
+
+
+def display_name(datatype):
+    return DISPLAY_NAMES.get(datatype, datatype.title())
 
 
 def parse_benchmark_txt(filepath):
@@ -167,7 +190,7 @@ def generate_plots(results, output_dir):
 
         fig, axes = plt.subplots(1, 2, figsize=(14, 6))
         fig.suptitle(
-            f"{datatype.title()} Serialization Benchmark",
+            f"{display_name(datatype)} Serialization Benchmark",
             fontsize=14,
             fontweight="bold",
         )
@@ -198,7 +221,7 @@ def generate_plots(results, output_dir):
             for bar, val in zip(bars, ops_per_sec):
                 height = bar.get_height()
                 ax.annotate(
-                    f"{val / 1e6:.2f}M" if val >= 1e6 else f"{val / 1e3:.0f}K",
+                    format_ops_per_sec(val),
                     xy=(bar.get_x() + bar.get_width() / 2, height),
                     xytext=(0, 3),
                     textcoords="offset points",
@@ -248,73 +271,74 @@ def generate_plots(results, output_dir):
         plt.close()
 
 
+def plot_throughput_grid_subplot(ax, results, datatype):
+    """Plot one datatype with Serialize/Deserialize operation groups."""
+    if datatype not in results:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+        ax.set_title(display_name(datatype))
+        return
+
+    available_serializers = [
+        serializer
+        for serializer in SERIALIZERS
+        if any(serializer in results[datatype].get(op, {}) for op in OPERATIONS)
+    ]
+    if not available_serializers:
+        ax.text(0.5, 0.5, "No data", ha="center", va="center", transform=ax.transAxes)
+        ax.set_title(display_name(datatype))
+        return
+
+    x = range(len(OPERATIONS))
+    width = min(0.8 / len(available_serializers), 0.25)
+    offsets = [
+        (idx - (len(available_serializers) - 1) / 2) * width
+        for idx in range(len(available_serializers))
+    ]
+
+    for serializer, offset in zip(available_serializers, offsets):
+        values = []
+        for operation in OPERATIONS:
+            ns_per_op = results[datatype].get(operation, {}).get(serializer)
+            values.append(1e9 / ns_per_op if ns_per_op else 0)
+        ax.bar(
+            [position + offset for position in x],
+            values,
+            width,
+            label=serializer.title(),
+            color=COLORS.get(serializer, "#888888"),
+        )
+
+    ax.set_title(display_name(datatype))
+    ax.set_xticks(list(x))
+    ax.set_xticklabels([op.title() for op in OPERATIONS])
+    ax.grid(True, axis="y", alpha=0.25)
+    ax.yaxis.set_major_formatter(FuncFormatter(format_ops_tick))
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+
+
 def generate_combined_plot(results, output_dir):
-    """Generate a combined plot showing all benchmarks."""
+    """Generate a 2x3 throughput grid for all benchmark data types."""
     if not HAS_MATPLOTLIB:
         return
 
-    datatypes = DATATYPES
-    operations = OPERATIONS
-    serializers = SERIALIZERS
-
-    cols = len(datatypes)
-    fig_width = max(12, 3.5 * cols)
-    fig, axes = plt.subplots(len(operations), cols, figsize=(fig_width, 10))
-    if cols == 1:
-        axes = [[axes[row]] for row in range(len(operations))]
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     fig.suptitle(
-        "Go Serialization Benchmark: Fory vs Protobuf vs Msgpack",
-        fontsize=14,
+        "Go Serialization Throughput",
+        fontsize=16,
         fontweight="bold",
     )
 
-    for row, op in enumerate(operations):
-        for col, datatype in enumerate(datatypes):
-            ax = axes[row][col]
-
-            if datatype not in results or op not in results[datatype]:
-                ax.text(
-                    0.5,
-                    0.5,
-                    "No data",
-                    ha="center",
-                    va="center",
-                    transform=ax.transAxes,
-                )
-                continue
-
-            data = results[datatype][op]
-            available_serializers = [s for s in serializers if s in data]
-
-            if not available_serializers:
-                continue
-
-            ops_per_sec = [
-                1e9 / data[s] if s in data else 0 for s in available_serializers
-            ]
-            colors = [COLORS.get(s, "#888888") for s in available_serializers]
-
-            bars = ax.bar(available_serializers, ops_per_sec, color=colors)
-            ax.set_title(f"{datatype.title()} - {op.title()}")
+    for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPES)):
+        plot_throughput_grid_subplot(ax, results, datatype)
+        if index % 3 == 0:
             ax.set_ylabel("ops/sec")
-
-            # Add value labels
-            for bar, val in zip(bars, ops_per_sec):
-                height = bar.get_height()
-                label = f"{val / 1e6:.2f}M" if val >= 1e6 else f"{val / 1e3:.0f}K"
-                ax.annotate(
-                    label,
-                    xy=(bar.get_x() + bar.get_width() / 2, height),
-                    xytext=(0, 3),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom",
-                    fontsize=8,
-                )
+        else:
+            ax.tick_params(axis="y", labelleft=False)
+            ax.yaxis.get_offset_text().set_visible(False)
 
     plt.tight_layout()
     plt.savefig(
-        os.path.join(output_dir, "benchmark_combined.png"), dpi=150, bbox_inches="tight"
+        os.path.join(output_dir, "throughput.png"), dpi=150, bbox_inches="tight"
     )
     plt.close()
 
@@ -370,7 +394,7 @@ def generate_markdown_report(results, output_dir):
             fory_vs_mp = f"{fory_ops / mp_ops:.2f}x" if mp_ops > 0 else "N/A"
 
             report.append(
-                f"| {datatype.title()} | {op.title()} | {fory_str} | {pb_str} | {mp_str} | {fory_vs_pb} | {fory_vs_mp} |"
+                f"| {display_name(datatype)} | {op.title()} | {fory_str} | {pb_str} | {mp_str} | {fory_vs_pb} | {fory_vs_mp} |"
             )
 
     report.append("")
@@ -393,7 +417,7 @@ def generate_markdown_report(results, output_dir):
             mp_ns = f"{data.get('msgpack', 0):.1f}"
 
             report.append(
-                f"| {datatype.title()} | {op.title()} | {fory_ns} | {pb_ns} | {mp_ns} |"
+                f"| {display_name(datatype)} | {op.title()} | {fory_ns} | {pb_ns} | {mp_ns} |"
             )
 
     report.append("")
@@ -405,10 +429,10 @@ def generate_markdown_report(results, output_dir):
         report.append("| Data Type | Fory | Protobuf | Msgpack |")
         report.append("|-----------|------|----------|---------|")
         name_map = {
-            "NumericStruct": "Struct",
+            "NumericStruct": "NumericStruct",
             "Sample": "Sample",
             "MediaContent": "MediaContent",
-            "StructList": "StructList",
+            "StructList": "NumericStructList",
             "SampleList": "SampleList",
             "MediaContentList": "MediaContentList",
         }
@@ -433,25 +457,29 @@ def generate_markdown_report(results, output_dir):
     # Plots section
     if HAS_MATPLOTLIB:
         report.append("## Performance Charts\n")
-        report.append("### Combined Overview")
-        report.append("![Combined Benchmark](benchmark_combined.png)\n")
+        report.append("### Throughput")
+        report.append("![Throughput](throughput.png)\n")
         for datatype in datatypes:
             if datatype in results:
-                report.append(f"### {datatype.title()}")
+                report.append(f"### {display_name(datatype)}")
                 report.append(
-                    f"![{datatype.title()} Benchmark](benchmark_{datatype}.png)\n"
+                    f"![{display_name(datatype)} Benchmark](benchmark_{datatype}.png)\n"
                 )
 
     # Write report
-    report_path = os.path.join(output_dir, "benchmark_report.md")
-    with open(report_path, "w") as f:
-        f.write("\n".join(report))
+    report_paths = [
+        os.path.join(output_dir, "README.md"),
+        os.path.join(output_dir, "benchmark_report.md"),
+    ]
+    for report_path in report_paths:
+        with open(report_path, "w") as f:
+            f.write("\n".join(report))
 
     prettier = shutil.which("prettier")
     if prettier is not None:
-        subprocess.run([prettier, "--write", report_path], check=True)
+        subprocess.run([prettier, "--write", *report_paths], check=True)
 
-    print(f"Report generated: {report_path}")
+    print(f"Report generated: {report_paths[0]}")
 
 
 def main():

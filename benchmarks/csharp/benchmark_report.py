@@ -27,6 +27,7 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 try:
     import psutil
@@ -108,6 +109,10 @@ def get_system_info(benchmark_data: dict) -> dict:
 
 
 def format_datatype_label(datatype: str) -> str:
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStruct\nList"
     if datatype.endswith("list"):
         base = datatype[: -len("list")]
         if base == "mediacontent":
@@ -119,6 +124,10 @@ def format_datatype_label(datatype: str) -> str:
 
 
 def format_datatype_table_label(datatype: str) -> str:
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStructList"
     if datatype.endswith("list"):
         base = datatype[: -len("list")]
         if base == "mediacontent":
@@ -137,6 +146,10 @@ def format_tps_label(tps: float) -> str:
     if tps >= 1e3:
         return f"{tps / 1e3:.2f}K"
     return f"{tps:.0f}"
+
+
+def format_tps_tick(tps: float, _position) -> str:
+    return format_tps_label(tps)
 
 
 def preferred_ordered_values(values, preferred):
@@ -272,26 +285,32 @@ def plot_datatype(ax, throughputs: dict, datatype: str, operation: str) -> None:
         )
 
 
-def plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, title):
-    if not grouped_datatypes:
-        ax.set_title(f"{title}\nNo Data")
+def plot_throughput_grid_subplot(ax, throughputs, datatype):
+    if datatype not in throughputs:
+        ax.set_title(f"{format_datatype_table_label(datatype)}\nNo Data")
         ax.axis("off")
         return
 
-    x = np.arange(len(grouped_datatypes))
     available_libs = [
         lib
         for lib in SERIALIZER_ORDER
-        if any(throughputs[dt][operation].get(lib, 0) > 0 for dt in grouped_datatypes)
+        if any(
+            throughputs[datatype][operation].get(lib, 0) > 0
+            for operation in PREFERRED_OPERATION_ORDER
+        )
     ]
     if not available_libs:
-        ax.set_title(f"{title}\nNo Data")
+        ax.set_title(f"{format_datatype_table_label(datatype)}\nNo Data")
         ax.axis("off")
         return
 
+    x = np.arange(len(PREFERRED_OPERATION_ORDER))
     width = 0.8 / len(available_libs)
     for idx, lib in enumerate(available_libs):
-        tps = [throughputs[dt][operation].get(lib, 0) for dt in grouped_datatypes]
+        tps = [
+            throughputs[datatype][operation].get(lib, 0)
+            for operation in PREFERRED_OPERATION_ORDER
+        ]
         offset = (idx - (len(available_libs) - 1) / 2) * width
         ax.bar(
             x + offset,
@@ -301,12 +320,12 @@ def plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, tit
             color=COLORS.get(lib, "#888888"),
         )
 
-    ax.set_title(title)
+    ax.set_title(format_datatype_table_label(datatype))
     ax.set_xticks(x)
-    ax.set_xticklabels([format_datatype_label(dt) for dt in grouped_datatypes])
-    ax.legend()
+    ax.set_xticklabels(["Serialize", "Deserialize"])
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
+    ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def build_markdown(
@@ -365,7 +384,11 @@ def build_markdown(
     for datatype, img in plot_images_sorted:
         img_filename = os.path.basename(img)
         img_path_report = args.plot_prefix + img_filename
-        plot_title = datatype.replace("_", " ").title()
+        plot_title = (
+            "Throughput"
+            if datatype == "throughput"
+            else format_datatype_table_label(datatype)
+        )
         report_lines.append(f"\n### {plot_title}\n\n")
         report_lines.append(f"![{plot_title}]({img_path_report})\n")
 
@@ -492,40 +515,15 @@ def main() -> None:
         plot_images.append((datatype, plot_path))
         plt.close()
 
-    non_list_datatypes = [dt for dt in datatypes if not dt.endswith("list")]
-    list_datatypes = [dt for dt in datatypes if dt.endswith("list")]
-    fig, axes = plt.subplots(1, 4, figsize=(28, 6))
-    combined_subplots = [
-        (
-            axes[0],
-            non_list_datatypes,
-            "serialize",
-            "Serialize Throughput (higher is better)",
-        ),
-        (
-            axes[1],
-            non_list_datatypes,
-            "deserialize",
-            "Deserialize Throughput (higher is better)",
-        ),
-        (
-            axes[2],
-            list_datatypes,
-            "serialize",
-            "Serialize Throughput (*List, higher is better)",
-        ),
-        (
-            axes[3],
-            list_datatypes,
-            "deserialize",
-            "Deserialize Throughput (*List, higher is better)",
-        ),
-    ]
-    for ax, grouped_datatypes, operation, title in combined_subplots:
-        plot_combined_tps_subplot(ax, throughputs, grouped_datatypes, operation, title)
-    # Keep the y-label style consistent with single-datatype plots (axis label,
-    # not figure-level label) and avoid overlap with y-ticks.
-    axes[0].set_ylabel("Throughput (ops/sec)")
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    for index, (ax, datatype) in enumerate(zip(axes.flat, PREFERRED_DATATYPE_ORDER)):
+        plot_throughput_grid_subplot(ax, throughputs, datatype)
+        if index % 3 == 0:
+            ax.set_ylabel("Throughput (ops/sec)")
+        else:
+            ax.tick_params(axis="y", labelleft=False)
+            ax.yaxis.get_offset_text().set_visible(False)
+    fig.suptitle("C# Serialization Throughput", fontsize=14)
     fig.tight_layout()
     throughput_path = os.path.join(output_dir, "throughput.png")
     plt.savefig(throughput_path, dpi=150)

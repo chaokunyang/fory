@@ -25,7 +25,8 @@ import 'package:fory_dart_benchmark/src/protobuf_convert.dart';
 import 'package:fory_dart_benchmark/src/workloads.dart';
 
 void main() {
-  test('compatible benchmark models round trip through generated serializers', () {
+  test('compatible benchmark models round trip through generated serializers',
+      () {
     expectRoundTrip<NumericStruct, protobuf.GeneratedMessage>(
       createNumericStruct(),
       toPbStruct,
@@ -56,12 +57,12 @@ void main() {
     final fory = newBenchmarkFory();
     final definitions = buildBenchmarkDefinitions();
     final expectedSizes = <String, int>{
-      'struct': 58,
-      'sample': 446,
-      'mediacontent': 365,
-      'structlist': 184,
-      'samplelist': 1980,
-      'mediacontentlist': 1535,
+      'struct': 57,
+      'sample': 445,
+      'mediacontent': 362,
+      'structlist': 182,
+      'samplelist': 1978,
+      'mediacontentlist': 1531,
     };
 
     for (final definition in definitions) {

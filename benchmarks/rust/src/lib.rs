@@ -26,28 +26,64 @@ use criterion::{black_box, Criterion};
 use data::{
     BenchmarkCase, MediaContent, MediaContentList, NumericStruct, Sample, SampleList, StructList,
 };
-use serializers::{fory::ForySerializer, protobuf::ProtobufSerializer, BenchmarkSerializer};
+use serializers::{
+    fory::ForySerializer, msgpack::MsgpackSerializer, protobuf::ProtobufSerializer,
+    BenchmarkSerializer,
+};
 
 pub fn run_serialization_benchmarks(c: &mut Criterion) {
     let fory_serializer = ForySerializer::new();
     let protobuf_serializer = ProtobufSerializer::new();
+    let msgpack_serializer = MsgpackSerializer::new();
 
-    run_benchmark_case::<NumericStruct>(c, &fory_serializer, &protobuf_serializer);
-    run_benchmark_case::<Sample>(c, &fory_serializer, &protobuf_serializer);
-    run_benchmark_case::<MediaContent>(c, &fory_serializer, &protobuf_serializer);
-    run_benchmark_case::<StructList>(c, &fory_serializer, &protobuf_serializer);
-    run_benchmark_case::<SampleList>(c, &fory_serializer, &protobuf_serializer);
-    run_benchmark_case::<MediaContentList>(c, &fory_serializer, &protobuf_serializer);
+    run_benchmark_case::<NumericStruct>(
+        c,
+        &fory_serializer,
+        &protobuf_serializer,
+        &msgpack_serializer,
+    );
+    run_benchmark_case::<Sample>(
+        c,
+        &fory_serializer,
+        &protobuf_serializer,
+        &msgpack_serializer,
+    );
+    run_benchmark_case::<MediaContent>(
+        c,
+        &fory_serializer,
+        &protobuf_serializer,
+        &msgpack_serializer,
+    );
+    run_benchmark_case::<StructList>(
+        c,
+        &fory_serializer,
+        &protobuf_serializer,
+        &msgpack_serializer,
+    );
+    run_benchmark_case::<SampleList>(
+        c,
+        &fory_serializer,
+        &protobuf_serializer,
+        &msgpack_serializer,
+    );
+    run_benchmark_case::<MediaContentList>(
+        c,
+        &fory_serializer,
+        &protobuf_serializer,
+        &msgpack_serializer,
+    );
 }
 
 fn run_benchmark_case<T>(
     c: &mut Criterion,
     fory_serializer: &ForySerializer,
     protobuf_serializer: &ProtobufSerializer,
+    msgpack_serializer: &MsgpackSerializer,
 ) where
     T: BenchmarkCase,
     ForySerializer: BenchmarkSerializer<T>,
     ProtobufSerializer: BenchmarkSerializer<T>,
+    MsgpackSerializer: BenchmarkSerializer<T>,
 {
     let data = T::create();
     let mut group = c.benchmark_group(T::KIND.group_name());
@@ -84,6 +120,24 @@ fn run_benchmark_case<T>(
         })
     });
 
+    group.bench_function("msgpack_serialize", |b| {
+        b.iter(|| {
+            let _ = black_box(msgpack_serializer.serialize(black_box(&data)).unwrap());
+        })
+    });
+
+    let msgpack_bytes = msgpack_serializer.serialize(&data).unwrap();
+    group.bench_function("msgpack_deserialize", |b| {
+        b.iter(|| {
+            let value: T = black_box(
+                msgpack_serializer
+                    .deserialize(black_box(&msgpack_bytes))
+                    .unwrap(),
+            );
+            black_box(value);
+        })
+    });
+
     group.finish();
 }
 
@@ -96,6 +150,7 @@ mod tests {
         T: BenchmarkCase + std::fmt::Debug,
         ForySerializer: BenchmarkSerializer<T>,
         ProtobufSerializer: BenchmarkSerializer<T>,
+        MsgpackSerializer: BenchmarkSerializer<T>,
     {
         let value = T::create();
 
@@ -108,19 +163,30 @@ mod tests {
         let protobuf_bytes = protobuf_serializer.serialize(&value).unwrap();
         let decoded: T = protobuf_serializer.deserialize(&protobuf_bytes).unwrap();
         assert_eq!(value, decoded);
+
+        let msgpack_serializer = MsgpackSerializer::new();
+        let msgpack_bytes = msgpack_serializer.serialize(&value).unwrap();
+        let decoded: T = msgpack_serializer.deserialize(&msgpack_bytes).unwrap();
+        assert_eq!(value, decoded);
     }
 
-    fn assert_serialized_size<T>(expected_fory: usize, expected_protobuf: usize)
-    where
+    fn assert_serialized_size<T>(
+        expected_fory: usize,
+        expected_protobuf: usize,
+        expected_msgpack: usize,
+    ) where
         T: BenchmarkCase,
         ForySerializer: BenchmarkSerializer<T>,
         ProtobufSerializer: BenchmarkSerializer<T>,
+        MsgpackSerializer: BenchmarkSerializer<T>,
     {
         let value = T::create();
         let fory_bytes = ForySerializer::new().serialize(&value).unwrap();
         let protobuf_bytes = ProtobufSerializer::new().serialize(&value).unwrap();
+        let msgpack_bytes = MsgpackSerializer::new().serialize(&value).unwrap();
         assert_eq!(fory_bytes.len(), expected_fory);
         assert_eq!(protobuf_bytes.len(), expected_protobuf);
+        assert_eq!(msgpack_bytes.len(), expected_msgpack);
     }
 
     #[test]
@@ -135,11 +201,11 @@ mod tests {
 
     #[test]
     fn benchmark_serialized_sizes_match_baseline() {
-        assert_serialized_size::<NumericStruct>(58, 61);
-        assert_serialized_size::<Sample>(446, 375);
-        assert_serialized_size::<MediaContent>(365, 301);
-        assert_serialized_size::<StructList>(184, 315);
-        assert_serialized_size::<SampleList>(1980, 1890);
-        assert_serialized_size::<MediaContentList>(1535, 1520);
+        assert_serialized_size::<NumericStruct>(57, 61, 55);
+        assert_serialized_size::<Sample>(445, 375, 590);
+        assert_serialized_size::<MediaContent>(362, 301, 500);
+        assert_serialized_size::<StructList>(182, 315, 289);
+        assert_serialized_size::<SampleList>(1978, 1890, 2964);
+        assert_serialized_size::<MediaContentList>(1531, 1520, 2521);
     }
 }

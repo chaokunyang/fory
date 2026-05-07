@@ -15,13 +15,29 @@
 // specific language governing permissions and limitations
 // under the License.
 
-pub mod fory;
-pub mod msgpack;
-pub mod protobuf;
+use crate::serializers::{BenchmarkSerializer, BoxError};
+use serde::{de::DeserializeOwned, Serialize};
 
-pub type BoxError = Box<dyn std::error::Error + Send + Sync + 'static>;
+#[derive(Default)]
+pub struct MsgpackSerializer;
 
-pub trait BenchmarkSerializer<T> {
-    fn serialize(&self, data: &T) -> Result<Vec<u8>, BoxError>;
-    fn deserialize(&self, data: &[u8]) -> Result<T, BoxError>;
+impl MsgpackSerializer {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl<T> BenchmarkSerializer<T> for MsgpackSerializer
+where
+    T: Serialize + DeserializeOwned,
+{
+    fn serialize(&self, data: &T) -> Result<Vec<u8>, BoxError> {
+        let mut buffer = Vec::new();
+        data.serialize(&mut rmp_serde::Serializer::new(&mut buffer).with_struct_map())?;
+        Ok(buffer)
+    }
+
+    fn deserialize(&self, data: &[u8]) -> Result<T, BoxError> {
+        Ok(rmp_serde::from_slice(data)?)
+    }
 }

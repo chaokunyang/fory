@@ -30,6 +30,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 SERIALIZER_ORDER = ["fory", "protobuf", "msgpack"]
 COLORS = {
@@ -76,6 +77,10 @@ def load_json(path: str) -> dict:
 
 
 def datatype_title(datatype: str) -> str:
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStructList"
     if datatype == "mediacontent":
         return "MediaContent"
     if datatype == "mediacontentlist":
@@ -86,6 +91,10 @@ def datatype_title(datatype: str) -> str:
 
 
 def datatype_plot_label(datatype: str) -> str:
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStruct\nList"
     if datatype == "mediacontent":
         return "MediaContent"
     if datatype == "mediacontentlist":
@@ -97,6 +106,20 @@ def datatype_plot_label(datatype: str) -> str:
 
 def format_tps(value: float) -> str:
     return f"{value:,.0f}"
+
+
+def format_tps_label(value: float) -> str:
+    if value >= 1e9:
+        return f"{value / 1e9:.2f}G"
+    if value >= 1e6:
+        return f"{value / 1e6:.2f}M"
+    if value >= 1e3:
+        return f"{value / 1e3:.2f}K"
+    return f"{value:.0f}"
+
+
+def format_tps_tick(value: float, _position) -> str:
+    return format_tps_label(value)
 
 
 def collect_results(payload: dict) -> dict:
@@ -111,11 +134,9 @@ def collect_results(payload: dict) -> dict:
     return results
 
 
-def plot_group(
-    ax, results: dict, datatypes: list[str], operation: str, title: str
-) -> None:
-    if not datatypes:
-        ax.set_title(f"{title}\nNo Data")
+def plot_group(ax, results: dict, datatype: str) -> None:
+    if datatype not in results:
+        ax.set_title(f"{datatype_title(datatype)}\nNo Data")
         ax.axis("off")
         return
 
@@ -123,21 +144,21 @@ def plot_group(
         serializer
         for serializer in SERIALIZER_ORDER
         if any(
-            results.get(dt, {}).get(operation, {}).get(serializer, 0.0) > 0
-            for dt in datatypes
+            results.get(datatype, {}).get(operation, {}).get(serializer, 0.0) > 0
+            for operation in OPERATIONS
         )
     ]
     if not available_serializers:
-        ax.set_title(f"{title}\nNo Data")
+        ax.set_title(f"{datatype_title(datatype)}\nNo Data")
         ax.axis("off")
         return
 
-    x = np.arange(len(datatypes))
+    x = np.arange(len(OPERATIONS))
     width = 0.8 / len(available_serializers)
     for index, serializer in enumerate(available_serializers):
         values = [
-            results.get(dt, {}).get(operation, {}).get(serializer, 0.0)
-            for dt in datatypes
+            results.get(datatype, {}).get(operation, {}).get(serializer, 0.0)
+            for operation in OPERATIONS
         ]
         offset = (index - (len(available_serializers) - 1) / 2) * width
         ax.bar(
@@ -148,52 +169,25 @@ def plot_group(
             color=COLORS.get(serializer, "#888888"),
         )
 
-    ax.set_title(title)
+    ax.set_title(datatype_title(datatype))
     ax.set_xticks(x)
-    ax.set_xticklabels([datatype_plot_label(dt) for dt in datatypes])
-    ax.set_ylabel("Throughput (ops/sec)")
+    ax.set_xticklabels(["Serialize", "Deserialize"])
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
-    ax.legend()
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
+    ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def render_plot(results: dict, output_dir: str) -> str:
-    non_list = [
-        dt for dt in DATATYPE_ORDER if dt in results and not dt.endswith("list")
-    ]
-    list_only = [dt for dt in DATATYPE_ORDER if dt in results and dt.endswith("list")]
-
-    fig, axes = plt.subplots(1, 4, figsize=(28, 6))
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     fig.suptitle("Swift Serialization Throughput", fontsize=14)
 
-    plot_group(
-        axes[0],
-        results,
-        non_list,
-        "serialize",
-        "Serialize Throughput (higher is better)",
-    )
-    plot_group(
-        axes[1],
-        results,
-        non_list,
-        "deserialize",
-        "Deserialize Throughput (higher is better)",
-    )
-    plot_group(
-        axes[2],
-        results,
-        list_only,
-        "serialize",
-        "Serialize Throughput (*List)",
-    )
-    plot_group(
-        axes[3],
-        results,
-        list_only,
-        "deserialize",
-        "Deserialize Throughput (*List)",
-    )
+    for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPE_ORDER)):
+        plot_group(ax, results, datatype)
+        if index % 3 == 0:
+            ax.set_ylabel("Throughput (ops/sec)")
+        else:
+            ax.tick_params(axis="y", labelleft=False)
+            ax.yaxis.get_offset_text().set_visible(False)
 
     fig.tight_layout()
     output_path = os.path.join(output_dir, "throughput.png")
@@ -282,9 +276,11 @@ def write_report(
     lines.append("| Datatype | Fory | Protobuf | Msgpack |")
     lines.append("| --- | ---: | ---: | ---: |")
     for entry in sorted(sizes, key=lambda item: item.get("dataType", "")):
+        datatype = str(entry.get("dataType", "-")).lower()
+        datatype_label = datatype_title(datatype) if datatype != "-" else "-"
         lines.append(
             "| "
-            + f"{entry.get('dataType', '-')} | "
+            + f"{datatype_label} | "
             + f"{entry.get('fory', '-')} | "
             + f"{entry.get('protobuf', '-')} | "
             + f"{entry.get('msgpack', '-')} |"

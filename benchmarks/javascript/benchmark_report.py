@@ -26,6 +26,7 @@ from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.ticker import FuncFormatter
 
 try:
     import psutil
@@ -37,7 +38,7 @@ except ImportError:
 COLORS = {
     "fory": "#FF6F01",
     "protobuf": "#55BCC2",
-    "json": "#7A7A7A",
+    "json": (0.55, 0.40, 0.45),
 }
 SERIALIZER_ORDER = ["fory", "protobuf", "json"]
 SERIALIZER_LABELS = {
@@ -97,6 +98,10 @@ def parse_benchmark_name(name):
 
 
 def format_datatype_label(datatype):
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStruct\nList"
     if datatype.endswith("list"):
         base = datatype[: -len("list")]
         if base == "mediacontent":
@@ -108,6 +113,10 @@ def format_datatype_label(datatype):
 
 
 def format_datatype_table_label(datatype):
+    if datatype == "struct":
+        return "NumericStruct"
+    if datatype == "structlist":
+        return "NumericStructList"
     if datatype.endswith("list"):
         base = datatype[: -len("list")]
         if base == "mediacontent":
@@ -156,6 +165,10 @@ def format_tps_label(tps):
     if tps >= 1e3:
         return f"{tps / 1e3:.2f}K"
     return f"{tps:.0f}"
+
+
+def format_tps_tick(tps, _position):
+    return format_tps_label(tps)
 
 
 def plot_datatype(ax, datatype, operation):
@@ -211,9 +224,9 @@ for datatype in datatypes:
     plt.close()
 
 
-def plot_combined_tps_subplot(ax, grouped_datatypes, operation, title):
-    if not grouped_datatypes:
-        ax.set_title(f"{title}\nNo Data")
+def plot_throughput_grid_subplot(ax, datatype):
+    if datatype not in data:
+        ax.set_title(f"{format_datatype_table_label(datatype)}\nNo Data")
         ax.axis("off")
         return
 
@@ -221,20 +234,20 @@ def plot_combined_tps_subplot(ax, grouped_datatypes, operation, title):
         lib
         for lib in SERIALIZER_ORDER
         if any(
-            data[datatype][operation].get(lib, 0) > 0 for datatype in grouped_datatypes
+            data[datatype][operation].get(lib, 0) > 0
+            for operation in ["serialize", "deserialize"]
         )
     ]
     if not available_libs:
-        ax.set_title(f"{title}\nNo Data")
+        ax.set_title(f"{format_datatype_table_label(datatype)}\nNo Data")
         ax.axis("off")
         return
 
-    x = np.arange(len(grouped_datatypes))
+    operations = ["serialize", "deserialize"]
+    x = np.arange(len(operations))
     width = 0.8 / len(available_libs)
     for idx, lib in enumerate(available_libs):
-        times = [
-            data[datatype][operation].get(lib, 0) for datatype in grouped_datatypes
-        ]
+        times = [data[datatype][operation].get(lib, 0) for operation in operations]
         throughput = [1e9 / value if value > 0 else 0 for value in times]
         offset = (idx - (len(available_libs) - 1) / 2) * width
         ax.bar(
@@ -245,36 +258,23 @@ def plot_combined_tps_subplot(ax, grouped_datatypes, operation, title):
             color=COLORS[lib],
         )
 
-    ax.set_title(title)
+    ax.set_title(format_datatype_table_label(datatype))
     ax.set_xticks(x)
-    ax.set_xticklabels(
-        [format_datatype_label(datatype) for datatype in grouped_datatypes]
-    )
-    ax.legend()
+    ax.set_xticklabels(["Serialize", "Deserialize"])
     ax.grid(True, axis="y", linestyle="--", alpha=0.5)
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
+    ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
+    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
 
 
-non_list_datatypes = [
-    datatype for datatype in datatypes if not datatype.endswith("list")
-]
-list_datatypes = [datatype for datatype in datatypes if datatype.endswith("list")]
-
-fig, axes = plt.subplots(1, 4, figsize=(28, 6))
-fig.supylabel("Throughput (ops/sec)")
-
-combined_subplots = [
-    (axes[0], non_list_datatypes, "serialize", "Serialize Throughput"),
-    (axes[1], non_list_datatypes, "deserialize", "Deserialize Throughput"),
-    (axes[2], list_datatypes, "serialize", "Serialize Throughput (*List)"),
-    (axes[3], list_datatypes, "deserialize", "Deserialize Throughput (*List)"),
-]
-
-for ax, grouped_datatypes, operation, title in combined_subplots:
-    plot_combined_tps_subplot(
-        ax, grouped_datatypes, operation, f"{title} (higher is better)"
-    )
-
+fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPE_ORDER)):
+    plot_throughput_grid_subplot(ax, datatype)
+    if index % 3 == 0:
+        ax.set_ylabel("Throughput (ops/sec)")
+    else:
+        ax.tick_params(axis="y", labelleft=False)
+        ax.yaxis.get_offset_text().set_visible(False)
+fig.suptitle("JavaScript Serialization Throughput", fontsize=14)
 fig.tight_layout()
 combined_plot_path = os.path.join(output_dir, "throughput.png")
 plt.savefig(combined_plot_path, dpi=150)
@@ -365,10 +365,10 @@ if sizes:
     md_report.append("| Datatype | fory | protobuf | json |\n")
     md_report.append("|----------|------|----------|------|\n")
     size_datatypes = [
-        ("struct", "Struct"),
+        ("struct", "NumericStruct"),
         ("sample", "Sample"),
         ("media", "MediaContent"),
-        ("struct_list", "StructList"),
+        ("struct_list", "NumericStructList"),
         ("sample_list", "SampleList"),
         ("media_list", "MediaContentList"),
     ]

@@ -1,12 +1,12 @@
 # Fory Dart Benchmark
 
-This benchmark compares serialization and deserialization throughput for Apache Fory and Protocol Buffers in Dart.
+This benchmark compares serialization and deserialization throughput for Apache Fory, Protocol Buffers, and JSON in Dart.
 
 ## Hardware and Runtime Info
 
 | Key                   | Value                                                             |
 | --------------------- | ----------------------------------------------------------------- |
-| Timestamp             | 2026-05-07T09:12:52.301869Z                                       |
+| Timestamp             | 2026-05-07T10:39:41.006553Z                                       |
 | OS                    | Version 15.7.2 (Build 24G325)                                     |
 | Host                  | MacBook-Pro.local                                                 |
 | CPU Cores (Logical)   | 12                                                                |
@@ -20,37 +20,37 @@ This benchmark compares serialization and deserialization throughput for Apache 
 
 ![Throughput](throughput.png)
 
-| Datatype         | Operation   |   Fory TPS | Protobuf TPS | Fastest       |
-| ---------------- | ----------- | ---------: | -----------: | ------------- |
-| Struct           | Serialize   |  9,631,226 |    2,134,738 | fory (4.51x)  |
-| Struct           | Deserialize | 10,449,715 |    4,968,658 | fory (2.10x)  |
-| Sample           | Serialize   |  2,468,767 |      536,410 | fory (4.60x)  |
-| Sample           | Deserialize |  2,393,903 |      901,767 | fory (2.65x)  |
-| MediaContent     | Serialize   |  1,162,191 |      431,591 | fory (2.69x)  |
-| MediaContent     | Deserialize |  2,005,785 |      767,396 | fory (2.61x)  |
-| StructList       | Serialize   |  2,851,755 |      374,020 | fory (7.62x)  |
-| StructList       | Deserialize |  3,768,194 |      740,750 | fory (5.09x)  |
-| SampleList       | Serialize   |    568,405 |       48,603 | fory (11.69x) |
-| SampleList       | Deserialize |    546,914 |      111,151 | fory (4.92x)  |
-| MediaContentList | Serialize   |    270,092 |       83,028 | fory (3.25x)  |
-| MediaContentList | Deserialize |    454,291 |      149,294 | fory (3.04x)  |
+| Datatype          | Operation   |   Fory TPS | Protobuf TPS |  JSON TPS | Fastest       |
+| ----------------- | ----------- | ---------: | -----------: | --------: | ------------- |
+| NumericStruct     | Serialize   |  9,980,488 |    2,259,988 | 1,207,837 | fory (4.42x)  |
+| NumericStruct     | Deserialize | 10,553,728 |    4,877,759 | 1,925,134 | fory (2.16x)  |
+| Sample            | Serialize   |  2,553,310 |      553,571 |   135,703 | fory (4.61x)  |
+| Sample            | Deserialize |  2,476,268 |      916,265 |   240,179 | fory (2.70x)  |
+| MediaContent      | Serialize   |  1,131,670 |      433,874 |   226,355 | fory (2.61x)  |
+| MediaContent      | Deserialize |  1,979,716 |      770,425 |   253,405 | fory (2.57x)  |
+| NumericStructList | Serialize   |  2,822,285 |      382,506 |   218,463 | fory (7.38x)  |
+| NumericStructList | Deserialize |  3,769,510 |      753,492 |   362,597 | fory (5.00x)  |
+| SampleList        | Serialize   |    558,603 |       50,513 |    25,508 | fory (11.06x) |
+| SampleList        | Deserialize |    544,041 |      110,942 |    48,131 | fory (4.90x)  |
+| MediaContentList  | Serialize   |    274,211 |       81,808 |    42,800 | fory (3.35x)  |
+| MediaContentList  | Deserialize |    457,961 |      151,931 |    51,106 | fory (3.01x)  |
 
 ## Serialized Size (bytes)
 
-| Datatype         | Fory | Protobuf |
-| ---------------- | ---: | -------: |
-| Struct           |   57 |       61 |
-| Sample           |  445 |      377 |
-| MediaContent     |  362 |      307 |
-| StructList       |  182 |      315 |
-| SampleList       | 1978 |     1900 |
-| MediaContentList | 1531 |     1550 |
+| Datatype          | Fory | Protobuf | JSON |
+| ----------------- | ---: | -------: | ---: |
+| NumericStruct     |   57 |       61 |  103 |
+| Sample            |  445 |      377 |  791 |
+| MediaContent      |  362 |      307 |  619 |
+| NumericStructList |  182 |      315 |  536 |
+| SampleList        | 1978 |     1900 | 3976 |
+| MediaContentList  | 1531 |     1550 | 3122 |
 
 ## Per-workload Plots
 
-### Struct
+### NumericStruct
 
-![Struct](struct.png)
+![NumericStruct](struct.png)
 
 ### Sample
 
@@ -60,9 +60,9 @@ This benchmark compares serialization and deserialization throughput for Apache 
 
 ![MediaContent](mediacontent.png)
 
-### StructList
+### NumericStructList
 
-![StructList](structlist.png)
+![NumericStructList](structlist.png)
 
 ### SampleList
 

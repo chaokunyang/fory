@@ -17,6 +17,7 @@
 
 use fory::{Error, Fory};
 use fory_derive::{ForyEnum, ForyStruct};
+use serde::{Deserialize, Serialize};
 
 const LIST_SIZE: usize = 5;
 
@@ -53,10 +54,10 @@ impl DataKind {
 
     pub fn display_name(self) -> &'static str {
         match self {
-            Self::Struct => "Struct",
+            Self::Struct => "NumericStruct",
             Self::Sample => "Sample",
             Self::MediaContent => "MediaContent",
-            Self::StructList => "StructList",
+            Self::StructList => "NumericStructList",
             Self::SampleList => "SampleList",
             Self::MediaContentList => "MediaContentList",
         }
@@ -69,7 +70,7 @@ pub trait BenchmarkCase: Clone + PartialEq + Sized + 'static {
     fn create() -> Self;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, Eq, ForyStruct, Serialize, Deserialize)]
 pub struct NumericStruct {
     #[fory(id = 1)]
     pub f1: i32,
@@ -89,7 +90,7 @@ pub struct NumericStruct {
     pub f8: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, ForyStruct, Serialize, Deserialize)]
 pub struct Sample {
     #[fory(id = 1)]
     pub int_value: i32,
@@ -137,7 +138,7 @@ pub struct Sample {
     pub string: String,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ForyEnum)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ForyEnum, Serialize, Deserialize)]
 #[repr(i32)]
 pub enum Player {
     #[default]
@@ -145,7 +146,7 @@ pub enum Player {
     Flash = 1,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ForyEnum)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ForyEnum, Serialize, Deserialize)]
 #[repr(i32)]
 pub enum Size {
     #[default]
@@ -153,7 +154,7 @@ pub enum Size {
     Large = 1,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, Eq, ForyStruct, Serialize, Deserialize)]
 pub struct Media {
     #[fory(id = 1)]
     pub uri: String,
@@ -181,7 +182,7 @@ pub struct Media {
     pub copyright: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, Eq, ForyStruct, Serialize, Deserialize)]
 pub struct Image {
     #[fory(id = 1)]
     pub uri: String,
@@ -195,7 +196,7 @@ pub struct Image {
     pub size: Size,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, Eq, ForyStruct, Serialize, Deserialize)]
 pub struct MediaContent {
     #[fory(id = 1)]
     pub media: Media,
@@ -203,19 +204,19 @@ pub struct MediaContent {
     pub images: Vec<Image>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, Eq, ForyStruct, Serialize, Deserialize)]
 pub struct StructList {
     #[fory(id = 1)]
     pub struct_list: Vec<NumericStruct>,
 }
 
-#[derive(Debug, Clone, PartialEq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, ForyStruct, Serialize, Deserialize)]
 pub struct SampleList {
     #[fory(id = 1)]
     pub sample_list: Vec<Sample>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ForyStruct)]
+#[derive(Debug, Clone, PartialEq, Eq, ForyStruct, Serialize, Deserialize)]
 pub struct MediaContentList {
     #[fory(id = 1)]
     pub media_content_list: Vec<MediaContent>,

@@ -678,6 +678,7 @@ private:
   int64_t last_meta_header_ = 0;
   const TypeInfo *last_meta_type_info_ = nullptr;
   bool has_last_meta_header_ = false;
+  bool meta_string_table_active_ = false;
 
   // Dynamic meta strings used for named type/class info.
   meta::MetaStringTable meta_string_table_;

@@ -399,9 +399,13 @@ WriteContext::write_struct_type_info(const TypeInfo *type_info) {
 void WriteContext::reset() {
   // Clear error state first
   error_ = Error();
-  ref_writer_.reset();
+  if (config_->track_ref) {
+    ref_writer_.reset();
+  }
   // Clear meta map for streaming TypeMeta (size is used as counter)
-  write_type_info_index_map_.clear();
+  if (type_info_index_map_active_) {
+    write_type_info_index_map_.clear();
+  }
   first_type_info_ = nullptr;
   has_first_type_info_ = false;
   type_info_index_map_active_ = false;
@@ -460,6 +464,7 @@ ReadContext::read_enum_type_info(uint32_t base_type_id) {
       // Read type meta inline using streaming protocol
       return read_type_meta();
     }
+    meta_string_table_active_ = true;
     FORY_TRY(namespace_str,
              meta_string_table_.read_string(*buffer_, k_namespace_decoder));
     FORY_TRY(type_name,
@@ -639,6 +644,7 @@ Result<const TypeInfo *, Error> ReadContext::read_any_type_info() {
       // Read type meta inline using streaming protocol
       return read_type_meta();
     }
+    meta_string_table_active_ = true;
     FORY_TRY(namespace_str,
              meta_string_table_.read_string(*buffer_, k_namespace_decoder));
     FORY_TRY(type_name,
@@ -667,11 +673,16 @@ const TypeInfo *ReadContext::read_any_type_info(Error &error) {
 void ReadContext::reset() {
   // Clear error state first
   error_ = Error();
-  ref_reader_.reset();
+  if (config_->track_ref) {
+    ref_reader_.reset();
+  }
   reading_type_infos_.clear();
   owned_reading_type_infos_.clear();
   current_dyn_depth_ = 0;
-  meta_string_table_.reset();
+  if (meta_string_table_active_) {
+    meta_string_table_.reset();
+    meta_string_table_active_ = false;
+  }
 }
 
 } // namespace serialization

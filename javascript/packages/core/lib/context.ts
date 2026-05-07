@@ -572,6 +572,7 @@ export class ReadContext {
   private _maxDepth: number;
   private _maxBinarySize: number;
   private _maxCollectionSize: number;
+  private readonly trackingRef: boolean;
 
   constructor(
     readonly typeResolver: TypeResolverLike,
@@ -580,6 +581,7 @@ export class ReadContext {
     this.reader = new BinaryReader(config);
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
+    this.trackingRef = config.ref;
     this._maxDepth = config.maxDepth ?? 50;
     this._maxBinarySize = config.maxBinarySize ?? 64 * 1024 * 1024;
     this._maxCollectionSize = config.maxCollectionSize ?? 1_000_000;
@@ -587,7 +589,9 @@ export class ReadContext {
 
   reset(bytes: Uint8Array) {
     this.reader.reset(bytes);
-    this.refReader.reset();
+    if (this.trackingRef) {
+      this.refReader.reset();
+    }
     this.metaStringReader.reset();
     this.typeMeta = [];
     this._depth = 0;

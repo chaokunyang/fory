@@ -293,28 +293,31 @@ export class BinaryReader {
 
   readVarUInt32() {
     // Reduce memory reads as much as possible. Reading a uint32 at once is far faster than reading four uint8s separately.
-    if (this.byteLength - this.cursor >= 5) {
-      const fourByteValue = this.dataView.getUint32(this.cursor++, true);
+    const cursor = this.cursor;
+    if (this.byteLength - cursor >= 5) {
+      const fourByteValue = this.dataView.getUint32(cursor, true);
+      let readIdx = cursor + 1;
       // | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits | 1bit + 7bits |
       let result = fourByteValue & 0x7f;
       if ((fourByteValue & 0x80) != 0) {
-        this.cursor++;
+        readIdx++;
         // 0x3f80: 0b1111111 << 7
         result |= (fourByteValue >>> 1) & 0x3f80;
         if ((fourByteValue & 0x8000) != 0) {
-          this.cursor++;
+          readIdx++;
           // 0x1fc000: 0b1111111 << 14
           result |= (fourByteValue >>> 2) & 0x1fc000;
           if ((fourByteValue & 0x800000) != 0) {
-            this.cursor++;
+            readIdx++;
             // 0xfe00000: 0b1111111 << 21
             result |= (fourByteValue >>> 3) & 0xfe00000;
             if ((fourByteValue & 0x80000000) != 0) {
-              result |= this.readUint8() << 28;
+              result |= this.dataView.getUint8(readIdx++) << 28;
             }
           }
         }
       }
+      this.cursor = readIdx;
       return result >>> 0;
     }
     let byte = this.readUint8();

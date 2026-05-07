@@ -521,12 +521,14 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                         }
                     }
                 } else {
-                    for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
-                        if (${elemSerializer}) {
+                    if (${elemSerializer}) {
+                        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
                             ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
                             ${putAccessor(`${elemSerializer}.read(false)`, idx)}
                             ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
-                        } else {
+                        }
+                    } else {
+                        for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
                             ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, "false")}
                         }
                     }

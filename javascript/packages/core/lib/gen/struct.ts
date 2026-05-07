@@ -585,22 +585,54 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     const hoisted = this.scope.declare("ser", this.serializerExpr);
     const scope = this.scope;
     const builder = this.builder;
+    const internalTypeId = this.getInternalTypeId();
+    const canInlineCompatibleTypeInfo = internalTypeId === TypeId.COMPATIBLE_STRUCT
+      || internalTypeId === TypeId.NAMED_COMPATIBLE_STRUCT
+      || (internalTypeId === TypeId.NAMED_STRUCT && builder.resolver.isCompatible());
+    const inlineCompatibleTypeInfo = (
+      onMetaChanged: (changedSerializer: string) => string,
+      onMetaUnchanged: () => string,
+    ) => {
+      if (!canInlineCompatibleTypeInfo) {
+        const changedSerializer = scope.uniqueName("changedSerializer");
+        return `
+              const ${changedSerializer} = ${hoisted}.readTypeInfo();
+              if (${changedSerializer} !== undefined) {
+                ${onMetaChanged(changedSerializer)}
+              } else {
+                ${onMetaUnchanged()}
+              }
+            `;
+      }
+      const typeMeta = scope.uniqueName("typeMeta");
+      const changedSerializer = scope.uniqueName("changedSerializer");
+      const hoistedHash = scope.declare("serHash", `${hoisted}.getHash()`);
+      return `
+              ${builder.reader.readUint8()};
+              const ${typeMeta} = ${builder.typeMetaResolver.readTypeMeta()};
+              if (${hoistedHash} !== ${typeMeta}.getHash()) {
+                const ${changedSerializer} = ${builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta, hoisted)};
+                ${onMetaChanged(changedSerializer)}
+              } else {
+                ${onMetaUnchanged()}
+              }
+            `;
+    };
     return new Proxy({}, {
       get: (target, prop: string) => {
         if (prop === "readNoRef") {
           return (accessor: (expr: string) => string, refState: string) => {
             const result = scope.uniqueName("result");
-            const changedSerializer = scope.uniqueName("changedSerializer");
             return `
-              const ${changedSerializer} = ${hoisted}.readTypeInfo();
-              if (${changedSerializer} !== undefined) {
-                ${accessor(`${changedSerializer}.read(${refState})`)};
-              } else {
+              ${inlineCompatibleTypeInfo(
+                changedSerializer => `${accessor(`${changedSerializer}.read(${refState})`)};`,
+                () => `
                 ${builder.getReadContextName()}.incReadDepth();
                 let ${result} = ${hoisted}.read(${refState});
                 ${builder.getReadContextName()}.decReadDepth();
                 ${accessor(result)};
-              }
+              `,
+              )}
             `;
           };
         }
@@ -608,7 +640,6 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           return (accessor: (expr: string) => string) => {
             const refFlag = scope.uniqueName("refFlag");
             const result = scope.uniqueName("result");
-            const changedSerializer = scope.uniqueName("changedSerializer");
             return `
               const ${refFlag} = ${builder.reader.readInt8()};
               let ${result};
@@ -617,14 +648,14 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
               } else if (${refFlag} === ${RefFlags.RefFlag}) {
                 ${result} = ${builder.referenceResolver.getReadRef(builder.reader.readVarUInt32())};
               } else {
-                const ${changedSerializer} = ${hoisted}.readTypeInfo();
-                if (${changedSerializer} !== undefined) {
-                  ${result} = ${changedSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag});
-                } else {
+                ${inlineCompatibleTypeInfo(
+                  changedSerializer => `${result} = ${changedSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag});`,
+                  () => `
                   ${builder.getReadContextName()}.incReadDepth();
                   ${result} = ${hoisted}.read(${refFlag} === ${RefFlags.RefValueFlag});
                   ${builder.getReadContextName()}.decReadDepth();
-                }
+                `,
+                )}
               }
               ${accessor(result)};
             `;

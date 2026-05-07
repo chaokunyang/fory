@@ -100,6 +100,8 @@ type FieldGroup struct {
 	RemainingFields []FieldInfo // All other fields
 	FixedSize       int         // Total bytes for fixed-size fields
 	MaxVarintSize   int         // Maximum bytes for varint fields
+
+	PlainVarint32ValueFields bool // Varint phase is only direct int32 value fields
 }
 
 // FieldCount returns the total number of fields across all categories.
@@ -212,6 +214,7 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 
 	// Compute maxVarintSize and build primitive varint field slice
 	g.PrimitiveVarintFields = make([]PrimitiveFieldInfo, len(g.VarintFields))
+	g.PlainVarint32ValueFields = len(g.VarintFields) > 0
 	for i := range g.VarintFields {
 		g.MaxVarintSize += getVarintMaxSizeByDispatchId(g.VarintFields[i].DispatchId)
 		g.PrimitiveVarintFields[i] = PrimitiveFieldInfo{
@@ -220,6 +223,10 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 			Kind:       g.VarintFields[i].Kind,
 			Meta:       g.VarintFields[i].Meta,
 			// WriteOffset not used for varint fields (variable length)
+		}
+		if g.VarintFields[i].DispatchId != PrimitiveVarint32DispatchId ||
+			g.VarintFields[i].Kind != FieldKindValue {
+			g.PlainVarint32ValueFields = false
 		}
 	}
 

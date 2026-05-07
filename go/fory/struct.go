@@ -1531,8 +1531,18 @@ func (s *structSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	// Note: For tagged int64/uint64, we can't use unsafe reads because they need bounds checking
 	if len(s.fieldGroup.PrimitiveVarintFields) > 0 {
 		err := ctx.Err()
-		// +8 padding for readVarUint32Fast bulk load (8 bytes physically read regardless of varint length)
-		if buf.remaining() >= s.fieldGroup.MaxVarintSize+8 {
+		if s.fieldGroup.PlainVarint32ValueFields {
+			// +8 padding for readVarUint32Fast bulk load (8 bytes physically read regardless of varint length)
+			if buf.remaining() >= s.fieldGroup.MaxVarintSize+8 {
+				for _, field := range s.fieldGroup.PrimitiveVarintFields {
+					*(*int32)(unsafe.Add(ptr, field.Offset)) = buf.UnsafeReadVarint32(err)
+				}
+			} else {
+				for _, field := range s.fieldGroup.PrimitiveVarintFields {
+					*(*int32)(unsafe.Add(ptr, field.Offset)) = buf.ReadVarint32(err)
+				}
+			}
+		} else if buf.remaining() >= s.fieldGroup.MaxVarintSize+8 {
 			for _, field := range s.fieldGroup.PrimitiveVarintFields {
 				fieldPtr := unsafe.Add(ptr, field.Offset)
 				optInfo := optionalInfo{}

@@ -115,8 +115,8 @@ impl<'a> Writer<'a> {
 
     #[inline(always)]
     pub fn write_var_i32(&mut self, value: i32) {
-        let zigzag = ((value as i64) << 1) ^ ((value as i64) >> 31);
-        self._write_var_u32(zigzag as u32)
+        let zigzag = ((value as u32) << 1) ^ ((value >> 31) as u32);
+        self._write_var_u32(zigzag)
     }
 
     // ============ INT64 (TypeId = 6) ============
@@ -130,7 +130,7 @@ impl<'a> Writer<'a> {
 
     #[inline(always)]
     pub fn write_var_i64(&mut self, value: i64) {
-        let zigzag = ((value << 1) ^ (value >> 63)) as u64;
+        let zigzag = ((value as u64) << 1) ^ ((value >> 63) as u64);
         self._write_var_u64(zigzag);
     }
 

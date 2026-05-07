@@ -24,7 +24,7 @@ import { TypeInfo } from "../typeInfo";
 import { CodegenRegistry } from "./router";
 import { BaseSerializerGenerator, SerializerGenerator } from "./serializer";
 import { TypeMeta } from "../meta/TypeMeta";
-import { getCompatibleCollectionArrayReadAction } from "../compatibleCollectionArrayRead";
+import { getCompatibleCollectionArrayReadAction } from "./collection";
 
 /**
  * Returns true when a field's read cannot recurse and needs no depth tracking.

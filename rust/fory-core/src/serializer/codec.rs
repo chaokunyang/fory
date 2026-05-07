@@ -21,7 +21,7 @@
 //! Fory-owned building blocks that allow generated code to apply field-local and
 //! nested collection configuration without creating wrapper value types.
 
-use super::compatible_collection_array::{
+use super::collection::{
     read_primitive_array_vec_compatible_mismatch, read_vec_compatible_mismatch,
     CompatibleListArrayElement,
 };

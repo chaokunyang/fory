@@ -326,6 +326,48 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     }
   }
 
+  private void readFields(ReadContext readContext, Object[] fields) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int counter = 0;
+    RefReader refReader = readContext.getRefReader();
+    // read order: primitive,boxed,final,other,collection,map
+    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
+      if (Utils.DEBUG_OUTPUT_ENABLED) {
+        printFieldDebugInfo(fieldInfo, buffer);
+      }
+      if (fieldInfo.fieldAccessor != null) {
+        fields[counter++] =
+            AbstractObjectSerializer.readBuildInFieldValue(
+                readContext, typeResolver, refReader, fieldInfo, buffer);
+      } else {
+        // Skip the field value from buffer since it doesn't exist in current class.
+        // For records, fieldConverter can't be used since records are immutable and
+        // constructed all at once. We just read to advance buffer position.
+        FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+        // remapping will handle those extra fields from peers.
+        fields[counter++] = null;
+      }
+    }
+    Generics generics = readContext.getGenerics();
+    for (SerializationFieldInfo fieldInfo : containerFields) {
+      if (Utils.DEBUG_OUTPUT_ENABLED) {
+        printFieldDebugInfo(fieldInfo, buffer);
+      }
+      Object fieldValue =
+          AbstractObjectSerializer.readContainerFieldValue(
+              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+      fields[counter++] = fieldValue;
+    }
+    for (SerializationFieldInfo fieldInfo : otherFields) {
+      if (Utils.DEBUG_OUTPUT_ENABLED) {
+        printFieldDebugInfo(fieldInfo, buffer);
+      }
+      Object fieldValue =
+          AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+      fields[counter++] = fieldValue;
+    }
+  }
+
   private void compatibleRead(
       ReadContext readContext, SerializationFieldInfo fieldInfo, Object obj) {
     MemoryBuffer buffer = readContext.getBuffer();
@@ -398,49 +440,6 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
       if (fieldAccessor != null) {
         fieldAccessor.putObject(targetObject, fieldValue);
       }
-    }
-  }
-
-  private void readFields(ReadContext readContext, Object[] fields) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    int counter = 0;
-    RefReader refReader = readContext.getRefReader();
-    // read order: primitive,boxed,final,other,collection,map
-    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      if (fieldInfo.fieldAccessor != null) {
-        fields[counter++] =
-            AbstractObjectSerializer.readBuildInFieldValue(
-                readContext, typeResolver, refReader, fieldInfo, buffer);
-      } else {
-        // Skip the field value from buffer since it doesn't exist in current class.
-        // For records, fieldConverter can't be used since records are immutable and
-        // constructed all at once. We just read to advance buffer position.
-        FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-        // remapping will handle those extra fields from peers.
-        fields[counter++] = null;
-      }
-    }
-    Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          AbstractObjectSerializer.readContainerFieldValue(
-              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-      fields[counter++] = fieldValue;
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          AbstractObjectSerializer.readField(
-              readContext, typeResolver, refReader, fieldInfo, buffer);
-      fields[counter++] = fieldValue;
     }
   }
 

@@ -27,7 +27,7 @@ import {
 import { InnerFieldInfo, TypeMeta } from "./meta/TypeMeta";
 import { Type, TypeInfo } from "./typeInfo";
 import { Config, RefFlags, Serializer, TypeId } from "./type";
-import { markCompatibleCollectionArrayRead } from "./compatibleCollectionArrayRead";
+import { markCompatibleCollectionArrayRead } from "./gen/collection";
 
 type TypeResolverLike = {
   config: Config;

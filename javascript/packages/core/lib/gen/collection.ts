@@ -17,15 +17,38 @@
  * under the License.
  */
 
-import { TypeInfo } from "../typeInfo";
+import type { TypeInfo } from "../typeInfo";
 import { CodecBuilder } from "./builder";
 import { BaseSerializerGenerator, SerializerGenerator } from "./serializer";
 import { CodegenRegistry } from "./router";
 import { TypeId, RefFlags, Serializer } from "../type";
 import { Scope } from "./scope";
 import { AnyHelper } from "./any";
-import { ReadContext, WriteContext } from "../context";
-import { getCompatibleCollectionArrayReadAction } from "../compatibleCollectionArrayRead";
+import type { ReadContext, WriteContext } from "../context";
+
+export type CompatibleCollectionArrayReadAction = {
+  target: "array" | "list";
+  elementTypeId: number;
+};
+
+const compatibleCollectionArrayReadActions = new WeakMap<
+  TypeInfo,
+  CompatibleCollectionArrayReadAction
+>();
+
+export function markCompatibleCollectionArrayRead(
+  typeInfo: TypeInfo,
+  action: CompatibleCollectionArrayReadAction,
+): TypeInfo {
+  compatibleCollectionArrayReadActions.set(typeInfo, action);
+  return typeInfo;
+}
+
+export function getCompatibleCollectionArrayReadAction(
+  typeInfo: TypeInfo,
+): CompatibleCollectionArrayReadAction | undefined {
+  return compatibleCollectionArrayReadActions.get(typeInfo);
+}
 
 export const CollectionFlags = {
   /** Whether track elements ref. */
@@ -326,9 +349,9 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     return this.genericTypeDescriptin()?.typeId === TypeId.UNKNOWN;
   }
 
-    abstract newCollection(lenAccessor: string): string;
+  abstract newCollection(lenAccessor: string): string;
 
-    abstract putAccessor(result: string, item: string, index: string): string;
+  abstract putAccessor(result: string, item: string, index: string): string;
 
   abstract sizeProp(): string;
 

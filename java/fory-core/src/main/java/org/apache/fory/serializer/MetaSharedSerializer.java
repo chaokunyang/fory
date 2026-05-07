@@ -363,7 +363,8 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       Object fieldValue =
-          AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+          AbstractObjectSerializer.readField(
+              readContext, typeResolver, refReader, fieldInfo, buffer);
       fields[counter++] = fieldValue;
     }
   }

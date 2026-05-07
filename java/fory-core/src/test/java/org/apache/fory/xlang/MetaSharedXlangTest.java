@@ -193,12 +193,14 @@ public class MetaSharedXlangTest extends ForyTestBase {
     byte[] nestedListBytes = nestedListFory.serialize(nestedListStruct);
 
     Fory nestedArrayFory = compatibleFory(NestedArrayElementField.class);
-    assertThrows(DeserializationException.class, () -> nestedArrayFory.deserialize(nestedListBytes));
+    assertThrows(
+        DeserializationException.class, () -> nestedArrayFory.deserialize(nestedListBytes));
 
     NestedArrayElementField nestedArrayStruct = new NestedArrayElementField();
     nestedArrayStruct.values = Arrays.asList(new int[] {1, 2});
     byte[] nestedArrayBytes = nestedArrayFory.serialize(nestedArrayStruct);
-    assertThrows(DeserializationException.class, () -> nestedListFory.deserialize(nestedArrayBytes));
+    assertThrows(
+        DeserializationException.class, () -> nestedListFory.deserialize(nestedArrayBytes));
 
     Fory nestedSetListFory = compatibleFory(NestedSetListField.class, false);
     NestedSetListField nestedSetListStruct = new NestedSetListField();

@@ -141,7 +141,10 @@ public final class FieldInfo implements Serializable {
             StringUtils.format(
                 "Unsupported nested list/array compatible field mismatch for field "
                     + "{}.{}: peer={}, local={}",
-                definedClass, fieldName, fieldType, localFieldType));
+                definedClass,
+                fieldName,
+                fieldType,
+                localFieldType));
       }
       if (remoteNullable == descriptor.isNullable()
           && remoteTrackingRef == descriptor.isTrackingRef()

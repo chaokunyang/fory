@@ -109,7 +109,7 @@ final class ReadContext {
   void increaseDepth() {
     _depth += 1;
     if (_depth > config.maxDepth) {
-      throw StateError('Deserialization depth exceeded ${config.maxDepth}.');
+      _throwMaxDepthExceeded();
     }
   }
 
@@ -117,6 +117,11 @@ final class ReadContext {
   @pragma('vm:prefer-inline')
   void decreaseDepth() {
     _depth -= 1;
+  }
+
+  @pragma('vm:never-inline')
+  Never _throwMaxDepthExceeded() {
+    throw StateError('Deserialization depth exceeded ${config.maxDepth}.');
   }
 
   /// Reads a boolean value.
@@ -230,6 +235,23 @@ final class ReadContext {
             resolved.needsRootRef
         ? _refReader.preserveRefId()
         : null;
+    if (preservedRefId == null &&
+        rootPreservedRefId == null &&
+        expectedRootType != null &&
+        identical(resolved, expectedRootType) &&
+        resolved.kind == RegistrationKind.struct &&
+        resolved.remoteTypeDef == null) {
+      _depth += 1;
+      if (_depth > config.maxDepth) {
+        _throwMaxDepthExceeded();
+      }
+      final value = resolved.structSerializer!.readSameTypeValue(
+        this,
+        resolved,
+      );
+      _depth -= 1;
+      return value;
+    }
     final value = readResolvedValue(
       resolved,
       null,

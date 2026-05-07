@@ -39,10 +39,17 @@ final class RefReader {
     return flag;
   }
 
+  @pragma('vm:prefer-inline')
   int tryPreserveRefId(Buffer buffer) {
-    final flag = readRefOrNull(buffer);
+    final flag = buffer.readByte();
     if (flag == RefWriter.refValueFlag) {
       return preserveRefId();
+    }
+    if (flag == RefWriter.refFlag) {
+      final id = buffer.readVarUint32();
+      _resolvedId = id;
+      _resolved = _refs[id];
+      return flag;
     }
     return flag;
   }

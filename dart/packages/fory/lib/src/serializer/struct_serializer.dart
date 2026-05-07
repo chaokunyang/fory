@@ -97,6 +97,22 @@ final class StructSerializer extends Serializer<Object?> {
     TypeInfo resolved, {
     bool hasCurrentPreservedRef = false,
   }) {
+    if (context.config.compatible &&
+        resolved.isCompatibleStruct &&
+        resolved.remoteTypeDef != null) {
+      return _readCompatible(
+        context,
+        resolved,
+      );
+    }
+    return readSameTypeValue(context, resolved);
+  }
+
+  @pragma('vm:prefer-inline')
+  Object readSameTypeValue(
+    ReadContext context,
+    TypeInfo resolved,
+  ) {
     if (!context.config.compatible && context.config.checkStructVersion) {
       final expected = schemaHash(_typeDef);
       final actual = context.buffer.readUint32();
@@ -106,19 +122,7 @@ final class StructSerializer extends Serializer<Object?> {
         );
       }
     }
-    if (context.config.compatible &&
-        resolved.isCompatibleStruct &&
-        resolved.remoteTypeDef != null) {
-      return _readCompatible(
-        context,
-        resolved,
-      );
-    }
-    return context.readSerializerPayload(
-      _payloadSerializer,
-      resolved,
-      hasCurrentPreservedRef: hasCurrentPreservedRef,
-    ) as Object;
+    return _payloadSerializer.read(context) as Object;
   }
 
   @pragma('vm:never-inline')

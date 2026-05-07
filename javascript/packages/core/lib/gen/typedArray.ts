@@ -58,6 +58,17 @@ type TypedArrayWriteMethod =
   | "writeUint32"
   | "writeUint64";
 
+const SMALL_TYPED_ARRAY_DIRECT_WRITE_BYTES = 96;
+
+const directWriteSetters: Partial<Record<TypedArrayWriteMethod, string>> = {
+  writeFloat32: "setFloat32",
+  writeFloat64: "setFloat64",
+  writeInt16: "setInt16",
+  writeInt32: "setInt32",
+  writeUint16: "setUint16",
+  writeUint32: "setUint32",
+};
+
 function build(
   inner: TypeInfo,
   creator: string,
@@ -74,6 +85,7 @@ function build(
     }
 
     write(accessor: string): string {
+      const directSetter = directWriteSetters[writeMethod];
       if (size !== 1 && !IS_LITTLE_ENDIAN) {
         const idx = this.scope.uniqueName("idx");
         return `
@@ -81,6 +93,28 @@ function build(
                 ${this.builder.writer.reserve(`${accessor}.length * ${size}`)};
                 for (let ${idx} = 0; ${idx} < ${accessor}.length; ${idx}++) {
                   ${this.builder.writer[writeMethod](`${accessor}[${idx}]`)}
+                }
+            `;
+      }
+      if (directSetter !== undefined) {
+        const byteLength = this.scope.uniqueName("byteLength");
+        const cursor = this.scope.uniqueName("cursor");
+        const dataView = this.scope.uniqueName("dataView");
+        const idx = this.scope.uniqueName("idx");
+        return `
+                const ${byteLength} = ${accessor}.byteLength;
+                ${this.builder.writer.writeVarUInt32(byteLength)}
+                if (${byteLength} <= ${SMALL_TYPED_ARRAY_DIRECT_WRITE_BYTES}) {
+                  ${this.builder.writer.reserve(byteLength)};
+                  let ${cursor} = ${this.builder.writer.writeGetCursor()};
+                  const ${dataView} = ${this.builder.writer.getDataView()};
+                  for (let ${idx} = 0; ${idx} < ${accessor}.length; ${idx}++) {
+                    ${dataView}.${directSetter}(${cursor}, ${accessor}[${idx}], true);
+                    ${cursor} += ${size};
+                  }
+                  ${this.builder.writer.setWriteCursor(cursor)}
+                } else {
+                  ${this.builder.writer.arrayBuffer(`${accessor}.buffer`, `${accessor}.byteOffset`, byteLength)}
                 }
             `;
       }

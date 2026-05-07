@@ -925,9 +925,8 @@ Container read_configured_list_data(ReadContext &ctx) {
 
 template <typename Container, typename StructT, size_t Index, int8_t NodeIndex,
           int8_t ElemNode>
-Container
-read_configured_list_data_as_array_field(ReadContext &ctx,
-                                         uint32_t remote_element_type_id) {
+FORY_NOINLINE Container read_configured_list_data_as_array_field(
+    ReadContext &ctx, uint32_t remote_element_type_id) {
   using Elem = element_type_t<Container>;
   uint32_t length = ctx.read_var_uint32(ctx.error());
   Container result;
@@ -957,11 +956,10 @@ read_configured_list_data_as_array_field(ReadContext &ctx,
         "compatible list to array field requires same-type elements"));
     return result;
   }
-  if (!is_decl_type) {
-    (void)ctx.read_any_type_info(ctx.error());
-    if (FORY_PREDICT_FALSE(ctx.has_error())) {
-      return result;
-    }
+  if (FORY_PREDICT_FALSE(!is_decl_type)) {
+    ctx.set_error(Error::invalid_data(
+        "compatible list to array field requires declared elements"));
+    return result;
   }
   if constexpr (has_reserve_v<Container>) {
     result.reserve(length);
@@ -984,8 +982,8 @@ read_configured_list_data_as_array_field(ReadContext &ctx,
 }
 
 template <typename Container>
-Container read_configured_array_data_as_list_field(ReadContext &ctx,
-                                                   RefMode ref_mode) {
+FORY_NOINLINE Container
+read_configured_array_data_as_list_field(ReadContext &ctx, RefMode ref_mode) {
   if (ref_mode == RefMode::None) {
     return Serializer<Container>::read_data(ctx);
   }

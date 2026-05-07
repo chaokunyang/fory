@@ -766,19 +766,13 @@ class CompatibleListToArrayFieldSerializer(Serializer):
             return np.empty(0, dtype=self.target_serializer.dtype)
         raise TypeError(f"Field {self.field_name!r} has unsupported array target serializer {type(self.target_serializer)!r}")
 
-    def _copy_list_to_target(self, values):
+    def _new_target(self, length):
         if isinstance(self.target_serializer, ForyArrayFieldSerializer):
-            return self.target_serializer.list_adapter_serializer._copy_list_to_wrapper(values)
+            return self.target_serializer.wrapper_type()
         if isinstance(self.target_serializer, PyArraySerializer):
-            target = array.array(self.target_serializer.typecode)
-            for index, item in enumerate(values):
-                try:
-                    target.append(item)
-                except (TypeError, ValueError, OverflowError) as exc:
-                    raise type(exc)(f"{self.field_name}[{index}] invalid for array.array typecode {target.typecode!r}: {exc}") from exc
-            return target
+            return array.array(self.target_serializer.typecode)
         if np is not None and isinstance(self.target_serializer, Numpy1DArraySerializer):
-            return np.array(values, dtype=self.target_serializer.dtype)
+            return np.empty(length, dtype=self.target_serializer.dtype)
         raise TypeError(f"Field {self.field_name!r} has unsupported array target serializer {type(self.target_serializer)!r}")
 
     def read(self, read_context):
@@ -805,10 +799,18 @@ class CompatibleListToArrayFieldSerializer(Serializer):
                 f"Field {self.field_name!r} requires declared same-type list elements for array<T> compatible read",
             )
 
-        values = []
-        for _ in range(length):
-            values.append(read_context.read_no_ref(serializer=self.elem_serializer))
-        return self._copy_list_to_target(values)
+        target = self._new_target(length)
+        append = None if np is not None and isinstance(self.target_serializer, Numpy1DArraySerializer) else target.append
+        for index in range(length):
+            item = read_context.read_no_ref(serializer=self.elem_serializer)
+            try:
+                if append is None:
+                    target[index] = item
+                else:
+                    append(item)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise type(exc)(f"{self.field_name}[{index}] invalid for {type(target).__name__}: {exc}") from exc
+        return target
 
 
 class DynamicPyArraySerializer(Serializer):

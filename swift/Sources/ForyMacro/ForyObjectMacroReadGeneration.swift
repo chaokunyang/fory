@@ -386,13 +386,7 @@ private func buildCompatibleReadCases(
             refModeExpr: "RefMode.from(nullable: remoteField.fieldType.nullable, trackRef: remoteField.fieldType.trackRef)",
             readTypeInfoExpr: "TypeId.needsTypeInfoForField(TypeId(rawValue: remoteField.fieldType.typeID) ?? .unknown)"
         )
-        let indexedCase = assignCase(sortedIndex, field, valueExpr)
-        let namedCase = assignCase(-1, field, valueExpr)
-            .replacingOccurrences(
-                of: "case -1:",
-                with: "case _ where remoteField.fieldName == \"\(field.name)\":"
-            )
-        return "\(indexedCase)\n\(indent)\(namedCase)"
+        return assignCase(sortedIndex, field, valueExpr)
     }.joined(separator: "\n\(indent)")
 }
 

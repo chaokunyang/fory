@@ -1078,6 +1078,10 @@ public sealed class ForyRuntimeTests
         ForyRuntime reader = ForyRuntime.Builder().Compatible(true).Build();
         reader.Register<CompatibleArraySchema>(308);
 
+        byte[] nonNullPayload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, 2] });
+        CompatibleArraySchema decoded = reader.Deserialize<CompatibleArraySchema>(nonNullPayload);
+        Assert.Equal([1, 2], decoded.Values);
+
         byte[] payload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, null] });
         InvalidDataException exception =
             Assert.Throws<InvalidDataException>(() => reader.Deserialize<CompatibleArraySchema>(payload));

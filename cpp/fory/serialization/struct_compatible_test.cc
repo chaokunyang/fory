@@ -222,7 +222,8 @@ struct ProductV2 {
 struct CompatibleListField {
   std::vector<int32_t> values;
 
-  FORY_STRUCT(CompatibleListField, (values, fory::F(1).list(fory::T::int32())));
+  FORY_STRUCT(CompatibleListField,
+              (values, fory::F(1).list(fory::T::int32().fixed())));
 };
 
 struct CompatibleArrayField {
@@ -232,12 +233,20 @@ struct CompatibleArrayField {
               (values, fory::F(1).array(fory::T::int32())));
 };
 
+struct CompatibleNullableListField {
+  std::vector<std::optional<int32_t>> values;
+
+  FORY_STRUCT(CompatibleNullableListField,
+              (values, fory::F(1).list(fory::T::fixed())));
+};
+
 struct CompatibleNestedListField {
   std::map<std::string, std::vector<int32_t>> values;
 
   FORY_STRUCT(CompatibleNestedListField,
-              (values, fory::F(1).map(fory::T::string(),
-                                      fory::T::list(fory::T::int32()))));
+              (values,
+               fory::F(1).map(fory::T::string(),
+                              fory::T::list(fory::T::int32().fixed()))));
 };
 
 struct CompatibleNestedArrayField {
@@ -487,19 +496,24 @@ TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
   auto reader = Fory::builder().compatible(true).xlang(true).build();
 
   constexpr uint32_t TYPE_ID = 1007;
-  ASSERT_TRUE(writer.register_struct<CompatibleListField>(TYPE_ID).ok());
+  ASSERT_TRUE(
+      writer.register_struct<CompatibleNullableListField>(TYPE_ID).ok());
   ASSERT_TRUE(reader.register_struct<CompatibleArrayField>(TYPE_ID).ok());
 
-  auto bytes = writer.serialize(CompatibleListField{{1, 2}});
+  auto bytes = writer.serialize(CompatibleNullableListField{{1, 2}});
   ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
-  std::vector<uint8_t> corrupted = std::move(bytes).value();
-  const std::vector<uint8_t> list_payload = {2, 0x0c, 2, 4};
-  auto payload_header = std::search(corrupted.begin(), corrupted.end(),
-                                    list_payload.begin(), list_payload.end());
-  ASSERT_NE(payload_header, corrupted.end());
-  *(payload_header + 1) = 0x0e;
-  auto decoded = reader.deserialize<CompatibleArrayField>(corrupted.data(),
-                                                          corrupted.size());
+  std::vector<uint8_t> payload = std::move(bytes).value();
+  auto decoded =
+      reader.deserialize<CompatibleArrayField>(payload.data(), payload.size());
+
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{1, 2}));
+
+  bytes = writer.serialize(CompatibleNullableListField{{1, std::nullopt}});
+  ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();
+  payload = std::move(bytes).value();
+  decoded =
+      reader.deserialize<CompatibleArrayField>(payload.data(), payload.size());
 
   ASSERT_FALSE(decoded.ok());
 }

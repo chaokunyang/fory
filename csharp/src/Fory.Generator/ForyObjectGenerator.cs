@@ -731,13 +731,10 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         FieldCodecModel alternateCodec)
     {
         string memberId = Sanitize(member.Name);
+        sb.AppendLine("        [global::System.Runtime.CompilerServices.MethodImpl(global::System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]");
         sb.AppendLine(
-            $"        internal static {member.TypeName} Read{memberId}(global::Apache.Fory.ReadContext context, global::Apache.Fory.TypeMetaFieldType remoteFieldType, global::Apache.Fory.RefMode refMode)");
+            $"        internal static {member.TypeName} Read{memberId}ListArrayBridge(global::Apache.Fory.ReadContext context, global::Apache.Fory.TypeMetaFieldType remoteFieldType, global::Apache.Fory.RefMode refMode)");
         sb.AppendLine("        {");
-        sb.AppendLine("            if (remoteFieldType.TypeId == " + codec.TypeId + ")");
-        sb.AppendLine("            {");
-        sb.AppendLine($"                return __ForyRead{memberId}Field(context, refMode);");
-        sb.AppendLine("            }");
         sb.AppendLine("            if (remoteFieldType.TypeId == " + alternateCodec.TypeId + ")");
         sb.AppendLine("            {");
         if (codec.Kind == FieldCodecKind.PackedArray)
@@ -1638,8 +1635,16 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             if (variableSuffix == "Compat" &&
                 TryBuildCompatibleListArrayReadCodec(member.FieldCodec, out _))
             {
+                sb.AppendLine($"{indent}if (remoteField.FieldType.TypeId == {member.FieldCodec.TypeId})");
+                sb.AppendLine($"{indent}{{");
                 sb.AppendLine(
-                    $"{indent}{assignmentTarget} = __ForyCompatibleFieldReaders.Read{Sanitize(member.Name)}(context, remoteField.FieldType, {refModeExpr});");
+                    $"{indent}  {assignmentTarget} = __ForyRead{Sanitize(member.Name)}Field(context, {refModeExpr});");
+                sb.AppendLine($"{indent}}}");
+                sb.AppendLine($"{indent}else");
+                sb.AppendLine($"{indent}{{");
+                sb.AppendLine(
+                    $"{indent}  {assignmentTarget} = __ForyCompatibleFieldReaders.Read{Sanitize(member.Name)}ListArrayBridge(context, remoteField.FieldType, {refModeExpr});");
+                sb.AppendLine($"{indent}}}");
             }
             else
             {

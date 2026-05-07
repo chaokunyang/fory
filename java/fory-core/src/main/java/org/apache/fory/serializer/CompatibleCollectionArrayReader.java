@@ -47,7 +47,6 @@ import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.BFloat16Array;
@@ -58,16 +57,29 @@ import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 
 final class CompatibleCollectionArrayReader {
-  static final int READ_NONE = 0;
   static final int READ_LIST_TO_ARRAY = 1;
   static final int READ_ARRAY_TO_LIST = 2;
 
+  static final class ReadAction {
+    final int mode;
+    final int arrayTypeId;
+    final int elementTypeId;
+    final Class<?> targetType;
+
+    private ReadAction(int mode, int arrayTypeId, int elementTypeId, Class<?> targetType) {
+      this.mode = mode;
+      this.arrayTypeId = arrayTypeId;
+      this.elementTypeId = elementTypeId;
+      this.targetType = targetType;
+    }
+  }
+
   private CompatibleCollectionArrayReader() {}
 
-  static int readMode(TypeResolver resolver, Descriptor descriptor) {
+  static ReadAction readAction(TypeResolver resolver, Descriptor descriptor) {
     Field field = descriptor.getField();
     if (field == null || !resolver.isCrossLanguage()) {
-      return READ_NONE;
+      return null;
     }
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, field);
     int peerListElementTypeId = listElementTypeId(descriptor.getTypeRef());
@@ -75,86 +87,50 @@ final class CompatibleCollectionArrayReader {
       int localArrayTypeId = arrayTypeId(localFieldType);
       if (localArrayTypeId != Types.UNKNOWN
           && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
-        return READ_LIST_TO_ARRAY;
+        return new ReadAction(
+            READ_LIST_TO_ARRAY, localArrayTypeId, peerListElementTypeId, field.getType());
       }
-      return READ_NONE;
+      return null;
     }
     int peerArrayTypeId = arrayTypeId(descriptor.getTypeRef());
     if (peerArrayTypeId != Types.UNKNOWN) {
       int localListElementTypeId = listElementTypeId(localFieldType);
       if (localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
-        return READ_ARRAY_TO_LIST;
+        return new ReadAction(
+            READ_ARRAY_TO_LIST, peerArrayTypeId, localListElementTypeId, field.getType());
       }
     }
-    return READ_NONE;
+    return null;
   }
 
-  static int compatibleArrayTypeId(TypeResolver resolver, Descriptor descriptor) {
-    int peerArrayTypeId = arrayTypeId(descriptor.getTypeRef());
-    if (peerArrayTypeId != Types.UNKNOWN) {
-      return peerArrayTypeId;
-    }
-    Field field = descriptor.getField();
-    return field == null ? Types.UNKNOWN : arrayTypeId(FieldTypes.buildFieldType(resolver, field));
-  }
-
-  static int compatibleElementTypeId(TypeResolver resolver, Descriptor descriptor) {
-    int peerListElementTypeId = listElementTypeId(descriptor.getTypeRef());
-    if (peerListElementTypeId != Types.UNKNOWN) {
-      return peerListElementTypeId;
-    }
-    Field field = descriptor.getField();
-    return field == null
-        ? Types.UNKNOWN
-        : listElementTypeId(FieldTypes.buildFieldType(resolver, field));
-  }
-
-  static Object read(ReadContext readContext, SerializationFieldInfo fieldInfo) {
-    Field field = fieldInfo.fieldAccessor.getField();
+  static Object read(ReadContext readContext, RefMode refMode, ReadAction action) {
     return read(
         readContext,
-        fieldInfo.refMode,
-        fieldInfo.compatibleReadMode,
-        fieldInfo.compatibleArrayTypeId,
-        fieldInfo.compatibleElementTypeId,
-        field.getType());
+        refMode,
+        action.mode,
+        action.arrayTypeId,
+        action.elementTypeId,
+        action.targetType);
   }
 
   static Object read(
       ReadContext readContext,
       RefMode refMode,
-      int compatibleReadMode,
-      int compatibleArrayTypeId,
-      int compatibleElementTypeId,
+      int readMode,
+      int arrayTypeId,
+      int elementTypeId,
       Class<?> targetType) {
     switch (refMode) {
       case NONE:
-        readContext.getRefReader().preserveRefId(-1);
-        return readNotNull(
-            readContext,
-            compatibleReadMode,
-            compatibleArrayTypeId,
-            compatibleElementTypeId,
-            targetType);
+        return readNotNull(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       case NULL_ONLY:
-        readContext.getRefReader().preserveRefId(-1);
         if (readContext.getBuffer().readByte() == Fory.NULL_FLAG) {
           return null;
         }
-        return readNotNull(
-            readContext,
-            compatibleReadMode,
-            compatibleArrayTypeId,
-            compatibleElementTypeId,
-            targetType);
+        return readNotNull(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       case TRACKING:
-        return readTracking(
-            readContext,
-            compatibleReadMode,
-            compatibleArrayTypeId,
-            compatibleElementTypeId,
-            targetType);
+        return readTracking(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       default:
         throw new IllegalStateException("Unknown refMode: " + refMode);
     }
@@ -162,20 +138,14 @@ final class CompatibleCollectionArrayReader {
 
   private static Object readTracking(
       ReadContext readContext,
-      int compatibleReadMode,
-      int compatibleArrayTypeId,
-      int compatibleElementTypeId,
+      int readMode,
+      int arrayTypeId,
+      int elementTypeId,
       Class<?> targetType) {
     RefReader refReader = readContext.getRefReader();
     int nextReadRefId = refReader.tryPreserveRefId(readContext.getBuffer());
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
-      Object value =
-          readNotNull(
-              readContext,
-              compatibleReadMode,
-              compatibleArrayTypeId,
-              compatibleElementTypeId,
-              targetType);
+      Object value = readNotNull(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       refReader.setReadRef(nextReadRefId, value);
       return value;
     }
@@ -184,24 +154,22 @@ final class CompatibleCollectionArrayReader {
 
   private static Object readNotNull(
       ReadContext readContext,
-      int compatibleReadMode,
-      int compatibleArrayTypeId,
-      int compatibleElementTypeId,
+      int readMode,
+      int arrayTypeId,
+      int elementTypeId,
       Class<?> targetType) {
-    if (compatibleReadMode == READ_LIST_TO_ARRAY) {
-      Object array =
-          readListPayloadAsPrimitiveArray(
-              readContext, compatibleArrayTypeId, compatibleElementTypeId);
+    if (readMode == READ_LIST_TO_ARRAY) {
+      Object array = readListPayloadAsPrimitiveArray(readContext, arrayTypeId, elementTypeId);
       if (array == null) {
         return null;
       }
-      return materializeTarget(array, compatibleArrayTypeId, targetType);
+      return materializeTarget(array, arrayTypeId, targetType);
     }
-    if (compatibleReadMode == READ_ARRAY_TO_LIST) {
-      Object array = readDenseArrayPayload(readContext, compatibleArrayTypeId);
-      return materializeTarget(array, compatibleArrayTypeId, targetType);
+    if (readMode == READ_ARRAY_TO_LIST) {
+      Object array = readDenseArrayPayload(readContext, arrayTypeId);
+      return materializeTarget(array, arrayTypeId, targetType);
     }
-    throw new IllegalStateException("Unexpected compatible read mode " + compatibleReadMode);
+    throw new IllegalStateException("Unexpected compatible read mode " + readMode);
   }
 
   private static int listElementTypeId(FieldTypes.FieldType fieldType) {

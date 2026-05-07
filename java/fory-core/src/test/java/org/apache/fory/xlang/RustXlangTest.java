@@ -81,7 +81,7 @@ public class RustXlangTest extends XlangTestBase {
     env.put("RUSTFLAGS", "-Awarnings");
     env.put("RUST_BACKTRACE", "1");
     env.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
-    env.put("FORY_PANIC_ON_ERROR", "1");
+    env.put("FORY_PANIC_ON_ERROR", caseName.endsWith("_error") ? "0" : "1");
     return new CommandContext(command, env, new File("../../rust"));
   }
 

@@ -51,9 +51,6 @@ interface TypeInfoOptions {
   enumProps?: { [key: string]: number };
   cases?: { [caseIndex: number]: TypeInfo };
   scalarEncoding?: ScalarEncoding;
-  compatibleReadTarget?: "array" | "list";
-  compatibleReadElementTypeId?: number;
-  rejectNullableCompatibleListPayload?: boolean;
 }
 
 /**

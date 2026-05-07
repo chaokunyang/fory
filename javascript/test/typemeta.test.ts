@@ -284,11 +284,53 @@ describe("typemeta", () => {
       values: Type.int32Array().setId(1),
     });
 
-    const bytes = writerFory.register(writerType).serialize({
+    const serializer = writerFory.register(writerType);
+    const nonNullBytes = serializer.serialize({
+      values: [1, 2, 3],
+    });
+    const result = readerFory.register(readerType).deserialize(nonNullBytes);
+    expect(Array.from(result.values as Int32Array)).toEqual([1, 2, 3]);
+
+    const nullableBytes = serializer.serialize({
       values: [1, null, 3],
     });
+    expect(() => readerFory.register(readerType).deserialize(nullableBytes)).toThrow();
+  });
 
-    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow();
+  test("rejects incompatible immediate list and dense array element fields", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const writerType = Type.struct(7215, {
+      values: Type.list(Type.string()).setId(1),
+    });
+    const readerType = Type.struct(7215, {
+      values: Type.int32Array().setId(1),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      values: ["1", "2"],
+    });
+
+    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow(/list\/array/);
+  });
+
+  test("rejects nested compatible list and dense array positions", () => {
+    const writerFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const writerType = Type.struct(7216, {
+      values: Type.list(Type.int32Array()).setId(1),
+    });
+    const readerType = Type.struct(7216, {
+      values: Type.list(Type.list(Type.int32({ encoding: "fixed" }))).setId(1),
+    });
+
+    const bytes = writerFory.register(writerType).serialize({
+      values: [new Int32Array([1, 2])],
+    });
+
+    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow(/list\/array/);
   });
 
   test("keeps compatible named schema evolution working when field count differs", () => {

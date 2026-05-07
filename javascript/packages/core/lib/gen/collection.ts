@@ -25,6 +25,7 @@ import { TypeId, RefFlags, Serializer } from "../type";
 import { Scope } from "./scope";
 import { AnyHelper } from "./any";
 import { ReadContext, WriteContext } from "../context";
+import { getCompatibleCollectionArrayReadAction } from "../compatibleCollectionArrayRead";
 
 export const CollectionFlags = {
   /** Whether track elements ref. */
@@ -39,6 +40,56 @@ export const CollectionFlags = {
   /** Whether collection elements type different. */
   SAME_TYPE: 0b1000,
 };
+
+function compatibleArrayCollectionExpr(elementTypeId: number, len: string): string {
+  switch (elementTypeId) {
+    case TypeId.BOOL:
+      return `new external.BoolArray(${len})`;
+    case TypeId.INT8:
+      return `new Int8Array(${len})`;
+    case TypeId.INT16:
+      return `new Int16Array(${len})`;
+    case TypeId.INT32:
+      return `new Int32Array(${len})`;
+    case TypeId.INT64:
+      return `new BigInt64Array(${len})`;
+    case TypeId.UINT8:
+      return `new Uint8Array(${len})`;
+    case TypeId.UINT16:
+      return `new Uint16Array(${len})`;
+    case TypeId.UINT32:
+      return `new Uint32Array(${len})`;
+    case TypeId.UINT64:
+      return `new BigUint64Array(${len})`;
+    case TypeId.FLOAT16:
+      return `external.createFloat16Array(${len})`;
+    case TypeId.BFLOAT16:
+      return `new external.BFloat16Array(${len})`;
+    case TypeId.FLOAT32:
+      return `new Float32Array(${len})`;
+    case TypeId.FLOAT64:
+      return `new Float64Array(${len})`;
+    default:
+      return `new Array(${len})`;
+  }
+}
+
+function compatibleArrayPutAccessor(
+  elementTypeId: number,
+  result: string,
+  item: string,
+  index: string,
+): string {
+  switch (elementTypeId) {
+    case TypeId.BOOL:
+    case TypeId.BFLOAT16:
+      return `${result}.setValue(${index}, ${item})`;
+    case TypeId.FLOAT16:
+      return `typeof ${result}.setValue === "function" ? ${result}.setValue(${index}, ${item}) : ${result}[${index}] = ${item}`;
+    default:
+      return `${result}[${index}] = ${item}`;
+  }
+}
 
 class CollectionAnySerializer {
   constructor(
@@ -275,9 +326,9 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     return this.genericTypeDescriptin()?.typeId === TypeId.UNKNOWN;
   }
 
-  abstract newCollection(lenAccessor: string): string;
+    abstract newCollection(lenAccessor: string): string;
 
-  abstract putAccessor(result: string, item: string, index: string): string;
+    abstract putAccessor(result: string, item: string, index: string): string;
 
   abstract sizeProp(): string;
 
@@ -370,7 +421,15 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const elemSerializer = this.scope.uniqueName("elemSerializer");
     const anyHelper = this.builder.getExternal(AnyHelper.name);
     const readContextName = this.builder.getReadContextName();
-    const rejectCompatiblePayload = this.typeInfo.options?.rejectNullableCompatibleListPayload
+    const compatibleReadAction = getCompatibleCollectionArrayReadAction(this.typeInfo);
+    const compatibleListToArray = compatibleReadAction?.target === "array";
+    const newCollection = compatibleListToArray
+      ? compatibleArrayCollectionExpr(compatibleReadAction!.elementTypeId, len)
+      : this.newCollection(len);
+    const putAccessor = (item: string, index: string) => compatibleListToArray
+      ? compatibleArrayPutAccessor(compatibleReadAction!.elementTypeId, result, item, index)
+      : this.putAccessor(result, item, index);
+    const rejectCompatiblePayload = compatibleListToArray
       ? `
                 if (${flags} & (${CollectionFlags.HAS_NULL} | ${CollectionFlags.TRACKING_REF})) {
                     throw new Error("compatible list-to-array field cannot read nullable or ref-tracked elements");
@@ -393,7 +452,7 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     return `
             const ${len} = ${this.builder.reader.readVarUint32Small7()};
             ${this.builder.getReadContextName()}.checkCollectionSize(${len});
-            const ${result} = ${this.newCollection(len)};
+            const ${result} = ${newCollection};
             ${this.maybeReference(result, refState)}
             if (${len} > 0) {
                 const ${flags} = ${this.builder.reader.readUint8()};
@@ -410,31 +469,31 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                             case ${RefFlags.RefValueFlag}:
                                 if (${elemSerializer}) {
                                     ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
-                                    ${this.putAccessor(result, `${elemSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag})`, idx)}
+                                    ${putAccessor(`${elemSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag})`, idx)}
                                     ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
                                 } else {
-                                    ${readInnerElement((x: any) => `${this.putAccessor(result, x, idx)}`, `${refFlag} === ${RefFlags.RefValueFlag}`)}
+                                    ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, `${refFlag} === ${RefFlags.RefValueFlag}`)}
                                 }
                                 break;
                             case ${RefFlags.RefFlag}:
-                                ${this.putAccessor(result, this.builder.referenceResolver.getReadRef(this.builder.reader.readVarUInt32()), idx)}
+                                ${putAccessor(this.builder.referenceResolver.getReadRef(this.builder.reader.readVarUInt32()), idx)}
                                 break;
                             case ${RefFlags.NullFlag}:
-                                ${this.putAccessor(result, "null", idx)}
+                                ${putAccessor("null", idx)}
                                 break;
                         }
                     }
                 } else if (${flags} & ${CollectionFlags.HAS_NULL}) {
                     for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
                         if (${this.builder.reader.readInt8()} == ${RefFlags.NullFlag}) {
-                            ${this.putAccessor(result, "null", idx)}
+                            ${putAccessor("null", idx)}
                         } else {
                             if (${elemSerializer}) {
                                 ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
-                                ${this.putAccessor(result, `${elemSerializer}.read(false)`, idx)}
+                                ${putAccessor(`${elemSerializer}.read(false)`, idx)}
                                 ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
                             } else {
-                                ${readInnerElement((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
+                                ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, "false")}
                             }
                         }
                     }
@@ -442,10 +501,10 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                     for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {
                         if (${elemSerializer}) {
                             ${innerIsLeaf ? "" : `${readContextName}.incReadDepth();`}
-                            ${this.putAccessor(result, `${elemSerializer}.read(false)`, idx)}
+                            ${putAccessor(`${elemSerializer}.read(false)`, idx)}
                             ${innerIsLeaf ? "" : `${readContextName}.decReadDepth();`}
                         } else {
-                            ${readInnerElement((x: any) => `${this.putAccessor(result, x, idx)}`, "false")}
+                            ${readInnerElement((x: any) => `${putAccessor(x, idx)}`, "false")}
                         }
                     }
                 }

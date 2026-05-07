@@ -1330,6 +1330,7 @@ private func readUIntArrayPayload(_ context: ReadContext) throws -> [UInt] {
     return values
 }
 
+@inline(never)
 private func readCompatiblePackedArrayField<ElementCodec: FieldCodec>(
     _ context: ReadContext,
     refMode: RefMode,
@@ -1572,59 +1573,6 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
     _ context: ReadContext,
     elementCodec _: ElementCodec.Type
 ) throws -> [ElementCodec.Value] {
-    try readCollectionPayload(
-        context,
-        elementCodec: ElementCodec.self,
-        rejectNullElements: false,
-        remoteElementTypeID: nil
-    )
-}
-
-private func readListPayloadAsArray<ElementCodec: FieldCodec>(
-    _ context: ReadContext,
-    refMode: RefMode,
-    elementCodec _: ElementCodec.Type,
-    remoteElementTypeID: UInt32
-) throws -> [ElementCodec.Value] {
-    switch refMode {
-    case .none:
-        return try readCollectionPayload(
-            context,
-            elementCodec: ElementCodec.self,
-            rejectNullElements: true,
-            remoteElementTypeID: remoteElementTypeID
-        )
-    case .nullOnly, .tracking:
-        let rawFlag = try context.buffer.readInt8()
-        guard rawFlag != RefFlag.null.rawValue else {
-            return []
-        }
-        if rawFlag == RefFlag.ref.rawValue {
-            let refID = try context.buffer.readVarUInt32()
-            return try context.refReader.readRef(refID, as: [ElementCodec.Value].self)
-        }
-        let reservedRefID = (rawFlag == RefFlag.refValue.rawValue && context.trackRef)
-            ? context.refReader.reserveRefID()
-            : nil
-        let value = try readCollectionPayload(
-            context,
-            elementCodec: ElementCodec.self,
-            rejectNullElements: true,
-            remoteElementTypeID: remoteElementTypeID
-        )
-        if let reservedRefID {
-            context.refReader.storeRef(value, at: reservedRefID)
-        }
-        return value
-    }
-}
-
-private func readCollectionPayload<ElementCodec: FieldCodec>(
-    _ context: ReadContext,
-    elementCodec _: ElementCodec.Type,
-    rejectNullElements: Bool,
-    remoteElementTypeID: UInt32?
-) throws -> [ElementCodec.Value] {
     let buffer = context.buffer
     let length = Int(try buffer.readVarUInt32())
     try context.ensureCollectionLength(length, label: "array")
@@ -1639,9 +1587,6 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
     // and then serialize another local payload. DO NOT REMOVE this comment.
     let trackRef = (header & CollectionHeader.trackingRef) != 0
     let hasNull = (header & CollectionHeader.hasNull) != 0
-    if rejectNullElements && hasNull {
-        throw ForyError.invalidData("compatible list-to-array field cannot read nullable elements")
-    }
     let declared = (header & CollectionHeader.declaredElementType) != 0
     let sameType = (header & CollectionHeader.sameType) != 0
 
@@ -1649,9 +1594,6 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
     result.reserveCapacity(length)
 
     if !sameType {
-        if remoteElementTypeID != nil {
-            throw ForyError.invalidData("compatible list-to-array field requires same-type elements")
-        }
         let refMode = RefMode.from(nullable: hasNull, trackRef: trackRef)
         for _ in 0..<length {
             result.append(try ElementCodec.read(context, refMode: refMode, readTypeInfo: true))
@@ -1659,17 +1601,7 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
         return result
     }
 
-    if remoteElementTypeID != nil && trackRef {
-        throw ForyError.invalidData("compatible list-to-array field cannot read ref-tracked elements")
-    }
-    let elementTypeInfo: TypeInfo?
-    if declared {
-        elementTypeInfo = nil
-    } else if let remoteElementTypeID, let typeID = TypeId(rawValue: remoteElementTypeID) {
-        elementTypeInfo = try context.readStaticTypeInfo(typeID)
-    } else {
-        elementTypeInfo = try ElementCodec.readTypeInfo(context)
-    }
+    let elementTypeInfo = declared ? nil : try ElementCodec.readTypeInfo(context)
     return try ElementCodec.withTypeInfo(elementTypeInfo, context) {
         if trackRef {
             for _ in 0..<length {
@@ -1681,23 +1613,102 @@ private func readCollectionPayload<ElementCodec: FieldCodec>(
                 if refFlag == RefFlag.null.rawValue {
                     result.append(ElementCodec.defaultValue)
                 } else if refFlag == RefFlag.notNullValue.rawValue {
-                    result.append(try readCompatibleElementPayload(
-                        context,
-                        elementCodec: ElementCodec.self,
-                        remoteElementTypeID: remoteElementTypeID
-                    ))
+                    result.append(try ElementCodec.readPayload(context))
                 } else {
                     throw ForyError.refError("invalid nullability flag \(refFlag)")
                 }
             }
         } else {
             for _ in 0..<length {
-                result.append(try readCompatibleElementPayload(
-                    context,
-                    elementCodec: ElementCodec.self,
-                    remoteElementTypeID: remoteElementTypeID
-                ))
+                result.append(try ElementCodec.readPayload(context))
             }
+        }
+        return result
+    }
+}
+
+@inline(never)
+private func readListPayloadAsArray<ElementCodec: FieldCodec>(
+    _ context: ReadContext,
+    refMode: RefMode,
+    elementCodec _: ElementCodec.Type,
+    remoteElementTypeID: UInt32
+) throws -> [ElementCodec.Value] {
+    switch refMode {
+    case .none:
+        return try readListPayloadAsArrayPayload(
+            context,
+            elementCodec: ElementCodec.self,
+            remoteElementTypeID: remoteElementTypeID
+        )
+    case .nullOnly, .tracking:
+        let rawFlag = try context.buffer.readInt8()
+        guard rawFlag != RefFlag.null.rawValue else {
+            return []
+        }
+        if rawFlag == RefFlag.ref.rawValue {
+            let refID = try context.buffer.readVarUInt32()
+            return try context.refReader.readRef(refID, as: [ElementCodec.Value].self)
+        }
+        let reservedRefID = (rawFlag == RefFlag.refValue.rawValue && context.trackRef)
+            ? context.refReader.reserveRefID()
+            : nil
+        let value = try readListPayloadAsArrayPayload(
+            context,
+            elementCodec: ElementCodec.self,
+            remoteElementTypeID: remoteElementTypeID
+        )
+        if let reservedRefID {
+            context.refReader.storeRef(value, at: reservedRefID)
+        }
+        return value
+    }
+}
+
+private func readListPayloadAsArrayPayload<ElementCodec: FieldCodec>(
+    _ context: ReadContext,
+    elementCodec _: ElementCodec.Type,
+    remoteElementTypeID: UInt32
+) throws -> [ElementCodec.Value] {
+    let buffer = context.buffer
+    let length = Int(try buffer.readVarUInt32())
+    try context.ensureCollectionLength(length, label: "array")
+    if length == 0 {
+        return []
+    }
+
+    let header = try buffer.readUInt8()
+    let trackRef = (header & CollectionHeader.trackingRef) != 0
+    let hasNull = (header & CollectionHeader.hasNull) != 0
+    if hasNull {
+        throw ForyError.invalidData("compatible list-to-array field cannot read nullable elements")
+    }
+    let declared = (header & CollectionHeader.declaredElementType) != 0
+    let sameType = (header & CollectionHeader.sameType) != 0
+
+    var result: [ElementCodec.Value] = []
+    result.reserveCapacity(length)
+
+    if !sameType {
+        throw ForyError.invalidData("compatible list-to-array field requires same-type elements")
+    }
+
+    if trackRef {
+        throw ForyError.invalidData("compatible list-to-array field cannot read ref-tracked elements")
+    }
+    let elementTypeInfo: TypeInfo?
+    if declared {
+        elementTypeInfo = nil
+    } else {
+        throw ForyError.invalidData("compatible list-to-array field requires declared elements")
+    }
+    return try ElementCodec.withTypeInfo(elementTypeInfo, context) {
+        for _ in 0..<length {
+            result.append(try readCompatibleElementPayload(
+                context,
+                elementCodec: ElementCodec.self,
+                remoteElementTypeID: remoteElementTypeID
+            ))
         }
         return result
     }

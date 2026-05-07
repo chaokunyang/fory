@@ -137,7 +137,11 @@ public final class FieldInfo implements Serializable {
             .build();
       }
       if (localFieldType != null && hasListArrayShapeMismatch(fieldType, localFieldType)) {
-        return builder.field(null).build();
+        throw new IllegalArgumentException(
+            StringUtils.format(
+                "Unsupported nested list/array compatible field mismatch for field "
+                    + "{}.{}: peer={}, local={}",
+                definedClass, fieldName, fieldType, localFieldType));
       }
       if (remoteNullable == descriptor.isNullable()
           && remoteTrackingRef == descriptor.isTrackingRef()
@@ -220,7 +224,11 @@ public final class FieldInfo implements Serializable {
     if ((peerList && localArray) || (peerArray && localList)) {
       return true;
     }
-    if (peerList && localList) {
+    if (peerFieldType.getTypeId() != localFieldType.getTypeId()) {
+      return false;
+    }
+    if (peerFieldType instanceof FieldTypes.CollectionFieldType
+        && localFieldType instanceof FieldTypes.CollectionFieldType) {
       return hasListArrayShapeMismatch(
           ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
           ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
@@ -231,6 +239,12 @@ public final class FieldInfo implements Serializable {
       FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
       return hasListArrayShapeMismatch(peerMap.getKeyType(), localMap.getKeyType())
           || hasListArrayShapeMismatch(peerMap.getValueType(), localMap.getValueType());
+    }
+    if (peerFieldType instanceof FieldTypes.ArrayFieldType
+        && localFieldType instanceof FieldTypes.ArrayFieldType) {
+      return hasListArrayShapeMismatch(
+          ((FieldTypes.ArrayFieldType) peerFieldType).getComponentType(),
+          ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
     }
     return false;
   }

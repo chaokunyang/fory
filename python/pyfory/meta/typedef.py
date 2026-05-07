@@ -634,10 +634,8 @@ def _list_array_element_type_matches(list_field_type: FieldType, array_field_typ
     array_element_type_id = _ARRAY_ELEMENT_TYPE_IDS.get(array_field_type.type_id)
     if array_element_type_id is None:
         return False
-    return (
-        list_field_type.type_id == TypeId.LIST
-        and _list_element_type_matches_array_element(list_field_type.element_type.type_id, array_element_type_id)
-        and not list_field_type.element_type.is_tracking_ref
+    return list_field_type.type_id == TypeId.LIST and _list_element_type_matches_array_element(
+        list_field_type.element_type.type_id, array_element_type_id
     )
 
 
@@ -656,6 +654,17 @@ def _is_root_list_array_pair(remote_field_type: FieldType, local_field_type: Fie
     if local_field_type.type_id == TypeId.LIST and remote_field_type.type_id in _ARRAY_TYPE_IDS:
         return _list_array_element_type_matches(local_field_type, remote_field_type)
     return False
+
+
+def _is_root_list_array_shape_pair(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
+    if local_field_type is None:
+        return False
+    return (
+        remote_field_type.type_id == TypeId.LIST
+        and local_field_type.type_id in _ARRAY_TYPE_IDS
+        or local_field_type.type_id == TypeId.LIST
+        and remote_field_type.type_id in _ARRAY_TYPE_IDS
+    )
 
 
 def _remote_list_to_local_array_allowed(remote_field_type: FieldType, local_field_type: FieldType) -> bool:
@@ -726,6 +735,14 @@ def _create_compatible_field_serializer(
     local_field_type: typing.Optional[FieldType],
     local_declared_type,
 ):
+    if _is_root_list_array_shape_pair(remote_field_type, local_field_type) and not _is_root_list_array_pair(
+        remote_field_type,
+        local_field_type,
+    ):
+        from pyfory.error import TypeNotCompatibleError
+
+        raise TypeNotCompatibleError(f"Field {field_name!r} has unsupported list/array schema mismatch")
+
     if _is_root_list_array_pair(remote_field_type, local_field_type):
         from pyfory.serializer import (
             CompatibleArrayToListFieldSerializer,

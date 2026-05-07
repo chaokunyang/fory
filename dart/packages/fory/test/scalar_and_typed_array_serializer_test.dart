@@ -104,6 +104,22 @@ class CompatibleStringListEnvelope {
   List<String> values = <String>[];
 }
 
+@ForyStruct()
+class CompatibleNestedArrayListEnvelope {
+  CompatibleNestedArrayListEnvelope();
+
+  @ListField(element: ArrayType(element: Int32Type()))
+  List<Int32List> values = <Int32List>[];
+}
+
+@ForyStruct()
+class CompatibleNestedListEnvelope {
+  CompatibleNestedListEnvelope();
+
+  @ListField(element: ListType(element: Int32Type(encoding: Encoding.fixed)))
+  List<List<int>> values = <List<int>>[];
+}
+
 void _registerScalarTypes(Fory fory) {
   ScalarAndTypedArraySerializerTestFory.register(
     fory,
@@ -597,17 +613,23 @@ void main() {
         typeName: 'CompatibleNullableListArrayEnvelope',
       );
 
-      final bytes = writer.serialize(
+      final nonNullBytes = writer.serialize(
+        CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
+      );
+      final decoded = reader.deserialize<CompatibleArrayEnvelope>(nonNullBytes);
+      expect(decoded.values, orderedEquals(<int>[1, 2, 3]));
+
+      final nullableBytes = writer.serialize(
         CompatibleNullableListEnvelope()..values = <int?>[1, null, 3],
       );
 
       expect(
-        () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
+        () => reader.deserialize<CompatibleArrayEnvelope>(nullableBytes),
         throwsStateError,
       );
     });
 
-    test('defaults incompatible compatible list and dense array element fields',
+    test('rejects incompatible compatible list and dense array element fields',
         () {
       final writer = Fory();
       final reader = Fory();
@@ -627,9 +649,39 @@ void main() {
       final bytes = writer.serialize(
         CompatibleStringListEnvelope()..values = <String>['1', '2'],
       );
-      final decoded = reader.deserialize<CompatibleArrayEnvelope>(bytes);
+      expect(
+        () => reader.deserialize<CompatibleArrayEnvelope>(bytes),
+        throwsStateError,
+      );
+    });
 
-      expect(decoded.values, isEmpty);
+    test('rejects nested compatible list and dense array field positions', () {
+      final writer = Fory();
+      final reader = Fory();
+      ScalarAndTypedArraySerializerTestFory.register(
+        writer,
+        CompatibleNestedArrayListEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleNestedListArrayEnvelope',
+      );
+      ScalarAndTypedArraySerializerTestFory.register(
+        reader,
+        CompatibleNestedListEnvelope,
+        namespace: 'test',
+        typeName: 'CompatibleNestedListArrayEnvelope',
+      );
+
+      final bytes = writer.serialize(
+        CompatibleNestedArrayListEnvelope()
+          ..values = <Int32List>[
+            Int32List.fromList(<int>[1, 2])
+          ],
+      );
+
+      expect(
+        () => reader.deserialize<CompatibleNestedListEnvelope>(bytes),
+        throwsStateError,
+      );
     });
 
     test('enforces maxBinarySize on write and read', () {

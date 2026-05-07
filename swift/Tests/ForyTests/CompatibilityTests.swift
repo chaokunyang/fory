@@ -150,6 +150,22 @@ private struct CompatibleNullableListFieldV1: Equatable {
 }
 
 @ForyStruct
+private struct CompatibleNestedListArrayFieldV1: Equatable {
+    @ListField(element: .list(element: .int32(encoding: .fixed)))
+    var values: [[Int32]] = []
+
+    var keep: Int32 = 0
+}
+
+@ForyStruct
+private struct CompatibleNestedArrayListFieldV2: Equatable {
+    @ListField(element: .array(element: .int32()))
+    var values: [[Int32]] = []
+
+    var keep: Int32 = 0
+}
+
+@ForyStruct
 private struct SchemaVersionV1: Equatable {
     var id: Int32 = 0
     var name: String = ""
@@ -433,10 +449,29 @@ func compatibleReadRejectsNullableListElementsForArrayField() throws {
     let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     reader.register(CompatibleArrayFieldV2.self, id: 9923)
 
-    let bytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
+    let bytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, 2, 3], extra: 9))
+    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
+    #expect(decoded.values == [1, 2, 3])
+
+    let nullableBytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
     #expect(throws: ForyError.invalidData("compatible list-to-array field cannot read nullable elements")) {
-        let _: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
+        let _: CompatibleArrayFieldV2 = try reader.deserialize(nullableBytes)
     }
+}
+
+@Test
+func compatibleReadSkipsNestedListArrayFieldPair() throws {
+    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    writer.register(CompatibleNestedListArrayFieldV1.self, id: 9926)
+
+    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    reader.register(CompatibleNestedArrayListFieldV2.self, id: 9926)
+
+    let decoded: CompatibleNestedArrayListFieldV2 = try reader.deserialize(
+        try writer.serialize(CompatibleNestedListArrayFieldV1(values: [[1, 2]], keep: 7))
+    )
+    #expect(decoded.values.isEmpty)
+    #expect(decoded.keep == 7)
 }
 
 @Test

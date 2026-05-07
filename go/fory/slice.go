@@ -205,6 +205,25 @@ func (s *sliceSerializer) writeDataWithGenerics(ctx *WriteContext, value reflect
 
 	// Serialize elements with ref tracking or nulls handling
 	declaredGenericDispatch := hasGenerics && serializerNeedsGenericDispatch(s.elemSerializer)
+	if !trackRefs && !hasNull {
+		if declaredGenericDispatch {
+			for i := 0; i < length; i++ {
+				s.elemSerializer.Write(ctx, RefModeNone, false, true, value.Index(i))
+				if ctx.HasError() {
+					return
+				}
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				s.elemSerializer.WriteData(ctx, value.Index(i))
+				if ctx.HasError() {
+					return
+				}
+			}
+		}
+		return
+	}
+
 	for i := 0; i < length; i++ {
 		elem := value.Index(i)
 
@@ -323,6 +342,25 @@ func (s *sliceSerializer) ReadData(ctx *ReadContext, value reflect.Value) {
 	elemRefMode := RefModeNone
 	if trackRefs {
 		elemRefMode = RefModeTracking
+	}
+
+	if !trackRefs && !hasNull {
+		if declaredGenericDispatch {
+			for i := 0; i < length; i++ {
+				s.elemSerializer.Read(ctx, RefModeNone, false, true, value.Index(i))
+				if ctx.HasError() {
+					return
+				}
+			}
+		} else {
+			for i := 0; i < length; i++ {
+				s.elemSerializer.ReadData(ctx, value.Index(i))
+				if ctx.HasError() {
+					return
+				}
+			}
+		}
+		return
 	}
 
 	// Slow path: general deserialization with ref tracking or nulls

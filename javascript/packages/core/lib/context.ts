@@ -27,6 +27,7 @@ import {
 import { InnerFieldInfo, TypeMeta } from "./meta/TypeMeta";
 import { Type, TypeInfo } from "./typeInfo";
 import { Config, RefFlags, Serializer, TypeId } from "./type";
+import { markCompatibleCollectionArrayRead } from "./compatibleCollectionArrayRead";
 
 type TypeResolverLike = {
   config: Config;
@@ -175,27 +176,25 @@ function typeInfoForDenseArrayElementTypeId(typeId: number): TypeInfo {
 }
 
 function compatibleListToArrayTypeInfo(
-  remoteElementTypeId: number,
+  remoteElement: InnerFieldInfo,
   targetElementTypeId: number,
 ): TypeInfo {
-  const typeInfo = Type.list(typeInfoForElementTypeId(remoteElementTypeId));
-  typeInfo.options = {
-    ...typeInfo.options,
-    compatibleReadTarget: "array",
-    compatibleReadElementTypeId: targetElementTypeId,
-    rejectNullableCompatibleListPayload: true,
-  };
-  return typeInfo;
+  const elementTypeInfo = typeInfoForElementTypeId(remoteElement.typeId)
+    .setNullable(remoteElement.nullable === true)
+    .setTrackingRef(remoteElement.trackingRef === true);
+  const typeInfo = Type.list(elementTypeInfo);
+  return markCompatibleCollectionArrayRead(typeInfo, {
+    target: "array",
+    elementTypeId: targetElementTypeId,
+  });
 }
 
 function compatibleArrayToListTypeInfo(elementTypeId: number): TypeInfo {
   const typeInfo = typeInfoForDenseArrayElementTypeId(elementTypeId);
-  typeInfo.options = {
-    ...typeInfo.options,
-    compatibleReadTarget: "list",
-    compatibleReadElementTypeId: elementTypeId,
-  };
-  return typeInfo;
+  return markCompatibleCollectionArrayRead(typeInfo, {
+    target: "list",
+    elementTypeId,
+  });
 }
 
 class MetaStringBytes {
@@ -667,6 +666,9 @@ export class ReadContext {
         return compatible;
       }
     }
+    if (this.hasUnsupportedListArrayMismatch(fieldInfo, fallbackTypeInfo, topLevel)) {
+      throw new Error("unsupported compatible list/array schema mismatch");
+    }
     switch (fieldInfo.typeId) {
       case TypeId.MAP:
         return Type.map(
@@ -741,7 +743,7 @@ export class ReadContext {
       if (compatibleArrayElementTypeId(remoteElement.typeId) !== localElement) {
         return undefined;
       }
-      return compatibleListToArrayTypeInfo(remoteElement.typeId, localElement);
+      return compatibleListToArrayTypeInfo(remoteElement, localElement);
     }
     const remoteArrayElement = denseArrayElementTypeId(remote.typeId);
     if (
@@ -753,6 +755,58 @@ export class ReadContext {
       return compatibleArrayToListTypeInfo(remoteArrayElement);
     }
     return undefined;
+  }
+
+  private hasUnsupportedListArrayMismatch(
+    remote: InnerFieldInfo,
+    local: TypeInfo | undefined,
+    topLevel: boolean,
+  ): boolean {
+    if (!local) {
+      return false;
+    }
+    if (this.isListArrayRootPair(remote, local)) {
+      return !(topLevel && this.compatibleFieldTypeInfo(remote, local));
+    }
+    if (remote.typeId !== local.typeId) {
+      return false;
+    }
+    switch (remote.typeId) {
+      case TypeId.MAP:
+        return (
+          this.hasUnsupportedListArrayMismatch(
+            remote.options!.key!,
+            local.options?.key,
+            false,
+          )
+          || this.hasUnsupportedListArrayMismatch(
+            remote.options!.value!,
+            local.options?.value,
+            false,
+          )
+        );
+      case TypeId.LIST:
+        return this.hasUnsupportedListArrayMismatch(
+          remote.options!.inner!,
+          local.options?.inner,
+          false,
+        );
+      case TypeId.SET:
+        return this.hasUnsupportedListArrayMismatch(
+          remote.options!.key!,
+          local.options?.key,
+          false,
+        );
+      default:
+        return false;
+    }
+  }
+
+  private isListArrayRootPair(remote: InnerFieldInfo, local: TypeInfo): boolean {
+    return (
+      (remote.typeId === TypeId.LIST && denseArrayElementTypeId(local.typeId) !== undefined)
+      || (denseArrayElementTypeId(remote.typeId) !== undefined && local.typeId === TypeId.LIST)
+    );
   }
 
   genSerializerByTypeMetaRuntime(typeMeta: TypeMeta, original?: Serializer) {

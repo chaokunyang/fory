@@ -24,6 +24,7 @@ import { TypeInfo } from "../typeInfo";
 import { CodegenRegistry } from "./router";
 import { BaseSerializerGenerator, SerializerGenerator } from "./serializer";
 import { TypeMeta } from "../meta/TypeMeta";
+import { getCompatibleCollectionArrayReadAction } from "../compatibleCollectionArrayRead";
 
 /**
  * Returns true when a field's read cannot recurse and needs no depth tracking.
@@ -46,52 +47,11 @@ function isDepthFreeField(typeInfo: TypeInfo): boolean {
   return false;
 }
 
-function denseArrayConstructor(elementTypeId: number | undefined): string | undefined {
-  switch (elementTypeId) {
-    case TypeId.INT8:
-      return "Int8Array";
-    case TypeId.INT16:
-      return "Int16Array";
-    case TypeId.INT32:
-      return "Int32Array";
-    case TypeId.INT64:
-      return "BigInt64Array";
-    case TypeId.UINT8:
-      return "Uint8Array";
-    case TypeId.UINT16:
-      return "Uint16Array";
-    case TypeId.UINT32:
-      return "Uint32Array";
-    case TypeId.UINT64:
-      return "BigUint64Array";
-    case TypeId.FLOAT32:
-      return "Float32Array";
-    case TypeId.FLOAT64:
-      return "Float64Array";
-    default:
-      return undefined;
-  }
-}
-
-function compatibleDenseArrayTargetExpr(elementTypeId: number | undefined, expr: string): string {
-  switch (elementTypeId) {
-    case TypeId.BOOL:
-      return `new external.BoolArray(${expr})`;
-    case TypeId.FLOAT16:
-      return `external.createFloat16Array(${expr})`;
-    case TypeId.BFLOAT16:
-      return `new external.BFloat16Array(${expr})`;
-    default: {
-      const creator = denseArrayConstructor(elementTypeId);
-      return creator ? `new ${creator}(${expr})` : expr;
-    }
-  }
-}
-
 function compatibleReadTargetExpr(typeInfo: TypeInfo, expr: string): string {
-  switch (typeInfo.options?.compatibleReadTarget) {
+  const action = getCompatibleCollectionArrayReadAction(typeInfo);
+  switch (action?.target) {
     case "array":
-      return compatibleDenseArrayTargetExpr(typeInfo.options.compatibleReadElementTypeId, expr);
+      return expr;
     case "list":
       return `Array.from(${expr})`;
     default:

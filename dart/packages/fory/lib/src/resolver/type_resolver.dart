@@ -277,7 +277,7 @@ final class TypeResolver {
     );
     final structSerializer = registrationKind != RegistrationKind.struct
         ? null
-        : newStructSerializer(
+        : StructSerializer(
             payloadSerializer,
             typeDef,
             this,

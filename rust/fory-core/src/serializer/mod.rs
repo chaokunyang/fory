@@ -23,6 +23,7 @@ mod box_;
 #[doc(hidden)]
 pub mod codec;
 pub mod collection;
+mod compatible_collection_array;
 mod datetime;
 pub mod enum_;
 mod heap;

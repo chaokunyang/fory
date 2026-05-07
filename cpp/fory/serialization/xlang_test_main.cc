@@ -311,7 +311,7 @@ struct ReducedPrecisionFloatStruct {
 struct CompatibleInt32ListField {
   std::vector<int32_t> values;
   FORY_STRUCT(CompatibleInt32ListField,
-              (values, fory::F(1).list(fory::T::int32())));
+              (values, fory::F(1).list(fory::T::int32().fixed())));
 };
 
 struct CompatibleInt32ArrayField {

@@ -120,6 +120,11 @@ class NullableInt32ListPayload:
 
 
 @dataclass
+class StringListPayload:
+    payload: List[str]
+
+
+@dataclass
 class Int32ArrayPayload:
     payload: pyfory.Array[pyfory.Int32]
 
@@ -547,8 +552,22 @@ def test_compatible_nullable_int32_list_payload_rejects_array_read():
     _register_int32_payload(writer, NullableInt32ListPayload)
     _register_int32_payload(reader, Int32ArrayPayload)
 
+    decoded = reader.deserialize(writer.serialize(NullableInt32ListPayload(payload=[1, 2, 3])))
+    assert isinstance(decoded, Int32ArrayPayload)
+    assert list(decoded.payload) == [1, 2, 3]
+
     with pytest.raises(TypeNotCompatibleError):
         reader.deserialize(writer.serialize(NullableInt32ListPayload(payload=[1, None, 3])))
+
+
+def test_compatible_incompatible_list_array_elements_reject():
+    writer = Fory(xlang=True, compatible=True)
+    reader = Fory(xlang=True, compatible=True)
+    _register_int32_payload(writer, StringListPayload)
+    _register_int32_payload(reader, Int32ArrayPayload)
+
+    with pytest.raises(TypeNotCompatibleError):
+        reader.deserialize(writer.serialize(StringListPayload(payload=["1", "2"])))
 
 
 def test_compatible_nested_list_array_mismatch_not_assigned():

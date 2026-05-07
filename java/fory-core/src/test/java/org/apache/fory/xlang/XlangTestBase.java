@@ -50,6 +50,7 @@ import org.apache.fory.annotation.UInt64Type;
 import org.apache.fory.annotation.UInt8Type;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.Float16List;
+import org.apache.fory.collection.Int32List;
 import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.context.ReadContext;
@@ -1717,7 +1718,8 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   static class XlangCompatibleInt32ListField {
     @ForyField(id = 1)
-    List<Integer> values;
+    @Int32Type(encoding = Int32Encoding.FIXED)
+    Int32List values;
   }
 
   @Data
@@ -1734,7 +1736,7 @@ public abstract class XlangTestBase extends ForyTestBase {
 
   protected static XlangCompatibleInt32ListField newCompatibleInt32ListField(int... values) {
     XlangCompatibleInt32ListField value = new XlangCompatibleInt32ListField();
-    value.values = Arrays.stream(values).boxed().collect(Collectors.toList());
+    value.values = new Int32List(values);
     return value;
   }
 
@@ -1827,6 +1829,18 @@ public abstract class XlangTestBase extends ForyTestBase {
     XlangCompatibleInt32ListField emptyListResult =
         (XlangCompatibleInt32ListField) listFory.deserialize(readBuffer(ctx.dataFile()));
     Assert.assertEquals(emptyListResult.values, Collections.emptyList());
+
+    XlangCompatibleNullableInt32ListField nullableListWithoutNulls =
+        newCompatibleNullableInt32ListField(1, 2, 3);
+    buffer = MemoryBuffer.newHeapBuffer(256);
+    nullableListFory.serialize(buffer, nullableListWithoutNulls);
+    ctx =
+        prepareExecution(
+            "test_list_array_compatible_list_to_array", buffer.getBytes(0, buffer.writerIndex()));
+    runPeer(ctx);
+    XlangCompatibleInt32ArrayField nullableListArrayResult =
+        (XlangCompatibleInt32ArrayField) arrayFory.deserialize(readBuffer(ctx.dataFile()));
+    assertIntArrayEquals(nullableListArrayResult.values, 1, 2, 3);
 
     XlangCompatibleNullableInt32ListField nullableListValue =
         newCompatibleNullableInt32ListField(1, null, 3);

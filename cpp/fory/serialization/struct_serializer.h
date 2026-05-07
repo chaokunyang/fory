@@ -3788,6 +3788,23 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
 
   static void write(const T &obj, WriteContext &ctx, RefMode ref_mode,
                     bool write_type, bool has_generics = false) {
+    const TypeInfo *type_info = nullptr;
+    if (write_type) {
+      auto type_info_res = ctx.type_resolver().template get_type_info<T>();
+      if (FORY_PREDICT_FALSE(!type_info_res.ok())) {
+        ctx.set_error(std::move(type_info_res).error());
+        return;
+      }
+      type_info = type_info_res.value();
+    }
+    write_with_type_info(obj, ctx, ref_mode, write_type, type_info,
+                         has_generics);
+  }
+
+  static void write_with_type_info(const T &obj, WriteContext &ctx,
+                                   RefMode ref_mode, bool write_type,
+                                   const TypeInfo *type_info,
+                                   bool has_generics = false) {
     // Handle ref flag based on mode
     if (ref_mode == RefMode::Tracking && ctx.track_ref()) {
       // In Tracking mode, write REF_VALUE_FLAG (0) and reserve a ref_id slot
@@ -3799,13 +3816,10 @@ struct Serializer<T, std::enable_if_t<is_fory_serializable_v<T>>> {
     }
 
     if (write_type) {
-      // Direct lookup using compile-time type_index<T>() - O(1) hash lookup
-      auto type_info_res = ctx.type_resolver().template get_type_info<T>();
-      if (FORY_PREDICT_FALSE(!type_info_res.ok())) {
-        ctx.set_error(std::move(type_info_res).error());
+      if (FORY_PREDICT_FALSE(type_info == nullptr)) {
+        ctx.set_error(Error::type_error("Type not registered"));
         return;
       }
-      const TypeInfo *type_info = type_info_res.value();
       uint32_t tid = type_info->type_id;
 
       // Fast path: check if this is a simple STRUCT type (no meta needed)

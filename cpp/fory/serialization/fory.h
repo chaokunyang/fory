@@ -821,7 +821,13 @@ private:
     // TypeMeta is written inline during serialization (streaming protocol)
     const RefMode top_level_ref_mode =
         write_ctx_->track_ref() ? RefMode::Tracking : RefMode::NullOnly;
-    Serializer<T>::write(obj, *write_ctx_, top_level_ref_mode, true);
+    if constexpr (is_fory_serializable_v<T>) {
+      FORY_TRY(type_info, cached_write_root_type_info<T>());
+      Serializer<T>::write_with_type_info(obj, *write_ctx_, top_level_ref_mode,
+                                          true, type_info);
+    } else {
+      Serializer<T>::write(obj, *write_ctx_, top_level_ref_mode, true);
+    }
     // Check for errors at serialization boundary
     if (FORY_PREDICT_FALSE(write_ctx_->has_error())) {
       return Unexpected(write_ctx_->take_error());
@@ -848,10 +854,25 @@ private:
     return result;
   }
 
+  template <typename T>
+  Result<const TypeInfo *, Error> cached_write_root_type_info() {
+    constexpr uint64_t ctid = type_index<T>();
+    if (write_root_type_info_ != nullptr && write_root_type_info_key_ == ctid) {
+      return write_root_type_info_;
+    }
+    FORY_TRY(type_info,
+             write_ctx_->type_resolver().template get_type_info<T>());
+    write_root_type_info_key_ = ctid;
+    write_root_type_info_ = type_info;
+    return type_info;
+  }
+
   bool finalized_;
   uint8_t precomputed_header_;
   std::optional<WriteContext> write_ctx_;
   std::optional<ReadContext> read_ctx_;
+  uint64_t write_root_type_info_key_ = 0;
+  const TypeInfo *write_root_type_info_ = nullptr;
 
   friend class ForyBuilder;
   friend class ThreadSafeFory;

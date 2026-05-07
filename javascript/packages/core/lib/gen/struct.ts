@@ -590,23 +590,25 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         if (prop === "readNoRef") {
           return (accessor: (expr: string) => string, refState: string) => {
             const result = scope.uniqueName("result");
-            return this.readTypeInfoThen(
-              changedSerializer => `
+            const changedSerializer = scope.uniqueName("changedSerializer");
+            return `
+              const ${changedSerializer} = ${hoisted}.readTypeInfo();
+              if (${changedSerializer} !== undefined) {
                 ${accessor(`${changedSerializer}.read(${refState})`)};
-              `,
-              () => `
-              ${builder.getReadContextName()}.incReadDepth();
-              let ${result} = ${hoisted}.read(${refState});
-              ${builder.getReadContextName()}.decReadDepth();
-              ${accessor(result)};
-            `,
-            );
+              } else {
+                ${builder.getReadContextName()}.incReadDepth();
+                let ${result} = ${hoisted}.read(${refState});
+                ${builder.getReadContextName()}.decReadDepth();
+                ${accessor(result)};
+              }
+            `;
           };
         }
         if (prop === "readRef") {
           return (accessor: (expr: string) => string) => {
             const refFlag = scope.uniqueName("refFlag");
             const result = scope.uniqueName("result");
+            const changedSerializer = scope.uniqueName("changedSerializer");
             return `
               const ${refFlag} = ${builder.reader.readInt8()};
               let ${result};
@@ -615,16 +617,14 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
               } else if (${refFlag} === ${RefFlags.RefFlag}) {
                 ${result} = ${builder.referenceResolver.getReadRef(builder.reader.readVarUInt32())};
               } else {
-                ${this.readTypeInfoThen(
-              changedSerializer => `
-                    ${result} = ${changedSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag});
-                  `,
-              () => `
-                ${builder.getReadContextName()}.incReadDepth();
-                ${result} = ${hoisted}.read(${refFlag} === ${RefFlags.RefValueFlag});
-                ${builder.getReadContextName()}.decReadDepth();
-              `,
-            )}
+                const ${changedSerializer} = ${hoisted}.readTypeInfo();
+                if (${changedSerializer} !== undefined) {
+                  ${result} = ${changedSerializer}.read(${refFlag} === ${RefFlags.RefValueFlag});
+                } else {
+                  ${builder.getReadContextName()}.incReadDepth();
+                  ${result} = ${hoisted}.read(${refFlag} === ${RefFlags.RefValueFlag});
+                  ${builder.getReadContextName()}.decReadDepth();
+                }
               }
               ${accessor(result)};
             `;

@@ -285,8 +285,12 @@ export default class TypeResolver {
     return this.customSerializer.get(name);
   }
 
+  generateReadSerializer(typeInfo: TypeInfo) {
+    return new Gen(this, { creator: typeInfo.options?.creator }).reGenerateSerializer(typeInfo);
+  }
+
   regenerateReadSerializer(typeInfo: TypeInfo) {
-    const serializer = new Gen(this, { creator: typeInfo.options?.creator }).reGenerateSerializer(typeInfo);
+    const serializer = this.generateReadSerializer(typeInfo);
     return this.registerSerializer(typeInfo, {
       getHash: serializer.getHash,
       read: serializer.read,

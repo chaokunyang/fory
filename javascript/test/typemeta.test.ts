@@ -128,6 +128,9 @@ describe("typemeta", () => {
         getSerializerByName: () => undefined,
         getSerializerByData: () => undefined,
         isCompatible: () => false,
+        generateReadSerializer: () => {
+          throw new Error("unused");
+        },
         regenerateReadSerializer: () => {
           throw new Error("unused");
         },
@@ -200,6 +203,69 @@ describe("typemeta", () => {
 
     expect(reader.deserialize(changedBytes)).toEqual({ value: "hello" });
     expect(reader.deserialize(localBytes)).toEqual({ value: 123 });
+  });
+
+  test("caches regenerated compatible readers for alternating nested schemas", () => {
+    const stringWriterFory = new Fory({ compatible: true });
+    const boolWriterFory = new Fory({ compatible: true });
+    const localWriterFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const stringChildType = Type.struct(7311, {
+      value: Type.string().setId(1),
+    });
+    const boolChildType = Type.struct(7311, {
+      value: Type.bool().setId(1),
+    });
+    const localChildType = Type.struct(7311, {
+      value: Type.int32().setId(1),
+    });
+    const createParentType = () => Type.struct(7312, {
+      child: Type.struct(7311).setId(1),
+    });
+
+    stringWriterFory.register(stringChildType);
+    boolWriterFory.register(boolChildType);
+    localWriterFory.register(localChildType);
+    readerFory.register(localChildType);
+
+    const stringWriter = stringWriterFory.register(createParentType());
+    const boolWriter = boolWriterFory.register(createParentType());
+    const localWriter = localWriterFory.register(createParentType());
+    const reader = readerFory.register(createParentType());
+
+    const typeResolver = (readerFory as any).typeResolver;
+    const generateReadSerializer
+      = typeResolver.generateReadSerializer.bind(typeResolver);
+    let generatedReaders = 0;
+    typeResolver.generateReadSerializer = (typeInfo: any) => {
+      generatedReaders++;
+      return generateReadSerializer(typeInfo);
+    };
+
+    const stringBytes = stringWriter.serialize({
+      child: { value: "hello" },
+    });
+    const boolBytes = boolWriter.serialize({
+      child: { value: true },
+    });
+    const localBytes = localWriter.serialize({
+      child: { value: 123 },
+    });
+
+    expect(reader.deserialize(stringBytes)).toEqual({
+      child: { value: "hello" },
+    });
+    expect(reader.deserialize(boolBytes)).toEqual({
+      child: { value: true },
+    });
+    expect(reader.deserialize(stringBytes)).toEqual({
+      child: { value: "hello" },
+    });
+    expect(reader.deserialize(localBytes)).toEqual({
+      child: { value: 123 },
+    });
+    expect(generatedReaders).toBe(2);
   });
 
   test("remaps compatible tag-id fields onto local property names during regeneration", () => {

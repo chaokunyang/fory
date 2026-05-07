@@ -76,7 +76,17 @@ def load_json(path: str) -> dict:
         return json.load(f)
 
 
+def normalize_datatype(datatype: str) -> str:
+    key = datatype.lower()
+    if key == "numericstruct":
+        return "struct"
+    if key == "numericstructlist":
+        return "structlist"
+    return key
+
+
 def datatype_title(datatype: str) -> str:
+    datatype = normalize_datatype(datatype)
     if datatype == "struct":
         return "NumericStruct"
     if datatype == "structlist":
@@ -91,6 +101,7 @@ def datatype_title(datatype: str) -> str:
 
 
 def datatype_plot_label(datatype: str) -> str:
+    datatype = normalize_datatype(datatype)
     if datatype == "struct":
         return "NumericStruct"
     if datatype == "structlist":
@@ -275,9 +286,14 @@ def write_report(
     lines.append("")
     lines.append("| Datatype | Fory | Protobuf | Msgpack |")
     lines.append("| --- | ---: | ---: | ---: |")
-    for entry in sorted(sizes, key=lambda item: item.get("dataType", "")):
-        datatype = str(entry.get("dataType", "-")).lower()
-        datatype_label = datatype_title(datatype) if datatype != "-" else "-"
+    sizes_by_datatype = {
+        normalize_datatype(str(entry.get("dataType", ""))): entry for entry in sizes
+    }
+    for datatype in DATATYPE_ORDER:
+        entry = sizes_by_datatype.get(datatype)
+        if entry is None:
+            continue
+        datatype_label = datatype_title(datatype)
         lines.append(
             "| "
             + f"{datatype_label} | "

@@ -233,6 +233,22 @@ int generatedCheckedUint16(int value) => checkedUint16(value);
 @pragma('vm:prefer-inline')
 int generatedCheckedUint32(int value) => checkedUint32(value);
 
+const int _generatedJsSafeUint64IntMax = 9007199254740991;
+const bool _generatedIsWeb = bool.fromEnvironment('dart.library.js_interop');
+
+@internal
+@pragma('vm:prefer-inline')
+Uint64 generatedCheckedUint64Int(int value) {
+  if (_generatedIsWeb && (value < 0 || value > _generatedJsSafeUint64IntMax)) {
+    throw StateError(
+      'Dart int value $value is outside the JS-safe unsigned uint64 '
+      'int field range [0, $_generatedJsSafeUint64IntMax]. Use Uint64 for '
+      'full unsigned 64-bit values on web.',
+    );
+  }
+  return Uint64(value);
+}
+
 @internal
 void writeGeneratedBoolArrayValue(WriteContext context, BoolList value) {
   final buffer = context.buffer;

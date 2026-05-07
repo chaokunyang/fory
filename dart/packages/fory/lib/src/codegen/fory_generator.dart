@@ -1956,7 +1956,7 @@ GeneratedFieldType(
         case TypeIds.uint64:
         case TypeIds.varUint64:
         case TypeIds.taggedUint64:
-          return 'Uint64($valueExpression)';
+          return 'generatedCheckedUint64Int($valueExpression)';
         default:
           return _checkedGeneratedScalarExpression(
               field.fieldType.typeId, valueExpression);

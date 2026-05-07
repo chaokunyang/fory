@@ -86,6 +86,12 @@ Charts labeled **"compatible"** show schema evolution mode with forward/backward
 <img src="docs/benchmarks/java/java_repo_deserialization_throughput.png" width="95%" alt="Java Deserialization Throughput">
 </p>
 
+**Xlang Throughput**:
+
+<p align="center">
+<img src="docs/benchmarks/java/throughput.png" width="95%">
+</p>
+
 See [Java Benchmarks](docs/benchmarks/java) for more details.
 
 ### Rust Serialization Performance

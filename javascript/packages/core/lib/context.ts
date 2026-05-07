@@ -344,7 +344,9 @@ export class WriteContext {
 
   reset() {
     this.writer.reset();
-    this.refWriter.reset();
+    if (this.typeResolver.trackingRef) {
+      this.refWriter.reset();
+    }
     this.metaStringWriter.reset();
     this.disposeTypeInfo.forEach((typeInfo) => {
       typeInfo.dynamicTypeId = -1;

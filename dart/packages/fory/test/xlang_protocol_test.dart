@@ -126,6 +126,8 @@ void main() {
         kind: RegistrationKind.builtin,
         typeId: TypeIds.struct,
         supportsRef: false,
+        needsRootRef: false,
+        usesNestedTypeDefinitions: false,
         serializer: _CacheTestSerializer(),
         structSerializer: null,
         userTypeId: null,

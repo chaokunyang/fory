@@ -18,7 +18,6 @@
  */
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/serializer/compatible_struct_metadata.dart';
 import 'package:test/test.dart';
 
 part 'unsigned_serializer_test.fory.dart';
@@ -353,24 +352,6 @@ void _expectUnsignedFieldsEqual(
   expect(actual.u64VarIntNullable, equals(expected.u64VarIntNullable));
 }
 
-int _remoteFieldTypeId(Object value, String identifier) {
-  final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(value);
-  expect(remoteTypeDef, isNotNull);
-  final field = remoteTypeDef!.fields.firstWhere(
-    (field) => field.identifier == identifier,
-  );
-  return field.fieldType.typeId;
-}
-
-bool _remoteFieldNullable(Object value, String identifier) {
-  final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(value);
-  expect(remoteTypeDef, isNotNull);
-  final field = remoteTypeDef!.fields.firstWhere(
-    (field) => field.identifier == identifier,
-  );
-  return field.fieldType.nullable;
-}
-
 void main() {
   group('unsigned generated fields', () {
     test('round trips small, threshold, midpoint, max, and null cases', () {
@@ -407,7 +388,7 @@ void main() {
       }
     });
 
-    test('compatible metadata records unsigned wire types and nullability', () {
+    test('compatible mode reads unsigned fields through remote wire types', () {
       final writer = Fory(compatible: true);
       final reader = Fory(compatible: true);
       _registerUnsignedFields(writer);
@@ -418,46 +399,6 @@ void main() {
       );
       expect(roundTrip.u8, equals(0xff));
       expect(roundTrip.extra, equals(42));
-
-      expect(_remoteFieldTypeId(roundTrip, 'u8'), equals(TypeIds.uint8));
-      expect(_remoteFieldTypeId(roundTrip, 'u16'), equals(TypeIds.uint16));
-      expect(
-        _remoteFieldTypeId(roundTrip, 'u32_var'),
-        equals(TypeIds.varUint32),
-      );
-      expect(
-          _remoteFieldTypeId(roundTrip, 'u32_fixed'), equals(TypeIds.uint32));
-      expect(
-          _remoteFieldTypeId(roundTrip, 'u64_var'), equals(TypeIds.varUint64));
-      expect(
-          _remoteFieldTypeId(roundTrip, 'u64_fixed'), equals(TypeIds.uint64));
-      expect(
-        _remoteFieldTypeId(roundTrip, 'u64_tagged'),
-        equals(TypeIds.taggedUint64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'u64_var_int'),
-        equals(TypeIds.varUint64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'u64_fixed_int'),
-        equals(TypeIds.uint64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'u64_tagged_int'),
-        equals(TypeIds.taggedUint64),
-      );
-
-      expect(_remoteFieldNullable(roundTrip, 'u8'), isFalse);
-      expect(_remoteFieldNullable(roundTrip, 'u16'), isFalse);
-      expect(_remoteFieldNullable(roundTrip, 'u8_nullable'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'u16_nullable'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'u32_var_nullable'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'u32_fixed_nullable'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'u64_var_nullable'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'u64_fixed_nullable'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'u64_tagged_nullable'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'u64_var_int_nullable'), isTrue);
     });
 
     test('rejects out-of-range annotated unsigned fields', () {

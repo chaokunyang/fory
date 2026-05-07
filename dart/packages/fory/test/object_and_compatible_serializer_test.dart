@@ -18,7 +18,6 @@
  */
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/serializer/compatible_struct_metadata.dart';
 import 'package:test/test.dart';
 
 part 'object_and_compatible_serializer_test.fory.dart';
@@ -244,13 +243,6 @@ void main() {
       expect(migrated.payload, isA<SharedLeaf>());
       expect((migrated.payload as SharedLeaf).label, equals('shared'));
       expect(identical(migrated.original, migrated.duplicate), isTrue);
-
-      final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(migrated);
-      expect(remoteTypeDef, isNotNull);
-      expect(
-        remoteTypeDef!.fields.map((field) => field.identifier),
-        containsAll(<String>['1', '2', '3', '4', '5']),
-      );
 
       final roundTripBack = writer.deserialize<CompatibleEnvelopeV1>(
         reader.serialize(migrated),

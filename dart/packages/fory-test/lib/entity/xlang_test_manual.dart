@@ -22,7 +22,6 @@ library;
 // ignore_for_file: implementation_imports, invalid_use_of_internal_member
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/serializer/serializer_support.dart';
 
 import 'xlang_test_models.dart';
 
@@ -166,43 +165,17 @@ const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
 final GeneratedStructRegistration<RefOverrideContainer>
     _refOverrideContainerForyRegistration =
     GeneratedStructRegistration<RefOverrideContainer>(
-  fieldWritersBySlot: <GeneratedStructFieldInfoWriter<RefOverrideContainer>>[
-    _writeRefOverrideContainerField0,
-    _writeRefOverrideContainerField1,
-    _writeRefOverrideContainerField2,
-  ],
   type: RefOverrideContainer,
   serializerFactory: _RefOverrideContainerForySerializer.new,
   evolving: true,
+  needsRootRef: true,
+  usesNestedTypeDefinitions: true,
   fields: _refOverrideContainerForyFieldInfo,
 );
 
-void _writeRefOverrideContainerField0(
-  WriteContext context,
-  GeneratedStructFieldInfo field,
-  RefOverrideContainer value,
-) {
-  writeGeneratedStructFieldInfoValue(context, field, value.listField);
-}
-
-void _writeRefOverrideContainerField1(
-  WriteContext context,
-  GeneratedStructFieldInfo field,
-  RefOverrideContainer value,
-) {
-  writeGeneratedStructFieldInfoValue(context, field, value.setField);
-}
-
-void _writeRefOverrideContainerField2(
-  WriteContext context,
-  GeneratedStructFieldInfo field,
-  RefOverrideContainer value,
-) {
-  writeGeneratedStructFieldInfoValue(context, field, value.mapField);
-}
-
 final class _RefOverrideContainerForySerializer
-    extends Serializer<RefOverrideContainer> {
+    extends Serializer<RefOverrideContainer>
+    implements GeneratedStructSerializer<RefOverrideContainer> {
   List<GeneratedStructFieldInfo>? _generatedFields;
 
   _RefOverrideContainerForySerializer();
@@ -223,67 +196,67 @@ final class _RefOverrideContainerForySerializer
 
   @override
   void write(WriteContext context, RefOverrideContainer value) {
-    final slots = generatedStructWriteSlots(context);
-    if (slots == null) {
-      final fields = _writeFields(context);
-      writeGeneratedStructFieldInfoValue(context, fields[0], value.listField);
-      writeGeneratedStructFieldInfoValue(context, fields[1], value.setField);
-      writeGeneratedStructFieldInfoValue(context, fields[2], value.mapField);
-      return;
-    }
-    final writers = _refOverrideContainerForyRegistration.fieldWritersBySlot;
-    for (final field in slots.orderedFields) {
-      writers[field.slot](context, field, value);
-    }
+    final fields = _writeFields(context);
+    writeGeneratedStructFieldInfoValue(context, fields[0], value.listField);
+    writeGeneratedStructFieldInfoValue(context, fields[1], value.setField);
+    writeGeneratedStructFieldInfoValue(context, fields[2], value.mapField);
   }
 
   @override
   RefOverrideContainer read(ReadContext context) {
-    final slots = generatedStructReadSlots(context);
     final value = RefOverrideContainer();
-    context.reference(value);
-    if (slots == null) {
-      final fields = _readFields(context);
-      value.listField = _readRefOverrideContainerListField(
-        readGeneratedStructFieldInfoValue(context, fields[0], value.listField),
-        value.listField,
-      );
-      value.setField = _readRefOverrideContainerSetField(
-        readGeneratedStructFieldInfoValue(context, fields[1], value.setField),
-        value.setField,
-      );
-      value.mapField = _readRefOverrideContainerMapField(
-        readGeneratedStructFieldInfoValue(context, fields[2], value.mapField),
-        value.mapField,
-      );
-      return value;
-    }
-    if (slots.containsSlot(0)) {
-      final rawRefOverrideContainer0 = slots.valueForSlot(0);
-      value.listField = _readRefOverrideContainerListField(
-        rawRefOverrideContainer0 is DeferredReadRef
-            ? context.getReadRef(rawRefOverrideContainer0.id)
-            : rawRefOverrideContainer0,
-        value.listField,
-      );
-    }
-    if (slots.containsSlot(1)) {
-      final rawRefOverrideContainer1 = slots.valueForSlot(1);
-      value.setField = _readRefOverrideContainerSetField(
-        rawRefOverrideContainer1 is DeferredReadRef
-            ? context.getReadRef(rawRefOverrideContainer1.id)
-            : rawRefOverrideContainer1,
-        value.setField,
-      );
-    }
-    if (slots.containsSlot(2)) {
-      final rawRefOverrideContainer2 = slots.valueForSlot(2);
-      value.mapField = _readRefOverrideContainerMapField(
-        rawRefOverrideContainer2 is DeferredReadRef
-            ? context.getReadRef(rawRefOverrideContainer2.id)
-            : rawRefOverrideContainer2,
-        value.mapField,
-      );
+    final fields = _readFields(context);
+    value.listField = _readRefOverrideContainerListField(
+      readGeneratedStructFieldInfoValue(context, fields[0], value.listField),
+      value.listField,
+    );
+    value.setField = _readRefOverrideContainerSetField(
+      readGeneratedStructFieldInfoValue(context, fields[1], value.setField),
+      value.setField,
+    );
+    value.mapField = _readRefOverrideContainerMapField(
+      readGeneratedStructFieldInfoValue(context, fields[2], value.mapField),
+      value.mapField,
+    );
+    return value;
+  }
+
+  @override
+  RefOverrideContainer readCompatibleStruct(
+    ReadContext context,
+    CompatibleStructReadLayout layout,
+  ) {
+    final value = RefOverrideContainer();
+    for (var index = 0; index < layout.fieldCount; index += 1) {
+      final field = layout.localFieldAt(index);
+      if (field == null) {
+        skipGeneratedCompatibleStructField(context, layout, index);
+        continue;
+      }
+      switch (field.index) {
+        case 0:
+          value.listField = _readRefOverrideContainerListField(
+            readGeneratedCompatibleStructField(context, layout, index),
+            value.listField,
+          );
+          break;
+        case 1:
+          value.setField = _readRefOverrideContainerSetField(
+            readGeneratedCompatibleStructField(context, layout, index),
+            value.setField,
+          );
+          break;
+        case 2:
+          value.mapField = _readRefOverrideContainerMapField(
+            readGeneratedCompatibleStructField(context, layout, index),
+            value.mapField,
+          );
+          break;
+        default:
+          throw StateError(
+            'Compatible field index is out of range for RefOverrideContainer.',
+          );
+      }
     }
     return value;
   }

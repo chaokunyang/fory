@@ -23,7 +23,7 @@ import 'package:fory/src/resolver/type_resolver.dart';
 
 final class SerializationFieldInfo {
   final FieldInfo field;
-  final int slot;
+  final int index;
   TypeInfo? _declaredTypeInfo;
   TypeResolver? _declaredTypeInfoResolver;
   bool _hasDeclaredTypeInfo = false;
@@ -32,7 +32,7 @@ final class SerializationFieldInfo {
 
   SerializationFieldInfo({
     required this.field,
-    required this.slot,
+    required this.index,
     TypeInfo? declaredTypeInfo,
     bool? usesDeclaredType,
   })  : _declaredTypeInfo = declaredTypeInfo,

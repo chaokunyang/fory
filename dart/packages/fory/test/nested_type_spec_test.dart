@@ -18,7 +18,6 @@
  */
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/serializer/compatible_struct_metadata.dart';
 import 'package:test/test.dart';
 
 part 'nested_type_spec_test.fory.dart';
@@ -149,7 +148,7 @@ void _registerNullableReader(Fory fory) {
 void main() {
   group('nested type specs', () {
     test(
-      'compatible mode reads nested overridden fixed int32 list values from remote meta',
+      'compatible mode reads nested overridden fixed int32 list values',
       () {
         final writer = Fory(compatible: true);
         final reader = Fory(compatible: true);
@@ -166,20 +165,6 @@ void main() {
         );
 
         expect(result.nested['a'], orderedEquals(<int?>[1, null, -7]));
-
-        final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(result);
-        expect(remoteTypeDef, isNotNull);
-        final nestedField = remoteTypeDef!.fields.single;
-        expect(nestedField.fieldType.typeId, equals(TypeIds.map));
-        expect(
-          nestedField.fieldType.arguments[0].typeId,
-          equals(TypeIds.string),
-        );
-        final remoteList = nestedField.fieldType.arguments[1];
-        expect(remoteList.typeId, equals(TypeIds.list));
-        final remoteElement = remoteList.arguments.single;
-        expect(remoteElement.typeId, equals(TypeIds.int32));
-        expect(remoteElement.nullable, isTrue);
       },
     );
 
@@ -209,7 +194,7 @@ void main() {
     });
 
     test(
-      'nested ref metadata stays out of schema hash but survives remote meta',
+      'nested ref metadata stays out of schema hash and preserves refs',
       () {
         final writer = Fory(compatible: true);
         final reader = Fory(compatible: true);
@@ -227,12 +212,6 @@ void main() {
         expect(result.items, hasLength(2));
         expect(result.items[0].name, equals('shared'));
         expect(identical(result.items[0], result.items[1]), isTrue);
-
-        final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(result);
-        expect(remoteTypeDef, isNotNull);
-        final remoteElement =
-            remoteTypeDef!.fields.single.fieldType.arguments.single;
-        expect(remoteElement.ref, isTrue);
       },
     );
 

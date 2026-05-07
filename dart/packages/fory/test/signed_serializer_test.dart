@@ -18,7 +18,6 @@
  */
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/serializer/compatible_struct_metadata.dart';
 import 'package:test/test.dart';
 
 part 'signed_serializer_test.fory.dart';
@@ -237,24 +236,6 @@ void _expectSignedFieldsEqual(SignedFields actual, SignedFields expected) {
   expect(actual.optionalI64Tagged, equals(expected.optionalI64Tagged));
 }
 
-int _remoteFieldTypeId(Object value, String identifier) {
-  final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(value);
-  expect(remoteTypeDef, isNotNull);
-  final field = remoteTypeDef!.fields.firstWhere(
-    (field) => field.identifier == identifier,
-  );
-  return field.fieldType.typeId;
-}
-
-bool _remoteFieldNullable(Object value, String identifier) {
-  final remoteTypeDef = CompatibleStructMetadata.remoteTypeDefFor(value);
-  expect(remoteTypeDef, isNotNull);
-  final field = remoteTypeDef!.fields.firstWhere(
-    (field) => field.identifier == identifier,
-  );
-  return field.fieldType.nullable;
-}
-
 void main() {
   group('signed generated fields', () {
     test('round trips int and Int64 encoding edge cases', () {
@@ -303,19 +284,9 @@ void main() {
       final roundTrip = fory.deserialize<SignedFields>(fory.serialize(value));
       expect(roundTrip.i64VarInt, equals(signedMin));
       expect(roundTrip.optionalI64VarInt, equals(signedMin));
-
-      final buffer = Buffer();
-      final writeCursor = GeneratedWriteCursor.reserve(buffer, 10);
-      writeCursor.writeVarInt64FromInt(signedMin);
-      writeCursor.finish();
-
-      final readCursor =
-          GeneratedReadCursor.start(Buffer.wrap(buffer.toBytes()));
-      expect(readCursor.readVarInt64AsInt(), equals(signedMin));
-      readCursor.finish();
     });
 
-    test('compatible metadata records signed wire types and nullability', () {
+    test('compatible mode reads signed fields through remote wire types', () {
       final writer = Fory(compatible: true);
       final reader = Fory(compatible: true);
       _registerSignedFields(writer);
@@ -325,51 +296,6 @@ void main() {
         writer.serialize(_fullRangeWrapperSignedFields()),
       );
       expect(roundTrip.plainInt, equals(0));
-
-      expect(
-        _remoteFieldTypeId(roundTrip, 'plain_int'),
-        equals(TypeIds.varInt64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i32_var'),
-        equals(TypeIds.varInt32),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i32_fixed'),
-        equals(TypeIds.int32),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i64_var_int'),
-        equals(TypeIds.varInt64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i64_fixed_int'),
-        equals(TypeIds.int64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i64_tagged_int'),
-        equals(TypeIds.taggedInt64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i64_default'),
-        equals(TypeIds.varInt64),
-      );
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i64_var'),
-        equals(TypeIds.varInt64),
-      );
-      expect(_remoteFieldTypeId(roundTrip, 'i64_fixed'), equals(TypeIds.int64));
-      expect(
-        _remoteFieldTypeId(roundTrip, 'i64_tagged'),
-        equals(TypeIds.taggedInt64),
-      );
-
-      expect(_remoteFieldNullable(roundTrip, 'plain_int'), isFalse);
-      expect(_remoteFieldNullable(roundTrip, 'optional_i32_var'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'optional_i32_fixed'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'optional_i64_var_int'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'optional_i64_fixed'), isTrue);
-      expect(_remoteFieldNullable(roundTrip, 'optional_i64_tagged'), isTrue);
     });
 
     test('rejects out-of-range annotated int32 fields', () {

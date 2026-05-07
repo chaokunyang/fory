@@ -21,7 +21,6 @@ import 'package:meta/meta.dart';
 
 import 'package:fory/src/meta/field_info.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/serializer/struct_serializer.dart';
 
 enum GeneratedRegistrationKind {
   enumType,
@@ -33,18 +32,17 @@ final class GeneratedRegistration {
   final GeneratedRegistrationKind kind;
   final Serializer<Object?> Function() serializerFactory;
   final bool evolving;
+  final bool needsRootRef;
+  final bool usesNestedTypeDefinitions;
   final List<FieldInfo> fields;
-  final GeneratedStructCompatibleFactory<Object>? compatibleFactory;
-  final List<GeneratedStructCompatibleFieldReader<Object>>?
-      compatibleReadersBySlot;
 
   const GeneratedRegistration({
     required this.kind,
     required this.serializerFactory,
     this.evolving = true,
+    this.needsRootRef = false,
+    this.usesNestedTypeDefinitions = true,
     this.fields = const <FieldInfo>[],
-    this.compatibleFactory,
-    this.compatibleReadersBySlot,
   });
 }
 

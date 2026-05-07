@@ -22,7 +22,7 @@ import 'package:fory_test/entity/xlang_test_models.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('compatible named struct round trip scopes nested struct slots', () {
+  test('compatible named struct round trip preserves nested struct fields', () {
     final fory = Fory(compatible: true);
     registerXlangType(
       fory,

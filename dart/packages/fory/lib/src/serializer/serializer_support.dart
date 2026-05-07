@@ -29,12 +29,6 @@ import 'package:fory/src/types/float32.dart';
 import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/types/uint64.dart';
 
-final class DeferredReadRef {
-  final int id;
-
-  const DeferredReadRef(this.id);
-}
-
 TypeInfo? fieldDeclaredTypeInfo(
   TypeResolver resolver,
   SerializationFieldInfo field,
@@ -301,42 +295,6 @@ TypeInfo? _compatibleFieldDeclaredTypeInfo(
     return null;
   }
   return resolver.resolveFieldType(fieldType);
-}
-
-FieldInfo mergeCompatibleWriteField(
-  FieldInfo localField,
-  FieldInfo remoteField,
-) {
-  FieldType mergeFieldType(
-    FieldType local,
-    FieldType remote,
-  ) {
-    final mergedArguments = <FieldType>[];
-    final argumentCount = remote.arguments.length;
-    for (var index = 0; index < argumentCount; index += 1) {
-      final remoteArgument = remote.arguments[index];
-      final localArgument = index < local.arguments.length
-          ? local.arguments[index]
-          : remoteArgument;
-      mergedArguments.add(mergeFieldType(localArgument, remoteArgument));
-    }
-    return FieldType(
-      type: local.type,
-      declaredTypeName: local.declaredTypeName,
-      typeId: remote.typeId,
-      nullable: remote.nullable,
-      ref: remote.ref,
-      dynamic: local.dynamic ?? remote.dynamic,
-      arguments: mergedArguments,
-    );
-  }
-
-  return FieldInfo(
-    name: localField.name,
-    identifier: localField.identifier,
-    id: localField.id,
-    fieldType: mergeFieldType(localField.fieldType, remoteField.fieldType),
-  );
 }
 
 FieldInfo mergeCompatibleReadField(

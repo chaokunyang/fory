@@ -13,6 +13,8 @@ Load this file when changing documentation, public APIs, protocol specs, benchma
 
 ## Rules
 
+- Do not format Markdown under `tasks/`, including task design, plan, progress, state, history,
+  and lessons files. These files are agent working state rather than repository documentation.
 - Update the relevant docs under `docs/` when important public APIs change.
 - Update `docs/specification/**` when protocol behavior changes.
 - Keep examples working and aligned with the current API and protocol behavior.
@@ -32,8 +34,6 @@ Load this file when changing documentation, public APIs, protocol specs, benchma
 ## Formatting Commands
 
 - Markdown: `prettier --write <file>`
-- Do not format Markdown under `tasks/`, including task design, plan, progress, state, history,
-  and lessons files. These files are agent working state rather than repository documentation.
 - Python code, including `compiler/`, `benchmarks/`, `integration_tests/`, and `python/`:
   `python -m ruff format <changed-python-files>` and
   `python -m ruff check --fix <changed-python-files>`

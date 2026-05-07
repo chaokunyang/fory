@@ -33,7 +33,6 @@ import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serializer.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
-import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/bfloat16.dart';
@@ -56,7 +55,6 @@ final class ReadContext {
 
   late Buffer _buffer;
   final List<TypeInfo> _sharedTypes = <TypeInfo>[];
-  StructReadSlots? _structReadSlots;
   int _depth = 0;
 
   @internal
@@ -77,7 +75,6 @@ final class ReadContext {
     _sharedTypes.clear();
     _refReader.reset();
     _metaStringReader.reset();
-    _structReadSlots = null;
     _depth = 0;
   }
 
@@ -91,14 +88,6 @@ final class ReadContext {
   RefReader get refReader => _refReader;
 
   @internal
-  StructReadSlots? get structReadSlots => _structReadSlots;
-
-  @internal
-  set structReadSlots(StructReadSlots? value) {
-    _structReadSlots = value;
-  }
-
-  @internal
   @pragma('vm:prefer-inline')
   TypeInfo readTypeMetaValue([
     TypeInfo? expectedNamedType,
@@ -110,24 +99,7 @@ final class ReadContext {
   Object? readSerializerPayload(
       Serializer<Object?> serializer, TypeInfo resolved,
       {required bool hasCurrentPreservedRef}) {
-    final int? sentinelId;
-    final int? sentinelDepth;
-    final needsSentinel = resolved.supportsRef && !hasCurrentPreservedRef;
-    if (needsSentinel) {
-      sentinelId = _refReader.preserveRefId(-1);
-      sentinelDepth = _refReader.preservedRefDepth;
-    } else {
-      sentinelId = null;
-      sentinelDepth = null;
-    }
-    final value = serializer.read(this);
-    if (needsSentinel &&
-        _refReader.preservedRefDepth == sentinelDepth &&
-        _refReader.hasPreservedRefId &&
-        _refReader.lastPreservedRefId == sentinelId) {
-      _refReader.reference(null);
-    }
-    return value;
+    return serializer.read(this);
   }
 
   int get depth => _depth;
@@ -241,13 +213,21 @@ final class ReadContext {
     if (flag == RefWriter.refFlag) {
       return _refReader.getReadRef();
     }
-    final resolved = _typeResolver.resolveExpectedRootWireType<T>(
-      _readTypeMeta(),
-    );
+    final expectedRootType = _typeResolver.expectedRootType<T>();
+    final typeMetaResolved = expectedRootType == null
+        ? _readTypeMeta()
+        : _typeResolver.readExpectedInitialTypeDefMeta(
+              _buffer,
+              expectedRootType,
+              sharedTypes: _sharedTypes,
+            ) ??
+            _readTypeMeta(expectedRootType);
+    final resolved =
+        _typeResolver.resolveExpectedRootWireType<T>(typeMetaResolved);
     final rootPreservedRefId = preservedRefId == null &&
             flag == RefWriter.notNullValueFlag &&
             _depth == 0 &&
-            resolved.supportsRef
+            resolved.needsRootRef
         ? _refReader.preserveRefId()
         : null;
     final value = readResolvedValue(
@@ -280,7 +260,7 @@ final class ReadContext {
     final rootPreservedRefId = preservedRefId == null &&
             flag == RefWriter.notNullValueFlag &&
             _depth == 0 &&
-            resolved.supportsRef
+            resolved.needsRootRef
         ? _refReader.preserveRefId()
         : null;
     final value = readResolvedValue(

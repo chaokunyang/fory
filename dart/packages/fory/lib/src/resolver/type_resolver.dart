@@ -111,6 +111,8 @@ final class TypeInfo {
   final RegistrationKind kind;
   final int typeId;
   final bool supportsRef;
+  final bool needsRootRef;
+  final bool usesNestedTypeDefinitions;
   final Serializer<Object?> serializer;
   final StructSerializer? structSerializer;
   final int? userTypeId;
@@ -126,6 +128,8 @@ final class TypeInfo {
     required this.kind,
     required this.typeId,
     required this.supportsRef,
+    required this.needsRootRef,
+    required this.usesNestedTypeDefinitions,
     required this.serializer,
     required this.structSerializer,
     required this.userTypeId,
@@ -168,6 +172,48 @@ bool usesDeclaredTypeInfo(
   }
 }
 
+bool _fieldsNeedRootRef(List<FieldInfo> fields) {
+  for (final field in fields) {
+    if (_fieldTypeNeedsRootRef(field.fieldType)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _fieldTypeNeedsRootRef(FieldType fieldType) {
+  if (fieldType.ref) {
+    return true;
+  }
+  for (final argument in fieldType.arguments) {
+    if (_fieldTypeNeedsRootRef(argument)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _fieldsUseNestedTypeDefinitions(List<FieldInfo> fields) {
+  for (final field in fields) {
+    if (_fieldTypeUsesNestedTypeDefinitions(field.fieldType)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _fieldTypeUsesNestedTypeDefinitions(FieldType fieldType) {
+  if (fieldType.isDynamic || TypeIds.isUserType(fieldType.typeId)) {
+    return true;
+  }
+  for (final argument in fieldType.arguments) {
+    if (_fieldTypeUsesNestedTypeDefinitions(argument)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 final class TypeResolver {
   final Config config;
   final WireTypeMetaEncoder _wireTypeMetaEncoder = const WireTypeMetaEncoder();
@@ -194,6 +240,8 @@ final class TypeResolver {
   final Map<_EncodedMetaStringKey, EncodedMetaString>
       _internedEncodedMetaStrings =
       <_EncodedMetaStringKey, EncodedMetaString>{};
+  final Map<TypeInfo, Uint8List> _initialTypeMetaBytes =
+      LinkedHashMap<TypeInfo, Uint8List>.identity();
 
   TypeResolver(this.config);
 
@@ -219,8 +267,8 @@ final class TypeResolver {
       },
       evolving: registration.evolving,
       fields: registration.fields,
-      compatibleFactory: registration.compatibleFactory,
-      compatibleReadersBySlot: registration.compatibleReadersBySlot,
+      needsRootRef: registration.needsRootRef,
+      usesNestedTypeDefinitions: registration.usesNestedTypeDefinitions,
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -250,9 +298,9 @@ final class TypeResolver {
     Serializer<Object?> payloadSerializer,
     RegistrationKind registrationKind, {
     bool evolving = true,
+    bool? needsRootRef,
+    bool? usesNestedTypeDefinitions,
     List<FieldInfo> fields = const <FieldInfo>[],
-    GeneratedStructCompatibleFactory<Object>? compatibleFactory,
-    List<GeneratedStructCompatibleFieldReader<Object>>? compatibleReadersBySlot,
     int? id,
     String? namespace,
     String? typeName,
@@ -281,14 +329,19 @@ final class TypeResolver {
             payloadSerializer,
             typeDef,
             this,
-            compatibleFactory: compatibleFactory,
-            compatibleReadersBySlot: compatibleReadersBySlot,
           );
     final resolved = TypeInfo(
       type: type,
       kind: registrationKind,
       typeId: _defaultTypeIdForType(type),
       supportsRef: payloadSerializer.supportsRef,
+      needsRootRef: registrationKind == RegistrationKind.struct
+          ? needsRootRef ?? _fieldsNeedRootRef(normalizedFields)
+          : payloadSerializer.supportsRef,
+      usesNestedTypeDefinitions: registrationKind == RegistrationKind.struct
+          ? usesNestedTypeDefinitions ??
+              _fieldsUseNestedTypeDefinitions(normalizedFields)
+          : true,
       serializer: payloadSerializer,
       structSerializer: structSerializer,
       userTypeId: id,
@@ -541,6 +594,8 @@ final class TypeResolver {
     return resolved;
   }
 
+  TypeInfo? expectedRootType<T>() => _registeredByType[T];
+
   TypeInfo resolveUserByEncodedName(
     EncodedMetaString namespace,
     EncodedMetaString typeName,
@@ -584,13 +639,13 @@ final class TypeResolver {
 
   SerializationFieldInfo serializationFieldInfo(
     FieldInfo field, {
-    required int slot,
+    required int index,
   }) {
     final fieldType = field.fieldType;
     if (fieldType.isDynamic || (fieldType.isPrimitive && !fieldType.nullable)) {
       return SerializationFieldInfo(
         field: field,
-        slot: slot,
+        index: index,
         declaredTypeInfo: null,
         usesDeclaredType: false,
       );
@@ -598,7 +653,7 @@ final class TypeResolver {
     final declaredTypeInfo = tryResolveFieldType(fieldType);
     return SerializationFieldInfo(
       field: field,
-      slot: slot,
+      index: index,
       declaredTypeInfo: declaredTypeInfo,
       usesDeclaredType: declaredTypeInfo != null
           ? usesDeclaredTypeInfo(
@@ -654,6 +709,69 @@ final class TypeResolver {
       metaStringWriter.writeMetaString(buffer, resolved.encodedNamespace!);
       metaStringWriter.writeMetaString(buffer, resolved.encodedTypeName!);
     }
+  }
+
+  bool writeInitialTypeDefMeta(
+    Buffer buffer,
+    TypeInfo resolved, {
+    required TypeDef? typeDef,
+    required LinkedHashMap<TypeDef, int> typeDefIds,
+  }) {
+    final resolvedTypeDef = resolved.typeDef;
+    if (typeDefIds.isNotEmpty ||
+        resolvedTypeDef == null ||
+        !identical(typeDef ?? resolvedTypeDef, resolvedTypeDef)) {
+      return false;
+    }
+    final wireTypeId = _wireTypeMetaEncoder.wireTypeIdFor(config, resolved);
+    if (!_wireTypeWritesTypeDef(wireTypeId)) {
+      return false;
+    }
+    final bytes = _initialTypeMetaBytes.putIfAbsent(
+      resolved,
+      () => _encodeInitialTypeDefMeta(wireTypeId, resolvedTypeDef),
+    );
+    buffer.writeBytes(bytes);
+    if (resolved.usesNestedTypeDefinitions) {
+      typeDefIds[resolvedTypeDef] = 0;
+    }
+    return true;
+  }
+
+  TypeInfo? readExpectedInitialTypeDefMeta(
+    Buffer buffer,
+    TypeInfo expected, {
+    required List<TypeInfo> sharedTypes,
+  }) {
+    final start = bufferReaderIndex(buffer);
+    final wireTypeId = buffer.readVarUint32Small7();
+    if (wireTypeId != _wireTypeMetaEncoder.wireTypeIdFor(config, expected) ||
+        !_wireTypeWritesTypeDef(wireTypeId)) {
+      bufferSetReaderIndex(buffer, start);
+      return null;
+    }
+    final marker = buffer.readVarUint32Small14();
+    if (marker != 0) {
+      bufferSetReaderIndex(buffer, start);
+      return null;
+    }
+    final header = TypeHeader(buffer.readInt64());
+    final expectedTypeDef = expected.typeDef;
+    if (expectedTypeDef == null || expectedTypeDef.header != header.value) {
+      bufferSetReaderIndex(buffer, start);
+      return null;
+    }
+    header.skipRemaining(buffer);
+    sharedTypes.add(expected);
+    return expected;
+  }
+
+  Uint8List _encodeInitialTypeDefMeta(int wireTypeId, TypeDef typeDef) {
+    final buffer = Buffer(typeDef.encoded.length + 2);
+    buffer.writeVarUint32Small7(wireTypeId);
+    buffer.writeVarUint32(0);
+    buffer.writeBytes(typeDef.encoded);
+    return buffer.toBytes();
   }
 
   @pragma('vm:prefer-inline')
@@ -1053,6 +1171,8 @@ final class TypeResolver {
       kind: resolved.kind,
       typeId: resolved.typeId,
       supportsRef: resolved.supportsRef,
+      needsRootRef: resolved.needsRootRef,
+      usesNestedTypeDefinitions: resolved.usesNestedTypeDefinitions,
       serializer: resolved.serializer,
       structSerializer: resolved.structSerializer,
       userTypeId: resolved.userTypeId,
@@ -1254,6 +1374,8 @@ final class TypeResolver {
       kind: RegistrationKind.builtin,
       typeId: typeId,
       supportsRef: TypeIds.supportsRef(typeId),
+      needsRootRef: false,
+      usesNestedTypeDefinitions: false,
       serializer: _builtinSerializerFor(typeId, type),
       structSerializer: null,
       userTypeId: null,

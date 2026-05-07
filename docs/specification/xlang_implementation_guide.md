@@ -55,7 +55,7 @@ For Dart, the runtime shape is centered on:
 - `RefWriter`
 - `RefReader`
 - `TypeResolver`
-- `StructCodec`
+- `StructSerializer`
 
 ## Runtime Ownership Model
 
@@ -101,7 +101,6 @@ That operation-local state includes:
 - meta-string state
 - shared type-definition state
 - operation-local scratch state keyed by identity
-- compatible struct slot state
 - logical object-graph depth
 
 Generated and hand-written serializers should treat these contexts as the only
@@ -118,7 +117,6 @@ state in thread locals, globals, or serializer instance fields.
 - shared TypeDef write state
 - root `trackRef` mode
 - recursion depth and limits
-- local struct slot state used by compatible writes
 
 It exposes one-shot primitive helpers such as:
 
@@ -139,7 +137,6 @@ methods directly.
 - `MetaStringReader`
 - shared TypeDef read state
 - recursion depth and limits
-- local struct slot state used by compatible reads
 
 It exposes matching one-shot primitive helpers such as:
 
@@ -297,25 +294,26 @@ able to recover operation-local state after failures.
 
 ## Struct Compatibility
 
-Struct-specific schema/version framing and compatible-field staging belong in
-the struct serializer layer, not on `Fory` and not on the public serializer
-API.
+Struct-specific schema/version framing and compatible-field layout belong in the
+struct serializer layer, not on `Fory` and not on the public serializer API.
 
-In Dart that internal owner is `StructCodec`.
+In Dart that internal owner is `StructSerializer`.
 
-`StructCodec` is responsible for:
+`StructSerializer` is responsible for:
 
 - schema-hash framing when compatibility mode is off and version checks are on
 - compatible-struct field remapping when compatibility mode is on
-- caching compatible write and read layouts
-- providing compatible write/read slot state to generated serializers
-- remembering remote struct metadata after successful reads
+- caching compatible read layouts
+- skipping unknown compatible fields
+- passing compatible read layouts explicitly to generated serializers
 
 When `Config.compatible` is enabled and the struct is marked evolving:
 
 - the wire type uses the compatible struct form
 - the runtime writes shared TypeDef metadata
 - reads map incoming fields by identifier and skip unknown fields
+- generated serializers apply matched fields directly while preserving their own
+  object construction and default-value rules
 
 When `compatible` is disabled and `checkStructVersion` is enabled:
 
@@ -415,7 +413,7 @@ different:
 7. Preserve the separation between the root bitmap, per-object ref flags, type
    headers, and payload bytes.
 8. Keep internal naming in the serialization domain. Prefer words like
-   `codec`, `binding`, `layout`, and `slots`; avoid RPC-style terms such as
+   `serializer`, `binding`, and `layout`; avoid RPC-style terms such as
    `session` or vague control-flow terms such as `plan`.
 9. After any xlang protocol or ownership change, run the cross-language test
    matrix and update both this guide and

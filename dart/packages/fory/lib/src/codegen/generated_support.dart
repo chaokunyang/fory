@@ -22,7 +22,15 @@ import 'dart:typed_data';
 import 'package:meta/meta.dart';
 
 import 'package:fory/fory.dart';
-export 'package:fory/src/codegen/generated_cursor.dart';
+export 'package:fory/src/memory/buffer.dart'
+    show
+        bufferByteData,
+        bufferBytes,
+        bufferReaderIndex,
+        bufferReserveBytes,
+        bufferSetReaderIndex,
+        bufferSetWriterIndex;
+export 'package:fory/src/serializer/generated_struct_serializer.dart';
 
 import 'package:fory/src/codegen/generated_registry.dart';
 import 'package:fory/src/context/ref_writer.dart';
@@ -34,11 +42,12 @@ import 'package:fory/src/serializer/map_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
 import 'package:fory/src/serializer/serialization_field_info.dart';
 import 'package:fory/src/serializer/serializer_support.dart';
-import 'package:fory/src/serializer/struct_serializer.dart';
-import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/util/int_validation.dart';
+
+@internal
+const Endian generatedLittleEndian = Endian.little;
 
 @internal
 final class GeneratedFieldType {
@@ -73,17 +82,6 @@ final class GeneratedFieldType {
           .toList(growable: false),
     );
   }
-}
-
-@internal
-Object? resolveGeneratedSlotRawValue(
-  ReadContext context,
-  Object? rawValue,
-) {
-  if (rawValue is DeferredReadRef) {
-    return context.getReadRef(rawValue.id);
-  }
-  return rawValue;
 }
 
 @internal
@@ -125,30 +123,20 @@ final class GeneratedEnumRegistration {
 typedef GeneratedStructFieldInfo = SerializationFieldInfo;
 
 @internal
-typedef GeneratedStructFieldInfoWriter<T> = void Function(
-    WriteContext context, GeneratedStructFieldInfo field, T value);
-
-@internal
-typedef GeneratedStructFieldInfoReader<T> = void Function(
-    ReadContext context, T value, Object? rawValue);
-
-@internal
 final class GeneratedStructRegistration<T> {
-  final List<GeneratedStructFieldInfoWriter<T>> fieldWritersBySlot;
-  final GeneratedStructCompatibleFactory<T>? compatibleFactory;
-  final List<GeneratedStructFieldInfoReader<T>>? compatibleReadersBySlot;
   final Type type;
   final Serializer<Object?> Function() serializerFactory;
   final bool evolving;
+  final bool needsRootRef;
+  final bool usesNestedTypeDefinitions;
   final List<GeneratedFieldInfo> fields;
 
   GeneratedStructRegistration({
-    required this.fieldWritersBySlot,
-    this.compatibleFactory,
-    this.compatibleReadersBySlot,
     required this.type,
     required this.serializerFactory,
     required this.evolving,
+    required this.needsRootRef,
+    required this.usesNestedTypeDefinitions,
     required this.fields,
   });
 
@@ -158,10 +146,6 @@ final class GeneratedStructRegistration<T> {
       fields.length,
       (index) => fields[index].toFieldInfo(),
     ),
-  );
-
-  late final List<int> defaultSlots = List<int>.unmodifiable(
-    List<int>.generate(fieldInfos.length, (index) => index),
   );
 }
 
@@ -196,29 +180,15 @@ void registerGeneratedStruct<T>(
   String? namespace,
   String? typeName,
 }) {
-  final compatibleReadersBySlot = registration.compatibleReadersBySlot == null
-      ? null
-      : List<GeneratedStructCompatibleFieldReader<Object>>.unmodifiable(
-          registration.compatibleReadersBySlot!.map(
-            (reader) => (
-              ReadContext context,
-              Object value,
-              Object? rawValue,
-            ) =>
-                reader(context, value as T, rawValue),
-          ),
-        );
   GeneratedRegistrationCatalog.remember(
     registration.type,
     GeneratedRegistration(
       kind: GeneratedRegistrationKind.struct,
       serializerFactory: registration.serializerFactory,
       evolving: registration.evolving,
+      needsRootRef: registration.needsRootRef,
+      usesNestedTypeDefinitions: registration.usesNestedTypeDefinitions,
       fields: registration.fieldInfos,
-      compatibleFactory: registration.compatibleFactory == null
-          ? null
-          : () => registration.compatibleFactory!() as Object,
-      compatibleReadersBySlot: compatibleReadersBySlot,
     ),
   );
   fory.register(
@@ -227,16 +197,6 @@ void registerGeneratedStruct<T>(
     namespace: namespace,
     typeName: typeName,
   );
-}
-
-@internal
-StructWriteSlots? generatedStructWriteSlots(WriteContext context) {
-  return context.structWriteSlots;
-}
-
-@internal
-StructReadSlots? generatedStructReadSlots(ReadContext context) {
-  return context.structReadSlots;
 }
 
 @internal
@@ -410,7 +370,7 @@ List<GeneratedStructFieldInfo> buildGeneratedUnionCaseFieldInfos(
     fields.length,
     (index) => GeneratedStructFieldInfo(
       field: fields[index].toFieldInfo(),
-      slot: index,
+      index: index,
     ),
     growable: false,
   );

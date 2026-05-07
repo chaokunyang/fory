@@ -35,7 +35,6 @@ import 'package:fory/src/serializer/collection_serializers.dart';
 import 'package:fory/src/serializer/map_serializers.dart';
 import 'package:fory/src/serializer/primitive_serializers.dart';
 import 'package:fory/src/serializer/scalar_serializers.dart';
-import 'package:fory/src/serializer/struct_slots.dart';
 import 'package:fory/src/serializer/time_serializers.dart';
 import 'package:fory/src/serializer/typed_array_serializers.dart';
 import 'package:fory/src/types/bfloat16.dart';
@@ -61,7 +60,6 @@ final class WriteContext {
   late Buffer _buffer;
   final LinkedHashMap<TypeDef, int> _typeDefIds =
       LinkedHashMap<TypeDef, int>.identity();
-  StructWriteSlots? _structWriteSlots;
   bool _rootTrackRef = false;
   int _depth = 0;
 
@@ -84,7 +82,6 @@ final class WriteContext {
     _typeDefIds.clear();
     _refWriter.reset();
     _metaStringWriter.reset();
-    _structWriteSlots = null;
     _rootTrackRef = false;
     _depth = 0;
   }
@@ -100,14 +97,6 @@ final class WriteContext {
 
   @internal
   bool get rootTrackRef => _rootTrackRef;
-
-  @internal
-  StructWriteSlots? get structWriteSlots => _structWriteSlots;
-
-  @internal
-  set structWriteSlots(StructWriteSlots? value) {
-    _structWriteSlots = value;
-  }
 
   int get depth => _depth;
 
@@ -214,7 +203,7 @@ final class WriteContext {
       return;
     }
     _refWriter.writeRefOrNull(_buffer, value, trackRef: false);
-    if (resolved.supportsRef) {
+    if (resolved.needsRootRef) {
       _refWriter.reference(value);
     }
     _writeTypeMeta(resolved, value);
@@ -236,7 +225,7 @@ final class WriteContext {
     )) {
       return;
     }
-    if (!effectiveTrackRef && resolved.supportsRef) {
+    if (!effectiveTrackRef && resolved.needsRootRef) {
       _refWriter.reference(value);
     }
     _writeTypeMeta(resolved, value);
@@ -410,14 +399,23 @@ final class WriteContext {
   }
 
   void _writeTypeMeta(TypeInfo resolved, Object value) {
+    final typeDef = resolved.structSerializer?.typeDefForWrite(
+      this,
+      resolved,
+      value,
+    );
+    if (_typeResolver.writeInitialTypeDefMeta(
+      _buffer,
+      resolved,
+      typeDef: typeDef,
+      typeDefIds: _typeDefIds,
+    )) {
+      return;
+    }
     _typeResolver.writeTypeMeta(
       _buffer,
       resolved,
-      typeDef: resolved.structSerializer?.typeDefForWrite(
-        this,
-        resolved,
-        value,
-      ),
+      typeDef: typeDef,
       typeDefIds: _typeDefIds,
       metaStringWriter: _metaStringWriter,
     );

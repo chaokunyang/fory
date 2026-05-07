@@ -273,6 +273,18 @@ class BinaryWriterBuilder {
     return `${this.holder}.writeGetCursor()`;
   }
 
+  getPlatformBuffer() {
+    return `${this.holder}.getPlatformBuffer()`;
+  }
+
+  getDataView() {
+    return `${this.holder}.getDataView()`;
+  }
+
+  setWriteCursor(cursor: number | string) {
+    return `${this.holder}.setWriteCursor(${cursor})`;
+  }
+
   setUint32Position(offset: number | string, v: number | string) {
     return `${this.holder}.setUint32Position(${offset}, ${v})`;
   }

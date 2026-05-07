@@ -92,6 +92,15 @@ function toRefMode(trackingRef?: boolean, nullable?: boolean) {
   }
 }
 
+function isDirectVarInt32Field(
+  typeInfo: TypeInfo,
+  typeResolver: CodecBuilder["resolver"],
+) {
+  return typeInfo.typeId === TypeId.VARINT32
+    && toRefMode(typeInfo.trackingRef, typeInfo.nullable) === RefMode.NONE
+    && typeResolver.isMonomorphic(typeInfo, typeInfo.dynamic);
+}
+
 class StructSerializerGenerator extends BaseSerializerGenerator {
   typeInfo: TypeInfo;
   sortedProps: { key: string; typeInfo: TypeInfo }[];
@@ -210,18 +219,94 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       return `${!this.builder.resolver.isCompatible() ? this.builder.writer.writeInt32(hash) : ""}`;
     }
     const hash = this.typeMeta.computeStructHash();
+    const fieldWrites: string[] = [];
+    for (let i = 0; i < this.sortedProps.length;) {
+      const current = this.sortedProps[i];
+      if (isDirectVarInt32Field(current.typeInfo, this.builder.resolver)) {
+        let end = i + 1;
+        while (
+          end < this.sortedProps.length
+          && isDirectVarInt32Field(this.sortedProps[end].typeInfo, this.builder.resolver)
+        ) {
+          end++;
+        }
+        if (end - i > 1) {
+          fieldWrites.push(this.writeVarInt32Run(accessor, this.sortedProps.slice(i, end)));
+          i = end;
+          continue;
+        }
+      }
+      const InnerGeneratorClass = CodegenRegistry.get(current.typeInfo.typeId);
+      if (!InnerGeneratorClass) {
+        throw new Error(`${current.typeInfo.typeId} generator not exists`);
+      }
+      const innerGenerator = new InnerGeneratorClass(current.typeInfo, this.builder, this.scope);
+      const fieldAccessor = `${accessor}${CodecBuilder.safePropAccessor(current.key)}`;
+      fieldWrites.push(this.writeField(current.key, current.typeInfo, fieldAccessor, innerGenerator.writeEmbed()));
+      i++;
+    }
     return `
       ${!this.builder.resolver.isCompatible() ? this.builder.writer.writeInt32(hash) : ""}
-      ${this.sortedProps.map(({ key, typeInfo }) => {
-      const InnerGeneratorClass = CodegenRegistry.get(typeInfo.typeId);
-      if (!InnerGeneratorClass) {
-        throw new Error(`${typeInfo.typeId} generator not exists`);
-      }
-      const innerGenerator = new InnerGeneratorClass(typeInfo, this.builder, this.scope);
+      ${fieldWrites.join(";\n")}
+    `;
+  }
 
-      const fieldAccessor = `${accessor}${CodecBuilder.safePropAccessor(key)}`;
-      return this.writeField(key, typeInfo, fieldAccessor, innerGenerator.writeEmbed());
-    }).join(";\n")}
+  private writeVarInt32Run(
+    accessor: string,
+    fields: { key: string; typeInfo: TypeInfo }[],
+  ) {
+    const cursor = this.scope.uniqueName("cursor");
+    const buffer = this.scope.uniqueName("buffer");
+    const dataView = this.scope.uniqueName("dataView");
+    const value = this.scope.uniqueName("value");
+    const rawCursor = this.scope.uniqueName("rawCursor");
+    const u32 = this.scope.uniqueName("u32");
+    const locals = fields.map(({ key }) => {
+      return {
+        key,
+        fieldAccessor: `${accessor}${CodecBuilder.safePropAccessor(key)}`,
+        local: this.scope.uniqueName(key),
+      };
+    });
+    const checks = locals.map(({ key, local }) => `
+      if (${local} === null || ${local} === undefined) {
+        throw new Error('Field ${CodecBuilder.safeString(key)} is not nullable');
+      }
+    `).join("\n");
+    const writes = locals.map(({ local }) => `
+      ${value} = ((${local} << 1) ^ (${local} >> 31)) >>> 0;
+      if (${value} >>> 7 === 0) {
+        ${buffer}[${cursor}++] = ${value};
+      } else {
+        ${rawCursor} = ${cursor};
+        if (${value} >>> 14 === 0) {
+          ${u32} = ((${value} & 0x7f | 0x80) << 24) | ((${value} >>> 7) << 16);
+          ${cursor} += 2;
+        } else if (${value} >>> 21 === 0) {
+          ${u32} = ((${value} & 0x7f | 0x80) << 24) | ((${value} >>> 7 & 0x7f | 0x80) << 16) | ((${value} >>> 14) << 8);
+          ${cursor} += 3;
+        } else if (${value} >>> 28 === 0) {
+          ${u32} = ((${value} & 0x7f | 0x80) << 24) | ((${value} >>> 7 & 0x7f | 0x80) << 16) | ((${value} >>> 14 & 0x7f | 0x80) << 8) | (${value} >>> 21);
+          ${cursor} += 4;
+        } else {
+          ${u32} = ((${value} & 0x7f | 0x80) << 24) | ((${value} >>> 7 & 0x7f | 0x80) << 16) | ((${value} >>> 14 & 0x7f | 0x80) << 8) | (${value} >>> 21 & 0x7f | 0x80);
+          ${buffer}[${rawCursor} + 4] = ${value} >>> 28;
+          ${cursor} += 5;
+        }
+        ${dataView}.setUint32(${rawCursor}, ${u32});
+      }
+    `).join("\n");
+    return `
+      ${locals.map(({ local, fieldAccessor }) => `const ${local} = ${fieldAccessor};`).join("\n")}
+      ${checks}
+      let ${cursor} = ${this.builder.writer.writeGetCursor()};
+      const ${buffer} = ${this.builder.writer.getPlatformBuffer()};
+      const ${dataView} = ${this.builder.writer.getDataView()};
+      let ${value};
+      let ${rawCursor};
+      let ${u32};
+      ${writes}
+      ${this.builder.writer.setWriteCursor(cursor)}
     `;
   }
 
@@ -501,7 +586,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       default:
         break;
     }
-    return ` 
+    return `
       ${this.builder.writer.writeUint8(this.getTypeId())};
       ${writeUserTypeIdStmt}
       ${typeMeta}

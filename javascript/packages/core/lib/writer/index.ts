@@ -477,6 +477,18 @@ export class BinaryWriter {
     return this.cursor;
   }
 
+  getPlatformBuffer() {
+    return this.platformBuffer;
+  }
+
+  getDataView() {
+    return this.dataView;
+  }
+
+  setWriteCursor(cursor: number) {
+    this.cursor = cursor;
+  }
+
   setUint32Position(offset: number, v: number) {
     this.dataView.setUint32(offset, v, true);
   }

@@ -116,6 +116,12 @@ public sealed class StringSerializer : Serializer<string>
     private static void WriteLatin1(WriteContext context, string value)
     {
         int byteLength = value.Length;
+        if (byteLength == 0)
+        {
+            context.Writer.WriteUInt8((byte)ForyStringEncoding.Latin1);
+            return;
+        }
+
         ulong header = ((ulong)byteLength << 2) | (ulong)ForyStringEncoding.Latin1;
         Span<byte> headerBuf = stackalloc byte[MaxVarUInt36SmallBytes];
         int headerBytes = EncodeVarUInt36Small(headerBuf, header);

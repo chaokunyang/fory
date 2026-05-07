@@ -24,6 +24,8 @@ import { toFloat16Bits } from "../types/float16";
 import { BFloat16, toBFloat16Bits } from "../types/bfloat16";
 
 const MAX_POOL_SIZE = 1024 * 1024 * 3; // 3MB
+const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
+const MIN_SAFE_BIGINT = BigInt(Number.MIN_SAFE_INTEGER);
 
 function getInternalStringDetector() {
   try {
@@ -413,15 +415,35 @@ export class BinaryWriter {
     return 5;
   }
 
-  writeVarInt64(v: bigint) {
-    if (typeof v !== "bigint") {
-      v = BigInt(v);
+  private writeVarUInt64Number(value: number) {
+    while (value >= 0x80) {
+      this.platformBuffer[this.cursor++] = (value % 0x80) | 0x80;
+      value = Math.floor(value / 0x80);
     }
-    return this.writeVarUInt64((v << 1n) ^ (v >> 63n));
+    this.platformBuffer[this.cursor++] = value;
+  }
+
+  writeVarInt64(v: bigint | number) {
+    if (typeof v !== "bigint") {
+      if (Number.isSafeInteger(v)) {
+        this.writeVarUInt64Number(v >= 0 ? v * 2 : -v * 2 - 1);
+        return;
+      }
+      v = BigInt(v);
+    } else if (v >= MIN_SAFE_BIGINT && v <= MAX_SAFE_BIGINT) {
+      const value = Number(v);
+      this.writeVarUInt64Number(value >= 0 ? value * 2 : -value * 2 - 1);
+      return;
+    }
+    this.writeVarUInt64((v << 1n) ^ (v >> 63n));
   }
 
   writeVarUInt64(val: bigint | number) {
     if (typeof val !== "bigint") {
+      if (Number.isSafeInteger(val) && val >= 0) {
+        this.writeVarUInt64Number(val);
+        return;
+      }
       val = BigInt(val);
     }
     val = val & 0xFFFFFFFFFFFFFFFFn; // keep only the lower 64 bits

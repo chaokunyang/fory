@@ -19,9 +19,13 @@ namespace Apache.Fory;
 
 public sealed class WriteContext
 {
+    private const int InlineTypeMetaSlots = 3;
+
     private UInt64Map<uint>? _typeMetaIndexByType;
-    private ulong _firstTypeMetaKey;
-    private bool _hasFirstTypeMeta;
+    private ulong _firstInlineTypeMetaKey;
+    private ulong _secondInlineTypeMetaKey;
+    private ulong _thirdInlineTypeMetaKey;
+    private int _inlineTypeMetaCount;
     private uint _nextTypeMetaIndex;
 
     private readonly Dictionary<MetaString, uint> _metaStringIndexByKey = [];
@@ -64,17 +68,53 @@ public sealed class WriteContext
     internal (uint Index, bool IsNew) AssignTypeMetaIndexIfAbsent(Type type)
     {
         ulong typeKey = TypeMapKey.Get(type);
-        if (_nextTypeMetaIndex == 0)
+        switch (_inlineTypeMetaCount)
         {
-            _firstTypeMetaKey = typeKey;
-            _hasFirstTypeMeta = true;
-            _nextTypeMetaIndex = 1;
-            return (0, true);
+            case 0:
+                _firstInlineTypeMetaKey = typeKey;
+                _inlineTypeMetaCount = 1;
+                _nextTypeMetaIndex = 1;
+                return (0, true);
+            case 1:
+                if (_firstInlineTypeMetaKey == typeKey)
+                {
+                    return (0, false);
+                }
+
+                _secondInlineTypeMetaKey = typeKey;
+                _inlineTypeMetaCount = 2;
+                _nextTypeMetaIndex = 2;
+                return (1, true);
+            case 2:
+                if (_firstInlineTypeMetaKey == typeKey)
+                {
+                    return (0, false);
+                }
+
+                if (_secondInlineTypeMetaKey == typeKey)
+                {
+                    return (1, false);
+                }
+
+                _thirdInlineTypeMetaKey = typeKey;
+                _inlineTypeMetaCount = InlineTypeMetaSlots;
+                _nextTypeMetaIndex = InlineTypeMetaSlots;
+                return (2, true);
         }
 
-        if (_hasFirstTypeMeta && _firstTypeMetaKey == typeKey)
+        if (_firstInlineTypeMetaKey == typeKey)
         {
             return (0, false);
+        }
+
+        if (_secondInlineTypeMetaKey == typeKey)
+        {
+            return (1, false);
+        }
+
+        if (_thirdInlineTypeMetaKey == typeKey)
+        {
+            return (2, false);
         }
 
         if (_typeMetaIndexByType is null)
@@ -132,8 +172,10 @@ public sealed class WriteContext
             RefWriter.Reset();
         }
 
-        _firstTypeMetaKey = 0;
-        _hasFirstTypeMeta = false;
+        _firstInlineTypeMetaKey = 0;
+        _secondInlineTypeMetaKey = 0;
+        _thirdInlineTypeMetaKey = 0;
+        _inlineTypeMetaCount = 0;
         _typeMetaIndexByType?.ClearKeys();
         _nextTypeMetaIndex = 0;
         if (_hasMetaStringIndexes)

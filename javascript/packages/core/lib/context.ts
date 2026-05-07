@@ -553,6 +553,8 @@ export class ReadContext {
   private typeMeta: TypeMeta[] = [];
   /** Persistent cross-message cache keyed by 8-byte type meta header. */
   private typeMetaCache: Map<bigint, TypeMeta> = new Map();
+  private lastTypeMetaHeader = -1n;
+  private lastTypeMeta: TypeMeta | null = null;
 
   private _depth = 0;
   private _maxDepth: number;
@@ -637,8 +639,14 @@ export class ReadContext {
       return typeMeta;
     }
     const dynamicTypeId = idOrLen >> 1;
-    // Read the 8-byte header to check the cross-message cache.
+    // Read the 8-byte header to check validated header caches.
     const header = TypeMeta.readHeader(this.reader);
+    if (this.lastTypeMeta !== null && this.lastTypeMetaHeader === header) {
+      TypeMeta.skipBody(this.reader, header);
+      this.typeMeta[dynamicTypeId] = this.lastTypeMeta;
+      return this.lastTypeMeta;
+    }
+
     const cached = this.typeMetaCache.get(header);
     let typeMeta: TypeMeta;
     if (cached) {
@@ -647,10 +655,14 @@ export class ReadContext {
       // size still comes from the current header bytes, not from the cached TypeMeta.
       TypeMeta.skipBody(this.reader, header);
       typeMeta = cached;
+      this.lastTypeMetaHeader = header;
+      this.lastTypeMeta = typeMeta;
     } else {
       typeMeta = TypeMeta.fromBytesAfterHeader(this.reader, header);
       if (this.typeMetaCache.size < ReadContext.MAX_CACHED_TYPE_META) {
         this.typeMetaCache.set(header, typeMeta);
+        this.lastTypeMetaHeader = header;
+        this.lastTypeMeta = typeMeta;
       }
     }
     this.typeMeta[dynamicTypeId] = typeMeta;

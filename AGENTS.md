@@ -39,6 +39,17 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Keep task boundaries strict. Review tasks do not edit code, analysis-only tasks do not silently turn into implementation, and active-branch fixes must land in the active branch/workspace.
 - For non-trivial multi-step tasks, write the plan and progress into the canonical durable task file (use a matched skill/workflow file if it provides one, otherwise use a file under `tasks/`) and read that file after compaction before continuing.
 
+## Design Integrity Gates
+
+- Record all core design and decisions in the owning docs when they belong there, especially under `docs/guide/**` or `docs/specification/**`.
+- Do not allow implementation drift from the design document.
+- Do not compromise design decisions to make implementation easier.
+- Do not leave workaround code behind.
+- All code must have a clean owner model; the wrong owner model or abstraction is unacceptable.
+- Do not leave ugly or temporary code behind.
+- Do not leave legacy, dead, useless, or stale code, tests, or docs behind.
+- Do not leave avoidable technical debt behind.
+
 ## Repo-Wide Hard Rules
 
 - Do not preserve legacy, dead, or useless code, tests, or docs unless the user explicitly requests it.

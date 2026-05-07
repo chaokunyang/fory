@@ -414,6 +414,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
   readTypeInfo(): string {
     const typeMeta = this.scope.uniqueName("typeMeta");
     const internalTypeId = this.getInternalTypeId();
+    const localHash = this.getHash();
     let namesStmt = "";
     let typeMetaStmt = "";
     let readUserTypeIdStmt = "";
@@ -425,7 +426,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
       case TypeId.COMPATIBLE_STRUCT:
         typeMetaStmt = `
           const ${typeMeta} = ${this.builder.typeMetaResolver.readTypeMeta()};
-          if (getHash() !== ${typeMeta}.getHash()) {
+          if (${localHash} !== ${typeMeta}.getHash()) {
             ${this.metaChangedSerializer} = ${this.builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta)}
           }
           `;
@@ -443,7 +444,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         } else {
           typeMetaStmt = `
           const ${typeMeta} = ${this.builder.typeMetaResolver.readTypeMeta()};
-          if (getHash() !== ${typeMeta}.getHash()) {
+          if (${localHash} !== ${typeMeta}.getHash()) {
             ${this.metaChangedSerializer} = ${this.builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta)}
           }
           `;
@@ -453,7 +454,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
         if (this.builder.resolver.isCompatible()) {
           typeMetaStmt = `
           const ${typeMeta} = ${this.builder.typeMetaResolver.readTypeMeta()};
-          if (getHash() !== ${typeMeta}.getHash()) {
+          if (${localHash} !== ${typeMeta}.getHash()) {
             ${this.metaChangedSerializer} = ${this.builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta)}
           }
           `;

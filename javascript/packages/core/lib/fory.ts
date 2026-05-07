@@ -43,6 +43,10 @@ export default class Fory {
   readonly config: Config;
   readonly writeContext: WriteContext;
   readonly readContext: ReadContext;
+  private readonly rootSerializers = new WeakMap<
+    Serializer,
+    (data: any) => PlatformBuffer
+  >();
 
   constructor(config?: Partial<Config>) {
     this.config = this.initConfig(config);
@@ -130,7 +134,7 @@ export default class Fory {
     }
     return {
       serializer,
-      serialize: (data: any) => this.serialize(data, serializer),
+      serialize: this.getRootSerializer(serializer),
       deserialize: (bytes: Uint8Array) => {
         if (TypeId.polymorphicType(serializer.getTypeId())) {
           return this.deserialize(bytes, serializer);
@@ -167,17 +171,26 @@ export default class Fory {
     throw new Error("outofband mode is not supported now");
   }
 
-  private serializeInternal<T = any>(data: T, serializer: Serializer) {
-    this.writeContext.reset();
-    const writer = this.writeContext.writer;
-    const bitmap = ConfigFlags.isCrossLanguageFlag;
-    writer.writeUint8(bitmap);
-    writer.reserve(serializer.fixedSize);
-    serializer.writeRef(data);
-    return writer;
+  private getRootSerializer(serializer: Serializer) {
+    let rootSerializer = this.rootSerializers.get(serializer);
+    if (rootSerializer !== undefined) {
+      return rootSerializer;
+    }
+    const writeContext = this.writeContext;
+    const writer = writeContext.writer;
+    const rootHeader = ConfigFlags.isCrossLanguageFlag;
+    rootSerializer = (data: any) => {
+      writeContext.reset();
+      writer.writeUint8(rootHeader);
+      writer.reserve(serializer.fixedSize);
+      serializer.writeRef(data);
+      return writer.dump();
+    };
+    this.rootSerializers.set(serializer, rootSerializer);
+    return rootSerializer;
   }
 
   serialize<T = any>(data: T, serializer: Serializer = this.anySerializer) {
-    return this.serializeInternal(data, serializer).dump();
+    return this.getRootSerializer(serializer)(data);
   }
 }

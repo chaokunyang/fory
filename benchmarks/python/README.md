@@ -3,10 +3,10 @@
 This directory contains two benchmark entrypoints:
 
 1. `benchmark.py` + `run.sh` (new): C++-parity benchmark matrix covering:
-   - `Struct`, `Sample`, `MediaContent`
-   - `StructList`, `SampleList`, `MediaContentList`
+   - `NumericStruct`, `Sample`, `MediaContent`
+   - `NumericStructList`, `SampleList`, `MediaContentList`
    - operations: `serialize`, `deserialize`
-   - serializers: `fory`, `pickle`, `protobuf`
+   - serializers: `fory`, `protobuf`, `pickle`
 2. `fory_benchmark.py`: CPython microbench script using the current annotation surface.
 
 ## Quick Start (Comprehensive Suite)
@@ -26,7 +26,7 @@ cd benchmarks/python
 ### Common Options
 
 ```bash
-# Run only Struct benchmarks for Fory serialize
+# Run only NumericStruct benchmarks for Fory serialize
 ./run.sh --data struct --serializer fory --operation serialize
 
 # Run all data types, deserialize only
@@ -42,7 +42,7 @@ cd benchmarks/python
 Supported values:
 
 - `--data`: `struct,sample,mediacontent,structlist,samplelist,mediacontentlist`
-- `--serializer`: `fory,pickle,protobuf`
+- `--serializer`: `fory,protobuf,pickle`
 - `--operation`: `all|serialize|deserialize`
 
 ## CPython Microbenchmark

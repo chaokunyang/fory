@@ -19,9 +19,9 @@
 """Comprehensive Python benchmark suite for C++ parity benchmark objects.
 
 This script mirrors `benchmarks/cpp/benchmark.cc` coverage and benchmarks:
-- Data types: Struct, Sample, MediaContent and corresponding *List variants.
+- Data types: NumericStruct, Sample, MediaContent and corresponding *List variants.
 - Operations: serialize / deserialize.
-- Serializers: fory / pickle / protobuf.
+- Serializers: fory / protobuf / pickle.
 
 Results are written as JSON and consumed by `benchmark_report.py`.
 """
@@ -54,21 +54,21 @@ DATA_TYPE_ORDER = [
     "samplelist",
     "mediacontentlist",
 ]
-SERIALIZER_ORDER = ["fory", "pickle", "protobuf"]
+SERIALIZER_ORDER = ["fory", "protobuf", "pickle"]
 OPERATION_ORDER = ["serialize", "deserialize"]
 
 DATA_LABELS = {
-    "struct": "Struct",
+    "struct": "NumericStruct",
     "sample": "Sample",
     "mediacontent": "MediaContent",
-    "structlist": "StructList",
+    "structlist": "NumericStructList",
     "samplelist": "SampleList",
     "mediacontentlist": "MediaContentList",
 }
 SERIALIZER_LABELS = {
     "fory": "Fory",
-    "pickle": "Pickle",
     "protobuf": "Protobuf",
+    "pickle": "Pickle",
 }
 
 
@@ -697,7 +697,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--serializer",
         default="all",
-        help="Comma-separated serializers: fory,pickle,protobuf or all",
+        help="Comma-separated serializers: fory,protobuf,pickle or all",
     )
     parser.add_argument(
         "--warmup",

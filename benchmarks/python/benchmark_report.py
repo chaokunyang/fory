@@ -45,14 +45,14 @@ except ImportError:
 
 COLORS = {
     "fory": "#FF6F01",
-    "pickle": "#4C78A8",
     "protobuf": "#55BCC2",
+    "pickle": (0.55, 0.40, 0.45),
 }
-SERIALIZER_ORDER = ["fory", "pickle", "protobuf"]
+SERIALIZER_ORDER = ["fory", "protobuf", "pickle"]
 SERIALIZER_LABELS = {
     "fory": "fory",
-    "pickle": "pickle",
     "protobuf": "protobuf",
+    "pickle": "pickle",
 }
 DATATYPE_ORDER = [
     "struct",
@@ -338,11 +338,18 @@ def generate_markdown_report(
 
     md.append("\n## Benchmark Results\n\n")
     md.append("### Timing Results (nanoseconds)\n\n")
+    timing_headers = [
+        f"{SERIALIZER_LABELS.get(lib, lib)} (ns)" for lib in SERIALIZER_ORDER
+    ]
     md.append(
-        "| Datatype | Operation | fory (ns) | pickle (ns) | protobuf (ns) | Fastest |\n"
+        "| Datatype | Operation | "
+        + " | ".join(timing_headers)
+        + " | Fastest |\n"
     )
     md.append(
-        "|----------|-----------|-----------|-------------|---------------|---------|\n"
+        "|----------|-----------|"
+        + "|".join("-" * (len(header) + 2) for header in timing_headers)
+        + "|---------|\n"
     )
 
     for datatype in datatypes:
@@ -364,11 +371,18 @@ def generate_markdown_report(
             )
 
     md.append("\n### Throughput Results (ops/sec)\n\n")
+    throughput_headers = [
+        f"{SERIALIZER_LABELS.get(lib, lib)} TPS" for lib in SERIALIZER_ORDER
+    ]
     md.append(
-        "| Datatype | Operation | fory TPS | pickle TPS | protobuf TPS | Fastest |\n"
+        "| Datatype | Operation | "
+        + " | ".join(throughput_headers)
+        + " | Fastest |\n"
     )
     md.append(
-        "|----------|-----------|----------|------------|--------------|---------|\n"
+        "|----------|-----------|"
+        + "|".join("-" * (len(header) + 2) for header in throughput_headers)
+        + "|---------|\n"
     )
 
     for datatype in datatypes:
@@ -392,8 +406,13 @@ def generate_markdown_report(
 
     if sizes:
         md.append("\n### Serialized Data Sizes (bytes)\n\n")
-        md.append("| Datatype | fory | pickle | protobuf |\n")
-        md.append("|----------|------|--------|----------|\n")
+        size_headers = [SERIALIZER_LABELS.get(lib, lib) for lib in SERIALIZER_ORDER]
+        md.append("| Datatype | " + " | ".join(size_headers) + " |\n")
+        md.append(
+            "|----------|"
+            + "|".join("-" * (len(header) + 2) for header in size_headers)
+            + "|\n"
+        )
 
         for datatype in datatypes:
             datatype_sizes = sizes.get(datatype, {})

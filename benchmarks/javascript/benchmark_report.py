@@ -289,6 +289,12 @@ md_report = [
     "cd benchmarks/javascript\n",
     "./run.sh\n",
     "```\n\n",
+    "## Benchmark Semantics\n\n",
+    "The timed serializer loops use serializer-native typed values. Fory receives "
+    "the pre-normalized Fory value used by its schema, protobuf receives the "
+    "prebuilt protobuf-shaped value, and JSON receives the benchmark JavaScript "
+    "object. Protobuf timings do not include `toProto`, `fromProto`, "
+    "`protobufjs.create`, or `toObject` conversion work.\n\n",
     "## Hardware & OS Info\n\n",
     "| Key | Value |\n",
     "|-----|-------|\n",

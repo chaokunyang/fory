@@ -727,7 +727,7 @@ function serializeBytes(serializerName, dataset, value) {
     case "fory":
       return dataset.forySerializer.serialize(normalizeForyValue(dataset.key, value));
     case "protobuf":
-      return dataset.protoType.encode(dataset.protoType.create(dataset.toProto(value))).finish();
+      return dataset.protoType.encode(dataset.toProto(value)).finish();
     case "json":
       return Buffer.from(JSON.stringify(value), "utf8");
     default:
@@ -754,16 +754,17 @@ function createBenchmarkCase(serializerName, dataset, operation) {
   }
 
   if (serializerName === "protobuf") {
+    const protoValue = dataset.toProto(value);
     if (operation === "Serialize") {
       return () => {
-        const bytes = dataset.protoType.encode(dataset.protoType.create(dataset.toProto(value))).finish();
+        const bytes = dataset.protoType.encode(protoValue).finish();
         blackhole ^= bytes.length;
       };
     }
-    const bytes = dataset.protoType.encode(dataset.protoType.create(dataset.toProto(value))).finish();
+    const bytes = dataset.protoType.encode(protoValue).finish();
     return () => {
-      const decoded = dataset.fromProto(decodeProtoObject(dataset.protoType, bytes));
-      blackhole ^= Array.isArray(decoded) ? decoded.length : 1;
+      const decoded = dataset.protoType.decode(bytes);
+      blackhole ^= decoded ? 1 : 0;
     };
   }
 

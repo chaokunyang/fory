@@ -331,9 +331,9 @@ def generate_plots(data, output_dir: Path):
             "Python Serialization Throughput",
             fontsize=15,
             fontweight="normal",
-            y=0.965,
+            y=0.955,
         )
-        fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.955], w_pad=1.2, h_pad=1.25)
+        fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
         throughput_path = output_dir / "throughput.png"
         plt.savefig(throughput_path, dpi=170, bbox_inches="tight", pad_inches=0.12)
         plt.close()

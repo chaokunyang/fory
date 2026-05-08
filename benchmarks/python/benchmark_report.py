@@ -149,12 +149,15 @@ def format_datatype_table_label(datatype: str) -> str:
 
 
 def format_tps_label(tps: float) -> str:
+    def format_scaled(value: float, suffix: str) -> str:
+        return f"{value:.2f}".rstrip("0").rstrip(".") + suffix
+
     if tps >= 1e9:
-        return f"{tps / 1e9:.2f}G"
+        return format_scaled(tps / 1e9, "G")
     if tps >= 1e6:
-        return f"{tps / 1e6:.2f}M"
+        return format_scaled(tps / 1e6, "M")
     if tps >= 1e3:
-        return f"{tps / 1e3:.2f}K"
+        return format_scaled(tps / 1e3, "K")
     return f"{tps:.0f}"
 
 
@@ -323,17 +326,14 @@ def generate_plots(data, output_dir: Path):
             plot_throughput_grid_subplot(ax, data, datatype)
             if index % 3 == 0:
                 ax.set_ylabel("Throughput (ops/sec)", labelpad=10)
-            else:
-                ax.tick_params(axis="y", labelleft=False)
-                ax.yaxis.get_offset_text().set_visible(False)
 
         fig.suptitle(
             "Python Serialization Throughput",
             fontsize=15,
             fontweight="normal",
-            y=0.975,
+            y=0.965,
         )
-        fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.945], w_pad=1.0, h_pad=1.25)
+        fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.955], w_pad=1.2, h_pad=1.25)
         throughput_path = output_dir / "throughput.png"
         plt.savefig(throughput_path, dpi=170, bbox_inches="tight", pad_inches=0.12)
         plt.close()

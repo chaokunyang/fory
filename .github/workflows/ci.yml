@@ -858,7 +858,7 @@ jobs:
       - name: Run C++ ${{ matrix.sanitizer }} tests
         run: |
           ARCH="$(uname -m)"
-          BAZEL_CONFIGS="--config=${{ matrix.sanitizer }}"
+          BAZEL_CONFIGS="--config=fory_cpp_werror --config=${{ matrix.sanitizer }}"
           if [[ "${ARCH}" == "x86_64" || "${ARCH}" == "amd64" ]]; then
             BAZEL_CONFIGS="--config=x86_64 ${BAZEL_CONFIGS}"
           fi

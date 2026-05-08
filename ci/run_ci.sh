@@ -255,10 +255,10 @@ case $1 in
       export PATH=~/bin:$PATH
       echo "bazel version: $(bazel version)"
       ARCH="$(uname -m)"
-      BAZEL_TEST_CONFIG=""
+      BAZEL_TEST_CONFIG="--config=fory_cpp_werror"
       case "${ARCH}" in
         x86_64|amd64)
-          BAZEL_TEST_CONFIG="--config=x86_64"
+          BAZEL_TEST_CONFIG="--config=x86_64 ${BAZEL_TEST_CONFIG}"
           ;;
       esac
       set +e

@@ -35,7 +35,7 @@ const (
 /*
 TypeDef represents a transportable value object containing type information and field definitions.
 typeDef are layout as following:
-  - first 8 bytes: global header (52 bits hash + 1 bit compress flag + 8 bits meta size)
+  - first 8 bytes: global header (52 bits metadata hash + 3 bits reserved + 1 bit compress flag + 8 bits meta size)
   - next 1 byte: kind header
   - next variable bytes: type id (varint) or ns name + type name
   - next variable bytes: field definitions (see below)
@@ -286,7 +286,7 @@ func readTypeDef(fory *Fory, buffer *ByteBuffer, header int64, err *Error) *Type
 func skipTypeDef(buffer *ByteBuffer, header int64, err *Error) {
 	// Header-cache hits intentionally treat the current body as opaque bytes and skip by the size in
 	// the current header. Parsed TypeDefs are published to the cache only after successful body parse
-	// and 52-bit body-hash validation; cache hits must not reparse or rehash that body.
+	// and 52-bit metadata-hash validation; cache hits must not reparse or rehash that body.
 	sz := int(header & META_SIZE_MASK)
 	if sz == META_SIZE_MASK {
 		sz += int(buffer.ReadVarUint32(err))
@@ -672,7 +672,7 @@ func getFieldNameEncodingIndex(encoding meta.Encoding) int {
 /*
 encodingTypeDef encodes a TypeDef into binary format according to the specification
 typeDef are layout as following:
-- first 8 bytes: global header (52 bits hash + 1 bit compress flag + 8 bits meta size)
+- first 8 bytes: global header (52 bits metadata hash + 3 bits reserved + 1 bit compress flag + 8 bits meta size)
 - next 1 byte: kind header
 - next variable bytes: type id (varint) or ns name + type name
 - next variable bytes: field defs (see below)
@@ -806,20 +806,15 @@ func encodingTypeDef(typeResolver *TypeResolver, typeDef *TypeDef) ([]byte, erro
 
 // prependGlobalHeader writes the 8-byte global header
 func prependGlobalHeader(buffer *ByteBuffer, isCompressed bool) (*ByteBuffer, error) {
-	var header uint64
 	metaSize := buffer.WriterIndex()
-
-	header |= typeDefHeaderHash(buffer.GetByteSlice(0, metaSize))
-
+	headerLowBits := uint64(metaSize)
+	if metaSize >= META_SIZE_MASK {
+		headerLowBits = META_SIZE_MASK
+	}
 	if isCompressed {
-		header |= COMPRESS_META_FLAG
+		headerLowBits |= COMPRESS_META_FLAG
 	}
-
-	if metaSize < META_SIZE_MASK {
-		header |= uint64(metaSize) & META_SIZE_MASK
-	} else {
-		header |= META_SIZE_MASK // Set to max value, actual size will follow
-	}
+	header := typeDefHeaderHash(buffer.GetByteSlice(0, metaSize), headerLowBits) | headerLowBits
 
 	result := NewByteBuffer(make([]byte, metaSize+8))
 	result.WriteInt64(int64(header))
@@ -990,7 +985,7 @@ func writeFieldDef(typeResolver *TypeResolver, buffer *ByteBuffer, field FieldDe
 /*
 decodeTypeDef decodes a TypeDef from the buffer
 typeDef are layout as following:
-  - first 8 bytes: global header (52 bits hash + 1 bit compress flag + 8 bits meta size)
+  - first 8 bytes: global header (52 bits metadata hash + 3 bits reserved + 1 bit compress flag + 8 bits meta size)
   - next 1 byte: kind header
   - next variable bytes: type id (varint) or ns name + type name
   - next variable bytes: field definitions (see below)
@@ -1275,8 +1270,12 @@ func buildTypeDefEncoded(header int64, metaSizeBits, extraMetaSize int, metaByte
 	return buffer.Bytes()
 }
 
-func typeDefHeaderHash(data []byte) uint64 {
-	hash := int64(Murmur3Sum64WithSeed(data, 47) << (64 - NUM_HASH_BITS))
+func typeDefHeaderHash(data []byte, headerLowBits uint64) uint64 {
+	hashInput := make([]byte, len(data)+2)
+	copy(hashInput, data)
+	hashInput[len(data)] = byte(headerLowBits)
+	hashInput[len(data)+1] = byte(headerLowBits >> 8)
+	hash := int64(Murmur3Sum64WithSeed(hashInput, 47) << (64 - NUM_HASH_BITS))
 	if hash < 0 {
 		hash = -hash
 	}
@@ -1295,7 +1294,7 @@ func validateParsedTypeDefHash(header int64, metaSizeBits, extraMetaSize int, en
 	}
 	hashMask := ^uint64(0)
 	hashMask <<= uint(64 - NUM_HASH_BITS)
-	expectedHeaderHash := typeDefHeaderHash(encoded)
+	expectedHeaderHash := typeDefHeaderHash(encoded, uint64(header)&^hashMask)
 	actualHeaderHash := uint64(header) & hashMask
 	if expectedHeaderHash != actualHeaderHash {
 		return fmt.Errorf("invalid TypeDef metadata hash")

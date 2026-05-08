@@ -25,6 +25,7 @@ import Fory, {
 } from "../packages/core/index";
 import { ReadContext } from "../packages/core/lib/context";
 import { TypeMeta } from "../packages/core/lib/meta/TypeMeta";
+import { x64hash128 } from "../packages/core/lib/murmurHash3";
 import { BinaryReader } from "../packages/core/lib/reader";
 import { BinaryWriter } from "../packages/core/lib/writer";
 import { describe, expect, test } from "@jest/globals";
@@ -33,6 +34,9 @@ const COMPRESS_META_FLAG = 1n << 8n;
 const RESERVED_META_FLAGS = 0b111n << 9n;
 const META_SIZE_MASK = 0xffn;
 const HASH_SHIFT_BITS = 12n;
+const LOW_HEADER_BITS_MASK = (1n << HASH_SHIFT_BITS) - 1n;
+const UINT64_MASK = (1n << 64n) - 1n;
+const HEADER_HASH_MASK = UINT64_MASK ^ LOW_HEADER_BITS_MASK;
 
 describe("typemeta", () => {
   test("writes TypeMeta header bits in the xlang layout", () => {
@@ -106,6 +110,36 @@ describe("typemeta", () => {
     const header = TypeMeta.readHeader(skipReader);
     TypeMeta.skipBody(skipReader, header);
     expect(skipReader.readGetCursor()).toBe(bytes.length);
+  });
+
+  test("includes TypeMeta header low bits in the metadata hash", () => {
+    const bytes = TypeMeta.fromTypeInfo(
+      Type.struct(7007, {
+        value: Type.string().setId(1),
+      }),
+    ).toBytes();
+    const malformed = new Uint8Array(bytes);
+    const view = new DataView(
+      malformed.buffer,
+      malformed.byteOffset,
+      malformed.byteLength,
+    );
+    const header = view.getBigUint64(0, true);
+    const bodyOffset = typeMetaBodyOffset(bytes);
+    const bodyOnlyHash = bodyOnlyHeaderHashBits(bytes.subarray(bodyOffset));
+    expect(header & HEADER_HASH_MASK).not.toBe(bodyOnlyHash);
+
+    view.setBigUint64(
+      0,
+      bodyOnlyHash | (header & LOW_HEADER_BITS_MASK),
+      true,
+    );
+    const reader = new BinaryReader({});
+    reader.reset(malformed);
+
+    expect(() => TypeMeta.fromBytes(reader)).toThrow(
+      "TypeMeta metadata hash mismatch",
+    );
   });
 
   test("TypeMeta header cache hit skips the current body size", () => {
@@ -642,4 +676,16 @@ function typeMetaBodyOffset(bytes: Uint8Array) {
     reader.readVarUInt32();
   }
   return reader.readGetCursor();
+}
+
+function bodyOnlyHeaderHashBits(buffer: Uint8Array) {
+  const hash = x64hash128(buffer, 47);
+  let header = BigInt.asIntN(
+    64,
+    hash.getBigInt64(0, false) << HASH_SHIFT_BITS,
+  );
+  if (header < 0n) {
+    header = -header;
+  }
+  return BigInt.asUintN(64, header) & HEADER_HASH_MASK;
 }

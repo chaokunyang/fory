@@ -238,14 +238,12 @@ public class NativeTypeDefEncoder {
 
   static MemoryBuffer prependHeader(MemoryBuffer buffer, boolean isCompressed) {
     int metaSize = buffer.writerIndex();
-    long hash = MurmurHash3.murmurhash3_x64_128(buffer.getHeapMemory(), 0, metaSize, 47)[0];
-    hash <<= (64 - NUM_HASH_BITS);
-    // this id will be part of generated codec, a negative number won't be allowed in class name.
-    long header = Math.abs(hash);
+    long headerLowBits = Math.min(metaSize, META_SIZE_MASKS);
     if (isCompressed) {
-      header |= COMPRESS_META_FLAG;
+      headerLowBits |= COMPRESS_META_FLAG;
     }
-    header |= Math.min(metaSize, META_SIZE_MASKS);
+    long header =
+        computeTypeDefHashBits(buffer.getHeapMemory(), 0, metaSize, headerLowBits) | headerLowBits;
     MemoryBuffer result = MemoryUtils.buffer(metaSize + 8);
     result.writeInt64(header);
     if (metaSize >= META_SIZE_MASKS) {
@@ -253,6 +251,18 @@ public class NativeTypeDefEncoder {
     }
     result.writeBytes(buffer.getHeapMemory(), 0, metaSize);
     return result;
+  }
+
+  static long computeTypeDefHashBits(byte[] bytes, int offset, int size, long headerLowBits) {
+    byte[] hashInput = new byte[size + Short.BYTES];
+    System.arraycopy(bytes, offset, hashInput, 0, size);
+    hashInput[size] = (byte) headerLowBits;
+    hashInput[size + 1] = (byte) (headerLowBits >>> Byte.SIZE);
+    long hash = MurmurHash3.murmurhash3_x64_128(hashInput, 0, hashInput.length, 47)[0];
+    hash <<= (64 - NUM_HASH_BITS);
+    long hashMask = -1L << (Long.SIZE - NUM_HASH_BITS);
+    // this id will be part of generated codec, a negative number won't be allowed in class name.
+    return Math.abs(hash) & hashMask;
   }
 
   static int nativeKindCode(int typeId) {

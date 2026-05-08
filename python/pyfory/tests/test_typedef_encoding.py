@@ -36,6 +36,11 @@ from pyfory.meta.typedef import (
     DynamicFieldType,
     FIELD_NAME_ENCODINGS,
     COMPRESS_META_FLAG,
+    META_SIZE_MASKS,
+    TYPEDEF_HASH_MASK,
+    TYPEDEF_HASH_SHIFT,
+    _INT64_MIN,
+    _UINT64_MASK,
 )
 from pyfory.meta.typedef_encoder import (
     FIELD_NAME_ENCODER,
@@ -47,6 +52,7 @@ from pyfory.serializer import PyArraySerializer
 from pyfory.types import TypeId
 from pyfory import Fory
 from pyfory.error import TypeNotCompatibleError
+from pyfory.lib.mmh3 import hash_buffer
 
 try:
     import numpy as np
@@ -252,6 +258,16 @@ def test_decode_typedef_rejects_parsed_body_with_mismatched_hash():
         decode_typedef(Buffer(malformed), fory.type_resolver)
 
 
+def test_decode_typedef_rejects_body_only_header_hash():
+    fory = Fory(xlang=True, compatible=False)
+    fory.register(SimpleTypeDef, namespace="example", typename="SimpleTypeDef")
+    typedef = encode_typedef(fory.type_resolver, SimpleTypeDef)
+    malformed = _rewrite_header_with_body_only_hash(typedef.encoded)
+
+    with pytest.raises(ValueError, match="Invalid TypeDef metadata hash"):
+        decode_typedef(Buffer(malformed), fory.type_resolver)
+
+
 def test_decode_typedef_rejects_hash_consistent_malformed_body():
     fory = Fory(xlang=True, compatible=False)
     encoded = prepend_header(b"\x00", False)
@@ -319,9 +335,31 @@ def _corrupt_encoded_field_name(typedef, field_name):
 def _typedef_body_offset(encoded):
     buffer = Buffer(encoded)
     header = buffer.read_int64()
-    if header & 0xFF == 0xFF:
+    if header & META_SIZE_MASKS == META_SIZE_MASKS:
         buffer.read_var_uint32()
     return buffer.get_reader_index()
+
+
+def _rewrite_header_with_body_only_hash(encoded):
+    malformed = bytearray(encoded)
+    buffer = Buffer(encoded)
+    header = buffer.read_int64() & _UINT64_MASK
+    body_offset = _typedef_body_offset(encoded)
+    body_only_hash = _body_only_typedef_hash_bits(encoded[body_offset:])
+    assert header & TYPEDEF_HASH_MASK != body_only_hash
+    rewritten_header = body_only_hash | (header & ~TYPEDEF_HASH_MASK)
+    malformed[:8] = rewritten_header.to_bytes(8, "little", signed=False)
+    return bytes(malformed)
+
+
+def _body_only_typedef_hash_bits(encoded_body):
+    hash_value = hash_buffer(encoded_body, 47)[0]
+    shifted = (hash_value << TYPEDEF_HASH_SHIFT) & _UINT64_MASK
+    if shifted >= (1 << 63):
+        shifted -= 1 << 64
+    if shifted != _INT64_MIN and shifted < 0:
+        shifted = -shifted
+    return (shifted & _UINT64_MASK) & TYPEDEF_HASH_MASK
 
 
 def test_nested_container_typedef_preserves_declared_encoding():

@@ -761,7 +761,7 @@ public abstract class TypeResolver {
       simpleClassNameBytes = metaStringReader.readMetaString(buffer, typeNameBytesCache);
 
       // MetaStringReader returns the provided cache object only when the wire identity matches. For
-      // big meta strings, body-hash validation happens before the entry is first cached.
+      // big meta strings, metadata-hash validation happens before the entry is first cached.
       if (typeNameBytesCache == simpleClassNameBytes && packageNameBytesCache == namespaceBytes) {
         return typeInfoCache;
       }
@@ -793,7 +793,7 @@ public abstract class TypeResolver {
     } else {
       // New type in stream, with optimized reuse by validated TypeDef header. A header-cache
       // hit intentionally skips the body without rehashing: entries are published only after the
-      // TypeDef body has parsed successfully and matched the 52-bit body hash.
+      // TypeDef body has parsed successfully and matched the 52-bit metadata hash.
       long id = buffer.readInt64();
       typeInfo = extRegistry.typeInfoByTypeDefId.get(id);
       if (typeInfo != null) {

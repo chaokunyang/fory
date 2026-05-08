@@ -1636,7 +1636,7 @@ func (r *TypeResolver) readSharedTypeMeta(buffer *ByteBuffer, err *Error) *TypeI
 	var td *TypeDef
 	if existingTd, exists := r.defIdToTypeDef[id]; exists {
 		// Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-		// after a successful TypeDef parse and 52-bit body-hash validation.
+		// after a successful TypeDef parse and 52-bit metadata-hash validation.
 		skipTypeDef(buffer, id, err)
 		td = existingTd
 	} else {

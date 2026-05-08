@@ -310,11 +310,11 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     }
 
     let body = try encodeBody()
-    var header = Self.typeMetaHeaderHash(body)
+    var headerLowBits = UInt64(min(body.count, Int(typeMetaSizeMask)))
     if compressed {
-      header |= typeMetaCompressedFlag
+      headerLowBits |= typeMetaCompressedFlag
     }
-    header |= UInt64(min(body.count, Int(typeMetaSizeMask)))
+    let header = Self.typeMetaHeaderHash(body, headerLowBits: headerLowBits) | headerLowBits
 
     let buffer = ByteBuffer(capacity: body.count + 16)
     buffer.writeUInt64(header)
@@ -407,7 +407,8 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     if bodyReader.remaining != 0 {
       throw ForyError.invalidData("unexpected trailing bytes in TypeMeta body")
     }
-    if (header & Self.hashMask()) != Self.typeMetaHeaderHash(encodedBody) {
+    if (header & Self.hashMask())
+      != Self.typeMetaHeaderHash(encodedBody, headerLowBits: header & ~Self.hashMask()) {
       throw ForyError.invalidData("invalid TypeMeta metadata hash")
     }
 
@@ -470,8 +471,11 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     UInt64.max << (64 - typeMetaNumHashBits)
   }
 
-  private static func typeMetaHeaderHash(_ body: [UInt8]) -> UInt64 {
-    let bodyHash = MurmurHash3.x64_128(body, seed: typeMetaHashSeed).0
+  private static func typeMetaHeaderHash(_ body: [UInt8], headerLowBits: UInt64) -> UInt64 {
+    var hashInput = body
+    hashInput.append(UInt8(truncatingIfNeeded: headerLowBits))
+    hashInput.append(UInt8(truncatingIfNeeded: headerLowBits >> 8))
+    let bodyHash = MurmurHash3.x64_128(hashInput, seed: typeMetaHashSeed).0
     let shifted = bodyHash << (64 - typeMetaNumHashBits)
     let signed = Int64(bitPattern: shifted)
     let absSigned = signed == Int64.min ? signed : Swift.abs(signed)

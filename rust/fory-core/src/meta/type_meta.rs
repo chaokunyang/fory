@@ -167,15 +167,20 @@ fn read_type_meta_body_size(reader: &mut Reader, header: i64) -> Result<usize, E
 }
 
 #[inline(always)]
-fn type_meta_hash_bits(body: &[u8]) -> u64 {
-    let hash_value = murmurhash3_x64_128(body, 47).0 as i64;
+fn type_meta_hash_bits(body: &[u8], header_low_bits: u64) -> u64 {
+    let mut hash_input = Vec::with_capacity(body.len() + 2);
+    hash_input.extend_from_slice(body);
+    hash_input.push(header_low_bits as u8);
+    hash_input.push((header_low_bits >> 8) as u8);
+    let hash_value = murmurhash3_x64_128(&hash_input, 47).0 as i64;
     hash_value.wrapping_shl(TYPE_META_HASH_SHIFT).wrapping_abs() as u64
 }
 
 #[inline(always)]
 fn validate_type_meta_body_hash(header: i64, body: &[u8]) -> Result<(), Error> {
     let hash_mask = u64::MAX << TYPE_META_HASH_SHIFT;
-    if ((header as u64) & hash_mask) != (type_meta_hash_bits(body) & hash_mask) {
+    let expected_hash = type_meta_hash_bits(body, (header as u64) & !hash_mask);
+    if ((header as u64) & hash_mask) != (expected_hash & hash_mask) {
         return Err(Error::invalid_data("TypeMeta metadata hash mismatch"));
     }
     Ok(())
@@ -1136,7 +1141,8 @@ impl TypeMeta {
         if is_compressed {
             header |= COMPRESS_META_FLAG;
         }
-        let meta_hash_shifted = type_meta_hash_bits(meta_writer.dump().as_slice()) as i64;
+        let meta_hash_shifted =
+            type_meta_hash_bits(meta_writer.dump().as_slice(), header as u64) as i64;
         let meta_hash = meta_hash_shifted >> TYPE_META_HASH_SHIFT;
         header |= meta_hash_shifted;
         result.write_i64(header);
@@ -1177,6 +1183,34 @@ mod tests {
     }
 
     #[test]
+    fn rejects_body_only_header_hash() {
+        let meta = TypeMeta::new(
+            STRUCT,
+            1,
+            MetaString::get_empty().clone(),
+            MetaString::get_empty().clone(),
+            false,
+            vec![],
+        )
+        .unwrap();
+        let (mut bytes, _) = meta.to_bytes().unwrap();
+        let header = i64::from_le_bytes(bytes[0..8].try_into().unwrap()) as u64;
+        let hash_mask = u64::MAX << TYPE_META_HASH_SHIFT;
+        let body_only_hash = body_only_type_meta_hash_bits(&bytes[8..]);
+        assert_ne!(header & hash_mask, body_only_hash);
+        let rewritten_header = body_only_hash | (header & !hash_mask);
+        bytes[0..8].copy_from_slice(&(rewritten_header as i64).to_le_bytes());
+
+        let mut reader = Reader::new(&bytes);
+        let result = TypeMeta::from_bytes(&mut reader, &TypeResolver::default());
+        let message = result
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default();
+        assert!(message.contains("hash mismatch"));
+    }
+
+    #[test]
     fn rejects_hash_consistent_trailing_body_bytes() {
         let meta = TypeMeta::new(
             STRUCT,
@@ -1193,8 +1227,9 @@ mod tests {
         let mut frame = vec![];
         let mut writer = Writer::from_buffer(&mut frame);
         let body_size = body.len() as i64;
-        let mut header = type_meta_hash_bits(&body) as i64;
-        header |= min(META_SIZE_MASK, body_size);
+        let header_low_bits = min(META_SIZE_MASK, body_size);
+        let mut header = type_meta_hash_bits(&body, header_low_bits as u64) as i64;
+        header |= header_low_bits;
         writer.write_i64(header);
         if body_size >= META_SIZE_MASK {
             writer.write_var_u32((body_size - META_SIZE_MASK) as u32);
@@ -1208,5 +1243,11 @@ mod tests {
             .map(|error| error.to_string())
             .unwrap_or_default();
         assert!(message.contains("metadata size"));
+    }
+
+    fn body_only_type_meta_hash_bits(body: &[u8]) -> u64 {
+        let hash_value = murmurhash3_x64_128(body, 47).0 as i64;
+        let shifted = hash_value << TYPE_META_HASH_SHIFT;
+        shifted.wrapping_abs() as u64 & (u64::MAX << TYPE_META_HASH_SHIFT)
     }
 }

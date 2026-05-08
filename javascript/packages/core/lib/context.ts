@@ -716,7 +716,7 @@ export class ReadContext {
     let typeMeta: TypeMeta;
     if (cached) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeMeta parse and 52-bit body-hash validation. The current body
+      // after a successful TypeMeta parse and 52-bit metadata-hash validation. The current body
       // size still comes from the current header bytes, not from the cached TypeMeta.
       TypeMeta.skipBodyByHeaderLow(this.reader, headerLow);
       typeMeta = cached;

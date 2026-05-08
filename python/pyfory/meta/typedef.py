@@ -121,8 +121,9 @@ def xlang_non_struct_type_id(kind_code: int) -> int:
         raise ValueError(f"Unsupported TypeDef kind code {kind_code}") from exc
 
 
-def _typedef_header_hash(encoded: bytes) -> int:
-    hash_value = hash_buffer(encoded, 47)[0]
+def _typedef_header_hash(encoded: bytes, header_low_bits: int) -> int:
+    hash_input = encoded + bytes((header_low_bits & 0xFF, (header_low_bits >> 8) & 0xFF))
+    hash_value = hash_buffer(hash_input, 47)[0]
     shifted = (hash_value << TYPEDEF_HASH_SHIFT) & _UINT64_MASK
     if shifted >= (1 << 63):
         shifted -= 1 << 64

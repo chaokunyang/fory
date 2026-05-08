@@ -1162,7 +1162,7 @@ class TypeResolver:
         type_info = self._meta_shared_type_info.get(header)
         if type_info is not None:
             # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-            # after a successful TypeDef parse and 52-bit body-hash validation.
+            # after a successful TypeDef parse and 52-bit metadata-hash validation.
             skip_typedef(buffer, header)
             return type_info
         type_def = decode_typedef(buffer, self, header=header)

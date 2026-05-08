@@ -30,6 +30,7 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.Types;
+import org.apache.fory.util.MurmurHash3;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -484,6 +485,18 @@ public class TypeDefEncoderTest {
   }
 
   @Test
+  public void testDecodeRejectsBodyOnlyHeaderHash() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    fory.register(ClassWithNoAnnotations.class);
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNoAnnotations.class);
+    byte[] malformed = rewriteHeaderWithBodyOnlyHash(typeDef);
+
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> TypeDef.readTypeDef(fory.getTypeResolver(), MemoryBuffer.fromByteArray(malformed)));
+  }
+
+  @Test
   public void testDecodeRejectsHashConsistentMalformedTypeDefBody() {
     Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     MemoryBuffer body = MemoryBuffer.newHeapBuffer(1);
@@ -535,6 +548,26 @@ public class TypeDefEncoderTest {
     Assert.assertTrue(index >= Long.BYTES);
     malformed[index + needleBytes.length - 1] ^= 1;
     return malformed;
+  }
+
+  private static byte[] rewriteHeaderWithBodyOnlyHash(TypeDef typeDef) {
+    byte[] malformed = typeDef.getEncoded().clone();
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(malformed);
+    long header = buffer.readInt64();
+    int bodyOffset = typeDefBodyOffset(malformed);
+    int size = malformed.length - bodyOffset;
+    long hashMask = -1L << (Long.SIZE - TypeDef.NUM_HASH_BITS);
+    long bodyOnlyHash = bodyOnlyTypeDefHashBits(malformed, bodyOffset, size);
+    Assert.assertNotEquals(header & hashMask, bodyOnlyHash);
+    MemoryBuffer.fromByteArray(malformed).putInt64(0, bodyOnlyHash | (header & ~hashMask));
+    return malformed;
+  }
+
+  private static long bodyOnlyTypeDefHashBits(byte[] bytes, int offset, int size) {
+    long hash = MurmurHash3.murmurhash3_x64_128(bytes, offset, size, 47)[0];
+    hash <<= (Long.SIZE - TypeDef.NUM_HASH_BITS);
+    long hashMask = -1L << (Long.SIZE - TypeDef.NUM_HASH_BITS);
+    return Math.abs(hash) & hashMask;
   }
 
   private static int indexOf(byte[] bytes, byte[] needle, int fromIndex) {

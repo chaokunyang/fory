@@ -16,6 +16,7 @@
 // under the License.
 
 using System.Buffers;
+using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Threading.Tasks;
@@ -1736,6 +1737,33 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
+    public void TypeMetaHeaderHashIncludesLowHeaderBits()
+    {
+        TypeMeta typeMeta = new(
+            (uint)TypeId.CompatibleStruct,
+            201,
+            MetaString.Empty('.', '_'),
+            MetaString.Empty('$', '_'),
+            registerByName: false,
+            [new TypeMetaFieldInfo(1, "value", new TypeMetaFieldType((uint)TypeId.String, true))]);
+        byte[] encoded = typeMeta.Encode();
+        ulong header = BinaryPrimitives.ReadUInt64LittleEndian(encoded);
+        int bodyOffset = TypeMetaBodyOffset(encoded, header);
+        ulong hashMask = ulong.MaxValue << 12;
+        ulong bodyOnlyHash = BodyOnlyTypeMetaHashBits(encoded.AsSpan(bodyOffset));
+        Assert.NotEqual(header & hashMask, bodyOnlyHash);
+
+        byte[] malformed = (byte[])encoded.Clone();
+        BinaryPrimitives.WriteUInt64LittleEndian(
+            malformed,
+            bodyOnlyHash | (header & ~hashMask));
+
+        InvalidDataException exception =
+            Assert.Throws<InvalidDataException>(() => TypeMeta.Decode(malformed));
+        Assert.Contains("TypeMeta metadata hash mismatch", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TypeMetaAssignFieldIdsPrefersIdAndFallsBackToName()
     {
         List<TypeMetaFieldInfo> localFields =
@@ -1887,6 +1915,27 @@ public sealed class ForyRuntimeTests
         byte[] malformed = (byte[])payload.Clone();
         malformed[typeMetaEnd - 1] ^= 1;
         return malformed;
+    }
+
+    private static int TypeMetaBodyOffset(byte[] encoded, ulong header)
+    {
+        ByteReader reader = new(encoded);
+        _ = reader.ReadUInt64();
+        if ((header & 0xff) == 0xff)
+        {
+            _ = reader.ReadVarUInt32();
+        }
+
+        return reader.Cursor;
+    }
+
+    private static ulong BodyOnlyTypeMetaHashBits(ReadOnlySpan<byte> body)
+    {
+        (ulong bodyHash, _) = MurmurHash3.X64_128(body, 47);
+        ulong shifted = bodyHash << 12;
+        long signed = unchecked((long)shifted);
+        long absSigned = signed == long.MinValue ? signed : Math.Abs(signed);
+        return unchecked((ulong)absSigned) & (ulong.MaxValue << 12);
     }
 
     private static (int TypeMetaStart, int TypeMetaEnd, TypeMeta TypeMeta) ReadCompatibleTypeMetaRange(byte[] payload)

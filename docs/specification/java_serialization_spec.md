@@ -206,9 +206,15 @@ Header layout (lower bits on the right):
 ```
 
 - size: lower 8 bits. If size equals the mask (0xFF), write extra size as varuint32 and add it.
-- compress: bit 8, set when payload is compressed.
+- compress: bit 8, set when class meta bytes are compressed.
 - reserved: bits 9-11 are reserved for future use and must be zero.
-- hash: 52-bit hash of the payload.
+- hash: 52 stored hash bits derived from MurmurHash3 x64_128 seed 47 over
+  `class meta bytes || header_low12_le`. `header_low12_le` is two little-endian bytes containing
+  the low 12 header bits (size, compress, and reserved bits); the upper four bits of the second
+  byte are zero. Take lane 0 of the 128-bit MurmurHash3 result as a signed int64, left-shift it by
+  12 with two's-complement 64-bit wraparound, apply signed absolute value (leaving `INT64_MIN`
+  unchanged), then mask with `0xfffffffffffff000`. The final header is the masked hash bits OR-ed
+  with the low 12 header bits.
 
 ### Class meta bytes
 

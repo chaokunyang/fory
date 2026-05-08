@@ -37,6 +37,7 @@ import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.MapFields;
 import org.apache.fory.test.bean.Struct;
 import org.apache.fory.type.Types;
+import org.apache.fory.util.MurmurHash3;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -259,6 +260,17 @@ public class NativeTypeDefEncoderTest {
   }
 
   @Test
+  public void testDecodeRejectsBodyOnlyHeaderHash() {
+    Fory fory = Fory.builder().withMetaShare(true).build();
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), Foo1.class);
+    byte[] malformed = rewriteHeaderWithBodyOnlyHash(typeDef);
+
+    Assert.assertThrows(
+        DeserializationException.class,
+        () -> TypeDef.readTypeDef(fory.getTypeResolver(), MemoryBuffer.fromByteArray(malformed)));
+  }
+
+  @Test
   public void testDecodeRejectsHashConsistentMalformedTypeDefBody() {
     Fory fory = Fory.builder().withMetaShare(true).build();
     MemoryBuffer body = MemoryBuffer.newHeapBuffer(1);
@@ -275,6 +287,35 @@ public class NativeTypeDefEncoderTest {
     Assert.assertTrue(index >= Long.BYTES);
     malformed[index + needleBytes.length - 1] ^= 1;
     return malformed;
+  }
+
+  private static byte[] rewriteHeaderWithBodyOnlyHash(TypeDef typeDef) {
+    byte[] malformed = typeDef.getEncoded().clone();
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(malformed);
+    long header = buffer.readInt64();
+    int bodyOffset = typeDefBodyOffset(malformed);
+    int size = malformed.length - bodyOffset;
+    long hashMask = -1L << (Long.SIZE - TypeDef.NUM_HASH_BITS);
+    long bodyOnlyHash = bodyOnlyTypeDefHashBits(malformed, bodyOffset, size);
+    Assert.assertNotEquals(header & hashMask, bodyOnlyHash);
+    MemoryBuffer.fromByteArray(malformed).putInt64(0, bodyOnlyHash | (header & ~hashMask));
+    return malformed;
+  }
+
+  private static long bodyOnlyTypeDefHashBits(byte[] bytes, int offset, int size) {
+    long hash = MurmurHash3.murmurhash3_x64_128(bytes, offset, size, 47)[0];
+    hash <<= (Long.SIZE - TypeDef.NUM_HASH_BITS);
+    long hashMask = -1L << (Long.SIZE - TypeDef.NUM_HASH_BITS);
+    return Math.abs(hash) & hashMask;
+  }
+
+  private static int typeDefBodyOffset(byte[] encoded) {
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(encoded);
+    long header = buffer.readInt64();
+    if ((header & TypeDef.META_SIZE_MASKS) == TypeDef.META_SIZE_MASKS) {
+      buffer.readVarUInt32Small14();
+    }
+    return buffer.readerIndex();
   }
 
   private static int indexOf(byte[] bytes, byte[] needle, int fromIndex) {

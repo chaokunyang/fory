@@ -57,6 +57,7 @@ final class WireTypeMeta {
 final class TypeHeader {
   static const int _compressMetaFlag = 1 << 8;
   static const int _reservedMetaFlags = 0x0e00;
+  static const int _headerLowBitsMask = 0x0fff;
   static const int _hashLow32Mask = 0xfffff000;
 
   final Int64 value;
@@ -89,7 +90,10 @@ final class TypeHeader {
 
   @pragma('vm:prefer-inline')
   void validateBodyHash(Uint8List body) {
-    final expected = typeDefHeader(body);
+    final expected = typeDefHeader(
+      body,
+      headerLowBits: value.low32 & _headerLowBitsMask,
+    );
     if (value.high32Unsigned != expected.high32Unsigned ||
         (value.low32 & _hashLow32Mask) != (expected.low32 & _hashLow32Mask)) {
       throw StateError('Invalid TypeDef metadata hash.');

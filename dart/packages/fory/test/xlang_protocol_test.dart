@@ -172,6 +172,18 @@ void main() {
           ),
         ),
       );
+
+      final headerWithDifferentLowBits = TypeHeader(header.value ^ 1);
+      expect(
+        () => headerWithDifferentLowBits.validateBodyHash(body),
+        throwsA(
+          isA<StateError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('metadata hash'),
+          ),
+        ),
+      );
     });
   });
 }

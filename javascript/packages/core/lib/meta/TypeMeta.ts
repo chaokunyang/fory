@@ -552,7 +552,10 @@ export class TypeMeta {
   }
 
   private static validateParsedBodyHash(header: bigint, body: Uint8Array) {
-    const expectedHeaderHash = TypeMeta.headerHashBits(body);
+    const expectedHeaderHash = TypeMeta.headerHashBits(
+      body,
+      header & ~HEADER_HASH_MASK,
+    );
     const actualHeaderHash = header & HEADER_HASH_MASK;
     if (expectedHeaderHash !== actualHeaderHash) {
       throw new Error("TypeMeta metadata hash mismatch");
@@ -954,19 +957,24 @@ export class TypeMeta {
   }
 
   private static buildHeader(buffer: Uint8Array, isCompressed: boolean) {
-    let header = TypeMeta.headerHashBits(buffer);
+    let headerLowBits = BigInt(Math.min(buffer.length, META_SIZE_MASKS));
     if (isCompressed) {
-      header |= COMPRESS_META_FLAG;
+      headerLowBits |= COMPRESS_META_FLAG;
     }
-    header |= BigInt(Math.min(buffer.length, META_SIZE_MASKS));
+    const header = TypeMeta.headerHashBits(buffer, headerLowBits)
+      | headerLowBits;
     return {
       header: BigInt.asUintN(64, header),
       headerHash: Number(header >> HASH_SHIFT_BITS),
     };
   }
 
-  private static headerHashBits(buffer: Uint8Array) {
-    const hash = x64hash128(buffer, 47);
+  private static headerHashBits(buffer: Uint8Array, headerLowBits: bigint) {
+    const hashInput = new Uint8Array(buffer.length + 2);
+    hashInput.set(buffer);
+    hashInput[buffer.length] = Number(headerLowBits & 0xffn);
+    hashInput[buffer.length + 1] = Number((headerLowBits >> 8n) & 0xffn);
+    const hash = x64hash128(hashInput, 47);
     // Read the high 64 bits of the 128-bit MurmurHash3 as a SIGNED
     // int64 to match pyfory (`hash_buffer()[0]` unpacks `int64_t[0]`),
     // java (`murmurhash3_x64_128(...)[0]` returns `long`), and rust

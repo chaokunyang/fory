@@ -154,18 +154,23 @@ Int64 metaStringHash(List<int> bytes, {int encoding = 0}) {
 Int64 typeDefHeader(
   List<int> bytes, {
   bool compressed = false,
+  int? headerLowBits,
 }) {
-  final hash = _int64FromUint64(
-    _murmurHash3X64_128Bits(bytes).$1 << _typeDefHashShift,
-  );
-  var header = _absSigned64Bits(hash);
-  if (compressed) {
-    header = header | _typeDefCompressMetaFlag;
-  }
-  header = header |
+  var lowBits = headerLowBits ??
       (bytes.length > _typeDefMetaSizeMask
           ? _typeDefMetaSizeMask
           : bytes.length);
+  if (compressed) {
+    lowBits |= _typeDefCompressMetaFlag;
+  }
+  final hashInput = List<int>.of(bytes, growable: true)
+    ..add(lowBits & 0xff)
+    ..add((lowBits >> 8) & 0xff);
+  final hash = _int64FromUint64(
+    _murmurHash3X64_128Bits(hashInput).$1 << _typeDefHashShift,
+  );
+  var header = _absSigned64Bits(hash);
+  header = header | lowBits;
   return _int64FromUint64(header);
 }
 

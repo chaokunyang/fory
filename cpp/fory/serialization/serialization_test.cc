@@ -84,7 +84,27 @@ namespace test {
 namespace {
 
 uint64_t compute_type_meta_hash_bits_for_test(const uint8_t *meta_bytes,
-                                              size_t meta_size) {
+                                              size_t meta_size,
+                                              uint64_t header_low_bits) {
+  constexpr uint32_t kHashShift = 12;
+  constexpr uint64_t kHashBitsMask = UINT64_MAX << kHashShift;
+  std::vector<uint8_t> hash_input(meta_size + 2);
+  std::memcpy(hash_input.data(), meta_bytes, meta_size);
+  hash_input[meta_size] = static_cast<uint8_t>(header_low_bits);
+  hash_input[meta_size + 1] = static_cast<uint8_t>(header_low_bits >> 8);
+  int64_t hash_out[2] = {0, 0};
+  MurmurHash3_x64_128(hash_input.data(), static_cast<int>(hash_input.size()),
+                      47, hash_out);
+  uint64_t shifted = static_cast<uint64_t>(hash_out[0]) << kHashShift;
+  if (static_cast<int64_t>(shifted) < 0) {
+    shifted = ~shifted + 1;
+  }
+  return shifted & kHashBitsMask;
+}
+
+uint64_t
+compute_body_only_type_meta_hash_bits_for_test(const uint8_t *meta_bytes,
+                                               size_t meta_size) {
   constexpr uint32_t kHashShift = 12;
   constexpr uint64_t kHashBitsMask = UINT64_MAX << kHashShift;
   int64_t hash_out[2] = {0, 0};
@@ -829,7 +849,7 @@ TEST(SerializationTest, TypeMetaRejectsOverConsumedDeclaredSize) {
   EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
 }
 
-TEST(SerializationTest, TypeMetaHeaderUses52BitBodyHash) {
+TEST(SerializationTest, TypeMetaHeaderUses52BitMetadataHash) {
   std::vector<FieldInfo> fields;
   fields.emplace_back(
       "value", FieldType(static_cast<uint32_t>(TypeId::VARINT32), false));
@@ -869,6 +889,35 @@ TEST(SerializationTest, TypeMetaHeaderUses52BitBodyHash) {
             parsed.value()->get_hash());
 }
 
+TEST(SerializationTest, TypeMetaRejectsBodyOnlyHeaderHash) {
+  TypeMeta meta =
+      TypeMeta::from_fields(static_cast<uint32_t>(TypeId::STRUCT), "", "S",
+                            false, 1, std::vector<FieldInfo>{});
+  auto bytes_result = meta.to_bytes();
+  ASSERT_TRUE(bytes_result.ok())
+      << "TypeMeta serialization failed: " << bytes_result.error().to_string();
+
+  std::vector<uint8_t> bytes = bytes_result.value();
+  ASSERT_GT(bytes.size(), sizeof(uint64_t));
+  uint64_t header = 0;
+  std::memcpy(&header, bytes.data(), sizeof(header));
+
+  constexpr uint32_t kHashShift = 12;
+  constexpr uint64_t kHashBitsMask = UINT64_MAX << kHashShift;
+  uint64_t body_only_hash = compute_body_only_type_meta_hash_bits_for_test(
+      bytes.data() + sizeof(uint64_t), bytes.size() - sizeof(uint64_t));
+  ASSERT_NE(header & kHashBitsMask, body_only_hash);
+  header = body_only_hash | (header & ~kHashBitsMask);
+  std::memcpy(bytes.data(), &header, sizeof(header));
+
+  Buffer buffer(bytes);
+  auto parsed = TypeMeta::from_bytes(buffer, nullptr);
+  ASSERT_FALSE(parsed.ok());
+  EXPECT_EQ(parsed.error().code(), ErrorCode::InvalidData);
+  EXPECT_NE(parsed.error().to_string().find("metadata hash"),
+            std::string::npos);
+}
+
 TEST(SerializationTest, TypeMetaNonStructHeaderUsesDenseKindCode) {
   TypeMeta meta =
       TypeMeta::from_fields(static_cast<uint32_t>(TypeId::ENUM), "", "E", false,
@@ -902,7 +951,7 @@ TEST(SerializationTest, TypeMetaRejectsNonStructReservedKindBits) {
   ASSERT_NE(header & 0xff, 0xff);
   header &= ~(UINT64_MAX << 12);
   header |= compute_type_meta_hash_bits_for_test(
-      bytes.data() + sizeof(uint64_t), bytes.size() - sizeof(uint64_t));
+      bytes.data() + sizeof(uint64_t), bytes.size() - sizeof(uint64_t), header);
   std::memcpy(bytes.data(), &header, sizeof(header));
 
   Buffer buffer(bytes);

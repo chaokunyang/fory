@@ -1070,7 +1070,7 @@ final class TypeResolver {
     final expectedTypeDef = expectedType?.typeDef;
     if (expectedTypeDef != null && expectedTypeDef.header == header.value) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeDef parse and 52-bit body-hash validation.
+      // after a successful TypeDef parse and 52-bit metadata-hash validation.
       header.skipRemaining(buffer);
       sharedTypes.add(expectedType!);
       return wireTypeMetaForResolved(expectedType);
@@ -1078,7 +1078,7 @@ final class TypeResolver {
     final cached = _parsedTypeMetaCache.lookup(header);
     if (cached != null) {
       // Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-      // after a successful TypeDef parse and 52-bit body-hash validation.
+      // after a successful TypeDef parse and 52-bit metadata-hash validation.
       header.skipRemaining(buffer);
       sharedTypes.add(cached);
       return wireTypeMetaForResolved(cached);

@@ -557,7 +557,13 @@ The 8-byte header is a little-endian uint64:
   Current xlang writers MUST leave this bit unset and current xlang readers MUST treat a set bit
   as unsupported.
 - Bits 9-11: reserved for future extension (must be zero).
-- High 52 bits: hash of the TypeDef body.
+- High 52 bits: stored hash bits derived from MurmurHash3 x64_128 seed 47 over
+  `TypeDef body || header_low12_le`. `header_low12_le` is two little-endian bytes containing the low
+  12 header bits (size, compress, and reserved bits); the upper four bits of the second byte are
+  zero. Take lane 0 of the 128-bit MurmurHash3 result as a signed int64, left-shift it by 12 with
+  two's-complement 64-bit wraparound, apply signed absolute value (leaving `INT64_MIN` unchanged),
+  then mask with `0xfffffffffffff000`. The final header is the masked hash bits OR-ed with the low
+  12 header bits.
 
 #### TypeDef body
 

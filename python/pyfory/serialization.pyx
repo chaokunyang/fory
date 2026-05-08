@@ -561,7 +561,7 @@ cdef class TypeResolver:
         cdef object type_def
         if typeinfo is not None:
             # Header-cache hits intentionally skip without rehashing. Entries reach this cache only
-            # after a successful TypeDef parse and 52-bit body-hash validation.
+            # after a successful TypeDef parse and 52-bit metadata-hash validation.
             _skip_typedef_fast(buffer, header)
             return typeinfo
         type_def = decode_typedef(buffer, self.resolver, header=header)

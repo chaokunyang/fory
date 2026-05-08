@@ -132,11 +132,11 @@ def encode_typedef(type_resolver, cls, include_fields: bool = True):
 def prepend_header(buffer: bytes, is_compressed: bool):
     """Prepend header to the buffer."""
     meta_size = len(buffer)
-    header = _typedef_header_hash(buffer)
+    header_low_bits = min(meta_size, META_SIZE_MASKS)
     if is_compressed:
-        header |= COMPRESS_META_FLAG
+        header_low_bits |= COMPRESS_META_FLAG
 
-    header |= min(meta_size, META_SIZE_MASKS)
+    header = _typedef_header_hash(buffer, header_low_bits) | header_low_bits
     if header >= (1 << 63):
         header -= 1 << 64
     result = Buffer.allocate(meta_size + 8)

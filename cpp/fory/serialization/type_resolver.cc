@@ -378,9 +378,15 @@ inline Result<uint32_t, Error> type_id_from_type_meta_kind(uint8_t kind_code) {
 }
 
 inline uint64_t compute_type_meta_hash_bits(const uint8_t *meta_bytes,
-                                            size_t meta_size) {
+                                            size_t meta_size,
+                                            uint64_t header_low_bits) {
+  std::vector<uint8_t> hash_input(meta_size + 2);
+  std::memcpy(hash_input.data(), meta_bytes, meta_size);
+  hash_input[meta_size] = static_cast<uint8_t>(header_low_bits);
+  hash_input[meta_size + 1] = static_cast<uint8_t>(header_low_bits >> 8);
   int64_t hash_out[2] = {0, 0};
-  MurmurHash3_x64_128(meta_bytes, static_cast<int>(meta_size), 47, hash_out);
+  MurmurHash3_x64_128(hash_input.data(), static_cast<int>(hash_input.size()),
+                      47, hash_out);
   uint64_t shifted = static_cast<uint64_t>(hash_out[0]) << TYPE_META_HASH_SHIFT;
   if (static_cast<int64_t>(shifted) < 0) {
     shifted = ~shifted + 1;
@@ -390,8 +396,10 @@ inline uint64_t compute_type_meta_hash_bits(const uint8_t *meta_bytes,
 
 inline int64_t compute_type_meta_hash(const uint8_t *meta_bytes,
                                       size_t meta_size) {
+  uint64_t header_low_bits =
+      std::min<uint64_t>(META_SIZE_MASK, static_cast<uint64_t>(meta_size));
   return static_cast<int64_t>(
-      compute_type_meta_hash_bits(meta_bytes, meta_size) >>
+      compute_type_meta_hash_bits(meta_bytes, meta_size, header_low_bits) >>
       TYPE_META_HASH_SHIFT);
 }
 
@@ -434,7 +442,7 @@ read_type_meta_size(Buffer &buffer, uint64_t header, size_t *header_size) {
 inline Result<void, Error> validate_type_meta_hash(Buffer &buffer,
                                                    uint32_t body_start,
                                                    uint32_t meta_size,
-                                                   int64_t header_hash) {
+                                                   uint64_t header) {
   uint64_t body_end = static_cast<uint64_t>(body_start) + meta_size;
   if (FORY_PREDICT_FALSE(body_end > buffer.reader_index() ||
                          body_end > buffer.size())) {
@@ -442,10 +450,11 @@ inline Result<void, Error> validate_type_meta_hash(Buffer &buffer,
         Error::invalid_data("TypeMeta body range is not readable"));
   }
   uint64_t computed_hash_bits = compute_type_meta_hash_bits(
-      buffer.data() + body_start, static_cast<size_t>(meta_size));
+      buffer.data() + body_start, static_cast<size_t>(meta_size),
+      header & ~TYPE_META_HASH_BITS_MASK);
   if (FORY_PREDICT_FALSE((computed_hash_bits >> TYPE_META_HASH_SHIFT) !=
-                         static_cast<uint64_t>(header_hash))) {
-    return Unexpected(Error::invalid_data("TypeMeta body hash mismatch"));
+                         (header >> TYPE_META_HASH_SHIFT))) {
+    return Unexpected(Error::invalid_data("TypeMeta metadata hash mismatch"));
   }
   return Result<void, Error>();
 }
@@ -574,7 +583,8 @@ Result<std::vector<uint8_t>, Error> TypeMeta::to_bytes() const {
   uint64_t meta_size = layer_size;
   uint64_t header = std::min(META_SIZE_MASK, meta_size);
 
-  header |= compute_type_meta_hash_bits(layer_buffer.data(), layer_size);
+  header |=
+      compute_type_meta_hash_bits(layer_buffer.data(), layer_size, header);
 
   result_buffer.write_bytes(reinterpret_cast<const uint8_t *>(&header),
                             sizeof(header));
@@ -700,7 +710,7 @@ TypeMeta::from_bytes(Buffer &buffer, const TypeMeta *local_type_info) {
         "TypeMeta parser did not consume declared meta size"));
   }
   FORY_RETURN_IF_ERROR(
-      validate_type_meta_hash(buffer, body_start, meta_size, meta_hash));
+      validate_type_meta_hash(buffer, body_start, meta_size, header_bits));
 
   auto meta = std::make_unique<TypeMeta>();
   meta->hash = meta_hash;
@@ -811,7 +821,7 @@ TypeMeta::from_bytes_with_header(Buffer &buffer, int64_t header) {
         "TypeMeta parser did not consume declared meta size"));
   }
   FORY_RETURN_IF_ERROR(
-      validate_type_meta_hash(buffer, start_pos, meta_size, meta_hash));
+      validate_type_meta_hash(buffer, start_pos, meta_size, header_bits));
 
   auto meta = std::make_unique<TypeMeta>();
   meta->hash = meta_hash;

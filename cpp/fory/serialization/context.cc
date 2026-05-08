@@ -506,8 +506,8 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   // Check if we already parsed this type meta (cache lookup by header)
   if (has_last_meta_header_ && meta_header == last_meta_header_) {
     // Header-cache hits intentionally skip without rehashing. Entries reach
-    // this cache only after a successful TypeMeta parse and 52-bit body-hash
-    // validation.
+    // this cache only after a successful TypeMeta parse and 52-bit
+    // metadata-hash validation.
     const TypeInfo *cached = last_meta_type_info_;
     reading_type_infos_.push_back(cached);
     FORY_RETURN_NOT_OK(
@@ -518,8 +518,8 @@ Result<const TypeInfo *, Error> ReadContext::read_type_meta() {
   auto *cache_entry = parsed_type_infos_.find(meta_header);
   if (cache_entry != nullptr) {
     // Header-cache hits intentionally skip without rehashing. Entries reach
-    // this cache only after a successful TypeMeta parse and 52-bit body-hash
-    // validation.
+    // this cache only after a successful TypeMeta parse and 52-bit
+    // metadata-hash validation.
     const TypeInfo *cached = cache_entry->second;
     reading_type_infos_.push_back(cached);
     has_last_meta_header_ = true;

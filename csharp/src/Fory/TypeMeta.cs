@@ -15,6 +15,8 @@
 // specific language governing permissions and limitations
 // under the License.
 
+using System.Buffers;
+
 namespace Apache.Fory;
 
 internal static class TypeMetaConstants
@@ -467,9 +469,8 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         }
 
         byte[] body = EncodeBody();
-        ulong header = ComputeHeaderHashBits(body);
-        uint bodySize = (uint)Math.Min(body.Length, (int)TypeMetaConstants.TypeMetaSizeMask);
-        header |= bodySize;
+        ulong headerLowBits = ComputeHeaderLowBits(body.Length, compressed: false);
+        ulong header = ComputeHeaderHashBits(body, headerLowBits) | headerLowBits;
         ByteWriter writer = new(body.Length + 16);
         writer.WriteUInt64(header);
         if (body.Length >= (int)TypeMetaConstants.TypeMetaSizeMask)
@@ -609,18 +610,47 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         reader.Skip(ReadBodySize(reader, header));
     }
 
-    private static ulong ComputeHeaderHashBits(ReadOnlySpan<byte> body)
+    private static ulong ComputeHeaderLowBits(int bodyLength, bool compressed)
     {
-        (ulong bodyHash, _) = MurmurHash3.X64_128(body, TypeMetaConstants.TypeMetaHashSeed);
-        ulong shifted = bodyHash << TypeMetaConstants.TypeMetaHashShift;
-        long signed = unchecked((long)shifted);
-        long absSigned = signed == long.MinValue ? signed : Math.Abs(signed);
-        return unchecked((ulong)absSigned) & TypeMetaConstants.TypeMetaHashMask;
+        ulong headerLowBits = (ulong)Math.Min(bodyLength, (int)TypeMetaConstants.TypeMetaSizeMask);
+        if (compressed)
+        {
+            headerLowBits |= TypeMetaConstants.TypeMetaCompressedFlag;
+        }
+
+        return headerLowBits;
+    }
+
+    private static ulong ComputeHeaderHashBits(ReadOnlySpan<byte> body, ulong headerLowBits)
+    {
+        int hashInputLength = body.Length + sizeof(ushort);
+        byte[]? rented = null;
+        Span<byte> hashInput = hashInputLength <= 1024
+            ? stackalloc byte[hashInputLength]
+            : (rented = ArrayPool<byte>.Shared.Rent(hashInputLength)).AsSpan(0, hashInputLength);
+        try
+        {
+            body.CopyTo(hashInput);
+            hashInput[body.Length] = unchecked((byte)headerLowBits);
+            hashInput[body.Length + 1] = unchecked((byte)(headerLowBits >> 8));
+            (ulong bodyHash, _) = MurmurHash3.X64_128(hashInput, TypeMetaConstants.TypeMetaHashSeed);
+            ulong shifted = bodyHash << TypeMetaConstants.TypeMetaHashShift;
+            long signed = unchecked((long)shifted);
+            long absSigned = signed == long.MinValue ? signed : Math.Abs(signed);
+            return unchecked((ulong)absSigned) & TypeMetaConstants.TypeMetaHashMask;
+        }
+        finally
+        {
+            if (rented is not null)
+            {
+                ArrayPool<byte>.Shared.Return(rented);
+            }
+        }
     }
 
     private static void ValidateParsedTypeMetaHash(ulong header, ReadOnlySpan<byte> body)
     {
-        ulong expectedHeaderHash = ComputeHeaderHashBits(body);
+        ulong expectedHeaderHash = ComputeHeaderHashBits(body, header & ~TypeMetaConstants.TypeMetaHashMask);
         ulong actualHeaderHash = header & TypeMetaConstants.TypeMetaHashMask;
         if (actualHeaderHash != expectedHeaderHash)
         {

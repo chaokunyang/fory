@@ -38,7 +38,6 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.type.Types;
-import org.apache.fory.util.MurmurHash3;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -259,10 +258,9 @@ class NativeTypeDefDecoder {
     if (encoded.length - bodyOffset != size) {
       throw new DeserializationException("Invalid TypeDef encoded size");
     }
-    long hash = MurmurHash3.murmurhash3_x64_128(encoded, bodyOffset, size, 47)[0];
-    hash <<= (Long.SIZE - TypeDef.NUM_HASH_BITS);
     long hashMask = -1L << (Long.SIZE - TypeDef.NUM_HASH_BITS);
-    long expectedHeaderHash = Math.abs(hash) & hashMask;
+    long expectedHeaderHash =
+        NativeTypeDefEncoder.computeTypeDefHashBits(encoded, bodyOffset, size, id & ~hashMask);
     long actualHeaderHash = id & hashMask;
     if (expectedHeaderHash != actualHeaderHash) {
       throw new DeserializationException("Invalid TypeDef metadata hash");

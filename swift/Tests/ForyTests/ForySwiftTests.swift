@@ -1280,3 +1280,39 @@ func typeMetaRoundTripByID() throws {
   #expect(decoded.userTypeID == 101)
   #expect(decoded.fields.isEmpty)
 }
+
+@Test
+func typeMetaHeaderHashIncludesHeaderLowBits() throws {
+  let emptyNamespace = MetaString.empty(specialChar1: ".", specialChar2: "_")
+  let emptyTypeName = MetaString.empty(specialChar1: "$", specialChar2: "_")
+
+  let meta = try TypeMeta(
+    typeID: TypeId.structType.rawValue,
+    userTypeID: 102,
+    namespace: emptyNamespace,
+    typeName: emptyTypeName,
+    registerByName: false,
+    fields: []
+  )
+
+  var encoded = try meta.encode()
+  let header = try ByteBuffer(bytes: encoded).readUInt64()
+  let hashMask = UInt64.max << 12
+  let bodyOnlyHash = bodyOnlyTypeMetaHeaderHash(Array(encoded.dropFirst(8)))
+  #expect((header & hashMask) != bodyOnlyHash)
+  let rewrittenHeader = bodyOnlyHash | (header & ~hashMask)
+  for index in 0..<8 {
+    encoded[index] = UInt8(truncatingIfNeeded: rewrittenHeader >> (index * 8))
+  }
+
+  #expect(throws: ForyError.self) {
+    _ = try TypeMeta.decode(encoded)
+  }
+}
+
+private func bodyOnlyTypeMetaHeaderHash(_ body: [UInt8]) -> UInt64 {
+  let shifted = MurmurHash3.x64_128(body, seed: 47).0 << 12
+  let signed = Int64(bitPattern: shifted)
+  let absSigned = signed == Int64.min ? signed : Swift.abs(signed)
+  return UInt64(bitPattern: absSigned) & (UInt64.max << 12)
+}

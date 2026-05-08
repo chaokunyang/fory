@@ -45,6 +45,7 @@ from pyfory.meta.typedef import (
     is_named_typedef_kind,
     xlang_non_struct_type_id,
     _typedef_header_hash,
+    _UINT64_MASK,
 )
 from pyfory.types import TypeId
 from pyfory._fory import NO_USER_TYPE_ID
@@ -204,7 +205,8 @@ def decode_typedef(buffer: Buffer, resolver, header=None) -> TypeDef:
 
 
 def _validate_parsed_typedef_hash(header: int, encoded_meta_data: bytes) -> None:
-    if _typedef_header_hash(encoded_meta_data) != (header & TYPEDEF_HASH_MASK):
+    header_bits = header & _UINT64_MASK
+    if _typedef_header_hash(encoded_meta_data, header_bits & ~TYPEDEF_HASH_MASK) != (header_bits & TYPEDEF_HASH_MASK):
         raise ValueError("Invalid TypeDef metadata hash")
 
 

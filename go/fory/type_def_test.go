@@ -418,6 +418,25 @@ func TestTypeDefRejectsMetadataHashMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "metadata hash")
 }
 
+func TestTypeDefHeaderHashIncludesHeaderLowBits(t *testing.T) {
+	fory := NewFory()
+	body := typeDefTestBodyWithoutFields()
+	_, header := typeDefTestFrame(t, body, false)
+
+	hashMask := ^uint64(0)
+	hashMask <<= uint(64 - NUM_HASH_BITS)
+	bodyOnlyHash := bodyOnlyTypeDefHeaderHash(body)
+	require.NotEqual(t, uint64(header)&hashMask, bodyOnlyHash)
+	rewrittenHeader := int64(bodyOnlyHash | (uint64(header) &^ hashMask))
+	buffer := NewByteBuffer(nil)
+	buffer.WriteBinary(body)
+	buffer.SetReaderIndex(0)
+
+	_, err := decodeTypeDef(fory, buffer, rewrittenHeader)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "metadata hash")
+}
+
 func TestTypeDefRejectsEncodedMetadataAboveMaxBinarySize(t *testing.T) {
 	fory := NewFory(WithMaxBinarySize(1))
 	body := typeDefTestBodyWithoutFields()
@@ -521,6 +540,16 @@ func TestTypeDefRejectsFieldNameLengthBeyondMetadata(t *testing.T) {
 	_, err := decodeTypeDef(fory, frame, header)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "field name length")
+}
+
+func bodyOnlyTypeDefHeaderHash(data []byte) uint64 {
+	hash := int64(Murmur3Sum64WithSeed(data, 47) << (64 - NUM_HASH_BITS))
+	if hash < 0 {
+		hash = -hash
+	}
+	hashMask := ^uint64(0)
+	hashMask <<= uint(64 - NUM_HASH_BITS)
+	return uint64(hash) & hashMask
 }
 
 // TestTypeDefNestedRecursionStackOverflowPanic verifies that readFieldTypeWithFlags

@@ -191,8 +191,8 @@ Fory fory = Fory.builder()
 3. **Verify registration order** - must be consistent across peers
 4. **Enable logging** to see internal operations:
 
-```java
-LoggerFactory.setLogLevel(LogLevel.DEBUG_LEVEL);
+```bash
+FORY_LOG_LEVEL=INFO mvn test -Dtest=org.apache.fory.TestClass#testMethod
 ```
 
 ## Related Topics

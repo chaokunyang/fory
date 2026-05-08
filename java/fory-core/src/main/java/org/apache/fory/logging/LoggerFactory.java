@@ -26,7 +26,7 @@ import org.apache.fory.util.GraalvmSupport;
  */
 public class LoggerFactory {
   private static volatile boolean useSlf4jLogger;
-  private static volatile int logLevel = LogLevel.INFO_LEVEL;
+  private static volatile int logLevel = LogLevel.DEFAULT_LEVEL;
 
   /** Disable Logger, there will be no log output. */
   public static void disableLogging() {
@@ -38,7 +38,7 @@ public class LoggerFactory {
    * Slf4jLogger} through {@link LoggerFactory#createSlf4jLogger(Class)}.
    */
   public static void enableLogging() {
-    logLevel = LogLevel.INFO_LEVEL;
+    logLevel = LogLevel.DEFAULT_LEVEL;
   }
 
   public static boolean isLoggingDisabled() {
@@ -47,7 +47,9 @@ public class LoggerFactory {
 
   /**
    * Set the {@link ForyLogger} log output control level, the default is {@link
-   * LogLevel#INFO_LEVEL}.
+   * LogLevel#WARN_LEVEL}, or {@link LogLevel#INFO_LEVEL} when debug output is enabled. The default
+   * can be overridden by setting the {@code FORY_LOG_LEVEL} environment variable to {@code ERROR},
+   * {@code WARN}, {@code INFO}, or {@code DEBUG}.
    *
    * @param level The log control level to be set, see {@link LogLevel}.
    */

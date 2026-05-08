@@ -75,4 +75,6 @@ mvn -T16 test -Dtest=org.apache.fory.TestClass#testMethod
 
 - Set `FORY_CODE_DIR` to dump generated code.
 - Set `ENABLE_FORY_GENERATED_CLASS_UNIQUE_ID=false` when you need stable generated class names.
+- When debugging Java tests or runtime behavior, set `FORY_LOG_LEVEL=INFO` unless a narrower
+  level is required.
 - In IntelliJ IDEA, use a JDK 11+ project SDK and disable `--release` if it blocks `sun.misc.Unsafe` access.

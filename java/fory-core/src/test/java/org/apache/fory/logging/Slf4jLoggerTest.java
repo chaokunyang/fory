@@ -19,6 +19,8 @@
 
 package org.apache.fory.logging;
 
+import static org.testng.Assert.assertEquals;
+
 import org.testng.annotations.Test;
 
 public class Slf4jLoggerTest {
@@ -30,13 +32,42 @@ public class Slf4jLoggerTest {
     logger.info("testInfo");
     logger.info("testInfo {}", "placeHolder");
     logger.warn("testInfo {}", "placeHolder");
-    logger.error("testInfo {}", "placeHolder", new Exception("test log"));
-    logger.error("testInfo {}", "placeHolder", new Exception("test log"));
     foryLogger.info("testInfo");
     foryLogger.info("testInfo {}", "placeHolder");
     foryLogger.warn("testInfo {}", "placeHolder");
-    foryLogger.error("testInfo {}", "placeHolder", new Exception("test log"));
-    foryLogger.error(null, new Exception("test log"));
-    foryLogger.error("test log {} {}", new Exception("test log {} {}"));
+    int previousLogLevel = LoggerFactory.getLogLevel();
+    try {
+      LoggerFactory.disableLogging();
+      logger.error("testInfo {}", "placeHolder", new Exception("test log"));
+      logger.error("testInfo {}", "placeHolder", new Exception("test log"));
+      foryLogger.error("testInfo {}", "placeHolder", new Exception("test log"));
+      foryLogger.error(null, new Exception("test log"));
+      foryLogger.error("test log {} {}", new Exception("test log {} {}"));
+    } finally {
+      LoggerFactory.setLogLevel(previousLogLevel);
+    }
+  }
+
+  @Test
+  public void testDefaultLogLevel() {
+    assertEquals(LoggerFactory.getLogLevel(), LogLevel.DEFAULT_LEVEL);
+    String envLogLevel = System.getenv("FORY_LOG_LEVEL");
+    boolean debugOutputEnabled = "1".equals(System.getenv("ENABLE_FORY_DEBUG_OUTPUT"));
+    assertEquals(
+        LogLevel.DEFAULT_LEVEL, LogLevel.getDefaultLogLevel(envLogLevel, debugOutputEnabled));
+    if (envLogLevel == null) {
+      assertEquals(
+          LogLevel.DEFAULT_LEVEL, debugOutputEnabled ? LogLevel.INFO_LEVEL : LogLevel.WARN_LEVEL);
+    }
+    assertEquals(LogLevel.getDefaultLogLevel(null, false), LogLevel.WARN_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("", false), LogLevel.WARN_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel(null, true), LogLevel.INFO_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("", true), LogLevel.INFO_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("error", true), LogLevel.ERROR_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("WARN", true), LogLevel.WARN_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("Info", false), LogLevel.INFO_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("DEBUG", false), LogLevel.DEBUG_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("unknown", false), LogLevel.WARN_LEVEL);
+    assertEquals(LogLevel.getDefaultLogLevel("unknown", true), LogLevel.INFO_LEVEL);
   }
 }

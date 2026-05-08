@@ -155,7 +155,7 @@ Custom memory allocators are useful for:
 
 ### ForyLogger
 
-By default, Fory uses a custom logger `ForyLogger` for internal needs. It builds resulting logged data into a single string and sends it directly to `System.out`. The result line layout is similar to (in Log4j notation):
+By default, Fory uses a custom logger `ForyLogger` for internal needs at `WARN` level, or `INFO` level when `ENABLE_FORY_DEBUG_OUTPUT=1` is set. Set `FORY_LOG_LEVEL` to `ERROR`, `WARN`, `INFO`, or `DEBUG` to configure the process default level before startup. `ForyLogger` builds resulting logged data into a single string and sends it directly to `System.out`. The result line layout is similar to (in Log4j notation):
 
 ```
 %d{yyyy-MM-dd hh:mm:ss} %p  %C:%L [%t] - %m%n

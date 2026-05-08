@@ -113,7 +113,7 @@ For more detailed benchmarks and methodology, see [C++ Benchmarks](benchmarks/cp
 ### Go Serialization Performance
 
 <p align="center">
-<img src="docs/benchmarks/go/benchmark_combined.png" width="95%">
+<img src="docs/benchmarks/go/throughput.png" width="95%">
 </p>
 
 For more detailed benchmarks and methodology, see [Go Benchmark](benchmarks/go).

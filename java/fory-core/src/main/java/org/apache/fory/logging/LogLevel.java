@@ -19,6 +19,7 @@
 
 package org.apache.fory.logging;
 
+import java.util.Locale;
 import org.apache.fory.util.Utils;
 
 /** Defines a series of log levels. */
@@ -34,10 +35,24 @@ public class LogLevel {
   public static final int DEFAULT_LEVEL;
 
   static {
-    if (Utils.DEBUG_OUTPUT_ENABLED) {
-      DEFAULT_LEVEL = DEBUG_LEVEL;
-    } else {
-      DEFAULT_LEVEL = ERROR_LEVEL;
+    DEFAULT_LEVEL = getDefaultLogLevel(System.getenv("FORY_LOG_LEVEL"), Utils.DEBUG_OUTPUT_ENABLED);
+  }
+
+  static int getDefaultLogLevel(String level, boolean debugOutputEnabled) {
+    if (level == null || level.trim().isEmpty()) {
+      return debugOutputEnabled ? INFO_LEVEL : WARN_LEVEL;
+    }
+    switch (level.trim().toUpperCase(Locale.ROOT)) {
+      case "ERROR":
+        return ERROR_LEVEL;
+      case "WARN":
+        return WARN_LEVEL;
+      case "INFO":
+        return INFO_LEVEL;
+      case "DEBUG":
+        return DEBUG_LEVEL;
+      default:
+        return debugOutputEnabled ? INFO_LEVEL : WARN_LEVEL;
     }
   }
 

@@ -23,14 +23,30 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
-import subprocess
+import sys
 from collections import defaultdict
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.ticker import FuncFormatter
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plot_style import (  # noqa: E402
+    BAR_EDGE_COLOR,
+    GROUP_BAR_WIDTH,
+    GROUP_X,
+    add_compact_legend,
+    apply_benchmark_style,
+    format_markdown_with_prettier,
+    format_throughput_label,
+    format_throughput_tick,
+    save_benchmark_figure,
+    serializer_offset,
+    set_grouped_operation_axis,
+    style_throughput_axis,
+)
+
+apply_benchmark_style(plt)
 
 SERIALIZER_ORDER = ["fory", "protobuf", "msgpack"]
 COLORS = {
@@ -120,17 +136,11 @@ def format_tps(value: float) -> str:
 
 
 def format_tps_label(value: float) -> str:
-    if value >= 1e9:
-        return f"{value / 1e9:.2f}G"
-    if value >= 1e6:
-        return f"{value / 1e6:.2f}M"
-    if value >= 1e3:
-        return f"{value / 1e3:.2f}K"
-    return f"{value:.0f}"
+    return format_throughput_label(value)
 
 
 def format_tps_tick(value: float, _position) -> str:
-    return format_tps_label(value)
+    return format_throughput_tick(value, _position)
 
 
 def collect_results(payload: dict) -> dict:
@@ -164,45 +174,50 @@ def plot_group(ax, results: dict, datatype: str) -> None:
         ax.axis("off")
         return
 
-    x = np.arange(len(OPERATIONS))
-    width = 0.8 / len(available_serializers)
+    x = GROUP_X
     for index, serializer in enumerate(available_serializers):
         values = [
             results.get(datatype, {}).get(operation, {}).get(serializer, 0.0)
             for operation in OPERATIONS
         ]
-        offset = (index - (len(available_serializers) - 1) / 2) * width
+        offset = serializer_offset(index, len(available_serializers))
         ax.bar(
             x + offset,
             values,
-            width=width,
+            width=GROUP_BAR_WIDTH,
             label=serializer,
             color=COLORS.get(serializer, "#888888"),
+            edgecolor=BAR_EDGE_COLOR,
+            linewidth=0.8,
         )
 
-    ax.set_title(datatype_title(datatype))
-    ax.set_xticks(x)
-    ax.set_xticklabels(["Serialize", "Deserialize"])
-    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+    max_value = max(
+        results.get(datatype, {}).get(operation, {}).get(serializer, 0.0)
+        for operation in OPERATIONS
+        for serializer in available_serializers
+    )
+    ax.set_ylim(0, max_value * 1.12)
+    ax.set_title(datatype_title(datatype), pad=8)
+    set_grouped_operation_axis(ax)
+    style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
-    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    add_compact_legend(ax)
 
 
 def render_plot(results: dict, output_dir: str) -> str:
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle("Swift Serialization Throughput", fontsize=14)
+    fig, axes = plt.subplots(2, 3, figsize=(16.5, 9.0))
+    fig.suptitle(
+        "Swift Serialization Throughput", fontsize=15, fontweight="normal", y=0.955
+    )
 
     for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPE_ORDER)):
         plot_group(ax, results, datatype)
         if index % 3 == 0:
-            ax.set_ylabel("Throughput (ops/sec)")
-        else:
-            ax.tick_params(axis="y", labelleft=False)
-            ax.yaxis.get_offset_text().set_visible(False)
+            ax.set_ylabel("Throughput (ops/sec)", labelpad=10)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
     output_path = os.path.join(output_dir, "throughput.png")
-    plt.savefig(output_path, dpi=150)
+    save_benchmark_figure(fig, output_path)
     plt.close(fig)
     return output_path
 
@@ -302,13 +317,15 @@ def write_report(
             + f"{entry.get('msgpack', '-')} |"
         )
 
-    report_path = os.path.join(output_dir, "REPORT.md")
+    report_path = os.path.join(output_dir, "README.md")
+    legacy_report_path = os.path.join(output_dir, "REPORT.md")
+    report_text = "\n".join(lines) + "\n"
     with open(report_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+        f.write(report_text)
+    with open(legacy_report_path, "w", encoding="utf-8") as f:
+        f.write(report_text)
 
-    prettier = shutil.which("prettier")
-    if prettier is not None:
-        subprocess.run([prettier, "--write", report_path], check=True)
+    format_markdown_with_prettier(report_path, legacy_report_path)
 
     return report_path
 

@@ -20,6 +20,7 @@ set -e
 export ENABLE_FORY_DEBUG_OUTPUT=0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+DOCS_DIR="$SCRIPT_DIR/../../docs/benchmarks/cpp"
 
 # Colors for output
 RED='\033[0;31m'
@@ -33,6 +34,7 @@ DATA=""
 SERIALIZER=""
 DEBUG_BUILD=false
 DURATION=""
+COPY_DOCS=true
 
 # Parse arguments
 usage() {
@@ -47,6 +49,7 @@ usage() {
     echo "                               Filter benchmark by serializer"
     echo "  --duration <seconds>         Minimum time to run each benchmark (e.g., 10, 30)"
     echo "  --debug                      Build with debug symbols and low optimization for profiling"
+    echo "  --no-copy-docs               Skip copying report/plots into docs/benchmarks/cpp"
     echo "  --help                       Show this help message"
     echo ""
     echo "Examples:"
@@ -78,6 +81,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --debug)
             DEBUG_BUILD=true
+            shift
+            ;;
+        --no-copy-docs)
+            COPY_DOCS=false
             shift
             ;;
         --help|-h)
@@ -205,10 +212,19 @@ if ! python3 -c "import matplotlib" 2>/dev/null; then
 fi
 
 python3 benchmark_report.py --json-file build/benchmark_results.json --output-dir report
+if [[ "$COPY_DOCS" == true ]]; then
+    mkdir -p "$DOCS_DIR"
+    cp report/README.md "$DOCS_DIR/README.md"
+    cp report/*.png "$DOCS_DIR/" 2>/dev/null || true
+    echo -e "${GREEN}Copied report and plots to: ${DOCS_DIR}${NC}"
+fi
 echo ""
 
 echo -e "${GREEN}=== All done! ===${NC}"
-echo -e "Report generated at: ${SCRIPT_DIR}/report/REPORT.md"
+echo -e "Report generated at: ${SCRIPT_DIR}/report/README.md"
 echo -e "Plots saved in: ${SCRIPT_DIR}/report/"
+if [[ "$COPY_DOCS" == true ]]; then
+    echo -e "Docs sync: ${DOCS_DIR}"
+fi
 echo ""
 echo -e "For profiling/flamegraph, run: ${YELLOW}./profile.sh --help${NC}"

@@ -25,13 +25,30 @@ import json
 import os
 import re
 import shutil
+import sys
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.ticker import FuncFormatter
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plot_style import (  # noqa: E402
+    BAR_EDGE_COLOR,
+    GROUP_BAR_WIDTH,
+    GROUP_X,
+    add_compact_legend,
+    apply_benchmark_style,
+    format_markdown_with_prettier,
+    format_throughput_tick,
+    save_benchmark_figure,
+    serializer_offset,
+    set_grouped_operation_axis,
+    style_throughput_axis,
+)
+
+apply_benchmark_style(plt)
 
 SERIALIZER_ORDER = ["fory", "protobuf", "flatbuffer"]
 COLORS = {
@@ -136,13 +153,7 @@ def collect_results(payload: Any) -> dict:
 
 
 def format_tps(value: float, _position) -> str:
-    if value >= 1e9:
-        return f"{value / 1e9:.2f}G"
-    if value >= 1e6:
-        return f"{value / 1e6:.2f}M"
-    if value >= 1e3:
-        return f"{value / 1e3:.2f}K"
-    return f"{value:.0f}"
+    return format_throughput_tick(value, _position)
 
 
 def plot_group(ax, results: dict, datatype: str) -> None:
@@ -164,49 +175,133 @@ def plot_group(ax, results: dict, datatype: str) -> None:
         ax.axis("off")
         return
 
-    x = np.arange(len(OPERATIONS))
-    width = 0.8 / len(serializers)
+    x = GROUP_X
     for index, serializer in enumerate(serializers):
         values = [
             results.get(datatype, {}).get(operation, {}).get(serializer, 0.0)
             for operation in OPERATIONS
         ]
-        offset = (index - (len(serializers) - 1) / 2) * width
+        offset = serializer_offset(index, len(serializers))
         ax.bar(
             x + offset,
             values,
-            width=width,
+            width=GROUP_BAR_WIDTH,
             label=serializer,
             color=COLORS.get(serializer, "#888888"),
+            edgecolor=BAR_EDGE_COLOR,
+            linewidth=0.8,
         )
 
-    ax.set_title(datatype_title(datatype), fontweight="normal")
-    ax.set_xticks(x)
-    ax.set_xticklabels(["Serialize", "Deserialize"])
-    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+    max_value = max(
+        results.get(datatype, {}).get(operation, {}).get(serializer, 0.0)
+        for operation in OPERATIONS
+        for serializer in serializers
+    )
+    ax.set_ylim(0, max_value * 1.12)
+    ax.set_title(datatype_title(datatype), fontweight="normal", pad=8)
+    set_grouped_operation_axis(ax)
+    style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tps))
-    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    add_compact_legend(ax)
 
 
 def render_plot(results: dict, output_dir: str) -> str:
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(16.5, 9.0))
     fig.suptitle(
-        "Java Xlang Serialization Throughput", fontsize=14, fontweight="normal"
+        "Java Xlang Serialization Throughput",
+        fontsize=15,
+        fontweight="normal",
+        y=0.955,
     )
 
     for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPE_ORDER)):
         plot_group(ax, results, datatype)
         if index % 3 == 0:
-            ax.set_ylabel("Throughput (ops/sec)")
-        else:
-            ax.tick_params(axis="y", labelleft=False)
-            ax.yaxis.get_offset_text().set_visible(False)
+            ax.set_ylabel("Throughput (ops/sec)", labelpad=10)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
     output_path = os.path.join(output_dir, "throughput.png")
-    plt.savefig(output_path, dpi=150)
+    save_benchmark_figure(fig, output_path)
     plt.close(fig)
     return output_path
+
+
+def format_table_value(value: float) -> str:
+    return f"{value:,.0f}" if value > 0 else "N/A"
+
+
+def winner_cell(values: dict) -> str:
+    positive = {name: value for name, value in values.items() if value > 0}
+    if not positive:
+        return "N/A"
+    winner = max(positive, key=positive.get)
+    return winner.capitalize()
+
+
+def build_xlang_section(results: dict, image_name: str) -> str:
+    lines = [
+        "## Xlang Benchmark\n\n",
+        "Run from `benchmarks/java/run.sh`. Raw JMH JSON stays under the ignored local "
+        "`benchmarks/java/reports/` directory; `throughput.png` and this xlang "
+        "section are synced into `docs/benchmarks/java/`.\n\n",
+        "```bash\n",
+        "cd benchmarks/java\n",
+        "./run.sh\n",
+        "```\n\n",
+        "JMH parameters: `-f 1 -wi 3 -i 3 -t 1 -w 3s -r 3s -bm thrpt -tu s`. "
+        "Higher throughput is better.\n\n",
+        f"![Java Xlang Serialization Throughput]({image_name})\n\n",
+        "| Data type | Operation | Fory ops/sec | Protobuf ops/sec | Flatbuffer ops/sec | Fastest |\n",
+        "|-----------|-----------|--------------|------------------|--------------------|---------|\n",
+    ]
+
+    for datatype in DATATYPE_ORDER:
+        for operation in OPERATIONS:
+            values = {
+                serializer: results.get(datatype, {})
+                .get(operation, {})
+                .get(serializer, 0.0)
+                for serializer in SERIALIZER_ORDER
+            }
+            lines.append(
+                f"| {datatype_title(datatype)} | {operation.capitalize()} | "
+                + " | ".join(
+                    format_table_value(values[serializer])
+                    for serializer in SERIALIZER_ORDER
+                )
+                + f" | {winner_cell(values)} |\n"
+            )
+    return "".join(lines)
+
+
+def write_local_readme(output_dir: Path, section: str) -> Path:
+    report_path = output_dir / "README.md"
+    report_path.write_text(
+        "# Java Xlang Benchmark Report\n\n" + section, encoding="utf-8"
+    )
+    run_prettier(report_path)
+    return report_path
+
+
+def update_docs_readme(docs_output_dir: Path, section: str) -> Path:
+    docs_readme = docs_output_dir / "README.md"
+    if docs_readme.exists():
+        content = docs_readme.read_text(encoding="utf-8").rstrip()
+        marker = "\n## Xlang Benchmark\n"
+        if marker in content:
+            prefix = content.split(marker, 1)[0].rstrip()
+            content = prefix + "\n\n" + section
+        else:
+            content = content + "\n\n" + section
+    else:
+        content = "# Java Benchmarks\n\n" + section
+    docs_readme.write_text(content.rstrip() + "\n", encoding="utf-8")
+    run_prettier(docs_readme)
+    return docs_readme
+
+
+def run_prettier(path: Path) -> None:
+    format_markdown_with_prettier(path)
 
 
 def main() -> None:
@@ -215,6 +310,9 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     results = collect_results(load_json(args.json_file))
     output_path = render_plot(results, str(output_dir))
+    section = build_xlang_section(results, os.path.basename(output_path))
+    report_path = write_local_readme(output_dir, section)
+    print(f"Generated {report_path}")
     print(f"Generated {output_path}")
     if args.docs_output_dir is not None:
         docs_output_dir = Path(args.docs_output_dir)
@@ -222,6 +320,8 @@ def main() -> None:
         docs_output_path = docs_output_dir / "throughput.png"
         shutil.copy2(output_path, docs_output_path)
         print(f"Copied {docs_output_path}")
+        docs_readme = update_docs_readme(docs_output_dir, section)
+        print(f"Updated {docs_readme}")
 
 
 if __name__ == "__main__":

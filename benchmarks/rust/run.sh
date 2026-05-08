@@ -23,9 +23,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 OUTPUT_DIR="$SCRIPT_DIR/results"
+DOCS_DIR="$SCRIPT_DIR/../../docs/benchmarks/rust"
 LOG_FILE="$OUTPUT_DIR/cargo_bench.log"
 SIZE_FILE="$OUTPUT_DIR/serialized_sizes.txt"
 GENERATE_REPORT=true
+COPY_DOCS=true
 DATA_FILTER=""
 SERIALIZER_FILTER=""
 CUSTOM_FILTER=""
@@ -41,6 +43,7 @@ usage() {
     echo "  --serializer <name> Filter by serializer: fory, protobuf, msgpack"
     echo "  --filter <regex>    Custom criterion filter regex (overrides --data/--serializer)"
     echo "  --no-report         Skip report generation"
+    echo "  --no-copy-docs      Skip copying report/plots into docs/benchmarks/rust"
     echo "  -h, --help          Show this help message"
     echo ""
     echo "Examples:"
@@ -68,6 +71,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-report)
             GENERATE_REPORT=false
+            shift
+            ;;
+        --no-copy-docs)
+            COPY_DOCS=false
             shift
             ;;
         -h|--help)
@@ -194,6 +201,12 @@ if $GENERATE_REPORT; then
     else
         echo "Warning: Python not found. Skipping report generation."
     fi
+    if [[ "$COPY_DOCS" == true && -f "$OUTPUT_DIR/README.md" ]]; then
+        mkdir -p "$DOCS_DIR"
+        cp "$OUTPUT_DIR/README.md" "$DOCS_DIR/README.md"
+        cp "$OUTPUT_DIR"/*.png "$DOCS_DIR/" 2>/dev/null || true
+        echo "Copied report and plots to: $DOCS_DIR"
+    fi
 fi
 
 echo ""
@@ -205,4 +218,7 @@ echo "  - cargo_bench.log"
 echo "  - serialized_sizes.txt"
 if $GENERATE_REPORT; then
     echo "  - README.md and plots"
+    if [[ "$COPY_DOCS" == true ]]; then
+        echo "Docs sync: $DOCS_DIR"
+    fi
 fi

@@ -24,7 +24,7 @@ DATA_FILTER=""
 SERIALIZER_FILTER=""
 DURATION_SECONDS="3"
 REPORT_DIR="${SCRIPT_DIR}/reports"
-DOCS_OUTPUT_DIR=""
+DOCS_OUTPUT_DIR="${SCRIPT_DIR}/../../docs/benchmarks/java"
 SKIP_BUILD="false"
 GENERATE_REPORT="true"
 
@@ -40,7 +40,8 @@ Options:
   --duration <seconds>         JMH warmup and measurement duration per iteration
   --reports-dir <dir>          Local directory for benchmark_results.json and throughput.png
                                (default: reports)
-  --output-dir <dir>           Optional docs directory for copied throughput.png only
+  --output-dir <dir>           Docs directory for copied throughput.png and README xlang section
+  --no-copy-docs               Skip copying xlang report artifacts into docs/benchmarks/java
   --skip-build                 Reuse an existing target/benchmarks.jar
   --no-report                  Do not generate throughput.png
   --help                       Show this help
@@ -140,6 +141,10 @@ while [[ $# -gt 0 ]]; do
     --output-dir)
       DOCS_OUTPUT_DIR="${2:-}"
       shift 2
+      ;;
+    --no-copy-docs)
+      DOCS_OUTPUT_DIR=""
+      shift
       ;;
     --reports-dir)
       REPORT_DIR="${2:-}"

@@ -24,8 +24,7 @@ import argparse
 import json
 import os
 import platform
-import shutil
-import subprocess
+import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -33,7 +32,23 @@ from typing import Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import FuncFormatter, MaxNLocator
+from matplotlib.ticker import FuncFormatter
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plot_style import (  # noqa: E402
+    BAR_EDGE_COLOR,
+    GROUP_BAR_WIDTH,
+    GROUP_X,
+    PLOT_RC_PARAMS,
+    add_compact_legend,
+    format_markdown_with_prettier,
+    format_throughput_label,
+    format_throughput_tick,
+    save_benchmark_figure,
+    serializer_offset,
+    set_grouped_operation_axis,
+    style_throughput_axis,
+)
 
 try:
     import psutil
@@ -48,23 +63,6 @@ COLORS = {
     "protobuf": "#55BCC2",
     "pickle": (0.55, 0.40, 0.45),
 }
-PLOT_RC_PARAMS = {
-    "figure.facecolor": "white",
-    "axes.facecolor": "white",
-    "axes.titleweight": "normal",
-    "axes.labelcolor": "#222222",
-    "xtick.color": "#222222",
-    "ytick.color": "#222222",
-    "font.size": 10,
-    "axes.titlesize": 11,
-    "axes.labelsize": 10,
-    "xtick.labelsize": 9,
-    "ytick.labelsize": 9,
-    "legend.fontsize": 8,
-}
-GRID_COLOR = "#D9DEE7"
-SPINE_COLOR = "#8A939E"
-BAR_EDGE_COLOR = "white"
 SERIALIZER_ORDER = ["fory", "protobuf", "pickle"]
 SERIALIZER_LABELS = {
     "fory": "fory",
@@ -149,31 +147,11 @@ def format_datatype_table_label(datatype: str) -> str:
 
 
 def format_tps_label(tps: float) -> str:
-    def format_scaled(value: float, suffix: str) -> str:
-        return f"{value:.2f}".rstrip("0").rstrip(".") + suffix
-
-    if tps >= 1e9:
-        return format_scaled(tps / 1e9, "G")
-    if tps >= 1e6:
-        return format_scaled(tps / 1e6, "M")
-    if tps >= 1e3:
-        return format_scaled(tps / 1e3, "K")
-    return f"{tps:.0f}"
+    return format_throughput_label(tps)
 
 
 def format_tps_tick(tps: float, _position) -> str:
-    return format_tps_label(tps)
-
-
-def style_throughput_axis(ax):
-    ax.set_axisbelow(True)
-    ax.grid(True, axis="y", color=GRID_COLOR, linestyle="-", linewidth=0.7)
-    ax.grid(False, axis="x")
-    ax.yaxis.set_major_locator(MaxNLocator(nbins=5, min_n_ticks=3))
-    ax.tick_params(axis="both", width=0.8, length=3)
-    for spine in ax.spines.values():
-        spine.set_color(SPINE_COLOR)
-        spine.set_linewidth(0.8)
+    return format_throughput_tick(tps, _position)
 
 
 def build_benchmark_matrix(benchmarks):
@@ -254,20 +232,18 @@ def plot_throughput_grid_subplot(ax, data, datatype: str):
         return
 
     operations = ["serialize", "deserialize"]
-    x = np.array([0.0, 0.68])
-    bar_width = 0.15
-    offset_step = 0.165
+    x = GROUP_X
     for idx, lib in enumerate(available_libs):
         times = [
             data.get(datatype, {}).get(operation, {}).get(lib, 0)
             for operation in operations
         ]
         tps = [1e9 / val if val > 0 else 0 for val in times]
-        offset = (idx - (len(available_libs) - 1) / 2) * offset_step
+        offset = serializer_offset(idx, len(available_libs))
         ax.bar(
             x + offset,
             tps,
-            bar_width,
+            GROUP_BAR_WIDTH,
             label=SERIALIZER_LABELS.get(lib, lib),
             color=COLORS.get(lib, "#999999"),
             edgecolor=BAR_EDGE_COLOR,
@@ -282,21 +258,10 @@ def plot_throughput_grid_subplot(ax, data, datatype: str):
     )
     ax.set_ylim(0, max_tps * 1.12)
     ax.set_title(format_datatype_table_label(datatype), pad=8)
-    ax.set_xticks(x)
-    ax.set_xticklabels(["Serialize", "Deserialize"])
-    ax.set_xlim(-0.39, 1.07)
+    set_grouped_operation_axis(ax)
     style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
-    ax.legend(
-        loc="upper right",
-        frameon=True,
-        framealpha=0.95,
-        edgecolor="#D6DAE0",
-        borderpad=0.3,
-        labelspacing=0.3,
-        handlelength=1.4,
-        handletextpad=0.45,
-    )
+    add_compact_legend(ax)
 
 
 def generate_plots(data, output_dir: Path):
@@ -317,7 +282,7 @@ def generate_plots(data, output_dir: Path):
             fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
 
             path = output_dir / f"{datatype}.png"
-            plt.savefig(path, dpi=170, bbox_inches="tight", pad_inches=0.12)
+            save_benchmark_figure(fig, path)
             plt.close()
             plot_images.append((datatype, path))
 
@@ -335,7 +300,7 @@ def generate_plots(data, output_dir: Path):
         )
         fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
         throughput_path = output_dir / "throughput.png"
-        plt.savefig(throughput_path, dpi=170, bbox_inches="tight", pad_inches=0.12)
+        save_benchmark_figure(fig, throughput_path)
         plt.close()
         plot_images.append(("throughput", throughput_path))
 
@@ -485,9 +450,7 @@ def generate_markdown_report(
     report_path = output_dir / "README.md"
     report_path.write_text("".join(md), encoding="utf-8")
 
-    prettier = shutil.which("prettier")
-    if prettier is not None:
-        subprocess.run([prettier, "--write", str(report_path)], check=True)
+    format_markdown_with_prettier(report_path)
 
     return report_path
 

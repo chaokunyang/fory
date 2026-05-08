@@ -19,15 +19,32 @@ import argparse
 import json
 import math
 import os
-import shutil
 import socket
 import subprocess
+import sys
 from collections import defaultdict
+from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.ticker import FuncFormatter
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plot_style import (  # noqa: E402
+    BAR_EDGE_COLOR,
+    GROUP_BAR_WIDTH,
+    GROUP_X,
+    apply_benchmark_style,
+    add_compact_legend,
+    format_markdown_with_prettier,
+    format_throughput_label,
+    format_throughput_tick,
+    save_benchmark_figure,
+    serializer_offset,
+    set_grouped_operation_axis,
+    style_throughput_axis,
+)
+
+apply_benchmark_style(plt)
 
 COLORS = {
     "fory": "#FF6F01",
@@ -77,15 +94,11 @@ def collect_results(payload: dict) -> dict:
 
 
 def format_label(value: float) -> str:
-    if value >= 1e6:
-        return f"{value / 1e6:.2f}M"
-    if value >= 1e3:
-        return f"{value / 1e3:.2f}K"
-    return f"{value:.2f}"
+    return format_throughput_label(value)
 
 
 def format_tick(value: float, _position) -> str:
-    return format_label(value)
+    return format_throughput_tick(value, _position)
 
 
 def format_int(value: float) -> str:
@@ -165,46 +178,51 @@ def plot_summary_group(ax, results: dict, data_type: str) -> None:
         return
 
     operations = ["serialize", "deserialize"]
-    x_positions = np.arange(len(operations))
-    bar_width = 0.8 / len(serializers)
+    x_positions = GROUP_X
     for index, serializer in enumerate(serializers):
         values = [
             results.get(data_type, {}).get(operation, {}).get(serializer, 0.0)
             for operation in operations
         ]
-        offset = (index - (len(serializers) - 1) / 2) * bar_width
+        offset = serializer_offset(index, len(serializers))
         ax.bar(
             x_positions + offset,
             values,
-            width=bar_width,
+            width=GROUP_BAR_WIDTH,
             label=serializer,
             color=COLORS[serializer],
+            edgecolor=BAR_EDGE_COLOR,
+            linewidth=0.8,
         )
 
-    ax.set_title(DISPLAY_NAMES[data_type])
-    ax.set_xticks(x_positions)
-    ax.set_xticklabels(["Serialize", "Deserialize"])
-    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+    max_value = max(
+        results.get(data_type, {}).get(operation, {}).get(serializer, 0.0)
+        for operation in operations
+        for serializer in serializers
+    )
+    ax.set_ylim(0, max_value * 1.12)
+    ax.set_title(DISPLAY_NAMES[data_type], pad=8)
+    set_grouped_operation_axis(ax)
+    style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tick))
-    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    add_compact_legend(ax)
 
 
 def save_summary_plot(results: dict, output_dir: str) -> str:
-    figure, axes = plt.subplots(2, 3, figsize=(18, 10))
-    figure.suptitle("Dart Serialization Throughput", fontsize=14)
+    figure, axes = plt.subplots(2, 3, figsize=(16.5, 9.0))
+    figure.suptitle(
+        "Dart Serialization Throughput", fontsize=15, fontweight="normal", y=0.955
+    )
 
     for index, (ax, data_type) in enumerate(zip(axes.flat, DATA_TYPES)):
         plot_summary_group(ax, results, data_type)
         if index % 3 == 0:
-            ax.set_ylabel("Throughput (ops/sec)")
-        else:
-            ax.tick_params(axis="y", labelleft=False)
-            ax.yaxis.get_offset_text().set_visible(False)
+            ax.set_ylabel("Throughput (ops/sec)", labelpad=10)
 
-    figure.tight_layout()
+    figure.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
 
     path = os.path.join(output_dir, "throughput.png")
-    figure.savefig(path, dpi=150)
+    save_benchmark_figure(figure, path)
     plt.close(figure)
     return path
 
@@ -215,7 +233,7 @@ def save_per_type_plots(results: dict, output_dir: str) -> list[tuple[str, str]]
         operations = results.get(data_type, {})
         if not operations:
             continue
-        figure, axes = plt.subplots(1, 2, figsize=(12, 5))
+        figure, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
         for index, operation in enumerate(["serialize", "deserialize"]):
             serializers = SERIALIZERS
             values = [
@@ -226,10 +244,13 @@ def save_per_type_plots(results: dict, output_dir: str) -> list[tuple[str, str]]
                 serializers,
                 values,
                 color=[COLORS[serializer] for serializer in serializers],
+                edgecolor=BAR_EDGE_COLOR,
+                linewidth=0.8,
+                width=0.46,
             )
-            axes[index].set_title(f"{operation.capitalize()} throughput")
+            axes[index].set_title(f"{operation.capitalize()} throughput", pad=8)
             axes[index].set_ylabel("ops/s")
-            axes[index].grid(True, axis="y", linestyle="--", alpha=0.4)
+            style_throughput_axis(axes[index])
             for bar, value in zip(bars, values):
                 axes[index].annotate(
                     format_label(value),
@@ -240,10 +261,10 @@ def save_per_type_plots(results: dict, output_dir: str) -> list[tuple[str, str]]
                     va="bottom",
                     fontsize=9,
                 )
-        figure.suptitle(DISPLAY_NAMES[data_type])
-        figure.tight_layout(rect=[0, 0, 1, 0.95])
+        figure.suptitle(DISPLAY_NAMES[data_type], fontsize=13, fontweight="normal")
+        figure.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
         path = os.path.join(output_dir, f"{data_type}.png")
-        figure.savefig(path, dpi=150)
+        save_benchmark_figure(figure, path)
         plt.close(figure)
         plot_paths.append((DISPLAY_NAMES[data_type], path))
     return plot_paths
@@ -306,9 +327,7 @@ def write_report(
                 handle.write(f"### {display_name}\n\n")
                 handle.write(f"![{display_name}]({os.path.basename(path)})\n\n")
 
-    prettier = shutil.which("prettier")
-    if prettier is not None:
-        subprocess.run([prettier, "--write", report_path], check=True)
+    format_markdown_with_prettier(report_path)
 
 
 def main() -> None:

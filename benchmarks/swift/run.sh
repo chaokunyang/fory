@@ -21,6 +21,7 @@ export ENABLE_FORY_DEBUG_OUTPUT=0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
+DOCS_DIR="$SCRIPT_DIR/../../docs/benchmarks/swift"
 
 # Colors
 RED='\033[0;31m'
@@ -34,6 +35,7 @@ SERIALIZER=""
 DURATION="3"
 OUTPUT_JSON="results/benchmark_results.json"
 NO_REPORT=false
+COPY_DOCS=true
 
 usage() {
     echo "Usage: $0 [OPTIONS]"
@@ -47,6 +49,7 @@ usage() {
     echo "                               Filter benchmark by serializer"
     echo "  --duration <seconds>         Minimum time to run each benchmark (default: 3)"
     echo "  --no-report                  Skip Python report generation"
+    echo "  --no-copy-docs               Skip copying report/plots into docs/benchmarks/swift"
     echo "  --help                       Show this help message"
     echo ""
     echo "Examples:"
@@ -73,6 +76,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-report)
             NO_REPORT=true
+            shift
+            ;;
+        --no-copy-docs)
+            COPY_DOCS=false
             shift
             ;;
         --help|-h)
@@ -127,4 +134,13 @@ if ! python3 -c "import matplotlib" >/dev/null 2>&1; then
 fi
 
 python3 benchmark_report.py --json-file "$OUTPUT_JSON" --output-dir results
-echo -e "${GREEN}Report generated: ${SCRIPT_DIR}/results/REPORT.md${NC}"
+if [[ "$COPY_DOCS" == true ]]; then
+    mkdir -p "$DOCS_DIR"
+    cp results/README.md "$DOCS_DIR/README.md"
+    cp results/*.png "$DOCS_DIR/" 2>/dev/null || true
+    echo -e "${GREEN}Copied report and plots to: ${DOCS_DIR}${NC}"
+fi
+echo -e "${GREEN}Report generated: ${SCRIPT_DIR}/results/README.md${NC}"
+if [[ "$COPY_DOCS" == true ]]; then
+    echo -e "Docs sync: ${DOCS_DIR}"
+fi

@@ -20,14 +20,32 @@ import argparse
 import json
 import os
 import platform
-import shutil
-import subprocess
+import sys
 from collections import defaultdict
 from datetime import datetime
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import FuncFormatter
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from plot_style import (  # noqa: E402
+    BAR_EDGE_COLOR,
+    GROUP_BAR_WIDTH,
+    GROUP_X,
+    apply_benchmark_style,
+    add_compact_legend,
+    format_markdown_with_prettier,
+    format_throughput_label,
+    format_throughput_tick,
+    save_benchmark_figure,
+    serializer_offset,
+    set_grouped_operation_axis,
+    style_throughput_axis,
+)
+
+apply_benchmark_style(plt)
 
 try:
     import psutil
@@ -139,17 +157,11 @@ def format_datatype_table_label(datatype: str) -> str:
 
 
 def format_tps_label(tps: float) -> str:
-    if tps >= 1e9:
-        return f"{tps / 1e9:.2f}G"
-    if tps >= 1e6:
-        return f"{tps / 1e6:.2f}M"
-    if tps >= 1e3:
-        return f"{tps / 1e3:.2f}K"
-    return f"{tps:.0f}"
+    return format_throughput_label(tps)
 
 
 def format_tps_tick(tps: float, _position) -> str:
-    return format_tps_label(tps)
+    return format_throughput_tick(tps, _position)
 
 
 def preferred_ordered_values(values, preferred):
@@ -263,13 +275,20 @@ def plot_datatype(ax, throughputs: dict, datatype: str, operation: str) -> None:
     colors = [COLORS.get(lib, "#888888") for lib in lib_order]
 
     x = np.arange(len(lib_order))
-    bars = ax.bar(x, throughput, color=colors, width=0.6)
+    bars = ax.bar(
+        x,
+        throughput,
+        color=colors,
+        edgecolor=BAR_EDGE_COLOR,
+        linewidth=0.8,
+        width=0.46,
+    )
 
-    ax.set_title(f"{operation.capitalize()} Throughput (higher is better)")
+    ax.set_title(f"{operation.capitalize()} Throughput (higher is better)", pad=8)
     ax.set_xticks(x)
     ax.set_xticklabels([SERIALIZER_LABELS.get(lib, lib) for lib in lib_order])
     ax.set_ylabel("Throughput (ops/sec)")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+    style_throughput_axis(ax)
     ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
 
     for bar, tps_value in zip(bars, throughput):
@@ -304,28 +323,35 @@ def plot_throughput_grid_subplot(ax, throughputs, datatype):
         ax.axis("off")
         return
 
-    x = np.arange(len(PREFERRED_OPERATION_ORDER))
-    width = 0.8 / len(available_libs)
+    x = GROUP_X
     for idx, lib in enumerate(available_libs):
         tps = [
             throughputs[datatype][operation].get(lib, 0)
             for operation in PREFERRED_OPERATION_ORDER
         ]
-        offset = (idx - (len(available_libs) - 1) / 2) * width
+        offset = serializer_offset(idx, len(available_libs))
         ax.bar(
             x + offset,
             tps,
-            width,
+            GROUP_BAR_WIDTH,
             label=SERIALIZER_LABELS.get(lib, lib),
             color=COLORS.get(lib, "#888888"),
+            edgecolor=BAR_EDGE_COLOR,
+            linewidth=0.8,
         )
 
-    ax.set_title(format_datatype_table_label(datatype))
-    ax.set_xticks(x)
-    ax.set_xticklabels(["Serialize", "Deserialize"])
-    ax.grid(True, axis="y", linestyle="--", alpha=0.5)
+    max_tps = max(
+        throughputs[datatype][operation][lib]
+        for operation in PREFERRED_OPERATION_ORDER
+        for lib in available_libs
+        if throughputs[datatype][operation].get(lib, 0) > 0
+    )
+    ax.set_ylim(0, max_tps * 1.12)
+    ax.set_title(format_datatype_table_label(datatype), pad=8)
+    set_grouped_operation_axis(ax)
+    style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
-    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    add_compact_legend(ax)
 
 
 def build_markdown(
@@ -505,28 +531,27 @@ def main() -> None:
 
     plot_images = []
     for datatype in datatypes:
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+        fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
         for index, operation in enumerate(PREFERRED_OPERATION_ORDER):
             plot_datatype(axes[index], throughputs, datatype, operation)
-        fig.suptitle(f"{format_datatype_table_label(datatype)} Throughput", fontsize=14)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        fig.suptitle(f"{format_datatype_table_label(datatype)} Throughput", fontsize=13)
+        fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
         plot_path = os.path.join(output_dir, f"{datatype}.png")
-        plt.savefig(plot_path, dpi=150)
+        save_benchmark_figure(fig, plot_path)
         plot_images.append((datatype, plot_path))
         plt.close()
 
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(16.5, 9.0))
     for index, (ax, datatype) in enumerate(zip(axes.flat, PREFERRED_DATATYPE_ORDER)):
         plot_throughput_grid_subplot(ax, throughputs, datatype)
         if index % 3 == 0:
-            ax.set_ylabel("Throughput (ops/sec)")
-        else:
-            ax.tick_params(axis="y", labelleft=False)
-            ax.yaxis.get_offset_text().set_visible(False)
-    fig.suptitle("C# Serialization Throughput", fontsize=14)
-    fig.tight_layout()
+            ax.set_ylabel("Throughput (ops/sec)", labelpad=10)
+    fig.suptitle(
+        "C# Serialization Throughput", fontsize=15, fontweight="normal", y=0.955
+    )
+    fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
     throughput_path = os.path.join(output_dir, "throughput.png")
-    plt.savefig(throughput_path, dpi=150)
+    save_benchmark_figure(fig, throughput_path)
     plot_images.append(("throughput", throughput_path))
     plt.close()
 
@@ -548,9 +573,7 @@ def main() -> None:
     with open(report_path, "w", encoding="utf-8") as f:
         f.write(report)
 
-    prettier = shutil.which("prettier")
-    if prettier is not None:
-        subprocess.run([prettier, "--write", report_path], check=True)
+    format_markdown_with_prettier(report_path)
 
     if coverage["is_partial"]:
         print(

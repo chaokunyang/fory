@@ -23,6 +23,7 @@ cd "$SCRIPT_DIR"
 
 # Output directory for results
 OUTPUT_DIR="$SCRIPT_DIR/results"
+DOCS_DIR="$SCRIPT_DIR/../../docs/benchmarks/go"
 mkdir -p "$OUTPUT_DIR"
 
 # Default values
@@ -31,6 +32,7 @@ SERIALIZER=""
 COUNT=5
 BENCHTIME="1s"
 GENERATE_REPORT=true
+COPY_DOCS=true
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -55,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             GENERATE_REPORT=false
             shift
             ;;
+        --no-copy-docs)
+            COPY_DOCS=false
+            shift
+            ;;
         -h|--help)
             echo "Usage: $0 [options]"
             echo ""
@@ -64,6 +70,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --count <n>         Number of benchmark runs (default: 5)"
             echo "  --benchtime <dur>   Time for each benchmark (default: 1s)"
             echo "  --no-report         Skip report generation"
+            echo "  --no-copy-docs      Skip copying report/plots into docs/benchmarks/go"
             echo "  -h, --help          Show this help message"
             echo ""
             echo "Examples:"
@@ -226,6 +233,14 @@ if $GENERATE_REPORT; then
     else
         echo "Warning: Python not found. Skipping report generation."
     fi
+    if [[ "$COPY_DOCS" == true && -f "$OUTPUT_DIR/README.md" ]]; then
+        mkdir -p "$DOCS_DIR"
+        cp "$OUTPUT_DIR/README.md" "$DOCS_DIR/README.md"
+        cp "$OUTPUT_DIR"/*.png "$DOCS_DIR/" 2>/dev/null || true
+        cp "$OUTPUT_DIR/benchmark_results.txt" "$DOCS_DIR/benchmark_results.txt"
+        cp "$OUTPUT_DIR/serialized_sizes.txt" "$DOCS_DIR/serialized_sizes.txt"
+        echo "Copied report, plots, and text outputs to: $DOCS_DIR"
+    fi
 fi
 
 echo ""
@@ -236,6 +251,9 @@ echo "Results saved to: $OUTPUT_DIR/"
 echo "  - benchmark_results.txt (human-readable)"
 echo "  - benchmark_results.json (JSON format)"
 if $GENERATE_REPORT; then
-    echo "  - benchmark_report.md (report)"
+    echo "  - README.md and benchmark_report.md (report)"
     echo "  - benchmark_*.png (plots)"
+    if [[ "$COPY_DOCS" == true ]]; then
+        echo "Docs sync: $DOCS_DIR"
+    fi
 fi

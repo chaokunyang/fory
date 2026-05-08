@@ -25,8 +25,6 @@ import json
 import os
 import platform
 import re
-import shutil
-import subprocess
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -40,6 +38,25 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
     print("Warning: matplotlib not installed. Skipping plot generation.")
+
+if HAS_MATPLOTLIB:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from plot_style import (  # noqa: E402
+        BAR_EDGE_COLOR,
+        GROUP_BAR_WIDTH,
+        GROUP_X,
+        add_compact_legend,
+        apply_benchmark_style,
+        format_markdown_with_prettier,
+        format_throughput_label,
+        format_throughput_tick,
+        save_benchmark_figure,
+        serializer_offset,
+        set_grouped_operation_axis,
+        style_throughput_axis,
+    )
+
+    apply_benchmark_style(plt)
 
 
 # Color scheme (matching C++ benchmark)
@@ -69,12 +86,16 @@ SERIALIZERS = ["fory", "protobuf", "msgpack"]
 
 
 def format_ops_per_sec(value):
+    if HAS_MATPLOTLIB:
+        return format_throughput_label(value)
     if value >= 1e6:
         return f"{value / 1e6:.2f}M"
     return f"{value / 1e3:.0f}K"
 
 
 def format_ops_tick(value, _position):
+    if HAS_MATPLOTLIB:
+        return format_throughput_tick(value, _position)
     return format_ops_per_sec(value)
 
 
@@ -196,10 +217,11 @@ def generate_plots(results, output_dir):
         if datatype not in results:
             continue
 
-        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
         fig.suptitle(
             f"{display_name(datatype)} Serialization Benchmark",
-            fontsize=14,
+            fontsize=13,
+            fontweight="normal",
         )
 
         for idx, op in enumerate(OPERATIONS):
@@ -220,9 +242,17 @@ def generate_plots(results, output_dir):
             ]
             colors = [COLORS.get(s, "#888888") for s in available_serializers]
 
-            bars = ax.bar(available_serializers, ops_per_sec, color=colors)
+            bars = ax.bar(
+                available_serializers,
+                ops_per_sec,
+                color=colors,
+                edgecolor=BAR_EDGE_COLOR,
+                linewidth=0.8,
+                width=0.46,
+            )
             ax.set_ylabel("Operations/sec")
-            ax.set_title(f"{op.title()}")
+            ax.set_title(f"{op.title()}", pad=8)
+            style_throughput_axis(ax)
 
             # Add value labels on bars
             for bar, val in zip(bars, ops_per_sec):
@@ -268,11 +298,9 @@ def generate_plots(results, output_dir):
                         ),
                     )
 
-        plt.tight_layout()
-        plt.savefig(
-            os.path.join(output_dir, f"benchmark_{datatype}.png"),
-            dpi=150,
-            bbox_inches="tight",
+        fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
+        save_benchmark_figure(
+            fig, os.path.join(output_dir, f"benchmark_{datatype}.png")
         )
         plt.close()
 
@@ -294,10 +322,9 @@ def plot_throughput_grid_subplot(ax, results, datatype):
         ax.set_title(display_name(datatype))
         return
 
-    x = range(len(OPERATIONS))
-    width = min(0.8 / len(available_serializers), 0.25)
+    x = GROUP_X
     offsets = [
-        (idx - (len(available_serializers) - 1) / 2) * width
+        serializer_offset(idx, len(available_serializers))
         for idx in range(len(available_serializers))
     ]
 
@@ -309,17 +336,25 @@ def plot_throughput_grid_subplot(ax, results, datatype):
         ax.bar(
             [position + offset for position in x],
             values,
-            width,
+            GROUP_BAR_WIDTH,
             label=serializer.title(),
             color=COLORS.get(serializer, "#888888"),
+            edgecolor=BAR_EDGE_COLOR,
+            linewidth=0.8,
         )
 
-    ax.set_title(display_name(datatype))
-    ax.set_xticks(list(x))
-    ax.set_xticklabels([op.title() for op in OPERATIONS])
-    ax.grid(True, axis="y", alpha=0.25)
+    max_value = max(
+        1e9 / results[datatype][operation][serializer]
+        for operation in OPERATIONS
+        for serializer in available_serializers
+        if results[datatype].get(operation, {}).get(serializer)
+    )
+    ax.set_ylim(0, max_value * 1.12)
+    ax.set_title(display_name(datatype), pad=8)
+    set_grouped_operation_axis(ax)
+    style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_ops_tick))
-    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    add_compact_legend(ax)
 
 
 def generate_combined_plot(results, output_dir):
@@ -327,24 +362,21 @@ def generate_combined_plot(results, output_dir):
     if not HAS_MATPLOTLIB:
         return
 
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(16.5, 9.0))
     fig.suptitle(
         "Go Serialization Throughput",
-        fontsize=16,
+        fontsize=15,
+        fontweight="normal",
+        y=0.955,
     )
 
     for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPES)):
         plot_throughput_grid_subplot(ax, results, datatype)
         if index % 3 == 0:
-            ax.set_ylabel("ops/sec")
-        else:
-            ax.tick_params(axis="y", labelleft=False)
-            ax.yaxis.get_offset_text().set_visible(False)
+            ax.set_ylabel("Throughput (ops/sec)", labelpad=10)
 
-    plt.tight_layout()
-    plt.savefig(
-        os.path.join(output_dir, "throughput.png"), dpi=150, bbox_inches="tight"
-    )
+    fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
+    save_benchmark_figure(fig, os.path.join(output_dir, "throughput.png"))
     plt.close()
 
 
@@ -480,9 +512,7 @@ def generate_markdown_report(results, output_dir):
         with open(report_path, "w") as f:
             f.write("\n".join(report))
 
-    prettier = shutil.which("prettier")
-    if prettier is not None:
-        subprocess.run([prettier, "--write", *report_paths], check=True)
+    format_markdown_with_prettier(*report_paths)
 
     print(f"Report generated: {report_paths[0]}")
 

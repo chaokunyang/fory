@@ -22,9 +22,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 OUTPUT_DIR="$SCRIPT_DIR/results"
+DOCS_DIR="$SCRIPT_DIR/../../docs/benchmarks/dart"
 BUILD_DIR="$SCRIPT_DIR/build"
 RUNNER="$BUILD_DIR/benchmark_runner"
 GENERATE_REPORT=true
+COPY_DOCS=true
 DATA=""
 SERIALIZER=""
 OPERATION=""
@@ -43,6 +45,7 @@ usage() {
   echo "  --duration <sec>     Seconds per sample (default: 1.5)."
   echo "  --warmup <sec>       Warmup seconds per case (default: 1.0)."
   echo "  --no-report          Skip report generation."
+  echo "  --no-copy-docs       Skip copying report/plots into docs/benchmarks/dart."
   echo "  -h, --help           Show this help."
 }
 
@@ -74,6 +77,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-report)
       GENERATE_REPORT=false
+      shift
+      ;;
+    --no-copy-docs)
+      COPY_DOCS=false
       shift
       ;;
     -h|--help)
@@ -135,6 +142,12 @@ if $GENERATE_REPORT; then
   python3 "$SCRIPT_DIR/benchmark_report.py" \
     --json-file "$OUTPUT_DIR/benchmark_results.json" \
     --output-dir "$OUTPUT_DIR"
+  if [[ "$COPY_DOCS" == true ]]; then
+    mkdir -p "$DOCS_DIR"
+    cp "$OUTPUT_DIR/README.md" "$DOCS_DIR/README.md"
+    cp "$OUTPUT_DIR"/*.png "$DOCS_DIR/" 2>/dev/null || true
+    echo "Copied report and plots to: $DOCS_DIR"
+  fi
 fi
 
 echo ""
@@ -142,3 +155,6 @@ echo "============================================"
 echo "Benchmark complete!"
 echo "============================================"
 echo "Results saved to: $OUTPUT_DIR"
+if [[ "$GENERATE_REPORT" == true && "$COPY_DOCS" == true ]]; then
+  echo "Docs sync: $DOCS_DIR"
+fi

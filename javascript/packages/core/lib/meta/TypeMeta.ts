@@ -433,8 +433,8 @@ export class TypeMeta {
   }
 
   /**
-   * Skip the type meta body when the caller already read the little-endian
-   * low 32 bits of a validated header-cache key.
+   * Skip the type meta body after the caller has matched the full validated
+   * header key. Only the low header bits are needed to decode the body-size field.
    */
   static skipBodyByHeaderLow(reader: BinaryReader, headerLow: number) {
     const metaSize = TypeMeta.readMetaSizeFromLow(reader, headerLow);

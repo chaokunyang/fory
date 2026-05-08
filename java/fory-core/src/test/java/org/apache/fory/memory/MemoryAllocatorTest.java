@@ -98,9 +98,8 @@ public class MemoryAllocatorTest {
     MemoryAllocator defaultAllocator = MemoryBuffer.getGlobalAllocator();
     MemoryBuffer buffer = defaultAllocator.allocate(100);
 
-    // Growth should return the same instance
-    MemoryBuffer grownBuffer = defaultAllocator.grow(buffer, 200);
-    assertSame(buffer, grownBuffer);
+    defaultAllocator.grow(buffer, 200);
+    assertEquals(buffer.size(), 200 << 1);
   }
 
   @Test
@@ -115,9 +114,9 @@ public class MemoryAllocatorTest {
           }
 
           @Override
-          public MemoryBuffer grow(MemoryBuffer buffer, int newCapacity) {
+          public void grow(MemoryBuffer buffer, int newCapacity) {
             if (newCapacity <= buffer.size()) {
-              return buffer;
+              return;
             }
 
             // Use default grow logic but with custom marker
@@ -125,7 +124,6 @@ public class MemoryAllocatorTest {
             byte[] data = new byte[newSize];
             buffer.copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, buffer.size());
             buffer.initHeapBuffer(data, 0, data.length);
-            return buffer;
           }
         };
 

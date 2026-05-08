@@ -35,7 +35,6 @@ public interface MemoryAllocator {
    *
    * @param buffer the existing buffer to grow
    * @param newCapacity the required new capacity
-   * @return the same MemoryBuffer instance with at least the new capacity
    */
-  MemoryBuffer grow(MemoryBuffer buffer, int newCapacity);
+  void grow(MemoryBuffer buffer, int newCapacity);
 }

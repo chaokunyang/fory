@@ -2826,9 +2826,9 @@ public final class MemoryBuffer {
     }
 
     @Override
-    public MemoryBuffer grow(MemoryBuffer buffer, int newCapacity) {
+    public void grow(MemoryBuffer buffer, int newCapacity) {
       if (newCapacity <= buffer.size()) {
-        return buffer;
+        return;
       }
 
       int newSize =
@@ -2839,8 +2839,6 @@ public final class MemoryBuffer {
       byte[] data = new byte[newSize];
       buffer.copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, buffer.size());
       buffer.initHeapBuffer(data, 0, data.length);
-
-      return buffer;
     }
   }
 

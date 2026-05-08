@@ -34,9 +34,9 @@ import org.apache.fory.benchmark.xlang.generated.FBSMedia;
 import org.apache.fory.benchmark.xlang.generated.FBSMediaContent;
 import org.apache.fory.benchmark.xlang.generated.FBSMediaContentList;
 import org.apache.fory.benchmark.xlang.generated.FBSNumericStruct;
+import org.apache.fory.benchmark.xlang.generated.FBSNumericStructList;
 import org.apache.fory.benchmark.xlang.generated.FBSSample;
 import org.apache.fory.benchmark.xlang.generated.FBSSampleList;
-import org.apache.fory.benchmark.xlang.generated.FBSNumericStructList;
 import org.apache.fory.integration_tests.state.generated.ProtoMessage;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -170,32 +170,32 @@ public class XlangBenchmark {
   }
 
   @Benchmark
-  public Object BM_Fory_Struct_Serialize(XlangState state) {
+  public Object BM_Fory_NumericStruct_Serialize(XlangState state) {
     return state.fory.serialize(state.numericStruct);
   }
 
   @Benchmark
-  public Object BM_Fory_Struct_Deserialize(XlangState state) {
+  public Object BM_Fory_NumericStruct_Deserialize(XlangState state) {
     return state.fory.deserialize(state.foryNumericStructBytes);
   }
 
   @Benchmark
-  public Object BM_Protobuf_Struct_Serialize(XlangState state) {
+  public Object BM_Protobuf_NumericStruct_Serialize(XlangState state) {
     return toProto(state.numericStruct).toByteArray();
   }
 
   @Benchmark
-  public Object BM_Protobuf_Struct_Deserialize(XlangState state) {
+  public Object BM_Protobuf_NumericStruct_Deserialize(XlangState state) {
     return fromProtoStruct(state.protobufNumericStructBytes);
   }
 
   @Benchmark
-  public Object BM_Flatbuffer_Struct_Serialize(XlangState state) {
+  public Object BM_Flatbuffer_NumericStruct_Serialize(XlangState state) {
     return toFlatBuffer(state.numericStruct);
   }
 
   @Benchmark
-  public Object BM_Flatbuffer_Struct_Deserialize(XlangState state) {
+  public Object BM_Flatbuffer_NumericStruct_Deserialize(XlangState state) {
     return fromFlatBufferNumericStruct(state.flatbufferNumericStructBuffer);
   }
 
@@ -816,8 +816,19 @@ public class XlangBenchmark {
 
   private static int buildFlatBuffer(FlatBufferBuilder builder, NumericStruct struct) {
     return FBSNumericStruct.createFBSNumericStruct(
-        builder, struct.f1, struct.f2, struct.f3, struct.f4, struct.f5, struct.f6, struct.f7,
-        struct.f8, struct.f9, struct.f10, struct.f11, struct.f12);
+        builder,
+        struct.f1,
+        struct.f2,
+        struct.f3,
+        struct.f4,
+        struct.f5,
+        struct.f6,
+        struct.f7,
+        struct.f8,
+        struct.f9,
+        struct.f10,
+        struct.f11,
+        struct.f12);
   }
 
   private static int buildFlatBuffer(FlatBufferBuilder builder, Sample sample) {

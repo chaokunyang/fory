@@ -58,7 +58,7 @@ MEDIA_CONTENT is a class from [jvm-serializers](https://github.com/eishay/jvm-se
 
 SAMPLE is a class from [kryo benchmark](https://github.com/EsotericSoftware/kryo/blob/master/benchmarks/src/main/java/com/esotericsoftware/kryo/benchmarks/data/Sample.java)
 
-## Benchmark Plots
+## Java Benchmark
 
 ### Serialize to heap buffer
 
@@ -138,9 +138,9 @@ But if you serialize data between processes on same node and use shared-memory, 
 
 ![Java Zero Copy Deserialization](java_zero_copy_deserialize.png)
 
-## Benchmark Data
+### Benchmark Data
 
-### Java Serialization
+#### Java Serialization
 
 | Benchmark              | objectType    | bufferType   | references | Fory           | ForyMetaShared  | Kryo           | Fst           | Hession       | Jdk           | Protostuff    |
 | ---------------------- | ------------- | ------------ | ---------- | -------------- | --------------- | -------------- | ------------- | ------------- | ------------- | ------------- |
@@ -209,7 +209,7 @@ But if you serialize data between processes on same node and use shared-memory, 
 | deserialize_compatible | SAMPLE        | directBuffer | False      | 2308111.633661 | 2289261.533644  | 201993.787890  |               | 124044.417439 |               |               |
 | deserialize_compatible | SAMPLE        | directBuffer | True       | 1820490.585648 | 1927548.827586  | 174534.710870  |               | 120276.449497 |               |               |
 
-### Java Zero-copy
+#### Java Zero-copy
 
 | Benchmark   | array_size | bufferType   | dataType        | Fory           | Kryo           | Fst            |
 | ----------- | ---------- | ------------ | --------------- | -------------- | -------------- | -------------- |
@@ -237,3 +237,31 @@ But if you serialize data between processes on same node and use shared-memory, 
 | deserialize | 5000       | array        | PRIMITIVE_ARRAY | 40312.590172   | 6122.351228    | 10672.872798   |
 | deserialize | 5000       | directBuffer | BUFFER          | 3284441.570594 | 148614.476829  | 77950.612503   |
 | deserialize | 5000       | directBuffer | PRIMITIVE_ARRAY | 40413.743717   | 21826.040410   | 8561.694533    |
+
+## Xlang Benchmark
+
+Run from `benchmarks/java/run.sh`. Raw JMH JSON stays under the ignored local `benchmarks/java/reports/` directory; only `throughput.png` is copied into `docs/benchmarks/java/`.
+
+```bash
+cd benchmarks/java
+./run.sh --output-dir ../../docs/benchmarks/java
+```
+
+JMH parameters: `-f 1 -wi 3 -i 3 -t 1 -w 3s -r 3s -bm thrpt -tu s`. Higher throughput is better.
+
+![Java Xlang Serialization Throughput](throughput.png)
+
+| Data type         | Operation   | Fory ops/sec | Protobuf ops/sec | Flatbuffer ops/sec | Fastest    |
+| ----------------- | ----------- | ------------ | ---------------- | ------------------ | ---------- |
+| NumericStruct     | Serialize   | 35,509,283   | 16,293,680       | 9,252,939          | Fory       |
+| NumericStruct     | Deserialize | 39,366,466   | 13,216,969       | 44,655,865         | Flatbuffer |
+| Sample            | Serialize   | 18,210,799   | 2,004,689        | 2,472,044          | Fory       |
+| Sample            | Deserialize | 18,342,162   | 1,869,185        | 4,061,787          | Fory       |
+| MediaContent      | Serialize   | 10,637,892   | 3,270,255        | 1,387,937          | Fory       |
+| MediaContent      | Deserialize | 9,091,945    | 2,512,194        | 3,548,934          | Fory       |
+| NumericStructList | Serialize   | 11,321,689   | 2,617,864        | 3,309,333          | Fory       |
+| NumericStructList | Deserialize | 12,088,544   | 2,091,938        | 7,478,377          | Fory       |
+| SampleList        | Serialize   | 4,458,489    | 403,819          | 638,011            | Fory       |
+| SampleList        | Deserialize | 2,335,308    | 360,378          | 760,997            | Fory       |
+| MediaContentList  | Serialize   | 1,795,904    | 351,794          | 250,981            | Fory       |
+| MediaContentList  | Deserialize | 989,372      | 453,614          | 510,958            | Fory       |

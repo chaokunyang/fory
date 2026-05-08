@@ -23,7 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DATA_FILTER=""
 SERIALIZER_FILTER=""
 DURATION_SECONDS="3"
-OUTPUT_DIR="${SCRIPT_DIR}/results"
+REPORT_DIR="${SCRIPT_DIR}/reports"
+DOCS_OUTPUT_DIR=""
 SKIP_BUILD="false"
 GENERATE_REPORT="true"
 
@@ -37,7 +38,9 @@ Options:
   --serializer <fory|protobuf|flatbuffer>
                                Filter benchmark by serializer
   --duration <seconds>         JMH warmup and measurement duration per iteration
-  --output-dir <dir>           Directory for benchmark_results.json and throughput.png
+  --reports-dir <dir>          Local directory for benchmark_results.json and throughput.png
+                               (default: reports)
+  --output-dir <dir>           Optional docs directory for copied throughput.png only
   --skip-build                 Reuse an existing target/benchmarks.jar
   --no-report                  Do not generate throughput.png
   --help                       Show this help
@@ -135,7 +138,11 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --output-dir)
-      OUTPUT_DIR="${2:-}"
+      DOCS_OUTPUT_DIR="${2:-}"
+      shift 2
+      ;;
+    --reports-dir)
+      REPORT_DIR="${2:-}"
       shift 2
       ;;
     --skip-build)
@@ -161,10 +168,10 @@ done
 SERIALIZERS="$(serializer_regex "${SERIALIZER_FILTER}")"
 DATA_TYPES="$(data_regex "${DATA_FILTER}")"
 JMH_DURATION="$(jmh_time "${DURATION_SECONDS}")"
-RESULT_JSON="${OUTPUT_DIR}/benchmark_results.json"
+RESULT_JSON="${REPORT_DIR}/benchmark_results.json"
 BENCHMARK_REGEX="org.apache.fory.benchmark.XlangBenchmark.BM_(${SERIALIZERS})_(${DATA_TYPES})_(Serialize|Deserialize)"
 
-mkdir -p "${OUTPUT_DIR}"
+mkdir -p "${REPORT_DIR}"
 
 cd "${SCRIPT_DIR}"
 
@@ -186,5 +193,9 @@ ENABLE_FORY_DEBUG_OUTPUT=0 \
   -rff "${RESULT_JSON}"
 
 if [[ "${GENERATE_REPORT}" == "true" ]]; then
-  python3 benchmark_report.py --json-file "${RESULT_JSON}" --output-dir "${OUTPUT_DIR}"
+  REPORT_ARGS=(--json-file "${RESULT_JSON}" --output-dir "${REPORT_DIR}")
+  if [[ -n "${DOCS_OUTPUT_DIR}" ]]; then
+    REPORT_ARGS+=(--docs-output-dir "${DOCS_OUTPUT_DIR}")
+  fi
+  python3 benchmark_report.py "${REPORT_ARGS[@]}"
 fi

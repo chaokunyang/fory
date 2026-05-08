@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -60,13 +61,18 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--json-file",
-        default="results/benchmark_results.json",
+        default="reports/benchmark_results.json",
         help="JMH JSON output file",
     )
     parser.add_argument(
         "--output-dir",
-        default="results",
-        help="Directory for throughput.png",
+        default="reports",
+        help="Local directory for throughput.png",
+    )
+    parser.add_argument(
+        "--docs-output-dir",
+        default=None,
+        help="Optional docs directory to receive only a copied throughput.png",
     )
     return parser.parse_args()
 
@@ -210,6 +216,12 @@ def main() -> None:
     results = collect_results(load_json(args.json_file))
     output_path = render_plot(results, str(output_dir))
     print(f"Generated {output_path}")
+    if args.docs_output_dir is not None:
+        docs_output_dir = Path(args.docs_output_dir)
+        docs_output_dir.mkdir(parents=True, exist_ok=True)
+        docs_output_path = docs_output_dir / "throughput.png"
+        shutil.copy2(output_path, docs_output_path)
+        print(f"Copied {docs_output_path}")
 
 
 if __name__ == "__main__":

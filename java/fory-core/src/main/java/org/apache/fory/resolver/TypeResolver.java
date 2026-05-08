@@ -1802,7 +1802,7 @@ public abstract class TypeResolver {
       }
     }
     if (GraalvmSupport.isGraalRuntime()) {
-      if (Functions.isLambda(cls) || ReflectionUtils.isJdkProxy(cls)) {
+      if (cls.isArray() || Functions.isLambda(cls) || ReflectionUtils.isJdkProxy(cls)) {
         return null;
       }
       throw new RuntimeException(String.format("Class %s is not registered", cls));

@@ -78,7 +78,7 @@ public:
   template <typename T> ForyLog &operator<<(const T &t) {
     stream() << t;
     return *this;
-  };
+  }
 
   /// Return whether or not the log level is enabled in current setting.
   ///
@@ -89,7 +89,7 @@ public:
   static ForyLogLevel get_log_level();
 
 protected:
-  virtual std::ostream &stream() { return std::cerr; };
+  virtual std::ostream &stream() { return std::cerr; }
 
 private:
   /// log level.

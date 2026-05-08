@@ -73,12 +73,12 @@ public final class ExceptionSerializers {
 
     @Override
     public void write(WriteContext writeContext, T value) {
-      MemoryBuffer buffer = writeContext.getBuffer();
       Serializer[] slotsSerializers = getSlotsSerializers();
       writeContext.writeRef(value.getStackTrace());
       writeContext.writeRef(value.getCause());
       writeContext.writeStringRef(value.getMessage());
-      buffer.writeVarUInt32(0);
+      writeContext.writeRef(value.getSuppressed());
+      writeContext.getBuffer().writeVarUInt32(0);
       for (Serializer slotsSerializer : slotsSerializers) {
         slotsSerializer.write(writeContext, value);
       }
@@ -86,17 +86,20 @@ public final class ExceptionSerializers {
 
     @Override
     public T read(ReadContext readContext) {
-      MemoryBuffer buffer = readContext.getBuffer();
       Serializer[] slotsSerializers = getSlotsSerializers();
       T obj = objectCreator.newInstance();
       readContext.reference(obj);
       StackTraceElement[] stackTrace = (StackTraceElement[]) readContext.readRef();
       Throwable cause = (Throwable) readContext.readRef();
       String detailMessage = readContext.readStringRef();
+      Throwable[] suppressedExceptions = (Throwable[]) readContext.readRef();
       skipExtraFields(readContext);
       Platform.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
       Platform.putObject(obj, ThrowableOffsets.CAUSE_FIELD_OFFSET, cause == null ? obj : cause);
       Platform.putObject(obj, ThrowableOffsets.STACK_TRACE_FIELD_OFFSET, stackTrace);
+      for (Throwable suppressedException : suppressedExceptions) {
+        obj.addSuppressed(suppressedException);
+      }
       readAndSetFields(readContext, obj, slotsSerializers, config);
       return obj;
     }

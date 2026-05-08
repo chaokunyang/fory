@@ -441,6 +441,7 @@ public class ClassResolver extends TypeResolver {
         Throwable.class,
         StackTraceElement.class,
         StackTraceElement[].class,
+        Throwable[].class,
         Exception.class,
         RuntimeException.class);
     registerInternal(NullPointerException.class);

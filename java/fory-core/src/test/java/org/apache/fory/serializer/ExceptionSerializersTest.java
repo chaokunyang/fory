@@ -33,6 +33,8 @@ public class ExceptionSerializersTest extends ForyTestBase {
   public void testBuiltInThrowableRoundTrip(Fory fory) {
     IllegalArgumentException cause = new IllegalArgumentException("inner-cause");
     IllegalStateException value = new IllegalStateException("outer-message", cause);
+    value.addSuppressed(new RuntimeException("suppressed-1"));
+    value.addSuppressed(new IllegalArgumentException("suppressed-2"));
 
     IllegalStateException copy = serDe(fory, value);
 
@@ -46,6 +48,11 @@ public class ExceptionSerializersTest extends ForyTestBase {
     Assert.assertEquals(copy.getCause().getMessage(), cause.getMessage());
     Assert.assertEquals(copy.getStackTrace().length, value.getStackTrace().length);
     Assert.assertEquals(copy.getStackTrace()[0], value.getStackTrace()[0]);
+    Assert.assertEquals(copy.getSuppressed().length, value.getSuppressed().length);
+    Assert.assertEquals(copy.getSuppressed()[0].getClass(), RuntimeException.class);
+    Assert.assertEquals(copy.getSuppressed()[0].getMessage(), "suppressed-1");
+    Assert.assertEquals(copy.getSuppressed()[1].getClass(), IllegalArgumentException.class);
+    Assert.assertEquals(copy.getSuppressed()[1].getMessage(), "suppressed-2");
   }
 
   @Test(dataProvider = "javaFory")
@@ -71,6 +78,7 @@ public class ExceptionSerializersTest extends ForyTestBase {
     CustomException copy = serDe(fory, value);
 
     Assert.assertNull(copy.getCause());
+    Assert.assertEquals(copy.getSuppressed().length, 0);
     Assert.assertSame(
         ReflectionUtils.getObjectFieldValue(
             copy, ReflectionUtils.getField(Throwable.class, "cause")),
@@ -85,6 +93,7 @@ public class ExceptionSerializersTest extends ForyTestBase {
         builder().requireClassRegistration(true).withRefTracking(false).withCodegen(false).build();
     IllegalStateException value =
         new IllegalStateException("registered-built-in", new IllegalArgumentException("cause"));
+    value.addSuppressed(new RuntimeException("registered-suppressed"));
 
     IllegalStateException copy = serDe(fory, value);
 
@@ -93,6 +102,22 @@ public class ExceptionSerializersTest extends ForyTestBase {
     Assert.assertEquals(copy.getCause().getClass(), value.getCause().getClass());
     Assert.assertEquals(copy.getCause().getMessage(), value.getCause().getMessage());
     Assert.assertEquals(copy.getStackTrace()[0], value.getStackTrace()[0]);
+    Assert.assertEquals(copy.getSuppressed().length, 1);
+    Assert.assertEquals(copy.getSuppressed()[0].getClass(), RuntimeException.class);
+    Assert.assertEquals(copy.getSuppressed()[0].getMessage(), "registered-suppressed");
+  }
+
+  @Test
+  public void testTryWithResourcesSuppressedRoundTrip() {
+    Fory fory = builder().withRefTracking(true).withCodegen(false).build();
+    RuntimeException value = buildTryWithResourcesException();
+
+    RuntimeException copy = serDe(fory, value);
+
+    Assert.assertEquals(copy.getMessage(), "main-failure");
+    Assert.assertEquals(copy.getSuppressed().length, 1);
+    Assert.assertEquals(copy.getSuppressed()[0].getClass(), IllegalStateException.class);
+    Assert.assertEquals(copy.getSuppressed()[0].getMessage(), "close-failure");
   }
 
   @Test
@@ -107,6 +132,7 @@ public class ExceptionSerializersTest extends ForyTestBase {
             .withParentCode(9)
             .withTags(new ArrayList<>(Arrays.asList("left", "right")));
     value.retryable = true;
+    value.addSuppressed(new IllegalStateException("suppressed-custom"));
 
     CustomException copy = serDe(fory, value);
 
@@ -117,6 +143,25 @@ public class ExceptionSerializersTest extends ForyTestBase {
     Assert.assertEquals(copy.parentCode, value.parentCode);
     Assert.assertEquals(copy.tags, value.tags);
     Assert.assertEquals(copy.retryable, value.retryable);
+    Assert.assertEquals(copy.getSuppressed().length, 1);
+    Assert.assertEquals(copy.getSuppressed()[0].getMessage(), "suppressed-custom");
+  }
+
+  private static RuntimeException buildTryWithResourcesException() {
+    try {
+      try (FailingCloseable ignored = new FailingCloseable()) {
+        throw new RuntimeException("main-failure");
+      }
+    } catch (RuntimeException e) {
+      return e;
+    }
+  }
+
+  private static final class FailingCloseable implements AutoCloseable {
+    @Override
+    public void close() {
+      throw new IllegalStateException("close-failure");
+    }
   }
 
   public static class ParentException extends RuntimeException {

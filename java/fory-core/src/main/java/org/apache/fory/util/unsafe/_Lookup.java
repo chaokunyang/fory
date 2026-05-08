@@ -28,6 +28,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.security.ProtectionDomain;
+import org.apache.fory.platform.JdkVersion;
 
 // CHECKSTYLE.OFF:TypeName
 class _Lookup {
@@ -63,7 +64,7 @@ class _Lookup {
       try {
         int trusted = -1;
         MethodHandle constructor = CONSTRUCTOR_LOOKUP;
-        if (_JDKAccess.JAVA_VERSION < 14) {
+        if (JdkVersion.MAJOR_VERSION < 14) {
           if (constructor == null) {
             constructor =
                 IMPL_LOOKUP.findConstructor(
@@ -87,7 +88,7 @@ class _Lookup {
         CONSTRUCTOR_LOOKUP_ERROR = true;
       }
     }
-    if (_JDKAccess.JAVA_VERSION < 11) {
+    if (JdkVersion.MAJOR_VERSION < 11) {
       Lookup lookup = getLookupByReflection(objectClass);
       if (lookup != null) {
         return lookup;

@@ -33,26 +33,18 @@ public final class UnsafeOps {
   @SuppressWarnings("restriction")
   public static final Unsafe UNSAFE = _JDKAccess.UNSAFE;
 
-  public static final int JAVA_VERSION = _JDKAccess.JAVA_VERSION;
   public static final boolean IS_LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
   public static final Class<?> HEAP_BYTE_BUFFER_CLASS = ByteBuffer.allocate(1).getClass();
   public static final Class<?> DIRECT_BYTE_BUFFER_CLASS = ByteBuffer.allocateDirect(1).getClass();
+
   public static final int BOOLEAN_ARRAY_OFFSET;
-
   public static final int BYTE_ARRAY_OFFSET;
-
   public static final int CHAR_ARRAY_OFFSET;
-
   public static final int SHORT_ARRAY_OFFSET;
-
   public static final int INT_ARRAY_OFFSET;
-
   public static final int LONG_ARRAY_OFFSET;
-
   public static final int FLOAT_ARRAY_OFFSET;
-
   public static final int DOUBLE_ARRAY_OFFSET;
-
   private static final boolean unaligned;
 
   /**
@@ -74,7 +66,7 @@ public final class UnsafeOps {
     DOUBLE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(double[].class);
   }
 
-  // This requires `JAVA_VERSION` and `_UNSAFE`.
+  // This requires `JdkVersion.MAJOR_VERSION` and `_UNSAFE`.
   static {
     boolean unalign;
     String arch = System.getProperty("os.arch", "");
@@ -86,10 +78,11 @@ public final class UnsafeOps {
       try {
         Class<?> bitsClass =
             Class.forName("java.nio.Bits", false, ClassLoader.getSystemClassLoader());
-        if (JAVA_VERSION >= 9) {
+        if (JdkVersion.MAJOR_VERSION >= 9) {
           // Java 9/10 and 11/12 have different field names.
           Field unalignedField =
-              bitsClass.getDeclaredField(JAVA_VERSION >= 11 ? "UNALIGNED" : "unaligned");
+              bitsClass.getDeclaredField(
+                  JdkVersion.MAJOR_VERSION >= 11 ? "UNALIGNED" : "unaligned");
           unalign =
               UNSAFE.getBoolean(
                   UNSAFE.staticFieldBase(unalignedField), UNSAFE.staticFieldOffset(unalignedField));

@@ -21,6 +21,7 @@ package org.apache.fory.benchmark;
 
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.StringSerializer;
@@ -35,7 +36,7 @@ public class NewJava11StringSuite {
   static byte coder;
 
   static {
-    if (UnsafeOps.JAVA_VERSION > 8) {
+    if (JdkVersion.MAJOR_VERSION > 8) {
       strBytes =
           (byte[]) UnsafeOps.getObject(str, ReflectionUtils.getFieldOffset(String.class, "value"));
       coder = UnsafeOps.getByte(str, ReflectionUtils.getFieldOffset(String.class, "coder"));

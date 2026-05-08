@@ -27,6 +27,7 @@ import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.record.RecordUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
@@ -144,7 +145,7 @@ public class ObjectCreators {
       Tuple2<Constructor, MethodHandle> tuple2 = RecordUtils.getRecordConstructor(type);
       constructor = tuple2.f0;
       handle = tuple2.f1;
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && UnsafeOps.JAVA_VERSION >= 25) {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25) {
         try {
           constructor.setAccessible(true);
         } catch (Throwable t) {
@@ -163,7 +164,7 @@ public class ObjectCreators {
     public T newInstanceWithArguments(Object... arguments) {
       try {
         // compile-time constant is eligible for dead code elimination.
-        if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && UnsafeOps.JAVA_VERSION >= 25) {
+        if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25) {
           // GraalVM 25+ path: workaround for https://github.com/oracle/graal/issues/12106
           return (T) constructor.newInstance(arguments);
         } else {
@@ -192,7 +193,7 @@ public class ObjectCreators {
         // Get ReflectionFactory instance
         if (reflectionFactory == null) {
           Class<?> reflectionFactoryClass;
-          if (UnsafeOps.JAVA_VERSION >= 9) {
+          if (JdkVersion.MAJOR_VERSION >= 9) {
             reflectionFactoryClass = Class.forName("jdk.internal.reflect.ReflectionFactory");
           } else {
             reflectionFactoryClass = Class.forName("sun.reflect.ReflectionFactory");

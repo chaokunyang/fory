@@ -39,7 +39,7 @@ import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
@@ -53,20 +53,14 @@ import sun.misc.Unsafe;
 // CHECKSTYLE.OFF:TypeName
 public class _JDKAccess {
   // CHECKSTYLE.ON:TypeName
-  public static final int JAVA_VERSION;
   public static final boolean IS_OPEN_J9;
   public static final Unsafe UNSAFE;
   public static final Class<?> _INNER_UNSAFE_CLASS;
   public static final Object _INNER_UNSAFE;
 
   static {
-    String property = System.getProperty("java.specification.version");
-    if (property.startsWith("1.")) {
-      property = property.substring(2);
-    }
     String jmvName = System.getProperty("java.vm.name", "");
     IS_OPEN_J9 = jmvName.contains("OpenJ9");
-    JAVA_VERSION = Integer.parseInt(property);
     Unsafe unsafe;
     try {
       Field unsafeField = Unsafe.class.getDeclaredField("theUnsafe");
@@ -76,7 +70,7 @@ public class _JDKAccess {
       throw new UnsupportedOperationException("Unsafe is not supported in this platform.");
     }
     UNSAFE = unsafe;
-    if (JAVA_VERSION >= 11) {
+    if (JdkVersion.MAJOR_VERSION >= 11) {
       try {
         Field theInternalUnsafeField = Unsafe.class.getDeclaredField("theInternalUnsafe");
         theInternalUnsafeField.setAccessible(true);
@@ -315,7 +309,7 @@ public class _JDKAccess {
   private static volatile Method getModuleMethod;
 
   public static Object getModule(Class<?> cls) {
-    Preconditions.checkArgument(UnsafeOps.JAVA_VERSION >= 9);
+    Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 9);
     if (getModuleMethod == null) {
       try {
         getModuleMethod = Class.class.getDeclaredMethod("getModule");
@@ -334,7 +328,7 @@ public class _JDKAccess {
   private static volatile MethodHandle addReadsHandle;
 
   public static Object addReads(Object thisModule, Object otherModule) {
-    Preconditions.checkArgument(UnsafeOps.JAVA_VERSION >= 9);
+    Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 9);
     try {
       if (addReadsHandle == null) {
         Class<?> cls = Class.forName("java.lang.Module");

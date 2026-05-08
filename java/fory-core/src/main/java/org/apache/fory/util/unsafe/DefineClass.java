@@ -24,7 +24,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.security.ProtectionDomain;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.util.Preconditions;
 
 /** A class to define bytecode as a class. */
@@ -39,8 +39,8 @@ public class DefineClass {
       ProtectionDomain domain,
       byte[] bytecodes) {
     Preconditions.checkNotNull(loader);
-    Preconditions.checkArgument(UnsafeOps.JAVA_VERSION >= 8);
-    if (neighbor != null && UnsafeOps.JAVA_VERSION >= 9) {
+    Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 8);
+    if (neighbor != null && JdkVersion.MAJOR_VERSION >= 9) {
       // classes in bytecode must be in same package as lookup class.
       MethodHandles.Lookup lookup = MethodHandles.lookup();
       _JDKAccess.addReads(_JDKAccess.getModule(DefineClass.class), _JDKAccess.getModule(neighbor));

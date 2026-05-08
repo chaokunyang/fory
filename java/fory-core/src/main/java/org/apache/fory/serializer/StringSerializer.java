@@ -42,6 +42,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.MathUtils;
@@ -943,7 +944,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   private static MethodHandle getJavaStringZeroCopyCtrHandle() {
-    Preconditions.checkArgument(UnsafeOps.JAVA_VERSION >= 8);
+    Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 8);
     if (STRING_LOOK_UP == null) {
       return null;
     }

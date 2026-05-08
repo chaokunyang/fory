@@ -35,6 +35,7 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.MathUtils;
@@ -52,7 +53,7 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void testJavaStringZeroCopy() {
-    if (UnsafeOps.JAVA_VERSION >= 17) {
+    if (JdkVersion.MAJOR_VERSION >= 17) {
       throw new SkipException("Skip on jdk17+");
     }
     // Ensure JavaStringZeroCopy work for CI and most development environments.
@@ -326,7 +327,7 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void testCompressJava8String() {
-    if (UnsafeOps.JAVA_VERSION != 8) {
+    if (JdkVersion.MAJOR_VERSION != 8) {
       throw new SkipException("Java 8 only");
     }
     Fory fory = Fory.builder().withStringCompressed(true).requireClassRegistration(false).build();
@@ -727,7 +728,7 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void disabled_testReadBytesUTF8ForXlang_DirectRawBytes() {
-    if (UnsafeOps.JAVA_VERSION <= 8) {
+    if (JdkVersion.MAJOR_VERSION <= 8) {
       // readBytesUTF8ForXlang will be invoked only in java9+
       return;
     }

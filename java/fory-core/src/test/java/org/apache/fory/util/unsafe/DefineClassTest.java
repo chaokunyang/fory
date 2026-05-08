@@ -22,7 +22,7 @@ package org.apache.fory.util.unsafe;
 import java.util.Collections;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.codegen.JaninoUtils;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.util.ClassLoaderUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -56,7 +56,7 @@ public class DefineClassTest {
         new ClassLoaderUtils.ByteArrayClassLoader(Collections.singletonMap(className, bytecodes));
     DefineClass.defineClass(className, DefineClassTest.class, loader, null, bytecodes);
     Class<?> clz = loader.loadClass(className);
-    if (UnsafeOps.JAVA_VERSION >= 9) {
+    if (JdkVersion.MAJOR_VERSION >= 9) {
       Assert.assertEquals(clz.getClassLoader(), DefineClassTest.class.getClassLoader());
       Assert.assertThrows(
           Exception.class,

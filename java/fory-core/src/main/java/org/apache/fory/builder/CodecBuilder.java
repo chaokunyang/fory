@@ -55,6 +55,7 @@ import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
@@ -484,7 +485,7 @@ public abstract class CodecBuilder {
     if (sourcePublicAccessible(beanClass)) {
       return new Expression.NewInstance(beanType);
     } else {
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && UnsafeOps.JAVA_VERSION >= 25) {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25) {
         ObjectCreators.getObjectCreator(beanClass); // trigger cache
         return new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
       }

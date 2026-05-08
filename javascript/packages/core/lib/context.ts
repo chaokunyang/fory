@@ -214,7 +214,9 @@ export class RefWriter {
   private writeObjects: Map<any, number> = new Map();
 
   reset() {
-    this.writeObjects = new Map();
+    if (this.writeObjects.size !== 0) {
+      this.writeObjects.clear();
+    }
   }
 
   writeRef(object: any) {
@@ -232,7 +234,9 @@ export class RefReader {
   constructor(private reader: BinaryReader) {}
 
   reset() {
-    this.readObjects = [];
+    if (this.readObjects.length !== 0) {
+      this.readObjects.length = 0;
+    }
   }
 
   getReadRef(refId: number) {
@@ -351,9 +355,7 @@ export class WriteContext {
 
   reset() {
     this.writer.reset();
-    if (this.typeResolver.trackingRef) {
-      this.refWriter.reset();
-    }
+    this.refWriter.reset();
     this.metaStringWriter.reset();
     this.disposeTypeInfo.forEach((typeInfo) => {
       typeInfo.dynamicTypeId = -1;
@@ -577,7 +579,6 @@ export class ReadContext {
   private _maxDepth: number;
   private _maxBinarySize: number;
   private _maxCollectionSize: number;
-  private readonly trackingRef: boolean;
 
   private static typeMetaHeaderHash(headerLow: number, headerHigh: number) {
     return headerHigh * 0x100000 + (headerLow >>> 12);
@@ -625,7 +626,6 @@ export class ReadContext {
     this.reader = new BinaryReader(config);
     this.refReader = new RefReader(this.reader);
     this.metaStringReader = new MetaStringReader();
-    this.trackingRef = config.ref;
     this._maxDepth = config.maxDepth ?? 50;
     this._maxBinarySize = config.maxBinarySize ?? 64 * 1024 * 1024;
     this._maxCollectionSize = config.maxCollectionSize ?? 1_000_000;
@@ -633,9 +633,7 @@ export class ReadContext {
 
   reset(bytes: Uint8Array) {
     this.reader.reset(bytes);
-    if (this.trackingRef) {
-      this.refReader.reset();
-    }
+    this.refReader.reset();
     this.metaStringReader.reset();
     this.typeMeta = [];
     this._depth = 0;

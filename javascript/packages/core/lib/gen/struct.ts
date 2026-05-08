@@ -666,20 +666,22 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
 
   readEmbed() {
     // Hoist the serializer lookup into a scope-level const, evaluated once during
-    // factory init. This is safe because readEmbed() is called by the PARENT
-    // struct whose factory runs after all child serializers are registered.
+    // factory init. Self-recursive structs may still point at a placeholder, so
+    // only the fully generated serializer path can hoist derived values below.
     const hoisted = this.scope.declare("ser", this.serializerExpr);
     const scope = this.scope;
     const builder = this.builder;
     const internalTypeId = this.getInternalTypeId();
+    const serializer = builder.resolver.getSerializerByTypeInfo(this.typeInfo);
     const canInlineCompatibleTypeInfo = internalTypeId === TypeId.COMPATIBLE_STRUCT
       || internalTypeId === TypeId.NAMED_COMPATIBLE_STRUCT
       || (internalTypeId === TypeId.NAMED_STRUCT && builder.resolver.isCompatible());
+    const canUseHeaderCacheFastPath = canInlineCompatibleTypeInfo && serializer?._initialized;
     const inlineCompatibleTypeInfo = (
       onMetaChanged: (changedSerializer: string) => string,
       onMetaUnchanged: () => string,
     ) => {
-      if (!canInlineCompatibleTypeInfo) {
+      if (!canUseHeaderCacheFastPath) {
         const changedSerializer = scope.uniqueName("changedSerializer");
         return `
               const ${changedSerializer} = ${hoisted}.readTypeInfo();

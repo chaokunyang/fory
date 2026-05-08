@@ -25,6 +25,7 @@ excludes = [
 
     # Generated
     "benchmarks/java/src/main/java/org/apache/fory/benchmark/state/generated/**",
+    "benchmarks/java/src/main/java/org/apache/fory/benchmark/xlang/generated/**",
     "integration_tests/idl_tests/**/auto_id.*",
     "integration_tests/idl_tests/dart/pubspec.yaml",
     "integration_tests/idl_tests/dart/analysis_options.yaml",

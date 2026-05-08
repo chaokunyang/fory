@@ -47,7 +47,7 @@ enum DataKind: String, CaseIterable {
 enum SerializerKind: String, CaseIterable {
     case fory
     case protobuf
-    case msgpack
+    case json
 
     var title: String {
         rawValue.capitalized

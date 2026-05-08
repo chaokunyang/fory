@@ -26,7 +26,7 @@ private struct CLI {
             Options:
               --data <struct|sample|mediacontent|structlist|samplelist|mediacontentlist>
                                    Filter benchmark by data type
-              --serializer <fory|protobuf|msgpack>
+              --serializer <fory|protobuf|json>
                                    Filter benchmark by serializer
               --duration <seconds>  Minimum time to run each benchmark (default: 3)
               --output <path>       JSON output file (default: results/benchmark_results.json)
@@ -119,7 +119,7 @@ private func runMain() throws {
 
     print("\nSerialized sizes (bytes):")
     for entry in output.serializedSizes {
-        print("  \(entry.dataType): fory=\(entry.fory), protobuf=\(entry.protobuf), msgpack=\(entry.msgpack)")
+        print("  \(entry.dataType): fory=\(entry.fory), protobuf=\(entry.protobuf), json=\(entry.json)")
     }
 }
 

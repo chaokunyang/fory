@@ -1,12 +1,12 @@
 # Fory Swift Benchmark
 
-This benchmark compares serialization and deserialization performance between Apache Fory, Protocol Buffers, and MessagePack in Swift.
+This benchmark compares serialization and deserialization performance between Apache Fory, Protocol Buffers, and JSON in Swift.
 
 ## Serializers Compared
 
 - **Fory**: Apache Fory Swift implementation (`swift/Sources/Fory`)
 - **Protocol Buffers**: `apple/swift-protobuf`
-- **MessagePack**: `Flight-School/MessagePack`
+- **JSON**: Foundation `JSONEncoder` and `JSONDecoder`
 
 ## Benchmarked Data Types
 
@@ -37,9 +37,10 @@ cd benchmarks/swift
 Supported flags:
 
 - `--data <struct|sample|mediacontent|structlist|samplelist|mediacontentlist>`
-- `--serializer <fory|protobuf|msgpack>`
+- `--serializer <fory|protobuf|json>`
 - `--duration <seconds>`
 - `--no-report`
+- `--no-copy-docs`
 
 Examples:
 
@@ -51,7 +52,7 @@ Examples:
 ./run.sh --serializer protobuf
 
 # Run a single serializer and datatype
-./run.sh --data sample --serializer msgpack --duration 5
+./run.sh --data sample --serializer json --duration 5
 
 # Skip report generation
 ./run.sh --no-report
@@ -76,7 +77,7 @@ After running `./run.sh`, the following files are generated in `benchmarks/swift
 
 - `benchmark_results.json`: raw benchmark metrics and serialized-size comparison
 - `throughput.png`: throughput comparison plot
-- `REPORT.md`: markdown report with hardware/runtime info and result tables
+- `README.md` and `REPORT.md`: markdown report with hardware/runtime info and result tables
 
 ## Notes
 

@@ -45,7 +45,7 @@ usage() {
     echo "Options:"
     echo "  --data <struct|sample|mediacontent|structlist|samplelist|mediacontentlist>"
     echo "                               Filter benchmark by data type"
-    echo "  --serializer <fory|protobuf|msgpack>"
+    echo "  --serializer <fory|protobuf|json>"
     echo "                               Filter benchmark by serializer"
     echo "  --duration <seconds>         Minimum time to run each benchmark (default: 3)"
     echo "  --no-report                  Skip Python report generation"
@@ -56,7 +56,7 @@ usage() {
     echo "  $0"
     echo "  $0 --data struct"
     echo "  $0 --serializer protobuf"
-    echo "  $0 --data sample --serializer msgpack --duration 5"
+    echo "  $0 --data sample --serializer json --duration 5"
     exit 0
 }
 

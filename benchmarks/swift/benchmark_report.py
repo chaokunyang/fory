@@ -48,11 +48,11 @@ from plot_style import (  # noqa: E402
 
 apply_benchmark_style(plt)
 
-SERIALIZER_ORDER = ["fory", "protobuf", "msgpack"]
+SERIALIZER_ORDER = ["fory", "protobuf", "json"]
 COLORS = {
     "fory": "#FF6f01",
     "protobuf": "#55BCC2",
-    "msgpack": "#8C6F6D",
+    "json": "#8C6F6D",
 }
 DATATYPE_ORDER = [
     "struct",
@@ -251,7 +251,7 @@ def write_report(
     lines.append("")
     lines.append(
         "This benchmark compares serialization and deserialization throughput for "
-        "Apache Fory, Protocol Buffers, and MessagePack in Swift."
+        "Apache Fory, Protocol Buffers, and JSON in Swift."
     )
     lines.append("")
     lines.append("## Hardware and Runtime Info")
@@ -277,7 +277,7 @@ def write_report(
     lines.append(f"![Throughput]({image_path})")
     lines.append("")
     lines.append(
-        "| Datatype | Operation | Fory TPS | Protobuf TPS | Msgpack TPS | Fastest |"
+        "| Datatype | Operation | Fory TPS | Protobuf TPS | JSON TPS | Fastest |"
     )
     lines.append("| --- | --- | ---: | ---: | ---: | --- |")
 
@@ -288,18 +288,18 @@ def write_report(
             throughputs = results.get(datatype, {}).get(operation, {})
             fory = throughputs.get("fory", 0.0)
             protobuf = throughputs.get("protobuf", 0.0)
-            msgpack = throughputs.get("msgpack", 0.0)
+            json_tps = throughputs.get("json", 0.0)
             lines.append(
                 "| "
                 + f"{datatype_title(datatype)} | {operation.capitalize()} | "
-                + f"{format_tps(fory)} | {format_tps(protobuf)} | {format_tps(msgpack)} | "
+                + f"{format_tps(fory)} | {format_tps(protobuf)} | {format_tps(json_tps)} | "
                 + f"{winner_cell(throughputs)} |"
             )
 
     lines.append("")
     lines.append("## Serialized Size (bytes)")
     lines.append("")
-    lines.append("| Datatype | Fory | Protobuf | Msgpack |")
+    lines.append("| Datatype | Fory | Protobuf | JSON |")
     lines.append("| --- | ---: | ---: | ---: |")
     sizes_by_datatype = {
         normalize_datatype(str(entry.get("dataType", ""))): entry for entry in sizes
@@ -314,7 +314,7 @@ def write_report(
             + f"{datatype_label} | "
             + f"{entry.get('fory', '-')} | "
             + f"{entry.get('protobuf', '-')} | "
-            + f"{entry.get('msgpack', '-')} |"
+            + f"{entry.get('json', '-')} |"
         )
 
     report_path = os.path.join(output_dir, "README.md")

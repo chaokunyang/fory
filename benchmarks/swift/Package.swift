@@ -32,7 +32,6 @@ let package = Package(
     dependencies: [
         .package(name: "fory", path: "../.."),
         .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.35.0"),
-        .package(url: "https://github.com/Flight-School/MessagePack.git", from: "1.2.4"),
     ],
     targets: [
         .target(
@@ -48,7 +47,6 @@ let package = Package(
             dependencies: [
                 .product(name: "Fory", package: "fory"),
                 "SwiftBenchmarkProto",
-                .product(name: "MessagePack", package: "MessagePack"),
             ],
             path: "Sources/SwiftBenchmark"
         ),

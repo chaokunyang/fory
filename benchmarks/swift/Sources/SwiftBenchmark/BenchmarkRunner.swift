@@ -17,7 +17,6 @@
 
 import Fory
 import Foundation
-import MessagePack
 import SwiftProtobuf
 
 struct BenchmarkConfig {
@@ -42,7 +41,7 @@ struct SizeEntry: Codable {
     let dataType: String
     let fory: Int
     let protobuf: Int
-    let msgpack: Int
+    let json: Int
 }
 
 struct BenchmarkContext: Codable {
@@ -63,8 +62,8 @@ struct BenchmarkOutput: Codable {
 final class BenchmarkSuite {
     private let config: BenchmarkConfig
     private let fory: Fory
-    private let msgpackEncoder = MessagePackEncoder()
-    private let msgpackDecoder = MessagePackDecoder()
+    private let jsonEncoder = JSONEncoder()
+    private let jsonDecoder = JSONDecoder()
 
     init(config: BenchmarkConfig) {
         self.config = config
@@ -156,14 +155,14 @@ final class BenchmarkSuite {
 
         let foryBytes = try fory.serialize(value)
         let protobufBytes = try value.toProtobuf().serializedData()
-        let msgpackBytes = try msgpackEncoder.encode(value)
+        let jsonBytes = try jsonEncoder.encode(value)
 
         sizeEntries.append(
             SizeEntry(
                 dataType: dataKind.title,
                 fory: foryBytes.count,
                 protobuf: protobufBytes.count,
-                msgpack: msgpackBytes.count
+                json: jsonBytes.count
             )
         )
 
@@ -218,27 +217,27 @@ final class BenchmarkSuite {
             )
         }
 
-        if shouldRun(dataKind, .msgpack) {
+        if shouldRun(dataKind, .json) {
             entries.append(
                 try runSingleCase(
-                    serializer: .msgpack,
+                    serializer: .json,
                     dataKind: dataKind,
                     operation: .serialize,
-                    bytes: msgpackBytes.count
+                    bytes: jsonBytes.count
                 ) {
-                    try self.msgpackEncoder.encode(value).count
+                    try self.jsonEncoder.encode(value).count
                 }
             )
             entries.append(
                 try runSingleCase(
-                    serializer: .msgpack,
+                    serializer: .json,
                     dataKind: dataKind,
                     operation: .deserialize,
-                    bytes: msgpackBytes.count
+                    bytes: jsonBytes.count
                 ) {
-                    let decoded: T = try self.msgpackDecoder.decode(T.self, from: msgpackBytes)
+                    let decoded: T = try self.jsonDecoder.decode(T.self, from: jsonBytes)
                     withExtendedLifetime(decoded) {}
-                    return msgpackBytes.count
+                    return jsonBytes.count
                 }
             )
         }

@@ -251,9 +251,9 @@ def plot_throughput_grid_subplot(ax, data, datatype: str):
         return
 
     operations = ["serialize", "deserialize"]
-    x = np.arange(len(operations))
-    bar_width = 0.135
-    offset_step = 0.17
+    x = np.array([0.0, 0.72])
+    bar_width = 0.15
+    offset_step = 0.165
     for idx, lib in enumerate(available_libs):
         times = [
             data.get(datatype, {}).get(operation, {}).get(lib, 0)
@@ -281,7 +281,7 @@ def plot_throughput_grid_subplot(ax, data, datatype: str):
     ax.set_title(format_datatype_table_label(datatype), pad=8)
     ax.set_xticks(x)
     ax.set_xticklabels(["Serialize", "Deserialize"])
-    ax.set_xlim(-0.48, 1.48)
+    ax.set_xlim(-0.43, 1.15)
     style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
     ax.legend(

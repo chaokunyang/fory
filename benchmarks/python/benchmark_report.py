@@ -342,9 +342,7 @@ def generate_markdown_report(
         f"{SERIALIZER_LABELS.get(lib, lib)} (ns)" for lib in SERIALIZER_ORDER
     ]
     md.append(
-        "| Datatype | Operation | "
-        + " | ".join(timing_headers)
-        + " | Fastest |\n"
+        "| Datatype | Operation | " + " | ".join(timing_headers) + " | Fastest |\n"
     )
     md.append(
         "|----------|-----------|"
@@ -375,9 +373,7 @@ def generate_markdown_report(
         f"{SERIALIZER_LABELS.get(lib, lib)} TPS" for lib in SERIALIZER_ORDER
     ]
     md.append(
-        "| Datatype | Operation | "
-        + " | ".join(throughput_headers)
-        + " | Fastest |\n"
+        "| Datatype | Operation | " + " | ".join(throughput_headers) + " | Fastest |\n"
     )
     md.append(
         "|----------|-----------|"

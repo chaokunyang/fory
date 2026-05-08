@@ -127,7 +127,7 @@ public class XlangBenchmark {
       forySampleListBytes = fory.serialize(sampleList);
       foryMediaContentListBytes = fory.serialize(mediaContentList);
 
-      protobufNumericStructBytes = toProto(numericStruct).toByteArray();
+      protobufNumericStructBytes = toFixedProto(numericStruct).toByteArray();
       protobufSampleBytes = toProto(sample).toByteArray();
       protobufMediaContentBytes = toProto(mediaContent).toByteArray();
       protobufNumericStructListBytes = toProto(numericStructList).toByteArray();
@@ -183,7 +183,7 @@ public class XlangBenchmark {
 
   @Benchmark
   public Object BM_Protobuf_NumericStruct_Serialize(XlangState state) {
-    return toProto(state.numericStruct).toByteArray();
+    return toFixedProto(state.numericStruct).toByteArray();
   }
 
   @Benchmark
@@ -481,6 +481,23 @@ public class XlangBenchmark {
         .build();
   }
 
+  private static ProtoMessage.FixedNumericStruct toFixedProto(NumericStruct struct) {
+    return ProtoMessage.FixedNumericStruct.newBuilder()
+        .setF1(struct.f1)
+        .setF2(struct.f2)
+        .setF3(struct.f3)
+        .setF4(struct.f4)
+        .setF5(struct.f5)
+        .setF6(struct.f6)
+        .setF7(struct.f7)
+        .setF8(struct.f8)
+        .setF9(struct.f9)
+        .setF10(struct.f10)
+        .setF11(struct.f11)
+        .setF12(struct.f12)
+        .build();
+  }
+
   private static ProtoMessage.Sample toProto(Sample sample) {
     ProtoMessage.Sample.Builder builder = ProtoMessage.Sample.newBuilder();
     builder.setIntValue(sample.int_value);
@@ -584,7 +601,7 @@ public class XlangBenchmark {
 
   private static NumericStruct fromProtoStruct(byte[] bytes) {
     try {
-      return fromProto(ProtoMessage.NumericStruct.parseFrom(bytes));
+      return fromProto(ProtoMessage.FixedNumericStruct.parseFrom(bytes));
     } catch (InvalidProtocolBufferException e) {
       throw new IllegalStateException(e);
     }
@@ -631,6 +648,23 @@ public class XlangBenchmark {
   }
 
   private static NumericStruct fromProto(ProtoMessage.NumericStruct proto) {
+    NumericStruct struct = new NumericStruct();
+    struct.f1 = proto.getF1();
+    struct.f2 = proto.getF2();
+    struct.f3 = proto.getF3();
+    struct.f4 = proto.getF4();
+    struct.f5 = proto.getF5();
+    struct.f6 = proto.getF6();
+    struct.f7 = proto.getF7();
+    struct.f8 = proto.getF8();
+    struct.f9 = proto.getF9();
+    struct.f10 = proto.getF10();
+    struct.f11 = proto.getF11();
+    struct.f12 = proto.getF12();
+    return struct;
+  }
+
+  private static NumericStruct fromProto(ProtoMessage.FixedNumericStruct proto) {
     NumericStruct struct = new NumericStruct();
     struct.f1 = proto.getF1();
     struct.f2 = proto.getF2();

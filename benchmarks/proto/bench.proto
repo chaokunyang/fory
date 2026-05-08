@@ -66,18 +66,14 @@ message Sample {
   string string = 22;
 }
 
-message SampleList {
-  repeated Sample sample_list = 1;
-}
+message SampleList { repeated Sample sample_list = 1; }
 
 message MediaContent {
   Media media = 1;
   repeated Image images = 2;
 }
 
-message MediaContentList {
-  repeated MediaContent media_content_list = 1;
-}
+message MediaContentList { repeated MediaContent media_content_list = 1; }
 
 message Media {
   string uri = 1;
@@ -126,6 +122,24 @@ message NumericStruct {
   int32 f10 = 10;
   int32 f11 = 11;
   int32 f12 = 12;
+}
+
+// Used by the fixed-width NumericStruct benchmark. FlatBuffers stores integers
+// without varint compression, so the Java xlang benchmark pairs this protobuf
+// fixed32 schema with Fory's FIXED int32 encoding for a fair comparison.
+message FixedNumericStruct {
+  fixed32 f1 = 1;
+  fixed32 f2 = 2;
+  fixed32 f3 = 3;
+  fixed32 f4 = 4;
+  fixed32 f5 = 5;
+  fixed32 f6 = 6;
+  fixed32 f7 = 7;
+  fixed32 f8 = 8;
+  fixed32 f9 = 9;
+  fixed32 f10 = 10;
+  fixed32 f11 = 11;
+  fixed32 f12 = 12;
 }
 
 message NumericStructList { repeated NumericStruct struct_list = 1; }

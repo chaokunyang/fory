@@ -41,6 +41,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.UnsafeOps;
@@ -306,7 +307,7 @@ final class CompatibleCollectionArrayReader {
       case Types.BFLOAT16_ARRAY:
         {
           short[] values = new short[numElements];
-          if (UnsafeOps.IS_LITTLE_ENDIAN) {
+          if (NativeByteOrder.IS_LITTLE_ENDIAN) {
             buffer.readToUnsafe(values, UnsafeOps.SHORT_ARRAY_OFFSET, numElements * 2);
           } else {
             for (int i = 0; i < numElements; i++) {
@@ -319,7 +320,7 @@ final class CompatibleCollectionArrayReader {
       case Types.UINT32_ARRAY:
         {
           int[] values = new int[numElements];
-          if (UnsafeOps.IS_LITTLE_ENDIAN) {
+          if (NativeByteOrder.IS_LITTLE_ENDIAN) {
             buffer.readToUnsafe(values, UnsafeOps.INT_ARRAY_OFFSET, numElements * 4);
           } else {
             for (int i = 0; i < numElements; i++) {
@@ -332,7 +333,7 @@ final class CompatibleCollectionArrayReader {
       case Types.UINT64_ARRAY:
         {
           long[] values = new long[numElements];
-          if (UnsafeOps.IS_LITTLE_ENDIAN) {
+          if (NativeByteOrder.IS_LITTLE_ENDIAN) {
             buffer.readToUnsafe(values, UnsafeOps.LONG_ARRAY_OFFSET, numElements * 8);
           } else {
             for (int i = 0; i < numElements; i++) {
@@ -344,7 +345,7 @@ final class CompatibleCollectionArrayReader {
       case Types.FLOAT32_ARRAY:
         {
           float[] values = new float[numElements];
-          if (UnsafeOps.IS_LITTLE_ENDIAN) {
+          if (NativeByteOrder.IS_LITTLE_ENDIAN) {
             buffer.readToUnsafe(values, UnsafeOps.FLOAT_ARRAY_OFFSET, numElements * 4);
           } else {
             for (int i = 0; i < numElements; i++) {
@@ -356,7 +357,7 @@ final class CompatibleCollectionArrayReader {
       case Types.FLOAT64_ARRAY:
         {
           double[] values = new double[numElements];
-          if (UnsafeOps.IS_LITTLE_ENDIAN) {
+          if (NativeByteOrder.IS_LITTLE_ENDIAN) {
             buffer.readToUnsafe(values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numElements * 8);
           } else {
             for (int i = 0; i < numElements; i++) {

@@ -97,6 +97,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
@@ -423,8 +424,8 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void registerDefaultClasses() {
-    registerInternal(UnsafeOps.HEAP_BYTE_BUFFER_CLASS);
-    registerInternal(UnsafeOps.DIRECT_BYTE_BUFFER_CLASS);
+    registerInternal(ByteBufferUtil.HEAP_BYTE_BUFFER_CLASS);
+    registerInternal(ByteBufferUtil.DIRECT_BYTE_BUFFER_CLASS);
     registerInternal(Comparator.naturalOrder().getClass());
     registerInternal(Comparator.reverseOrder().getClass());
     registerInternal(ConcurrentHashMap.class);

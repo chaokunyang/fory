@@ -21,6 +21,7 @@ package org.apache.fory.util;
 
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_ASCII_MASK;
 
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.UnsafeOps;
 
 /** String Encoding Utils. */
@@ -116,7 +117,7 @@ public class StringEncodingUtils {
                   & MULTI_CHARS_NON_ASCII_MASK)
               == 0) {
         // ascii only
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           dst[dp] = src[offset];
           dst[dp + 1] = src[offset + 2];
           dst[dp + 2] = src[offset + 4];
@@ -171,7 +172,7 @@ public class StringEncodingUtils {
           && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset) & 0x8080808080808080L)
               == 0) {
         // ascii only
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           dst[dp] = src[offset];
           dst[dp + 2] = src[offset + 1];
           dst[dp + 4] = src[offset + 2];

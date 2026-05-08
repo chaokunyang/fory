@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.MathUtils;
 import org.apache.fory.util.StringEncodingUtils;
@@ -71,7 +72,7 @@ final class SlicedStringUtil {
       int arrIndex = targetIndex;
       arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
       writerIndex += arrIndex - targetIndex + numBytes;
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         // FIXME JDK11 utf16 string uses little-endian order.
         UnsafeOps.UNSAFE.copyMemory(
             chars,
@@ -84,7 +85,7 @@ final class SlicedStringUtil {
       }
     } else {
       writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         writerIndex =
             offHeapWriteCharsUTF16WithOffset(
                 serializer, buffer, chars, offset, writerIndex, numBytes);

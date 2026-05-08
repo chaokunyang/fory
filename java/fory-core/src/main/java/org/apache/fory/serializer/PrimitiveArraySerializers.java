@@ -27,6 +27,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.BFloat16Array;
@@ -227,7 +228,7 @@ public final class PrimitiveArraySerializers {
       }
       if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 2);
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, UnsafeOps.CHAR_ARRAY_OFFSET, size);
         } else {
           writeCharBySwapEndian(buffer, value);
@@ -271,7 +272,7 @@ public final class PrimitiveArraySerializers {
         }
         int numElements = size >>> 1;
         char[] values = new char[numElements];
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buf.copyToUnsafe(0, values, UnsafeOps.CHAR_ARRAY_OFFSET, size);
         } else {
           readCharBySwapEndian(buf, values, numElements);
@@ -290,7 +291,7 @@ public final class PrimitiveArraySerializers {
       }
       int numElements = size >>> 1;
       char[] values = new char[numElements];
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         buffer.readToUnsafe(values, UnsafeOps.CHAR_ARRAY_OFFSET, size);
       } else {
         readCharBySwapEndian(buffer, values, numElements);
@@ -344,7 +345,7 @@ public final class PrimitiveArraySerializers {
           return;
         }
         int size = Math.multiplyExact(value.length, 4);
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, UnsafeOps.INT_ARRAY_OFFSET, size);
         } else {
           writeInt32BySwapEndian(buffer, value);
@@ -386,7 +387,7 @@ public final class PrimitiveArraySerializers {
         int numElements = size >>> 2;
         int[] values = new int[numElements];
         if (size > 0) {
-          if (UnsafeOps.IS_LITTLE_ENDIAN) {
+          if (NativeByteOrder.IS_LITTLE_ENDIAN) {
             buf.copyToUnsafe(0, values, UnsafeOps.INT_ARRAY_OFFSET, size);
           } else {
             readInt32BySwapEndian(buf, values, numElements);
@@ -410,7 +411,7 @@ public final class PrimitiveArraySerializers {
       int numElements = size >>> 2;
       int[] values = new int[numElements];
       if (size > 0) {
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buffer.readToUnsafe(values, UnsafeOps.INT_ARRAY_OFFSET, size);
         } else {
           readInt32BySwapEndian(buffer, values, numElements);
@@ -469,7 +470,7 @@ public final class PrimitiveArraySerializers {
           return;
         }
         int size = Math.multiplyExact(value.length, 8);
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, UnsafeOps.LONG_ARRAY_OFFSET, size);
         } else {
           writeInt64BySwapEndian(buffer, value);
@@ -511,7 +512,7 @@ public final class PrimitiveArraySerializers {
         int numElements = size >>> 3;
         long[] values = new long[numElements];
         if (size > 0) {
-          if (UnsafeOps.IS_LITTLE_ENDIAN) {
+          if (NativeByteOrder.IS_LITTLE_ENDIAN) {
             buf.copyToUnsafe(0, values, UnsafeOps.LONG_ARRAY_OFFSET, size);
           } else {
             readInt64BySwapEndian(buf, values, numElements);
@@ -535,7 +536,7 @@ public final class PrimitiveArraySerializers {
       int numElements = size >>> 3;
       long[] values = new long[numElements];
       if (size > 0) {
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buffer.readToUnsafe(values, UnsafeOps.LONG_ARRAY_OFFSET, size);
         } else {
           readInt64BySwapEndian(buffer, values, numElements);
@@ -598,7 +599,7 @@ public final class PrimitiveArraySerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 4);
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, UnsafeOps.FLOAT_ARRAY_OFFSET, size);
         } else {
           writeFloat32BySwapEndian(buffer, value);
@@ -639,7 +640,7 @@ public final class PrimitiveArraySerializers {
         }
         int numElements = size >>> 2;
         float[] values = new float[numElements];
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buf.copyToUnsafe(0, values, UnsafeOps.FLOAT_ARRAY_OFFSET, size);
         } else {
           readFloat32BySwapEndian(buf, values, numElements);
@@ -658,7 +659,7 @@ public final class PrimitiveArraySerializers {
       }
       int numElements = size >>> 2;
       float[] values = new float[numElements];
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         buffer.readToUnsafe(values, UnsafeOps.FLOAT_ARRAY_OFFSET, size);
       } else {
         readFloat32BySwapEndian(buffer, values, numElements);
@@ -687,7 +688,7 @@ public final class PrimitiveArraySerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       if (writeContext.getBufferCallback() == null) {
         int size = Math.multiplyExact(value.length, 8);
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buffer.writePrimitiveArrayWithSize(value, UnsafeOps.DOUBLE_ARRAY_OFFSET, size);
         } else {
           writeFloat64BySwapEndian(buffer, value);
@@ -728,7 +729,7 @@ public final class PrimitiveArraySerializers {
         }
         int numElements = size >>> 3;
         double[] values = new double[numElements];
-        if (UnsafeOps.IS_LITTLE_ENDIAN) {
+        if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           buf.copyToUnsafe(0, values, UnsafeOps.DOUBLE_ARRAY_OFFSET, size);
         } else {
           readFloat64BySwapEndian(buf, values, numElements);
@@ -747,7 +748,7 @@ public final class PrimitiveArraySerializers {
       }
       int numElements = size >>> 3;
       double[] values = new double[numElements];
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         buffer.readToUnsafe(values, UnsafeOps.DOUBLE_ARRAY_OFFSET, size);
       } else {
         readFloat64BySwapEndian(buffer, values, numElements);
@@ -813,7 +814,7 @@ public final class PrimitiveArraySerializers {
     MemoryBuffer buffer = writeContext.getBuffer();
     if (writeContext.getBufferCallback() == null) {
       int size = Math.multiplyExact(value.length, 2);
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         buffer.writePrimitiveArrayWithSize(value, UnsafeOps.SHORT_ARRAY_OFFSET, size);
       } else {
         writeInt16BySwapEndian(buffer, value);
@@ -848,7 +849,7 @@ public final class PrimitiveArraySerializers {
       }
       int numElements = size >>> 1;
       short[] values = new short[numElements];
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         buf.copyToUnsafe(0, values, UnsafeOps.SHORT_ARRAY_OFFSET, size);
       } else {
         readInt16BySwapEndian(buf, values, numElements);
@@ -867,7 +868,7 @@ public final class PrimitiveArraySerializers {
     }
     int numElements = size >>> 1;
     short[] values = new short[numElements];
-    if (UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (NativeByteOrder.IS_LITTLE_ENDIAN) {
       buffer.readToUnsafe(values, UnsafeOps.SHORT_ARRAY_OFFSET, size);
     } else {
       readInt16BySwapEndian(buffer, values, numElements);

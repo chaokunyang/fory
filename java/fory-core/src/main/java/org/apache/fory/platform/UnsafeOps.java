@@ -19,8 +19,6 @@ package org.apache.fory.platform;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import org.apache.fory.util.unsafe._JDKAccess;
 import sun.misc.Unsafe;
 
@@ -32,10 +30,6 @@ import sun.misc.Unsafe;
 public final class UnsafeOps {
   @SuppressWarnings("restriction")
   public static final Unsafe UNSAFE = _JDKAccess.UNSAFE;
-
-  public static final boolean IS_LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
-  public static final Class<?> HEAP_BYTE_BUFFER_CLASS = ByteBuffer.allocate(1).getClass();
-  public static final Class<?> DIRECT_BYTE_BUFFER_CLASS = ByteBuffer.allocateDirect(1).getClass();
 
   public static final int BOOLEAN_ARRAY_OFFSET;
   public static final int BYTE_ARRAY_OFFSET;

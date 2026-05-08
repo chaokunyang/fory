@@ -54,6 +54,7 @@ import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
@@ -632,7 +633,7 @@ public abstract class CodecBuilder {
   protected Expression unsafeGetChar(Expression base, Expression pos) {
     StaticInvoke expr =
         new StaticInvoke(UnsafeOps.class, "getChar", PRIMITIVE_CHAR_TYPE, base, pos);
-    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Character.class, "reverseBytes", PRIMITIVE_CHAR_TYPE, expr.inline());
     }
     return expr;
@@ -641,7 +642,7 @@ public abstract class CodecBuilder {
   protected Expression unsafeGetShort(Expression base, Expression pos) {
     StaticInvoke expr =
         new StaticInvoke(UnsafeOps.class, "getShort", PRIMITIVE_SHORT_TYPE, base, pos);
-    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Short.class, "reverseBytes", PRIMITIVE_SHORT_TYPE, expr.inline());
     }
     return expr;
@@ -649,7 +650,7 @@ public abstract class CodecBuilder {
 
   protected Expression unsafeGetInt(Expression base, Expression pos) {
     StaticInvoke expr = new StaticInvoke(UnsafeOps.class, "getInt", PRIMITIVE_INT_TYPE, base, pos);
-    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
     return expr;
@@ -658,7 +659,7 @@ public abstract class CodecBuilder {
   protected Expression unsafeGetLong(Expression base, Expression pos) {
     StaticInvoke expr =
         new StaticInvoke(UnsafeOps.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos);
-    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }
     return expr;
@@ -666,7 +667,7 @@ public abstract class CodecBuilder {
 
   protected Expression unsafeGetFloat(Expression base, Expression pos) {
     StaticInvoke expr = new StaticInvoke(UnsafeOps.class, "getInt", PRIMITIVE_INT_TYPE, base, pos);
-    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
     return new StaticInvoke(Float.class, "intBitsToFloat", PRIMITIVE_FLOAT_TYPE, expr.inline());
@@ -675,7 +676,7 @@ public abstract class CodecBuilder {
   protected Expression unsafeGetDouble(Expression base, Expression pos) {
     StaticInvoke expr =
         new StaticInvoke(UnsafeOps.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos);
-    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }
     return new StaticInvoke(Double.class, "longBitsToDouble", PRIMITIVE_DOUBLE_TYPE, expr.inline());
@@ -686,21 +687,21 @@ public abstract class CodecBuilder {
   }
 
   protected Expression readInt16(Expression buffer) {
-    String func = UnsafeOps.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
+    String func = NativeByteOrder.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
     return new Invoke(buffer, func, PRIMITIVE_SHORT_TYPE);
   }
 
   protected Expression readInt32(Expression buffer) {
-    String func = UnsafeOps.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
+    String func = NativeByteOrder.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
     return new Invoke(buffer, func, PRIMITIVE_INT_TYPE);
   }
 
   public static String readIntFunc() {
-    return UnsafeOps.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
+    return NativeByteOrder.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
   }
 
   protected Expression readVarInt32(Expression buffer) {
-    String func = UnsafeOps.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
+    String func = NativeByteOrder.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
     return new Invoke(buffer, func, PRIMITIVE_INT_TYPE);
   }
 
@@ -709,23 +710,23 @@ public abstract class CodecBuilder {
   }
 
   public static String readLongFunc() {
-    return UnsafeOps.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
+    return NativeByteOrder.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
   }
 
   public static String readInt16Func() {
-    return UnsafeOps.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
+    return NativeByteOrder.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
   }
 
   public static String readVarInt32Func() {
-    return UnsafeOps.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
+    return NativeByteOrder.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
   }
 
   public static String readFloat32Func() {
-    return UnsafeOps.IS_LITTLE_ENDIAN ? "_readFloat32OnLE" : "_readFloat32OnBE";
+    return NativeByteOrder.IS_LITTLE_ENDIAN ? "_readFloat32OnLE" : "_readFloat32OnBE";
   }
 
   public static String readFloat64Func() {
-    return UnsafeOps.IS_LITTLE_ENDIAN ? "_readFloat64OnLE" : "_readFloat64OnBE";
+    return NativeByteOrder.IS_LITTLE_ENDIAN ? "_readFloat64OnLE" : "_readFloat64OnBE";
   }
 
   protected Expression readFloat32(Expression buffer) {

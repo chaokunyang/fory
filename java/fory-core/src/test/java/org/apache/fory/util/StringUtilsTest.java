@@ -24,6 +24,7 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.UnsafeOps;
 import org.testng.annotations.Test;
 
@@ -105,7 +106,8 @@ public class StringUtilsTest extends ForyTestBase {
 
   private boolean isLatin(char[] chars, boolean isLittle) {
     boolean reverseBytes =
-        (UnsafeOps.IS_LITTLE_ENDIAN && !isLittle) || (!UnsafeOps.IS_LITTLE_ENDIAN && !isLittle);
+        (NativeByteOrder.IS_LITTLE_ENDIAN && !isLittle)
+            || (!NativeByteOrder.IS_LITTLE_ENDIAN && !isLittle);
     if (reverseBytes) {
       for (int i = 0; i < chars.length; i++) {
         chars[i] = Character.reverseBytes(chars[i]);

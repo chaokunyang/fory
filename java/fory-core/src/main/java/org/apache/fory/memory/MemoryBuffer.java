@@ -21,7 +21,6 @@ package org.apache.fory.memory;
 import static org.apache.fory.util.Preconditions.checkArgument;
 
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.util.Arrays;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.io.AbstractStreamReader;
@@ -63,7 +62,7 @@ import sun.misc.Unsafe;
 public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
   private static final Unsafe UNSAFE = UnsafeOps.UNSAFE;
-  private static final boolean LITTLE_ENDIAN = (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN);
+  private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
 
   // Global allocator instance that can be customized
   private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();

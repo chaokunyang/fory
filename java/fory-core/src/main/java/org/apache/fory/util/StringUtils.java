@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.UnsafeOps;
 
 public class StringUtils {
@@ -38,7 +39,7 @@ public class StringUtils {
   };
 
   static {
-    if (UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (NativeByteOrder.IS_LITTLE_ENDIAN) {
       // latin chars will be 0xXX,0x00;0xXX,0x00 in byte order;
       // Using 0x00,0xff(0xff00) to clear latin bits.
       MULTI_CHARS_NON_LATIN_MASK = 0xff00ff00ff00ff00L;

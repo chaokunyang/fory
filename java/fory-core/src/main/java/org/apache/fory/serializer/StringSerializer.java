@@ -42,6 +42,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -208,7 +209,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     byte coder = (byte) (header & 0b11);
     int numBytes = (int) (header >>> 2);
     byte[] bytes;
-    if (!UnsafeOps.IS_LITTLE_ENDIAN && coder == UTF16) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN && coder == UTF16) {
       bytes = readBytesUTF16BE(buffer, numBytes);
     } else {
       bytes = readBytesUnCompressedUTF16(buffer, numBytes);
@@ -256,7 +257,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       return newBytesStringZeroCopy(coder, readBytesUnCompressedUTF16(buffer, numBytes));
     } else if (coder == UTF16) {
       byte[] bytes;
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         bytes = readBytesUnCompressedUTF16(buffer, numBytes);
       } else {
         bytes = readBytesUTF16BE(buffer, numBytes);
@@ -453,7 +454,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   public static void writeBytesString(MemoryBuffer buffer, byte coder, byte[] bytes) {
-    if (!UnsafeOps.IS_LITTLE_ENDIAN && coder == UTF16) {
+    if (!NativeByteOrder.IS_LITTLE_ENDIAN && coder == UTF16) {
       writeBytesStringUTF16BE(buffer, bytes);
       return;
     }
@@ -578,7 +579,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   public char[] readCharsUTF16(MemoryBuffer buffer, int numBytes) {
-    if (UnsafeOps.IS_LITTLE_ENDIAN) {
+    if (NativeByteOrder.IS_LITTLE_ENDIAN) {
       char[] chars = new char[numBytes >> 1];
       // FIXME JDK11 utf16 string uses little-endian order.
       buffer.readChars(chars, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
@@ -662,7 +663,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       int arrIndex = targetIndex;
       arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
       writerIndex += arrIndex - targetIndex + numBytes;
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         // FIXME JDK11 utf16 string uses little-endian order.
         UnsafeOps.UNSAFE.copyMemory(
             chars,
@@ -675,7 +676,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       }
     } else {
       writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      if (UnsafeOps.IS_LITTLE_ENDIAN) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         writerIndex = offHeapWriteCharsUTF16(buffer, chars, writerIndex, numBytes);
       } else {
         writerIndex = offHeapWriteCharsUTF16BE(buffer, chars, writerIndex, numBytes);

@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.benchmark.xlang.generated.FBSImage;
 import org.apache.fory.benchmark.xlang.generated.FBSMedia;
 import org.apache.fory.benchmark.xlang.generated.FBSMediaContent;
@@ -37,6 +38,7 @@ import org.apache.fory.benchmark.xlang.generated.FBSNumericStruct;
 import org.apache.fory.benchmark.xlang.generated.FBSNumericStructList;
 import org.apache.fory.benchmark.xlang.generated.FBSSample;
 import org.apache.fory.benchmark.xlang.generated.FBSSampleList;
+import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.integration_tests.state.generated.ProtoMessage;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -1069,40 +1071,40 @@ public class XlangBenchmark {
   @ForyStruct
   public static class NumericStruct {
     @ForyField(id = 1)
-    public int f1;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f1;
 
     @ForyField(id = 2)
-    public int f2;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f2;
 
     @ForyField(id = 3)
-    public int f3;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f3;
 
     @ForyField(id = 4)
-    public int f4;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f4;
 
     @ForyField(id = 5)
-    public int f5;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f5;
 
     @ForyField(id = 6)
-    public int f6;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f6;
 
     @ForyField(id = 7)
-    public int f7;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f7;
 
     @ForyField(id = 8)
-    public int f8;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f8;
 
     @ForyField(id = 9)
-    public int f9;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f9;
 
     @ForyField(id = 10)
-    public int f10;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f10;
 
     @ForyField(id = 11)
-    public int f11;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f11;
 
     @ForyField(id = 12)
-    public int f12;
+    public @Int32Type(encoding = Int32Encoding.FIXED) int f12;
   }
 
   @ForyStruct

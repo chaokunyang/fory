@@ -25,7 +25,7 @@ import java.lang.invoke.MethodType;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.testng.Assert;
 import org.testng.SkipException;
 import org.testng.annotations.Test;
@@ -91,8 +91,8 @@ public class JDKAccessTest {
 
   @Test
   public void testMakeFunctionFailed() throws NoSuchMethodException, IllegalAccessException {
-    if (Platform.JAVA_VERSION != 11) {
-      throw new SkipException("Skip on jdk" + Platform.JAVA_VERSION);
+    if (UnsafeSupport.JAVA_VERSION != 11) {
+      throw new SkipException("Skip on jdk" + UnsafeSupport.JAVA_VERSION);
     }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(String.class);
     MethodHandle handle =

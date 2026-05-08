@@ -19,7 +19,7 @@
 
 package org.apache.fory.benchmark;
 
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.StringUtils;
@@ -48,7 +48,7 @@ public class NewStringSuite {
   // @Benchmark
   public Object createJDK8StringByUnsafe() {
     String str = new String(stubStr);
-    Platform.putObject(str, STRING_VALUE_FIELD_OFFSET, strData);
+    UnsafeSupport.putObject(str, STRING_VALUE_FIELD_OFFSET, strData);
     return str;
   }
 

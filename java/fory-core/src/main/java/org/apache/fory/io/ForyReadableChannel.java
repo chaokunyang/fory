@@ -26,7 +26,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.util.Preconditions;
 
 @NotThreadSafe
@@ -113,7 +113,7 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
       fillBuffer(numBytes - remaining);
     }
     long address = buf.getUnsafeReaderAddress();
-    Platform.copyMemory(null, address, target, targetPointer, numBytes);
+    UnsafeSupport.copyMemory(null, address, target, targetPointer, numBytes);
     buf.increaseReaderIndex(numBytes);
   }
 

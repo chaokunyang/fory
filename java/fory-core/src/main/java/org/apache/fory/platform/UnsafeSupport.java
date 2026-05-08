@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.fory.memory;
+package org.apache.fory.platform;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -29,7 +29,7 @@ import sun.misc.Unsafe;
 
 /** A utility class for unsafe memory operations. */
 @SuppressWarnings("restriction")
-public final class Platform {
+public final class UnsafeSupport {
   @SuppressWarnings("restriction")
   public static final Unsafe UNSAFE = _JDKAccess.UNSAFE;
 
@@ -60,6 +60,8 @@ public final class Platform {
    * safepoint polling during a large copy.
    */
   private static final long UNSAFE_COPY_THRESHOLD = 1024L * 1024L;
+
+  private UnsafeSupport() {}
 
   static {
     BOOLEAN_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(boolean[].class);
@@ -150,11 +152,11 @@ public final class Platform {
   }
 
   public static char getChar(Object obj, long offset) {
-    return Platform.UNSAFE.getChar(obj, offset);
+    return UnsafeSupport.UNSAFE.getChar(obj, offset);
   }
 
   public static void putChar(Object obj, long offset, char value) {
-    Platform.UNSAFE.putChar(obj, offset, value);
+    UnsafeSupport.UNSAFE.putChar(obj, offset, value);
   }
 
   public static long getLong(Object object, long offset) {
@@ -253,8 +255,8 @@ public final class Platform {
     // check if stars align and we can get both offsets to be aligned
     if ((leftOffset % 8) == (rightOffset % 8)) {
       while ((leftOffset + i) % 8 != 0 && i < length) {
-        if (Platform.getByte(leftBase, leftOffset + i)
-            != Platform.getByte(rightBase, rightOffset + i)) {
+        if (UnsafeSupport.getByte(leftBase, leftOffset + i)
+            != UnsafeSupport.getByte(rightBase, rightOffset + i)) {
           return false;
         }
         i += 1;
@@ -263,8 +265,8 @@ public final class Platform {
     // for architectures that support unaligned accesses, chew it up 8 bytes at a time
     if (unaligned || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
       while (i <= length - 8) {
-        if (Platform.getLong(leftBase, leftOffset + i)
-            != Platform.getLong(rightBase, rightOffset + i)) {
+        if (UnsafeSupport.getLong(leftBase, leftOffset + i)
+            != UnsafeSupport.getLong(rightBase, rightOffset + i)) {
           return false;
         }
         i += 8;
@@ -273,8 +275,8 @@ public final class Platform {
     // this will finish off the unaligned comparisons, or do the entire aligned
     // comparison whichever is needed.
     while (i < length) {
-      if (Platform.getByte(leftBase, leftOffset + i)
-          != Platform.getByte(rightBase, rightOffset + i)) {
+      if (UnsafeSupport.getByte(leftBase, leftOffset + i)
+          != UnsafeSupport.getByte(rightBase, rightOffset + i)) {
         return false;
       }
       i += 1;

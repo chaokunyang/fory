@@ -27,7 +27,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import org.apache.fory.Fory;
 import org.apache.fory.config.ForyBuilder;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -50,14 +50,14 @@ public class JDKCompatibilityTest {
       Assert.assertEquals(createObject(), object);
       byte[] serialized = fory.serialize(object);
       Assert.assertEquals(fory.deserialize(serialized), object);
-      write("object_schema_consistent" + Platform.JAVA_VERSION, serialized);
+      write("object_schema_consistent" + UnsafeSupport.JAVA_VERSION, serialized);
     }
     {
       Fory fory = builder().withCompatible(true).build();
       Object object = createObject();
       byte[] serialized = fory.serialize(object);
       Assert.assertEquals(fory.deserialize(serialized), object);
-      write("object_schema_compatible" + Platform.JAVA_VERSION, serialized);
+      write("object_schema_compatible" + UnsafeSupport.JAVA_VERSION, serialized);
     }
     // 11Test the case for the user registration class
     {
@@ -67,7 +67,7 @@ public class JDKCompatibilityTest {
       Assert.assertEquals(createCustomObject(), customObject);
       byte[] serialized = fory.serialize(customObject);
       Assert.assertEquals(fory.deserialize(serialized), customObject);
-      write("custom_object_schema_consistent" + Platform.JAVA_VERSION, serialized);
+      write("custom_object_schema_consistent" + UnsafeSupport.JAVA_VERSION, serialized);
     }
     {
       Fory fory = builder().withCompatible(true).build();
@@ -75,7 +75,7 @@ public class JDKCompatibilityTest {
       CustomObject customObject = createCustomObject();
       byte[] serialized = fory.serialize(customObject);
       Assert.assertEquals(fory.deserialize(serialized), customObject);
-      write("custom_object_schema_compatible" + Platform.JAVA_VERSION, serialized);
+      write("custom_object_schema_compatible" + UnsafeSupport.JAVA_VERSION, serialized);
     }
   }
 
@@ -118,7 +118,7 @@ public class JDKCompatibilityTest {
         Assert.assertEquals(o, object);
       } catch (Throwable e) {
         throw new RuntimeException(
-            "Check failed for " + file + " under JDK " + Platform.JAVA_VERSION, e);
+            "Check failed for " + file + " under JDK " + UnsafeSupport.JAVA_VERSION, e);
       }
     }
   }

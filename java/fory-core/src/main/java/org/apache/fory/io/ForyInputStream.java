@@ -24,7 +24,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 
 /**
  * A buffered stream by fory. Do not use original {@link InputStream} when this stream object
@@ -124,7 +124,7 @@ public class ForyInputStream extends InputStream implements ForyStreamReader {
     }
     byte[] heapMemory = buf.getHeapMemory();
     long address = buf.getUnsafeReaderAddress();
-    Platform.copyMemory(heapMemory, address, target, targetPointer, numBytes);
+    UnsafeSupport.copyMemory(heapMemory, address, target, targetPointer, numBytes);
     buf.increaseReaderIndex(numBytes);
   }
 

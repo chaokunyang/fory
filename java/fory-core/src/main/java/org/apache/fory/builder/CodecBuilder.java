@@ -54,8 +54,8 @@ import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -192,7 +192,7 @@ public abstract class CodecBuilder {
 
   protected Expression buildDefaultComponentsArray() {
     return new StaticInvoke(
-        Platform.class, "copyObjectArray", OBJECT_ARRAY_TYPE, recordComponentDefaultValues);
+        UnsafeSupport.class, "copyObjectArray", OBJECT_ARRAY_TYPE, recordComponentDefaultValues);
   }
 
   /** Returns an expression that get field value from <code>bean</code>. */
@@ -306,17 +306,17 @@ public abstract class CodecBuilder {
     Expression fieldOffsetExpr = getFieldOffset(cls, descriptor);
     boolean fieldNullable = fieldNullable(descriptor);
     if (descriptor.getTypeRef().isPrimitive()) {
-      // ex: Platform.UNSAFE.getFloat(obj, fieldOffset)
+      // ex: UnsafeSupport.UNSAFE.getFloat(obj, fieldOffset)
       Preconditions.checkArgument(!fieldNullable);
       TypeRef<?> returnType = descriptor.getTypeRef();
       String funcName = "get" + StringUtils.capitalize(descriptor.getRawType().toString());
       return new StaticInvoke(
-          Platform.class, funcName, returnType, false, inputObject, fieldOffsetExpr);
+          UnsafeSupport.class, funcName, returnType, false, inputObject, fieldOffsetExpr);
     } else {
-      // ex: Platform.UNSAFE.getObject(obj, fieldOffset)
+      // ex: UnsafeSupport.UNSAFE.getObject(obj, fieldOffset)
       StaticInvoke getObj =
           new StaticInvoke(
-              Platform.class,
+              UnsafeSupport.class,
               "getObject",
               OBJECT_TYPE,
               fieldNullable,
@@ -340,7 +340,7 @@ public abstract class CodecBuilder {
             new Invoke(classExpr, "getDeclaredField", TypeRef.of(Field.class));
             Expression reflectFieldRef = getReflectField(cls, field, false);
             return new StaticInvoke(
-                    Platform.class, "objectFieldOffset", PRIMITIVE_LONG_TYPE, reflectFieldRef)
+                    UnsafeSupport.class, "objectFieldOffset", PRIMITIVE_LONG_TYPE, reflectFieldRef)
                 .inline();
           });
     } else {
@@ -423,9 +423,9 @@ public abstract class CodecBuilder {
     if (descriptor.getTypeRef().isPrimitive()) {
       Preconditions.checkArgument(getRawType(value.type()) == getRawType(fieldType));
       String funcName = "put" + StringUtils.capitalize(getRawType(fieldType).toString());
-      return new StaticInvoke(Platform.class, funcName, bean, fieldOffsetExpr, value);
+      return new StaticInvoke(UnsafeSupport.class, funcName, bean, fieldOffsetExpr, value);
     } else {
-      return new StaticInvoke(Platform.class, "putObject", bean, fieldOffsetExpr, value);
+      return new StaticInvoke(UnsafeSupport.class, "putObject", bean, fieldOffsetExpr, value);
     }
   }
 
@@ -484,11 +484,11 @@ public abstract class CodecBuilder {
     if (sourcePublicAccessible(beanClass)) {
       return new Expression.NewInstance(beanType);
     } else {
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && Platform.JAVA_VERSION >= 25) {
+      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && UnsafeSupport.JAVA_VERSION >= 25) {
         ObjectCreators.getObjectCreator(beanClass); // trigger cache
         return new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
       }
-      return new StaticInvoke(Platform.class, "newInstance", OBJECT_TYPE, beanClassExpr());
+      return new StaticInvoke(UnsafeSupport.class, "newInstance", OBJECT_TYPE, beanClassExpr());
     }
   }
 
@@ -587,50 +587,51 @@ public abstract class CodecBuilder {
 
   /** Build unsafePut operation. */
   protected Expression unsafePut(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putByte", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putByte", base, pos, value);
   }
 
   protected Expression unsafePutBoolean(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putBoolean", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putBoolean", base, pos, value);
   }
 
   protected Expression unsafePutChar(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putChar", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putChar", base, pos, value);
   }
 
   protected Expression unsafePutShort(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putShort", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putShort", base, pos, value);
   }
 
   protected Expression unsafePutInt(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putInt", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putInt", base, pos, value);
   }
 
   protected Expression unsafePutLong(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putLong", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putLong", base, pos, value);
   }
 
   protected Expression unsafePutFloat(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putFloat", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putFloat", base, pos, value);
   }
 
   /** Build unsafePutDouble operation. */
   protected Expression unsafePutDouble(Expression base, Expression pos, Expression value) {
-    return new StaticInvoke(Platform.class, "putDouble", base, pos, value);
+    return new StaticInvoke(UnsafeSupport.class, "putDouble", base, pos, value);
   }
 
   /** Build unsafeGet operation. */
   protected Expression unsafeGet(Expression base, Expression pos) {
-    return new StaticInvoke(Platform.class, "getByte", PRIMITIVE_BYTE_TYPE, base, pos);
+    return new StaticInvoke(UnsafeSupport.class, "getByte", PRIMITIVE_BYTE_TYPE, base, pos);
   }
 
   protected Expression unsafeGetBoolean(Expression base, Expression pos) {
-    return new StaticInvoke(Platform.class, "getBoolean", PRIMITIVE_BOOLEAN_TYPE, base, pos);
+    return new StaticInvoke(UnsafeSupport.class, "getBoolean", PRIMITIVE_BOOLEAN_TYPE, base, pos);
   }
 
   protected Expression unsafeGetChar(Expression base, Expression pos) {
-    StaticInvoke expr = new StaticInvoke(Platform.class, "getChar", PRIMITIVE_CHAR_TYPE, base, pos);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    StaticInvoke expr =
+        new StaticInvoke(UnsafeSupport.class, "getChar", PRIMITIVE_CHAR_TYPE, base, pos);
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Character.class, "reverseBytes", PRIMITIVE_CHAR_TYPE, expr.inline());
     }
     return expr;
@@ -638,40 +639,44 @@ public abstract class CodecBuilder {
 
   protected Expression unsafeGetShort(Expression base, Expression pos) {
     StaticInvoke expr =
-        new StaticInvoke(Platform.class, "getShort", PRIMITIVE_SHORT_TYPE, base, pos);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+        new StaticInvoke(UnsafeSupport.class, "getShort", PRIMITIVE_SHORT_TYPE, base, pos);
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Short.class, "reverseBytes", PRIMITIVE_SHORT_TYPE, expr.inline());
     }
     return expr;
   }
 
   protected Expression unsafeGetInt(Expression base, Expression pos) {
-    StaticInvoke expr = new StaticInvoke(Platform.class, "getInt", PRIMITIVE_INT_TYPE, base, pos);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    StaticInvoke expr =
+        new StaticInvoke(UnsafeSupport.class, "getInt", PRIMITIVE_INT_TYPE, base, pos);
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
     return expr;
   }
 
   protected Expression unsafeGetLong(Expression base, Expression pos) {
-    StaticInvoke expr = new StaticInvoke(Platform.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    StaticInvoke expr =
+        new StaticInvoke(UnsafeSupport.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos);
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }
     return expr;
   }
 
   protected Expression unsafeGetFloat(Expression base, Expression pos) {
-    StaticInvoke expr = new StaticInvoke(Platform.class, "getInt", PRIMITIVE_INT_TYPE, base, pos);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    StaticInvoke expr =
+        new StaticInvoke(UnsafeSupport.class, "getInt", PRIMITIVE_INT_TYPE, base, pos);
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
     return new StaticInvoke(Float.class, "intBitsToFloat", PRIMITIVE_FLOAT_TYPE, expr.inline());
   }
 
   protected Expression unsafeGetDouble(Expression base, Expression pos) {
-    StaticInvoke expr = new StaticInvoke(Platform.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    StaticInvoke expr =
+        new StaticInvoke(UnsafeSupport.class, "getLong", PRIMITIVE_LONG_TYPE, base, pos);
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }
     return new StaticInvoke(Double.class, "longBitsToDouble", PRIMITIVE_DOUBLE_TYPE, expr.inline());
@@ -682,21 +687,21 @@ public abstract class CodecBuilder {
   }
 
   protected Expression readInt16(Expression buffer) {
-    String func = Platform.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
+    String func = UnsafeSupport.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
     return new Invoke(buffer, func, PRIMITIVE_SHORT_TYPE);
   }
 
   protected Expression readInt32(Expression buffer) {
-    String func = Platform.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
+    String func = UnsafeSupport.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
     return new Invoke(buffer, func, PRIMITIVE_INT_TYPE);
   }
 
   public static String readIntFunc() {
-    return Platform.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readInt32OnLE" : "_readInt32OnBE";
   }
 
   protected Expression readVarInt32(Expression buffer) {
-    String func = Platform.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
+    String func = UnsafeSupport.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
     return new Invoke(buffer, func, PRIMITIVE_INT_TYPE);
   }
 
@@ -705,23 +710,23 @@ public abstract class CodecBuilder {
   }
 
   public static String readLongFunc() {
-    return Platform.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
   }
 
   public static String readInt16Func() {
-    return Platform.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readInt16OnLE" : "_readInt16OnBE";
   }
 
   public static String readVarInt32Func() {
-    return Platform.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readVarInt32OnLE" : "_readVarInt32OnBE";
   }
 
   public static String readFloat32Func() {
-    return Platform.IS_LITTLE_ENDIAN ? "_readFloat32OnLE" : "_readFloat32OnBE";
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readFloat32OnLE" : "_readFloat32OnBE";
   }
 
   public static String readFloat64Func() {
-    return Platform.IS_LITTLE_ENDIAN ? "_readFloat64OnLE" : "_readFloat64OnBE";
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readFloat64OnLE" : "_readFloat64OnBE";
   }
 
   protected Expression readFloat32(Expression buffer) {

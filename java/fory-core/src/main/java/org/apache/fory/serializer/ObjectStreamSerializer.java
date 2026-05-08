@@ -55,12 +55,12 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -747,7 +747,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         try {
           objectOutputStream = new ForyStructOutputStream(this);
         } catch (IOException e) {
-          Platform.throwException(e);
+          UnsafeSupport.throwException(e);
           throw new IllegalStateException("unreachable");
         }
       } else {
@@ -757,7 +757,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         try {
           objectInputStream = new ForyStructInputStream(this);
         } catch (IOException e) {
-          Platform.throwException(e);
+          UnsafeSupport.throwException(e);
           throw new IllegalStateException("unreachable");
         }
       } else {

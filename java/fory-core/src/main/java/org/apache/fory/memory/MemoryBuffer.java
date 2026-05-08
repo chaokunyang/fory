@@ -26,6 +26,7 @@ import java.util.Arrays;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.io.AbstractStreamReader;
 import org.apache.fory.io.ForyStreamReader;
+import org.apache.fory.platform.UnsafeSupport;
 import sun.misc.Unsafe;
 
 /**
@@ -61,7 +62,7 @@ import sun.misc.Unsafe;
  */
 public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
-  private static final Unsafe UNSAFE = Platform.UNSAFE;
+  private static final Unsafe UNSAFE = UnsafeSupport.UNSAFE;
   private static final boolean LITTLE_ENDIAN = (ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN);
 
   // Global allocator instance that can be customized
@@ -203,7 +204,7 @@ public final class MemoryBuffer {
     }
     this.heapMemory = buffer;
     this.heapOffset = offset;
-    final long startPos = Platform.BYTE_ARRAY_OFFSET + offset;
+    final long startPos = UnsafeSupport.BYTE_ARRAY_OFFSET + offset;
     this.address = startPos;
     this.size = length;
     this.addressLimit = startPos + length;
@@ -331,7 +332,7 @@ public final class MemoryBuffer {
           < 0) {
         throwOOBException();
       }
-      Platform.copyMemory(null, pos, dst, Platform.BYTE_ARRAY_OFFSET + offset, length);
+      UnsafeSupport.copyMemory(null, pos, dst, UnsafeSupport.BYTE_ARRAY_OFFSET + offset, length);
     }
   }
 
@@ -350,7 +351,7 @@ public final class MemoryBuffer {
       final long targetAddr = ByteBufferUtil.getAddress(target) + targetPos;
       final long sourceAddr = address + offset;
       if (sourceAddr <= addressLimit - numBytes) {
-        Platform.copyMemory(heapMemory, sourceAddr, null, targetAddr, numBytes);
+        UnsafeSupport.copyMemory(heapMemory, sourceAddr, null, targetAddr, numBytes);
       } else {
         throwOOBException();
       }
@@ -371,7 +372,7 @@ public final class MemoryBuffer {
       final long sourceAddr = ByteBufferUtil.getAddress(source) + sourcePos;
       final long targetAddr = address + offset;
       if (targetAddr <= addressLimit - numBytes) {
-        Platform.copyMemory(null, sourceAddr, heapMemory, targetAddr, numBytes);
+        UnsafeSupport.copyMemory(null, sourceAddr, heapMemory, targetAddr, numBytes);
       } else {
         throwOOBException();
       }
@@ -403,8 +404,8 @@ public final class MemoryBuffer {
           < 0) {
         throwOOBException();
       }
-      final long arrayAddress = Platform.BYTE_ARRAY_OFFSET + offset;
-      Platform.copyMemory(src, arrayAddress, null, pos, length);
+      final long arrayAddress = UnsafeSupport.BYTE_ARRAY_OFFSET + offset;
+      UnsafeSupport.copyMemory(src, arrayAddress, null, pos, length);
     }
   }
 
@@ -1318,7 +1319,7 @@ public final class MemoryBuffer {
     int idx = writerIndex;
     ensure(idx + 5 + numBytes);
     idx += _unsafeWriteVarUInt32(numBytes);
-    Platform.copyMemory(arr, offset, heapMemory, address + idx, numBytes);
+    UnsafeSupport.copyMemory(arr, offset, heapMemory, address + idx, numBytes);
     writerIndex = idx + numBytes;
   }
 
@@ -1326,7 +1327,7 @@ public final class MemoryBuffer {
     final int writerIdx = writerIndex;
     final int newIdx = writerIdx + numBytes;
     ensure(newIdx);
-    Platform.copyMemory(arr, offset, heapMemory, address + writerIdx, numBytes);
+    UnsafeSupport.copyMemory(arr, offset, heapMemory, address + writerIdx, numBytes);
     writerIndex = newIdx;
   }
 
@@ -2377,7 +2378,8 @@ public final class MemoryBuffer {
       // System.arraycopy faster for some jdk than Unsafe.
       System.arraycopy(heapMemory, heapOffset + readerIdx, bytes, 0, length);
     } else {
-      Platform.copyMemory(null, address + readerIdx, bytes, Platform.BYTE_ARRAY_OFFSET, length);
+      UnsafeSupport.copyMemory(
+          null, address + readerIdx, bytes, UnsafeSupport.BYTE_ARRAY_OFFSET, length);
     }
     readerIndex = readerIdx + length;
     return bytes;
@@ -2393,7 +2395,7 @@ public final class MemoryBuffer {
     if (dstIndex < 0 || dstIndex > dst.length - length) {
       throwIndexOOBExceptionForRead();
     }
-    copyToUnsafe(readerIdx, dst, Platform.BYTE_ARRAY_OFFSET + dstIndex, length);
+    copyToUnsafe(readerIdx, dst, UnsafeSupport.BYTE_ARRAY_OFFSET + dstIndex, length);
     readerIndex = readerIdx + length;
   }
 
@@ -2536,8 +2538,8 @@ public final class MemoryBuffer {
     if (heapMemory != null) {
       System.arraycopy(heapMemory, heapOffset + readerIdx, arr, 0, numBytes);
     } else {
-      Platform.UNSAFE.copyMemory(
-          null, address + readerIdx, arr, Platform.BYTE_ARRAY_OFFSET, numBytes);
+      UnsafeSupport.UNSAFE.copyMemory(
+          null, address + readerIdx, arr, UnsafeSupport.BYTE_ARRAY_OFFSET, numBytes);
     }
     readerIndex = readerIdx + numBytes;
     return arr;
@@ -2549,11 +2551,11 @@ public final class MemoryBuffer {
     final char[] chars = new char[numBytes >> 1];
     // use subtract to avoid overflow
     if (readerIdx > size - numBytes) {
-      streamReader.readToUnsafe(chars, Platform.CHAR_ARRAY_OFFSET, numBytes);
+      streamReader.readToUnsafe(chars, UnsafeSupport.CHAR_ARRAY_OFFSET, numBytes);
       return chars;
     }
-    Platform.copyMemory(
-        heapMemory, address + readerIdx, chars, Platform.CHAR_ARRAY_OFFSET, numBytes);
+    UnsafeSupport.copyMemory(
+        heapMemory, address + readerIdx, chars, UnsafeSupport.CHAR_ARRAY_OFFSET, numBytes);
     readerIndex = readerIdx + numBytes;
     return chars;
   }
@@ -2565,7 +2567,7 @@ public final class MemoryBuffer {
       streamReader.readToUnsafe(chars, offset, numBytes);
       return;
     }
-    Platform.copyMemory(heapMemory, address + readerIdx, chars, offset, numBytes);
+    UnsafeSupport.copyMemory(heapMemory, address + readerIdx, chars, offset, numBytes);
     readerIndex = readerIdx + numBytes;
   }
 
@@ -2576,11 +2578,11 @@ public final class MemoryBuffer {
     final char[] arr = new char[numBytes >> 1];
     // use subtract to avoid overflow
     if (readerIdx > size - numBytes) {
-      streamReader.readToUnsafe(arr, Platform.CHAR_ARRAY_OFFSET, numBytes);
+      streamReader.readToUnsafe(arr, UnsafeSupport.CHAR_ARRAY_OFFSET, numBytes);
       return arr;
     }
-    Platform.UNSAFE.copyMemory(
-        heapMemory, address + readerIdx, arr, Platform.CHAR_ARRAY_OFFSET, numBytes);
+    UnsafeSupport.UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, arr, UnsafeSupport.CHAR_ARRAY_OFFSET, numBytes);
     readerIndex = readerIdx + numBytes;
     return arr;
   }
@@ -2591,11 +2593,11 @@ public final class MemoryBuffer {
     final long[] longs = new long[numElements];
     // use subtract to avoid overflow
     if (readerIdx > size - numBytes) {
-      streamReader.readToUnsafe(longs, Platform.LONG_ARRAY_OFFSET, numBytes);
+      streamReader.readToUnsafe(longs, UnsafeSupport.LONG_ARRAY_OFFSET, numBytes);
       return longs;
     }
-    Platform.copyMemory(
-        heapMemory, address + readerIdx, longs, Platform.LONG_ARRAY_OFFSET, numBytes);
+    UnsafeSupport.copyMemory(
+        heapMemory, address + readerIdx, longs, UnsafeSupport.LONG_ARRAY_OFFSET, numBytes);
     readerIndex = readerIdx + numBytes;
     return longs;
   }
@@ -2610,7 +2612,7 @@ public final class MemoryBuffer {
       streamReader.readToUnsafe(target, targetPointer, numBytes);
     } else {
       int readerIdx = readerIndex;
-      Platform.copyMemory(heapMemory, address + readerIdx, target, targetPointer, numBytes);
+      UnsafeSupport.copyMemory(heapMemory, address + readerIdx, target, targetPointer, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -2645,7 +2647,7 @@ public final class MemoryBuffer {
   public void copyToUnsafe(long offset, Object target, long targetPointer, int numBytes) {
     final long thisPointer = this.address + offset;
     checkArgument(thisPointer + numBytes <= addressLimit);
-    Platform.copyMemory(this.heapMemory, thisPointer, target, targetPointer, numBytes);
+    UnsafeSupport.copyMemory(this.heapMemory, thisPointer, target, targetPointer, numBytes);
   }
 
   /**
@@ -2655,7 +2657,7 @@ public final class MemoryBuffer {
   public void copyFromUnsafe(long offset, Object source, long sourcePointer, long numBytes) {
     final long thisPointer = this.address + offset;
     checkArgument(thisPointer + numBytes <= addressLimit);
-    Platform.copyMemory(source, sourcePointer, this.heapMemory, thisPointer, numBytes);
+    UnsafeSupport.copyMemory(source, sourcePointer, this.heapMemory, thisPointer, numBytes);
   }
 
   public void copyTo(int offset, MemoryBuffer target, int targetOffset, int numBytes) {
@@ -2688,7 +2690,7 @@ public final class MemoryBuffer {
       throwIndexOOBExceptionForRead(length);
     }
     byte[] data = new byte[length];
-    copyToUnsafe(index, data, Platform.BYTE_ARRAY_OFFSET, length);
+    copyToUnsafe(index, data, UnsafeSupport.BYTE_ARRAY_OFFSET, length);
     return data;
   }
 
@@ -2699,7 +2701,7 @@ public final class MemoryBuffer {
     if (index > size - length) {
       throwOOBException();
     }
-    copyToUnsafe(index, dst, Platform.BYTE_ARRAY_OFFSET + dstIndex, length);
+    copyToUnsafe(index, dst, UnsafeSupport.BYTE_ARRAY_OFFSET + dstIndex, length);
   }
 
   public MemoryBuffer slice(int offset) {
@@ -2767,7 +2769,7 @@ public final class MemoryBuffer {
     final long pos2 = buf2.address + offset2;
     checkArgument(pos1 < addressLimit);
     checkArgument(pos2 < buf2.addressLimit);
-    return Platform.arrayEquals(heapMemory, pos1, buf2.heapMemory, pos2, len);
+    return UnsafeSupport.arrayEquals(heapMemory, pos1, buf2.heapMemory, pos2, len);
   }
 
   /**
@@ -2788,8 +2790,8 @@ public final class MemoryBuffer {
       return true;
     }
     final long pos = address + offset;
-    return Platform.arrayEquals(
-        heapMemory, pos, bytes, Platform.BYTE_ARRAY_OFFSET + bytesOffset, len);
+    return UnsafeSupport.arrayEquals(
+        heapMemory, pos, bytes, UnsafeSupport.BYTE_ARRAY_OFFSET + bytesOffset, len);
   }
 
   @Override
@@ -2837,7 +2839,7 @@ public final class MemoryBuffer {
               : (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8);
 
       byte[] data = new byte[newSize];
-      buffer.copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, buffer.size());
+      buffer.copyToUnsafe(0, data, UnsafeSupport.BYTE_ARRAY_OFFSET, buffer.size());
       buffer.initHeapBuffer(data, 0, data.length);
     }
   }

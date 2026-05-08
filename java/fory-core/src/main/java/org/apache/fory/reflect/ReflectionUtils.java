@@ -48,8 +48,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
@@ -108,7 +108,7 @@ public class ReflectionUtils {
     try {
       return lookup.findConstructor(ctr.getDeclaringClass(), MethodType.methodType(void.class));
     } catch (NoSuchMethodException | IllegalAccessException e) {
-      Platform.throwException(e);
+      UnsafeSupport.throwException(e);
       throw new IllegalStateException("unreachable");
     }
   }
@@ -147,7 +147,7 @@ public class ReflectionUtils {
           try {
             return lookup.findConstructor(cls, MethodType.methodType(void.class, types));
           } catch (NoSuchMethodException | IllegalAccessException e) {
-            Platform.throwException(e);
+            UnsafeSupport.throwException(e);
             throw new IllegalStateException("unreachable");
           }
         });
@@ -304,7 +304,7 @@ public class ReflectionUtils {
     try {
       return cls.getDeclaredField(fieldName);
     } catch (NoSuchFieldException e) {
-      Platform.throwException(e);
+      UnsafeSupport.throwException(e);
       throw new IllegalStateException("Unreachable");
     }
   }
@@ -430,7 +430,7 @@ public class ReflectionUtils {
   public static List<Object> getFieldValues(Collection<Field> fields, Object o) {
     List<Object> results = new ArrayList<>(fields.size());
     for (Field field : fields) {
-      // Platform.objectFieldOffset(field) can't handle primitive field.
+      // UnsafeSupport.objectFieldOffset(field) can't handle primitive field.
       Object fieldValue = FieldAccessor.createAccessor(field).get(o);
       results.add(fieldValue);
     }
@@ -448,7 +448,7 @@ public class ReflectionUtils {
     if (field == null) {
       return -1;
     }
-    return Platform.objectFieldOffset(field);
+    return UnsafeSupport.objectFieldOffset(field);
   }
 
   public static long getFieldOffset(Class<?> cls, String fieldName) {
@@ -469,11 +469,11 @@ public class ReflectionUtils {
   public static void setObjectFieldValue(Object obj, Field field, Object value) {
     Preconditions.checkArgument(
         !field.getType().isPrimitive(), "Field %s is primitive type", field);
-    Platform.putObject(obj, Platform.objectFieldOffset(field), value);
+    UnsafeSupport.putObject(obj, UnsafeSupport.objectFieldOffset(field), value);
   }
 
   public static <T> T getObjectFieldValue(Object obj, Field field) {
-    return (T) Platform.getObject(obj, Platform.objectFieldOffset(field));
+    return (T) UnsafeSupport.getObject(obj, UnsafeSupport.objectFieldOffset(field));
   }
 
   /**
@@ -487,8 +487,8 @@ public class ReflectionUtils {
     while (cls != Object.class) {
       try {
         Field field = cls.getDeclaredField(fieldName);
-        long fieldOffset = Platform.objectFieldOffset(field);
-        return Platform.getObject(obj, fieldOffset);
+        long fieldOffset = UnsafeSupport.objectFieldOffset(field);
+        return UnsafeSupport.getObject(obj, fieldOffset);
         // CHECKSTYLE.OFF:EmptyCatchBlock
       } catch (NoSuchFieldException ignored) {
       }

@@ -25,6 +25,7 @@ import static org.testng.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.util.Random;
+import org.apache.fory.platform.UnsafeSupport;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -83,28 +84,28 @@ public class MemoryBufferTest {
       long pos = buffer.getUnsafeAddress();
       assertEquals(buffer._unsafeWriterAddress(), pos);
       assertEquals(buffer.getUnsafeReaderAddress(), pos);
-      Platform.putByte(heapMemory, pos, Byte.MIN_VALUE);
+      UnsafeSupport.putByte(heapMemory, pos, Byte.MIN_VALUE);
       pos += 1;
-      Platform.putShort(heapMemory, pos, Short.MAX_VALUE);
+      UnsafeSupport.putShort(heapMemory, pos, Short.MAX_VALUE);
       pos += 2;
       LittleEndian.putInt32(heapMemory, pos, Integer.MIN_VALUE);
       pos += 4;
-      Platform.putLong(heapMemory, pos, Long.MAX_VALUE);
+      UnsafeSupport.putLong(heapMemory, pos, Long.MAX_VALUE);
       pos += 8;
       LittleEndian.putFloat64(heapMemory, pos, -1);
       pos += 8;
       LittleEndian.putFloat32(heapMemory, pos, -1);
-      assertEquals(buffer.getFloat32((int) (pos - Platform.BYTE_ARRAY_OFFSET)), -1);
+      assertEquals(buffer.getFloat32((int) (pos - UnsafeSupport.BYTE_ARRAY_OFFSET)), -1);
       pos -= 8;
-      assertEquals(buffer.getFloat64((int) (pos - Platform.BYTE_ARRAY_OFFSET)), -1);
+      assertEquals(buffer.getFloat64((int) (pos - UnsafeSupport.BYTE_ARRAY_OFFSET)), -1);
       pos -= 8;
       assertEquals(LittleEndian.getInt64(heapMemory, pos), Long.MAX_VALUE);
       pos -= 4;
       assertEquals(LittleEndian.getInt32(heapMemory, pos), Integer.MIN_VALUE);
       pos -= 2;
-      assertEquals(buffer.getInt16((int) (pos - Platform.BYTE_ARRAY_OFFSET)), Short.MAX_VALUE);
+      assertEquals(buffer.getInt16((int) (pos - UnsafeSupport.BYTE_ARRAY_OFFSET)), Short.MAX_VALUE);
       pos -= 1;
-      assertEquals(buffer.getByte((int) (pos - Platform.BYTE_ARRAY_OFFSET)), Byte.MIN_VALUE);
+      assertEquals(buffer.getByte((int) (pos - UnsafeSupport.BYTE_ARRAY_OFFSET)), Byte.MIN_VALUE);
     }
     {
       MemoryBuffer buffer = MemoryUtils.buffer(1024);
@@ -181,7 +182,7 @@ public class MemoryBufferTest {
     {
       long address = 0;
       try {
-        address = Platform.allocateMemory(10);
+        address = UnsafeSupport.allocateMemory(10);
         ByteBuffer direct = ByteBufferUtil.wrapDirectBuffer(address, 10);
         direct.put(data);
         direct.flip();
@@ -190,7 +191,7 @@ public class MemoryBufferTest {
         assertEquals(buffer.sliceAsByteBuffer(), direct);
         assertEquals(ByteBufferUtil.getAddress(buffer.sliceAsByteBuffer()), address + 5);
       } finally {
-        Platform.freeMemory(address);
+        UnsafeSupport.freeMemory(address);
       }
     }
   }
@@ -236,8 +237,8 @@ public class MemoryBufferTest {
     for (int i = 0; i < chars.length; i++) {
       chars[i] = (char) random.nextInt();
     }
-    buf.writePrimitiveArrayWithSize(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length);
-    buf.writePrimitiveArrayWithSize(chars, Platform.CHAR_ARRAY_OFFSET, chars.length * 2);
+    buf.writePrimitiveArrayWithSize(bytes, UnsafeSupport.BYTE_ARRAY_OFFSET, bytes.length);
+    buf.writePrimitiveArrayWithSize(chars, UnsafeSupport.CHAR_ARRAY_OFFSET, chars.length * 2);
     assertEquals(bytes, buf.readBytesAndSize());
     assertEquals(chars, buf.readChars(buf.readVarUInt32()));
   }

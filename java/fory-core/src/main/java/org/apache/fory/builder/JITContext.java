@@ -31,7 +31,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.config.Config;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.util.Preconditions;
 
 /** A context for managing jit serialization code generation in async multithreaded environment. */
@@ -124,7 +124,7 @@ public class JITContext {
         return interpreterModeAction.call();
       }
     } catch (Exception e) {
-      Platform.throwException(e);
+      UnsafeSupport.throwException(e);
       throw new IllegalStateException("unreachable");
     } finally {
       unlock();
@@ -210,7 +210,7 @@ public class JITContext {
 
     default void onFailure(Throwable e) {
       e.printStackTrace();
-      Platform.throwException(e);
+      UnsafeSupport.throwException(e);
     }
 
     /** Callback id used to build mapping between jit result, call site and notify site. */

@@ -38,8 +38,8 @@ import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
@@ -315,7 +315,7 @@ public class _JDKAccess {
   private static volatile Method getModuleMethod;
 
   public static Object getModule(Class<?> cls) {
-    Preconditions.checkArgument(Platform.JAVA_VERSION >= 9);
+    Preconditions.checkArgument(UnsafeSupport.JAVA_VERSION >= 9);
     if (getModuleMethod == null) {
       try {
         getModuleMethod = Class.class.getDeclaredMethod("getModule");
@@ -334,7 +334,7 @@ public class _JDKAccess {
   private static volatile MethodHandle addReadsHandle;
 
   public static Object addReads(Object thisModule, Object otherModule) {
-    Preconditions.checkArgument(Platform.JAVA_VERSION >= 9);
+    Preconditions.checkArgument(UnsafeSupport.JAVA_VERSION >= 9);
     try {
       if (addReadsHandle == null) {
         Class<?> cls = Class.forName("java.lang.Module");

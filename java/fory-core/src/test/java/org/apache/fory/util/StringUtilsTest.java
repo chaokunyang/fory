@@ -24,7 +24,7 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.testng.annotations.Test;
 
 public class StringUtilsTest extends ForyTestBase {
@@ -105,7 +105,8 @@ public class StringUtilsTest extends ForyTestBase {
 
   private boolean isLatin(char[] chars, boolean isLittle) {
     boolean reverseBytes =
-        (Platform.IS_LITTLE_ENDIAN && !isLittle) || (!Platform.IS_LITTLE_ENDIAN && !isLittle);
+        (UnsafeSupport.IS_LITTLE_ENDIAN && !isLittle)
+            || (!UnsafeSupport.IS_LITTLE_ENDIAN && !isLittle);
     if (reverseBytes) {
       for (int i = 0; i < chars.length; i++) {
         chars[i] = Character.reverseBytes(chars[i]);
@@ -124,11 +125,11 @@ public class StringUtilsTest extends ForyTestBase {
     int numChars = chars.length;
     int vectorizedLen = numChars >> 2;
     int vectorizedChars = vectorizedLen << 2;
-    int endOffset = Platform.CHAR_ARRAY_OFFSET + (vectorizedChars << 1);
+    int endOffset = UnsafeSupport.CHAR_ARRAY_OFFSET + (vectorizedChars << 1);
     boolean isLatin = true;
-    for (int offset = Platform.CHAR_ARRAY_OFFSET; offset < endOffset; offset += 8) {
+    for (int offset = UnsafeSupport.CHAR_ARRAY_OFFSET; offset < endOffset; offset += 8) {
       // check 4 chars in a vectorized way, 4 times faster than scalar check loop.
-      long multiChars = Platform.getLong(chars, offset);
+      long multiChars = UnsafeSupport.getLong(chars, offset);
       if ((multiChars & mask) != 0) {
         isLatin = false;
         break;

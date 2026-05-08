@@ -26,8 +26,8 @@ import java.lang.reflect.Proxy;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
@@ -41,7 +41,7 @@ public class JdkProxySerializer extends Serializer {
 
   static {
     FIELD = ReflectionUtils.getField(Proxy.class, InvocationHandler.class);
-    PROXY_HANDLER_FIELD_OFFSET = Platform.objectFieldOffset(FIELD);
+    PROXY_HANDLER_FIELD_OFFSET = UnsafeSupport.objectFieldOffset(FIELD);
   }
 
   private static class StubInvocationHandler implements InvocationHandler {
@@ -89,7 +89,7 @@ public class JdkProxySerializer extends Serializer {
     Preconditions.checkNotNull(invocationHandler);
     Object proxy = Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
     copyContext.reference(value, proxy);
-    Platform.putObject(
+    UnsafeSupport.putObject(
         proxy, PROXY_HANDLER_FIELD_OFFSET, copyContext.copyObject(invocationHandler));
     return proxy;
   }
@@ -103,7 +103,7 @@ public class JdkProxySerializer extends Serializer {
     readContext.setReadRef(refId, proxy);
     InvocationHandler invocationHandler = (InvocationHandler) readContext.readRef();
     Preconditions.checkNotNull(invocationHandler);
-    Platform.putObject(proxy, PROXY_HANDLER_FIELD_OFFSET, invocationHandler);
+    UnsafeSupport.putObject(proxy, PROXY_HANDLER_FIELD_OFFSET, invocationHandler);
     return proxy;
   }
 

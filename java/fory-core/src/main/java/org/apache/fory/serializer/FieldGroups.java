@@ -213,7 +213,7 @@ public class FieldGroups {
         this.fieldAccessor = null;
       }
       // Use local field type to determine if field is primitive.
-      // This determines how to write the value to the object (Platform.putInt vs putObject).
+      // This determines how to write the value to the object (UnsafeSupport.putInt vs putObject).
       isPrimitiveField = typeRef.getRawType().isPrimitive();
       fieldConverter = d.getFieldConverter();
       // For xlang compatibility, check TypeExtMeta first (from remote peer's type meta)

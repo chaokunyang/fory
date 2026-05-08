@@ -22,7 +22,7 @@ package org.apache.fory.meta;
 import java.util.Arrays;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.memory.LittleEndian;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.util.MurmurHash3;
 
 @Internal
@@ -53,8 +53,8 @@ public final class EncodedMetaString {
       data = new byte[16];
       System.arraycopy(bytes, 0, data, 0, bytes.length);
     }
-    first8Bytes = LittleEndian.getInt64(data, Platform.BYTE_ARRAY_OFFSET);
-    second8Bytes = LittleEndian.getInt64(data, Platform.BYTE_ARRAY_OFFSET + 8);
+    first8Bytes = LittleEndian.getInt64(data, UnsafeSupport.BYTE_ARRAY_OFFSET);
+    second8Bytes = LittleEndian.getInt64(data, UnsafeSupport.BYTE_ARRAY_OFFSET + 8);
   }
 
   public static long computeHash(byte[] bytes, MetaString.Encoding encoding) {

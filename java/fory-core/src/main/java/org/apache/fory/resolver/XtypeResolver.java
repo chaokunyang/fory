@@ -73,11 +73,11 @@ import org.apache.fory.exception.SerializerUnregisteredException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BigIntegerSerializer;
@@ -962,18 +962,18 @@ public class XtypeResolver extends TypeResolver {
         Types.BINARY, byte[].class, new PrimitiveArraySerializers.ByteArraySerializer(this));
     @SuppressWarnings("unchecked")
     Class<java.nio.ByteBuffer> heapByteBufferClass =
-        (Class<java.nio.ByteBuffer>) Platform.HEAP_BYTE_BUFFER_CLASS;
+        (Class<java.nio.ByteBuffer>) UnsafeSupport.HEAP_BYTE_BUFFER_CLASS;
     registerType(
         Types.BINARY,
-        Platform.HEAP_BYTE_BUFFER_CLASS,
+        UnsafeSupport.HEAP_BYTE_BUFFER_CLASS,
         new org.apache.fory.serializer.BufferSerializers.ByteBufferSerializer(
             this, heapByteBufferClass));
     @SuppressWarnings("unchecked")
     Class<java.nio.ByteBuffer> directByteBufferClass =
-        (Class<java.nio.ByteBuffer>) Platform.DIRECT_BYTE_BUFFER_CLASS;
+        (Class<java.nio.ByteBuffer>) UnsafeSupport.DIRECT_BYTE_BUFFER_CLASS;
     registerType(
         Types.BINARY,
-        Platform.DIRECT_BYTE_BUFFER_CLASS,
+        UnsafeSupport.DIRECT_BYTE_BUFFER_CLASS,
         new org.apache.fory.serializer.BufferSerializers.ByteBufferSerializer(
             this, directByteBufferClass));
 

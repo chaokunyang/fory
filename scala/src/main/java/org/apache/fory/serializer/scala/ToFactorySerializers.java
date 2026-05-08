@@ -23,7 +23,7 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.Shareable;
 import org.apache.fory.serializer.Serializer;
@@ -43,7 +43,7 @@ public class ToFactorySerializers  {
       try {
         // for graalvm field offset auto rewrite
         Field field = Class.forName("scala.collection.IterableFactory$ToFactory").getDeclaredField("factory");
-        fieldOffset = Platform.objectFieldOffset(field);
+        fieldOffset = UnsafeSupport.objectFieldOffset(field);
       } catch (final Exception e) {
         throw new RuntimeException(e);
       }
@@ -55,13 +55,13 @@ public class ToFactorySerializers  {
 
     @Override
     public void write(WriteContext writeContext, Object value) {
-      writeContext.writeRef(Platform.getObject(value, fieldOffset));
+      writeContext.writeRef(UnsafeSupport.getObject(value, fieldOffset));
     }
 
     @Override
     public Object read(ReadContext readContext) {
-      Object o = Platform.newInstance(type);
-      Platform.putObject(o, fieldOffset, readContext.readRef());
+      Object o = UnsafeSupport.newInstance(type);
+      UnsafeSupport.putObject(o, fieldOffset, readContext.readRef());
       return o;
     }
   }
@@ -73,7 +73,7 @@ public class ToFactorySerializers  {
       try {
         // for graalvm field offset auto rewrite
         Field field = Class.forName("scala.collection.MapFactory$ToFactory").getDeclaredField("factory");
-        fieldOffset = Platform.objectFieldOffset(field);
+        fieldOffset = UnsafeSupport.objectFieldOffset(field);
       } catch (final Exception e) {
         throw new RuntimeException(e);
       }
@@ -85,13 +85,13 @@ public class ToFactorySerializers  {
 
     @Override
     public void write(WriteContext writeContext, Object value) {
-      writeContext.writeRef(Platform.getObject(value, fieldOffset));
+      writeContext.writeRef(UnsafeSupport.getObject(value, fieldOffset));
     }
 
     @Override
     public Object read(ReadContext readContext) {
-      Object o = Platform.newInstance(type);
-      Platform.putObject(o, fieldOffset, readContext.readRef());
+      Object o = UnsafeSupport.newInstance(type);
+      UnsafeSupport.putObject(o, fieldOffset, readContext.readRef());
       return o;
     }
   }

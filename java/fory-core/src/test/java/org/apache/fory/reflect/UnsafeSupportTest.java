@@ -28,12 +28,12 @@ import java.util.Arrays;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.ByteBufferUtil;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.testng.annotations.Test;
 
-public class PlatformTest {
+public class UnsafeSupportTest {
 
-  private static final Logger LOG = LoggerFactory.getLogger(PlatformTest.class);
+  private static final Logger LOG = LoggerFactory.getLogger(UnsafeSupportTest.class);
 
   @Test
   public void testArrayEquals() {
@@ -41,8 +41,12 @@ public class PlatformTest {
     byte[] bytes2 = "123456781234567".getBytes(StandardCharsets.UTF_8);
     assert bytes.length == bytes2.length;
     assertTrue(
-        Platform.arrayEquals(
-            bytes, Platform.BYTE_ARRAY_OFFSET, bytes2, Platform.BYTE_ARRAY_OFFSET, bytes.length));
+        UnsafeSupport.arrayEquals(
+            bytes,
+            UnsafeSupport.BYTE_ARRAY_OFFSET,
+            bytes2,
+            UnsafeSupport.BYTE_ARRAY_OFFSET,
+            bytes.length));
   }
 
   @Test(enabled = false)
@@ -63,22 +67,22 @@ public class PlatformTest {
       for (int i = 0; i < nums; i++) {
         eq =
             bytes.length == bytes2.length
-                && Platform.arrayEquals(
+                && UnsafeSupport.arrayEquals(
                     bytes,
-                    Platform.BYTE_ARRAY_OFFSET,
+                    UnsafeSupport.BYTE_ARRAY_OFFSET,
                     bytes2,
-                    Platform.BYTE_ARRAY_OFFSET,
+                    UnsafeSupport.BYTE_ARRAY_OFFSET,
                     bytes.length);
       }
       long t = System.nanoTime();
       for (int i = 0; i < nums; i++) {
         eq =
             bytes.length == bytes2.length
-                && Platform.arrayEquals(
+                && UnsafeSupport.arrayEquals(
                     bytes,
-                    Platform.BYTE_ARRAY_OFFSET,
+                    UnsafeSupport.BYTE_ARRAY_OFFSET,
                     bytes2,
-                    Platform.BYTE_ARRAY_OFFSET,
+                    UnsafeSupport.BYTE_ARRAY_OFFSET,
                     bytes.length);
       }
       long duration = System.nanoTime() - t;
@@ -104,12 +108,12 @@ public class PlatformTest {
     long address = 0;
     try {
       int size = 16;
-      address = Platform.allocateMemory(size);
+      address = UnsafeSupport.allocateMemory(size);
       ByteBuffer buffer = ByteBufferUtil.wrapDirectBuffer(address, size);
       buffer.putLong(0, 1);
       assertEquals(1, buffer.getLong(0));
     } finally {
-      Platform.freeMemory(address);
+      UnsafeSupport.freeMemory(address);
     }
   }
 
@@ -118,7 +122,7 @@ public class PlatformTest {
     long address = 0;
     try {
       int size = 16;
-      address = Platform.allocateMemory(size);
+      address = UnsafeSupport.allocateMemory(size);
       long nums = 100_000_000;
       ByteBuffer buffer = null;
       {
@@ -160,7 +164,7 @@ public class PlatformTest {
         LOG.info("ByteBuffer.wrap " + duration + "ns " + duration / 1000_000 + "ms\n");
       }
     } finally {
-      Platform.freeMemory(address);
+      UnsafeSupport.freeMemory(address);
     }
   }
 }

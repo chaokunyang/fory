@@ -29,10 +29,10 @@ import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.apache.fory.meta.MetaCompressor;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.SharedRegistry;
@@ -650,7 +650,7 @@ public final class ForyBuilder {
     } catch (Throwable t) {
       t.printStackTrace();
       LOG.error("Fory creation failed with classloader {}", classLoader);
-      Platform.throwException(t);
+      UnsafeSupport.throwException(t);
       throw new RuntimeException(t);
     }
   }

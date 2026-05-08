@@ -32,8 +32,8 @@ import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
@@ -83,20 +83,21 @@ public abstract class FieldAccessor {
   }
 
   public final void putObject(Object targetObject, Object object) {
-    // For primitive fields, we must use set() which calls the correct Platform.putXxx method.
-    // Platform.putObject writes object references, not primitive values.
+    // For primitive fields, we must use set() which calls the correct UnsafeSupport.putXxx method.
+    // UnsafeSupport.putObject writes object references, not primitive values.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
-      Platform.putObject(targetObject, fieldOffset, object);
+      UnsafeSupport.putObject(targetObject, fieldOffset, object);
     } else {
       set(targetObject, object);
     }
   }
 
   public final Object getObject(Object targetObject) {
-    // For primitive fields, we must use get() which calls the correct Platform.getXxx method
-    // and returns the boxed value. Platform.getObject interprets primitive bytes as object refs.
+    // For primitive fields, we must use get() which calls the correct UnsafeSupport.getXxx method
+    // and returns the boxed value. UnsafeSupport.getObject interprets primitive bytes as object
+    // refs.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
-      return Platform.getObject(targetObject, fieldOffset);
+      return UnsafeSupport.getObject(targetObject, fieldOffset);
     } else {
       return get(targetObject);
     }
@@ -194,13 +195,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return Platform.getBoolean(obj, fieldOffset);
+      return UnsafeSupport.getBoolean(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putBoolean(obj, fieldOffset, (Boolean) value);
+      UnsafeSupport.putBoolean(obj, fieldOffset, (Boolean) value);
     }
   }
 
@@ -230,13 +231,13 @@ public abstract class FieldAccessor {
     @Override
     public Byte get(Object obj) {
       checkObj(obj);
-      return Platform.getByte(obj, fieldOffset);
+      return UnsafeSupport.getByte(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putByte(obj, fieldOffset, (Byte) value);
+      UnsafeSupport.putByte(obj, fieldOffset, (Byte) value);
     }
   }
 
@@ -266,13 +267,13 @@ public abstract class FieldAccessor {
     @Override
     public Character get(Object obj) {
       checkObj(obj);
-      return Platform.getChar(obj, fieldOffset);
+      return UnsafeSupport.getChar(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putChar(obj, fieldOffset, (Character) value);
+      UnsafeSupport.putChar(obj, fieldOffset, (Character) value);
     }
   }
 
@@ -301,13 +302,13 @@ public abstract class FieldAccessor {
     @Override
     public Short get(Object obj) {
       checkObj(obj);
-      return Platform.getShort(obj, fieldOffset);
+      return UnsafeSupport.getShort(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putShort(obj, fieldOffset, (Short) value);
+      UnsafeSupport.putShort(obj, fieldOffset, (Short) value);
     }
   }
 
@@ -336,13 +337,13 @@ public abstract class FieldAccessor {
     @Override
     public Integer get(Object obj) {
       checkObj(obj);
-      return Platform.getInt(obj, fieldOffset);
+      return UnsafeSupport.getInt(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putInt(obj, fieldOffset, (Integer) value);
+      UnsafeSupport.putInt(obj, fieldOffset, (Integer) value);
     }
   }
 
@@ -371,13 +372,13 @@ public abstract class FieldAccessor {
     @Override
     public Long get(Object obj) {
       checkObj(obj);
-      return Platform.getLong(obj, fieldOffset);
+      return UnsafeSupport.getLong(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putLong(obj, fieldOffset, (Long) value);
+      UnsafeSupport.putLong(obj, fieldOffset, (Long) value);
     }
   }
 
@@ -406,13 +407,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return Platform.getFloat(obj, fieldOffset);
+      return UnsafeSupport.getFloat(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putFloat(obj, fieldOffset, (Float) value);
+      UnsafeSupport.putFloat(obj, fieldOffset, (Float) value);
     }
   }
 
@@ -441,13 +442,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return Platform.getDouble(obj, fieldOffset);
+      return UnsafeSupport.getDouble(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putDouble(obj, fieldOffset, (Double) value);
+      UnsafeSupport.putDouble(obj, fieldOffset, (Double) value);
     }
   }
 
@@ -476,13 +477,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return Platform.getObject(obj, fieldOffset);
+      return UnsafeSupport.getObject(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      Platform.putObject(obj, fieldOffset, value);
+      UnsafeSupport.putObject(obj, fieldOffset, value);
     }
   }
 

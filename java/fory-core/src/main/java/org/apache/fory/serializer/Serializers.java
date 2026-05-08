@@ -47,9 +47,9 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -117,9 +117,9 @@ public class Serializers {
       // support serialization.
       typeResolver.resetSerializer(type, serializer);
       if (t instanceof java.lang.reflect.InvocationTargetException && t.getCause() != null) {
-        Platform.throwException(t.getCause());
+        UnsafeSupport.throwException(t.getCause());
       }
-      Platform.throwException(t);
+      UnsafeSupport.throwException(t);
     }
     throw new IllegalStateException("unreachable");
   }
@@ -153,7 +153,7 @@ public class Serializers {
       }
       return createSerializer(typeResolver, type, serializerClass);
     } catch (Throwable t) {
-      Platform.throwException(t);
+      UnsafeSupport.throwException(t);
       throw new IllegalStateException("unreachable");
     }
   }
@@ -310,7 +310,7 @@ public class Serializers {
       CTR_MAP.put(serializerClass, Tuple2.of(SIG6, ctr));
       return (Serializer<T>) ctr.invoke();
     } catch (Throwable t) {
-      Platform.throwException(t);
+      UnsafeSupport.throwException(t);
       throw new IllegalStateException("unreachable");
     }
   }

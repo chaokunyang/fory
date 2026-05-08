@@ -25,7 +25,7 @@ import org.apache.fory.format.type.DataTypes;
 import org.apache.fory.format.type.Field;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 
 /**
  * An BinaryMap implementation of Map which is backed by two BinaryArray./ForyStructOutput
@@ -133,7 +133,7 @@ public class BinaryMap implements MapData {
     byte[] target = buffer.array();
     int offset = buffer.arrayOffset();
     int pos = buffer.position();
-    writeToMemory(target, Platform.BYTE_ARRAY_OFFSET + offset + pos);
+    writeToMemory(target, UnsafeSupport.BYTE_ARRAY_OFFSET + offset + pos);
     buffer.position(pos + sizeInBytes);
   }
 

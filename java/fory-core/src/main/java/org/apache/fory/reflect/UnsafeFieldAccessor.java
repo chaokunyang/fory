@@ -20,7 +20,7 @@
 package org.apache.fory.reflect;
 
 import java.lang.reflect.Field;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
@@ -51,74 +51,74 @@ public class UnsafeFieldAccessor {
   }
 
   public boolean getBoolean(Object obj) {
-    return Platform.UNSAFE.getBoolean(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getBoolean(obj, fieldOffset);
   }
 
   public void putBoolean(Object obj, boolean value) {
-    Platform.UNSAFE.putBoolean(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putBoolean(obj, fieldOffset, value);
   }
 
   public byte getByte(Object obj) {
-    return Platform.UNSAFE.getByte(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getByte(obj, fieldOffset);
   }
 
   public void putByte(Object obj, byte value) {
-    Platform.UNSAFE.putByte(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putByte(obj, fieldOffset, value);
   }
 
   public char getChar(Object obj) {
-    return Platform.UNSAFE.getChar(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getChar(obj, fieldOffset);
   }
 
   public void putChar(Object obj, char value) {
-    Platform.UNSAFE.putChar(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putChar(obj, fieldOffset, value);
   }
 
   public short getShort(Object obj) {
-    return Platform.UNSAFE.getShort(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getShort(obj, fieldOffset);
   }
 
   public void putShort(Object obj, short value) {
-    Platform.UNSAFE.putShort(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putShort(obj, fieldOffset, value);
   }
 
   public int getInt(Object obj) {
-    return Platform.UNSAFE.getInt(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getInt(obj, fieldOffset);
   }
 
   public void putInt(Object obj, int value) {
-    Platform.UNSAFE.putInt(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putInt(obj, fieldOffset, value);
   }
 
   public long getLong(Object obj) {
-    return Platform.UNSAFE.getLong(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getLong(obj, fieldOffset);
   }
 
   public void putLong(Object obj, long value) {
-    Platform.UNSAFE.putLong(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putLong(obj, fieldOffset, value);
   }
 
   public float getFloat(Object obj) {
-    return Platform.UNSAFE.getFloat(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getFloat(obj, fieldOffset);
   }
 
   public void putFloat(Object obj, float value) {
-    Platform.UNSAFE.putFloat(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putFloat(obj, fieldOffset, value);
   }
 
   public double getDouble(Object obj) {
-    return Platform.UNSAFE.getDouble(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getDouble(obj, fieldOffset);
   }
 
   public void putDouble(Object obj, double value) {
-    Platform.UNSAFE.putDouble(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putDouble(obj, fieldOffset, value);
   }
 
   public Object getObject(Object obj) {
-    return Platform.UNSAFE.getObject(obj, fieldOffset);
+    return UnsafeSupport.UNSAFE.getObject(obj, fieldOffset);
   }
 
   public void putObject(Object obj, Object value) {
-    Platform.UNSAFE.putObject(obj, fieldOffset, value);
+    UnsafeSupport.UNSAFE.putObject(obj, fieldOffset, value);
   }
 }

@@ -1,5 +1,7 @@
 package org.apache.fory.memory;
 
+import org.apache.fory.platform.UnsafeSupport;
+
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -56,42 +58,42 @@ public class LittleEndian {
   }
 
   public static void putInt32(Object o, long pos, int value) {
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       value = Integer.reverseBytes(value);
     }
-    Platform.putInt(o, pos, value);
+    UnsafeSupport.putInt(o, pos, value);
   }
 
   public static int getInt32(Object o, long pos) {
-    int i = Platform.getInt(o, pos);
-    return Platform.IS_LITTLE_ENDIAN ? i : Integer.reverseBytes(i);
+    int i = UnsafeSupport.getInt(o, pos);
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? i : Integer.reverseBytes(i);
   }
 
   public static long getInt64(Object o, long pos) {
-    long v = Platform.getLong(o, pos);
-    return Platform.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
+    long v = UnsafeSupport.getLong(o, pos);
+    return UnsafeSupport.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
   public static void putInt64(byte[] o, int index, long value) {
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
     }
-    Platform.putLong(o, Platform.BYTE_ARRAY_OFFSET + index, value);
+    UnsafeSupport.putLong(o, UnsafeSupport.BYTE_ARRAY_OFFSET + index, value);
   }
 
   public static void putFloat32(Object o, long pos, float value) {
     int v = Float.floatToRawIntBits(value);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       v = Integer.reverseBytes(v);
     }
-    Platform.putInt(o, pos, v);
+    UnsafeSupport.putInt(o, pos, v);
   }
 
   public static void putFloat64(Object o, long pos, double value) {
     long v = Double.doubleToRawLongBits(value);
-    if (!Platform.IS_LITTLE_ENDIAN) {
+    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
       v = Long.reverseBytes(v);
     }
-    Platform.putLong(o, pos, v);
+    UnsafeSupport.putLong(o, pos, v);
   }
 }

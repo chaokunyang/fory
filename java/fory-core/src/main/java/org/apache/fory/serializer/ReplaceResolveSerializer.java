@@ -34,7 +34,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -137,7 +137,7 @@ public class ReplaceResolveSerializer extends Serializer {
         try {
           return writeReplaceMethod.invoke(o);
         } catch (Exception e) {
-          Platform.throwException(e);
+          UnsafeSupport.throwException(e);
           throw new IllegalStateException(e);
         }
       }
@@ -150,7 +150,7 @@ public class ReplaceResolveSerializer extends Serializer {
         try {
           return readResolveMethod.invoke(o);
         } catch (Exception e) {
-          Platform.throwException(e);
+          UnsafeSupport.throwException(e);
           throw new IllegalStateException(e);
         }
       }

@@ -25,7 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.test.bean.Struct;
 import org.apache.fory.util.ClassLoaderUtils;
@@ -254,9 +254,9 @@ public class JaninoUtilsTest {
     // Compile all sources
     compiler.compile(sourceFinder.resources().toArray(new Resource[0]));
     // See https://github.com/janino-compiler/janino/issues/173
-    Platform.putObject(
+    UnsafeSupport.putObject(
         classLoader, ReflectionUtils.getFieldOffset(classLoader.getClass(), "classLoader"), null);
-    Platform.putObject(
+    UnsafeSupport.putObject(
         classLoader,
         ReflectionUtils.getFieldOffset(classLoader.getClass(), "loadedIClasses"),
         null);

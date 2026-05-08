@@ -21,7 +21,7 @@ package org.apache.fory.benchmark;
 
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
@@ -35,10 +35,10 @@ public class NewJava11StringSuite {
   static byte coder;
 
   static {
-    if (Platform.JAVA_VERSION > 8) {
+    if (UnsafeSupport.JAVA_VERSION > 8) {
       strBytes =
-          (byte[]) Platform.getObject(str, ReflectionUtils.getFieldOffset(String.class, "value"));
-      coder = Platform.getByte(str, ReflectionUtils.getFieldOffset(String.class, "coder"));
+          (byte[]) UnsafeSupport.getObject(str, ReflectionUtils.getFieldOffset(String.class, "value"));
+      coder = UnsafeSupport.getByte(str, ReflectionUtils.getFieldOffset(String.class, "coder"));
     }
   }
 
@@ -65,8 +65,8 @@ public class NewJava11StringSuite {
   // @Benchmark
   public Object createJDK11StringByUnsafe() {
     String str = new String(stubStr);
-    Platform.putObject(str, STRING_VALUE_FIELD_OFFSET, strBytes);
-    Platform.putObject(str, STRING_CODER_FIELD_OFFSET, coder);
+    UnsafeSupport.putObject(str, STRING_VALUE_FIELD_OFFSET, strBytes);
+    UnsafeSupport.putObject(str, STRING_CODER_FIELD_OFFSET, coder);
     return str;
   }
 

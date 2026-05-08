@@ -25,7 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 
 public class StringUtils {
   // A long mask used to clear all-higher bits of char in a super-word way.
@@ -38,7 +38,7 @@ public class StringUtils {
   };
 
   static {
-    if (Platform.IS_LITTLE_ENDIAN) {
+    if (UnsafeSupport.IS_LITTLE_ENDIAN) {
       // latin chars will be 0xXX,0x00;0xXX,0x00 in byte order;
       // Using 0x00,0xff(0xff00) to clear latin bits.
       MULTI_CHARS_NON_LATIN_MASK = 0xff00ff00ff00ff00L;
@@ -289,12 +289,14 @@ public class StringUtils {
     int numChars = chars.length;
     int vectorizedLen = numChars >> 2;
     int vectorizedChars = vectorizedLen << 2;
-    int endOffset = Platform.CHAR_ARRAY_OFFSET + (vectorizedChars << 1);
+    int endOffset = UnsafeSupport.CHAR_ARRAY_OFFSET + (vectorizedChars << 1);
     boolean isLatin = true;
-    for (int offset = Platform.CHAR_ARRAY_OFFSET + byteOffset; offset < endOffset; offset += 8) {
+    for (int offset = UnsafeSupport.CHAR_ARRAY_OFFSET + byteOffset;
+        offset < endOffset;
+        offset += 8) {
       // check 4 chars in a vectorized way, 4 times faster than scalar check loop.
       // See benchmark in CompressStringSuite.latinSuperWordCheck.
-      long multiChars = Platform.getLong(chars, offset);
+      long multiChars = UnsafeSupport.getLong(chars, offset);
       if ((multiChars & MULTI_CHARS_NON_LATIN_MASK) != 0) {
         isLatin = false;
         break;

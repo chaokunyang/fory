@@ -30,8 +30,8 @@ import java.util.*;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.fory.collection.Tuple3;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.Descriptor;
@@ -106,7 +106,7 @@ public class TestUtils {
 
   public static <T> T unsafeCopy(T obj) {
     @SuppressWarnings("unchecked")
-    T newInstance = (T) Platform.newInstance(obj.getClass());
+    T newInstance = (T) UnsafeSupport.newInstance(obj.getClass());
     for (Field field : ReflectionUtils.getFields(obj.getClass(), true)) {
       if (!Modifier.isStatic(field.getModifiers())) {
         // Don't cache accessors by `obj.getClass()` using WeakHashMap, the `field` will reference

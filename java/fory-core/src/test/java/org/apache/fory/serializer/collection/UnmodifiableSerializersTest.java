@@ -45,7 +45,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.CollectionFields;
@@ -88,13 +88,13 @@ public class UnmodifiableSerializersTest extends ForyTestBase {
           Collection.class.isAssignableFrom(value.getClass())
               ? SOURCE_COLLECTION_FIELD_OFFSET
               : SOURCE_MAP_FIELD_OFFSET;
-      Object innerValue = Platform.getObject(value, sourceCollectionFieldOffset);
-      Object newValue = Platform.getObject(newObj, sourceCollectionFieldOffset);
+      Object innerValue = UnsafeSupport.getObject(value, sourceCollectionFieldOffset);
+      Object newValue = UnsafeSupport.getObject(newObj, sourceCollectionFieldOffset);
       assertEquals(innerValue, newValue);
 
       newObj = serDe(fory, value);
-      innerValue = Platform.getObject(value, sourceCollectionFieldOffset);
-      newValue = Platform.getObject(newObj, sourceCollectionFieldOffset);
+      innerValue = UnsafeSupport.getObject(value, sourceCollectionFieldOffset);
+      newValue = UnsafeSupport.getObject(newObj, sourceCollectionFieldOffset);
       assertEquals(innerValue, newValue);
       assertTrue(
           fory.getTypeResolver()

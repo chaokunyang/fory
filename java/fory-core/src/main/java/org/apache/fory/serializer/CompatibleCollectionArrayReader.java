@@ -41,9 +41,9 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeResolver;
@@ -290,14 +290,14 @@ final class CompatibleCollectionArrayReader {
       case Types.BOOL_ARRAY:
         {
           boolean[] values = new boolean[numElements];
-          buffer.readToUnsafe(values, Platform.BOOLEAN_ARRAY_OFFSET, numElements);
+          buffer.readToUnsafe(values, UnsafeSupport.BOOLEAN_ARRAY_OFFSET, numElements);
           return values;
         }
       case Types.INT8_ARRAY:
       case Types.UINT8_ARRAY:
         {
           byte[] values = new byte[numElements];
-          buffer.readToUnsafe(values, Platform.BYTE_ARRAY_OFFSET, numElements);
+          buffer.readToUnsafe(values, UnsafeSupport.BYTE_ARRAY_OFFSET, numElements);
           return values;
         }
       case Types.INT16_ARRAY:
@@ -306,8 +306,8 @@ final class CompatibleCollectionArrayReader {
       case Types.BFLOAT16_ARRAY:
         {
           short[] values = new short[numElements];
-          if (Platform.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, Platform.SHORT_ARRAY_OFFSET, numElements * 2);
+          if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+            buffer.readToUnsafe(values, UnsafeSupport.SHORT_ARRAY_OFFSET, numElements * 2);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt16();
@@ -319,8 +319,8 @@ final class CompatibleCollectionArrayReader {
       case Types.UINT32_ARRAY:
         {
           int[] values = new int[numElements];
-          if (Platform.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, Platform.INT_ARRAY_OFFSET, numElements * 4);
+          if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+            buffer.readToUnsafe(values, UnsafeSupport.INT_ARRAY_OFFSET, numElements * 4);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt32();
@@ -332,8 +332,8 @@ final class CompatibleCollectionArrayReader {
       case Types.UINT64_ARRAY:
         {
           long[] values = new long[numElements];
-          if (Platform.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, Platform.LONG_ARRAY_OFFSET, numElements * 8);
+          if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+            buffer.readToUnsafe(values, UnsafeSupport.LONG_ARRAY_OFFSET, numElements * 8);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt64();
@@ -344,8 +344,8 @@ final class CompatibleCollectionArrayReader {
       case Types.FLOAT32_ARRAY:
         {
           float[] values = new float[numElements];
-          if (Platform.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, Platform.FLOAT_ARRAY_OFFSET, numElements * 4);
+          if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+            buffer.readToUnsafe(values, UnsafeSupport.FLOAT_ARRAY_OFFSET, numElements * 4);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat32();
@@ -356,8 +356,8 @@ final class CompatibleCollectionArrayReader {
       case Types.FLOAT64_ARRAY:
         {
           double[] values = new double[numElements];
-          if (Platform.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, Platform.DOUBLE_ARRAY_OFFSET, numElements * 8);
+          if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+            buffer.readToUnsafe(values, UnsafeSupport.DOUBLE_ARRAY_OFFSET, numElements * 8);
           } else {
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat64();

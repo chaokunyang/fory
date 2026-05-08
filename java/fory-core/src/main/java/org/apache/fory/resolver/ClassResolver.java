@@ -98,13 +98,13 @@ import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
@@ -423,8 +423,8 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void registerDefaultClasses() {
-    registerInternal(Platform.HEAP_BYTE_BUFFER_CLASS);
-    registerInternal(Platform.DIRECT_BYTE_BUFFER_CLASS);
+    registerInternal(UnsafeSupport.HEAP_BYTE_BUFFER_CLASS);
+    registerInternal(UnsafeSupport.DIRECT_BYTE_BUFFER_CLASS);
     registerInternal(Comparator.naturalOrder().getClass());
     registerInternal(Comparator.reverseOrder().getClass());
     registerInternal(ConcurrentHashMap.class);
@@ -1657,7 +1657,7 @@ public class ClassResolver extends TypeResolver {
       // constructor failed later. For example, some final type field doesn't
       // support serialization.
       resetSerializer(cls, serializer);
-      Platform.throwException(t);
+      UnsafeSupport.throwException(t);
       throw new IllegalStateException("unreachable");
     }
   }

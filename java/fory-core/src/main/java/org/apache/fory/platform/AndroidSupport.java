@@ -21,12 +21,12 @@ package org.apache.fory.platform;
 
 import org.apache.fory.annotation.Internal;
 
-/** Runtime feature checks that must be safe to load before Unsafe-backed platform classes. */
+/** Android runtime detection that is safe to load before Unsafe-backed platform classes. */
 @Internal
-public final class RuntimeFeatures {
+public final class AndroidSupport {
   public static final boolean IS_ANDROID = isAndroid();
 
-  private RuntimeFeatures() {}
+  private AndroidSupport() {}
 
   private static boolean isAndroid() {
     return "Dalvik".equals(System.getProperty("java.vm.name", ""))

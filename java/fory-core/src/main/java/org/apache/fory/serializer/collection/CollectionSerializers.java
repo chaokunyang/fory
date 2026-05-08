@@ -57,7 +57,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -133,7 +133,7 @@ public class CollectionSerializers {
     static {
       try {
         Field arrayField = Class.forName("java.util.Arrays$ArrayList").getDeclaredField("a");
-        arrayFieldOffset = Platform.objectFieldOffset(arrayField);
+        arrayFieldOffset = UnsafeSupport.objectFieldOffset(arrayField);
       } catch (final Exception e) {
         throw new RuntimeException(e);
       }
@@ -157,7 +157,7 @@ public class CollectionSerializers {
       if (config.isXlang()) {
         super.write(writeContext, value);
       } else {
-        Object[] array = (Object[]) Platform.getObject(value, arrayFieldOffset);
+        Object[] array = (Object[]) UnsafeSupport.getObject(value, arrayFieldOffset);
         writeContext.writeRef(array);
       }
     }
@@ -552,7 +552,7 @@ public class CollectionSerializers {
       try {
         Class<?> type = Class.forName("java.util.Collections$SetFromMap");
         Field mapField = type.getDeclaredField("m");
-        MAP_FIELD_OFFSET = Platform.objectFieldOffset(mapField);
+        MAP_FIELD_OFFSET = UnsafeSupport.objectFieldOffset(mapField);
         MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
         m = lookup.findSetter(type, "m", Map.class);
         s = lookup.findSetter(type, "s", Set.class);
@@ -580,7 +580,7 @@ public class CollectionSerializers {
       } else {
         Map map = (Map) mapSerializer.read(readContext);
         try {
-          set = Platform.newInstance(type);
+          set = UnsafeSupport.newInstance(type);
           m.invoke(set, map);
           s.invoke(set, map.keySet());
         } catch (Throwable e) {
@@ -596,7 +596,7 @@ public class CollectionSerializers {
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       assert !config.isXlang();
       Map<?, Boolean> map =
-          (Map<?, Boolean>) Platform.getObject(originCollection, MAP_FIELD_OFFSET);
+          (Map<?, Boolean>) UnsafeSupport.getObject(originCollection, MAP_FIELD_OFFSET);
       MapLikeSerializer mapSerializer =
           (MapLikeSerializer) typeResolver.getSerializer(map.getClass());
       Map newMap = mapSerializer.newMap(copyContext, map);
@@ -606,7 +606,8 @@ public class CollectionSerializers {
     @Override
     public Collection onCollectionWrite(WriteContext writeContext, Set<?> value) {
       MemoryBuffer buffer = writeContext.getBuffer();
-      final Map<?, Boolean> map = (Map<?, Boolean>) Platform.getObject(value, MAP_FIELD_OFFSET);
+      final Map<?, Boolean> map =
+          (Map<?, Boolean>) UnsafeSupport.getObject(value, MAP_FIELD_OFFSET);
       final TypeInfo typeInfo = typeResolver.getTypeInfo(map.getClass());
       MapLikeSerializer mapSerializer = (MapLikeSerializer) typeInfo.getSerializer();
       typeResolver.writeTypeInfo(writeContext, typeInfo);
@@ -758,7 +759,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       long[] values = set.toLongArray();
       buffer.writePrimitiveArrayWithSize(
-          values, Platform.LONG_ARRAY_OFFSET, Math.multiplyExact(values.length, 8));
+          values, UnsafeSupport.LONG_ARRAY_OFFSET, Math.multiplyExact(values.length, 8));
     }
 
     @Override
@@ -839,7 +840,7 @@ public class CollectionSerializers {
     static {
       try {
         Field itemsField = ArrayBlockingQueue.class.getDeclaredField("items");
-        ITEMS_OFFSET = Platform.objectFieldOffset(itemsField);
+        ITEMS_OFFSET = UnsafeSupport.objectFieldOffset(itemsField);
       } catch (NoSuchFieldException e) {
         throw new RuntimeException(e);
       }
@@ -850,7 +851,7 @@ public class CollectionSerializers {
     }
 
     private static int getCapacity(ArrayBlockingQueue queue) {
-      Object[] items = (Object[]) Platform.getObject(queue, ITEMS_OFFSET);
+      Object[] items = (Object[]) UnsafeSupport.getObject(queue, ITEMS_OFFSET);
       return items.length;
     }
 
@@ -900,7 +901,7 @@ public class CollectionSerializers {
     static {
       try {
         Field capacityField = LinkedBlockingQueue.class.getDeclaredField("capacity");
-        CAPACITY_OFFSET = Platform.objectFieldOffset(capacityField);
+        CAPACITY_OFFSET = UnsafeSupport.objectFieldOffset(capacityField);
       } catch (NoSuchFieldException e) {
         throw new RuntimeException(e);
       }
@@ -912,7 +913,7 @@ public class CollectionSerializers {
     }
 
     private static int getCapacity(LinkedBlockingQueue queue) {
-      return Platform.getInt(queue, CAPACITY_OFFSET);
+      return UnsafeSupport.getInt(queue, CAPACITY_OFFSET);
     }
 
     @Override

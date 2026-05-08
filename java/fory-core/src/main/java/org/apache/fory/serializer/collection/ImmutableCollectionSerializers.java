@@ -32,7 +32,7 @@ import java.util.Set;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -52,7 +52,7 @@ public class ImmutableCollectionSerializers {
   private static MethodHandle mapNFactory;
 
   static {
-    if (Platform.JAVA_VERSION > 8) {
+    if (UnsafeSupport.JAVA_VERSION > 8) {
       try {
         List12 = Class.forName("java.util.ImmutableCollections$List12");
         ListN = Class.forName("java.util.ImmutableCollections$ListN");
@@ -76,7 +76,7 @@ public class ImmutableCollectionSerializers {
                 .findConstructor(MapN, MethodType.methodType(void.class, Object[].class));
       } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException e) {
         e.printStackTrace();
-        Platform.throwException(e);
+        UnsafeSupport.throwException(e);
       }
     } else {
       // Use stub class as placeholder to ensure jdk8 registered id consistent with JDK9+.
@@ -114,7 +114,7 @@ public class ImmutableCollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      if (Platform.JAVA_VERSION > 8) {
+      if (UnsafeSupport.JAVA_VERSION > 8) {
         return new CollectionContainer<>(numElements);
       } else {
         return new ArrayList(numElements);
@@ -123,7 +123,7 @@ public class ImmutableCollectionSerializers {
 
     @Override
     public Collection copy(CopyContext copyContext, Collection originCollection) {
-      if (Platform.JAVA_VERSION <= 8) {
+      if (UnsafeSupport.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(
                 "Only support jdk9+ java.util.ImmutableCollections deep copy. %s",
@@ -140,7 +140,7 @@ public class ImmutableCollectionSerializers {
 
     @Override
     public Collection onCollectionRead(Collection collection) {
-      if (Platform.JAVA_VERSION > 8) {
+      if (UnsafeSupport.JAVA_VERSION > 8) {
         CollectionContainer container = (CollectionContainer) collection;
         try {
           collection = (List) listFactory.invoke(container.elements);
@@ -164,7 +164,7 @@ public class ImmutableCollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      if (Platform.JAVA_VERSION > 8) {
+      if (UnsafeSupport.JAVA_VERSION > 8) {
         return new CollectionContainer<>(numElements);
       } else {
         return new HashSet(numElements);
@@ -173,7 +173,7 @@ public class ImmutableCollectionSerializers {
 
     @Override
     public Collection copy(CopyContext copyContext, Collection originCollection) {
-      if (Platform.JAVA_VERSION <= 8) {
+      if (UnsafeSupport.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(
                 "Only support jdk9+ java.util.ImmutableCollections deep copy. %s",
@@ -190,7 +190,7 @@ public class ImmutableCollectionSerializers {
 
     @Override
     public Collection onCollectionRead(Collection collection) {
-      if (Platform.JAVA_VERSION > 8) {
+      if (UnsafeSupport.JAVA_VERSION > 8) {
         CollectionContainer container = (CollectionContainer) collection;
         try {
           collection = (Set) setFactory.invoke(container.elements);
@@ -214,7 +214,7 @@ public class ImmutableCollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      if (Platform.JAVA_VERSION > 8) {
+      if (UnsafeSupport.JAVA_VERSION > 8) {
         return new JDKImmutableMapContainer(numElements);
       } else {
         return new HashMap(numElements);
@@ -223,7 +223,7 @@ public class ImmutableCollectionSerializers {
 
     @Override
     public Map copy(CopyContext copyContext, Map originMap) {
-      if (Platform.JAVA_VERSION <= 8) {
+      if (UnsafeSupport.JAVA_VERSION <= 8) {
         throw new UnsupportedOperationException(
             String.format(
                 "Only support jdk9+ java.util.ImmutableCollections deep copy. %s",
@@ -245,7 +245,7 @@ public class ImmutableCollectionSerializers {
 
     @Override
     public Map onMapRead(Map map) {
-      if (Platform.JAVA_VERSION > 8) {
+      if (UnsafeSupport.JAVA_VERSION > 8) {
         JDKImmutableMapContainer container = (JDKImmutableMapContainer) map;
         try {
           if (container.size() == 1) {

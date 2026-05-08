@@ -25,7 +25,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.MemoryBufferObjectInput;
 import org.apache.fory.io.MemoryBufferObjectOutput;
-import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.UnsafeSupport;
 import org.apache.fory.resolver.TypeResolver;
 
 /** Serializer for class implements {@link Externalizable}. */
@@ -49,7 +49,7 @@ public class ExternalizableSerializer<T extends Externalizable>
     try {
       value.writeExternal(objectOutput);
     } catch (IOException e) {
-      Platform.throwException(e);
+      UnsafeSupport.throwException(e);
     } finally {
       objectOutput.clearWriteContext();
     }
@@ -63,7 +63,7 @@ public class ExternalizableSerializer<T extends Externalizable>
     try {
       t.readExternal(objectInput);
     } catch (IOException | ClassNotFoundException e) {
-      Platform.throwException(e);
+      UnsafeSupport.throwException(e);
     } finally {
       objectInput.clearReadContext();
     }

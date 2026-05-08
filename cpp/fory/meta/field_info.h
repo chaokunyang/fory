@@ -366,8 +366,12 @@ constexpr const T &unwrap_tuple(const TupleWrapper<T> &value) {
 // it must be able to be executed in compile-time
 template <typename FieldInfo, size_t... I>
 constexpr bool is_valid_field_info_impl(std::index_sequence<I...>) {
-  constexpr auto ptrs = FieldInfo::ptrs();
-  return IsUnique<std::get<I>(ptrs)...>::value;
+  if constexpr (sizeof...(I) == 0) {
+    return true;
+  } else {
+    constexpr auto ptrs = FieldInfo::ptrs();
+    return IsUnique<std::get<I>(ptrs)...>::value;
+  }
 }
 
 } // namespace details

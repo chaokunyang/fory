@@ -179,7 +179,7 @@ def plot_datatype(ax, data, datatype: str, operation: str):
         x,
         throughput,
         color=[COLORS.get(lib, "#999999") for lib in libs],
-        width=0.6,
+        width=0.4,
     )
 
     ax.set_xticks(x)
@@ -222,7 +222,7 @@ def plot_throughput_grid_subplot(ax, data, datatype: str):
 
     operations = ["serialize", "deserialize"]
     x = np.arange(len(operations))
-    width = 0.8 / len(available_libs)
+    width = 0.18
     for idx, lib in enumerate(available_libs):
         times = [
             data.get(datatype, {}).get(operation, {}).get(lib, 0)
@@ -241,6 +241,7 @@ def plot_throughput_grid_subplot(ax, data, datatype: str):
     ax.set_title(format_datatype_table_label(datatype))
     ax.set_xticks(x)
     ax.set_xticklabels(["Serialize", "Deserialize"])
+    ax.set_xlim(-0.45, 1.45)
     ax.grid(True, axis="y", linestyle="--", alpha=0.45)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
     ax.legend(loc="upper right", fontsize=8, framealpha=0.9)

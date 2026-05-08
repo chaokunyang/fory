@@ -22,6 +22,7 @@
 #include "fory/util/error.h"
 #include "fory/util/logging.h"
 #include "fory/util/macros.h"
+#include <new>
 #include <type_traits>
 #include <utility>
 
@@ -320,21 +321,23 @@ public:
 /// ```
 template <typename E> class Result<void, E> {
 private:
-  // Union-based storage avoids heap allocation
-  union Storage {
-    char dummy_; // Placeholder for success state (1 byte)
-    E error_;
+  using ErrorStorage =
+      typename std::aligned_storage<sizeof(E), alignof(E)>::type;
 
-    Storage() : dummy_(0) {}
-    ~Storage() {}
-  };
-
-  Storage storage_;
+  ErrorStorage error_storage_;
   bool has_value_;
+
+  E *error_ptr() noexcept {
+    return std::launder(reinterpret_cast<E *>(&error_storage_));
+  }
+
+  const E *error_ptr() const noexcept {
+    return std::launder(reinterpret_cast<const E *>(&error_storage_));
+  }
 
   void destroy() {
     if (!has_value_) {
-      storage_.error_.~E();
+      error_ptr()->~E();
     }
   }
 
@@ -343,15 +346,15 @@ public:
   using error_type = E;
 
   // Construct success result
-  Result() : has_value_(true) { storage_.dummy_ = 0; }
+  Result() : has_value_(true) {}
 
   // Construct error result
   Result(const Unexpected<E> &unexpected) : has_value_(false) {
-    new (&storage_.error_) E(unexpected.error());
+    new (&error_storage_) E(unexpected.error());
   }
 
   Result(Unexpected<E> &&unexpected) : has_value_(false) {
-    new (&storage_.error_) E(std::move(unexpected.error()));
+    new (&error_storage_) E(std::move(unexpected.error()));
   }
 
   // Destructor
@@ -360,9 +363,7 @@ public:
   // copy constructor
   Result(const Result &other) : has_value_(other.has_value_) {
     if (!has_value_) {
-      new (&storage_.error_) E(other.storage_.error_);
-    } else {
-      storage_.dummy_ = 0;
+      new (&error_storage_) E(*other.error_ptr());
     }
   }
 
@@ -370,9 +371,7 @@ public:
   Result(Result &&other) noexcept(std::is_nothrow_move_constructible<E>::value)
       : has_value_(other.has_value_) {
     if (!has_value_) {
-      new (&storage_.error_) E(std::move(other.storage_.error_));
-    } else {
-      storage_.dummy_ = 0;
+      new (&error_storage_) E(std::move(*other.error_ptr()));
     }
   }
 
@@ -381,15 +380,13 @@ public:
     if (this != &other) {
       if (has_value_ == other.has_value_) {
         if (!has_value_) {
-          storage_.error_ = other.storage_.error_;
+          *error_ptr() = *other.error_ptr();
         }
       } else {
         destroy();
         has_value_ = other.has_value_;
         if (!has_value_) {
-          new (&storage_.error_) E(other.storage_.error_);
-        } else {
-          storage_.dummy_ = 0;
+          new (&error_storage_) E(*other.error_ptr());
         }
       }
     }
@@ -403,15 +400,13 @@ public:
     if (this != &other) {
       if (has_value_ == other.has_value_) {
         if (!has_value_) {
-          storage_.error_ = std::move(other.storage_.error_);
+          *error_ptr() = std::move(*other.error_ptr());
         }
       } else {
         destroy();
         has_value_ = other.has_value_;
         if (!has_value_) {
-          new (&storage_.error_) E(std::move(other.storage_.error_));
-        } else {
-          storage_.dummy_ = 0;
+          new (&error_storage_) E(std::move(*other.error_ptr()));
         }
       }
     }
@@ -434,22 +429,22 @@ public:
   /// Returns a reference to the contained error
   E &error() & {
     FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
-    return storage_.error_;
+    return *error_ptr();
   }
 
   const E &error() const & {
     FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
-    return storage_.error_;
+    return *error_ptr();
   }
 
   E &&error() && {
     FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
-    return std::move(storage_.error_);
+    return std::move(*error_ptr());
   }
 
   const E &&error() const && {
     FORY_CHECK(!has_value_) << "Cannot access error of successful Result";
-    return std::move(storage_.error_);
+    return std::move(*error_ptr());
   }
 };
 

@@ -57,16 +57,15 @@ Fory create_xlang_fory() {
 // Test basic variant serialization with primitive types
 TEST(VariantSerializerTest, BasicVariant) {
   Fory fory = create_fory();
+  using BasicVariant = std::variant<int, std::string, double>;
 
   // Test with int active
   {
-    std::variant<int, std::string, double> v1 = 42;
+    static const BasicVariant v1(std::in_place_index<0>, 42);
     auto result1 = fory.serialize(v1);
     ASSERT_TRUE(result1.has_value());
 
-    auto read_result1 =
-        fory.deserialize<std::variant<int, std::string, double>>(
-            result1.value());
+    auto read_result1 = fory.deserialize<BasicVariant>(result1.value());
     ASSERT_TRUE(read_result1.has_value()) << read_result1.error().message();
     ASSERT_EQ(read_result1.value().index(), 0);
     ASSERT_EQ(std::get<0>(read_result1.value()), 42);
@@ -74,13 +73,11 @@ TEST(VariantSerializerTest, BasicVariant) {
 
   // Test with string active
   {
-    std::variant<int, std::string, double> v2 = std::string("hello");
+    static const BasicVariant v2(std::in_place_index<1>, "hello");
     auto result2 = fory.serialize(v2);
     ASSERT_TRUE(result2.has_value());
 
-    auto read_result2 =
-        fory.deserialize<std::variant<int, std::string, double>>(
-            result2.value());
+    auto read_result2 = fory.deserialize<BasicVariant>(result2.value());
     ASSERT_TRUE(read_result2.has_value());
     ASSERT_EQ(read_result2.value().index(), 1);
     ASSERT_EQ(std::get<1>(read_result2.value()), "hello");
@@ -88,13 +85,11 @@ TEST(VariantSerializerTest, BasicVariant) {
 
   // Test with double active
   {
-    std::variant<int, std::string, double> v3 = 3.14;
+    static const BasicVariant v3(std::in_place_index<2>, 3.14);
     auto result3 = fory.serialize(v3);
     ASSERT_TRUE(result3.has_value());
 
-    auto read_result3 =
-        fory.deserialize<std::variant<int, std::string, double>>(
-            result3.value());
+    auto read_result3 = fory.deserialize<BasicVariant>(result3.value());
     ASSERT_TRUE(read_result3.has_value());
     ASSERT_EQ(read_result3.value().index(), 2);
     ASSERT_DOUBLE_EQ(std::get<2>(read_result3.value()), 3.14);

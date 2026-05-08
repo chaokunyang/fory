@@ -50,6 +50,7 @@ test --test_output=all
 # Fory C++ validation config. This is opt-in so downstream Bazel users do not
 # inherit Fory's warning-as-error policy when they consume Fory as source.
 test:fory_cpp_werror --per_file_copt=^cpp/fory/.*@-Werror
+test:fory_cpp_werror_msvc --per_file_copt=^cpp/fory/.*@/WX
 
 # Platform-specific C++ options
 build:linux --cxxopt="-std=c++17" --linkopt="-pthread"

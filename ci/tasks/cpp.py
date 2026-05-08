@@ -57,7 +57,10 @@ def run_doc_example_tests():
 
 
 def _cpp_test_configs():
-    configs = ["--config=fory_cpp_werror"]
+    if common.is_windows():
+        configs = ["--config=fory_cpp_werror_msvc"]
+    else:
+        configs = ["--config=fory_cpp_werror"]
     if common.get_os_machine() == "x86_64":
         configs.insert(0, "--config=x86_64")
     return " ".join(configs)

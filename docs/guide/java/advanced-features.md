@@ -93,7 +93,7 @@ public interface MemoryAllocator {
    * The implementation must grow the buffer in-place by modifying
    * the existing buffer instance.
    */
-  MemoryBuffer grow(MemoryBuffer buffer, int newCapacity);
+  void grow(MemoryBuffer buffer, int newCapacity);
 }
 ```
 
@@ -111,9 +111,9 @@ MemoryAllocator customAllocator = new MemoryAllocator() {
   }
 
   @Override
-  public MemoryBuffer grow(MemoryBuffer buffer, int newCapacity) {
+  public void grow(MemoryBuffer buffer, int newCapacity) {
     if (newCapacity <= buffer.size()) {
-      return buffer;
+      return;
     }
 
     // Custom growth strategy - add 100% extra capacity
@@ -121,7 +121,6 @@ MemoryAllocator customAllocator = new MemoryAllocator() {
     byte[] data = new byte[newSize];
     buffer.copyToUnsafe(0, data, Platform.BYTE_ARRAY_OFFSET, buffer.size());
     buffer.initHeapBuffer(data, 0, data.length);
-    return buffer;
   }
 };
 

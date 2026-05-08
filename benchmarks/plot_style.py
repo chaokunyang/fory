@@ -46,10 +46,10 @@ PLOT_RC_PARAMS = {
 GRID_COLOR = "#D9DEE7"
 SPINE_COLOR = "#8A939E"
 BAR_EDGE_COLOR = "white"
-GROUP_X = np.array([0.0, 0.68])
-GROUP_BAR_WIDTH = 0.15
-GROUP_OFFSET_STEP = 0.165
-GROUP_X_LIMITS = (-0.39, 1.07)
+GROUP_X = np.array([0.0, 0.66])
+GROUP_BAR_WIDTH = 0.16
+GROUP_OFFSET_STEP = 0.175
+GROUP_X_LIMITS = (-0.35, 1.01)
 
 
 def apply_benchmark_style(plt) -> None:

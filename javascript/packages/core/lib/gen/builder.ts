@@ -36,6 +36,10 @@ export class BinaryReaderBuilder {
     return `${this.holder}.readSetCursor(${v})`;
   }
 
+  getDataView() {
+    return `${this.holder}.getDataView()`;
+  }
+
   readVarInt32() {
     return `${this.holder}.readVarInt32()`;
   }
@@ -365,6 +369,13 @@ class TypeMetaContextBuilder {
 
   readTypeMeta() {
     return `${this.readHolder}.readTypeMeta()`;
+  }
+
+  readTypeMetaIfSchemaChanged(expectedHash: string, original?: string) {
+    if (original) {
+      return `${this.readHolder}.readTypeMetaIfSchemaChanged(${expectedHash}, ${original})`;
+    }
+    return `${this.readHolder}.readTypeMetaIfSchemaChanged(${expectedHash})`;
   }
 
   genSerializerByTypeMetaRuntime(typeMeta: string, original?: string) {

@@ -233,11 +233,11 @@ export class BinaryReader {
     const len = header >>> 2;
     switch (type) {
       case LATIN1:
-        return this.stringLatin1(len);
+        return len === 0 ? "" : this.stringLatin1(len);
       case UTF8:
-        return this.stringUtf8(len);
+        return len === 0 ? "" : this.stringUtf8(len);
       case UTF16:
-        return this.stringUtf16LE(len);
+        return len === 0 ? "" : this.stringUtf16LE(len);
       default:
         throw new Error(`Unsupported string encoding: ${type}`);
     }
@@ -392,6 +392,13 @@ export class BinaryReader {
 
   readVarUint36Small(): number {
     const readIdx = this.cursor;
+    if (this.byteLength - readIdx > 0) {
+      const value = this.dataView.getUint8(readIdx);
+      if ((value & 0x80) === 0) {
+        this.cursor = readIdx + 1;
+        return value;
+      }
+    }
     if (this.byteLength - readIdx >= 5) {
       const fourByteValue = this.dataView.getUint32(readIdx, true);
       this.cursor = readIdx + 1;
@@ -572,5 +579,9 @@ export class BinaryReader {
 
   readSetCursor(v: number) {
     this.cursor = v;
+  }
+
+  getDataView() {
+    return this.dataView;
   }
 }

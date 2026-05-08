@@ -444,6 +444,9 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
     const elemSerializer = this.scope.uniqueName("elemSerializer");
     const anyHelper = this.builder.getExternal(AnyHelper.name);
     const readContextName = this.builder.getReadContextName();
+    const useDeclaredStructElementReader = TypeId.structType(
+      this.innerGenerator.getTypeId()!,
+    );
     const compatibleReadAction = getCompatibleCollectionArrayReadAction(this.typeInfo);
     const compatibleListToArray = compatibleReadAction?.target === "array";
     const newCollection = compatibleListToArray
@@ -464,14 +467,22 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
       : "";
     // Skip depth tracking for leaf element types (primitives, string, enum, time, typed arrays).
     const innerIsLeaf = TypeId.isLeafTypeId(this.innerGenerator.getTypeId()!);
+    const innerReader = useDeclaredStructElementReader
+      ? this.innerGenerator.readEmbed()
+      : this.innerGenerator;
     const readInnerElement = (
       assignStmt: (x: any) => string,
       refState: string,
     ) => {
       return innerIsLeaf
         ? this.innerGenerator.read(assignStmt, refState)
-        : this.innerGenerator.readWithDepth(assignStmt, refState);
+        : innerReader.readWithDepth(assignStmt, refState);
     };
+    const readElementTypeInfo = useDeclaredStructElementReader
+      ? this.innerGenerator.readEmbed().readTypeInfo(
+        (expr: string) => `${elemSerializer} = ${expr};`,
+      )
+      : `${elemSerializer} = ${anyHelper}.detectSerializer(${readContextName});`;
     return `
             const ${len} = ${this.builder.reader.readVarUint32Small7()};
             ${this.builder.getReadContextName()}.checkCollectionSize(${len});
@@ -482,7 +493,7 @@ export abstract class CollectionSerializerGenerator extends BaseSerializerGenera
                 ${rejectCompatiblePayload}
                 let ${elemSerializer} = null;
                 if (!(${flags} & ${CollectionFlags.DECL_ELEMENT_TYPE})) {
-                    ${elemSerializer} = ${anyHelper}.detectSerializer(${readContextName});
+                    ${readElementTypeInfo}
                 }
                 if (${flags} & ${CollectionFlags.TRACKING_REF}) {
                     for (let ${idx} = 0; ${idx} < ${len}; ${idx}++) {

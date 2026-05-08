@@ -426,6 +426,10 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     accessor: (expr: string) => string,
     refState: string,
   ): string | null {
+    const varInt32ObjectRead = this.readDirectVarInt32Object(accessor, refState);
+    if (varInt32ObjectRead !== null) {
+      return varInt32ObjectRead;
+    }
     if (this.typeInfo.options!.withConstructor || this.sortedProps.length === 0) {
       return null;
     }
@@ -441,6 +445,89 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     return `
       const ${result} = {
         ${fields.map(({ key, expr }) => `${CodecBuilder.safePropName(key)}: ${expr}`).join(",\n")}
+      };
+      ${this.maybeReference(result, refState)}
+      ${accessor(result)}
+    `;
+  }
+
+  private readDirectVarInt32Object(
+    accessor: (expr: string) => string,
+    refState: string,
+  ): string | null {
+    if (
+      this.typeInfo.options!.withConstructor
+      || this.sortedProps.length === 0
+      || !this.sortedProps.every(({ typeInfo }) =>
+        isDirectVarInt32Field(typeInfo, this.builder.resolver)
+      )
+    ) {
+      return null;
+    }
+    const cursor = this.scope.uniqueName("cursor");
+    const dataView = this.scope.uniqueName("dataView");
+    const byteLength = this.scope.uniqueName("byteLength");
+    const fourByteValue = this.scope.uniqueName("fourByteValue");
+    const byte = this.scope.uniqueName("byte");
+    const value = this.scope.uniqueName("value");
+    const result = this.scope.uniqueName("result");
+    const fields = this.sortedProps.map(({ key }) => ({
+      key,
+      local: this.scope.uniqueName(key),
+    }));
+    const reads = fields.map(({ local }) => `
+      if (${byteLength} - ${cursor} >= 5) {
+        ${fourByteValue} = ${dataView}.getUint32(${cursor}, true);
+        ${cursor}++;
+        ${value} = ${fourByteValue} & 0x7f;
+        if ((${fourByteValue} & 0x80) !== 0) {
+          ${cursor}++;
+          ${value} |= (${fourByteValue} >>> 1) & 0x3f80;
+          if ((${fourByteValue} & 0x8000) !== 0) {
+            ${cursor}++;
+            ${value} |= (${fourByteValue} >>> 2) & 0x1fc000;
+            if ((${fourByteValue} & 0x800000) !== 0) {
+              ${cursor}++;
+              ${value} |= (${fourByteValue} >>> 3) & 0xfe00000;
+              if ((${fourByteValue} & 0x80000000) !== 0) {
+                ${value} |= ${dataView}.getUint8(${cursor}++) << 28;
+              }
+            }
+          }
+        }
+      } else {
+        ${byte} = ${dataView}.getUint8(${cursor}++);
+        ${value} = ${byte} & 0x7f;
+        if ((${byte} & 0x80) !== 0) {
+          ${byte} = ${dataView}.getUint8(${cursor}++);
+          ${value} |= (${byte} & 0x7f) << 7;
+          if ((${byte} & 0x80) !== 0) {
+            ${byte} = ${dataView}.getUint8(${cursor}++);
+            ${value} |= (${byte} & 0x7f) << 14;
+            if ((${byte} & 0x80) !== 0) {
+              ${byte} = ${dataView}.getUint8(${cursor}++);
+              ${value} |= (${byte} & 0x7f) << 21;
+              if ((${byte} & 0x80) !== 0) {
+                ${byte} = ${dataView}.getUint8(${cursor}++);
+                ${value} |= ${byte} << 28;
+              }
+            }
+          }
+        }
+      }
+      const ${local} = (${value} >>> 1) ^ -(${value} & 1);
+    `).join("\n");
+    return `
+      let ${cursor} = ${this.builder.reader.readGetCursor()};
+      const ${dataView} = ${this.builder.reader.getDataView()};
+      const ${byteLength} = ${dataView}.byteLength;
+      let ${fourByteValue};
+      let ${byte};
+      let ${value};
+      ${reads}
+      ${this.builder.reader.readSetCursor(cursor)}
+      const ${result} = {
+        ${fields.map(({ key, local }) => `${CodecBuilder.safePropName(key)}: ${local}`).join(",\n")}
       };
       ${this.maybeReference(result, refState)}
       ${accessor(result)}
@@ -513,7 +600,6 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     onMetaUnchanged?: () => string,
     metaChangedExits = false,
   ): string {
-    const typeMeta = this.scope.uniqueName("typeMeta");
     const internalTypeId = this.getInternalTypeId();
     const localHash = this.getHash();
     let namesStmt = "";
@@ -521,7 +607,7 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     let readUserTypeIdStmt = "";
     const unchangedStmt = onMetaUnchanged?.() ?? "";
     const readCompatibleTypeMeta = () => {
-      const changedSerializer = this.builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta);
+      const changedSerializer = this.scope.uniqueName("changedSerializer");
       let unchangedBranch = "";
       if (unchangedStmt && !metaChangedExits) {
         unchangedBranch = ` else {
@@ -529,8 +615,8 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           }`;
       }
       return `
-          const ${typeMeta} = ${this.builder.typeMetaResolver.readTypeMeta()};
-          if (${localHash} !== ${typeMeta}.getHash()) {
+          const ${changedSerializer} = ${this.builder.typeMetaResolver.readTypeMetaIfSchemaChanged(localHash)};
+          if (${changedSerializer} !== undefined) {
             ${onMetaChanged?.(changedSerializer) ?? `return ${changedSerializer};`}
           }${unchangedBranch}
           `;
@@ -604,14 +690,12 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
               }
             `;
       }
-      const typeMeta = scope.uniqueName("typeMeta");
       const changedSerializer = scope.uniqueName("changedSerializer");
       const hoistedHash = scope.declare("serHash", `${hoisted}.getHash()`);
       return `
               ${builder.reader.readUint8()};
-              const ${typeMeta} = ${builder.typeMetaResolver.readTypeMeta()};
-              if (${hoistedHash} !== ${typeMeta}.getHash()) {
-                const ${changedSerializer} = ${builder.typeMetaResolver.genSerializerByTypeMetaRuntime(typeMeta, hoisted)};
+              const ${changedSerializer} = ${builder.typeMetaResolver.readTypeMetaIfSchemaChanged(hoistedHash, hoisted)};
+              if (${changedSerializer} !== undefined) {
                 ${onMetaChanged(changedSerializer)}
               } else {
                 ${onMetaUnchanged()}

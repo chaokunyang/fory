@@ -137,7 +137,9 @@ describe("typemeta", () => {
       } as any,
       config,
     );
-    (context as any).typeMetaCache.set(header, typeMeta);
+    (context as any).typeMetaCache.set(Number(header >> 32n), new Map([
+      [Number(header & 0xffffffffn), typeMeta],
+    ]));
     context.reset(writer.dump());
 
     expect(context.readTypeMeta()).toBe(typeMeta);

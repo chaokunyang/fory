@@ -432,6 +432,15 @@ export class TypeMeta {
     reader.readSkip(metaSize);
   }
 
+  /**
+   * Skip the type meta body when the caller already read the little-endian
+   * low 32 bits of a validated header-cache key.
+   */
+  static skipBodyByHeaderLow(reader: BinaryReader, headerLow: number) {
+    const metaSize = TypeMeta.readMetaSizeFromLow(reader, headerLow);
+    reader.readSkip(metaSize);
+  }
+
   static fromBytes(reader: BinaryReader): TypeMeta {
     return TypeMeta.fromBytesAfterHeader(reader, TypeMeta.readHeader(reader));
   }
@@ -528,7 +537,14 @@ export class TypeMeta {
   }
 
   private static readMetaSize(reader: BinaryReader, header: bigint): number {
-    let metaSize = Number(header & BigInt(META_SIZE_MASKS));
+    return TypeMeta.readMetaSizeFromLow(
+      reader,
+      Number(header & BigInt(META_SIZE_MASKS)),
+    );
+  }
+
+  private static readMetaSizeFromLow(reader: BinaryReader, headerLow: number): number {
+    let metaSize = headerLow & META_SIZE_MASKS;
     if (metaSize === META_SIZE_MASKS) {
       metaSize += reader.readVarUInt32();
     }

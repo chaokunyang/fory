@@ -167,10 +167,7 @@ public sealed class WriteContext
 
     internal void Reset()
     {
-        if (TrackRef)
-        {
-            RefWriter.Reset();
-        }
+        RefWriter.Reset();
 
         _firstInlineTypeMetaKey = 0;
         _secondInlineTypeMetaKey = 0;

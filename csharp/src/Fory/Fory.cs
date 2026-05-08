@@ -147,10 +147,7 @@ public sealed class Fory
         _writeContext.ResetFor(writer);
         RefMode refMode = Config.TrackRef ? RefMode.Tracking : RefMode.NullOnly;
         serializer.Write(_writeContext, value, refMode, true, false);
-        if (Config.TrackRef)
-        {
-            _writeContext.RefWriter.Reset();
-        }
+        _writeContext.RefWriter.Reset();
 
         return writer.ToArray();
     }

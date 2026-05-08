@@ -46,6 +46,11 @@ public sealed class RefWriter
 
     public void Reset()
     {
+        if (_nextRefId == 0)
+        {
+            return;
+        }
+
         _refs.Clear();
         _nextRefId = 0;
     }

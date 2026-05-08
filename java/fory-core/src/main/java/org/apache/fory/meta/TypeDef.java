@@ -38,7 +38,7 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
@@ -82,8 +82,8 @@ public class TypeDef implements Serializable {
   // even field offset or fields order change between jvm process.
   public static final Comparator<Field> FIELD_COMPARATOR =
       (f1, f2) -> {
-        long offset1 = UnsafeSupport.objectFieldOffset(f1);
-        long offset2 = UnsafeSupport.objectFieldOffset(f2);
+        long offset1 = UnsafeOps.objectFieldOffset(f1);
+        long offset2 = UnsafeOps.objectFieldOffset(f2);
         long diff = offset1 - offset2;
         if (diff != 0) {
           return (int) diff;

@@ -27,15 +27,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 public class JpmsOptionalClassLoadingTest {
   @Test
   public void testBuildWithoutJavaSqlModule() throws Exception {
-    if (UnsafeSupport.JAVA_VERSION < 9) {
-      throw new SkipException("Skip on jdk" + UnsafeSupport.JAVA_VERSION);
+    if (UnsafeOps.JAVA_VERSION < 9) {
+      throw new SkipException("Skip on jdk" + UnsafeOps.JAVA_VERSION);
     }
     String javaBin =
         System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";

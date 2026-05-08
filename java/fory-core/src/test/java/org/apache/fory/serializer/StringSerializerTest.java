@@ -35,7 +35,7 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.MathUtils;
 import org.apache.fory.util.StringUtils;
@@ -52,7 +52,7 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void testJavaStringZeroCopy() {
-    if (UnsafeSupport.JAVA_VERSION >= 17) {
+    if (UnsafeOps.JAVA_VERSION >= 17) {
       throw new SkipException("Skip on jdk17+");
     }
     // Ensure JavaStringZeroCopy work for CI and most development environments.
@@ -136,10 +136,9 @@ public class StringSerializerTest extends ForyTestBase {
 
   static void writeJDK8String(MemoryBuffer buffer, String value) {
     final char[] chars =
-        (char[])
-            UnsafeSupport.getObject(value, ReflectionUtils.getFieldOffset(String.class, "value"));
+        (char[]) UnsafeOps.getObject(value, ReflectionUtils.getFieldOffset(String.class, "value"));
     int numBytes = MathUtils.doubleExact(value.length());
-    buffer.writePrimitiveArrayWithSize(chars, UnsafeSupport.CHAR_ARRAY_OFFSET, numBytes);
+    buffer.writePrimitiveArrayWithSize(chars, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
   }
 
   @Test
@@ -327,7 +326,7 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void testCompressJava8String() {
-    if (UnsafeSupport.JAVA_VERSION != 8) {
+    if (UnsafeOps.JAVA_VERSION != 8) {
       throw new SkipException("Java 8 only");
     }
     Fory fory = Fory.builder().withStringCompressed(true).requireClassRegistration(false).build();
@@ -728,7 +727,7 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void disabled_testReadBytesUTF8ForXlang_DirectRawBytes() {
-    if (UnsafeSupport.JAVA_VERSION <= 8) {
+    if (UnsafeOps.JAVA_VERSION <= 8) {
       // readBytesUTF8ForXlang will be invoked only in java9+
       return;
     }

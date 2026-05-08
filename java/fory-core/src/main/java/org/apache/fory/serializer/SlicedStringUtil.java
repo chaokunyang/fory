@@ -21,7 +21,7 @@ package org.apache.fory.serializer;
 
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.MathUtils;
 import org.apache.fory.util.StringEncodingUtils;
 import org.apache.fory.util.StringUtils;
@@ -71,20 +71,20 @@ final class SlicedStringUtil {
       int arrIndex = targetIndex;
       arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
       writerIndex += arrIndex - targetIndex + numBytes;
-      if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+      if (UnsafeOps.IS_LITTLE_ENDIAN) {
         // FIXME JDK11 utf16 string uses little-endian order.
-        UnsafeSupport.UNSAFE.copyMemory(
+        UnsafeOps.UNSAFE.copyMemory(
             chars,
-            UnsafeSupport.CHAR_ARRAY_OFFSET + ((long) offset << 1),
+            UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1),
             targetArray,
-            UnsafeSupport.BYTE_ARRAY_OFFSET + arrIndex,
+            UnsafeOps.BYTE_ARRAY_OFFSET + arrIndex,
             numBytes);
       } else {
         writeCharsUTF16BEToHeap(chars, offset, arrIndex, numBytes, targetArray);
       }
     } else {
       writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+      if (UnsafeOps.IS_LITTLE_ENDIAN) {
         writerIndex =
             offHeapWriteCharsUTF16WithOffset(
                 serializer, buffer, chars, offset, writerIndex, numBytes);
@@ -166,10 +166,10 @@ final class SlicedStringUtil {
     int end = offset + count;
     int vectorizedChars = count & ~3;
     int vectorEnd = offset + vectorizedChars;
-    long byteOffset = UnsafeSupport.CHAR_ARRAY_OFFSET + ((long) offset << 1);
-    long endOffset = UnsafeSupport.CHAR_ARRAY_OFFSET + ((long) vectorEnd << 1);
+    long byteOffset = UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1);
+    long endOffset = UnsafeOps.CHAR_ARRAY_OFFSET + ((long) vectorEnd << 1);
     for (long off = byteOffset; off < endOffset; off += 8) {
-      long multiChars = UnsafeSupport.getLong(chars, off);
+      long multiChars = UnsafeOps.getLong(chars, off);
       if ((multiChars & StringUtils.MULTI_CHARS_NON_LATIN_MASK) != 0) {
         return false;
       }
@@ -186,13 +186,13 @@ final class SlicedStringUtil {
     int sampleNum = Math.min(64, count);
     int vectorizedLen = sampleNum >> 2;
     int vectorizedChars = vectorizedLen << 2;
-    long byteOffset = UnsafeSupport.CHAR_ARRAY_OFFSET + ((long) offset << 1);
+    long byteOffset = UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1);
     long endOffset = byteOffset + ((long) vectorizedChars << 1);
     int asciiCount = 0;
     int latin1Count = 0;
     int charOffset = offset;
     for (long off = byteOffset; off < endOffset; off += 8, charOffset += 4) {
-      long multiChars = UnsafeSupport.getLong(chars, off);
+      long multiChars = UnsafeOps.getLong(chars, off);
       if ((multiChars & StringUtils.MULTI_CHARS_NON_ASCII_MASK) == 0) {
         latin1Count += 4;
         asciiCount += 4;
@@ -263,11 +263,11 @@ final class SlicedStringUtil {
       int writerIndex,
       int numBytes) {
     byte[] tmpArray = serializer.getByteArray(numBytes);
-    UnsafeSupport.UNSAFE.copyMemory(
+    UnsafeOps.UNSAFE.copyMemory(
         chars,
-        UnsafeSupport.CHAR_ARRAY_OFFSET + ((long) offset << 1),
+        UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1),
         tmpArray,
-        UnsafeSupport.BYTE_ARRAY_OFFSET,
+        UnsafeOps.BYTE_ARRAY_OFFSET,
         numBytes);
     buffer.put(writerIndex, tmpArray, 0, numBytes);
     writerIndex += numBytes;

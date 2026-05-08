@@ -39,7 +39,7 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -336,8 +336,7 @@ public class MapSerializers {
 
     static {
       try {
-        keyTypeFieldOffset =
-            UnsafeSupport.objectFieldOffset(EnumMap.class.getDeclaredField("keyType"));
+        keyTypeFieldOffset = UnsafeOps.objectFieldOffset(EnumMap.class.getDeclaredField("keyType"));
       } catch (final Exception e) {
         throw new RuntimeException(e);
       }
@@ -353,7 +352,7 @@ public class MapSerializers {
     public Map onMapWrite(WriteContext writeContext, EnumMap value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
-      Class keyType = (Class) UnsafeSupport.getObject(value, keyTypeFieldOffset);
+      Class keyType = (Class) UnsafeOps.getObject(value, keyTypeFieldOffset);
       ((ClassResolver) typeResolver).writeClassAndUpdateCache(writeContext, keyType);
       return value;
     }

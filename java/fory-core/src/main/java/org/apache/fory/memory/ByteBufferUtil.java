@@ -22,7 +22,7 @@ package org.apache.fory.memory;
 import java.lang.reflect.Field;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.Preconditions;
 
 public class ByteBufferUtil {
@@ -32,10 +32,10 @@ public class ByteBufferUtil {
   static {
     try {
       Field addressField = Buffer.class.getDeclaredField("address");
-      BUFFER_ADDRESS_FIELD_OFFSET = UnsafeSupport.objectFieldOffset(addressField);
+      BUFFER_ADDRESS_FIELD_OFFSET = UnsafeOps.objectFieldOffset(addressField);
       Preconditions.checkArgument(BUFFER_ADDRESS_FIELD_OFFSET != 0);
       Field capacityField = Buffer.class.getDeclaredField("capacity");
-      BUFFER_CAPACITY_FIELD_OFFSET = UnsafeSupport.objectFieldOffset(capacityField);
+      BUFFER_CAPACITY_FIELD_OFFSET = UnsafeOps.objectFieldOffset(capacityField);
       Preconditions.checkArgument(BUFFER_CAPACITY_FIELD_OFFSET != 0);
     } catch (NoSuchFieldException e) {
       throw new IllegalStateException(e);
@@ -47,7 +47,7 @@ public class ByteBufferUtil {
     Preconditions.checkArgument(buffer.isDirect(), "Can't get address of a non-direct ByteBuffer.");
     long offHeapAddress;
     try {
-      offHeapAddress = UnsafeSupport.getLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET);
+      offHeapAddress = UnsafeOps.getLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET);
     } catch (Throwable t) {
       throw new Error("Could not access direct byte buffer address field.", t);
     }
@@ -61,8 +61,8 @@ public class ByteBufferUtil {
     try {
       // ByteBuffer.allocateDirect(0) is about 30x slower than `localBuffer.duplicate()`.
       ByteBuffer buffer = localBuffer.duplicate();
-      UnsafeSupport.putLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET, address);
-      UnsafeSupport.putInt(buffer, BUFFER_CAPACITY_FIELD_OFFSET, size);
+      UnsafeOps.putLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET, address);
+      UnsafeOps.putInt(buffer, BUFFER_CAPACITY_FIELD_OFFSET, size);
       buffer.clear();
       return buffer;
     } catch (Throwable t) {
@@ -75,8 +75,8 @@ public class ByteBufferUtil {
       ByteBuffer buffer, long address, int size) {
     Preconditions.checkArgument(
         buffer.isDirect(), "Can't wrap native memory into a non-direct ByteBuffer.");
-    UnsafeSupport.putLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET, address);
-    UnsafeSupport.putInt(buffer, BUFFER_CAPACITY_FIELD_OFFSET, size);
+    UnsafeOps.putLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET, address);
+    UnsafeOps.putInt(buffer, BUFFER_CAPACITY_FIELD_OFFSET, size);
     buffer.clear();
   }
 
@@ -86,8 +86,8 @@ public class ByteBufferUtil {
 
   /** Wrap a buffer [address, address + size) into provided <code>buffer</code>. */
   public static void wrapDirectBuffer(ByteBuffer buffer, long address, int size) {
-    UnsafeSupport.putLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET, address);
-    UnsafeSupport.putInt(buffer, BUFFER_CAPACITY_FIELD_OFFSET, size);
+    UnsafeOps.putLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET, address);
+    UnsafeOps.putInt(buffer, BUFFER_CAPACITY_FIELD_OFFSET, size);
     buffer.clear();
   }
 

@@ -22,7 +22,7 @@ package org.apache.fory.memory;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.Preconditions;
 
 /** Memory utils for fory. */
@@ -78,15 +78,15 @@ public class MemoryUtils {
     static {
       try {
         BAS_BUF_BUF =
-            UnsafeSupport.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("buf"));
+            UnsafeOps.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("buf"));
         BAS_BUF_COUNT =
-            UnsafeSupport.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("count"));
+            UnsafeOps.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("count"));
         BIS_BUF_BUF =
-            UnsafeSupport.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("buf"));
+            UnsafeOps.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("buf"));
         BIS_BUF_POS =
-            UnsafeSupport.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("pos"));
+            UnsafeOps.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("pos"));
         BIS_BUF_COUNT =
-            UnsafeSupport.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("count"));
+            UnsafeOps.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("count"));
       } catch (NoSuchFieldException e) {
         throw new RuntimeException(e);
       }
@@ -99,8 +99,8 @@ public class MemoryUtils {
    */
   public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
     Preconditions.checkNotNull(stream);
-    byte[] buf = (byte[]) UnsafeSupport.getObject(stream, Offset.BAS_BUF_BUF);
-    int count = UnsafeSupport.getInt(stream, Offset.BAS_BUF_COUNT);
+    byte[] buf = (byte[]) UnsafeOps.getObject(stream, Offset.BAS_BUF_BUF);
+    int count = UnsafeOps.getInt(stream, Offset.BAS_BUF_COUNT);
     buffer.pointTo(buf, 0, buf.length);
     buffer.writerIndex(count);
   }
@@ -113,8 +113,8 @@ public class MemoryUtils {
     Preconditions.checkNotNull(stream);
     byte[] bytes = buffer.getHeapMemory();
     Preconditions.checkNotNull(bytes);
-    UnsafeSupport.putObject(stream, Offset.BAS_BUF_BUF, bytes);
-    UnsafeSupport.putInt(stream, Offset.BAS_BUF_COUNT, buffer.writerIndex());
+    UnsafeOps.putObject(stream, Offset.BAS_BUF_BUF, bytes);
+    UnsafeOps.putInt(stream, Offset.BAS_BUF_COUNT, buffer.writerIndex());
   }
 
   /**
@@ -123,9 +123,9 @@ public class MemoryUtils {
    */
   public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
     Preconditions.checkNotNull(stream);
-    byte[] buf = (byte[]) UnsafeSupport.getObject(stream, Offset.BIS_BUF_BUF);
-    int count = UnsafeSupport.getInt(stream, Offset.BIS_BUF_COUNT);
-    int pos = UnsafeSupport.getInt(stream, Offset.BIS_BUF_POS);
+    byte[] buf = (byte[]) UnsafeOps.getObject(stream, Offset.BIS_BUF_BUF);
+    int count = UnsafeOps.getInt(stream, Offset.BIS_BUF_COUNT);
+    int pos = UnsafeOps.getInt(stream, Offset.BIS_BUF_POS);
     buffer.pointTo(buf, 0, count);
     buffer.readerIndex(pos);
   }

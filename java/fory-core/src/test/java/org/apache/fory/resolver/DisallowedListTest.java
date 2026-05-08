@@ -24,7 +24,7 @@ import java.util.Set;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.exception.InsecureException;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -93,7 +93,7 @@ public class DisallowedListTest extends ForyTestBase {
     for (Fory fory : allFory) {
       Assert.assertThrows(
           InsecureException.class,
-          () -> fory.serialize(UnsafeSupport.newInstance(UnicastRemoteObject.class)));
+          () -> fory.serialize(UnsafeOps.newInstance(UnicastRemoteObject.class)));
       serDe(fory, new String[] {"a", "b"});
     }
   }

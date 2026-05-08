@@ -33,7 +33,7 @@ import org.apache.fory.format.type.DataTypes;
 import org.apache.fory.format.type.Field;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 
 /**
  * Writer for binary array. See {@link BinaryArray}
@@ -200,37 +200,33 @@ public class BinaryArrayWriter extends BinaryWriter {
   }
 
   public void fromPrimitiveArray(byte[] arr) {
-    fromPrimitiveArray(
-        arr, UnsafeSupport.BYTE_ARRAY_OFFSET, arr.length, PRIMITIVE_BYTE_ARRAY_FIELD);
+    fromPrimitiveArray(arr, UnsafeOps.BYTE_ARRAY_OFFSET, arr.length, PRIMITIVE_BYTE_ARRAY_FIELD);
   }
 
   public void fromPrimitiveArray(boolean[] arr) {
     fromPrimitiveArray(
-        arr, UnsafeSupport.BOOLEAN_ARRAY_OFFSET, arr.length, PRIMITIVE_BOOLEAN_ARRAY_FIELD);
+        arr, UnsafeOps.BOOLEAN_ARRAY_OFFSET, arr.length, PRIMITIVE_BOOLEAN_ARRAY_FIELD);
   }
 
   public void fromPrimitiveArray(short[] arr) {
-    fromPrimitiveArray(
-        arr, UnsafeSupport.SHORT_ARRAY_OFFSET, arr.length, PRIMITIVE_SHORT_ARRAY_FIELD);
+    fromPrimitiveArray(arr, UnsafeOps.SHORT_ARRAY_OFFSET, arr.length, PRIMITIVE_SHORT_ARRAY_FIELD);
   }
 
   public void fromPrimitiveArray(int[] arr) {
-    fromPrimitiveArray(arr, UnsafeSupport.INT_ARRAY_OFFSET, arr.length, PRIMITIVE_INT_ARRAY_FIELD);
+    fromPrimitiveArray(arr, UnsafeOps.INT_ARRAY_OFFSET, arr.length, PRIMITIVE_INT_ARRAY_FIELD);
   }
 
   public void fromPrimitiveArray(long[] arr) {
-    fromPrimitiveArray(
-        arr, UnsafeSupport.LONG_ARRAY_OFFSET, arr.length, PRIMITIVE_LONG_ARRAY_FIELD);
+    fromPrimitiveArray(arr, UnsafeOps.LONG_ARRAY_OFFSET, arr.length, PRIMITIVE_LONG_ARRAY_FIELD);
   }
 
   public void fromPrimitiveArray(float[] arr) {
-    fromPrimitiveArray(
-        arr, UnsafeSupport.FLOAT_ARRAY_OFFSET, arr.length, PRIMITIVE_FLOAT_ARRAY_FIELD);
+    fromPrimitiveArray(arr, UnsafeOps.FLOAT_ARRAY_OFFSET, arr.length, PRIMITIVE_FLOAT_ARRAY_FIELD);
   }
 
   public void fromPrimitiveArray(double[] arr) {
     fromPrimitiveArray(
-        arr, UnsafeSupport.DOUBLE_ARRAY_OFFSET, arr.length, PRIMITIVE_DOUBLE_ARRAY_FIELD);
+        arr, UnsafeOps.DOUBLE_ARRAY_OFFSET, arr.length, PRIMITIVE_DOUBLE_ARRAY_FIELD);
   }
 
   public BinaryArray toArray() {

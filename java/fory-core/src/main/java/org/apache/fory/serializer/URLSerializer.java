@@ -23,7 +23,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
 
 /** Serializer for {@link URL}. */
@@ -42,7 +42,7 @@ public final class URLSerializer extends AbstractObjectSerializer<URL> {
     try {
       return new URL(readContext.readString());
     } catch (MalformedURLException e) {
-      UnsafeSupport.throwException(e);
+      UnsafeOps.throwException(e);
       throw new IllegalStateException("unreachable");
     }
   }

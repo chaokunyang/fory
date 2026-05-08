@@ -66,7 +66,7 @@ import org.apache.fory.exception.InsecureException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
@@ -297,14 +297,14 @@ public class ForyTest extends ForyTestBase {
     long ptr = 0;
     try {
       int size = 1024;
-      ptr = UnsafeSupport.allocateMemory(size);
+      ptr = UnsafeOps.allocateMemory(size);
       MemoryBuffer buffer = fory.serialize(new A(), ptr, size);
       assertNull(buffer.getHeapMemory());
 
       Object obj = fory.deserialize(ptr, size);
       assertEquals(new A(), obj);
     } finally {
-      UnsafeSupport.freeMemory(ptr);
+      UnsafeOps.freeMemory(ptr);
     }
   }
 

@@ -39,7 +39,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.CollectionFields;
@@ -81,12 +81,12 @@ public class SynchronizedSerializersTest extends ForyTestBase {
           Collection.class.isAssignableFrom(value.getClass())
               ? SOURCE_COLLECTION_FIELD_OFFSET
               : SOURCE_MAP_FIELD_OFFSET;
-      Object innerValue = UnsafeSupport.getObject(value, sourceCollectionFieldOffset);
-      Object newValue = UnsafeSupport.getObject(newObj, sourceCollectionFieldOffset);
+      Object innerValue = UnsafeOps.getObject(value, sourceCollectionFieldOffset);
+      Object newValue = UnsafeOps.getObject(newObj, sourceCollectionFieldOffset);
       assertEquals(innerValue, newValue);
       newObj = serDe(fory, value);
-      innerValue = UnsafeSupport.getObject(value, sourceCollectionFieldOffset);
-      newValue = UnsafeSupport.getObject(newObj, sourceCollectionFieldOffset);
+      innerValue = UnsafeOps.getObject(value, sourceCollectionFieldOffset);
+      newValue = UnsafeOps.getObject(newObj, sourceCollectionFieldOffset);
       assertEquals(innerValue, newValue);
       assertTrue(
           fory.getTypeResolver()

@@ -32,7 +32,7 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefMode;
@@ -245,7 +245,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     if (!hasDefaultValues) {
       return newBean();
     }
-    T obj = GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? newBean() : UnsafeSupport.newInstance(type);
+    T obj = GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? newBean() : UnsafeOps.newInstance(type);
     // Set default values for missing fields in Scala case classes
     DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
     return obj;

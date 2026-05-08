@@ -34,7 +34,7 @@ import org.apache.fory.format.type.Field;
 import org.apache.fory.memory.BitUtils;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -187,43 +187,43 @@ public class BinaryArray extends UnsafeTrait implements ArrayData {
 
   public boolean[] toBooleanArray() {
     boolean[] values = new boolean[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeSupport.BOOLEAN_ARRAY_OFFSET, numElements);
+    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.BOOLEAN_ARRAY_OFFSET, numElements);
     return values;
   }
 
   public byte[] toByteArray() {
     byte[] values = new byte[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeSupport.BYTE_ARRAY_OFFSET, numElements);
+    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.BYTE_ARRAY_OFFSET, numElements);
     return values;
   }
 
   public short[] toShortArray() {
     short[] values = new short[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeSupport.SHORT_ARRAY_OFFSET, numElements * 2);
+    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.SHORT_ARRAY_OFFSET, numElements * 2);
     return values;
   }
 
   public int[] toIntArray() {
     int[] values = new int[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeSupport.INT_ARRAY_OFFSET, numElements * 4);
+    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.INT_ARRAY_OFFSET, numElements * 4);
     return values;
   }
 
   public long[] toLongArray() {
     long[] values = new long[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeSupport.LONG_ARRAY_OFFSET, numElements * 8);
+    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.LONG_ARRAY_OFFSET, numElements * 8);
     return values;
   }
 
   public float[] toFloatArray() {
     float[] values = new float[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeSupport.FLOAT_ARRAY_OFFSET, numElements * 4);
+    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.FLOAT_ARRAY_OFFSET, numElements * 4);
     return values;
   }
 
   public double[] toDoubleArray() {
     double[] values = new double[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeSupport.DOUBLE_ARRAY_OFFSET, numElements * 8);
+    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numElements * 8);
     return values;
   }
 
@@ -263,9 +263,9 @@ public class BinaryArray extends UnsafeTrait implements ArrayData {
     }
 
     final byte[] data = new byte[(int) totalSize];
-    UnsafeSupport.putLong(data, UnsafeSupport.BYTE_ARRAY_OFFSET, length);
-    UnsafeSupport.copyMemory(
-        arr, offset, data, UnsafeSupport.BYTE_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
+    UnsafeOps.putLong(data, UnsafeOps.BYTE_ARRAY_OFFSET, length);
+    UnsafeOps.copyMemory(
+        arr, offset, data, UnsafeOps.BYTE_ARRAY_OFFSET + headerInBytes, valueRegionInBytes);
 
     MemoryBuffer memoryBuffer = MemoryUtils.wrap(data);
     result.pointTo(memoryBuffer, 0, (int) totalSize);
@@ -274,37 +274,37 @@ public class BinaryArray extends UnsafeTrait implements ArrayData {
 
   public static BinaryArray fromPrimitiveArray(byte[] arr) {
     return fromPrimitiveArray(
-        arr, UnsafeSupport.BYTE_ARRAY_OFFSET, arr.length, PRIMITIVE_BYTE_ARRAY_FIELD);
+        arr, UnsafeOps.BYTE_ARRAY_OFFSET, arr.length, PRIMITIVE_BYTE_ARRAY_FIELD);
   }
 
   public static BinaryArray fromPrimitiveArray(boolean[] arr) {
     return fromPrimitiveArray(
-        arr, UnsafeSupport.BOOLEAN_ARRAY_OFFSET, arr.length, PRIMITIVE_BOOLEAN_ARRAY_FIELD);
+        arr, UnsafeOps.BOOLEAN_ARRAY_OFFSET, arr.length, PRIMITIVE_BOOLEAN_ARRAY_FIELD);
   }
 
   public static BinaryArray fromPrimitiveArray(short[] arr) {
     return fromPrimitiveArray(
-        arr, UnsafeSupport.SHORT_ARRAY_OFFSET, arr.length, PRIMITIVE_SHORT_ARRAY_FIELD);
+        arr, UnsafeOps.SHORT_ARRAY_OFFSET, arr.length, PRIMITIVE_SHORT_ARRAY_FIELD);
   }
 
   public static BinaryArray fromPrimitiveArray(int[] arr) {
     return fromPrimitiveArray(
-        arr, UnsafeSupport.INT_ARRAY_OFFSET, arr.length, PRIMITIVE_INT_ARRAY_FIELD);
+        arr, UnsafeOps.INT_ARRAY_OFFSET, arr.length, PRIMITIVE_INT_ARRAY_FIELD);
   }
 
   public static BinaryArray fromPrimitiveArray(long[] arr) {
     return fromPrimitiveArray(
-        arr, UnsafeSupport.LONG_ARRAY_OFFSET, arr.length, PRIMITIVE_LONG_ARRAY_FIELD);
+        arr, UnsafeOps.LONG_ARRAY_OFFSET, arr.length, PRIMITIVE_LONG_ARRAY_FIELD);
   }
 
   public static BinaryArray fromPrimitiveArray(float[] arr) {
     return fromPrimitiveArray(
-        arr, UnsafeSupport.FLOAT_ARRAY_OFFSET, arr.length, PRIMITIVE_FLOAT_ARRAY_FIELD);
+        arr, UnsafeOps.FLOAT_ARRAY_OFFSET, arr.length, PRIMITIVE_FLOAT_ARRAY_FIELD);
   }
 
   public static BinaryArray fromPrimitiveArray(double[] arr) {
     return fromPrimitiveArray(
-        arr, UnsafeSupport.DOUBLE_ARRAY_OFFSET, arr.length, PRIMITIVE_DOUBLE_ARRAY_FIELD);
+        arr, UnsafeOps.DOUBLE_ARRAY_OFFSET, arr.length, PRIMITIVE_DOUBLE_ARRAY_FIELD);
   }
 
   public static int calculateHeaderInBytes(int numElements) {

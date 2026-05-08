@@ -39,7 +39,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.ExceptionUtils;
@@ -61,7 +61,7 @@ public class UnmodifiableSerializers {
       String clsName = "java.util.Collections$UnmodifiableCollection";
       try {
         SOURCE_COLLECTION_FIELD_OFFSET =
-            UnsafeSupport.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("c"));
+            UnsafeOps.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("c"));
       } catch (Exception e) {
         LOG.info("Could not access source collection field in {}", clsName);
         throw new RuntimeException(e);
@@ -70,7 +70,7 @@ public class UnmodifiableSerializers {
       try {
         // UnmodifiableSortedMap/UnmodifiableNavigableMap extends UnmodifiableMap
         SOURCE_MAP_FIELD_OFFSET =
-            UnsafeSupport.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("m"));
+            UnsafeOps.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("m"));
       } catch (Exception e) {
         LOG.info("Could not access source map field in {}", clsName);
         throw new RuntimeException(e);
@@ -93,7 +93,7 @@ public class UnmodifiableSerializers {
     @Override
     public void write(WriteContext writeContext, Collection value) {
       Preconditions.checkArgument(value.getClass() == type);
-      writeContext.writeRef(UnsafeSupport.getObject(value, offset));
+      writeContext.writeRef(UnsafeOps.getObject(value, offset));
     }
 
     @Override
@@ -104,7 +104,7 @@ public class UnmodifiableSerializers {
     @Override
     public Collection copy(CopyContext copyContext, Collection object) {
       return (Collection)
-          factory.apply(copyContext.copyObject(UnsafeSupport.getObject(object, offset)));
+          factory.apply(copyContext.copyObject(UnsafeOps.getObject(object, offset)));
     }
   }
 
@@ -122,13 +122,12 @@ public class UnmodifiableSerializers {
     @Override
     public void write(WriteContext writeContext, Map value) {
       Preconditions.checkArgument(value.getClass() == type);
-      writeContext.writeRef(UnsafeSupport.getObject(value, offset));
+      writeContext.writeRef(UnsafeOps.getObject(value, offset));
     }
 
     @Override
     public Map copy(CopyContext copyContext, Map originMap) {
-      return (Map)
-          factory.apply(copyContext.copyObject(UnsafeSupport.getObject(originMap, offset)));
+      return (Map) factory.apply(copyContext.copyObject(UnsafeOps.getObject(originMap, offset)));
     }
 
     @Override

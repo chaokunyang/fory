@@ -27,7 +27,7 @@ import kotlin.reflect.jvm.javaType
 import org.apache.fory.collection.ClassValueCache
 import org.apache.fory.logging.Logger
 import org.apache.fory.logging.LoggerFactory
-import org.apache.fory.memory.Platform
+import org.apache.fory.platform.UnsafeOps
 import org.apache.fory.util.DefaultValueUtils
 
 /**
@@ -139,7 +139,7 @@ internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport
       Char::class.java,
       Char::class.javaPrimitiveType -> '\u0000'
       String::class.java -> ""
-      else -> Platform.newInstance(clazz)
+      else -> UnsafeOps.newInstance(clazz)
     }
   }
 }

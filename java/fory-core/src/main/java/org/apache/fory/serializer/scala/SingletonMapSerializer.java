@@ -24,7 +24,7 @@ import java.util.Map;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.MapLikeSerializer;
 import org.apache.fory.util.Preconditions;
@@ -62,10 +62,10 @@ public class SingletonMapSerializer extends MapLikeSerializer {
     long offset = this.offset;
     if (offset == -1) {
       Preconditions.checkArgument(!GraalvmSupport.isGraalBuildTime());
-      offset = this.offset = UnsafeSupport.UNSAFE.staticFieldOffset(field);
-      base = UnsafeSupport.UNSAFE.staticFieldBase(field);
+      offset = this.offset = UnsafeOps.UNSAFE.staticFieldOffset(field);
+      base = UnsafeOps.UNSAFE.staticFieldBase(field);
     }
-    return UnsafeSupport.getObject(base, offset);
+    return UnsafeOps.getObject(base, offset);
   }
 
   @Override

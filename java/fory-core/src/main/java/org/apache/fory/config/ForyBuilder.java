@@ -32,7 +32,7 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.apache.fory.meta.MetaCompressor;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.SharedRegistry;
@@ -650,7 +650,7 @@ public final class ForyBuilder {
     } catch (Throwable t) {
       t.printStackTrace();
       LOG.error("Fory creation failed with classloader {}", classLoader);
-      UnsafeSupport.throwException(t);
+      UnsafeOps.throwException(t);
       throw new RuntimeException(t);
     }
   }

@@ -40,7 +40,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.ExceptionUtils;
@@ -60,7 +60,7 @@ public class SynchronizedSerializers {
       String clsName = "java.util.Collections$SynchronizedCollection";
       try {
         SOURCE_COLLECTION_FIELD_OFFSET =
-            UnsafeSupport.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("c"));
+            UnsafeOps.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("c"));
       } catch (Exception e) {
         LOG.info("Could not access source collection field in {}", clsName);
         throw new RuntimeException(e);
@@ -68,7 +68,7 @@ public class SynchronizedSerializers {
       clsName = "java.util.Collections$SynchronizedMap";
       try {
         SOURCE_MAP_FIELD_OFFSET =
-            UnsafeSupport.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("m"));
+            UnsafeOps.UNSAFE.objectFieldOffset(Class.forName(clsName).getDeclaredField("m"));
       } catch (Exception e) {
         LOG.info("Could not access source map field in {}", clsName);
         throw new RuntimeException(e);
@@ -92,7 +92,7 @@ public class SynchronizedSerializers {
     @Override
     public void write(WriteContext writeContext, Collection object) {
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
-      Object unwrapped = UnsafeSupport.getObject(object, offset);
+      Object unwrapped = UnsafeOps.getObject(object, offset);
       synchronized (object) {
         writeContext.writeRef(unwrapped);
       }
@@ -106,7 +106,7 @@ public class SynchronizedSerializers {
 
     @Override
     public Collection copy(CopyContext copyContext, Collection object) {
-      final Object collection = UnsafeSupport.getObject(object, offset);
+      final Object collection = UnsafeOps.getObject(object, offset);
       return (Collection) factory.apply(copyContext.copyObject(collection));
     }
   }
@@ -125,7 +125,7 @@ public class SynchronizedSerializers {
     @Override
     public void write(WriteContext writeContext, Map object) {
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
-      Object unwrapped = UnsafeSupport.getObject(object, offset);
+      Object unwrapped = UnsafeOps.getObject(object, offset);
       synchronized (object) {
         writeContext.writeRef(unwrapped);
       }
@@ -133,7 +133,7 @@ public class SynchronizedSerializers {
 
     @Override
     public Map copy(CopyContext copyContext, Map originMap) {
-      final Object unwrappedMap = UnsafeSupport.getObject(originMap, offset);
+      final Object unwrappedMap = UnsafeOps.getObject(originMap, offset);
       return (Map) factory.apply(copyContext.copyObject(unwrappedMap));
     }
 

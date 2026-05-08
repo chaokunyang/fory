@@ -21,7 +21,7 @@ package org.apache.fory.util;
 
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_ASCII_MASK;
 
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 
 /** String Encoding Utils. */
 public class StringEncodingUtils {
@@ -29,10 +29,9 @@ public class StringEncodingUtils {
   /** A fast convert algorithm to convert an utf16 char array into an utf8 byte array. */
   public static int convertUTF16ToUTF8(char[] src, byte[] dst, int dp) {
     int numChars = src.length;
-    for (int charOffset = 0, arrayOffset = UnsafeSupport.CHAR_ARRAY_OFFSET;
-        charOffset < numChars; ) {
+    for (int charOffset = 0, arrayOffset = UnsafeOps.CHAR_ARRAY_OFFSET; charOffset < numChars; ) {
       if (charOffset + 4 <= numChars
-          && (UnsafeSupport.getLong(src, arrayOffset) & MULTI_CHARS_NON_ASCII_MASK) == 0) {
+          && (UnsafeOps.getLong(src, arrayOffset) & MULTI_CHARS_NON_ASCII_MASK) == 0) {
         // ascii only
         dst[dp] = (byte) src[charOffset];
         dst[dp + 1] = (byte) src[charOffset + 1];
@@ -69,10 +68,10 @@ public class StringEncodingUtils {
   /** A fast convert algorithm to convert an utf16 char array slice into an utf8 byte array. */
   public static int convertUTF16ToUTF8(char[] src, int offset, int len, byte[] dst, int dp) {
     int end = offset + len;
-    for (int charOffset = offset, arrayOffset = UnsafeSupport.CHAR_ARRAY_OFFSET + (offset << 1);
+    for (int charOffset = offset, arrayOffset = UnsafeOps.CHAR_ARRAY_OFFSET + (offset << 1);
         charOffset < end; ) {
       if (charOffset + 4 <= end
-          && (UnsafeSupport.getLong(src, arrayOffset) & MULTI_CHARS_NON_ASCII_MASK) == 0) {
+          && (UnsafeOps.getLong(src, arrayOffset) & MULTI_CHARS_NON_ASCII_MASK) == 0) {
         dst[dp] = (byte) src[charOffset];
         dst[dp + 1] = (byte) src[charOffset + 1];
         dst[dp + 2] = (byte) src[charOffset + 2];
@@ -113,11 +112,11 @@ public class StringEncodingUtils {
     int numBytes = src.length;
     for (int offset = 0; offset < numBytes; ) {
       if (offset + 8 <= numBytes
-          && (UnsafeSupport.getLong(src, UnsafeSupport.BYTE_ARRAY_OFFSET + offset)
+          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset)
                   & MULTI_CHARS_NON_ASCII_MASK)
               == 0) {
         // ascii only
-        if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+        if (UnsafeOps.IS_LITTLE_ENDIAN) {
           dst[dp] = src[offset];
           dst[dp + 1] = src[offset + 2];
           dst[dp + 2] = src[offset + 4];
@@ -131,7 +130,7 @@ public class StringEncodingUtils {
         dp += 4;
         offset += 8;
       } else {
-        char c = UnsafeSupport.getChar(src, UnsafeSupport.BYTE_ARRAY_OFFSET + offset);
+        char c = UnsafeOps.getChar(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset);
         offset += 2;
 
         if (c < 0x80) {
@@ -169,11 +168,10 @@ public class StringEncodingUtils {
 
     while (offset < end) {
       if (offset + 8 <= end
-          && (UnsafeSupport.getLong(src, UnsafeSupport.BYTE_ARRAY_OFFSET + offset)
-                  & 0x8080808080808080L)
+          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset) & 0x8080808080808080L)
               == 0) {
         // ascii only
-        if (UnsafeSupport.IS_LITTLE_ENDIAN) {
+        if (UnsafeOps.IS_LITTLE_ENDIAN) {
           dst[dp] = src[offset];
           dst[dp + 2] = src[offset + 1];
           dst[dp + 4] = src[offset + 2];
@@ -293,8 +291,7 @@ public class StringEncodingUtils {
     int dp = 0;
     while (offset < end) {
       if (offset + 8 <= end
-          && (UnsafeSupport.getLong(src, UnsafeSupport.BYTE_ARRAY_OFFSET + offset)
-                  & 0x8080808080808080L)
+          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset) & 0x8080808080808080L)
               == 0) {
         // ascii only
         dst[dp] = (char) src[offset];
@@ -412,7 +409,7 @@ public class StringEncodingUtils {
     char d;
     if (c > Character.MAX_HIGH_SURROGATE
         || numBytes - offset < 1
-        || (d = UnsafeSupport.getChar(src, UnsafeSupport.BYTE_ARRAY_OFFSET + offset))
+        || (d = UnsafeOps.getChar(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset))
             < Character.MIN_LOW_SURROGATE
         || d > Character.MAX_LOW_SURROGATE) {
       throw new RuntimeException("malformed input off : " + offset);
@@ -468,8 +465,7 @@ public class StringEncodingUtils {
     while (offset < end) {
       // Vectorized ASCII fast path
       if (offset + 8 <= end
-          && (UnsafeSupport.getLong(src, UnsafeSupport.BYTE_ARRAY_OFFSET + offset)
-                  & 0x8080808080808080L)
+          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset) & 0x8080808080808080L)
               == 0) {
         // 8 ASCII bytes - direct copy
         dst[dstPos] = src[offset];
@@ -511,8 +507,7 @@ public class StringEncodingUtils {
 
     // Check 8 bytes at a time
     for (int i = offset; i < vectorizedEnd; i += 8) {
-      if ((UnsafeSupport.getLong(bytes, UnsafeSupport.BYTE_ARRAY_OFFSET + i) & 0x8080808080808080L)
-          != 0) {
+      if ((UnsafeOps.getLong(bytes, UnsafeOps.BYTE_ARRAY_OFFSET + i) & 0x8080808080808080L) != 0) {
         return false;
       }
     }

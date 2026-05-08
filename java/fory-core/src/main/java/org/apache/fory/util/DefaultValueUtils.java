@@ -32,7 +32,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.ScalaTypes;
@@ -404,28 +404,28 @@ public class DefaultValueUtils {
         long fieldOffset = fieldAccessor.getFieldOffset();
         switch (defaultField.dispatchId) {
           case Types.BOOL:
-            UnsafeSupport.putBoolean(obj, fieldOffset, (Boolean) defaultValue);
+            UnsafeOps.putBoolean(obj, fieldOffset, (Boolean) defaultValue);
             break;
           case Types.INT8:
-            UnsafeSupport.putByte(obj, fieldOffset, (Byte) defaultValue);
+            UnsafeOps.putByte(obj, fieldOffset, (Byte) defaultValue);
             break;
           case Types.INT16:
-            UnsafeSupport.putShort(obj, fieldOffset, (Short) defaultValue);
+            UnsafeOps.putShort(obj, fieldOffset, (Short) defaultValue);
             break;
           case Types.INT32:
           case Types.VARINT32:
-            UnsafeSupport.putInt(obj, fieldOffset, (Integer) defaultValue);
+            UnsafeOps.putInt(obj, fieldOffset, (Integer) defaultValue);
             break;
           case Types.INT64:
           case Types.VARINT64:
           case Types.TAGGED_INT64:
-            UnsafeSupport.putLong(obj, fieldOffset, (Long) defaultValue);
+            UnsafeOps.putLong(obj, fieldOffset, (Long) defaultValue);
             break;
           case Types.FLOAT32:
-            UnsafeSupport.putFloat(obj, fieldOffset, (Float) defaultValue);
+            UnsafeOps.putFloat(obj, fieldOffset, (Float) defaultValue);
             break;
           case Types.FLOAT64:
-            UnsafeSupport.putDouble(obj, fieldOffset, (Double) defaultValue);
+            UnsafeOps.putDouble(obj, fieldOffset, (Double) defaultValue);
             break;
           default:
             // Object type (including String, char, boxed types not covered above)

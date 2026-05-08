@@ -1,6 +1,6 @@
 package org.apache.fory.memory;
 
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -58,42 +58,42 @@ public class LittleEndian {
   }
 
   public static void putInt32(Object o, long pos, int value) {
-    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
+    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
       value = Integer.reverseBytes(value);
     }
-    UnsafeSupport.putInt(o, pos, value);
+    UnsafeOps.putInt(o, pos, value);
   }
 
   public static int getInt32(Object o, long pos) {
-    int i = UnsafeSupport.getInt(o, pos);
-    return UnsafeSupport.IS_LITTLE_ENDIAN ? i : Integer.reverseBytes(i);
+    int i = UnsafeOps.getInt(o, pos);
+    return UnsafeOps.IS_LITTLE_ENDIAN ? i : Integer.reverseBytes(i);
   }
 
   public static long getInt64(Object o, long pos) {
-    long v = UnsafeSupport.getLong(o, pos);
-    return UnsafeSupport.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
+    long v = UnsafeOps.getLong(o, pos);
+    return UnsafeOps.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
   public static void putInt64(byte[] o, int index, long value) {
-    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
+    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
     }
-    UnsafeSupport.putLong(o, UnsafeSupport.BYTE_ARRAY_OFFSET + index, value);
+    UnsafeOps.putLong(o, UnsafeOps.BYTE_ARRAY_OFFSET + index, value);
   }
 
   public static void putFloat32(Object o, long pos, float value) {
     int v = Float.floatToRawIntBits(value);
-    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
+    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
       v = Integer.reverseBytes(v);
     }
-    UnsafeSupport.putInt(o, pos, v);
+    UnsafeOps.putInt(o, pos, v);
   }
 
   public static void putFloat64(Object o, long pos, double value) {
     long v = Double.doubleToRawLongBits(value);
-    if (!UnsafeSupport.IS_LITTLE_ENDIAN) {
+    if (!UnsafeOps.IS_LITTLE_ENDIAN) {
       v = Long.reverseBytes(v);
     }
-    UnsafeSupport.putLong(o, pos, v);
+    UnsafeOps.putLong(o, pos, v);
   }
 }

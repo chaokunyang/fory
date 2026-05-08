@@ -23,7 +23,7 @@ import java.lang.reflect.Field;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.Preconditions;
@@ -60,9 +60,9 @@ public class SingletonObjectSerializer extends Serializer {
     long offset = this.offset;
     if (offset == -1) {
       Preconditions.checkArgument(!GraalvmSupport.isGraalBuildTime());
-      offset = this.offset = UnsafeSupport.UNSAFE.staticFieldOffset(field);
-      base = UnsafeSupport.UNSAFE.staticFieldBase(field);
+      offset = this.offset = UnsafeOps.UNSAFE.staticFieldOffset(field);
+      base = UnsafeOps.UNSAFE.staticFieldBase(field);
     }
-    return UnsafeSupport.getObject(base, offset);
+    return UnsafeOps.getObject(base, offset);
   }
 }

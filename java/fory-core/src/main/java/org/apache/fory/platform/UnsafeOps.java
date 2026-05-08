@@ -29,7 +29,7 @@ import sun.misc.Unsafe;
 
 /** A utility class for unsafe memory operations. */
 @SuppressWarnings("restriction")
-public final class UnsafeSupport {
+public final class UnsafeOps {
   @SuppressWarnings("restriction")
   public static final Unsafe UNSAFE = _JDKAccess.UNSAFE;
 
@@ -61,7 +61,7 @@ public final class UnsafeSupport {
    */
   private static final long UNSAFE_COPY_THRESHOLD = 1024L * 1024L;
 
-  private UnsafeSupport() {}
+  private UnsafeOps() {}
 
   static {
     BOOLEAN_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(boolean[].class);
@@ -152,11 +152,11 @@ public final class UnsafeSupport {
   }
 
   public static char getChar(Object obj, long offset) {
-    return UnsafeSupport.UNSAFE.getChar(obj, offset);
+    return UnsafeOps.UNSAFE.getChar(obj, offset);
   }
 
   public static void putChar(Object obj, long offset, char value) {
-    UnsafeSupport.UNSAFE.putChar(obj, offset, value);
+    UnsafeOps.UNSAFE.putChar(obj, offset, value);
   }
 
   public static long getLong(Object object, long offset) {
@@ -255,8 +255,8 @@ public final class UnsafeSupport {
     // check if stars align and we can get both offsets to be aligned
     if ((leftOffset % 8) == (rightOffset % 8)) {
       while ((leftOffset + i) % 8 != 0 && i < length) {
-        if (UnsafeSupport.getByte(leftBase, leftOffset + i)
-            != UnsafeSupport.getByte(rightBase, rightOffset + i)) {
+        if (UnsafeOps.getByte(leftBase, leftOffset + i)
+            != UnsafeOps.getByte(rightBase, rightOffset + i)) {
           return false;
         }
         i += 1;
@@ -265,8 +265,8 @@ public final class UnsafeSupport {
     // for architectures that support unaligned accesses, chew it up 8 bytes at a time
     if (unaligned || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
       while (i <= length - 8) {
-        if (UnsafeSupport.getLong(leftBase, leftOffset + i)
-            != UnsafeSupport.getLong(rightBase, rightOffset + i)) {
+        if (UnsafeOps.getLong(leftBase, leftOffset + i)
+            != UnsafeOps.getLong(rightBase, rightOffset + i)) {
           return false;
         }
         i += 8;
@@ -275,8 +275,8 @@ public final class UnsafeSupport {
     // this will finish off the unaligned comparisons, or do the entire aligned
     // comparison whichever is needed.
     while (i < length) {
-      if (UnsafeSupport.getByte(leftBase, leftOffset + i)
-          != UnsafeSupport.getByte(rightBase, rightOffset + i)) {
+      if (UnsafeOps.getByte(leftBase, leftOffset + i)
+          != UnsafeOps.getByte(rightBase, rightOffset + i)) {
         return false;
       }
       i += 1;

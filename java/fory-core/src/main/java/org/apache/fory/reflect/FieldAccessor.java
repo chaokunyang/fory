@@ -33,7 +33,7 @@ import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
@@ -83,21 +83,21 @@ public abstract class FieldAccessor {
   }
 
   public final void putObject(Object targetObject, Object object) {
-    // For primitive fields, we must use set() which calls the correct UnsafeSupport.putXxx method.
-    // UnsafeSupport.putObject writes object references, not primitive values.
+    // For primitive fields, we must use set() which calls the correct UnsafeOps.putXxx method.
+    // UnsafeOps.putObject writes object references, not primitive values.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
-      UnsafeSupport.putObject(targetObject, fieldOffset, object);
+      UnsafeOps.putObject(targetObject, fieldOffset, object);
     } else {
       set(targetObject, object);
     }
   }
 
   public final Object getObject(Object targetObject) {
-    // For primitive fields, we must use get() which calls the correct UnsafeSupport.getXxx method
-    // and returns the boxed value. UnsafeSupport.getObject interprets primitive bytes as object
+    // For primitive fields, we must use get() which calls the correct UnsafeOps.getXxx method
+    // and returns the boxed value. UnsafeOps.getObject interprets primitive bytes as object
     // refs.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
-      return UnsafeSupport.getObject(targetObject, fieldOffset);
+      return UnsafeOps.getObject(targetObject, fieldOffset);
     } else {
       return get(targetObject);
     }
@@ -195,13 +195,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getBoolean(obj, fieldOffset);
+      return UnsafeOps.getBoolean(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putBoolean(obj, fieldOffset, (Boolean) value);
+      UnsafeOps.putBoolean(obj, fieldOffset, (Boolean) value);
     }
   }
 
@@ -231,13 +231,13 @@ public abstract class FieldAccessor {
     @Override
     public Byte get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getByte(obj, fieldOffset);
+      return UnsafeOps.getByte(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putByte(obj, fieldOffset, (Byte) value);
+      UnsafeOps.putByte(obj, fieldOffset, (Byte) value);
     }
   }
 
@@ -267,13 +267,13 @@ public abstract class FieldAccessor {
     @Override
     public Character get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getChar(obj, fieldOffset);
+      return UnsafeOps.getChar(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putChar(obj, fieldOffset, (Character) value);
+      UnsafeOps.putChar(obj, fieldOffset, (Character) value);
     }
   }
 
@@ -302,13 +302,13 @@ public abstract class FieldAccessor {
     @Override
     public Short get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getShort(obj, fieldOffset);
+      return UnsafeOps.getShort(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putShort(obj, fieldOffset, (Short) value);
+      UnsafeOps.putShort(obj, fieldOffset, (Short) value);
     }
   }
 
@@ -337,13 +337,13 @@ public abstract class FieldAccessor {
     @Override
     public Integer get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getInt(obj, fieldOffset);
+      return UnsafeOps.getInt(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putInt(obj, fieldOffset, (Integer) value);
+      UnsafeOps.putInt(obj, fieldOffset, (Integer) value);
     }
   }
 
@@ -372,13 +372,13 @@ public abstract class FieldAccessor {
     @Override
     public Long get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getLong(obj, fieldOffset);
+      return UnsafeOps.getLong(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putLong(obj, fieldOffset, (Long) value);
+      UnsafeOps.putLong(obj, fieldOffset, (Long) value);
     }
   }
 
@@ -407,13 +407,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getFloat(obj, fieldOffset);
+      return UnsafeOps.getFloat(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putFloat(obj, fieldOffset, (Float) value);
+      UnsafeOps.putFloat(obj, fieldOffset, (Float) value);
     }
   }
 
@@ -442,13 +442,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getDouble(obj, fieldOffset);
+      return UnsafeOps.getDouble(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putDouble(obj, fieldOffset, (Double) value);
+      UnsafeOps.putDouble(obj, fieldOffset, (Double) value);
     }
   }
 
@@ -477,13 +477,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return UnsafeSupport.getObject(obj, fieldOffset);
+      return UnsafeOps.getObject(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeSupport.putObject(obj, fieldOffset, value);
+      UnsafeOps.putObject(obj, fieldOffset, value);
     }
   }
 

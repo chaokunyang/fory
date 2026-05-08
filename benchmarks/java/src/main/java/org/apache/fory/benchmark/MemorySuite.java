@@ -23,7 +23,7 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.StringUtils;
 import org.openjdk.jmh.Main;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -102,7 +102,7 @@ public class MemorySuite {
   public Object charsCopyAligned(MemoryState state) {
     state.heapBuffer.writerIndex(0);
     state.heapBuffer.writePrimitiveArrayWithSize(
-        state.chars, UnsafeSupport.CHAR_ARRAY_OFFSET, state.chars.length * 2);
+        state.chars, UnsafeOps.CHAR_ARRAY_OFFSET, state.chars.length * 2);
     return state.heapBuffer;
   }
 
@@ -111,7 +111,7 @@ public class MemorySuite {
     state.heapBuffer.writerIndex(0);
     state.heapBuffer.writeBoolean(false);
     state.heapBuffer.writePrimitiveArrayWithSize(
-        state.chars, UnsafeSupport.CHAR_ARRAY_OFFSET, state.chars.length * 2);
+        state.chars, UnsafeOps.CHAR_ARRAY_OFFSET, state.chars.length * 2);
     return state.heapBuffer;
   }
 
@@ -119,7 +119,7 @@ public class MemorySuite {
   public Object longsCopyAligned(MemoryState state) {
     state.heapBuffer.writerIndex(0);
     state.heapBuffer.writePrimitiveArrayWithSize(
-        state.longs, UnsafeSupport.LONG_ARRAY_OFFSET, state.longs.length * 8);
+        state.longs, UnsafeOps.LONG_ARRAY_OFFSET, state.longs.length * 8);
     return state.heapBuffer;
   }
 
@@ -128,7 +128,7 @@ public class MemorySuite {
     state.heapBuffer.writerIndex(0);
     state.heapBuffer.writeBoolean(false);
     state.heapBuffer.writePrimitiveArrayWithSize(
-        state.longs, UnsafeSupport.LONG_ARRAY_OFFSET, state.longs.length * 8);
+        state.longs, UnsafeOps.LONG_ARRAY_OFFSET, state.longs.length * 8);
     return state.heapBuffer;
   }
 
@@ -142,11 +142,11 @@ public class MemorySuite {
 
   @org.openjdk.jmh.annotations.Benchmark
   public Object unsafeCopy(MemoryState state) {
-    UnsafeSupport.UNSAFE.copyMemory(
+    UnsafeOps.UNSAFE.copyMemory(
         state.bytes,
-        UnsafeSupport.BYTE_ARRAY_OFFSET,
+        UnsafeOps.BYTE_ARRAY_OFFSET,
         target,
-        UnsafeSupport.BYTE_ARRAY_OFFSET,
+        UnsafeOps.BYTE_ARRAY_OFFSET,
         state.bytes.length);
     return target;
   }

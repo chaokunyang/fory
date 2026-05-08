@@ -31,7 +31,7 @@ import javax.annotation.concurrent.ThreadSafe;
  *
  * <p><strong>Thread Safety:</strong> All implementations of ObjectCreator are thread-safe and can
  * be safely used across multiple threads concurrently. The underlying creation mechanisms
- * (MethodHandle, Constructor, UnsafeSupport.newInstance) are all thread-safe.
+ * (MethodHandle, Constructor, UnsafeOps.newInstance) are all thread-safe.
  *
  * @param <T> the type of objects this creator can instantiate
  */

@@ -28,7 +28,7 @@ import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Float16;
@@ -280,11 +280,11 @@ public class PrimitiveSerializers {
     public static String readLongFunc(Int64Encoding longEncoding) {
       switch (longEncoding) {
         case FIXED:
-          return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
+          return UnsafeOps.IS_LITTLE_ENDIAN ? "_readInt64OnLE" : "_readInt64OnBE";
         case TAGGED:
-          return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readTaggedInt64OnLE" : "_readTaggedInt64OnBE";
+          return UnsafeOps.IS_LITTLE_ENDIAN ? "_readTaggedInt64OnLE" : "_readTaggedInt64OnBE";
         case VARINT:
-          return UnsafeSupport.IS_LITTLE_ENDIAN ? "_readVarInt64OnLE" : "_readVarInt64OnBE";
+          return UnsafeOps.IS_LITTLE_ENDIAN ? "_readVarInt64OnLE" : "_readVarInt64OnBE";
         default:
           throw new UnsupportedOperationException("Unsupported long encoding " + longEncoding);
       }

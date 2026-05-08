@@ -104,7 +104,7 @@ import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
@@ -423,8 +423,8 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void registerDefaultClasses() {
-    registerInternal(UnsafeSupport.HEAP_BYTE_BUFFER_CLASS);
-    registerInternal(UnsafeSupport.DIRECT_BYTE_BUFFER_CLASS);
+    registerInternal(UnsafeOps.HEAP_BYTE_BUFFER_CLASS);
+    registerInternal(UnsafeOps.DIRECT_BYTE_BUFFER_CLASS);
     registerInternal(Comparator.naturalOrder().getClass());
     registerInternal(Comparator.reverseOrder().getClass());
     registerInternal(ConcurrentHashMap.class);
@@ -1657,7 +1657,7 @@ public class ClassResolver extends TypeResolver {
       // constructor failed later. For example, some final type field doesn't
       // support serialization.
       resetSerializer(cls, serializer);
-      UnsafeSupport.throwException(t);
+      UnsafeOps.throwException(t);
       throw new IllegalStateException("unreachable");
     }
   }

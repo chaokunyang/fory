@@ -21,7 +21,7 @@ package org.apache.fory.benchmark;
 
 import java.nio.ByteBuffer;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.StringUtils;
 import org.openjdk.jmh.Main;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -43,7 +43,7 @@ public class CompressStringSuite {
       heapBuffer[i] = (byte) (latinStrChars[i]);
     }
     directBuffer.writerIndex(0);
-    directBuffer.writePrimitiveArray(heapBuffer, UnsafeSupport.BYTE_ARRAY_OFFSET, latinStrChars.length);
+    directBuffer.writePrimitiveArray(heapBuffer, UnsafeOps.BYTE_ARRAY_OFFSET, latinStrChars.length);
     return directBuffer;
   }
 
@@ -69,7 +69,7 @@ public class CompressStringSuite {
     }
     directBuffer.writerIndex(0);
     directBuffer.writePrimitiveArray(
-        heapBuffer, UnsafeSupport.BYTE_ARRAY_OFFSET, utf16StrChars.length << 1);
+        heapBuffer, UnsafeOps.BYTE_ARRAY_OFFSET, utf16StrChars.length << 1);
     return directBuffer;
   }
 

@@ -59,7 +59,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.TypeUtils;
@@ -1502,7 +1502,7 @@ public interface Expression {
               ExpressionUtils.callFunc(
                   "Object",
                   instance,
-                  ctx.type(UnsafeSupport.class),
+                  ctx.type(UnsafeOps.class),
                   "newInstance",
                   clzName + ".class",
                   false);

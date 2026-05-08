@@ -33,7 +33,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.codegen.Expression.ListExpression;
 import org.apache.fory.codegen.Expression.Reference;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.TypeUtils;
@@ -191,7 +191,7 @@ public class ExpressionVisitor {
               // TODO add map type support.
             }
           } catch (Exception e) {
-            UnsafeSupport.throwException(e);
+            UnsafeOps.throwException(e);
           }
         }
       }

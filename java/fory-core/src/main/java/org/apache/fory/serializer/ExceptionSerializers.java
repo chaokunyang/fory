@@ -38,7 +38,7 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -99,11 +99,10 @@ public final class ExceptionSerializers {
       String detailMessage = readContext.readStringRef();
       List<Throwable> suppressedExceptions = readSuppressedExceptions(readContext);
       skipExtraFields(readContext);
-      UnsafeSupport.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
-      UnsafeSupport.putObject(
-          obj, ThrowableOffsets.CAUSE_FIELD_OFFSET, cause == null ? obj : cause);
-      UnsafeSupport.putObject(obj, ThrowableOffsets.STACK_TRACE_FIELD_OFFSET, stackTrace);
-      UnsafeSupport.putObject(
+      UnsafeOps.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
+      UnsafeOps.putObject(obj, ThrowableOffsets.CAUSE_FIELD_OFFSET, cause == null ? obj : cause);
+      UnsafeOps.putObject(obj, ThrowableOffsets.STACK_TRACE_FIELD_OFFSET, stackTrace);
+      UnsafeOps.putObject(
           obj, ThrowableOffsets.SUPPRESSED_EXCEPTIONS_FIELD_OFFSET, suppressedExceptions);
       readAndSetFields(readContext, obj, slotsSerializers, config);
       return obj;
@@ -344,14 +343,14 @@ public final class ExceptionSerializers {
     static {
       try {
         Field detailMessageField = Throwable.class.getDeclaredField("detailMessage");
-        DETAIL_MESSAGE_FIELD_OFFSET = UnsafeSupport.UNSAFE.objectFieldOffset(detailMessageField);
+        DETAIL_MESSAGE_FIELD_OFFSET = UnsafeOps.UNSAFE.objectFieldOffset(detailMessageField);
         Field causeField = Throwable.class.getDeclaredField("cause");
-        CAUSE_FIELD_OFFSET = UnsafeSupport.UNSAFE.objectFieldOffset(causeField);
+        CAUSE_FIELD_OFFSET = UnsafeOps.UNSAFE.objectFieldOffset(causeField);
         Field stackTraceField = Throwable.class.getDeclaredField("stackTrace");
-        STACK_TRACE_FIELD_OFFSET = UnsafeSupport.UNSAFE.objectFieldOffset(stackTraceField);
+        STACK_TRACE_FIELD_OFFSET = UnsafeOps.UNSAFE.objectFieldOffset(stackTraceField);
         Field suppressedExceptionsField = Throwable.class.getDeclaredField("suppressedExceptions");
         SUPPRESSED_EXCEPTIONS_FIELD_OFFSET =
-            UnsafeSupport.UNSAFE.objectFieldOffset(suppressedExceptionsField);
+            UnsafeOps.UNSAFE.objectFieldOffset(suppressedExceptionsField);
       } catch (Exception e) {
         throw new RuntimeException(e);
       }

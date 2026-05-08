@@ -20,10 +20,13 @@ process fory/kryo/fst/hession performance data
 """
 
 import matplotlib.pyplot as plt
+import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
 import re
+import shutil
+import subprocess
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 repo_root = Path(dir_path).parent.parent
@@ -229,15 +232,29 @@ def _replace_table_section(content: str, heading: str, table_markdown: str):
             break
     if start_index is None:
         raise ValueError(f"Failed to find section {heading}")
+    heading_level = len(heading) - len(heading.lstrip("#"))
     end_index = len(lines)
     for index in range(start_index + 1, len(lines)):
-        if lines[index].startswith("### "):
+        line = lines[index]
+        if line.startswith("#"):
+            line_level = len(line) - len(line.lstrip("#"))
+            if line_level <= heading_level:
+                end_index = index
+                break
+        if line.startswith("### ") and heading_level <= 3:
             end_index = index
             break
     updated_lines = lines[: start_index + 1] + ["", table_markdown, ""]
     if end_index < len(lines):
         updated_lines.extend(lines[end_index:])
     return "\n".join(updated_lines).rstrip() + "\n"
+
+
+def _format_markdown_with_prettier(path: Path):
+    prettier = shutil.which("prettier")
+    if prettier is None:
+        return
+    subprocess.run([prettier, "--write", str(path)], check=True)
 
 
 def _parse_chart_spec(source_path: str):
@@ -303,7 +320,7 @@ def _build_single_plot_frame(spec, benchmark_data, zero_copy_data):
                 f"{spec['benchmark']} {spec['objectType']} from {spec['bufferType']}"
             )
         xlabel = "enable_references"
-        width = 0.7 * bar_width_scale
+        width = benchmark_group_width
     else:
         sub_df = zero_copy_data[
             (zero_copy_data["Benchmark"] == spec["benchmark"])
@@ -320,8 +337,64 @@ def _build_single_plot_frame(spec, benchmark_data, zero_copy_data):
         else:
             title = f"{spec['benchmark']} {spec['dataType']} from {spec['bufferType']}"
         xlabel = "array_size"
-        width = 0.8 * bar_width_scale
+        width = zero_copy_group_width
     return final_df, title, xlabel, width
+
+
+def _lib_columns(frame: pd.DataFrame):
+    if isinstance(frame.columns, pd.MultiIndex):
+        return frame.columns.get_level_values("Lib").tolist()
+    return frame.columns.tolist()
+
+
+def _plot_colors(libs):
+    colors = color_map.copy()
+    if "Fory" in libs and "ForyMetaShared" in libs:
+        colors["Fory"] = color_map["ForyMetaShared"]
+        colors["ForyMetaShared"] = color_map["Fory"]
+    return [colors[lib] for lib in libs]
+
+
+def _bar_label(value):
+    if pd.isna(value):
+        return ""
+    return f"{float(value):g}"
+
+
+def _plot_grouped_bar_frame(axis, frame: pd.DataFrame, title: str, width: float):
+    libs = _lib_columns(frame)
+    values = frame.to_numpy(dtype=float)
+    group_count = len(frame.index)
+    bar_count = len(libs)
+    x = np.arange(group_count)
+    gap = intra_bar_gap if bar_count > 1 else 0.0
+    bar_width = (width - gap * (bar_count - 1)) / bar_count
+    if bar_width <= 0:
+        raise ValueError(f"Invalid grouped bar width for {bar_count} bars")
+    total_width = bar_width * bar_count + gap * (bar_count - 1)
+    start = -total_width / 2 + bar_width / 2
+
+    for index, lib in enumerate(libs):
+        positions = x + start + index * (bar_width + gap)
+        container = axis.bar(
+            positions,
+            values[:, index],
+            width=bar_width,
+            label=lib,
+            color=_plot_colors(libs)[index],
+        )
+        axis.bar_label(
+            container,
+            labels=[_bar_label(value) for value in values[:, index]],
+            fontsize=8,
+            padding=1,
+        )
+
+    axis.set_title(title)
+    axis.set_xticks(x)
+    axis.set_xticklabels([str(value) for value in frame.index])
+    axis.margins(x=0.04, y=0.08)
+    return libs
 
 
 def _plot_combined_group(group, benchmark_data, zero_copy_data, output_path: Path):
@@ -332,11 +405,7 @@ def _plot_combined_group(group, benchmark_data, zero_copy_data, output_path: Pat
         final_df, title, xlabel, width = _build_single_plot_frame(
             spec, benchmark_data, zero_copy_data
         )
-        libs = final_df.columns.to_frame()["Lib"]
-        color = [color_map[lib] for lib in libs]
-        final_df.plot.bar(title=title, color=color, ax=axis, width=width)
-        for container in axis.containers:
-            axis.bar_label(container, fontsize=8)
+        libs = _plot_grouped_bar_frame(axis, final_df, title, width)
         axis.set_xlabel(xlabel)
         if axis_index == 0:
             axis.set_ylabel(f"Tps/{scaler}")
@@ -416,12 +485,13 @@ def _update_java_benchmark_readme(data_dir: Path, readme_path: Path):
 
     readme_content = readme_path.read_text()
     readme_content = _replace_table_section(
-        readme_content, "### Java Serialization", _to_markdown(benchmark_table)
+        readme_content, "#### Java Serialization", _to_markdown(benchmark_table)
     )
     readme_content = _replace_table_section(
-        readme_content, "### Java Zero-copy", _to_markdown(zero_copy_table)
+        readme_content, "#### Java Zero-copy", _to_markdown(zero_copy_table)
     )
     readme_path.write_text(readme_content)
+    _format_markdown_with_prettier(readme_path)
 
 
 def process_data(filepath: str):
@@ -460,8 +530,8 @@ def process_data(filepath: str):
 
 
 color_map = {
-    "Fory": "#FF6f01",  # Orange
-    "ForyMetaShared": "#FFB266",  # Shallow orange
+    "Fory": "#FF6f01",  # Primary orange
+    "ForyMetaShared": "#FF8A24",  # Secondary orange
     # "Kryo": (1, 0.5, 1),
     # "Kryo": (1, 0.84, 0.25),
     "Kryo": "#55BCC2",
@@ -476,7 +546,9 @@ color_map = {
 
 
 scaler = 10000
-bar_width_scale = 1.2
+benchmark_group_width = 0.9
+zero_copy_group_width = 0.9
+intra_bar_gap = 0.012
 
 
 def format_scaler(x):
@@ -495,9 +567,14 @@ def add_upper_right_legend(ax, labels):
         loc="upper right",
         bbox_to_anchor=(0.98, 0.98),
         borderaxespad=0.2,
-        prop={"size": 10},
         frameon=True,
-        framealpha=0.9,
+        framealpha=0.95,
+        edgecolor="#D6DAE0",
+        borderpad=0.3,
+        labelspacing=0.3,
+        handlelength=1.4,
+        handletextpad=0.45,
+        prop={"size": 8},
     )
 
 

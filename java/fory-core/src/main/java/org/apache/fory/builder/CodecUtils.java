@@ -27,11 +27,11 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.ClassLoaderUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 /** Codec util to create and load jit serializer class. */

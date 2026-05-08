@@ -39,9 +39,9 @@ import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.ToByteFunction;
 import org.apache.fory.util.function.ToCharFunction;
@@ -103,7 +103,7 @@ public class _JDKAccess {
 
   public static Lookup _trustedLookup(Class<?> objectClass) {
     // CHECKSTYLE.ON:MethodName
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       // Lookup will init `java.io.FilePermission`,which is not allowed at graalvm build time
       // as a reachable object.
       return _Lookup._trustedLookup(objectClass);

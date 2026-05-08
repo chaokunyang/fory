@@ -60,6 +60,7 @@ import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -71,7 +72,6 @@ import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -724,7 +724,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       // In GraalVM, ensure serializers are generated for all field types at build time
       // so they're available when new Fory instances are created at runtime
-      if (GraalvmSupport.isGraalBuildtime()) {
+      if (GraalvmSupport.isGraalBuildTime()) {
         ensureFieldSerializersGenerated(typeResolver, layerTypeDef, type);
       }
 

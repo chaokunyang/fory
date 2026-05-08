@@ -25,7 +25,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.util.function.Function;
 import org.apache.fory.Fory;
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings({"rawtypes", "unchecked"})

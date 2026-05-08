@@ -53,10 +53,10 @@ import org.apache.fory.format.type.Schema;
 import org.apache.fory.format.type.TypeInference;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.TypeUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordUtils;
@@ -440,7 +440,7 @@ class RowEncoderBuilder extends BaseBinaryEncoderBuilder {
 
   @Override
   protected Expression beanClassExpr() {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return staticBeanClassExpr();
     }
     return beanClassRef;

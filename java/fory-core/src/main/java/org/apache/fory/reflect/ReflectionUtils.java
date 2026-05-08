@@ -49,7 +49,7 @@ import java.util.stream.Stream;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
@@ -438,7 +438,7 @@ public class ReflectionUtils {
   }
 
   public static long getFieldOffset(Field field) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       // See more details at
       // https://www.graalvm.org/latest/reference-manual/native-image/metadata/Compatibility/#unsafe-memory-access
       throw new IllegalStateException(

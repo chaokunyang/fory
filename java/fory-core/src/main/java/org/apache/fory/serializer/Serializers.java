@@ -49,6 +49,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -63,7 +64,6 @@ import org.apache.fory.serializer.scala.SingletonCollectionSerializer;
 import org.apache.fory.serializer.scala.SingletonMapSerializer;
 import org.apache.fory.serializer.scala.SingletonObjectSerializer;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -74,7 +74,7 @@ public class Serializers {
   private static final Cache<Class, Tuple2<MethodType, MethodHandle>> CTR_MAP;
 
   static {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       CTR_MAP = CacheBuilder.newBuilder().concurrencyLevel(32).build();
     } else {
       CTR_MAP = CacheBuilder.newBuilder().weakKeys().softValues().build();

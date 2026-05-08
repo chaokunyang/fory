@@ -121,6 +121,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
@@ -150,7 +151,6 @@ import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 
@@ -3051,7 +3051,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
 
   @Override
   protected Expression beanClassExpr() {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return staticBeanClassExpr();
     }
     // Serializer has a `type` field.

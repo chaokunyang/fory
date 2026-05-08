@@ -77,6 +77,7 @@ import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BigIntegerSerializer;
@@ -124,7 +125,6 @@ import org.apache.fory.type.unsigned.UInt16;
 import org.apache.fory.type.unsigned.UInt32;
 import org.apache.fory.type.unsigned.UInt64;
 import org.apache.fory.type.unsigned.UInt8;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
@@ -159,7 +159,7 @@ public class XtypeResolver extends TypeResolver {
       Serializer serializer = new UnknownStructSerializer(this, null);
       register(UnknownStruct.class, serializer, "", "unknown_struct", Types.COMPATIBLE_STRUCT, -1);
     }
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       classInfoMap.forEach(
           (cls, classInfo) -> {
             if (classInfo.serializer != null) {
@@ -1384,7 +1384,7 @@ public class XtypeResolver extends TypeResolver {
             }
           }
           // For enums at GraalVM build time, also handle anonymous enum value classes
-          if (cls.isEnum() && GraalvmSupport.isGraalBuildtime()) {
+          if (cls.isEnum() && GraalvmSupport.isGraalBuildTime()) {
             for (Object enumConstant : cls.getEnumConstants()) {
               Class<?> enumValueClass = enumConstant.getClass();
               if (enumValueClass != cls) {
@@ -1392,12 +1392,12 @@ public class XtypeResolver extends TypeResolver {
               }
             }
           }
-          if (GraalvmSupport.isGraalBuildtime() && classInfo.serializer != null) {
+          if (GraalvmSupport.isGraalBuildTime() && classInfo.serializer != null) {
             getGraalvmClassRegistry()
                 .putSerializerClass(cls, getGraalvmSerializerClass(classInfo.serializer));
           }
         });
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       clearGraalvmGeneratedTypeInfoSerializers();
       getGraalvmClassRegistry().clearResolvers();
     }

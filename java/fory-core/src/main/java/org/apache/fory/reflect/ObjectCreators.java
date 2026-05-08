@@ -27,7 +27,7 @@ import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.Platform;
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.record.RecordUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 

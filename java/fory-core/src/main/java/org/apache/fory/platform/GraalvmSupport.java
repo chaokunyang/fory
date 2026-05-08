@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.util;
+package org.apache.fory.platform;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Modifier;
@@ -130,7 +130,7 @@ public class GraalvmSupport {
   }
 
   /** Returns true if current process is running in graalvm native image build stage. */
-  public static boolean isGraalBuildtime() {
+  public static boolean isGraalBuildTime() {
     return IN_GRAALVM_NATIVE_IMAGE
         && GRAAL_IMAGE_BUILDTIME.equals(System.getProperty(GRAAL_IMAGE_CODE_KEY));
   }

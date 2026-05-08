@@ -38,11 +38,11 @@ import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.MultiKeyWeakMap;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.ClassLoaderUtils;
 import org.apache.fory.util.ClassLoaderUtils.ByteArrayClassLoader;
 import org.apache.fory.util.DelayedRef;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.concurrency.DirectExecutorService;
@@ -231,7 +231,7 @@ public class CodeGenerator {
 
   public static synchronized ExecutorService getCompilationService() {
     if (compilationExecutorService == null) {
-      if (GraalvmSupport.isGraalBuildtime()) {
+      if (GraalvmSupport.isGraalBuildTime()) {
         // GraalVM build time can't reachable thread.
         return compilationExecutorService = new DirectExecutorService();
       }

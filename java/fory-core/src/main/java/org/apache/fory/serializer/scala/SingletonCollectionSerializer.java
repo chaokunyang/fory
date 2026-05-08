@@ -24,9 +24,9 @@ import java.util.Collection;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionLikeSerializer;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -61,7 +61,7 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
   public Object read(ReadContext readContext) {
     long offset = this.offset;
     if (offset == -1) {
-      Preconditions.checkArgument(!GraalvmSupport.isGraalBuildtime());
+      Preconditions.checkArgument(!GraalvmSupport.isGraalBuildTime());
       offset = this.offset = Platform.UNSAFE.staticFieldOffset(field);
       base = Platform.UNSAFE.staticFieldBase(field);
     }

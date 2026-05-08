@@ -38,10 +38,10 @@ import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
-import org.apache.fory.util.GraalvmSupport;
 
 /**
  * Shared caches reused by multiple equivalent {@link org.apache.fory.Fory} instances.
@@ -252,7 +252,7 @@ public final class SharedRegistry {
 
   List<Descriptor> getOrCreateFieldDescriptors(
       Class<?> type, boolean searchParent, java.util.function.Supplier<List<Descriptor>> factory) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return Collections.unmodifiableList(new ArrayList<>(factory.get()));
     }
     FieldDescriptorsKey key = new FieldDescriptorsKey(type, searchParent);
@@ -262,7 +262,7 @@ public final class SharedRegistry {
 
   public List<Descriptor> getOrCreateTypeDefDescriptors(
       TypeDef typeDef, Class<?> type, java.util.function.Supplier<List<Descriptor>> factory) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return Collections.unmodifiableList(new ArrayList<>(factory.get()));
     }
     TypeDefDescriptorsKey key = new TypeDefDescriptorsKey(typeDef.getId(), type);
@@ -276,7 +276,7 @@ public final class SharedRegistry {
       boolean descriptorsGroupedOrdered,
       java.util.function.Function<Descriptor, Descriptor> descriptorUpdator,
       java.util.function.Supplier<DescriptorGrouper> factory) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return factory.get();
     }
     FieldDescriptorGrouperKey key =
@@ -293,7 +293,7 @@ public final class SharedRegistry {
       boolean descriptorsGroupedOrdered,
       java.util.function.Function<Descriptor, Descriptor> descriptorUpdator,
       java.util.function.Supplier<DescriptorGrouper> factory) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return factory.get();
     }
     TypeDefDescriptorGrouperKey key =

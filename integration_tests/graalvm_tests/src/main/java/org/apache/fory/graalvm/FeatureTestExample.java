@@ -24,7 +24,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import org.apache.fory.Fory;
 import org.apache.fory.builder.Generated;
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 public class FeatureTestExample {

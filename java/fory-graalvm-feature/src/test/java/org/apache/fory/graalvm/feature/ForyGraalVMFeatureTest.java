@@ -21,7 +21,7 @@ package org.apache.fory.graalvm.feature;
 
 import static org.testng.Assert.*;
 
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.testng.annotations.Test;
 
 public class ForyGraalVMFeatureTest {

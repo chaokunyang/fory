@@ -32,6 +32,7 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.apache.fory.meta.MetaCompressor;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.SharedRegistry;
@@ -41,7 +42,6 @@ import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.TimeSerializers;
 import org.apache.fory.serializer.collection.GuavaCollectionSerializers;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 /** Builder class to config and create {@link Fory}. */

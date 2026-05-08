@@ -73,6 +73,7 @@ import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.CodegenSerializer;
@@ -94,7 +95,6 @@ import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
 
@@ -1041,7 +1041,7 @@ public abstract class TypeResolver {
                 c -> typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, c)));
       }
     }
-    if (GraalvmSupport.isGraalBuildtime()
+    if (GraalvmSupport.isGraalBuildTime()
         && GeneratedMetaSharedSerializer.class.isAssignableFrom(sc)) {
       getGraalvmClassRegistry().putIfAbsentDeserializerClass(typeDef.getId(), sc);
       typeInfo.setSerializer(this, new MetaSharedSerializer(this, cls, typeDef));
@@ -1765,7 +1765,7 @@ public abstract class TypeResolver {
   // CHECKSTYLE.OFF:MethodName
   public static void _addGraalvmClassRegistry(int foryConfigHash, ClassResolver classResolver) {
     // CHECKSTYLE.ON:MethodName
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       GraalvmSupport.GraalvmClassRegistry registry =
           GraalvmSupport.getClassRegistry(foryConfigHash);
       registry.addResolver(classResolver);

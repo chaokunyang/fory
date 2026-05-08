@@ -38,11 +38,11 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Serializers for {@link Throwable} and {@link StackTraceElement}. */

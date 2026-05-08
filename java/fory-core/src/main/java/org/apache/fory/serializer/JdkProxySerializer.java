@@ -27,9 +27,9 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 
 /** Serializer for jdk {@link Proxy}. */

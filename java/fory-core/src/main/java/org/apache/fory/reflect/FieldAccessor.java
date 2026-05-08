@@ -33,8 +33,8 @@ import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.type.TypeUtils;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
 import org.apache.fory.util.function.ToByteFunction;
@@ -160,7 +160,7 @@ public abstract class FieldAccessor {
         return new ObjectGetter(field, (Function) getter);
       }
     }
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return new GeneratedAccessor(field);
     }
     if (field.getType() == boolean.class) {

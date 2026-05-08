@@ -19,7 +19,7 @@
 
 package org.apache.fory.logging;
 
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 
 /**
  * A logger factory which can be used to disable fory logging more easily than configure logging.

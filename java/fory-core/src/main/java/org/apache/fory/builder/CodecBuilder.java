@@ -55,6 +55,7 @@ import org.apache.fory.codegen.Expression.StaticInvoke;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.Platform;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -62,7 +63,6 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
@@ -264,7 +264,7 @@ public abstract class CodecBuilder {
       if (ref == null) {
         Class<?> funcInterface = methodInfo.f0;
         TypeRef<?> getterType = TypeRef.of(funcInterface);
-        if (GraalvmSupport.isGraalBuildtime()) {
+        if (GraalvmSupport.isGraalBuildTime()) {
           // generate getter ahead at native image build time.
           Functions.makeGetterFunction(beanClass, fieldName);
         }
@@ -330,7 +330,7 @@ public abstract class CodecBuilder {
     Field field = descriptor.getField();
     String fieldName = descriptor.getName();
     // Use Field in case the class has duplicate field name as `fieldName`.
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return getOrCreateField(
           true,
           long.class,
@@ -449,7 +449,7 @@ public abstract class CodecBuilder {
           TypeRef<Field> fieldTypeRef = TypeRef.of(Field.class);
           Expression classExpr = beanClassExpr(field.getDeclaringClass());
           Expression fieldExpr;
-          if (GraalvmSupport.isGraalBuildtime()) {
+          if (GraalvmSupport.isGraalBuildTime()) {
             fieldExpr =
                 inlineInvoke(
                     classExpr, "getDeclaredField", fieldTypeRef, Literal.ofString(fieldName));
@@ -534,7 +534,7 @@ public abstract class CodecBuilder {
     if (cls == beanClass) {
       return staticBeanClassExpr();
     }
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       String name = cls.getName().replaceAll("\\.|\\$", "_") + "__class__";
       return getOrCreateField(
           true,
@@ -548,7 +548,7 @@ public abstract class CodecBuilder {
   }
 
   protected Expression beanClassExpr() {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return staticBeanClassExpr();
     }
     throw new UnsupportedOperationException();

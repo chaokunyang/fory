@@ -132,7 +132,7 @@ public class Example {
 ### Example with Dynamic Proxy
 
 ```java
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 
 public class ProxyExample {
   public interface MyService {

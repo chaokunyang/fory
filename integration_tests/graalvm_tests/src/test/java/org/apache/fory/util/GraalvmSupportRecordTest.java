@@ -19,6 +19,7 @@
 
 package org.apache.fory.util;
 
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.record.RecordUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;

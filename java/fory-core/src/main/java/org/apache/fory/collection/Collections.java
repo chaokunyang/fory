@@ -29,7 +29,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class Collections {
@@ -215,7 +215,7 @@ public class Collections {
    * @return the cache
    */
   public static <T> Cache<Class<?>, T> newClassKeySoftCache(int concurrencyLevel) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build();
     } else {
       return CacheBuilder.newBuilder()

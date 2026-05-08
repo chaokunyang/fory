@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 
 /**
  * Hash table based implementation with weak keys. An entry in a MultiKeyWeakMap will automatically
@@ -64,7 +64,7 @@ public class MultiKeyWeakMap<T> {
 
   private List<? extends KeyReference> createKey(Object[] keys) {
     boolean[] reclaimedFlags = new boolean[keys.length];
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       List<NoCallbackRef> keyRefs = new ArrayList<>();
       for (Object key : keys) {
         keyRefs.add(new NoCallbackRef(key));

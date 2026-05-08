@@ -104,6 +104,7 @@ import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
@@ -168,7 +169,6 @@ import org.apache.fory.type.unsigned.UInt16;
 import org.apache.fory.type.unsigned.UInt32;
 import org.apache.fory.type.unsigned.UInt64;
 import org.apache.fory.type.unsigned.UInt8;
-import org.apache.fory.util.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
@@ -320,7 +320,7 @@ public class ClassResolver extends TypeResolver {
     registerDefaultClasses();
     addDefaultSerializers();
     shimDispatcher.initialize();
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       classInfoMap.forEach(
           (cls, classInfo) -> {
             if (classInfo.serializer != null) {
@@ -1802,7 +1802,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   private void createSerializer0(Class<?> cls) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       registerGraalvmSerializerClass(cls);
       return;
     }
@@ -2180,7 +2180,7 @@ public class ClassResolver extends TypeResolver {
             // Always ensure array class serializers and their component type serializers
             // are registered in GraalVM registry, since ObjectArraySerializer needs
             // the component type serializer at construction time
-            if (cls.isArray() && GraalvmSupport.isGraalBuildtime()) {
+            if (cls.isArray() && GraalvmSupport.isGraalBuildTime()) {
               // First ensure component type serializer is registered if it's serializable
               Class<?> componentType = TypeUtils.getArrayComponent(cls);
               if (isSerializable(componentType)) {
@@ -2191,7 +2191,7 @@ public class ClassResolver extends TypeResolver {
             }
             // For abstract enums, also create and store serializers for enum value classes
             // so they are available at GraalVM runtime
-            if (cls.isEnum() && GraalvmSupport.isGraalBuildtime()) {
+            if (cls.isEnum() && GraalvmSupport.isGraalBuildTime()) {
               for (Object enumConstant : cls.getEnumConstants()) {
                 Class<?> enumValueClass = enumConstant.getClass();
                 if (enumValueClass != cls) {
@@ -2200,12 +2200,12 @@ public class ClassResolver extends TypeResolver {
                 }
               }
             }
-            if (GraalvmSupport.isGraalBuildtime() && classInfo.serializer != null) {
+            if (GraalvmSupport.isGraalBuildTime() && classInfo.serializer != null) {
               getGraalvmClassRegistry()
                   .putSerializerClass(cls, getGraalvmSerializerClass(classInfo.serializer));
             }
           });
-      if (GraalvmSupport.isGraalBuildtime()) {
+      if (GraalvmSupport.isGraalBuildTime()) {
         typeInfoCache = NIL_TYPE_INFO;
         clearGraalvmGeneratedTypeInfoSerializers();
         compositeNameBytes2TypeInfo.forEach(

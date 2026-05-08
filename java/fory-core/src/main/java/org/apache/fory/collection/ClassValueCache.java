@@ -22,7 +22,7 @@ package org.apache.fory.collection;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.util.GraalvmSupport;
+import org.apache.fory.platform.GraalvmSupport;
 
 @Internal
 public class ClassValueCache<T> {
@@ -59,7 +59,7 @@ public class ClassValueCache<T> {
    * @return the cache
    */
   public static <T> ClassValueCache<T> newClassKeyCache(int concurrencyLevel) {
-    if (GraalvmSupport.isGraalBuildtime()) {
+    if (GraalvmSupport.isGraalBuildTime()) {
       return new ClassValueCache<>(
           CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build());
     } else {

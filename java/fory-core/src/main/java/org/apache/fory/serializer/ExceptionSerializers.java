@@ -77,8 +77,13 @@ public final class ExceptionSerializers {
       writeContext.writeRef(value.getStackTrace());
       writeContext.writeRef(value.getCause());
       writeContext.writeStringRef(value.getMessage());
-      writeContext.writeRef(value.getSuppressed());
-      writeContext.getBuffer().writeVarUInt32(0);
+      Throwable[] suppressedExceptions = value.getSuppressed();
+      MemoryBuffer buffer = writeContext.getBuffer();
+      buffer.writeVarUInt32(suppressedExceptions.length);
+      for (Throwable suppressedException : suppressedExceptions) {
+        writeContext.writeRef(suppressedException);
+      }
+      buffer.writeVarUInt32(0);
       for (Serializer slotsSerializer : slotsSerializers) {
         slotsSerializer.write(writeContext, value);
       }
@@ -92,14 +97,13 @@ public final class ExceptionSerializers {
       StackTraceElement[] stackTrace = (StackTraceElement[]) readContext.readRef();
       Throwable cause = (Throwable) readContext.readRef();
       String detailMessage = readContext.readStringRef();
-      Throwable[] suppressedExceptions = (Throwable[]) readContext.readRef();
+      List<Throwable> suppressedExceptions = readSuppressedExceptions(readContext);
       skipExtraFields(readContext);
       Platform.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
       Platform.putObject(obj, ThrowableOffsets.CAUSE_FIELD_OFFSET, cause == null ? obj : cause);
       Platform.putObject(obj, ThrowableOffsets.STACK_TRACE_FIELD_OFFSET, stackTrace);
-      for (Throwable suppressedException : suppressedExceptions) {
-        obj.addSuppressed(suppressedException);
-      }
+      Platform.putObject(
+          obj, ThrowableOffsets.SUPPRESSED_EXCEPTIONS_FIELD_OFFSET, suppressedExceptions);
       readAndSetFields(readContext, obj, slotsSerializers, config);
       return obj;
     }
@@ -318,12 +322,23 @@ public final class ExceptionSerializers {
     metaReadContext.readTypeInfos.add(null);
   }
 
+  private static List<Throwable> readSuppressedExceptions(ReadContext readContext) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int numSuppressedExceptions = buffer.readVarUInt32();
+    List<Throwable> suppressedExceptionsList = new ArrayList<>(numSuppressedExceptions);
+    for (int i = 0; i < numSuppressedExceptions; i++) {
+      suppressedExceptionsList.add((Throwable) readContext.readRef());
+    }
+    return suppressedExceptionsList;
+  }
+
   private static final class ThrowableOffsets {
     // Graalvm unsafe offset substitution support: Make the call followed by a field store
     // directly or by a sign extend node followed directly by a field store.
     private static final long DETAIL_MESSAGE_FIELD_OFFSET;
     private static final long CAUSE_FIELD_OFFSET;
     private static final long STACK_TRACE_FIELD_OFFSET;
+    private static final long SUPPRESSED_EXCEPTIONS_FIELD_OFFSET;
 
     static {
       try {
@@ -333,6 +348,9 @@ public final class ExceptionSerializers {
         CAUSE_FIELD_OFFSET = Platform.UNSAFE.objectFieldOffset(causeField);
         Field stackTraceField = Throwable.class.getDeclaredField("stackTrace");
         STACK_TRACE_FIELD_OFFSET = Platform.UNSAFE.objectFieldOffset(stackTraceField);
+        Field suppressedExceptionsField = Throwable.class.getDeclaredField("suppressedExceptions");
+        SUPPRESSED_EXCEPTIONS_FIELD_OFFSET =
+            Platform.UNSAFE.objectFieldOffset(suppressedExceptionsField);
       } catch (Exception e) {
         throw new RuntimeException(e);
       }

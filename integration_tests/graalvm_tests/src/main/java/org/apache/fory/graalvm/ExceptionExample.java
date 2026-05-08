@@ -48,6 +48,7 @@ public class ExceptionExample {
   private static void testBuiltInException() {
     IllegalArgumentException cause = new IllegalArgumentException("built-in-cause");
     IllegalStateException value = new IllegalStateException("built-in", cause);
+    value.addSuppressed(new RuntimeException("built-in-suppressed"));
     IllegalStateException copy = (IllegalStateException) FORY.deserialize(FORY.serialize(value));
     Preconditions.checkArgument(
         FORY.getTypeResolver().getSerializerClass(IllegalStateException.class)
@@ -58,6 +59,9 @@ public class ExceptionExample {
     Preconditions.checkArgument(copy.getCause().getMessage().equals(cause.getMessage()));
     Preconditions.checkArgument(copy.getStackTrace().length == value.getStackTrace().length);
     Preconditions.checkArgument(copy.getStackTrace()[0].equals(value.getStackTrace()[0]));
+    Preconditions.checkArgument(copy.getSuppressed().length == 1);
+    Preconditions.checkArgument(copy.getSuppressed()[0].getClass() == RuntimeException.class);
+    Preconditions.checkArgument(copy.getSuppressed()[0].getMessage().equals("built-in-suppressed"));
   }
 
   private static void testCustomException() {
@@ -66,6 +70,7 @@ public class ExceptionExample {
             .withParentCode(42)
             .withTags(new ArrayList<>(Arrays.asList("left", "right")));
     value.retryable = true;
+    value.addSuppressed(new IllegalStateException("custom-suppressed"));
     CustomException copy = (CustomException) FORY.deserialize(FORY.serialize(value));
     Preconditions.checkArgument(
         FORY.getTypeResolver().getSerializerClass(CustomException.class)
@@ -75,6 +80,9 @@ public class ExceptionExample {
     Preconditions.checkArgument(copy.retryable == value.retryable);
     Preconditions.checkArgument(copy.tags.equals(value.tags));
     Preconditions.checkArgument(copy.getCause() == null);
+    Preconditions.checkArgument(copy.getSuppressed().length == 1);
+    Preconditions.checkArgument(copy.getSuppressed()[0].getClass() == IllegalStateException.class);
+    Preconditions.checkArgument(copy.getSuppressed()[0].getMessage().equals("custom-suppressed"));
     Preconditions.checkArgument(
         ReflectionUtils.getObjectFieldValue(
                 copy, ReflectionUtils.getField(Throwable.class, "cause"))

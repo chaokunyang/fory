@@ -36,7 +36,6 @@ from plot_style import (  # noqa: E402
     apply_benchmark_style,
     add_compact_legend,
     format_markdown_with_prettier,
-    format_throughput_label,
     format_throughput_tick,
     save_benchmark_figure,
     serializer_offset,
@@ -93,30 +92,12 @@ def collect_results(payload: dict) -> dict:
     return results
 
 
-def format_label(value: float) -> str:
-    return format_throughput_label(value)
-
-
 def format_tick(value: float, _position) -> str:
     return format_throughput_tick(value, _position)
 
 
 def format_int(value: float) -> str:
     return f"{int(round(value)):,}"
-
-
-def datatype_plot_label(data_type: str) -> str:
-    if data_type == "struct":
-        return "NumericStruct"
-    if data_type == "structlist":
-        return "NumericStruct\nList"
-    if data_type == "mediacontent":
-        return "MediaContent"
-    if data_type == "mediacontentlist":
-        return "MediaContent\nList"
-    if data_type.endswith("list"):
-        return f"{data_type[:-4].capitalize()}\nList"
-    return data_type.capitalize()
 
 
 def fastest_entry(values: dict[str, float]) -> str:
@@ -227,52 +208,7 @@ def save_summary_plot(results: dict, output_dir: str) -> str:
     return path
 
 
-def save_per_type_plots(results: dict, output_dir: str) -> list[tuple[str, str]]:
-    plot_paths = []
-    for data_type in DATA_TYPES:
-        operations = results.get(data_type, {})
-        if not operations:
-            continue
-        figure, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
-        for index, operation in enumerate(["serialize", "deserialize"]):
-            serializers = SERIALIZERS
-            values = [
-                operations.get(operation, {}).get(serializer, 0.0)
-                for serializer in serializers
-            ]
-            bars = axes[index].bar(
-                serializers,
-                values,
-                color=[COLORS[serializer] for serializer in serializers],
-                edgecolor=BAR_EDGE_COLOR,
-                linewidth=0.8,
-                width=0.46,
-            )
-            axes[index].set_title(f"{operation.capitalize()} throughput", pad=8)
-            axes[index].set_ylabel("ops/s")
-            style_throughput_axis(axes[index])
-            for bar, value in zip(bars, values):
-                axes[index].annotate(
-                    format_label(value),
-                    xy=(bar.get_x() + bar.get_width() / 2, value),
-                    xytext=(0, 3),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom",
-                    fontsize=9,
-                )
-        figure.suptitle(DISPLAY_NAMES[data_type], fontsize=13, fontweight="normal")
-        figure.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
-        path = os.path.join(output_dir, f"{data_type}.png")
-        save_benchmark_figure(figure, path)
-        plt.close(figure)
-        plot_paths.append((DISPLAY_NAMES[data_type], path))
-    return plot_paths
-
-
-def write_report(
-    payload: dict, results: dict, output_dir: str, plot_paths: list[tuple[str, str]]
-):
+def write_report(payload: dict, results: dict, output_dir: str):
     metadata = payload["metadata"]
     report_path = os.path.join(output_dir, "README.md")
     with open(report_path, "w", encoding="utf-8") as handle:
@@ -281,6 +217,8 @@ def write_report(
             "This benchmark compares serialization and deserialization throughput for "
             "Apache Fory, Protocol Buffers, and JSON in Dart.\n\n"
         )
+        handle.write("## Throughput Plot\n\n")
+        handle.write("![Throughput](throughput.png)\n\n")
         handle.write("## Hardware and Runtime Info\n\n")
         handle.write("| Key | Value |\n")
         handle.write("| --- | --- |\n")
@@ -288,7 +226,6 @@ def write_report(
             handle.write(f"| {key} | {value} |\n")
 
         handle.write("\n## Throughput Results\n\n")
-        handle.write("![Throughput](throughput.png)\n\n")
         handle.write(
             "| Datatype | Operation | Fory TPS | Protobuf TPS | JSON TPS | Fastest |\n"
         )
@@ -321,12 +258,6 @@ def write_report(
                 f"| {DISPLAY_NAMES[data_type]} | {sizes['fory']} | {sizes['protobuf']} | {sizes['json']} |\n"
             )
 
-        if plot_paths:
-            handle.write("\n## Per-workload Plots\n\n")
-            for display_name, path in plot_paths:
-                handle.write(f"### {display_name}\n\n")
-                handle.write(f"![{display_name}]({os.path.basename(path)})\n\n")
-
     format_markdown_with_prettier(report_path)
 
 
@@ -336,8 +267,7 @@ def main() -> None:
     payload = load_payload(args.json_file)
     results = collect_results(payload)
     save_summary_plot(results, args.output_dir)
-    plot_paths = save_per_type_plots(results, args.output_dir)
-    write_report(payload, results, args.output_dir, plot_paths)
+    write_report(payload, results, args.output_dir)
 
 
 if __name__ == "__main__":

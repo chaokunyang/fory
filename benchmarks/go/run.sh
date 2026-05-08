@@ -236,10 +236,10 @@ if $GENERATE_REPORT; then
     if [[ "$COPY_DOCS" == true && -f "$OUTPUT_DIR/README.md" ]]; then
         mkdir -p "$DOCS_DIR"
         cp "$OUTPUT_DIR/README.md" "$DOCS_DIR/README.md"
-        cp "$OUTPUT_DIR"/*.png "$DOCS_DIR/" 2>/dev/null || true
+        cp "$OUTPUT_DIR/throughput.png" "$DOCS_DIR/throughput.png"
         cp "$OUTPUT_DIR/benchmark_results.txt" "$DOCS_DIR/benchmark_results.txt"
         cp "$OUTPUT_DIR/serialized_sizes.txt" "$DOCS_DIR/serialized_sizes.txt"
-        echo "Copied report, plots, and text outputs to: $DOCS_DIR"
+        echo "Copied report, throughput plot, and text outputs to: $DOCS_DIR"
     fi
 fi
 
@@ -252,7 +252,7 @@ echo "  - benchmark_results.txt (human-readable)"
 echo "  - benchmark_results.json (JSON format)"
 if $GENERATE_REPORT; then
     echo "  - README.md and benchmark_report.md (report)"
-    echo "  - benchmark_*.png (plots)"
+    echo "  - throughput.png (plot)"
     if [[ "$COPY_DOCS" == true ]]; then
         echo "Docs sync: $DOCS_DIR"
     fi

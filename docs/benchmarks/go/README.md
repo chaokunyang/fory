@@ -1,6 +1,10 @@
 # Go Serialization Benchmark Report
 
-Generated: 2026-05-08 16:56:03
+Generated: 2026-05-08 17:27:11
+
+## Performance Chart
+
+![Throughput](throughput.png)
 
 ## System Information
 
@@ -52,33 +56,3 @@ Generated: 2026-05-08 16:56:03
 | NumericStructList | 819  | 1900     | 1766    |
 | SampleList        | 7599 | 7560     | 10486   |
 | MediaContentList  | 5774 | 6080     | 8006    |
-
-## Performance Charts
-
-### Throughput
-
-![Throughput](throughput.png)
-
-### NumericStruct
-
-![NumericStruct Benchmark](benchmark_struct.png)
-
-### Sample
-
-![Sample Benchmark](benchmark_sample.png)
-
-### MediaContent
-
-![MediaContent Benchmark](benchmark_mediacontent.png)
-
-### NumericStructList
-
-![NumericStructList Benchmark](benchmark_structlist.png)
-
-### SampleList
-
-![SampleList Benchmark](benchmark_samplelist.png)
-
-### MediaContentList
-
-![MediaContentList Benchmark](benchmark_mediacontentlist.png)

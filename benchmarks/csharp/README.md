@@ -24,7 +24,7 @@ This runs all benchmark cases and generates:
 
 - `build/benchmark_results.json`
 - `report/README.md`
-- `report/throughput.png` and per-datatype throughput plots (for example `report/struct.png`)
+- `report/throughput.png`
 
 ## Run Options
 
@@ -79,4 +79,4 @@ Per-case winners vary by payload and operation. The full breakdown is generated 
 
 - `benchmarks/csharp/build/benchmark_results.json`
 - `benchmarks/csharp/report/README.md`
-- `benchmarks/csharp/report/*.png`
+- `benchmarks/csharp/report/throughput.png`

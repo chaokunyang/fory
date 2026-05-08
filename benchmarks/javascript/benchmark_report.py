@@ -25,7 +25,6 @@ from datetime import datetime
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.ticker import FuncFormatter
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -36,7 +35,6 @@ from plot_style import (  # noqa: E402
     add_compact_legend,
     apply_benchmark_style,
     format_markdown_with_prettier,
-    format_throughput_label,
     format_throughput_tick,
     save_benchmark_figure,
     serializer_offset,
@@ -180,76 +178,12 @@ if context.get("v8_version"):
     system_info["V8"] = context["v8_version"]
 
 
-def format_tps_label(tps):
-    return format_throughput_label(tps)
-
-
 def format_tps_tick(tps, _position):
     return format_throughput_tick(tps, _position)
 
 
-def plot_datatype(ax, datatype, operation):
-    if datatype not in data or operation not in data[datatype]:
-        ax.set_title(f"{datatype} {operation} - No Data")
-        ax.axis("off")
-        return
-
-    libs = [lib for lib in SERIALIZER_ORDER if lib in data[datatype][operation]]
-    if not libs:
-        ax.set_title(f"{datatype} {operation} - No Data")
-        ax.axis("off")
-        return
-
-    times = [data[datatype][operation].get(lib, 0) for lib in libs]
-    throughput = [1e9 / value if value > 0 else 0 for value in times]
-    colors = [COLORS[lib] for lib in libs]
-
-    x = np.arange(len(libs))
-    bars = ax.bar(
-        x,
-        throughput,
-        color=colors,
-        edgecolor=BAR_EDGE_COLOR,
-        linewidth=0.8,
-        width=0.46,
-    )
-    ax.set_title(f"{operation.capitalize()} Throughput (higher is better)", pad=8)
-    ax.set_xticks(x)
-    ax.set_xticklabels([SERIALIZER_LABELS[lib] for lib in libs])
-    ax.set_ylabel("Throughput (ops/sec)")
-    style_throughput_axis(ax)
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
-
-    for bar, tps in zip(bars, throughput):
-        ax.annotate(
-            format_tps_label(tps),
-            xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
-            xytext=(0, 3),
-            textcoords="offset points",
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
-
-
-plot_images = []
 datatypes = [datatype for datatype in DATATYPE_ORDER if datatype in data]
 operations = ["serialize", "deserialize"]
-
-for datatype in datatypes:
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
-    for i, operation in enumerate(operations):
-        plot_datatype(axes[i], datatype, operation)
-    fig.suptitle(
-        f"{format_datatype_table_label(datatype)} Throughput",
-        fontsize=13,
-        fontweight="normal",
-    )
-    fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
-    plot_path = os.path.join(output_dir, f"{datatype}.png")
-    save_benchmark_figure(fig, plot_path)
-    plot_images.append((datatype, plot_path))
-    plt.close()
 
 
 def plot_throughput_grid_subplot(ax, datatype):
@@ -312,7 +246,6 @@ fig.suptitle(
 fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
 combined_plot_path = os.path.join(output_dir, "throughput.png")
 save_benchmark_figure(fig, combined_plot_path)
-plot_images.append(("throughput", combined_plot_path))
 plt.close()
 
 md_report = [
@@ -329,6 +262,9 @@ md_report = [
     "prebuilt protobuf-shaped value, and JSON receives the benchmark JavaScript "
     "object. Protobuf timings do not include `toProto`, `fromProto`, "
     "`protobufjs.create`, or `toObject` conversion work.\n\n",
+    "## Benchmark Plot\n\n",
+    "The plot shows throughput (ops/sec); higher is better.\n\n",
+    f"![Throughput]({args.plot_prefix}throughput.png)\n\n",
     "## Hardware & OS Info\n\n",
     "| Key | Value |\n",
     "|-----|-------|\n",
@@ -336,21 +272,6 @@ md_report = [
 
 for key, value in system_info.items():
     md_report.append(f"| {key} | {value} |\n")
-
-md_report.append("\n## Benchmark Plots\n")
-md_report.append("\nAll class-level plots below show throughput (ops/sec).\n")
-for datatype, image in sorted(
-    plot_images, key=lambda item: (0 if item[0] == "throughput" else 1, item[0])
-):
-    image_name = os.path.basename(image)
-    image_path = args.plot_prefix + image_name
-    title = (
-        "Throughput"
-        if datatype == "throughput"
-        else format_datatype_table_label(datatype)
-    )
-    md_report.append(f"\n### {title}\n\n")
-    md_report.append(f"![{title}]({image_path})\n")
 
 md_report.append("\n## Benchmark Results\n\n")
 md_report.append("### Timing Results (nanoseconds)\n\n")

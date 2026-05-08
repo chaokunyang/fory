@@ -22,7 +22,6 @@ import argparse
 import sys
 from pathlib import Path
 import matplotlib.pyplot as plt
-import numpy as np
 from matplotlib.ticker import FuncFormatter
 from collections import defaultdict
 from datetime import datetime
@@ -35,7 +34,6 @@ from plot_style import (  # noqa: E402
     apply_benchmark_style,
     add_compact_legend,
     format_markdown_with_prettier,
-    format_throughput_label,
     format_throughput_tick,
     save_benchmark_figure,
     serializer_offset,
@@ -244,81 +242,16 @@ if context:
         system_info["CPU Cores (from benchmark)"] = context["num_cpus"]
 
 
-# === Plotting ===
-def format_tps_label(tps):
-    return format_throughput_label(tps)
-
-
 def format_tps_tick(tps, _position):
     return format_throughput_tick(tps, _position)
 
 
-def plot_datatype(ax, datatype, operation):
-    """Plot a single datatype/operation throughput comparison."""
-    if datatype not in data or operation not in data[datatype]:
-        ax.set_title(f"{datatype} {operation} - No Data")
-        ax.axis("off")
-        return
-
-    libs = set(data[datatype][operation].keys())
-    lib_order = [lib for lib in SERIALIZER_ORDER if lib in libs]
-
-    times = [data[datatype][operation].get(lib, 0) for lib in lib_order]
-    throughput = [1e9 / t if t > 0 else 0 for t in times]
-    colors = [COLORS.get(lib, "#888888") for lib in lib_order]
-
-    x = np.arange(len(lib_order))
-    bars = ax.bar(
-        x,
-        throughput,
-        color=colors,
-        edgecolor=BAR_EDGE_COLOR,
-        linewidth=0.8,
-        width=0.46,
-    )
-
-    ax.set_title(f"{operation.capitalize()} Throughput (higher is better)", pad=8)
-    ax.set_xticks(x)
-    ax.set_xticklabels([SERIALIZER_LABELS.get(lib, lib) for lib in lib_order])
-    ax.set_ylabel("Throughput (ops/sec)")
-    style_throughput_axis(ax)
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
-
-    # Add value labels on bars
-    for bar, tps_val in zip(bars, throughput):
-        height = bar.get_height()
-        ax.annotate(
-            format_tps_label(tps_val),
-            xy=(bar.get_x() + bar.get_width() / 2, height),
-            xytext=(0, 3),
-            textcoords="offset points",
-            ha="center",
-            va="bottom",
-            fontsize=9,
-        )
-
-
 # === Create plots ===
-plot_images = []
 datatypes = ordered_datatypes(data.keys())
 operations = ["serialize", "deserialize"]
 
-for datatype in datatypes:
-    fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
-    for i, op in enumerate(operations):
-        plot_datatype(axes[i], datatype, op)
-    fig.suptitle(f"{format_datatype_table_label(datatype)} Throughput", fontsize=13)
-    fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
-    plot_path = os.path.join(output_dir, f"{datatype}.png")
-    save_benchmark_figure(fig, plot_path)
-    plot_images.append((datatype, plot_path))
-    plt.close()
 
 # === Create combined TPS comparison plot ===
-non_list_datatypes = [dt for dt in datatypes if not dt.endswith("list")]
-list_datatypes = [dt for dt in datatypes if dt.endswith("list")]
-
-
 def plot_throughput_grid_subplot(ax, datatype):
     if datatype not in data:
         ax.set_title(f"{format_datatype_table_label(datatype)}\nNo Data")
@@ -377,7 +310,6 @@ fig.suptitle("C++ Serialization Throughput", fontsize=15, fontweight="normal", y
 fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.965], w_pad=1.2, h_pad=1.25)
 combined_plot_path = os.path.join(output_dir, "throughput.png")
 save_benchmark_figure(fig, combined_plot_path)
-plot_images.append(("throughput", combined_plot_path))
 plt.close()
 
 # === Markdown report ===
@@ -391,34 +323,15 @@ md_report = [
     "cd ..\n",
     "python benchmark_report.py --json-file build/benchmark_results.json --output-dir report\n",
     "```\n\n",
+    "## Benchmark Plot\n\n",
+    "The plot shows throughput (ops/sec); higher is better.\n\n",
+    f"![Throughput]({args.plot_prefix}throughput.png)\n\n",
     "## Hardware & OS Info\n\n",
     "| Key | Value |\n",
     "|-----|-------|\n",
 ]
 for k, v in system_info.items():
     md_report.append(f"| {k} | {v} |\n")
-
-# Plots section
-md_report.append("\n## Benchmark Plots\n")
-md_report.append("\nAll class-level plots below show throughput (ops/sec).\n")
-plot_images_sorted = sorted(
-    plot_images,
-    key=lambda item: (
-        0 if item[0] == "throughput" else 1,
-        DATATYPE_ORDER_INDEX.get(item[0], len(DATATYPE_ORDER)),
-        item[0],
-    ),
-)
-for datatype, img in plot_images_sorted:
-    img_filename = os.path.basename(img)
-    img_path_report = args.plot_prefix + img_filename
-    plot_title = (
-        "Throughput"
-        if datatype == "throughput"
-        else format_datatype_table_label(datatype)
-    )
-    md_report.append(f"\n### {plot_title}\n\n")
-    md_report.append(f"![{plot_title}]({img_path_report})\n")
 
 # Results table
 md_report.append("\n## Benchmark Results\n\n")

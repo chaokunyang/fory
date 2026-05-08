@@ -2,6 +2,10 @@
 
 This benchmark compares serialization and deserialization throughput for Apache Fory, Protocol Buffers, and JSON in Dart.
 
+## Throughput Plot
+
+![Throughput](throughput.png)
+
 ## Hardware and Runtime Info
 
 | Key                   | Value                                                             |
@@ -17,8 +21,6 @@ This benchmark compares serialization and deserialization throughput for Apache 
 | Duration per case (s) | 1.5                                                               |
 
 ## Throughput Results
-
-![Throughput](throughput.png)
 
 | Datatype          | Operation   |  Fory TPS | Protobuf TPS |  JSON TPS | Fastest       |
 | ----------------- | ----------- | --------: | -----------: | --------: | ------------- |
@@ -45,29 +47,3 @@ This benchmark compares serialization and deserialization throughput for Apache 
 | NumericStructList |  255 |      475 |  816 |
 | SampleList        | 1978 |     1900 | 3976 |
 | MediaContentList  | 1531 |     1550 | 3122 |
-
-## Per-workload Plots
-
-### NumericStruct
-
-![NumericStruct](struct.png)
-
-### Sample
-
-![Sample](sample.png)
-
-### MediaContent
-
-![MediaContent](mediacontent.png)
-
-### NumericStructList
-
-![NumericStructList](structlist.png)
-
-### SampleList
-
-![SampleList](samplelist.png)
-
-### MediaContentList
-
-![MediaContentList](mediacontentlist.png)

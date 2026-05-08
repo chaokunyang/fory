@@ -1,6 +1,6 @@
 # Rust Benchmark Performance Report
 
-_Generated on 2026-05-08 16:56:03_
+_Generated on 2026-05-08 17:27:11_
 
 ## How to Generate This Report
 
@@ -10,6 +10,12 @@ cargo bench --bench serialization_bench 2>&1 | tee results/cargo_bench.log
 cargo run --release --bin fory_profiler -- --print-all-serialized-sizes | tee results/serialized_sizes.txt
 python benchmark_report.py --log-file results/cargo_bench.log --size-file results/serialized_sizes.txt --output-dir results
 ```
+
+## Benchmark Plot
+
+The plot shows throughput (ops/sec); higher is better.
+
+![Throughput](throughput.png)
 
 ## Hardware & OS Info
 
@@ -22,38 +28,6 @@ python benchmark_report.py --log-file results/cargo_bench.log --size-file result
 | CPU Cores (Logical)  | 12                  |
 | Total RAM (GB)       | 48.0                |
 | Benchmark Date       | 2026-05-08T16:47:49 |
-
-## Benchmark Plots
-
-All class-level plots below show throughput (ops/sec).
-
-### Throughput
-
-![Throughput](throughput.png)
-
-### MediaContent
-
-![MediaContent](mediacontent.png)
-
-### MediaContentList
-
-![MediaContentList](mediacontentlist.png)
-
-### Sample
-
-![Sample](sample.png)
-
-### SampleList
-
-![SampleList](samplelist.png)
-
-### NumericStruct
-
-![NumericStruct](struct.png)
-
-### NumericStructList
-
-![NumericStructList](structlist.png)
 
 ## Benchmark Results
 

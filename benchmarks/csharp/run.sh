@@ -136,8 +136,8 @@ python3 benchmark_report.py --json-file "$RESULT_JSON" --output-dir "$REPORT_DIR
 if [[ "$COPY_DOCS" == true ]]; then
     mkdir -p "$DOCS_DIR"
     cp "$REPORT_DIR/README.md" "$DOCS_DIR/README.md"
-    cp "$REPORT_DIR"/*.png "$DOCS_DIR/" 2>/dev/null || true
-    echo -e "${GREEN}Copied report and plots to: ${DOCS_DIR}${NC}"
+    cp "$REPORT_DIR/throughput.png" "$DOCS_DIR/throughput.png"
+    echo -e "${GREEN}Copied report and throughput plot to: ${DOCS_DIR}${NC}"
 fi
 
 echo ""

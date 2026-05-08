@@ -1,6 +1,6 @@
 # C++ Benchmark Performance Report
 
-_Generated on 2026-05-08 16:55:43_
+_Generated on 2026-05-08 17:26:51_
 
 ## How to Generate This Report
 
@@ -10,6 +10,12 @@ cd benchmarks/cpp/build
 cd ..
 python benchmark_report.py --json-file build/benchmark_results.json --output-dir report
 ```
+
+## Benchmark Plot
+
+The plot shows throughput (ops/sec); higher is better.
+
+![Throughput](throughput.png)
 
 ## Hardware & OS Info
 
@@ -23,38 +29,6 @@ python benchmark_report.py --json-file build/benchmark_results.json --output-dir
 | Total RAM (GB)             | 48.0                      |
 | Benchmark Date             | 2026-05-08T16:29:28+08:00 |
 | CPU Cores (from benchmark) | 12                        |
-
-## Benchmark Plots
-
-All class-level plots below show throughput (ops/sec).
-
-### Throughput
-
-![Throughput](throughput.png)
-
-### NumericStruct
-
-![NumericStruct](struct.png)
-
-### Sample
-
-![Sample](sample.png)
-
-### MediaContent
-
-![MediaContent](mediacontent.png)
-
-### NumericStructList
-
-![NumericStructList](structlist.png)
-
-### SampleList
-
-![SampleList](samplelist.png)
-
-### MediaContentList
-
-![MediaContentList](mediacontentlist.png)
 
 ## Benchmark Results
 

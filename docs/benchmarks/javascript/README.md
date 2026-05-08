@@ -1,6 +1,6 @@
 # JavaScript Benchmark Performance Report
 
-_Generated on 2026-05-08 16:56:26_
+_Generated on 2026-05-08 17:27:11_
 
 ## How to Generate This Report
 
@@ -12,6 +12,12 @@ cd benchmarks/javascript
 ## Benchmark Semantics
 
 The timed serializer loops use serializer-native typed values. Fory receives the pre-normalized Fory value used by its schema, protobuf receives the prebuilt protobuf-shaped value, and JSON receives the benchmark JavaScript object. Protobuf timings do not include `toProto`, `fromProto`, `protobufjs.create`, or `toObject` conversion work.
+
+## Benchmark Plot
+
+The plot shows throughput (ops/sec); higher is better.
+
+![Throughput](throughput.png)
 
 ## Hardware & OS Info
 
@@ -27,38 +33,6 @@ The timed serializer loops use serializer-native typed values. Fory receives the
 | CPU Cores (from benchmark) | 12                       |
 | Node.js                    | v22.20.0                 |
 | V8                         | 12.4.254.21-node.33      |
-
-## Benchmark Plots
-
-All class-level plots below show throughput (ops/sec).
-
-### Throughput
-
-![Throughput](throughput.png)
-
-### MediaContent
-
-![MediaContent](mediacontent.png)
-
-### MediaContentList
-
-![MediaContentList](mediacontentlist.png)
-
-### Sample
-
-![Sample](sample.png)
-
-### SampleList
-
-![SampleList](samplelist.png)
-
-### NumericStruct
-
-![NumericStruct](struct.png)
-
-### NumericStructList
-
-![NumericStructList](structlist.png)
 
 ## Benchmark Results
 

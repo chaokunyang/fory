@@ -84,4 +84,3 @@ The report generator writes:
 
 - `results/README.md`
 - `results/throughput.png`
-- per-datatype plots such as `results/struct.png` and `results/mediacontent.png`

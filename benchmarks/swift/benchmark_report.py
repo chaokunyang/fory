@@ -254,6 +254,15 @@ def write_report(
         "Apache Fory, Protocol Buffers, and JSON in Swift."
     )
     lines.append("")
+    lines.append("## Throughput Plot")
+    lines.append("")
+    plot_name = os.path.basename(throughput_plot)
+    if plot_prefix:
+        image_path = f"{plot_prefix.rstrip('/')}/{plot_name}"
+    else:
+        image_path = plot_name
+    lines.append(f"![Throughput]({image_path})")
+    lines.append("")
     lines.append("## Hardware and Runtime Info")
     lines.append("")
     lines.append("| Key | Value |")
@@ -268,13 +277,6 @@ def write_report(
     lines.append(f"| Duration per case (s) | {context.get('durationSeconds', '-')} |")
     lines.append("")
     lines.append("## Throughput Results")
-    lines.append("")
-    plot_name = os.path.basename(throughput_plot)
-    if plot_prefix:
-        image_path = f"{plot_prefix.rstrip('/')}/{plot_name}"
-    else:
-        image_path = plot_name
-    lines.append(f"![Throughput]({image_path})")
     lines.append("")
     lines.append(
         "| Datatype | Operation | Fory TPS | Protobuf TPS | JSON TPS | Fastest |"

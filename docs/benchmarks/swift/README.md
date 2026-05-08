@@ -2,6 +2,10 @@
 
 This benchmark compares serialization and deserialization throughput for Apache Fory, Protocol Buffers, and JSON in Swift.
 
+## Throughput Plot
+
+![Throughput](throughput.png)
+
 ## Hardware and Runtime Info
 
 | Key                   | Value                         |
@@ -14,8 +18,6 @@ This benchmark compares serialization and deserialization throughput for Apache 
 | Duration per case (s) | 3                             |
 
 ## Throughput Results
-
-![Throughput](throughput.png)
 
 | Datatype          | Operation   |   Fory TPS | Protobuf TPS | JSON TPS | Fastest      |
 | ----------------- | ----------- | ---------: | -----------: | -------: | ------------ |

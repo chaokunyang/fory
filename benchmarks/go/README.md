@@ -93,7 +93,7 @@ go test -bench=BenchmarkFory_NumericStruct -benchmem
 
 Example results on Apple M1 Pro:
 
-![Combined Benchmark](../../docs/benchmarks/go/benchmark_combined.png)
+![Combined Benchmark](../../docs/benchmarks/go/throughput.png)
 
 | Data Type         | Operation   | Fory (ops/s) | Protobuf (ops/s) | Msgpack (ops/s) | Fory vs PB | Fory vs MP |
 | ----------------- | ----------- | ------------ | ---------------- | --------------- | ---------- | ---------- |
@@ -148,7 +148,7 @@ After running `./run.sh`:
 - `benchmark_results.txt` - Human-readable benchmark output
 - `benchmark_results.json` - JSON format for programmatic analysis
 - `benchmark_report.md` - Generated markdown report
-- `benchmark_*.png` - Performance comparison charts (requires matplotlib)
+- `throughput.png` - Combined throughput chart (requires matplotlib)
 
 ## Directory Structure
 

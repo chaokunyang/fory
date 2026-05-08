@@ -145,8 +145,8 @@ if $GENERATE_REPORT; then
   if [[ "$COPY_DOCS" == true ]]; then
     mkdir -p "$DOCS_DIR"
     cp "$OUTPUT_DIR/README.md" "$DOCS_DIR/README.md"
-    cp "$OUTPUT_DIR"/*.png "$DOCS_DIR/" 2>/dev/null || true
-    echo "Copied report and plots to: $DOCS_DIR"
+    cp "$OUTPUT_DIR/throughput.png" "$DOCS_DIR/throughput.png"
+    echo "Copied report and throughput plot to: $DOCS_DIR"
   fi
 fi
 

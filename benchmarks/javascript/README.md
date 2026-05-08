@@ -48,7 +48,7 @@ Examples:
 Running the pipeline writes:
 
 - raw benchmark JSON to `benchmarks/javascript/benchmark_results.json`
-- plots to `docs/benchmarks/javascript/*.png`
+- throughput plot to `docs/benchmarks/javascript/throughput.png`
 - Markdown report to `docs/benchmarks/javascript/README.md`
 
 ## Notes

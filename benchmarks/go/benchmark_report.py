@@ -208,103 +208,6 @@ def load_serialized_sizes(output_dir):
     return {}
 
 
-def generate_plots(results, output_dir):
-    """Generate comparison plots for each data type."""
-    if not HAS_MATPLOTLIB:
-        return
-
-    for datatype in DATATYPES:
-        if datatype not in results:
-            continue
-
-        fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
-        fig.suptitle(
-            f"{display_name(datatype)} Serialization Benchmark",
-            fontsize=13,
-            fontweight="normal",
-        )
-
-        for idx, op in enumerate(OPERATIONS):
-            ax = axes[idx]
-
-            if op not in results[datatype]:
-                continue
-
-            data = results[datatype][op]
-            available_serializers = [s for s in SERIALIZERS if s in data]
-
-            if not available_serializers:
-                continue
-
-            # Convert ns to ops/sec
-            ops_per_sec = [
-                1e9 / data[s] if s in data else 0 for s in available_serializers
-            ]
-            colors = [COLORS.get(s, "#888888") for s in available_serializers]
-
-            bars = ax.bar(
-                available_serializers,
-                ops_per_sec,
-                color=colors,
-                edgecolor=BAR_EDGE_COLOR,
-                linewidth=0.8,
-                width=0.46,
-            )
-            ax.set_ylabel("Operations/sec")
-            ax.set_title(f"{op.title()}", pad=8)
-            style_throughput_axis(ax)
-
-            # Add value labels on bars
-            for bar, val in zip(bars, ops_per_sec):
-                height = bar.get_height()
-                ax.annotate(
-                    format_ops_per_sec(val),
-                    xy=(bar.get_x() + bar.get_width() / 2, height),
-                    xytext=(0, 3),
-                    textcoords="offset points",
-                    ha="center",
-                    va="bottom",
-                    fontsize=9,
-                )
-
-            # Add speedup annotations
-            if "fory" in data:
-                fory_val = 1e9 / data["fory"]
-                speedup_lines = []
-                for s in available_serializers:
-                    if s != "fory" and s in data:
-                        other_val = 1e9 / data[s]
-                        speedup = fory_val / other_val
-                        if speedup > 1:
-                            speedup_lines.append(
-                                f"Fory {speedup:.1f}x faster than {s.title()}"
-                            )
-
-                if speedup_lines:
-                    ax.text(
-                        0.98,
-                        0.98,
-                        "\n".join(speedup_lines),
-                        transform=ax.transAxes,
-                        ha="right",
-                        va="top",
-                        fontsize=9,
-                        color="green",
-                        bbox=dict(
-                            boxstyle="round,pad=0.25",
-                            facecolor="white",
-                            edgecolor="none",
-                            alpha=0.85,
-                        ),
-                    )
-
-        fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
-        save_benchmark_figure(
-            fig, os.path.join(output_dir, f"benchmark_{datatype}.png")
-        )
-        plt.close()
-
-
 def plot_throughput_grid_subplot(ax, results, datatype):
     """Plot one datatype with Serialize/Deserialize operation groups."""
     if datatype not in results:
@@ -388,6 +291,11 @@ def generate_markdown_report(results, output_dir):
     report = []
     report.append("# Go Serialization Benchmark Report\n")
     report.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+    # Plot section
+    if HAS_MATPLOTLIB:
+        report.append("## Performance Chart\n")
+        report.append("![Throughput](throughput.png)\n")
 
     # System info
     report.append("## System Information\n")
@@ -491,18 +399,6 @@ def generate_markdown_report(results, output_dir):
     else:
         report.append("No serialized size data found.\n")
 
-    # Plots section
-    if HAS_MATPLOTLIB:
-        report.append("## Performance Charts\n")
-        report.append("### Throughput")
-        report.append("![Throughput](throughput.png)\n")
-        for datatype in datatypes:
-            if datatype in results:
-                report.append(f"### {display_name(datatype)}")
-                report.append(
-                    f"![{display_name(datatype)} Benchmark](benchmark_{datatype}.png)\n"
-                )
-
     # Write report
     report_paths = [
         os.path.join(output_dir, "README.md"),
@@ -548,7 +444,6 @@ def main():
     print("Parsed results for data types:", list(results.keys()))
 
     # Generate outputs
-    generate_plots(results, output_dir)
     generate_combined_plot(results, output_dir)
     generate_markdown_report(results, output_dir)
 

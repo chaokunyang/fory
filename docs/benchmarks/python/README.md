@@ -1,6 +1,6 @@
 # Python Benchmark Performance Report
 
-_Generated on 2026-05-08 16:55:43_
+_Generated on 2026-05-08 17:26:51_
 
 ## How to Generate This Report
 
@@ -8,6 +8,12 @@ _Generated on 2026-05-08 16:55:43_
 cd benchmarks/python
 ./run.sh
 ```
+
+## Benchmark Plot
+
+The plot shows throughput (ops/sec); higher is better.
+
+![Throughput](throughput.png)
 
 ## Hardware & OS Info
 
@@ -32,38 +38,6 @@ cd benchmarks/python
 | repeat     | 5     |
 | number     | 1000  |
 | list_size  | 5     |
-
-## Benchmark Plots
-
-All plots show throughput (ops/sec); higher is better.
-
-### Throughput
-
-![Throughput](throughput.png)
-
-### MediaContent
-
-![MediaContent](mediacontent.png)
-
-### MediaContentList
-
-![MediaContentList](mediacontentlist.png)
-
-### Sample
-
-![Sample](sample.png)
-
-### SampleList
-
-![SampleList](samplelist.png)
-
-### NumericStruct
-
-![NumericStruct](struct.png)
-
-### NumericStructList
-
-![NumericStructList](structlist.png)
 
 ## Benchmark Results
 

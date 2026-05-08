@@ -1,6 +1,6 @@
 # C# Benchmark Performance Report
 
-_Generated on 2026-05-08 16:55:43_
+_Generated on 2026-05-08 17:26:51_
 
 ## How to Generate This Report
 
@@ -9,6 +9,12 @@ cd benchmarks/csharp
 dotnet run -c Release --project ./Fory.CSharpBenchmark.csproj -- --output build/benchmark_results.json
 python3 benchmark_report.py --json-file build/benchmark_results.json --output-dir report
 ```
+
+## Benchmark Plot
+
+The plot shows throughput (ops/sec); higher is better.
+
+![Throughput](throughput.png)
 
 ## Hardware & OS Info
 
@@ -34,38 +40,6 @@ python3 benchmark_report.py --json-file build/benchmark_results.json --output-di
 | Serializers         | fory, msgpack, protobuf                                                |
 | Datatypes           | struct, sample, mediacontent, structlist, samplelist, mediacontentlist |
 | Operations          | serialize, deserialize                                                 |
-
-## Benchmark Plots
-
-All class-level plots below show throughput (ops/sec).
-
-### Throughput
-
-![Throughput](throughput.png)
-
-### MediaContent
-
-![MediaContent](mediacontent.png)
-
-### MediaContentList
-
-![MediaContentList](mediacontentlist.png)
-
-### Sample
-
-![Sample](sample.png)
-
-### SampleList
-
-![SampleList](samplelist.png)
-
-### NumericStruct
-
-![NumericStruct](struct.png)
-
-### NumericStructList
-
-![NumericStructList](structlist.png)
 
 ## Benchmark Results
 

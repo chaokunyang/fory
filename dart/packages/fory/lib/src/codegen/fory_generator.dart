@@ -1557,13 +1557,13 @@ GeneratedFieldType(
       case TypeIds.float16:
         output
           ..writeln(
-            '$indent$view.setUint16($offset, $valueExpression.toBits(), generatedLittleEndian);',
+            '$indent$view.setUint16($offset, toFloat16Bits($valueExpression), generatedLittleEndian);',
           )
           ..writeln('$indent$offset += 2;');
       case TypeIds.bfloat16:
         output
           ..writeln(
-            '$indent$view.setUint16($offset, $valueExpression.toBits(), generatedLittleEndian);',
+            '$indent$view.setUint16($offset, toBfloat16Bits($valueExpression), generatedLittleEndian);',
           )
           ..writeln('$indent$offset += 2;');
       case TypeIds.float32:
@@ -1662,13 +1662,13 @@ GeneratedFieldType(
       case TypeIds.float16:
         output
           ..writeln(
-            '$indent$target = Float16.fromBits($view.getUint16($offset, generatedLittleEndian));',
+            '$indent$target = fromFloat16Bits($view.getUint16($offset, generatedLittleEndian));',
           )
           ..writeln('$indent$offset += 2;');
       case TypeIds.bfloat16:
         output
           ..writeln(
-            '$indent$target = Bfloat16.fromBits($view.getUint16($offset, generatedLittleEndian));',
+            '$indent$target = fromBfloat16Bits($view.getUint16($offset, generatedLittleEndian));',
           )
           ..writeln('$indent$offset += 2;');
       case TypeIds.float32:
@@ -2772,12 +2772,13 @@ GeneratedFieldType(
     final valid = switch (_typeLiteral(nonNullable)) {
       'bool' => typeId == TypeIds.boolType,
       'int' => _isSupportedIntTypeId(typeId),
-      'double' => typeId == TypeIds.float32 || typeId == TypeIds.float64,
+      'double' => typeId == TypeIds.float16 ||
+          typeId == TypeIds.bfloat16 ||
+          typeId == TypeIds.float32 ||
+          typeId == TypeIds.float64,
       'String' => typeId == TypeIds.string,
       'Int64' => _isSigned64TypeId(typeId),
       'Uint64' => _isUnsigned64TypeId(typeId),
-      'Float16' => typeId == TypeIds.float16,
-      'Bfloat16' => typeId == TypeIds.bfloat16,
       'Float32' => typeId == TypeIds.float32,
       'Decimal' => typeId == TypeIds.decimal,
       'Timestamp' || 'DateTime' => typeId == TypeIds.timestamp,
@@ -2996,10 +2997,6 @@ GeneratedFieldType(
         return TypeIds.varUint64;
       case 'Int64':
         return TypeIds.varInt64;
-      case 'Float16':
-        return TypeIds.float16;
-      case 'Bfloat16':
-        return TypeIds.bfloat16;
       case 'Float32':
         return TypeIds.float32;
       case 'Decimal':

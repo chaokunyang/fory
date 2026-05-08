@@ -103,6 +103,11 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Preserve protocol compatibility across languages.
 - Read and respect `docs/specification/xlang_type_mapping.md` when changing cross-language type behavior.
 - Handle byte order correctly for cross-platform compatibility.
+- When a target language exposes one public integer type for narrower integer
+  widths or one public floating type for reduced-precision floats, use schema
+  metadata or field annotations to carry the exact Fory wire type. Do not add
+  scalar carrier wrappers for `int8`, `int16`, `int32`, `uint8`, `uint16`,
+  `uint32`, `float16`, or `bfloat16`.
 - If the reference implementation is not right, do not tweak another language's correct implementation to align with a wrong reference implementation just to make tests pass; fix the runtime that diverged from the spec.
 
 ## Git And Review Rules

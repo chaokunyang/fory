@@ -161,7 +161,7 @@ Fory matches fields by name or by stable field ID. For robust cross-language int
 1. Use the same type identity on every side (same numeric ID or same `namespace + typeName`).
 2. Assign stable `@ForyField(id: ...)` values to all fields before shipping the first payload.
 3. Keep field names consistent or rely on IDs, since Dart typically uses `lowerCamelCase` while Go uses `PascalCase` for exported fields and C# often uses `PascalCase` properties.
-4. Use explicit numeric field metadata: `@ForyField(type: Int32Type())` in Dart for Java `int`, Go `int32`, and C# `int`; `double` in Dart for 64-bit floats; `Float32` for 32-bit; `Int64` / `Uint64` for full-range 64-bit values.
+4. Use explicit numeric field metadata: `@ForyField(type: Int32Type())` in Dart for Java `int`, Go `int32`, and C# `int`; `double` in Dart for 64-bit floats; `double` plus `Float16Type` or `Bfloat16Type` for 16-bit floats; `Float32` for 32-bit; `Int64` / `Uint64` for full-range 64-bit values.
 5. Use `Timestamp`, `LocalDate`, and `Duration` for temporal fields rather than raw `DateTime`.
 6. Validate real round trips across all languages before shipping.
 
@@ -173,7 +173,8 @@ Because Dart `int` is not itself a promise about the exact xlang wire width, pre
 - `@ForyField(type: Uint32Type())` for xlang `uint32`
 - `@ForyField(type: Int8Type())` / `@ForyField(type: Int16Type())` / `@ForyField(type: Uint8Type())` / `@ForyField(type: Uint16Type())` for narrower integer widths
 - `Int64` and `Uint64` for full-range 64-bit values on web
-- `Float16`, `Bfloat16`, and `Float32` for reduced-width floating point
+- `double` fields annotated with `Float16Type` or `Bfloat16Type` for 16-bit
+  floating-point scalars, and `Float32` for single-precision values
 - `Float16List` and `Bfloat16List` for 16-bit floating-point array payloads
 - `Timestamp`, `LocalDate`, and `Duration` for explicit temporal semantics
 

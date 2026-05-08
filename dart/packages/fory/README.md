@@ -14,8 +14,8 @@ cases.
 - Compatible mode for schema evolution
 - Optional reference tracking for shared and circular object graphs
 - Manual serializers for external types, custom payloads, and unions
-- Explicit exact-width value classes for `Int64`, `Uint64`, `Float16`,
-  `Bfloat16`, `Float32`, `LocalDate`, and `Timestamp`, plus `Duration` support
+- Explicit exact-width value classes for `Int64`, `Uint64`, `Float32`,
+  `LocalDate`, and `Timestamp`, plus `Duration` support
 
 ## Getting Started
 
@@ -234,11 +234,11 @@ void main() {
 ## Type Mapping
 
 Dart has no native fixed-width 8/16/32-bit integer, unsigned 64-bit integer,
-or single-precision float types. Fory Dart uses plain Dart `int` plus field
-annotations for 8/16/32-bit integer fields, keeps `Int64` and `Uint64` for
-full-range 64-bit values, and uses wrapper value types for reduced-width
-floating point. For 16-bit floating-point arrays, Dart exposes `Float16List`
-and `Bfloat16List` as contiguous fixed-length buffers.
+or reduced/single-precision float scalar types. Fory Dart uses plain Dart `int`
+or `double` plus field annotations for exact wire widths, keeps `Int64` and
+`Uint64` for full-range 64-bit values, and keeps `Float32` for single-precision
+rounding. For 16-bit floating-point arrays, Dart exposes `Float16List` and
+`Bfloat16List` as contiguous fixed-length buffers.
 
 | Fory xlang type | Dart type                                       |
 | --------------- | ----------------------------------------------- |
@@ -251,8 +251,8 @@ and `Bfloat16List` as contiguous fixed-length buffers.
 | uint16          | `int` + `@ForyField(type: Uint16Type())`        |
 | uint32          | `int` + `@ForyField(type: Uint32Type())`        |
 | uint64          | `fory.Uint64` (wrapper)                         |
-| float16         | `fory.Float16` (wrapper)                        |
-| bfloat16        | `fory.Bfloat16` (wrapper)                       |
+| float16         | `double` + `@ForyField(type: Float16Type())`    |
+| bfloat16        | `double` + `@ForyField(type: Bfloat16Type())`   |
 | float32         | `fory.Float32` (wrapper)                        |
 | float64         | `double`                                        |
 | string          | `String`                                        |
@@ -294,7 +294,7 @@ The main exported API includes:
 - `Int8Type`, `Int16Type`, `Int32Type`, `Int64Type`, `Uint8Type`, `Uint16Type`,
   `Uint32Type`, `Uint64Type`, `Float16Type`, `Bfloat16Type`, `Float32Type` —
   scalar wire-type overrides
-- Numeric value wrappers: `Int64`, `Uint64`, `Float16`, `Bfloat16`, `Float32`
+- Numeric value wrappers: `Int64`, `Uint64`, `Float32`
 - Temporal types: `LocalDate`, `Timestamp`, `Duration`
 
 ## Cross-Language Notes
@@ -304,7 +304,9 @@ The main exported API includes:
 - Keep numeric IDs or `namespace + typeName` mappings consistent across
   languages.
 - Use Dart `int` plus `@ForyField(type: ...)` for 8/16/32-bit integer fields,
-  and `Int64` / `Uint64` when full-range 64-bit values matter.
+  Dart `double` plus `Float16Type` or `Bfloat16Type` for 16-bit
+  floating-point fields, and `Int64` / `Uint64` when full-range 64-bit values
+  matter.
 
 For the xlang wire format and type mapping details, see the
 [Apache Fory specification](https://github.com/apache/fory/tree/main/docs/specification).

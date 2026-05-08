@@ -32,7 +32,8 @@ including getting started, API reference, and code examples.
 | uint16          | `int` + `@ForyField(type: Uint16Type())`        |
 | uint32          | `int` + `@ForyField(type: Uint32Type())`        |
 | uint64          | `int` or `Uint64`                               |
-| float16         | `fory.Float16` (wrapper)                        |
+| float16         | `double` + `@ForyField(type: Float16Type())`    |
+| bfloat16        | `double` + `@ForyField(type: Bfloat16Type())`   |
 | float32         | `fory.Float32` (wrapper)                        |
 | float64         | `double`                                        |
 | string          | `String`                                        |

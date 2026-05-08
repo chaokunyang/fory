@@ -38,8 +38,8 @@ void main() {
   group('Buffer', () {
     test('round-trips fixed-width primitives, 16-bit floats, and bytes', () {
       final buffer = Buffer();
-      final half = Float16(-2.5);
-      final brain = Bfloat16(-3.5);
+      const half = -2.5;
+      const brain = -3.5;
 
       buffer.writeBool(false);
       buffer.writeBool(true);

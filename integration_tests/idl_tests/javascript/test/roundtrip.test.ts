@@ -18,7 +18,6 @@
  */
 
 import Fory, {
-  BFloat16,
   BFloat16Array,
   BoolArray,
   Decimal,
@@ -131,9 +130,6 @@ function roundTripUnion<T>(fory: Fory, typeId: number, value: T): unknown {
 function normalize(value: unknown): unknown {
   if (value instanceof Decimal) {
     return { __decimal: value.toString() };
-  }
-  if (value instanceof BFloat16) {
-    return value.toFloat32();
   }
   if (
     value instanceof BoolArray ||

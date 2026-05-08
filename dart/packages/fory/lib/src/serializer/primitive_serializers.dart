@@ -21,8 +21,6 @@ import 'package:fory/src/context/read_context.dart';
 import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/type_ids.dart';
 import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/types/bfloat16.dart';
-import 'package:fory/src/types/float16.dart';
 import 'package:fory/src/types/float32.dart';
 import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/types/uint64.dart';
@@ -118,10 +116,10 @@ final class PrimitiveSerializer<T> extends Serializer<T> {
         buffer.writeTaggedUint64(_uint64Value(value));
         return;
       case TypeIds.float16:
-        buffer.writeFloat16(value as Float16);
+        buffer.writeFloat16(value as double);
         return;
       case TypeIds.bfloat16:
-        buffer.writeBfloat16(value as Bfloat16);
+        buffer.writeBfloat16(value as double);
         return;
       case TypeIds.float32:
         buffer.writeFloat32((value as Float32).value);
@@ -264,13 +262,13 @@ const PrimitiveSerializer<Uint64> taggedUint64Serializer =
   TypeIds.taggedUint64,
   supportsRef: false,
 );
-const PrimitiveSerializer<Float16> float16Serializer =
-    PrimitiveSerializer<Float16>(
+const PrimitiveSerializer<double> float16Serializer =
+    PrimitiveSerializer<double>(
   TypeIds.float16,
   supportsRef: false,
 );
-const PrimitiveSerializer<Bfloat16> bfloat16Serializer =
-    PrimitiveSerializer<Bfloat16>(
+const PrimitiveSerializer<double> bfloat16Serializer =
+    PrimitiveSerializer<double>(
   TypeIds.bfloat16,
   supportsRef: false,
 );

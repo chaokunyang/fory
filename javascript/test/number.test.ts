@@ -17,7 +17,7 @@
  * under the License.
  */
 
-import Fory, { Type, BFloat16 } from '../packages/core/index';
+import Fory, { Type } from '../packages/core/index';
 import { describe, expect, test } from '@jest/globals';
 
 describe('number', () => {
@@ -160,10 +160,9 @@ describe('number', () => {
     }, {
       a: Type.bfloat16()
     })).serializer;
-    const input = fory.serialize({ a: BFloat16.fromFloat32(1.5) }, serializer);
+    const input = fory.serialize({ a: 1.5 }, serializer);
     const result = fory.deserialize(input);
-    expect(result.a).toBeInstanceOf(BFloat16);
-    expect(result.a.toFloat32()).toBeCloseTo(1.5, 2);
+    expect(result.a).toBeCloseTo(1.5, 2);
   });
 
   test('should bfloat16 accept number', () => {
@@ -175,8 +174,7 @@ describe('number', () => {
     })).serializer;
     const input = fory.serialize({ a: 1.5 }, serializer);
     const result = fory.deserialize(input);
-    expect(result.a).toBeInstanceOf(BFloat16);
-    expect(result.a.toFloat32()).toBeCloseTo(1.5, 2);
+    expect(result.a).toBeCloseTo(1.5, 2);
   });
 
   test('should bfloat16 NaN work', () => {
@@ -188,8 +186,7 @@ describe('number', () => {
     })).serializer;
     const input = fory.serialize({ a: NaN }, serializer);
     const result = fory.deserialize(input);
-    expect(result.a).toBeInstanceOf(BFloat16);
-    expect(Number.isNaN(result.a.toFloat32())).toBe(true);
+    expect(Number.isNaN(result.a)).toBe(true);
   });
 
   test('should bfloat16 Infinity work', () => {
@@ -201,8 +198,7 @@ describe('number', () => {
     })).serializer;
     const input = fory.serialize({ a: Infinity }, serializer);
     const result = fory.deserialize(input);
-    expect(result.a).toBeInstanceOf(BFloat16);
-    expect(result.a.toFloat32()).toBe(Infinity);
+    expect(result.a).toBe(Infinity);
   });
 
   test('should bfloat16 zero and neg zero round-trip', () => {
@@ -215,10 +211,10 @@ describe('number', () => {
     })).serializer;
     const input = fory.serialize({ a: 0, b: -0 }, serializer);
     const result = fory.deserialize(input);
-    expect(result.a.toFloat32()).toBe(0);
-    expect(result.b.toFloat32()).toBe(-0);
-    expect(1 / result.a.toFloat32()).toBe(Infinity);
-    expect(1 / result.b.toFloat32()).toBe(-Infinity);
+    expect(result.a).toBe(0);
+    expect(result.b).toBe(-0);
+    expect(1 / result.a).toBe(Infinity);
+    expect(1 / result.b).toBe(-Infinity);
   });
 
   test('should uint8 work', () => {
@@ -305,4 +301,3 @@ describe('number', () => {
     expect(result).toEqual({ a: 1n });
   });
 });
-

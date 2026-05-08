@@ -332,10 +332,17 @@ class TwoStringFieldStruct {
 class ReducedPrecisionFloatStruct {
   ReducedPrecisionFloatStruct();
 
-  Float16 float16Value = const Float16.fromBits(0);
-  Bfloat16 bfloat16Value = const Bfloat16.fromBits(0);
-  List<Float16> float16Array = <Float16>[];
-  List<Bfloat16> bfloat16Array = <Bfloat16>[];
+  @ForyField(type: Float16Type())
+  double float16Value = 0.0;
+
+  @ForyField(type: Bfloat16Type())
+  double bfloat16Value = 0.0;
+
+  @ListField(element: Float16Type())
+  List<double> float16Array = <double>[];
+
+  @ListField(element: Bfloat16Type())
+  List<double> bfloat16Array = <double>[];
 }
 
 @ForyStruct()

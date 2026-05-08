@@ -609,9 +609,9 @@ void _setArrayValue(Object target, int arrayTypeId, int index, Object? value) {
       (target as Uint64List)[index] =
           value is int ? Uint64(value) : value as Uint64;
     case TypeIds.float16Array:
-      (target as Float16List)[index] = value as Float16;
+      (target as Float16List)[index] = value as double;
     case TypeIds.bfloat16Array:
-      (target as Bfloat16List)[index] = value as Bfloat16;
+      (target as Bfloat16List)[index] = value as double;
     case TypeIds.float32Array:
       (target as Float32List)[index] = (value as num).toDouble();
     case TypeIds.float64Array:

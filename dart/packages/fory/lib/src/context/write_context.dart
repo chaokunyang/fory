@@ -132,10 +132,10 @@ final class WriteContext {
   void writeInt64(Int64 value) => _buffer.writeInt64(value);
 
   /// Writes a half-precision floating-point value.
-  void writeFloat16(Float16 value) => _buffer.writeFloat16(value);
+  void writeFloat16(double value) => _buffer.writeFloat16(value);
 
   /// Writes a bfloat16 floating-point value.
-  void writeBfloat16(Bfloat16 value) => _buffer.writeBfloat16(value);
+  void writeBfloat16(double value) => _buffer.writeBfloat16(value);
 
   /// Writes a single-precision floating-point value.
   void writeFloat32(double value) => _buffer.writeFloat32(value);

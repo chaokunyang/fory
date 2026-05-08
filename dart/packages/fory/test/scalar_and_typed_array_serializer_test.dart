@@ -49,8 +49,11 @@ class ScalarAndArrayEnvelope {
   Float32List float32s = Float32List(0);
   Float64List float64s = Float64List(0);
   List<bool> flags = <bool>[];
-  Float16 half = Float16(0);
-  Bfloat16 brain = Bfloat16(0);
+  @ForyField(type: Float16Type())
+  double half = 0.0;
+
+  @ForyField(type: Bfloat16Type())
+  double brain = 0.0;
   Float32 single = Float32(0);
   LocalDate date = const LocalDate(1970, 1, 1);
   Timestamp timestamp = _timestamp(0, 0);
@@ -152,21 +155,21 @@ ScalarAndArrayEnvelope _sampleEnvelope() {
     ..uint64s = Uint64List.fromList(
       <Object>[0, 1, 1 << 40, _uint64HighBit, _uint64Max],
     )
-    ..float16s = Float16List.fromList(<Float16>[
-      Float16.fromBits(0x8000),
-      Float16.fromBits(0x3555),
-      Float16.fromBits(0x7c00),
+    ..float16s = Float16List.fromList(<double>[
+      fromFloat16Bits(0x8000),
+      fromFloat16Bits(0x3555),
+      fromFloat16Bits(0x7c00),
     ])
-    ..bfloat16s = Bfloat16List.fromList(<Bfloat16>[
-      Bfloat16.fromBits(0x8000),
-      Bfloat16.fromBits(0x3eab),
-      Bfloat16.fromBits(0x7f80),
+    ..bfloat16s = Bfloat16List.fromList(<double>[
+      fromBfloat16Bits(0x8000),
+      fromBfloat16Bits(0x3eab),
+      fromBfloat16Bits(0x7f80),
     ])
     ..float32s = Float32List.fromList(<double>[-1.5, 0.0, 3.25])
     ..float64s = Float64List.fromList(<double>[-2.5, 0.0, 4.5])
     ..flags = <bool>[true, false, true, true]
-    ..half = const Float16.fromBits(0x8000)
-    ..brain = const Bfloat16.fromBits(0x7fc0)
+    ..half = fromFloat16Bits(0x8000)
+    ..brain = fromBfloat16Bits(0x3fc0)
     ..single = Float32(3.5)
     ..date = LocalDate.fromEpochDay(Int64(-1))
     ..timestamp = _timestamp(-123, 456789123);
@@ -206,15 +209,29 @@ void _expectUint64ListEquals(Uint64List actual, Uint64List expected) {
 
 void _expectFloat16ListEquals(Float16List actual, Float16List expected) {
   expect(
-    actual.map((value) => value.toBits()).toList(),
-    orderedEquals(expected.map((value) => value.toBits()).toList()),
+    Uint16List.view(actual.buffer, actual.offsetInBytes, actual.length)
+        .toList(),
+    orderedEquals(
+      Uint16List.view(
+        expected.buffer,
+        expected.offsetInBytes,
+        expected.length,
+      ).toList(),
+    ),
   );
 }
 
 void _expectBfloat16ListEquals(Bfloat16List actual, Bfloat16List expected) {
   expect(
-    actual.map((value) => value.toBits()).toList(),
-    orderedEquals(expected.map((value) => value.toBits()).toList()),
+    Uint16List.view(actual.buffer, actual.offsetInBytes, actual.length)
+        .toList(),
+    orderedEquals(
+      Uint16List.view(
+        expected.buffer,
+        expected.offsetInBytes,
+        expected.length,
+      ).toList(),
+    ),
   );
 }
 
@@ -228,18 +245,20 @@ void _expectFloat64ListEquals(Float64List actual, Float64List expected) {
 
 void main() {
   group('scalar and typed array serializers', () {
-    test('round-trips Float16 edge cases', () {
+    test('round-trips float16 edge cases', () {
       final fory = Fory();
-      final cases = <Float16>[
-        const Float16.fromBits(0x8000),
-        const Float16.fromBits(0x7e00),
-        Float16(double.infinity),
-        Float16(-1.5),
+      final cases = <double>[
+        fromFloat16Bits(0x8000),
+        fromFloat16Bits(0x7e00),
+        double.infinity,
+        -1.5,
       ];
 
       for (final value in cases) {
-        final roundTrip = _roundTripRoot<Float16>(fory, value);
-        expect(roundTrip.toBits(), equals(value.toBits()));
+        final roundTrip = fory.deserialize<double>(
+          fory.serializeBuiltin(value, wireTypeId: TypeIds.float16),
+        );
+        expect(toFloat16Bits(roundTrip), equals(toFloat16Bits(value)));
       }
     });
 
@@ -258,18 +277,20 @@ void main() {
       expect(ordinary, equals(Float32(-1.5)));
     });
 
-    test('round-trips Bfloat16 edge cases', () {
+    test('round-trips bfloat16 edge cases', () {
       final fory = Fory();
-      final cases = <Bfloat16>[
-        const Bfloat16.fromBits(0x8000),
-        const Bfloat16.fromBits(0x7fc0),
-        Bfloat16(double.infinity),
-        Bfloat16(-1.5),
+      final cases = <double>[
+        fromBfloat16Bits(0x8000),
+        fromBfloat16Bits(0x7fc0),
+        double.infinity,
+        -1.5,
       ];
 
       for (final value in cases) {
-        final roundTrip = _roundTripRoot<Bfloat16>(fory, value);
-        expect(roundTrip.toBits(), equals(value.toBits()));
+        final roundTrip = fory.deserialize<double>(
+          fory.serializeBuiltin(value, wireTypeId: TypeIds.bfloat16),
+        );
+        expect(toBfloat16Bits(roundTrip), equals(toBfloat16Bits(value)));
       }
     });
 
@@ -390,31 +411,31 @@ void main() {
       _expectFloat16ListEquals(
         _roundTripRoot<Float16List>(
           fory,
-          Float16List.fromList(<Float16>[
-            Float16.fromBits(0x8000),
-            Float16.fromBits(0x3555),
-            Float16.fromBits(0x7c00),
+          Float16List.fromList(<double>[
+            fromFloat16Bits(0x8000),
+            fromFloat16Bits(0x3555),
+            fromFloat16Bits(0x7c00),
           ]),
         ),
-        Float16List.fromList(<Float16>[
-          Float16.fromBits(0x8000),
-          Float16.fromBits(0x3555),
-          Float16.fromBits(0x7c00),
+        Float16List.fromList(<double>[
+          fromFloat16Bits(0x8000),
+          fromFloat16Bits(0x3555),
+          fromFloat16Bits(0x7c00),
         ]),
       );
       _expectBfloat16ListEquals(
         _roundTripRoot<Bfloat16List>(
           fory,
-          Bfloat16List.fromList(<Bfloat16>[
-            Bfloat16.fromBits(0x8000),
-            Bfloat16.fromBits(0x3eab),
-            Bfloat16.fromBits(0x7f80),
+          Bfloat16List.fromList(<double>[
+            fromBfloat16Bits(0x8000),
+            fromBfloat16Bits(0x3eab),
+            fromBfloat16Bits(0x7f80),
           ]),
         ),
-        Bfloat16List.fromList(<Bfloat16>[
-          Bfloat16.fromBits(0x8000),
-          Bfloat16.fromBits(0x3eab),
-          Bfloat16.fromBits(0x7f80),
+        Bfloat16List.fromList(<double>[
+          fromBfloat16Bits(0x8000),
+          fromBfloat16Bits(0x3eab),
+          fromBfloat16Bits(0x7f80),
         ]),
       );
       _expectFloat32ListEquals(
@@ -472,17 +493,17 @@ void main() {
 
       expect(float16s.offsetInBytes, equals(0));
       expect(float16s.lengthInBytes, equals(4));
-      expect(float16s[0].toBits(), equals(0x3c00));
-      expect(float16s[1].toBits(), equals(0x3555));
+      expect(toFloat16Bits(float16s[0]), equals(0x3c00));
+      expect(toFloat16Bits(float16s[1]), equals(0x3555));
 
-      float16s[1] = Float16.fromBits(0x4200);
+      float16s[1] = fromFloat16Bits(0x4200);
       expect(storage[1], equals(0x4200));
 
       expect(bfloat16s.offsetInBytes, equals(4));
-      expect(bfloat16s[0].toBits(), equals(0x3f80));
-      expect(bfloat16s[1].toBits(), equals(0x7fc0));
+      expect(toBfloat16Bits(bfloat16s[0]), equals(0x3f80));
+      expect(toBfloat16Bits(bfloat16s[1]), equals(0x7fc0));
 
-      bfloat16s[0] = Bfloat16.fromBits(0xbf80);
+      bfloat16s[0] = fromBfloat16Bits(0xbf80);
       expect(storage[2], equals(0xbf80));
     });
 
@@ -508,8 +529,11 @@ void main() {
       _expectFloat32ListEquals(roundTrip.float32s, value.float32s);
       _expectFloat64ListEquals(roundTrip.float64s, value.float64s);
       expect(roundTrip.flags, orderedEquals(value.flags));
-      expect(roundTrip.half.toBits(), equals(value.half.toBits()));
-      expect(roundTrip.brain.toBits(), equals(value.brain.toBits()));
+      expect(toFloat16Bits(roundTrip.half), equals(toFloat16Bits(value.half)));
+      expect(
+        toBfloat16Bits(roundTrip.brain),
+        equals(toBfloat16Bits(value.brain)),
+      );
       expect(roundTrip.single, equals(value.single));
       expect(roundTrip.date, equals(value.date));
       expect(roundTrip.timestamp, equals(value.timestamp));

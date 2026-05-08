@@ -23,18 +23,18 @@ This page lists the JavaScript and TypeScript types supported by Fory, and expla
 
 ## Primitive and Scalar Types
 
-| JavaScript value      | Fory schema                                                                           | Notes                                                |
-| --------------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `boolean`             | `Type.bool()`                                                                         |                                                      |
-| `number`              | `Type.int8()` / `Type.int16()` / `Type.int32()` / `Type.float32()` / `Type.float64()` | Pick the width that matches the peer language        |
-| `bigint`              | `Type.int64()` / `Type.uint64()`                                                      | Use `bigint` for 64-bit integers                     |
-| `string`              | `Type.string()`                                                                       |                                                      |
-| `Uint8Array`          | `Type.binary()`                                                                       | Binary blob                                          |
-| `Date`                | `Type.timestamp()`                                                                    | Serializes/deserializes as `Date`                    |
-| `Date`                | `Type.date()`                                                                         | Date without time; deserializes as `Date`            |
-| duration (ms)         | `Type.duration()`                                                                     | Exposed as a numeric millisecond value in JavaScript |
-| `number`              | `Type.float16()`                                                                      | Half-precision float                                 |
-| `BFloat16` / `number` | `Type.bfloat16()`                                                                     | Deserializes to `BFloat16`                           |
+| JavaScript value | Fory schema                                                                           | Notes                                                |
+| ---------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `boolean`        | `Type.bool()`                                                                         |                                                      |
+| `number`         | `Type.int8()` / `Type.int16()` / `Type.int32()` / `Type.float32()` / `Type.float64()` | Pick the width that matches the peer language        |
+| `bigint`         | `Type.int64()` / `Type.uint64()`                                                      | Use `bigint` for 64-bit integers                     |
+| `string`         | `Type.string()`                                                                       |                                                      |
+| `Uint8Array`     | `Type.binary()`                                                                       | Binary blob                                          |
+| `Date`           | `Type.timestamp()`                                                                    | Serializes/deserializes as `Date`                    |
+| `Date`           | `Type.date()`                                                                         | Date without time; deserializes as `Date`            |
+| duration (ms)    | `Type.duration()`                                                                     | Exposed as a numeric millisecond value in JavaScript |
+| `number`         | `Type.float16()`                                                                      | Half-precision float                                 |
+| `number`         | `Type.bfloat16()`                                                                     | Brain floating point                                 |
 
 ## Integer Types
 
@@ -97,7 +97,7 @@ Type.int64Array(); // BigInt64Array
 Type.float32Array(); // Float32Array
 Type.float64Array(); // Float64Array
 Type.float16Array(); // number[]
-Type.bfloat16Array(); // BFloat16[]
+Type.bfloat16Array(); // BFloat16Array
 ```
 
 Use `Type.list(elementType)` for non-numeric, struct, nullable-element, or ref-tracked ordered collections.

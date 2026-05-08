@@ -297,8 +297,8 @@ example.ExampleMessage buildExampleMessage() {
     ..fixedU64Value = Uint64(9876543210)
     ..varintU64Value = Uint64(12345678901)
     ..taggedU64Value = Uint64(2222222222)
-    ..float16Value = Float16(1.5)
-    ..bfloat16Value = Bfloat16(2.5)
+    ..float16Value = 1.5
+    ..bfloat16Value = 2.5
     ..float32Value = Float32(3.5)
     ..float64Value = 4.5
     ..stringValue = 'example'
@@ -325,10 +325,10 @@ example.ExampleMessage buildExampleMessage() {
     ..fixedU64List = <Uint64>[Uint64(9000000000)]
     ..varintU64List = <Uint64>[Uint64(12000000000)]
     ..taggedU64List = <Uint64>[Uint64(13000000000)]
-    ..float16List = <Float16>[Float16(1.0), Float16(2.0)]
-    ..bfloat16List = <Bfloat16>[Bfloat16(1.0), Bfloat16(2.0)]
-    ..maybeFloat16List = <Float16?>[Float16(1.0), null, Float16(2.0)]
-    ..maybeBfloat16List = <Bfloat16?>[Bfloat16(1.0), null, Bfloat16(3.0)]
+    ..float16List = <double>[1.0, 2.0]
+    ..bfloat16List = <double>[1.0, 2.0]
+    ..maybeFloat16List = <double?>[1.0, null, 2.0]
+    ..maybeBfloat16List = <double?>[1.0, null, 3.0]
     ..float32List = <Float32>[Float32(1.5), Float32(2.5)]
     ..float64List = <double>[3.5, 4.5]
     ..stringList = <String>['alpha', 'beta']
@@ -372,11 +372,8 @@ example.ExampleMessage buildExampleMessage() {
     ..uint16Array = Uint16List.fromList(<int>[50000, 60000])
     ..uint32Array = Uint32List.fromList(<int>[2000000000, 2100000000])
     ..uint64Array = Uint64List.fromList(<int>[9000000000, 12000000000])
-    ..float16Array = Float16List.fromList(<Float16>[Float16(1.0), Float16(2.0)])
-    ..bfloat16Array = Bfloat16List.fromList(<Bfloat16>[
-      Bfloat16(1.0),
-      Bfloat16(2.0),
-    ])
+    ..float16Array = Float16List.fromList(<double>[1.0, 2.0])
+    ..bfloat16Array = Bfloat16List.fromList(<double>[1.0, 2.0])
     ..float32Array = Float32List.fromList(<double>[1.5, 2.5])
     ..float64Array = Float64List.fromList(<double>[3.5, 4.5])
     ..int32ArrayList = <Int32List>[
@@ -416,12 +413,10 @@ example.ExampleMessage buildExampleMessage() {
     ..stringValuesByEnum = <example.ExampleState, String>{
       example.ExampleState.ready: 'ready',
     }
-    ..float16ValuesByName = <String, Float16>{'f16': Float16(1.25)}
-    ..maybeFloat16ValuesByName = <String, Float16?>{'maybe-f16': Float16(1.5)}
-    ..bfloat16ValuesByName = <String, Bfloat16>{'bf16': Bfloat16(1.75)}
-    ..maybeBfloat16ValuesByName = <String, Bfloat16?>{
-      'maybe-bf16': Bfloat16(2.25),
-    }
+    ..float16ValuesByName = <String, double>{'f16': 1.25}
+    ..maybeFloat16ValuesByName = <String, double?>{'maybe-f16': 1.5}
+    ..bfloat16ValuesByName = <String, double>{'bf16': 1.75}
+    ..maybeBfloat16ValuesByName = <String, double?>{'maybe-bf16': 2.25}
     ..bytesValuesByName = <String, Uint8List>{
       'bytes': Uint8List.fromList(<int>[8, 9]),
     }

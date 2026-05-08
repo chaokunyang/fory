@@ -26,7 +26,7 @@ import { Serializer, Mode } from "./lib/type";
 import Fory from "./lib/fory";
 import { BinaryReader } from "./lib/reader";
 import { BinaryWriter } from "./lib/writer";
-import { BFloat16, BFloat16Array } from "./lib/types/bfloat16";
+import { BFloat16Array } from "./lib/types/bfloat16";
 import { BoolArray } from "./lib/types/boolArray";
 import { Float16Array, ForyFloat16Array } from "./lib/types/float16";
 import { ReadContext, WriteContext } from "./lib/context";
@@ -41,7 +41,6 @@ export {
   Dynamic,
   BinaryReader,
   BoolArray,
-  BFloat16,
   BFloat16Array,
   Decimal,
   Float16Array,

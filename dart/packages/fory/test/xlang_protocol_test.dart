@@ -20,12 +20,8 @@
 import 'dart:typed_data';
 
 import 'package:fory/fory.dart';
-import 'package:fory/src/context/read_context.dart';
-import 'package:fory/src/context/write_context.dart';
 import 'package:fory/src/meta/type_meta.dart';
 import 'package:fory/src/resolver/type_resolver.dart';
-import 'package:fory/src/serializer/serializer.dart';
-import 'package:fory/src/types/int64.dart';
 import 'package:fory/src/util/hash_util.dart';
 import 'package:test/test.dart';
 
@@ -64,31 +60,36 @@ void main() {
       final values = fory.deserialize<Float16List>(bytes);
 
       expect(
-        values.map((value) => value.toBits()).toList(),
+        Uint16List.view(values.buffer, values.offsetInBytes, values.length)
+            .toList(),
         orderedEquals(<int>[0x3c00, 0xc000, 0x7e00]),
       );
     });
 
     test('deserializes BFLOAT16 and BFLOAT16_ARRAY wire values', () {
       final fory = Fory();
-      final scalarBytes =
-          Uint8List.fromList(fory.serialize(Bfloat16.fromBits(0xbf60)));
-      final arrayBytes = Uint8List.fromList(
-        fory.serialize(
-          Bfloat16List.fromList(<Bfloat16>[
-            Bfloat16.fromBits(0x3f80),
-            Bfloat16.fromBits(0xbf80),
-            Bfloat16.fromBits(0x7fc1),
-          ]),
+      final scalarBytes = Uint8List.fromList(
+        fory.serializeBuiltin(
+          fromBfloat16Bits(0xbf60),
+          wireTypeId: TypeIds.bfloat16,
         ),
       );
+      final rawArray = Uint16List.fromList(<int>[0x3f80, 0xbf80, 0x7fc1]);
+      final arrayBytes = Uint8List.fromList(
+        fory.serialize(Bfloat16List.view(rawArray.buffer)),
+      );
 
-      expect(fory.deserialize<Bfloat16>(scalarBytes).toBits(), equals(0xbf60));
       expect(
-        fory
-            .deserialize<Bfloat16List>(arrayBytes)
-            .map((value) => value.toBits())
-            .toList(),
+        toBfloat16Bits(fory.deserialize<double>(scalarBytes)),
+        equals(0xbf60),
+      );
+      final arrayValues = fory.deserialize<Bfloat16List>(arrayBytes);
+      expect(
+        Uint16List.view(
+          arrayValues.buffer,
+          arrayValues.offsetInBytes,
+          arrayValues.length,
+        ).toList(),
         orderedEquals(<int>[0x3f80, 0xbf80, 0x7fc1]),
       );
     });

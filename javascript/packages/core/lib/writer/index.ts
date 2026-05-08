@@ -21,7 +21,7 @@ import { HalfMaxInt32, HalfMinInt32, Hps, LATIN1, UTF16, UTF8 } from "../type";
 import { PlatformBuffer, alloc, strByteLength } from "../platformBuffer";
 import { OwnershipError } from "../error";
 import { toFloat16Bits } from "../types/float16";
-import { BFloat16, toBFloat16Bits } from "../types/bfloat16";
+import { toBFloat16Bits } from "../types/bfloat16";
 
 const MAX_POOL_SIZE = 1024 * 1024 * 3; // 3MB
 const MAX_SAFE_BIGINT = BigInt(Number.MAX_SAFE_INTEGER);
@@ -506,7 +506,7 @@ export class BinaryWriter {
     this.writeUint16(toFloat16Bits(value));
   }
 
-  writeBfloat16(value: BFloat16 | number) {
+  writeBfloat16(value: number) {
     this.writeUint16(toBFloat16Bits(value));
   }
 

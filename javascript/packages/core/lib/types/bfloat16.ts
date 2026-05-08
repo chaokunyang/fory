@@ -20,45 +20,19 @@
 const float32View = new Float32Array(1);
 const uint32View = new Uint32Array(float32View.buffer);
 
-export class BFloat16 {
-  private readonly _bits: number;
-
-  constructor(bits: number) {
-    this._bits = bits & 0xffff;
+export function toBFloat16Bits(value: number): number {
+  float32View[0] = value;
+  const bits = uint32View[0];
+  const exponent = (bits >> 23) & 0xff;
+  if (exponent === 255) {
+    return (bits >> 16) & 0xffff;
   }
-
-  toBits(): number {
-    return this._bits;
+  const remainder = bits & 0x1ffff;
+  let u = (bits + 0x8000) >> 16;
+  if (remainder === 0x8000 && (u & 1) !== 0) {
+    u--;
   }
-
-  static fromBits(bits: number): BFloat16 {
-    return new BFloat16(bits & 0xffff);
-  }
-
-  static fromFloat32(f32: number): BFloat16 {
-    float32View[0] = f32;
-    const bits = uint32View[0];
-    const exponent = (bits >> 23) & 0xff;
-    if (exponent === 255) {
-      return BFloat16.fromBits((bits >> 16) & 0xffff);
-    }
-    const remainder = bits & 0x1ffff;
-    let u = (bits + 0x8000) >> 16;
-    if (remainder === 0x8000 && (u & 1) !== 0) {
-      u--;
-    }
-    return BFloat16.fromBits(u & 0xffff);
-  }
-
-  toFloat32(): number {
-    float32View[0] = 0;
-    uint32View[0] = this._bits << 16;
-    return float32View[0];
-  }
-}
-
-export function toBFloat16Bits(value: BFloat16 | number): number {
-  return value instanceof BFloat16 ? value.toBits() : BFloat16.fromFloat32(value).toBits();
+  return u & 0xffff;
 }
 
 export function fromBFloat16Bits(bits: number): number {
@@ -73,8 +47,8 @@ export class BFloat16Array {
   private _data: Uint16Array;
 
   constructor(length: number);
-  constructor(source: BFloat16Array | Uint16Array | ArrayLike<BFloat16 | number>);
-  constructor(lengthOrSource: number | BFloat16Array | Uint16Array | ArrayLike<BFloat16 | number>) {
+  constructor(source: BFloat16Array | Uint16Array | ArrayLike<number>);
+  constructor(lengthOrSource: number | BFloat16Array | Uint16Array | ArrayLike<number>) {
     if (typeof lengthOrSource === "number") {
       this._data = new Uint16Array(lengthOrSource);
     } else if (lengthOrSource instanceof BFloat16Array) {
@@ -118,7 +92,7 @@ export class BFloat16Array {
     return this.get(normalized);
   }
 
-  set(values: BFloat16Array | ArrayLike<BFloat16 | number>, offset = 0): void {
+  set(values: BFloat16Array | ArrayLike<number>, offset = 0): void {
     if (values instanceof BFloat16Array) {
       this._data.set(values.raw, offset);
       return;
@@ -128,11 +102,11 @@ export class BFloat16Array {
     }
   }
 
-  setValue(index: number, value: BFloat16 | number): void {
+  setValue(index: number, value: number): void {
     this._data[index] = toBFloat16Bits(value);
   }
 
-  fill(value: BFloat16 | number, start?: number, end?: number): this {
+  fill(value: number, start?: number, end?: number): this {
     this._data.fill(toBFloat16Bits(value), start, end);
     return this;
   }

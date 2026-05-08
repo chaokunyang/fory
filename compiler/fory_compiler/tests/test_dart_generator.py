@@ -164,6 +164,32 @@ def test_dart_generator_distinguishes_lists_from_dense_arrays():
     assert "factory ValueUnion.values(Uint32List value)" in file.content
 
 
+def test_dart_generator_uses_double_for_reduced_precision_scalar_carriers():
+    file = generate_dart(
+        """
+        package demo;
+
+        message Holder {
+            float16 half = 1;
+            bfloat16 brain = 2;
+            list<float16> halves = 3;
+            array<bfloat16> brains = 4;
+        }
+        """
+    )
+
+    assert "@ForyField(type: Float16Type(), id: 1)" in file.content
+    assert "double half = 0.0;" in file.content
+    assert "@ForyField(type: Bfloat16Type(), id: 2)" in file.content
+    assert "double brain = 0.0;" in file.content
+    assert "@ForyField(type: ListType(element: Float16Type()), id: 3)" in file.content
+    assert "List<double> halves = <double>[];" in file.content
+    assert "@ForyField(type: ArrayType(element: Bfloat16Type()), id: 4)" in file.content
+    assert "Bfloat16List brains = Bfloat16List(0);" in file.content
+    assert "Float16 half" not in file.content
+    assert "Bfloat16 brain" not in file.content
+
+
 def test_dart_generator_supports_decimal_fields_and_unions():
     file = generate_dart(
         """

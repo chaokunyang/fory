@@ -118,8 +118,8 @@ dart run build_runner build --delete-conflicting-outputs
 - `@ForyStruct()` — marks a class for code generation
 - `@ForyField(...)` — per-field options and canonical `type:` overrides
 - `@ListField(...)`, `@SetField(...)`, `@MapField(...)` — container sugar for nested `type:` trees
-- Exact-value wrappers: `Int64`, `Uint64`, `Float16`, `Bfloat16`, `Float32`
-- Float wrappers: `Float16`, `Bfloat16`, `Float32`
+- Exact-value wrappers: `Int64`, `Uint64`, `Float32`
+- Reduced-precision scalar fields: `double` with `Float16Type` or `Bfloat16Type`
 - 16-bit float arrays: `Float16List`, `Bfloat16List`
 - Time types: `LocalDate`, `Timestamp`, `Duration`
 

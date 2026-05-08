@@ -427,12 +427,6 @@ final class TypeResolver {
     if (value is Uint64) {
       return _builtin(Uint64, TypeIds.varUint64);
     }
-    if (value is Float16) {
-      return _builtin(Float16, TypeIds.float16);
-    }
-    if (value is Bfloat16) {
-      return _builtin(Bfloat16, TypeIds.bfloat16);
-    }
     if (value is Float32) {
       return _builtin(Float32, TypeIds.float32);
     }
@@ -1297,9 +1291,9 @@ final class TypeResolver {
       case TypeIds.taggedUint64:
         return _builtin(Uint64, TypeIds.taggedUint64);
       case TypeIds.float16:
-        return _builtin(Float16, TypeIds.float16);
+        return _builtin(double, TypeIds.float16);
       case TypeIds.bfloat16:
-        return _builtin(Bfloat16, TypeIds.bfloat16);
+        return _builtin(double, TypeIds.bfloat16);
       case TypeIds.float32:
         return _builtin(Float32, TypeIds.float32);
       case TypeIds.float64:
@@ -1511,12 +1505,6 @@ final class TypeResolver {
     }
     if (type == Uint64List) {
       return TypeIds.uint64Array;
-    }
-    if (type == Float16) {
-      return TypeIds.float16;
-    }
-    if (type == Bfloat16) {
-      return TypeIds.bfloat16;
     }
     if (type == BoolList) {
       return TypeIds.list;

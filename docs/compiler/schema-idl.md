@@ -1113,12 +1113,12 @@ Underscore spellings for integer encoding are not FDL type names.
 
 **Language Mapping:**
 
-| Fory IDL   | Java       | Python annotation/value     | Go                  | Rust       | C++                | JavaScript | Dart       |
-| ---------- | ---------- | --------------------------- | ------------------- | ---------- | ------------------ | ---------- | ---------- |
-| `float16`  | `Float16`  | `pyfory.Float16` / `float`  | `float16.Float16`   | `Float16`  | `fory::float16_t`  | `number`   | `Float16`  |
-| `bfloat16` | `BFloat16` | `pyfory.BFloat16` / `float` | `bfloat16.BFloat16` | `BFloat16` | `fory::bfloat16_t` | `BFloat16` | `BFloat16` |
-| `float32`  | `float`    | `pyfory.Float32`            | `float32`           | `f32`      | `float`            | `number`   | `Float32`  |
-| `float64`  | `double`   | `pyfory.Float64`            | `float64`           | `f64`      | `double`           | `number`   | `double`   |
+| Fory IDL   | Java       | Python annotation/value     | Go                  | Rust       | C++                | JavaScript | Dart      |
+| ---------- | ---------- | --------------------------- | ------------------- | ---------- | ------------------ | ---------- | --------- |
+| `float16`  | `Float16`  | `pyfory.Float16` / `float`  | `float16.Float16`   | `Float16`  | `fory::float16_t`  | `number`   | `double`  |
+| `bfloat16` | `BFloat16` | `pyfory.BFloat16` / `float` | `bfloat16.BFloat16` | `BFloat16` | `fory::bfloat16_t` | `number`   | `double`  |
+| `float32`  | `float`    | `pyfory.Float32`            | `float32`           | `f32`      | `float`            | `number`   | `Float32` |
+| `float64`  | `double`   | `pyfory.Float64`            | `float64`           | `f64`      | `double`           | `number`   | `double`  |
 
 #### String Type
 

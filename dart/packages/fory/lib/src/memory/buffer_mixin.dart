@@ -198,16 +198,16 @@ mixin _BufferMixin {
   }
 
   /// Writes a half-precision floating-point value.
-  void writeFloat16(Float16 value) => writeUint16(value.toBits());
+  void writeFloat16(double value) => writeUint16(toFloat16Bits(value));
 
   /// Reads a half-precision floating-point value.
-  Float16 readFloat16() => Float16.fromBits(readUint16());
+  double readFloat16() => fromFloat16Bits(readUint16());
 
   /// Writes a bfloat16 floating-point value.
-  void writeBfloat16(Bfloat16 value) => writeUint16(value.toBits());
+  void writeBfloat16(double value) => writeUint16(toBfloat16Bits(value));
 
   /// Reads a bfloat16 floating-point value.
-  Bfloat16 readBfloat16() => Bfloat16.fromBits(readUint16());
+  double readBfloat16() => fromBfloat16Bits(readUint16());
 
   /// Writes [value] verbatim.
   void writeBytes(List<int> value) {

@@ -76,14 +76,15 @@ field metadata or explicit `Buffer` APIs when native VM payloads must preserve
 unsigned 64-bit identity across dynamic boundaries. Dart web uses wrapper
 classes, so web root `Uint64` values keep `varuint64` metadata.
 
-## Floating-Point Wrappers
+## Floating-Point Types
 
-Dart `double` maps to 64-bit float. If the peer uses reduced-precision
-floating-point values, use an explicit wrapper:
+Dart `double` maps to 64-bit float by default. If the peer uses
+reduced-precision floating-point values, keep the Dart field as `double` and
+mark the exact wire type with field metadata:
 
 - `Float32` — 32-bit float (matches Java `float`, C# `float`, Go `float32`)
-- `Float16` — half-precision, for specialized numeric payloads
-- `Bfloat16` — brain floating point, useful when interoperating with ML-oriented payloads
+- `@ForyField(type: Float16Type()) double value` — half-precision scalar
+- `@ForyField(type: Bfloat16Type()) double value` — bfloat16 scalar
 
 For contiguous 16-bit floating-point arrays, use `Float16List` and
 `Bfloat16List` rather than `Uint16List` when the schema is `array<float16>`

@@ -71,7 +71,7 @@ FDL spells them as an encoding modifier plus a semantic integer type.
 | tagged uint64                      | 15           | long/Long                                 | int/pyfory.TaggedUInt64                   | `Type.uint64({ encoding: "tagged" })` | uint64_t                                            | uint64                                         | u64                               |
 | float8                             | 16           | /                                         | /                                         | /                                     | /                                                   | /                                              | /                                 |
 | float16                            | 17           | Float16                                   | native float / pyfory.Float16 annotation  | `number`                              | `fory::float16_t`                                   | `float16.Float16`                              | `Float16`                         |
-| bfloat16                           | 18           | BFloat16                                  | native float / pyfory.BFloat16 annotation | `BFloat16` / `number`                 | `fory::bfloat16_t`                                  | `bfloat16.BFloat16`                            | `BFloat16`                        |
+| bfloat16                           | 18           | BFloat16                                  | native float / pyfory.BFloat16 annotation | `number`                              | `fory::bfloat16_t`                                  | `bfloat16.BFloat16`                            | `BFloat16`                        |
 | float32                            | 19           | float/Float                               | float/pyfory.Float32                      | Type.float32()                        | float                                               | float32                                        | f32                               |
 | float64                            | 20           | double/Double                             | float/pyfory.Float64                      | Type.float64()                        | double                                              | float64                                        | f64                               |
 | string                             | 21           | String                                    | str                                       | String                                | string                                              | string                                         | String/str                        |
@@ -112,11 +112,12 @@ Notes:
 
 - Python `pyfory.Float16` and `pyfory.BFloat16` are reserved annotation markers; scalar values deserialize as native Python `float`.
 - Python `BoolArray`, `Int8Array`, `Int16Array`, `Int32Array`, `Int64Array`, `UInt8Array`, `UInt16Array`, `UInt32Array`, `UInt64Array`, `Float16Array`, `BFloat16Array`, `Float32Array`, and `Float64Array` are public dense-array wrappers with list-like sequence behavior.
-- JavaScript `BoolArray`, fallback `Float16Array`, and `BFloat16Array` are public dense-array wrappers backed by `Uint8Array` or `Uint16Array`. A JavaScript runtime with native `Float16Array` may return that native carrier for `array<float16>`.
+- JavaScript `BoolArray`, fallback `Float16Array`, and `BFloat16Array` are public dense-array wrappers backed by `Uint8Array` or `Uint16Array`. Scalar `float16` and `bfloat16` values use `number`. A JavaScript runtime with native `Float16Array` may return that native carrier for `array<float16>`.
 - Java plain `byte[]` maps to `binary`. Numeric byte arrays use type-use annotations:
   `@Int8Type byte[]` for `array<int8>` and `@UInt8Type byte[]` for `array<uint8>`.
-- Dart uses `BoolList` for `array<bool>`, typed-data lists for integer/float32/float64 arrays, and
-  `Float16List` / `BFloat16List` for `array<float16>` / `array<bfloat16>`. Plain Dart `List<bool>`
+- Dart uses `double` plus `Float16Type` or `Bfloat16Type` metadata for scalar
+  `float16` and `bfloat16`, `BoolList` for `array<bool>`, typed-data lists for integer/float32/float64 arrays, and
+  `Float16List` / `Bfloat16List` for `array<float16>` / `array<bfloat16>`. Plain Dart `List<bool>`
   maps to `list<bool>` unless a field uses `@ArrayField(element: BoolType())` or
   `@ForyField(type: ArrayType(element: BoolType()))` with a `BoolList` carrier.
 - `Float16[]` and `BFloat16[]` remain object arrays in xlang mode and serialize with the `list` wire type.

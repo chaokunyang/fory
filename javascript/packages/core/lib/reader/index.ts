@@ -21,7 +21,7 @@ import { LATIN1, UTF16, UTF8 } from "../type";
 import { isNodeEnv } from "../util";
 import { PlatformBuffer, alloc, fromUint8Array } from "../platformBuffer";
 import { readLatin1String } from "./string";
-import { BFloat16 } from "../types/bfloat16";
+import { fromBFloat16Bits } from "../types/bfloat16";
 import { fromFloat16Bits } from "../types/float16";
 
 export class BinaryReader {
@@ -569,8 +569,8 @@ export class BinaryReader {
     return fromFloat16Bits(this.readUint16());
   }
 
-  readBfloat16(): BFloat16 {
-    return BFloat16.fromBits(this.readUint16());
+  readBfloat16() {
+    return fromBFloat16Bits(this.readUint16());
   }
 
   readGetCursor() {

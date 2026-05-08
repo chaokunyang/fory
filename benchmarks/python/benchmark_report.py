@@ -33,7 +33,7 @@ from typing import Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import FuncFormatter
+from matplotlib.ticker import FuncFormatter, MaxNLocator
 
 try:
     import psutil
@@ -48,6 +48,23 @@ COLORS = {
     "protobuf": "#55BCC2",
     "pickle": (0.55, 0.40, 0.45),
 }
+PLOT_RC_PARAMS = {
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "axes.titleweight": "normal",
+    "axes.labelcolor": "#222222",
+    "xtick.color": "#222222",
+    "ytick.color": "#222222",
+    "font.size": 10,
+    "axes.titlesize": 11,
+    "axes.labelsize": 10,
+    "xtick.labelsize": 9,
+    "ytick.labelsize": 9,
+    "legend.fontsize": 8,
+}
+GRID_COLOR = "#D9DEE7"
+SPINE_COLOR = "#8A939E"
+BAR_EDGE_COLOR = "white"
 SERIALIZER_ORDER = ["fory", "protobuf", "pickle"]
 SERIALIZER_LABELS = {
     "fory": "fory",
@@ -145,6 +162,17 @@ def format_tps_tick(tps: float, _position) -> str:
     return format_tps_label(tps)
 
 
+def style_throughput_axis(ax):
+    ax.set_axisbelow(True)
+    ax.grid(True, axis="y", color=GRID_COLOR, linestyle="-", linewidth=0.7)
+    ax.grid(False, axis="x")
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=5, min_n_ticks=3))
+    ax.tick_params(axis="both", width=0.8, length=3)
+    for spine in ax.spines.values():
+        spine.set_color(SPINE_COLOR)
+        spine.set_linewidth(0.8)
+
+
 def build_benchmark_matrix(benchmarks):
     data = defaultdict(lambda: defaultdict(dict))
     for bench in benchmarks:
@@ -179,14 +207,16 @@ def plot_datatype(ax, data, datatype: str, operation: str):
         x,
         throughput,
         color=[COLORS.get(lib, "#999999") for lib in libs],
-        width=0.4,
+        edgecolor=BAR_EDGE_COLOR,
+        linewidth=0.8,
+        width=0.46,
     )
 
     ax.set_xticks(x)
     ax.set_xticklabels([SERIALIZER_LABELS.get(lib, lib) for lib in libs])
     ax.set_ylabel("Throughput (ops/sec)")
-    ax.set_title(f"{operation.capitalize()} Throughput (higher is better)")
-    ax.grid(True, axis="y", linestyle="--", alpha=0.45)
+    ax.set_title(f"{operation.capitalize()} Throughput (higher is better)", pad=8)
+    style_throughput_axis(ax)
     ax.ticklabel_format(style="scientific", axis="y", scilimits=(0, 0))
 
     for bar, val in zip(bars, throughput):
@@ -222,63 +252,92 @@ def plot_throughput_grid_subplot(ax, data, datatype: str):
 
     operations = ["serialize", "deserialize"]
     x = np.arange(len(operations))
-    width = 0.18
+    bar_width = 0.135
+    offset_step = 0.17
     for idx, lib in enumerate(available_libs):
         times = [
             data.get(datatype, {}).get(operation, {}).get(lib, 0)
             for operation in operations
         ]
         tps = [1e9 / val if val > 0 else 0 for val in times]
-        offset = (idx - (len(available_libs) - 1) / 2) * width
+        offset = (idx - (len(available_libs) - 1) / 2) * offset_step
         ax.bar(
             x + offset,
             tps,
-            width,
+            bar_width,
             label=SERIALIZER_LABELS.get(lib, lib),
             color=COLORS.get(lib, "#999999"),
+            edgecolor=BAR_EDGE_COLOR,
+            linewidth=0.8,
         )
 
-    ax.set_title(format_datatype_table_label(datatype))
+    max_tps = max(
+        1e9 / data[datatype][operation][lib]
+        for operation in operations
+        for lib in available_libs
+        if data.get(datatype, {}).get(operation, {}).get(lib, 0) > 0
+    )
+    ax.set_ylim(0, max_tps * 1.12)
+    ax.set_title(format_datatype_table_label(datatype), pad=8)
     ax.set_xticks(x)
     ax.set_xticklabels(["Serialize", "Deserialize"])
-    ax.set_xlim(-0.45, 1.45)
-    ax.grid(True, axis="y", linestyle="--", alpha=0.45)
+    ax.set_xlim(-0.48, 1.48)
+    style_throughput_axis(ax)
     ax.yaxis.set_major_formatter(FuncFormatter(format_tps_tick))
-    ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
+    ax.legend(
+        loc="upper right",
+        frameon=True,
+        framealpha=0.95,
+        edgecolor="#D6DAE0",
+        borderpad=0.3,
+        labelspacing=0.3,
+        handlelength=1.4,
+        handletextpad=0.45,
+    )
 
 
 def generate_plots(data, output_dir: Path):
-    plot_images = []
-    operations = ["serialize", "deserialize"]
+    with plt.rc_context(PLOT_RC_PARAMS):
+        plot_images = []
+        operations = ["serialize", "deserialize"]
 
-    datatypes = [dt for dt in DATATYPE_ORDER if dt in data]
-    for datatype in datatypes:
-        fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-        for idx, operation in enumerate(operations):
-            plot_datatype(axes[idx], data, datatype, operation)
-        fig.suptitle(f"{format_datatype_table_label(datatype)} Throughput", fontsize=14)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        datatypes = [dt for dt in DATATYPE_ORDER if dt in data]
+        for datatype in datatypes:
+            fig, axes = plt.subplots(1, 2, figsize=(11.5, 4.6))
+            for idx, operation in enumerate(operations):
+                plot_datatype(axes[idx], data, datatype, operation)
+            fig.suptitle(
+                f"{format_datatype_table_label(datatype)} Throughput",
+                fontsize=13,
+                fontweight="normal",
+            )
+            fig.tight_layout(rect=[0, 0, 1, 0.93], w_pad=1.3)
 
-        path = output_dir / f"{datatype}.png"
-        plt.savefig(path, dpi=150)
+            path = output_dir / f"{datatype}.png"
+            plt.savefig(path, dpi=170, bbox_inches="tight", pad_inches=0.12)
+            plt.close()
+            plot_images.append((datatype, path))
+
+        fig, axes = plt.subplots(2, 3, figsize=(16.5, 9.0))
+        for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPE_ORDER)):
+            plot_throughput_grid_subplot(ax, data, datatype)
+            if index % 3 == 0:
+                ax.set_ylabel("Throughput (ops/sec)", labelpad=10)
+            else:
+                ax.tick_params(axis="y", labelleft=False)
+                ax.yaxis.get_offset_text().set_visible(False)
+
+        fig.suptitle(
+            "Python Serialization Throughput",
+            fontsize=15,
+            fontweight="normal",
+            y=0.975,
+        )
+        fig.tight_layout(rect=[0.02, 0.02, 0.995, 0.945], w_pad=1.0, h_pad=1.25)
+        throughput_path = output_dir / "throughput.png"
+        plt.savefig(throughput_path, dpi=170, bbox_inches="tight", pad_inches=0.12)
         plt.close()
-        plot_images.append((datatype, path))
-
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    for index, (ax, datatype) in enumerate(zip(axes.flat, DATATYPE_ORDER)):
-        plot_throughput_grid_subplot(ax, data, datatype)
-        if index % 3 == 0:
-            ax.set_ylabel("Throughput (ops/sec)")
-        else:
-            ax.tick_params(axis="y", labelleft=False)
-            ax.yaxis.get_offset_text().set_visible(False)
-
-    fig.suptitle("Python Serialization Throughput", fontsize=14)
-    fig.tight_layout()
-    throughput_path = output_dir / "throughput.png"
-    plt.savefig(throughput_path, dpi=150)
-    plt.close()
-    plot_images.append(("throughput", throughput_path))
+        plot_images.append(("throughput", throughput_path))
 
     return plot_images
 

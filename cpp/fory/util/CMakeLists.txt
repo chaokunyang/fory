@@ -43,6 +43,7 @@ set(FORY_UTIL_HEADERS
 
 add_library(fory_util ${FORY_UTIL_SOURCES})
 add_library(fory::util ALIAS fory_util)
+fory_configure_target(fory_util)
 
 target_include_directories(fory_util
     PUBLIC
@@ -58,38 +59,47 @@ set_target_properties(fory_util PROPERTIES
 # Tests
 if(FORY_BUILD_TESTS)
     add_executable(fory_util_buffer_test buffer_test.cc)
+    fory_configure_target(fory_util_buffer_test)
     target_link_libraries(fory_util_buffer_test fory_util GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_util_buffer_test)
 
     add_executable(fory_util_error_test error_test.cc)
+    fory_configure_target(fory_util_error_test)
     target_link_libraries(fory_util_error_test fory_util GTest::gtest)
     gtest_discover_tests(fory_util_error_test)
 
     add_executable(fory_util_logging_test logging_test.cc)
+    fory_configure_target(fory_util_logging_test)
     target_link_libraries(fory_util_logging_test fory_util GTest::gtest)
     gtest_discover_tests(fory_util_logging_test)
 
     add_executable(fory_util_pool_test pool_test.cc)
+    fory_configure_target(fory_util_pool_test)
     target_link_libraries(fory_util_pool_test fory_util GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_util_pool_test)
 
     add_executable(fory_util_result_test result_test.cc)
+    fory_configure_target(fory_util_result_test)
     target_link_libraries(fory_util_result_test fory_util GTest::gtest)
     gtest_discover_tests(fory_util_result_test)
 
     add_executable(fory_util_string_util_test string_util_test.cc)
+    fory_configure_target(fory_util_string_util_test)
     target_link_libraries(fory_util_string_util_test fory_util GTest::gtest)
     gtest_discover_tests(fory_util_string_util_test)
 
     add_executable(fory_util_time_util_test time_util_test.cc)
+    fory_configure_target(fory_util_time_util_test)
     target_link_libraries(fory_util_time_util_test fory_util GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_util_time_util_test)
 
     add_executable(fory_util_flat_int_map_test flat_int_map_test.cc)
+    fory_configure_target(fory_util_flat_int_map_test)
     target_link_libraries(fory_util_flat_int_map_test fory_util GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_util_flat_int_map_test)
 
     add_executable(fory_util_float16_test float16_test.cc)
+    fory_configure_target(fory_util_float16_test)
     target_link_libraries(fory_util_float16_test fory_util fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_util_float16_test)
 endif()

@@ -30,6 +30,7 @@ set(FORY_META_HEADERS
 
 add_library(fory_meta ${FORY_META_SOURCES})
 add_library(fory::meta ALIAS fory_meta)
+fory_configure_target(fory_meta)
 
 target_include_directories(fory_meta
     PUBLIC
@@ -50,26 +51,32 @@ set_target_properties(fory_meta PROPERTIES
 # Tests
 if(FORY_BUILD_TESTS)
     add_executable(fory_meta_preprocessor_test preprocessor_test.cc)
+    fory_configure_target(fory_meta_preprocessor_test)
     target_link_libraries(fory_meta_preprocessor_test fory_meta GTest::gtest)
     gtest_discover_tests(fory_meta_preprocessor_test)
 
     add_executable(fory_meta_field_info_test field_info_test.cc)
+    fory_configure_target(fory_meta_field_info_test)
     target_link_libraries(fory_meta_field_info_test fory_meta GTest::gtest)
     gtest_discover_tests(fory_meta_field_info_test)
 
     add_executable(fory_meta_enum_info_test enum_info_test.cc)
+    fory_configure_target(fory_meta_enum_info_test)
     target_link_libraries(fory_meta_enum_info_test fory_meta GTest::gtest)
     gtest_discover_tests(fory_meta_enum_info_test)
 
     add_executable(fory_meta_type_traits_test type_traits_test.cc)
+    fory_configure_target(fory_meta_type_traits_test)
     target_link_libraries(fory_meta_type_traits_test fory_meta GTest::gtest)
     gtest_discover_tests(fory_meta_type_traits_test)
 
     add_executable(fory_meta_string_test meta_string_test.cc)
+    fory_configure_target(fory_meta_string_test)
     target_link_libraries(fory_meta_string_test fory_meta GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_meta_string_test)
 
     add_executable(fory_meta_field_test field_test.cc)
+    fory_configure_target(fory_meta_field_test)
     target_link_libraries(fory_meta_field_test fory_meta GTest::gtest)
     gtest_discover_tests(fory_meta_field_test)
 endif()

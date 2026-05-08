@@ -53,10 +53,14 @@ def run_doc_example_tests():
     generate_doc_example_tests()
 
     logging.info("Running documentation example tests")
-    test_command = "test //cpp/doc_tests:doc_example_tests"
+    common.bazel(f"test {_cpp_test_configs()} //cpp/doc_tests:doc_example_tests")
+
+
+def _cpp_test_configs():
+    configs = ["--config=fory_cpp_werror"]
     if common.get_os_machine() == "x86_64":
-        test_command = "test --config=x86_64 //cpp/doc_tests:doc_example_tests"
-    common.bazel(test_command)
+        configs.insert(0, "--config=x86_64")
+    return " ".join(configs)
 
 
 def run(install_deps_only=False, skip_doc_tests=False, doc_tests_only=False):
@@ -83,11 +87,7 @@ def run(install_deps_only=False, skip_doc_tests=False, doc_tests_only=False):
     query_result = common.bazel("query //...")
     targets = query_result.replace("\n", " ").replace("\r", " ")
 
-    test_command = "test"
-    if common.get_os_machine() == "x86_64":
-        test_command += " --config=x86_64"
-
-    common.bazel(f"{test_command} {targets}")
+    common.bazel(f"test {_cpp_test_configs()} {targets}")
     logging.info("C++ CI tasks completed successfully")
 
     # Run documentation example tests

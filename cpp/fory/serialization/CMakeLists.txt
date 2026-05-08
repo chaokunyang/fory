@@ -51,6 +51,7 @@ set(FORY_SERIALIZATION_HEADERS
 
 add_library(fory_serialization ${FORY_SERIALIZATION_SOURCES})
 add_library(fory::serialization_impl ALIAS fory_serialization)
+fory_configure_target(fory_serialization)
 
 target_include_directories(fory_serialization
     PUBLIC
@@ -74,52 +75,64 @@ set_target_properties(fory_serialization PROPERTIES
 # Tests
 if(FORY_BUILD_TESTS)
     add_executable(fory_serialization_test serialization_test.cc)
+    fory_configure_target(fory_serialization_test)
     target_link_libraries(fory_serialization_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_test)
 
     add_executable(fory_serialization_struct_test struct_test.cc)
+    fory_configure_target(fory_serialization_struct_test)
     target_link_libraries(fory_serialization_struct_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_struct_test)
 
     add_executable(fory_serialization_struct_compatible_test struct_compatible_test.cc)
+    fory_configure_target(fory_serialization_struct_compatible_test)
     target_link_libraries(fory_serialization_struct_compatible_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_struct_compatible_test)
 
     add_executable(fory_serialization_smart_ptr_test smart_ptr_serializer_test.cc)
+    fory_configure_target(fory_serialization_smart_ptr_test)
     target_link_libraries(fory_serialization_smart_ptr_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_smart_ptr_test)
 
     add_executable(fory_serialization_map_test map_serializer_test.cc)
+    fory_configure_target(fory_serialization_map_test)
     target_link_libraries(fory_serialization_map_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_map_test)
 
     add_executable(fory_serialization_variant_test variant_serializer_test.cc)
+    fory_configure_target(fory_serialization_variant_test)
     target_link_libraries(fory_serialization_variant_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_variant_test)
 
     add_executable(fory_serialization_field_test field_serializer_test.cc)
+    fory_configure_target(fory_serialization_field_test)
     target_link_libraries(fory_serialization_field_test fory_serialization GTest::gtest)
     gtest_discover_tests(fory_serialization_field_test)
 
     add_executable(fory_serialization_namespace_macro_test namespace_macro_test.cc)
+    fory_configure_target(fory_serialization_namespace_macro_test)
     target_link_libraries(fory_serialization_namespace_macro_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_namespace_macro_test)
 
     add_executable(fory_serialization_weak_ptr_test weak_ptr_serializer_test.cc)
+    fory_configure_target(fory_serialization_weak_ptr_test)
     target_link_libraries(fory_serialization_weak_ptr_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_weak_ptr_test)
 
     add_executable(fory_serialization_any_test any_serializer_test.cc)
+    fory_configure_target(fory_serialization_any_test)
     target_link_libraries(fory_serialization_any_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_any_test)
 
     add_executable(fory_serialization_stream_test stream_test.cc)
+    fory_configure_target(fory_serialization_stream_test)
     target_link_libraries(fory_serialization_stream_test fory_serialization GTest::gtest GTest::gtest_main)
     gtest_discover_tests(fory_serialization_stream_test)
 endif()
 
 # xlang test binary
 add_executable(fory_xlang_test_main xlang_test_main.cc)
+fory_configure_target(fory_xlang_test_main)
 target_link_libraries(fory_xlang_test_main fory_serialization fory_thirdparty)
 set_target_properties(fory_xlang_test_main PROPERTIES
     EXCLUDE_FROM_ALL TRUE

@@ -19,6 +19,7 @@ add_library(fory_thirdparty
     MurmurHash3.cc
 )
 add_library(fory::thirdparty ALIAS fory_thirdparty)
+fory_configure_dependency_target(fory_thirdparty)
 
 target_include_directories(fory_thirdparty
     PUBLIC

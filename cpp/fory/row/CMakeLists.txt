@@ -31,6 +31,7 @@ set(FORY_ROW_HEADERS
 
 add_library(fory_row_format ${FORY_ROW_SOURCES})
 add_library(fory::row_format_impl ALIAS fory_row_format)
+fory_configure_target(fory_row_format)
 
 target_include_directories(fory_row_format
     PUBLIC
@@ -53,6 +54,7 @@ set_target_properties(fory_row_format PROPERTIES
 # Tests
 if(FORY_BUILD_TESTS)
     add_executable(fory_row_test row_test.cc)
+    fory_configure_target(fory_row_test)
     target_link_libraries(fory_row_test fory_row_format GTest::gtest)
     gtest_discover_tests(fory_row_test)
 endif()

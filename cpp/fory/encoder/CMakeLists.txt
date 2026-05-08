@@ -34,6 +34,7 @@ target_link_libraries(fory_encoder
 # Tests
 if(FORY_BUILD_TESTS)
     add_executable(fory_encoder_test row_encoder_test.cc row_encode_trait_test.cc)
+    fory_configure_target(fory_encoder_test)
     target_link_libraries(fory_encoder_test fory_encoder GTest::gtest)
     gtest_discover_tests(fory_encoder_test)
 endif()

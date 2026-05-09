@@ -177,7 +177,7 @@ message User [id=101] { ... }              // Registered with type ID 101
 message User [id=101, deprecated=true] { ... }  // Multiple options
 ```
 
-Types without `[id=...]` use namespace-based registration:
+Types without `[id=...]` use name-based registration:
 
 ```fdl
 message Config { ... }  // Registered as "package.Config"
@@ -238,7 +238,7 @@ option polymorphism = true;
 option enable_auto_type_id = true;
 ```
 
-`enable_auto_type_id` defaults to `true`. Set it to `false` to keep namespace-based registration
+`enable_auto_type_id` defaults to `true`. Set it to `false` to keep name-based registration
 for types that omit explicit IDs.
 
 **Message/Enum options:**
@@ -372,7 +372,7 @@ Generates structs with:
 
 - `#[derive(ForyStruct)]`, `#[derive(ForyEnum)]`, and `#[derive(ForyUnion)]` macros
 - `#[fory(...)]` field attributes
-- a registration helper for namespace-based registration
+- a registration helper for name-based registration
 
 ```rust
 #[derive(ForyStruct, Debug, Clone, PartialEq, Default)]

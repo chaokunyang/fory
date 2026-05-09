@@ -129,7 +129,7 @@ struct Point {
 #[test]
 fn test_array_struct() {
     let mut fory = Fory::default();
-    fory.register_by_name::<Point>("Point").unwrap();
+    fory.register_by_name::<Point>("", "Point").unwrap();
 
     let arr = [
         Point { x: 1, y: 2 },
@@ -151,7 +151,8 @@ struct ArrayStruct {
 #[test]
 fn test_struct_with_arrays() {
     let mut fory = Fory::default();
-    fory.register_by_name::<ArrayStruct>("ArrayStruct").unwrap();
+    fory.register_by_name::<ArrayStruct>("", "ArrayStruct")
+        .unwrap();
 
     let data = ArrayStruct {
         int_array: [1, 2, 3, 4, 5],
@@ -256,8 +257,8 @@ register_trait_type!(Shape, Circle, Rectangle);
 #[test]
 fn test_array_box_trait_objects() {
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register::<Circle>(9001).unwrap();
-    fory.register::<Rectangle>(9002).unwrap();
+    fory.register_by_id::<Circle>(9001).unwrap();
+    fory.register_by_id::<Rectangle>(9002).unwrap();
 
     // Create an array of Box<dyn Shape>
     let shapes: [Box<dyn Shape>; 3] = [
@@ -315,7 +316,8 @@ fn test_struct_with_vec_of_arrays() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_name::<PointCloud>("PointCloud").unwrap();
+    fory.register_by_name::<PointCloud>("", "PointCloud")
+        .unwrap();
 
     let data = PointCloud {
         index: 42,
@@ -334,8 +336,8 @@ fn test_struct_with_vec_of_arrays() {
 #[test]
 fn test_array_rc_trait_objects() {
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register::<Circle>(9001).unwrap();
-    fory.register::<Rectangle>(9002).unwrap();
+    fory.register_by_id::<Circle>(9001).unwrap();
+    fory.register_by_id::<Rectangle>(9002).unwrap();
 
     // Create Rc<dyn Shape> instances and convert to wrappers
     let circle1: Rc<dyn Shape> = Rc::new(Circle { radius: 2.0 });

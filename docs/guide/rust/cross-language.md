@@ -32,10 +32,10 @@ let mut fory = Fory::builder()
     .xlang(true).build();
 
 // Register types with consistent IDs across languages
-fory.register::<MyStruct>(100);
+fory.register_by_id::<MyStruct>(100);
 
-// Or use namespace-based registration
-fory.register_by_namespace::<MyStruct>("com.example", "MyStruct");
+// Or use name-based registration
+fory.register_by_name::<MyStruct>("com.example", "MyStruct");
 ```
 
 ## Type Registration for Cross-Language
@@ -49,15 +49,15 @@ let mut fory = Fory::builder()
     .compatible(true)
     .xlang(true).build();
 
-fory.register::<User>(100);  // Same ID in Java, Python, etc.
+fory.register_by_id::<User>(100);  // Same ID in Java, Python, etc.
 ```
 
-### Register by Namespace
+### Register by Name
 
 For more flexible type naming:
 
 ```rust
-fory.register_by_namespace::<User>("com.example", "User");
+fory.register_by_name::<User>("com.example", "User");
 ```
 
 ## Cross-Language Example
@@ -78,7 +78,7 @@ let mut fory = Fory::builder()
     .compatible(true)
     .xlang(true).build();
 
-fory.register::<Person>(100);
+fory.register_by_id::<Person>(100);
 
 let person = Person {
     name: "Alice".to_string(),

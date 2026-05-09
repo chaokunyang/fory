@@ -61,7 +61,7 @@ fn test_struct_multi_thread() {
         f1: i32,
     }
     let mut fory = Fory::default();
-    fory.register::<Item1>(101).unwrap();
+    fory.register_by_id::<Item1>(101).unwrap();
     let fory = Arc::new(fory);
     let src: HashSet<_> = [
         Item1 { f1: 42 },
@@ -130,7 +130,7 @@ fn test_multiple_threads_shared_fory() {
     }
 
     let mut fory = Fory::default();
-    fory.register::<UserSessionMetrics>(2)
+    fory.register_by_id::<UserSessionMetrics>(2)
         .expect("register UserSessionMetrics");
     let shared_fory = Arc::new(fory);
     let shared_value = Arc::new(UserSessionMetrics {

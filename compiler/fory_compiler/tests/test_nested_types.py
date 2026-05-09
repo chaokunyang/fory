@@ -415,7 +415,7 @@ class TestRustNestedTypeGeneration:
         assert "pub bar: foo::Bar," in content
 
     def test_nested_message_registration_uses_pascal_struct(self):
-        """register_by_namespace must reference the PascalCase struct name."""
+        """register_by_name must reference the PascalCase struct name."""
         source = dedent("""
             message foo {
                 message Bar {
@@ -425,9 +425,9 @@ class TestRustNestedTypeGeneration:
             }
         """)
         content = self._generate_rust(source)
-        assert "register_by_namespace::<Foo>" in content
-        assert 'register_by_namespace::<Foo>("default", "foo")' in content
-        assert "register_by_namespace::<foo::Bar>" in content
+        assert "register_by_name::<Foo>" in content
+        assert 'register_by_name::<Foo>("default", "foo")' in content
+        assert "register_by_name::<foo::Bar>" in content
 
     def test_pascal_case_names_unchanged(self):
         """Messages already in PascalCase must not be renamed."""

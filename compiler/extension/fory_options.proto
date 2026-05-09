@@ -108,7 +108,7 @@ message ForyMessageOptions {
   // Unique type ID for cross-language registration.
   // Used for efficient type lookup during deserialization.
   // Must be a positive integer unique within the schema.
-  // If not specified, namespace-based registration is used.
+  // If not specified, name-based registration is used.
   optional int32 id = 1;
 
   // Enable schema evolution for this message.

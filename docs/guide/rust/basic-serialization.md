@@ -55,8 +55,8 @@ struct Address {
 }
 
 let mut fory = Fory::default();
-fory.register::<Address>(100);
-fory.register::<Person>(200);
+fory.register_by_id::<Address>(100);
+fory.register_by_id::<Person>(200);
 
 let person = Person {
     name: "John Doe".to_string(),
@@ -137,7 +137,7 @@ assert_eq!(person, decoded);
 use fory::{Fory, Reader};
 
 let mut fory = Fory::default();
-fory.register::<MyStruct>(1)?;
+fory.register_by_id::<MyStruct>(1)?;
 
 let obj = MyStruct { /* ... */ };
 

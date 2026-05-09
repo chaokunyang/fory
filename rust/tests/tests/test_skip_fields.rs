@@ -83,7 +83,7 @@ enum TestEnumSkip {
 #[test]
 fn test_basic_skip_functionality() {
     let mut fory = Fory::default();
-    fory.register::<TestSkipFields>(1).unwrap();
+    fory.register_by_id::<TestSkipFields>(1).unwrap();
 
     let original = TestSkipFields {
         serialized_field: 42,
@@ -109,8 +109,8 @@ fn test_basic_skip_functionality() {
 #[test]
 fn test_nested_skip_functionality() {
     let mut fory = Fory::default();
-    fory.register::<TestNestedSkip>(2).unwrap();
-    fory.register::<NestedStruct>(3).unwrap();
+    fory.register_by_id::<TestNestedSkip>(2).unwrap();
+    fory.register_by_id::<NestedStruct>(3).unwrap();
 
     let original = TestNestedSkip {
         normal_field: 100,
@@ -130,7 +130,7 @@ fn test_nested_skip_functionality() {
 #[test]
 fn test_multiple_skip_fields() {
     let mut fory = Fory::default();
-    fory.register::<MultipleSkipFields>(3).unwrap();
+    fory.register_by_id::<MultipleSkipFields>(3).unwrap();
 
     let original = MultipleSkipFields {
         field1: 42,
@@ -153,7 +153,7 @@ fn test_multiple_skip_fields() {
 #[test]
 fn test_all_fields_skipped() {
     let mut fory = Fory::default();
-    fory.register::<AllFieldsSkipped>(4).unwrap();
+    fory.register_by_id::<AllFieldsSkipped>(4).unwrap();
 
     let original = AllFieldsSkipped {
         skipped1: "test1".to_string(),
@@ -172,8 +172,8 @@ fn test_all_fields_skipped() {
 #[test]
 fn test_complex_nested_skip() {
     let mut fory = Fory::default();
-    fory.register::<ComplexNestedSkip>(5).unwrap();
-    fory.register::<TestSkipFields>(6).unwrap();
+    fory.register_by_id::<ComplexNestedSkip>(5).unwrap();
+    fory.register_by_id::<TestSkipFields>(6).unwrap();
 
     let original = ComplexNestedSkip {
         normal_field: 1,
@@ -207,7 +207,7 @@ fn test_complex_nested_skip() {
 #[test]
 fn test_enum_skip() {
     let mut fory = Fory::default();
-    fory.register::<TestEnumSkip>(6).unwrap();
+    fory.register_by_id::<TestEnumSkip>(6).unwrap();
 
     let original_v1 = TestEnumSkip::Pending;
 
@@ -225,7 +225,7 @@ fn test_enum_skip() {
 #[test]
 fn test_skip_serialization_size() {
     let mut fory = Fory::default();
-    fory.register::<TestSkipFields>(10).unwrap();
+    fory.register_by_id::<TestSkipFields>(10).unwrap();
 
     let with_skip = TestSkipFields {
         serialized_field: 42,
@@ -239,7 +239,7 @@ fn test_skip_serialization_size() {
         another_serialized: f64,
     }
 
-    fory.register::<TestNoSkip>(11).unwrap();
+    fory.register_by_id::<TestNoSkip>(11).unwrap();
 
     let without_skip = TestNoSkip {
         serialized_field: 42,
@@ -275,7 +275,7 @@ fn test_skip_with_different_types() {
     }
 
     let mut fory = Fory::default();
-    fory.register::<MultiTypeSkip>(12).unwrap();
+    fory.register_by_id::<MultiTypeSkip>(12).unwrap();
 
     let original = MultiTypeSkip {
         field1: 1,
@@ -358,10 +358,10 @@ fn test_trait_object_serialization() {
     }
 
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register::<Dog>(100).unwrap();
-    fory.register::<Cat>(101).unwrap();
-    fory.register::<Zoo>(102).unwrap();
-    fory.register::<ZooWithSkip>(103).unwrap();
+    fory.register_by_id::<Dog>(100).unwrap();
+    fory.register_by_id::<Cat>(101).unwrap();
+    fory.register_by_id::<Zoo>(102).unwrap();
+    fory.register_by_id::<ZooWithSkip>(103).unwrap();
 
     let zoo_with_skip = ZooWithSkip {
         regular_animal: Box::new(Dog {
@@ -398,7 +398,7 @@ fn test_trait_object_serialization() {
     }
 
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register::<ComplexSkipExample>(106).unwrap();
+    fory.register_by_id::<ComplexSkipExample>(106).unwrap();
 
     let complex = ComplexSkipExample {
         boxed_dyn: Box::new(Dog {

@@ -35,7 +35,7 @@ fn basic() {
     }
 
     let mut fory = Fory::builder().xlang(false).build();
-    fory.register::<Token>(1000).unwrap();
+    fory.register_by_id::<Token>(1000).unwrap();
 
     let mut map = HashMap::new();
     map.insert("one".to_string(), Token::Number(1));
@@ -76,10 +76,10 @@ fn named_enum() {
     }
 
     let mut fory1 = Fory::builder().xlang(false).build();
-    fory1.register::<Token1>(1000).unwrap();
+    fory1.register_by_id::<Token1>(1000).unwrap();
 
     let mut fory2 = Fory::builder().xlang(false).build();
-    fory2.register::<Token2>(1000).unwrap();
+    fory2.register_by_id::<Token2>(1000).unwrap();
 
     let token = Token1::Assign {
         target: "bar".to_string(),
@@ -133,8 +133,8 @@ fn struct_with_enum_field() {
     );
 
     let mut fory = Fory::builder().xlang(true).compatible(false).build();
-    fory.register::<Color>(100).unwrap();
-    fory.register::<StructWithEnum>(101).unwrap();
+    fory.register_by_id::<Color>(100).unwrap();
+    fory.register_by_id::<StructWithEnum>(101).unwrap();
 
     let obj = StructWithEnum {
         name: "test".to_string(),
@@ -177,8 +177,8 @@ fn union_compatible_enum_xlang_format() {
 
     // Test xlang mode serialization
     let mut fory = Fory::builder().xlang(true).compatible(false).build();
-    fory.register::<StringOrLong>(300).unwrap();
-    fory.register::<StructWithUnion>(301).unwrap();
+    fory.register_by_id::<StringOrLong>(300).unwrap();
+    fory.register_by_id::<StructWithUnion>(301).unwrap();
 
     // Test with String variant (index 0)
     let obj1 = StructWithUnion {
@@ -211,7 +211,7 @@ fn union_payload_nested_codec_annotations_roundtrip() {
     }
 
     let mut fory = Fory::builder().xlang(false).compatible(true).build();
-    fory.register::<Payload>(320).unwrap();
+    fory.register_by_id::<Payload>(320).unwrap();
 
     let values = Payload::Values(vec![Some(1), None, Some(-300)]);
     let bytes = fory.serialize(&values).unwrap();
@@ -254,8 +254,9 @@ fn struct_with_enum_field_explicit_nullable() {
     );
 
     let mut fory = Fory::builder().xlang(true).compatible(false).build();
-    fory.register::<Status>(200).unwrap();
-    fory.register::<StructWithExplicitNullable>(201).unwrap();
+    fory.register_by_id::<Status>(200).unwrap();
+    fory.register_by_id::<StructWithExplicitNullable>(201)
+        .unwrap();
 
     let obj = StructWithExplicitNullable {
         name: "explicit".to_string(),

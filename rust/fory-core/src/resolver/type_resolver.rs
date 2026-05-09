@@ -69,6 +69,16 @@ const INTERNAL_TYPE_ID_LIMIT: usize = 256;
 const MAX_USER_TYPE_ID: u32 = 0xfffffffe;
 pub(crate) const NO_USER_TYPE_ID: u32 = u32::MAX;
 
+fn validate_named_registration(type_name: &str, api: &str) -> Result<(), Error> {
+    if type_name.is_empty() {
+        return Err(Error::not_allowed(format!(
+            "type_name must be non-empty for {}",
+            api
+        )));
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 pub struct Harness {
     write_fn: WriteFn,
@@ -803,7 +813,7 @@ impl TypeResolver {
         &mut self,
         id: u32,
     ) -> Result<(), Error> {
-        self.register::<T>(id, &EMPTY_STRING, &EMPTY_STRING, true)
+        self.register_struct_type::<T>(id, &EMPTY_STRING, &EMPTY_STRING, true)
     }
 
     pub fn register_union_by_id<T: 'static + StructSerializer + Serializer + ForyDefault>(
@@ -815,31 +825,33 @@ impl TypeResolver {
                 "register_union_by_id requires a union-compatible enum type",
             ));
         }
-        self.register::<T>(id, &EMPTY_STRING, &EMPTY_STRING, true)
+        self.register_struct_type::<T>(id, &EMPTY_STRING, &EMPTY_STRING, true)
     }
 
-    pub fn register_by_namespace<T: 'static + StructSerializer + Serializer + ForyDefault>(
+    pub fn register_by_name<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
         namespace: &str,
         type_name: &str,
     ) -> Result<(), Error> {
-        self.register::<T>(0, namespace, type_name, true)
+        validate_named_registration(type_name, "register_by_name")?;
+        self.register_struct_type::<T>(0, namespace, type_name, true)
     }
 
-    pub fn register_union_by_namespace<T: 'static + StructSerializer + Serializer + ForyDefault>(
+    pub fn register_union_by_name<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
         namespace: &str,
         type_name: &str,
     ) -> Result<(), Error> {
+        validate_named_registration(type_name, "register_union_by_name")?;
         if T::fory_static_type_id() != TypeId::UNION {
             return Err(Error::not_allowed(
-                "register_union_by_namespace requires a union-compatible enum type",
+                "register_union_by_name requires a union-compatible enum type",
             ));
         }
-        self.register::<T>(0, namespace, type_name, true)
+        self.register_struct_type::<T>(0, namespace, type_name, true)
     }
 
-    fn register<T: StructSerializer + Serializer + ForyDefault>(
+    fn register_struct_type<T: StructSerializer + Serializer + ForyDefault>(
         &mut self,
         id: u32,
         namespace: &str,
@@ -847,6 +859,18 @@ impl TypeResolver {
         _lazy: bool,
     ) -> Result<(), Error> {
         let register_by_name = !type_name.is_empty();
+        if register_by_name
+            && self.partial_type_infos.values().any(|info| {
+                info.register_by_name
+                    && info.namespace.original == namespace
+                    && info.type_name.original == type_name
+            })
+        {
+            return Err(Error::type_error(format!(
+                "Type name {}::{} conflicts with already registered type",
+                namespace, type_name
+            )));
+        }
         if !register_by_name && id > MAX_USER_TYPE_ID {
             return Err(Error::not_allowed(format!(
                 "type id must be in range [0, 0xfffffffe], got {}",
@@ -1022,14 +1046,15 @@ impl TypeResolver {
                 "register_serializer can only be used for ext and named_ext types",
             ));
         }
-        self.register_serializer::<T>(id, actual_type_id, &EMPTY_STRING, &EMPTY_STRING)
+        self.register_serializer_type::<T>(id, actual_type_id, &EMPTY_STRING, &EMPTY_STRING)
     }
 
-    pub fn register_serializer_by_namespace<T: Serializer + ForyDefault>(
+    pub fn register_serializer_by_name<T: Serializer + ForyDefault>(
         &mut self,
         namespace: &str,
         type_name: &str,
     ) -> Result<(), Error> {
+        validate_named_registration(type_name, "register_serializer_by_name")?;
         let actual_type_id = get_ext_actual_type_id(0, true);
         let static_type_id = T::fory_static_type_id();
         if static_type_id != TypeId::EXT && static_type_id != TypeId::NAMED_EXT {
@@ -1037,7 +1062,7 @@ impl TypeResolver {
                 "register_serializer can only be used for ext and named_ext types",
             ));
         }
-        self.register_serializer::<T>(0, actual_type_id, namespace, type_name)
+        self.register_serializer_type::<T>(0, actual_type_id, namespace, type_name)
     }
 
     fn register_internal_serializer<T: Serializer + ForyDefault>(
@@ -1051,10 +1076,10 @@ impl TypeResolver {
                 raw_id
             )));
         }
-        self.register_serializer::<T>(raw_id, raw_id, &EMPTY_STRING, &EMPTY_STRING)
+        self.register_serializer_type::<T>(raw_id, raw_id, &EMPTY_STRING, &EMPTY_STRING)
     }
 
-    fn register_serializer<T: Serializer + ForyDefault>(
+    fn register_serializer_type<T: Serializer + ForyDefault>(
         &mut self,
         id: u32,
         actual_type_id: u32,
@@ -1062,6 +1087,18 @@ impl TypeResolver {
         type_name: &str,
     ) -> Result<(), Error> {
         let register_by_name = !type_name.is_empty();
+        if register_by_name
+            && self.partial_type_infos.values().any(|info| {
+                info.register_by_name
+                    && info.namespace.original == namespace
+                    && info.type_name.original == type_name
+            })
+        {
+            return Err(Error::type_error(format!(
+                "Type name {}::{} conflicts with already registered type",
+                namespace, type_name
+            )));
+        }
         if !register_by_name && id > MAX_USER_TYPE_ID {
             return Err(Error::not_allowed(format!(
                 "type id must be in range [0, 0xfffffffe], got {}",
@@ -1298,6 +1335,12 @@ impl TypeResolver {
                     let namespace = &type_info.namespace;
                     let type_name = &type_info.type_name;
                     let ms_key = (namespace.clone(), type_name.clone());
+                    if type_info_map_by_meta_string_name.contains_key(&ms_key) {
+                        return Err(Error::type_error(format!(
+                            "Type name {}::{} conflicts with already registered type",
+                            namespace.original, type_name.original
+                        )));
+                    }
                     type_info_map_by_meta_string_name.insert(ms_key, Rc::new(type_info.clone()));
                     let string_key = (namespace.original.clone(), type_name.original.clone());
                     type_info_map_by_name.insert(string_key, Rc::new(type_info.clone()));

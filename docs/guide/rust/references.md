@@ -103,7 +103,7 @@ struct Node {
 }
 
 let mut fory = Fory::default();
-fory.register::<Node>(2000);
+fory.register_by_id::<Node>(2000);
 
 // Build a parent-child tree
 let parent = Rc::new(RefCell::new(Node {
@@ -155,7 +155,7 @@ struct Node {
 }
 
 let mut fory = Fory::default();
-fory.register::<Node>(6000);
+fory.register_by_id::<Node>(6000);
 
 let parent = Arc::new(Mutex::new(Node {
     val: 10,

@@ -80,7 +80,7 @@ impl ForyDefault for CustomType {
 
 ```rust
 let mut fory = Fory::default();
-fory.register_serializer::<CustomType>(100);
+fory.register_serializer_by_id::<CustomType>(100);
 
 let custom = CustomType {
     value: 42,

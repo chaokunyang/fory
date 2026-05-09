@@ -156,7 +156,7 @@
 //!
 //! fn main() -> Result<(), Error> {
 //!     let mut fory = Fory::default();
-//!     fory.register::<MyData>(100);
+//!     fory.register_by_id::<MyData>(100);
 //!     
 //!     let data = MyData {
 //!         value: 42,

@@ -36,7 +36,7 @@ struct User {
 }
 
 let mut fory = Fory::default();
-fory.register::<User>(1)?;
+fory.register_by_id::<User>(1)?;
 
 let user = User {
     name: "Alice".to_string(),
@@ -47,7 +47,7 @@ let bytes = fory.serialize(&user)?;
 let decoded: User = fory.deserialize(&bytes)?;
 ```
 
-## Register by Namespace
+## Register by Name
 
 For cross-language compatibility, register with namespace and type name:
 
@@ -56,8 +56,8 @@ let mut fory = Fory::builder()
     .compatible(true)
     .xlang(true).build();
 
-// Register with namespace-based naming
-fory.register_by_namespace::<MyStruct>("com.example", "MyStruct")?;
+// Register with symbolic type identity
+fory.register_by_name::<MyStruct>("com.example", "MyStruct")?;
 ```
 
 ## Register Custom Serializer
@@ -66,7 +66,7 @@ For types that need custom serialization logic:
 
 ```rust
 let mut fory = Fory::default();
-fory.register_serializer::<CustomType>(100)?;
+fory.register_serializer_by_id::<CustomType>(100)?;
 ```
 
 ## Registration Consistency
@@ -76,15 +76,15 @@ Rust registration APIs use explicit IDs or explicit namespace/type names. Keep t
 ```rust
 // Serializer side
 let mut fory = Fory::default();
-fory.register::<TypeA>(1)?;
-fory.register::<TypeB>(2)?;
-fory.register::<TypeC>(3)?;
+fory.register_by_id::<TypeA>(1)?;
+fory.register_by_id::<TypeB>(2)?;
+fory.register_by_id::<TypeC>(3)?;
 
 // Deserializer side - MUST use the same ID mapping
 let mut fory = Fory::default();
-fory.register::<TypeA>(1)?;
-fory.register::<TypeB>(2)?;
-fory.register::<TypeC>(3)?;
+fory.register_by_id::<TypeA>(1)?;
+fory.register_by_id::<TypeB>(2)?;
+fory.register_by_id::<TypeC>(3)?;
 ```
 
 ## Thread-Safe Registration
@@ -96,8 +96,8 @@ use std::sync::Arc;
 use std::thread;
 
 let mut fory = Fory::default();
-fory.register::<User>(1)?;
-fory.register::<Order>(2)?;
+fory.register_by_id::<User>(1)?;
+fory.register_by_id::<Order>(2)?;
 
 // Now share across threads
 let fory = Arc::new(fory);

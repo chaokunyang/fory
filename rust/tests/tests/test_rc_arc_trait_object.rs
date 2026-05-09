@@ -229,8 +229,8 @@ fn test_conversion_helper_macros() {
 #[test]
 fn test_nested_wrapper_collections() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(100).unwrap();
-    fory.register::<Cat>(101).unwrap();
+    fory.register_by_id::<Dog>(100).unwrap();
+    fory.register_by_id::<Cat>(101).unwrap();
 
     // Wrapper types are not registered since they're transparent
 
@@ -287,8 +287,8 @@ fn test_nested_wrapper_collections() {
 #[test]
 fn test_empty_wrapper_collections() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     // Test empty collections
     let empty_rc_vec: Vec<AnimalRc> = vec![];
@@ -329,9 +329,9 @@ struct AnimalByCodeFixedKey {
 #[test]
 fn test_collections_of_wrappers() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
-    fory.register::<AnimalShelter>(8011).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
+    fory.register_by_id::<AnimalShelter>(8011).unwrap();
 
     let shelter = AnimalShelter {
         animals_rc: vec![
@@ -426,14 +426,14 @@ fn test_collections_of_wrappers() {
 #[test]
 fn test_hashmap_fixed_key_rc_trait_object_field_compatible() {
     let mut writer = fory_compatible();
-    writer.register::<Dog>(8101).unwrap();
-    writer.register::<Cat>(8102).unwrap();
-    writer.register::<AnimalByCodeFixedKey>(8111).unwrap();
+    writer.register_by_id::<Dog>(8101).unwrap();
+    writer.register_by_id::<Cat>(8102).unwrap();
+    writer.register_by_id::<AnimalByCodeFixedKey>(8111).unwrap();
 
     let mut reader = fory_compatible();
-    reader.register::<Dog>(8101).unwrap();
-    reader.register::<Cat>(8102).unwrap();
-    reader.register::<AnimalByCodeVarKey>(8111).unwrap();
+    reader.register_by_id::<Dog>(8101).unwrap();
+    reader.register_by_id::<Cat>(8102).unwrap();
+    reader.register_by_id::<AnimalByCodeVarKey>(8111).unwrap();
 
     let animals = AnimalByCodeFixedKey {
         animals: HashMap::from([
@@ -466,8 +466,8 @@ fn test_hashmap_fixed_key_rc_trait_object_field_compatible() {
 #[test]
 fn test_rc_shared_ref_tracking() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(200).unwrap();
-    fory.register::<Cat>(201).unwrap();
+    fory.register_by_id::<Dog>(200).unwrap();
+    fory.register_by_id::<Cat>(201).unwrap();
 
     let dog = Rc::new(Dog {
         name: "Rex".to_string(),
@@ -498,8 +498,8 @@ fn test_rc_shared_ref_tracking() {
 #[test]
 fn test_arc_shared_ref_tracking() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(200).unwrap();
-    fory.register::<Cat>(201).unwrap();
+    fory.register_by_id::<Dog>(200).unwrap();
+    fory.register_by_id::<Cat>(201).unwrap();
 
     let cat = Arc::new(Cat {
         name: "Whiskers".to_string(),

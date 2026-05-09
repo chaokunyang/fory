@@ -174,7 +174,7 @@ fn test_mixed_rc_arc_serialization() {
 #[test]
 fn test_nested_rc_arc() {
     let mut fory = Fory::default();
-    fory.register::<NestedData>(100).unwrap();
+    fory.register_by_id::<NestedData>(100).unwrap();
 
     // Test Rc containing Arc with allowed struct type
     let inner_data = Arc::new(NestedData {

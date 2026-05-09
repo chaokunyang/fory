@@ -147,8 +147,7 @@ fn test_any_registered_by_name() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_namespace::<Person>("test", "Person")
-        .unwrap();
+    fory.register_by_name::<Person>("test", "Person").unwrap();
 
     let person = Person {
         name: "Alice".to_string(),
@@ -175,7 +174,7 @@ fn test_mixed_any_types() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_name::<Item>("Item").unwrap();
+    fory.register_by_name::<Item>("", "Item").unwrap();
 
     let item = Item {
         id: 123,
@@ -223,10 +222,10 @@ struct AnyMapFixedKey {
 #[test]
 fn test_hashmap_fixed_key_rc_any_field_compatible() {
     let mut writer = Fory::builder().compatible(true).build();
-    writer.register::<AnyMapFixedKey>(700).unwrap();
+    writer.register_by_id::<AnyMapFixedKey>(700).unwrap();
 
     let mut reader = Fory::builder().compatible(true).build();
-    reader.register::<AnyMapVarKey>(700).unwrap();
+    reader.register_by_id::<AnyMapVarKey>(700).unwrap();
 
     let original = AnyMapFixedKey {
         values: HashMap::from([
@@ -251,7 +250,7 @@ fn test_hashmap_fixed_key_rc_any_field_compatible() {
 #[test]
 fn test_arc_by_name() {
     let mut fory = Fory::default();
-    fory.register_by_name::<Container>("Container").unwrap();
+    fory.register_by_name::<Container>("", "Container").unwrap();
 
     let container = Container {
         id: 999,
@@ -282,7 +281,7 @@ fn test_arc_by_name() {
 #[test]
 fn test_rc_by_name() {
     let mut fory = Fory::default();
-    fory.register_by_name::<Container>("Container").unwrap();
+    fory.register_by_name::<Container>("", "Container").unwrap();
 
     let container = Container {
         id: 555,
@@ -333,9 +332,9 @@ struct StructB {
 fn test_vec_of_different_struct_types_in_box_any_returns_error() {
     let mut fory = Fory::default();
     // Register both struct types
-    fory.register_by_name::<StructA>("StructA").unwrap();
+    fory.register_by_name::<StructA>("", "StructA").unwrap();
     fory.register_generic_trait::<Vec<StructA>>().unwrap();
-    fory.register_by_name::<StructB>("StructB").unwrap();
+    fory.register_by_name::<StructB>("", "StructB").unwrap();
     fory.register_generic_trait::<Vec<StructB>>().unwrap();
 
     // Create Box<dyn Any> wrappers for Vec<StructA> and Vec<StructB>

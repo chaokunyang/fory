@@ -51,7 +51,7 @@ struct User {
 
 fn main() -> Result<(), Error> {
     let mut fory = Fory::default();
-    fory.register::<User>(1)?;
+    fory.register_by_id::<User>(1)?;
 
     let user = User {
         name: "Alice".to_string(),
@@ -112,8 +112,8 @@ struct Address {
 }
 
 let mut fory = Fory::default();
-fory.register::<Address>(100);
-fory.register::<Person>(200);
+fory.register_by_id::<Address>(100);
+fory.register_by_id::<Person>(200);
 
 let person = Person {
     name: "John Doe".to_string(),
@@ -197,7 +197,7 @@ struct Node {
 }
 
 let mut fory = Fory::default();
-fory.register::<Node>(2000);
+fory.register_by_id::<Node>(2000);
 
 // Build a parent-child tree
 let parent = Rc::new(RefCell::new(Node {
@@ -282,9 +282,9 @@ struct Zoo {
 }
 
 let mut fory = Fory::builder().compatible(true).build();
-fory.register::<Dog>(100);
-fory.register::<Cat>(101);
-fory.register::<Zoo>(102);
+fory.register_by_id::<Dog>(100);
+fory.register_by_id::<Cat>(101);
+fory.register_by_id::<Zoo>(102);
 
 let zoo = Zoo {
     star_animal: Box::new(Dog {
@@ -341,10 +341,10 @@ struct PersonV2 {
 }
 
 let mut fory1 = Fory::builder().compatible(true).build();
-fory1.register::<PersonV1>(1);
+fory1.register_by_id::<PersonV1>(1);
 
 let mut fory2 = Fory::builder().compatible(true).build();
-fory2.register::<PersonV2>(1);
+fory2.register_by_id::<PersonV2>(1);
 
 let person_v1 = PersonV1 {
     name: "Alice".to_string(),
@@ -393,7 +393,7 @@ enum Value {
 }
 
 let mut fory = Fory::default();
-fory.register::<Value>(1)?;
+fory.register_by_id::<Value>(1)?;
 
 let value = Value::Object { name: "score".to_string(), value: 100 };
 let bytes = fory.serialize(&value)?;
@@ -496,7 +496,7 @@ impl ForyDefault for CustomType {
 }
 
 let mut fory = Fory::default();
-fory.register_serializer::<CustomType>(100);
+fory.register_serializer_by_id::<CustomType>(100);
 
 let custom = CustomType {
     value: 42,
@@ -607,10 +607,10 @@ let mut fory = Fory::builder()
     .xlang(true).build();
 
 // Register types with consistent IDs across languages
-fory.register::<MyStruct>(100);
+fory.register_by_id::<MyStruct>(100);
 
-// Or use namespace-based registration
-fory.register_by_namespace::<MyStruct>("com.example", "MyStruct");
+// Or use name-based registration
+fory.register_by_name::<MyStruct>("com.example", "MyStruct");
 ```
 
 See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_type_mapping) for type mapping across languages.

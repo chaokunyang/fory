@@ -89,7 +89,7 @@ let mut fory = Fory::builder()
     .compatible(true)
     .xlang(true).build();
 
-fory.register_by_namespace::<Person>("example", "Person");
+fory.register_by_name::<Person>("example", "Person");
 let person: Person = fory.deserialize(&binary_data)?;
 ```
 

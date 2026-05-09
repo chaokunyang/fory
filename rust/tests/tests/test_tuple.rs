@@ -269,7 +269,7 @@ fn run_struct_with_simple_tuple_fields(xlang: bool) {
     }
 
     let mut fory = Fory::builder().xlang(xlang).build();
-    fory.register::<SimpleTupleStruct>(1).unwrap();
+    fory.register_by_id::<SimpleTupleStruct>(1).unwrap();
 
     let data = SimpleTupleStruct {
         id: 42,
@@ -305,7 +305,7 @@ fn run_struct_with_complex_tuple_fields(xlang: bool) {
     }
 
     let mut fory = Fory::builder().xlang(xlang).build();
-    fory.register::<ComplexTupleStruct>(2).unwrap();
+    fory.register_by_id::<ComplexTupleStruct>(2).unwrap();
 
     let data = ComplexTupleStruct {
         name: "Complex Test".to_string(),
@@ -376,7 +376,7 @@ struct StructWithUnit {
 #[test]
 fn test_struct_with_unit_field() {
     let mut fory = Fory::default();
-    fory.register::<StructWithUnit>(200).unwrap();
+    fory.register_by_id::<StructWithUnit>(200).unwrap();
 
     let value = StructWithUnit {
         name: "test".to_string(),

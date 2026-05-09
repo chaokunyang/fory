@@ -502,10 +502,10 @@ fn run_struct_missing_tuple_field(xlang: bool) {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory1.register::<StructV1>(1).unwrap();
+    fory1.register_by_id::<StructV1>(1).unwrap();
 
     let mut fory2 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory2.register::<StructV2>(1).unwrap();
+    fory2.register_by_id::<StructV2>(1).unwrap();
 
     // Serialize V1 and deserialize as V2
     let v1 = StructV1 {
@@ -554,10 +554,10 @@ fn run_struct_added_tuple_field(xlang: bool) {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory1.register::<StructV1>(2).unwrap();
+    fory1.register_by_id::<StructV1>(2).unwrap();
 
     let mut fory2 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory2.register::<StructV2>(2).unwrap();
+    fory2.register_by_id::<StructV2>(2).unwrap();
 
     // Serialize V1 and deserialize as V2 (new tuple fields should be default)
     let v1 = StructV1 {
@@ -602,10 +602,10 @@ fn run_struct_tuple_element_increase(xlang: bool) {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory1.register::<StructV1>(3).unwrap();
+    fory1.register_by_id::<StructV1>(3).unwrap();
 
     let mut fory2 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory2.register::<StructV2>(3).unwrap();
+    fory2.register_by_id::<StructV2>(3).unwrap();
 
     // Serialize V1 and deserialize as V2 (extra elements should be default)
     let v1 = StructV1 {
@@ -649,10 +649,10 @@ fn run_struct_tuple_element_decrease(xlang: bool) {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory1.register::<StructV1>(4).unwrap();
+    fory1.register_by_id::<StructV1>(4).unwrap();
 
     let mut fory2 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory2.register::<StructV2>(4).unwrap();
+    fory2.register_by_id::<StructV2>(4).unwrap();
 
     // Serialize V1 and deserialize as V2 (extra elements should be dropped)
     let v1 = StructV1 {
@@ -699,10 +699,10 @@ fn run_struct_nested_tuple_evolution(xlang: bool) {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory1.register::<StructV1>(5).unwrap();
+    fory1.register_by_id::<StructV1>(5).unwrap();
 
     let mut fory2 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory2.register::<StructV2>(5).unwrap();
+    fory2.register_by_id::<StructV2>(5).unwrap();
 
     // Serialize V1 and deserialize as V2
     let v1 = StructV1 {
@@ -756,10 +756,10 @@ fn run_struct_multiple_tuple_fields_evolution(xlang: bool) {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory1.register::<StructV1>(6).unwrap();
+    fory1.register_by_id::<StructV1>(6).unwrap();
 
     let mut fory2 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory2.register::<StructV2>(6).unwrap();
+    fory2.register_by_id::<StructV2>(6).unwrap();
 
     // Serialize V1 and deserialize as V2
     let v1 = StructV1 {
@@ -926,10 +926,10 @@ fn run_struct_complex_evolution_scenario(xlang: bool) {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory1.register::<DataRecordV1>(100).unwrap();
+    fory1.register_by_id::<DataRecordV1>(100).unwrap();
 
     let mut fory2 = Fory::builder().xlang(xlang).compatible(true).build();
-    fory2.register::<DataRecordV2>(100).unwrap();
+    fory2.register_by_id::<DataRecordV2>(100).unwrap();
 
     // Test V1 -> V2: Old schema to new schema
     let v1 = DataRecordV1 {
@@ -1036,10 +1036,10 @@ fn test_tuple_alias() {
 
     // Use separate Fory instances with the same type ID
     let mut fory1 = Fory::builder().compatible(true).build();
-    fory1.register::<DataRecordV1>(100).unwrap();
+    fory1.register_by_id::<DataRecordV1>(100).unwrap();
 
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory2.register::<DataRecordV2>(100).unwrap();
+    fory2.register_by_id::<DataRecordV2>(100).unwrap();
 
     // Test record1 serialized by fory1, deserialized by fory2
     let record1 = DataRecordV1 {

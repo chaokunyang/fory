@@ -134,7 +134,7 @@ fn test_rc_weak_field_in_struct() {
     }
 
     let mut fory = Fory::builder().track_ref(true).build();
-    fory.register::<SimpleNode>(1000).unwrap();
+    fory.register_by_id::<SimpleNode>(1000).unwrap();
 
     let data = Rc::new(42i32);
     let node = SimpleNode {
@@ -161,7 +161,7 @@ struct Node {
 fn test_node_circular_reference_with_parent_children() {
     // Register the Node type with Fory
     let mut fory = Fory::builder().track_ref(true).build();
-    fory.register::<Node>(2000).unwrap();
+    fory.register_by_id::<Node>(2000).unwrap();
 
     // Create parent
     let parent = Rc::new(RefCell::new(Node {
@@ -219,7 +219,7 @@ fn test_arc_mutex_circular_reference() {
     }
 
     let mut fory = Fory::builder().track_ref(true).build();
-    fory.register::<Node>(6000).unwrap();
+    fory.register_by_id::<Node>(6000).unwrap();
 
     let parent = Arc::new(Mutex::new(Node {
         val: 10,

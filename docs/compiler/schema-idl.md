@@ -88,7 +88,7 @@ package com.example.models alias models_v1;
 - Optional but recommended
 - Must appear before any type definitions
 - Only one package declaration per file
-- Used for namespace-based type registration
+- Used for name-based type registration
 - Package alias is used for auto-ID hashing
 
 **Language Mapping:**

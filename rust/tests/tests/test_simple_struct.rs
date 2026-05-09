@@ -30,7 +30,7 @@ fn test_one_field_primitive_non_compatible() {
     }
 
     let mut fory = Fory::default();
-    fory.register::<Data>(100).unwrap();
+    fory.register_by_id::<Data>(100).unwrap();
     let data = Data { value: 42 };
     let bytes = fory.serialize(&data).unwrap();
     let result: Data = fory.deserialize(&bytes).unwrap();
@@ -46,7 +46,7 @@ fn test_one_field_string_non_compatible() {
     }
 
     let mut fory = Fory::default();
-    fory.register::<Data>(101).unwrap();
+    fory.register_by_id::<Data>(101).unwrap();
     let data = Data {
         name: String::from("hello"),
     };
@@ -70,8 +70,8 @@ fn test_compatible_field_type_change() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Data1>(100).unwrap();
-    fory2.register::<Data2>(100).unwrap();
+    fory1.register_by_id::<Data1>(100).unwrap();
+    fory2.register_by_id::<Data2>(100).unwrap();
 
     let data1 = Data1 { value: 42 };
     let bytes = fory1.serialize(&data1).unwrap();
@@ -97,8 +97,8 @@ fn test_struct_evolving_override() {
         .compatible(true)
         .track_ref(false)
         .build();
-    fory.register::<Evolving>(100).unwrap();
-    fory.register::<Fixed>(101).unwrap();
+    fory.register_by_id::<Evolving>(100).unwrap();
+    fory.register_by_id::<Fixed>(101).unwrap();
 
     let evolving = Evolving { id: 123 };
     let evolving_bytes = fory.serialize(&evolving).unwrap();
@@ -132,8 +132,8 @@ fn test_compatible_to_empty_struct() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<DataWithField>(101).unwrap();
-    fory2.register::<EmptyData>(101).unwrap();
+    fory1.register_by_id::<DataWithField>(101).unwrap();
+    fory2.register_by_id::<EmptyData>(101).unwrap();
 
     let data1 = DataWithField {
         value: 42,
@@ -158,8 +158,8 @@ fn test_compatible_from_empty_struct() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<EmptyData>(102).unwrap();
-    fory2.register::<DataWithField>(102).unwrap();
+    fory1.register_by_id::<EmptyData>(102).unwrap();
+    fory2.register_by_id::<DataWithField>(102).unwrap();
 
     let data1 = EmptyData {};
     let bytes = fory1.serialize(&data1).unwrap();
@@ -181,8 +181,8 @@ fn test_compatible_vec_to_empty_struct() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<DataWithField>(101).unwrap();
-    fory2.register::<EmptyData>(101).unwrap();
+    fory1.register_by_id::<DataWithField>(101).unwrap();
+    fory2.register_by_id::<EmptyData>(101).unwrap();
 
     let data1 = DataWithField {
         value: vec![32],
@@ -206,8 +206,8 @@ fn test_compatible_map_to_empty_struct() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<DataWithField>(101).unwrap();
-    fory2.register::<EmptyData>(101).unwrap();
+    fory1.register_by_id::<DataWithField>(101).unwrap();
+    fory2.register_by_id::<EmptyData>(101).unwrap();
 
     let data1 = DataWithField {
         value: HashMap::from([(String::from("k1"), 1i32), (String::from("k2"), 2i32)]),
@@ -230,7 +230,7 @@ fn test_struct_with_float16_fields() {
     }
 
     let mut fory = Fory::default();
-    fory.register::<Float16Data>(200).unwrap();
+    fory.register_by_id::<Float16Data>(200).unwrap();
 
     let obj = Float16Data {
         scalar: float16::from_f32(1.5),
@@ -272,7 +272,7 @@ fn test_struct_with_bfloat16_fields() {
     }
 
     let mut fory = Fory::default();
-    fory.register::<BFloat16Data>(201).unwrap();
+    fory.register_by_id::<BFloat16Data>(201).unwrap();
 
     let obj = BFloat16Data {
         scalar: bfloat16::from_f32(1.5),

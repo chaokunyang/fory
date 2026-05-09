@@ -65,7 +65,7 @@ struct User {
 
 fn main() -> Result<(), Error> {
     let mut fory = Fory::default();
-    fory.register::<User>(1)?;
+    fory.register_by_id::<User>(1)?;
 
     let user = User {
         name: "Alice".to_string(),
@@ -107,7 +107,7 @@ struct Item {
 
 fn main() -> Result<(), Error> {
     let mut fory = Fory::default();
-    fory.register::<Item>(1000)?;
+    fory.register_by_id::<Item>(1000)?;
 
     let fory = Arc::new(fory);
     let handles: Vec<_> = (0..8)
@@ -130,7 +130,7 @@ fn main() -> Result<(), Error> {
 }
 ```
 
-**Tip:** Perform registrations (such as `fory.register::<T>(id)`) before spawning threads so every worker sees the same metadata. Once configured, wrapping the instance in `Arc` is enough to fan out serialization and deserialization tasks safely.
+**Tip:** Perform registrations (such as `fory.register_by_id::<T>(id)`) before spawning threads so every worker sees the same metadata. Once configured, wrapping the instance in `Arc` is enough to fan out serialization and deserialization tasks safely.
 
 ## Architecture
 

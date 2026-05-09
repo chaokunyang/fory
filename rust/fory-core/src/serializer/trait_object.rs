@@ -91,8 +91,8 @@ macro_rules! downcast_and_serialize {
 ///
 /// # fn main() {
 /// let mut fory = Fory::builder().compatible(true).build();
-/// fory.register::<Dog>(100);
-/// fory.register::<Cat>(101);
+/// fory.register_by_id::<Dog>(100);
+/// fory.register_by_id::<Cat>(101);
 ///
 /// let dog: Box<dyn Animal> = Box::new(Dog { name: "Rex".to_string() });
 /// let bytes = fory.serialize(&dog);

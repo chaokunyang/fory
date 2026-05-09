@@ -46,8 +46,8 @@ fn simple() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Animal1>(999).unwrap();
-    fory2.register::<Animal2>(999).unwrap();
+    fory1.register_by_id::<Animal1>(999).unwrap();
+    fory2.register_by_id::<Animal2>(999).unwrap();
     let animal: Animal1 = Animal1 {
         f1: HashMap::from([(1, vec![2])]),
         f2: String::from("hello"),
@@ -82,7 +82,7 @@ fn simple_write_continuous() {
     }
 
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register::<Animal1>(999).unwrap();
+    fory.register_by_id::<Animal1>(999).unwrap();
     let animal: Animal1 = Animal1 {
         f1: HashMap::from([(1, vec![2])]),
         f2: String::from("hello"),
@@ -130,8 +130,8 @@ fn skip_option() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Item1>(999).unwrap();
-    fory2.register::<Item2>(999).unwrap();
+    fory1.register_by_id::<Item1>(999).unwrap();
+    fory2.register_by_id::<Item2>(999).unwrap();
     let item1 = Item1 {
         f1: None,
         f2: Some(String::from("f2")),
@@ -169,10 +169,10 @@ fn nonexistent_struct() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Item1>(899).unwrap();
-    fory1.register::<Person1>(999).unwrap();
-    fory2.register::<Item2>(799).unwrap();
-    fory2.register::<Person2>(999).unwrap();
+    fory1.register_by_id::<Item1>(899).unwrap();
+    fory1.register_by_id::<Person1>(999).unwrap();
+    fory2.register_by_id::<Item2>(799).unwrap();
+    fory2.register_by_id::<Person2>(999).unwrap();
     let person = Person1 {
         f2: Item1 { f1: 42 },
         f3: 24,
@@ -200,7 +200,7 @@ fn option() {
         last: i64,
     }
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register::<Animal>(999).unwrap();
+    fory.register_by_id::<Animal>(999).unwrap();
     let animal: Animal = Animal {
         f1: Some(String::from("f1")),
         f2: None,
@@ -245,8 +245,8 @@ fn nullable() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Item1>(999).unwrap();
-    fory2.register::<Item2>(999).unwrap();
+    fory1.register_by_id::<Item1>(999).unwrap();
+    fory2.register_by_id::<Item2>(999).unwrap();
 
     let item1 = Item1 {
         f2: 43,
@@ -299,8 +299,8 @@ fn nullable_container() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Item1>(999).unwrap();
-    fory2.register::<Item2>(999).unwrap();
+    fory1.register_by_id::<Item1>(999).unwrap();
+    fory2.register_by_id::<Item2>(999).unwrap();
 
     let item1 = Item1 {
         f1: vec![44, 45],
@@ -351,8 +351,8 @@ fn inner_nullable() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Item1>(999).unwrap();
-    fory2.register::<Item2>(999).unwrap();
+    fory1.register_by_id::<Item1>(999).unwrap();
+    fory2.register_by_id::<Item2>(999).unwrap();
 
     let item1 = Item1 {
         f1: vec![None, Some("hello".to_string())],
@@ -398,10 +398,10 @@ fn nullable_struct() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register::<Item>(199).unwrap();
-    fory1.register::<Person1>(200).unwrap();
-    fory2.register::<Item>(199).unwrap();
-    fory2.register::<Person2>(200).unwrap();
+    fory1.register_by_id::<Item>(199).unwrap();
+    fory1.register_by_id::<Person1>(200).unwrap();
+    fory2.register_by_id::<Item>(199).unwrap();
+    fory2.register_by_id::<Person2>(200).unwrap();
 
     let person1 = Person1 {
         f1: Item {
@@ -474,13 +474,13 @@ fn enum_without_payload() {
     }
 
     let mut fory1 = Fory::builder().compatible(true).xlang(true).build();
-    fory1.register::<Color1>(101).unwrap();
-    fory1.register::<Color2>(102).unwrap();
-    fory1.register::<Person1>(103).unwrap();
+    fory1.register_by_id::<Color1>(101).unwrap();
+    fory1.register_by_id::<Color2>(102).unwrap();
+    fory1.register_by_id::<Person1>(103).unwrap();
     let mut fory2 = Fory::builder().compatible(true).xlang(true).build();
-    fory2.register::<Color1>(101).unwrap();
-    fory2.register::<Color2>(102).unwrap();
-    fory2.register::<Person2>(103).unwrap();
+    fory2.register_by_id::<Color1>(101).unwrap();
+    fory2.register_by_id::<Color2>(102).unwrap();
+    fory2.register_by_id::<Person2>(103).unwrap();
 
     let person1 = Person1 {
         f1: Color1::Blue,
@@ -540,11 +540,11 @@ fn named_enum() {
         last: i8,
     }
     let mut fory1 = Fory::builder().compatible(true).xlang(true).build();
-    fory1.register_by_name::<Color>("a").unwrap();
-    fory1.register::<Item1>(101).unwrap();
+    fory1.register_by_name::<Color>("", "a").unwrap();
+    fory1.register_by_id::<Item1>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).xlang(true).build();
-    fory2.register_by_name::<Color>("a").unwrap();
-    fory2.register::<Item2>(101).unwrap();
+    fory2.register_by_name::<Color>("", "a").unwrap();
+    fory2.register_by_id::<Item2>(101).unwrap();
     let item1 = Item1 {
         f1: Color::Red,
         f2: Color::Blue,
@@ -596,9 +596,9 @@ fn boxed() {
     }
 
     let mut fory1 = Fory::builder().compatible(true).xlang(true).build();
-    fory1.register::<Item1>(101).unwrap();
+    fory1.register_by_id::<Item1>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).xlang(true).build();
-    fory2.register::<Item2>(101).unwrap();
+    fory2.register_by_id::<Item2>(101).unwrap();
 
     let f1 = 1;
     let f2 = 2;

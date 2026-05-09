@@ -68,7 +68,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::default();
-//! fory.register::<User>(1)?;
+//! fory.register_by_id::<User>(1)?;
 //!
 //! let user = User {
 //!     name: "Alice".to_string(),
@@ -140,8 +140,8 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::default();
-//! fory.register::<Address>(100);
-//! fory.register::<Person>(200);
+//! fory.register_by_id::<Address>(100);
+//! fory.register_by_id::<Person>(200);
 //!
 //! let person = Person {
 //!     name: "John Doe".to_string(),
@@ -252,7 +252,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().track_ref(true).build();
-//! fory.register::<Node>(2000);
+//! fory.register_by_id::<Node>(2000);
 //!
 //! let parent = Rc::new(RefCell::new(Node {
 //!     value: 1,
@@ -294,7 +294,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().track_ref(true).build();
-//! fory.register::<Node>(6000);
+//! fory.register_by_id::<Node>(6000);
 //!
 //! let parent = Arc::new(Mutex::new(Node {
 //!     val: 10,
@@ -375,9 +375,9 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().compatible(true).build();
-//! fory.register::<Dog>(100);
-//! fory.register::<Cat>(101);
-//! fory.register::<Zoo>(102);
+//! fory.register_by_id::<Dog>(100);
+//! fory.register_by_id::<Cat>(101);
+//! fory.register_by_id::<Zoo>(102);
 //!
 //! let zoo = Zoo {
 //!     star_animal: Box::new(Dog {
@@ -421,7 +421,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::default();
-//! fory.register::<Dog>(100);
+//! fory.register_by_id::<Dog>(100);
 //!
 //! let dog: Rc<dyn Any> = Rc::new(Dog {
 //!     name: "Rex".to_string()
@@ -450,7 +450,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::default();
-//! fory.register::<Cat>(101);
+//! fory.register_by_id::<Cat>(101);
 //!
 //! let cat: Arc<dyn Any> = Arc::new(Cat {
 //!     name: "Whiskers".to_string()
@@ -502,9 +502,9 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().compatible(true).build();
-//! fory.register::<Dog>(100);
-//! fory.register::<Cat>(101);
-//! fory.register::<AnimalShelter>(102);
+//! fory.register_by_id::<Dog>(100);
+//! fory.register_by_id::<Cat>(101);
+//! fory.register_by_id::<AnimalShelter>(102);
 //!
 //! let shelter = AnimalShelter {
 //!     animals_rc: vec![
@@ -556,7 +556,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().compatible(true).build();
-//! fory.register::<Dog>(100);
+//! fory.register_by_id::<Dog>(100);
 //!
 //! // For Rc<dyn Trait>
 //! let dog_rc: Rc<dyn Animal> = Rc::new(Dog { name: "Rex".to_string() });
@@ -631,10 +631,10 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory1 = Fory::builder().compatible(true).build();
-//! fory1.register::<PersonV1>(1);
+//! fory1.register_by_id::<PersonV1>(1);
 //!
 //! let mut fory2 = Fory::builder().compatible(true).build();
-//! fory2.register::<PersonV2>(1);
+//! fory2.register_by_id::<PersonV2>(1);
 //!
 //! let person_v1 = PersonV1 {
 //!     name: "Alice".to_string(),
@@ -695,7 +695,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::default();
-//! fory.register::<Value>(1)?;
+//! fory.register_by_id::<Value>(1)?;
 //!
 //! let value = Value::Object { name: "score".to_string(), value: 100 };
 //! let bytes = fory.serialize(&value)?;
@@ -728,10 +728,10 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory_old = Fory::builder().compatible(true).build();
-//! fory_old.register::<OldEvent>(5)?;
+//! fory_old.register_by_id::<OldEvent>(5)?;
 //!
 //! let mut fory_new = Fory::builder().compatible(true).build();
-//! fory_new.register::<NewEvent>(5)?;
+//! fory_new.register_by_id::<NewEvent>(5)?;
 //!
 //! // Serialize with old schema (2 fields)
 //! let old_bytes = fory_old.serialize(&OldEvent::Click { x: 100, y: 200 })?;
@@ -856,7 +856,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::default();
-//! fory.register_serializer::<CustomType>(100);
+//! fory.register_serializer_by_id::<CustomType>(100);
 //!
 //! let custom = CustomType {
 //!     value: 42,
@@ -1061,13 +1061,13 @@
 //!     field2: String,
 //! }
 //!
-//! fory.register_by_namespace::<MyStruct>("com.example", "MyStruct");
+//! fory.register_by_name::<MyStruct>("com.example", "MyStruct");
 //! ```
 //!
 //! **Type registration strategies:**
 //!
-//! - **ID-based registration**: `fory.register::<T>(id)` - Fastest, requires coordination
-//! - **Namespace-based registration**: `fory.register_by_namespace::<T>(namespace, name)` - Automatic cross-language mapping
+//! - **ID-based registration**: `fory.register_by_id::<T>(id)` - Fastest, requires coordination
+//! - **Name-based registration**: `fory.register_by_name::<T>(namespace, name)` - Automatic cross-language mapping
 //!
 //! ## Performance Characteristics
 //!
@@ -1109,7 +1109,7 @@
 //!
 //! fn process_data(bytes: &[u8]) -> Result<Data, Error> {
 //!     let mut fory = Fory::default();
-//!     fory.register::<Data>(100);
+//!     fory.register_by_id::<Data>(100);
 //!
 //!     let data: Data = fory.deserialize(bytes)?;
 //!     Ok(data)
@@ -1135,7 +1135,7 @@
 //! }
 //!
 //! let mut fory = Fory::default();
-//! fory.register::<Item>(1000).unwrap();
+//! fory.register_by_id::<Item>(1000).unwrap();
 //! let fory = Arc::new(fory);
 //! let handles: Vec<_> = (0..8)
 //!     .map(|i| {
@@ -1154,7 +1154,7 @@
 //! }
 //! ```
 //!
-//! **Best practice:** Perform type registration (e.g., `fory.register::<T>(id)`) before
+//! **Best practice:** Perform type registration (e.g., `fory.register_by_id::<T>(id)`) before
 //! spawning worker threads so metadata is ready, then share the configured instance.
 //!
 //! ## Examples
@@ -1170,7 +1170,7 @@
 //!
 //! - **Type registry errors**: Errors such as `TypeId ... not found in type_info registry` mean
 //!   the type was never registered with the active `Fory` instance. Ensure every serializable
-//!   struct, enum, or trait implementation calls `register::<T>(type_id)` before use, and reuse
+//!   struct, enum, or trait implementation calls `register_by_id::<T>(type_id)` before use, and reuse
 //!   the same IDs when deserializing.
 //! - **Quick error lookup**: Always prefer the static constructors on
 //!   [`fory_core::error::Error`]—for example `Error::type_mismatch`, `Error::invalid_data`, or

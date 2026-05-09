@@ -84,7 +84,7 @@ fn test_use() {
     }
     let mut fory = Fory::builder().compatible(true).xlang(true).build();
     let item = Item { f1: 1, f2: 2 };
-    fory.register_serializer::<Item>(100).unwrap();
+    fory.register_serializer_by_id::<Item>(100).unwrap();
     let bytes = fory.serialize(&item).unwrap();
     let new_item: Item = fory.deserialize(&bytes).unwrap();
     assert_eq!(new_item.f1, item.f1);

@@ -41,10 +41,10 @@ fn test_unnamed_enum_variant_compatible() {
 
     // Test 1: Serialize v1 (2 fields), deserialize as v2 (3 fields)
     let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v1.register::<EventV1>(2000).unwrap();
+    fory_v1.register_by_id::<EventV1>(2000).unwrap();
 
     let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v2.register::<EventV2>(2000).unwrap();
+    fory_v2.register_by_id::<EventV2>(2000).unwrap();
 
     let event_v1 = EventV1::Message(42, "hello".to_string());
     let bin = fory_v1.serialize(&event_v1).unwrap();
@@ -81,7 +81,7 @@ fn test_unnamed_enum_variant_compatible() {
     }
 
     let mut fory_v3 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v3.register::<EventV3>(2000).unwrap();
+    fory_v3.register_by_id::<EventV3>(2000).unwrap();
 
     let event_v3 = EventV3::NewVariant(true);
     let bin = fory_v3.serialize(&event_v3).unwrap();
@@ -118,10 +118,10 @@ fn test_named_enum_variant_compatible() {
     }
 
     let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v1.register::<CommandV1>(3000).unwrap();
+    fory_v1.register_by_id::<CommandV1>(3000).unwrap();
 
     let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v2.register::<CommandV2>(3000).unwrap();
+    fory_v2.register_by_id::<CommandV2>(3000).unwrap();
 
     // Test 1: Serialize v1, deserialize as v2 (new field gets default value)
     let cmd_v1 = CommandV1::Execute {
@@ -199,13 +199,13 @@ fn test_named_enum_field_evolution() {
     }
 
     let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v1.register::<ConfigV1>(4000).unwrap();
+    fory_v1.register_by_id::<ConfigV1>(4000).unwrap();
 
     let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v2.register::<ConfigV2>(4000).unwrap();
+    fory_v2.register_by_id::<ConfigV2>(4000).unwrap();
 
     let mut fory_v3 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v3.register::<ConfigV3>(4000).unwrap();
+    fory_v3.register_by_id::<ConfigV3>(4000).unwrap();
 
     // Test V1 -> V2: New fields get default values
     let config_v1 = ConfigV1::Settings {
@@ -320,13 +320,13 @@ fn test_named_enum_variant_add_remove() {
     }
 
     let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v1.register::<TaskV1>(5000).unwrap();
+    fory_v1.register_by_id::<TaskV1>(5000).unwrap();
 
     let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v2.register::<TaskV2>(5000).unwrap();
+    fory_v2.register_by_id::<TaskV2>(5000).unwrap();
 
     let mut fory_v3 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v3.register::<TaskV3>(5000).unwrap();
+    fory_v3.register_by_id::<TaskV3>(5000).unwrap();
 
     // Test V2 (new variant Completed) -> V1: Unknown variant falls back to default
     let task_v2 = TaskV2::Completed {
@@ -459,13 +459,13 @@ fn test_enum_variant_type_change() {
     }
 
     let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v1.register::<StatusV1>(6000).unwrap();
+    fory_v1.register_by_id::<StatusV1>(6000).unwrap();
 
     let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v2.register::<StatusV2>(6000).unwrap();
+    fory_v2.register_by_id::<StatusV2>(6000).unwrap();
 
     let mut fory_v3 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v3.register::<StatusV3>(6000).unwrap();
+    fory_v3.register_by_id::<StatusV3>(6000).unwrap();
 
     // Test V1 Unit -> V2 Named: Type mismatch, uses default value
     let status_v1_active = StatusV1::Active;
@@ -594,16 +594,16 @@ fn test_struct_with_enum_field_evolution() {
     }
 
     let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v1.register::<StateV1>(7001).unwrap();
-    fory_v1.register::<MessageV1>(7000).unwrap();
+    fory_v1.register_by_id::<StateV1>(7001).unwrap();
+    fory_v1.register_by_id::<MessageV1>(7000).unwrap();
 
     let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v2.register::<StateV2>(7001).unwrap();
-    fory_v2.register::<MessageV2>(7000).unwrap();
+    fory_v2.register_by_id::<StateV2>(7001).unwrap();
+    fory_v2.register_by_id::<MessageV2>(7000).unwrap();
 
     let mut fory_v3 = Fory::builder().xlang(false).compatible(true).build();
-    fory_v3.register::<StateV3>(7001).unwrap();
-    fory_v3.register::<MessageV3>(7000).unwrap();
+    fory_v3.register_by_id::<StateV3>(7001).unwrap();
+    fory_v3.register_by_id::<MessageV3>(7000).unwrap();
 
     // Test V1 -> V2: Enum field evolution
     let msg_v1 = MessageV1 {

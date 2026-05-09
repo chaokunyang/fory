@@ -88,7 +88,7 @@ Unlike generic IDLs, Fory IDL is designed specifically for Fory serialization:
 
 - **Reference Tracking**: First-class support for shared and circular references via `ref`
 - **Nullable Fields**: Explicit `optional` modifier for nullable types
-- **Type Registration**: Built-in support for both numeric IDs and namespace-based registration
+- **Type Registration**: Built-in support for both numeric IDs and name-based registration
 - **Native Code Generation**: Generates idiomatic code with Fory annotations/macros
 
 ### Low Integration Overhead

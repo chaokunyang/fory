@@ -156,7 +156,7 @@ struct Company {
 #[test]
 fn test_fory_derived_struct_as_trait_object() {
     let mut fory = fory_compatible();
-    fory.register::<Person>(5000).unwrap();
+    fory.register_by_id::<Person>(5000).unwrap();
 
     let person = Person {
         name: String::from("Alice"),
@@ -178,8 +178,8 @@ fn test_fory_derived_struct_as_trait_object() {
 #[test]
 fn test_vec_of_fory_derived_trait_objects() {
     let mut fory = fory_compatible();
-    fory.register::<Person>(5000).unwrap();
-    fory.register::<Company>(5001).unwrap();
+    fory.register_by_id::<Person>(5000).unwrap();
+    fory.register_by_id::<Company>(5001).unwrap();
 
     let vec_of_trait_objects: Vec<Box<dyn Serializer>> = vec![
         Box::new(Person {
@@ -205,8 +205,8 @@ fn test_vec_of_fory_derived_trait_objects() {
 #[test]
 fn test_hashmap_with_fory_derived_values() {
     let mut fory = fory_compatible();
-    fory.register::<Person>(5000).unwrap();
-    fory.register::<Company>(5001).unwrap();
+    fory.register_by_id::<Person>(5000).unwrap();
+    fory.register_by_id::<Company>(5001).unwrap();
 
     let mut map: HashMap<String, Box<dyn Serializer>> = HashMap::new();
     map.insert(
@@ -280,9 +280,9 @@ struct Zoo {
 #[test]
 fn test_custom_trait_object_basic() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
-    fory.register::<Zoo>(8003).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
+    fory.register_by_id::<Zoo>(8003).unwrap();
 
     let zoo_dog = Zoo {
         star_animal: Box::new(Dog {
@@ -338,9 +338,9 @@ struct PetOwner {
 #[test]
 fn test_multiple_traits() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
-    fory.register::<PetOwner>(9001).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
+    fory.register_by_id::<PetOwner>(9001).unwrap();
 
     let owner = PetOwner {
         pets: vec![
@@ -384,8 +384,8 @@ fn test_multiple_traits() {
 #[test]
 fn test_single_custom_trait_object_direct() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     let animal: Box<dyn Animal> = Box::new(Dog {
         name: "Rex".to_string(),
@@ -402,8 +402,8 @@ fn test_single_custom_trait_object_direct() {
 #[test]
 fn test_vec_custom_trait_objects_direct() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     let animals: Vec<Box<dyn Animal>> = vec![
         Box::new(Dog {
@@ -435,8 +435,8 @@ fn test_vec_custom_trait_objects_direct() {
 #[test]
 fn test_hashmap_custom_trait_objects_direct() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     let mut animal_map: std::collections::HashMap<String, Box<dyn Animal>> =
         std::collections::HashMap::new();
@@ -478,8 +478,8 @@ fn test_hashmap_custom_trait_objects_direct() {
 #[test]
 fn test_nested_custom_trait_object_collections() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     // Test Vec<Vec<Box<dyn Animal>>>
     let nested_animals: Vec<Vec<Box<dyn Animal>>> = vec![
@@ -516,8 +516,8 @@ fn test_nested_custom_trait_object_collections() {
 #[test]
 fn test_mixed_trait_object_collections() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     // Test HashMap<String, Vec<Box<dyn Animal>>>
     let mut groups: std::collections::HashMap<String, Vec<Box<dyn Animal>>> =
@@ -567,8 +567,8 @@ fn test_mixed_trait_object_collections() {
 #[test]
 fn test_empty_trait_object_collections() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     // Test empty Vec<Box<dyn Animal>>
     let empty_animals: Vec<Box<dyn Animal>> = vec![];
@@ -588,8 +588,8 @@ fn test_empty_trait_object_collections() {
 #[test]
 fn test_single_item_trait_object_collections() {
     let mut fory = fory_compatible();
-    fory.register::<Dog>(8001).unwrap();
-    fory.register::<Cat>(8002).unwrap();
+    fory.register_by_id::<Dog>(8001).unwrap();
+    fory.register_by_id::<Cat>(8002).unwrap();
 
     // Test single item Vec<Box<dyn Animal>>
     let single_animal: Vec<Box<dyn Animal>> = vec![Box::new(Dog {

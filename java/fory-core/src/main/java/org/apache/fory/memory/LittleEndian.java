@@ -1,5 +1,6 @@
 package org.apache.fory.memory;
 
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.UnsafeOps;
 
 /*
@@ -74,7 +75,19 @@ public class LittleEndian {
     return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
+  public static long getInt64(byte[] o, int index) {
+    if (AndroidSupport.IS_ANDROID) {
+      return MemoryOps.getInt64(o, index);
+    }
+    long v = UnsafeOps.getLong(o, UnsafeOps.BYTE_ARRAY_OFFSET + index);
+    return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
+  }
+
   public static void putInt64(byte[] o, int index, long value) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.putInt64(o, index, value);
+      return;
+    }
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
     }

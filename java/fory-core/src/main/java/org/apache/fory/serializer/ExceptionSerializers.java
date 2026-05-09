@@ -28,6 +28,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
@@ -89,9 +90,9 @@ public final class ExceptionSerializers {
     @Override
     public void write(WriteContext writeContext, T value) {
       Serializer[] slotsSerializers = getSlotsSerializers();
-      writeContext.writeStringRef(value.getMessage());
       writeContext.writeRef(value.getStackTrace());
       writeContext.writeRef(value.getCause());
+      writeContext.writeStringRef(value.getMessage());
       Throwable[] suppressedExceptions = value.getSuppressed();
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32(suppressedExceptions.length);
@@ -107,36 +108,77 @@ public final class ExceptionSerializers {
     @Override
     public T read(ReadContext readContext) {
       Serializer[] slotsSerializers = getSlotsSerializers();
-      String detailMessage = readContext.readStringRef();
-      T obj;
-      if (messageConstructor != null) {
-        obj = newThrowableWithMessage(detailMessage);
-      } else {
-        if (AndroidSupport.IS_ANDROID) {
-          throw new ForyException(
-              "Android doesn't support deserializing Throwable type "
-                  + type.getName()
-                  + " without a String message constructor because it requires Unsafe allocation "
-                  + "and private-field access.");
-        }
-        obj = objectCreator.newInstance();
-      }
-      readContext.reference(obj);
       StackTraceElement[] stackTrace = (StackTraceElement[]) readContext.readRef();
-      Throwable cause = (Throwable) readContext.readRef();
-      readSuppressedExceptions(readContext, obj);
-      skipExtraFields(readContext);
-      if (!AndroidSupport.IS_ANDROID) {
-        UnsafeOps.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
+      if (AndroidSupport.IS_ANDROID && !ThrowableFields.isDetailMessageWritable()) {
+        return readAndroidThrowableWithoutDetailMessageField(
+            readContext, stackTrace, slotsSerializers);
       }
+      T obj = newThrowableForRead();
+      readContext.reference(obj);
+      Throwable cause = (Throwable) readContext.readRef();
+      String detailMessage = readContext.readStringRef();
+      List<Throwable> suppressedExceptions = readSuppressedExceptions(readContext);
+      skipExtraFields(readContext);
+      restoreDetailMessage(obj, detailMessage);
       if (stackTrace != null) {
         obj.setStackTrace(stackTrace);
       }
       if (cause != null) {
         obj.initCause(cause);
       }
+      addSuppressedExceptions(obj, suppressedExceptions);
       readAndSetFields(readContext, obj, slotsSerializers, config);
       return obj;
+    }
+
+    private T readAndroidThrowableWithoutDetailMessageField(
+        ReadContext readContext, StackTraceElement[] stackTrace, Serializer[] slotsSerializers) {
+      if (messageConstructor == null) {
+        throw new ForyException(
+            "Android doesn't support deserializing Throwable type "
+                + type.getName()
+                + " without a String message constructor because Throwable.detailMessage is not "
+                + "reflectively writable.");
+      }
+      int refId = readContext.lastPreservedRefId();
+      if (refId >= 0) {
+        readContext.setReadRef(refId, PendingThrowable.INSTANCE);
+      }
+      Throwable cause = (Throwable) readContext.readRef();
+      String detailMessage = readContext.readStringRef();
+      List<Throwable> suppressedExceptions = readSuppressedExceptions(readContext);
+      skipExtraFields(readContext);
+      if (containsPendingThrowable(cause) || containsPendingThrowable(suppressedExceptions)) {
+        throw new ForyException(
+            "Android doesn't support deserializing cyclic Throwable references for type "
+                + type.getName()
+                + " because Throwable.detailMessage is not reflectively writable.");
+      }
+      T obj = newThrowableWithMessage(detailMessage);
+      readContext.reference(obj);
+      if (stackTrace != null) {
+        obj.setStackTrace(stackTrace);
+      }
+      if (cause != null) {
+        obj.initCause(cause);
+      }
+      addSuppressedExceptions(obj, suppressedExceptions);
+      readAndSetFields(readContext, obj, slotsSerializers, config);
+      return obj;
+    }
+
+    private T newThrowableForRead() {
+      if (messageConstructor != null) {
+        return newThrowableWithMessage(null);
+      }
+      if (AndroidSupport.IS_ANDROID) {
+        throw new ForyException(
+            "Android doesn't support deserializing Throwable type "
+                + type.getName()
+                + " without a String message constructor because it requires Unsafe allocation "
+                + "or unsupported private-field access.");
+      }
+      return objectCreator.newInstance();
     }
 
     private T newThrowableWithMessage(String detailMessage) {
@@ -148,6 +190,14 @@ public final class ExceptionSerializers {
                 + type.getName()
                 + " with a String message constructor.",
             t);
+      }
+    }
+
+    private void restoreDetailMessage(T obj, String detailMessage) {
+      if (AndroidSupport.IS_ANDROID) {
+        ThrowableFields.setDetailMessage(obj, detailMessage, type);
+      } else {
+        UnsafeOps.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
       }
     }
 
@@ -416,12 +466,54 @@ public final class ExceptionSerializers {
     metaReadContext.readTypeInfos.add(null);
   }
 
-  private static void readSuppressedExceptions(ReadContext readContext, Throwable obj) {
+  private static List<Throwable> readSuppressedExceptions(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
     int numSuppressedExceptions = buffer.readVarUInt32();
+    List<Throwable> suppressedExceptions = new ArrayList<>(numSuppressedExceptions);
     for (int i = 0; i < numSuppressedExceptions; i++) {
-      obj.addSuppressed((Throwable) readContext.readRef());
+      suppressedExceptions.add((Throwable) readContext.readRef());
     }
+    return suppressedExceptions;
+  }
+
+  private static void addSuppressedExceptions(Throwable obj, List<Throwable> suppressedExceptions) {
+    for (Throwable suppressedException : suppressedExceptions) {
+      obj.addSuppressed(suppressedException);
+    }
+  }
+
+  private static boolean containsPendingThrowable(List<Throwable> throwables) {
+    for (Throwable throwable : throwables) {
+      if (containsPendingThrowable(throwable)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean containsPendingThrowable(Throwable throwable) {
+    return containsPendingThrowable(throwable, Collections.newSetFromMap(new IdentityHashMap<>()));
+  }
+
+  private static boolean containsPendingThrowable(Throwable throwable, Set<Throwable> seen) {
+    if (throwable == null) {
+      return false;
+    }
+    if (throwable == PendingThrowable.INSTANCE) {
+      return true;
+    }
+    if (!seen.add(throwable)) {
+      return false;
+    }
+    if (containsPendingThrowable(throwable.getCause(), seen)) {
+      return true;
+    }
+    for (Throwable suppressedException : throwable.getSuppressed()) {
+      if (containsPendingThrowable(suppressedException, seen)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static final class ThrowableOffsets {
@@ -436,6 +528,51 @@ public final class ExceptionSerializers {
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
+    }
+  }
+
+  private static final class ThrowableFields {
+    private static final Field DETAIL_MESSAGE_FIELD = getDetailMessageField();
+
+    private static boolean isDetailMessageWritable() {
+      return DETAIL_MESSAGE_FIELD != null;
+    }
+
+    private static Field getDetailMessageField() {
+      try {
+        Field detailMessageField = Throwable.class.getDeclaredField("detailMessage");
+        detailMessageField.setAccessible(true);
+        return detailMessageField;
+      } catch (RuntimeException | NoSuchFieldException e) {
+        return null;
+      }
+    }
+
+    private static void setDetailMessage(
+        Throwable throwable, String detailMessage, Class<?> throwableType) {
+      if (DETAIL_MESSAGE_FIELD == null) {
+        throw new ForyException(
+            "Android doesn't support restoring Throwable message for type "
+                + throwableType.getName()
+                + " because Throwable.detailMessage is not reflectively accessible.");
+      }
+      try {
+        DETAIL_MESSAGE_FIELD.set(throwable, detailMessage);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw new ForyException(
+            "Android doesn't support restoring Throwable message for type "
+                + throwableType.getName()
+                + " because Throwable.detailMessage is not reflectively writable.",
+            e);
+      }
+    }
+  }
+
+  private static final class PendingThrowable extends Throwable {
+    private static final PendingThrowable INSTANCE = new PendingThrowable();
+
+    private PendingThrowable() {
+      super(null, null, false, false);
     }
   }
 }

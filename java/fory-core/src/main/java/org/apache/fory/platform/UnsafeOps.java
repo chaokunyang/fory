@@ -19,6 +19,7 @@ package org.apache.fory.platform;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 import sun.misc.Unsafe;
@@ -27,6 +28,7 @@ import sun.misc.Unsafe;
 // https://github.com/apache/spark/blob/921fb289f003317d89120faa6937e4abd359195c/common/unsafe/src/main/java/org/apache/spark/unsafe/Platform.java.
 
 /** A utility class for unsafe memory operations. */
+@Internal
 @SuppressWarnings("restriction")
 public final class UnsafeOps {
   @SuppressWarnings("restriction")

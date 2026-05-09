@@ -46,6 +46,7 @@ import org.apache.fory.serializer.scala.SingletonCollectionSerializer;
 import org.apache.fory.serializer.scala.SingletonMapSerializer;
 import org.apache.fory.serializer.scala.SingletonObjectSerializer;
 import org.apache.fory.type.union.Union;
+import org.apache.fory.type.union.Union2;
 import org.apache.fory.util.function.Functions;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -87,6 +88,7 @@ public class AndroidDynamicFeatureTest {
           "Android must not create a runtime lambda stub class");
       verifyReflectiveGetter();
       verifyMemoryUtilsStreamWrapGuards();
+      verifyXlangUnion();
 
       verifyFory(false);
       verifyFory(true);
@@ -181,6 +183,12 @@ public class AndroidDynamicFeatureTest {
               MemoryUtils.wrap(
                   new ByteArrayInputStream(new byte[] {1, 2, 3}), MemoryUtils.buffer(8)),
           "ByteArrayInputStream direct wrapping");
+    }
+
+    private static void verifyXlangUnion() {
+      Fory fory = Fory.builder().withXlang(true).registerGuavaTypes(false).build();
+      Union2<String, Integer> value = Union2.ofT2(26);
+      checkEquals(fory.deserialize(fory.serialize(value)), value, "Android xlang union");
     }
 
     private static void verifyCustomUnionFactory(Fory fory) {

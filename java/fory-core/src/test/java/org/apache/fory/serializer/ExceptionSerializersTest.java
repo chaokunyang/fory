@@ -24,6 +24,10 @@ import java.util.Arrays;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
+import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -150,6 +154,38 @@ public class ExceptionSerializersTest extends ForyTestBase {
     CustomException suppressedCopy = (CustomException) copy.getSuppressed()[0];
     Assert.assertEquals(suppressedCopy.parentCode, 12);
     Assert.assertEquals(suppressedCopy.tags, Arrays.asList("suppressed-tag"));
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testThrowableReadsMainWireOrderWithCyclicCause() {
+    Fory fory = builder().withRefTracking(true).withCodegen(false).build();
+    RuntimeException value = new RuntimeException("root");
+    RuntimeException cause = new RuntimeException("cause");
+    value.initCause(cause);
+    cause.initCause(value);
+
+    MemoryBuffer payload = MemoryUtils.buffer(512);
+    WriteContext writeContext = fory.getWriteContext();
+    writeContext.prepare(payload, null);
+    writeContext.getRefWriter().writeRefOrNull(MemoryUtils.buffer(8), value);
+    writeContext.writeRef(value.getStackTrace());
+    writeContext.writeRef(value.getCause());
+    writeContext.writeStringRef(value.getMessage());
+    payload.writeVarUInt32(0);
+    payload.writeVarUInt32(0);
+
+    payload.readerIndex(0);
+    ReadContext readContext = fory.getReadContext();
+    readContext.prepare(payload, null, false);
+    readContext.preserveRefId();
+    Serializer<RuntimeException> serializer =
+        (Serializer<RuntimeException>) fory.getTypeResolver().getSerializer(RuntimeException.class);
+    RuntimeException copy = serializer.read(readContext);
+
+    Assert.assertEquals(copy.getMessage(), "root");
+    Assert.assertEquals(copy.getCause().getMessage(), "cause");
+    Assert.assertSame(copy.getCause().getCause(), copy);
   }
 
   @Test

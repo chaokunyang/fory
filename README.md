@@ -12,155 +12,147 @@
 [![NuGet](https://img.shields.io/nuget/v/Apache.Fory?logo=nuget&style=for-the-badge)](https://www.nuget.org/packages/Apache.Fory)
 [![pub.dev](https://img.shields.io/pub/v/fory?logo=dart&style=for-the-badge)](https://pub.dev/packages/fory)
 
-**Apache Fory™** is a blazingly-fast multi-language serialization framework powered by **JIT compilation**, **zero-copy** techniques, and **advanced code generation**, achieving up to **170x performance improvement** while maintaining simplicity and ease of use.
+**Apache Fory™** is a multi-language serialization framework for idiomatic
+domain objects, schema IDL, fast object serialization, cross-language data
+exchange, and row-format random access.
 
 <https://fory.apache.org>
 
 > [!IMPORTANT]
-> **Apache Fory™ was previously named as Apache Fury. For versions before 0.11, please use "fury" instead of "fory" in package names, imports, and dependencies, see [Fury Docs](https://fory.apache.org/docs/0.10/docs/introduction/) for how to use Fury in older versions**.
+> Apache Fory™ was previously named Apache Fury. For versions before 0.11, use
+> `fury` instead of `fory` in package names, imports, and dependencies. See the
+> [Fury docs](https://fory.apache.org/docs/0.10/docs/introduction/) for older
+> releases.
 
-## Key Features
+## Why Fory
 
-### High-Performance Serialization
+- **Domain-object first**: Serialize Java classes, Python dataclasses, Go
+  structs, Rust/C++ structs, and generated or annotated model types directly.
+  You do not need an IDL file to start.
+- **Schema IDL with native domain objects**: For shared schemas, define numbers,
+  strings, lists, maps, arrays, enums, structs, and unions once, then generate
+  domain objects that use each language's native types.
+- **Fast paths in one codebase**: Native serialization, xlang serialization,
+  and row format all benefit from Fory's optimized runtime work, including Java
+  JIT serializers and generated/static serializers in other runtimes.
+- **Xlang wire format**: Exchange payloads across supported languages with
+  compact binary encoding, metadata packing, cross-language type mapping, and
+  polymorphic runtime types.
+- **Shared and circular references**: Preserve object identity for graphs that
+  need it.
+- **Schema evolution**: Add or delete fields while services deploy
+  independently, with compatible mode handling forward and backward reads.
+- **Row format**: Use zero-copy random access, partial reads/deserialization,
+  and Arrow integration when jobs need fields instead of whole objects.
+- **Broad runtime support**: Java, Python, C++, Go, Rust,
+  JavaScript/TypeScript, C#, Swift, Dart, Scala, and Kotlin, including GraalVM
+  native image, Dart VM/Flutter/web, and Node.js/browser JavaScript.
 
-Apache Fory™ delivers excellent performance through advanced optimization techniques:
+## Performance
 
-- **JIT Compilation**: Runtime code generation for Java eliminates virtual method calls and inlines hot paths
-- **Static Code Generation**: Compile-time code generation for Rust, C++, and Go delivers peak performance without runtime overhead
-- **Meta Packing & Sharing**: Class metadata packing and sharing reduces redundant type information across objects on one stream
+Charts labeled "compatible" use schema evolution mode. Other Java charts use
+schema-consistent mode, where writer and reader class schemas are expected to
+match.
 
-### Cross-Language Serialization
+### Java serialization
 
-The **[xlang serialization format](docs/specification/xlang_serialization_spec.md)** enables seamless data exchange across programming languages:
+In Java serialization benchmarks, Fory reaches up to **170x** the throughput of
+JDK serialization on selected workloads.
 
-- **Reference Preservation**: Shared and circular references work correctly across languages
-- **Polymorphism**: Objects serialize/deserialize with their actual runtime types
-- **Schema Evolution**: Optional forward/backward compatibility for evolving schemas
-- **Automatic Serialization**: Serialize domain objects automatically, no IDL or schema definitions required
-
-### Row Format
-
-A cache-friendly **[row format](docs/specification/row_format_spec.md)** optimized for analytics workloads:
-
-- **Zero-Copy Random Access**: Read individual fields without deserializing entire objects
-- **Partial Operations**: Selective field serialization and deserialization for efficiency
-- **Apache Arrow Integration**: Seamless conversion to columnar format for analytics pipelines
-- **Multi-Language**: Available in Java, Python, Rust and C++
-
-### Security & Production-Readiness
-
-Built for production environments with secure defaults and explicit control:
-
-- **Class Registration**: Whitelist-based deserialization control is enabled by default to block untrusted classes.
-- **Depth Limiting**: Configurable object graph depth limits mitigate recursive and stack exhaustion attacks.
-- **Configurable Policies**: Custom class checkers and deserialization policies let teams enforce internal security rules.
-- **Platform Support**: Runs on Java 8 through 25, supports GraalVM native image, and works across major operating systems.
-
-## Protocols
-
-Apache Fory™ provides three protocol families optimized for different scenarios:
-
-| Protocol Family                                                           | Use Case                       | Key Features                                                                                                                                                                                                                  |
-| ------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **[Xlang Serialization](docs/specification/xlang_serialization_spec.md)** | Cross-language object exchange | Automatic serialization, reference preservation, polymorphism                                                                                                                                                                 |
-| **[Row Format](docs/specification/row_format_spec.md)**                   | Analytics and data processing  | Zero-copy random access, partial operations, Apache Arrow compatibility                                                                                                                                                       |
-| **Native Serialization**                                                  | Language-specific optimization | Native protocol implementations per language, including **[Java Serialization](docs/specification/java_serialization_spec.md)** and Python Native. Python Native extends Xlang with more type support and better performance. |
-
-All protocol families share the same optimized codebase, allowing improvements in one family to benefit others.
-
-## Benchmarks
-
-### Java Serialization Performance
-
-Charts labeled **"compatible"** show schema evolution mode with forward/backward compatibility enabled, while others show schema consistent mode where class schemas must match.
-
-**Serialization Throughput**:
+**Serialization throughput**
 
 <p align="center">
-<img src="docs/benchmarks/java/java_repo_serialization_throughput.png" width="95%" alt="Java Serialization Throughput">
+<img src="docs/benchmarks/java/java_repo_serialization_throughput.png" width="95%" alt="Java serialization throughput">
 </p>
 
-**Deserialization Throughput**:
+**Deserialization throughput**
 
 <p align="center">
-<img src="docs/benchmarks/java/java_repo_deserialization_throughput.png" width="95%" alt="Java Deserialization Throughput">
+<img src="docs/benchmarks/java/java_repo_deserialization_throughput.png" width="95%" alt="Java deserialization throughput">
 </p>
 
-**Xlang Throughput**:
+**Xlang throughput**
 
 <p align="center">
-<img src="docs/benchmarks/java/throughput.png" width="95%">
+<img src="docs/benchmarks/java/throughput.png" width="95%" alt="Java xlang throughput">
 </p>
 
-See [Java Benchmarks](docs/benchmarks/java) for more details.
+See [Java benchmarks](docs/benchmarks/java) for the full methodology and data.
 
-### Rust Serialization Performance
+### Other runtime benchmarks
+
+### Rust
 
 <p align="center">
-<img src="docs/benchmarks/rust/throughput.png" width="95%">
+<img src="docs/benchmarks/rust/throughput.png" width="95%" alt="Rust serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [Rust Benchmarks](benchmarks/rust).
+See [Rust benchmarks](benchmarks/rust).
 
-### C++ Serialization Performance
+### C++
 
 <p align="center">
-<img src="docs/benchmarks/cpp/throughput.png" width="95%">
+<img src="docs/benchmarks/cpp/throughput.png" width="95%" alt="C++ serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [C++ Benchmarks](benchmarks/cpp).
+See [C++ benchmarks](benchmarks/cpp).
 
-### Go Serialization Performance
+### Go
 
 <p align="center">
-<img src="docs/benchmarks/go/throughput.png" width="95%">
+<img src="docs/benchmarks/go/throughput.png" width="95%" alt="Go serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [Go Benchmark](benchmarks/go).
+See [Go benchmarks](benchmarks/go).
 
-### Python Serialization Performance
+### Python
 
 <p align="center">
-<img src="docs/benchmarks/python/throughput.png" width="95%">
+<img src="docs/benchmarks/python/throughput.png" width="95%" alt="Python serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [Python Benchmarks](benchmarks/python).
+See [Python benchmarks](benchmarks/python).
 
-### JavaScript/NodeJS Serialization Performance
+### JavaScript/TypeScript
 
 <p align="center">
-<img src="docs/benchmarks/javascript/throughput.png" width="95%">
+<img src="docs/benchmarks/javascript/throughput.png" width="95%" alt="JavaScript serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [JavaScript Benchmarks](docs/benchmarks/javascript).
+See [JavaScript benchmarks](docs/benchmarks/javascript).
 
-### C# Serialization Performance
+### C#
 
 <p align="center">
-<img src="docs/benchmarks/csharp/throughput.png" width="95%">
+<img src="docs/benchmarks/csharp/throughput.png" width="95%" alt="C# serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [C# Benchmarks](docs/benchmarks/csharp).
+See [C# benchmarks](docs/benchmarks/csharp).
 
-### Swift Serialization Performance
+### Swift
 
 <p align="center">
-<img src="docs/benchmarks/swift/throughput.png" width="95%">
+<img src="docs/benchmarks/swift/throughput.png" width="95%" alt="Swift serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [Swift Benchmarks](docs/benchmarks/swift).
+See [Swift benchmarks](docs/benchmarks/swift).
 
-### Dart Serialization Performance
+### Dart
 
 <p align="center">
-<img src="docs/benchmarks/dart/throughput.png" width="95%">
+<img src="docs/benchmarks/dart/throughput.png" width="95%" alt="Dart serialization throughput">
 </p>
 
-For more detailed benchmarks and methodology, see [Dart Benchmarks](docs/benchmarks/dart).
+See [Dart benchmarks](docs/benchmarks/dart).
 
 ## Installation
 
-**Java**:
+Pick the runtime you use and run the package-manager command, or paste the
+dependency block into your build file.
+
+### Java
+
+Maven:
 
 ```xml
 <dependency>
@@ -170,19 +162,29 @@ For more detailed benchmarks and methodology, see [Dart Benchmarks](docs/benchma
 </dependency>
 ```
 
-Snapshots are available from `https://repository.apache.org/snapshots/` (version `0.17.0-SNAPSHOT`).
+Gradle:
 
-**Scala**:
-
-```sbt
-// Scala 2.13
-libraryDependencies += "org.apache.fory" % "fory-scala_2.13" % "0.17.0"
-
-// Scala 3
-libraryDependencies += "org.apache.fory" % "fory-scala_3" % "0.17.0"
+```gradle
+implementation "org.apache.fory:fory-core:0.17.0"
 ```
 
-**Kotlin**:
+### Scala
+
+sbt:
+
+```scala
+libraryDependencies += "org.apache.fory" %% "fory-scala" % "0.17.0"
+```
+
+### Kotlin
+
+Gradle:
+
+```kotlin
+implementation("org.apache.fory:fory-kotlin:0.17.0")
+```
+
+Maven:
 
 ```xml
 <dependency>
@@ -192,113 +194,179 @@ libraryDependencies += "org.apache.fory" % "fory-scala_3" % "0.17.0"
 </dependency>
 ```
 
-**Python**:
+### Python
 
 ```bash
 pip install pyfory
-
-# With row format support
-pip install pyfory[format]
 ```
 
-**Rust**:
+For row-format support:
+
+```bash
+pip install "pyfory[format]"
+```
+
+### Rust
+
+`Cargo.toml`:
 
 ```toml
 [dependencies]
-fory = "0.16"
+fory = "0.17"
 ```
 
-**C++**:
+### C++
 
-Fory C++ supports both CMake and Bazel build systems. See [C++ Installation Guide](https://fory.apache.org/docs/guide/cpp/#installation) for detailed instructions.
+CMake:
 
-**Golang**:
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  fory
+  GIT_REPOSITORY https://github.com/apache/fory.git
+  GIT_TAG v0.17.0
+  SOURCE_SUBDIR cpp
+)
+FetchContent_MakeAvailable(fory)
+target_link_libraries(my_app PRIVATE fory::serialization)
+```
+
+Bazel `MODULE.bazel`:
+
+```bazel
+bazel_dep(name = "fory", version = "0.17.0")
+git_override(module_name = "fory", remote = "https://github.com/apache/fory.git", commit = "v0.17.0")
+```
+
+Bazel `BUILD`:
+
+```bazel
+deps = ["@fory//cpp/fory/serialization:fory_serialization"]
+```
+
+See the [C++ installation guide](https://fory.apache.org/docs/guide/cpp/#installation)
+for complete CMake, Bazel, and source-build details.
+
+### Go
 
 ```bash
 go get github.com/apache/fory/go/fory
 ```
 
-**NodeJS/JavaScript**:
+### JavaScript/TypeScript
 
 ```bash
 npm install @apache-fory/core
 ```
 
-Optional Node.js string fast-path support:
+For the Node.js string fast path:
 
 ```bash
 npm install @apache-fory/core @apache-fory/hps
 ```
 
-**C#**:
+### C#
 
-```xml
-<ItemGroup>
-  <PackageReference Include="Apache.Fory" Version="0.17.0" />
-</ItemGroup>
+```bash
+dotnet add package Apache.Fory --version 0.17.0
 ```
 
-**Dart**:
+### Dart
 
-```yaml
-dependencies:
-  fory: ^0.17.0
-
-dev_dependencies:
-  build_runner: ^2.4.0
+```bash
+dart pub add fory:^0.17.0
+dart pub add dev:build_runner
 ```
 
-## Quick Start
+### Swift
 
-This section provides quick examples for getting started with Apache Fory™. For comprehensive guides, see the [Documentation](#documentation).
+Add Fory to `Package.swift`:
 
-### Native Serialization
+```swift
+dependencies: [
+  .package(url: "https://github.com/apache/fory.git", exact: "0.17.0")
+],
+targets: [
+  .target(
+    name: "YourTarget",
+    dependencies: [.product(name: "Fory", package: "fory")]
+  )
+]
+```
 
-**Always use native mode when working with a single language.** Native mode delivers optimal performance by avoiding the type metadata overhead required for cross-language compatibility. Xlang mode introduces additional metadata encoding costs and restricts serialization to types that are common across all supported languages. Language-specific types will be rejected during serialization in xlang-mode.
+See the [Swift guide](https://fory.apache.org/docs/guide/swift/) for generated
+serializer setup.
 
-#### Java Serialization
+### Development from source
 
-When you don't need cross-language support, use Java mode for optimal performance.
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
+Snapshots for Java, Scala, and Kotlin are available from
+`https://repository.apache.org/snapshots/` with the matching `-SNAPSHOT` version.
+
+## Choose a mode
+
+| Mode                 | Use it when                                                   | Start here                                               |
+| -------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| Xlang serialization  | Data crosses language boundaries                              | [Cross-language guide](docs/guide/xlang)                 |
+| Native serialization | Producer and consumer are in the same language                | Language guide for your runtime                          |
+| Row format           | You need random field access or analytics-style partial reads | [Row format spec](docs/specification/row_format_spec.md) |
+
+Use native mode for same-language traffic. It avoids xlang's cross-language
+type mapping and metadata constraints, so it can serialize broader
+language-specific object graphs and is the fastest path for same-language
+payloads.
+
+Compatible mode is Fory's schema-evolution mode. It writes the metadata readers
+and writers need to tolerate schema differences. Xlang mode enables compatible
+mode by default to better handle differences between language type systems.
+Native mode keeps it off by default for smaller payloads and higher throughput.
+
+Use compatible mode when services deploy independently or when fields may be
+added or deleted over time. Use schema-consistent mode when writer and reader
+schemas deploy together and you want the smallest payloads.
+
+For xlang, all peers must agree on type identity. Name-based registration is
+easier to read in examples. Numeric IDs are smaller and faster, but they require
+coordination across every reader and writer.
+
+## Quick start: xlang serialization
+
+Xlang mode writes the cross-language Fory wire format. Bytes produced by one
+runtime can be read by another when the runtimes use the same type identity,
+compatible mode setting, and field schema.
+
+### Java
 
 ```java
-import org.apache.fory.*;
-import org.apache.fory.config.*;
+import org.apache.fory.Fory;
 
 public class Example {
   public static class Person {
-    String name;
-    int age;
+    public String name;
+    public int age;
   }
 
   public static void main(String[] args) {
-    // Create Fory instance - should be reused across serializations
-    BaseFory fory = Fory.builder()
-      .withXlang(false)
-      .requireClassRegistration(true)
-      // replace `build` with `buildThreadSafeFory` for Thread-Safe Usage
-      .build();
-    // Register your classes (required when class registration is enabled)
-    // Registration order must be consistent if id is not specified
-    fory.register(Person.class);
-    // Serialize
+    Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
+    fory.register(Person.class, "example.Person");
+
     Person person = new Person();
-    person.name = "chaokunyang";
-    person.age = 28;
+    person.name = "Alice";
+    person.age = 30;
+
     byte[] bytes = fory.serialize(person);
-    Person result = (Person) fory.deserialize(bytes);
-    System.out.println(result.name + " " + result.age);  // Output: chaokunyang 28
+    Person decoded = (Person) fory.deserialize(bytes);
+    System.out.println(decoded.name);
   }
 }
 ```
 
-For detailed Java usage including compatibility modes, compression, and advanced features, see [Java Serialization Guide](docs/guide/java) and [java/README.md](java/README.md).
-
-#### Python Serialization
-
-Python native mode provides a high-performance drop-in replacement for pickle/cloudpickle with better speed and compatibility.
+### Python
 
 ```python
 from dataclasses import dataclass
+
 import pyfory
 
 @dataclass
@@ -306,28 +374,49 @@ class Person:
     name: str
     age: pyfory.Int32
 
-# Create Fory instance - should be reused across serializations
-fory = pyfory.Fory()
-# Register your classes (required when class registration is enabled)
-fory.register_type(Person)
-person = Person(name="chaokunyang", age=28)
-data = fory.serialize(person)
-result = fory.deserialize(data)
-print(result.name, result.age)  # Output: chaokunyang 28
+fory = pyfory.Fory(xlang=True, compatible=True)
+fory.register_type(Person, typename="example.Person")
+
+data = fory.serialize(Person("Alice", 30))
+person = fory.deserialize(data)
+print(person.name)
 ```
 
-Python schema aliases also apply inside declared containers, such as
-`Dict[pyfory.FixedInt32, List[pyfory.TaggedInt64]]`, so nested keys and values use the requested
-wire encoding in both pure Python and Cython modes.
+### Go
 
-For detailed Python usage including type hints, compatibility modes, and advanced features, see [Python Guide](docs/guide/python).
+```go
+package main
 
-#### Rust Serialization
+import (
+    "fmt"
 
-Rust native mode provides compile-time code generation via derive macros for high-performance serialization without runtime overhead.
+    "github.com/apache/fory/go/fory"
+)
+
+type Person struct {
+    Name string
+    Age  int32
+}
+
+func main() {
+    f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+    if err := f.RegisterNamedStruct(Person{}, "example.Person"); err != nil {
+        panic(err)
+    }
+
+    data, _ := f.Serialize(&Person{Name: "Alice", Age: 30})
+    var person Person
+    if err := f.Deserialize(data, &person); err != nil {
+        panic(err)
+    }
+    fmt.Println(person.Name)
+}
+```
+
+### Rust
 
 ```rust
-use fory::{Fory, ForyStruct};
+use fory::{Error, Fory, ForyStruct};
 
 #[derive(ForyStruct, Debug, PartialEq)]
 struct Person {
@@ -335,111 +424,93 @@ struct Person {
     age: i32,
 }
 
-fn main() -> Result<(), fory::Error> {
-    // Create Fory instance - should be reused across serializations
-    let mut fory = Fory::default();
-    // Register your structs (required when class registration is enabled)
-    fory.register::<Person>(1);
-    let person = Person {
-        name: "chaokunyang".to_string(),
-        age: 28,
-    };
-    let bytes = fory.serialize(&person);
-    let result: Person = fory.deserialize(&bytes)?;
-    println!("{} {}", result.name, result.age); // Output: chaokunyang 28
+fn main() -> Result<(), Error> {
+    let mut fory = Fory::builder().xlang(true).compatible(true).build();
+    fory.register_by_name::<Person>("example", "Person")?;
+
+    let bytes = fory.serialize(&Person {
+        name: "Alice".to_string(),
+        age: 30,
+    })?;
+    let person: Person = fory.deserialize(&bytes)?;
+    println!("{}", person.name);
     Ok(())
 }
 ```
 
-For detailed Rust usage including collections, references, and custom serializers, see [Rust Guide](docs/guide/rust).
-
-#### C++ Serialization
-
-C++ native mode provides compile-time reflection via the `FORY_STRUCT` macro for efficient serialization with zero runtime overhead.
+### C++
 
 ```cpp
 #include "fory/serialization/fory.h"
+#include <cstdint>
+#include <iostream>
+#include <string>
 
 using namespace fory::serialization;
 
 struct Person {
-    std::string name;
-    int32_t age;
+  std::string name;
+  int32_t age;
 };
 FORY_STRUCT(Person, name, age);
 
 int main() {
-    // Create Fory instance - should be reused across serializations
-    auto fory = Fory::builder().build();
-    // Register your structs (required when class registration is enabled)
-    fory.register_struct<Person>(1);
-    Person person{"chaokunyang", 28};
-    auto bytes = fory.serialize(person).value();
-    auto result = fory.deserialize<Person>(bytes).value();
-    std::cout << result.name << " " << result.age << std::endl;  // Output: chaokunyang 28
+  auto fory = Fory::builder().xlang(true).compatible(true).build();
+  fory.register_struct<Person>("example.Person");
+
+  auto bytes = fory.serialize(Person{"Alice", 30}).value();
+  Person person = fory.deserialize<Person>(bytes).value();
+  std::cout << person.name << std::endl;
 }
 ```
 
-For detailed C++ usage including collections, smart pointers, and error handling, see [C++ Guide](docs/guide/cpp).
-
-#### NodeJS/JavaScript Serialization
-
-JavaScript native mode uses registered schemas to generate fast serializers for repeated use in browser or Node.js applications.
+### JavaScript/TypeScript
 
 ```ts
 import Fory, { Type } from "@apache-fory/core";
 
-const personType = Type.struct("example.person", {
-  name: Type.string(),
-  age: Type.int32(),
-});
+const personType = Type.struct(
+  { typeName: "example.Person" },
+  {
+    name: Type.string(),
+    age: Type.int32(),
+  },
+);
 
-const fory = new Fory();
+const fory = new Fory({ compatible: true });
 const { serialize, deserialize } = fory.register(personType);
 
-const bytes = serialize({
-  name: "chaokunyang",
-  age: 28,
-});
+const bytes = serialize({ name: "Alice", age: 30 });
 const person = deserialize(bytes);
-console.log(person.name, person.age); // Output: chaokunyang 28
+console.log(person.name);
 ```
 
-For detailed JavaScript usage including schema registration, references, and cross-language support, see [JavaScript Guide](docs/guide/javascript).
-
-#### C# Serialization
-
-C# native mode provides source-generator-backed serialization for registered .NET types.
+### C#
 
 ```csharp
 using Apache.Fory;
 
-[ForyStruct]
+[ForyObject]
 public sealed class Person
 {
-    public long Id { get; set; }
     public string Name { get; set; } = string.Empty;
+    public int Age { get; set; }
 }
 
-Fory fory = Fory.Builder().Build();
-fory.Register<Person>(1);
+Fory fory = Fory.Builder()
+    .Compatible(true)
+    .Build();
+fory.Register<Person>("example", "Person");
 
-Person person = new()
-{
-    Id = 1,
-    Name = "chaokunyang",
-};
-
-byte[] bytes = fory.Serialize(person);
-Person result = fory.Deserialize<Person>(bytes);
-Console.WriteLine($"{result.Name} {result.Id}"); // Output: chaokunyang 1
+byte[] bytes = fory.Serialize(new Person { Name = "Alice", Age = 30 });
+Person person = fory.Deserialize<Person>(bytes);
+Console.WriteLine(person.Name);
 ```
 
-For detailed C# usage including configuration, custom serializers, and thread-safe runtime options, see [C# Guide](docs/guide/csharp).
+C# always writes the xlang frame header, so there is no separate xlang builder
+flag.
 
-#### Dart Serialization
-
-Dart native mode uses generated serializers for fast serialization without runtime reflection.
+### Dart
 
 ```dart
 import 'package:fory/fory.dart';
@@ -457,7 +528,7 @@ class Person {
 }
 
 void main() {
-  final fory = Fory();
+  final fory = Fory(compatible: true);
   PersonFory.register(
     fory,
     Person,
@@ -465,27 +536,41 @@ void main() {
     typeName: 'Person',
   );
 
-  final person = Person()
-    ..name = 'chaokunyang'
-    ..age = 28;
-
-  final bytes = fory.serialize(person);
-  final result = fory.deserialize<Person>(bytes);
-  print('${result.name} ${result.age}');
+  final bytes = fory.serialize(Person()
+    ..name = 'Alice'
+    ..age = 30);
+  final person = fory.deserialize<Person>(bytes);
+  print(person.name);
 }
 ```
 
-Generate the companion file before running the program:
+Dart uses the xlang wire format directly. Generate the companion file before
+running:
 
 ```bash
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-For detailed Dart usage including code generation, field configuration, and cross-language guidance, see [Dart Guide](docs/guide/dart).
+### Swift
 
-#### Scala Serialization
+```swift
+import Fory
 
-Scala native mode provides optimized serialization for Scala-specific types including case classes, collections, and Option types.
+@ForyStruct
+struct Person {
+    var name: String = ""
+    var age: Int32 = 0
+}
+
+let fory = Fory(xlang: true, compatible: true)
+try fory.register(Person.self, namespace: "example", name: "Person")
+
+let bytes = try fory.serialize(Person(name: "Alice", age: 30))
+let person: Person = try fory.deserialize(bytes)
+print(person.name)
+```
+
+### Scala
 
 ```scala
 import org.apache.fory.Fory
@@ -493,29 +578,19 @@ import org.apache.fory.serializer.scala.ScalaSerializers
 
 case class Person(name: String, age: Int)
 
-object Example {
-  def main(args: Array[String]): Unit = {
-    // Create Fory instance - should be reused across serializations
-    val fory = Fory.builder()
-      .withXlang(false)
-      .requireClassRegistration(true)
-      .build()
-    // Register Scala serializers for Scala-specific types
-    ScalaSerializers.registerSerializers(fory)
-    // Register your case classes
-    fory.register(classOf[Person])
-    val bytes = fory.serialize(Person("chaokunyang", 28))
-    val result = fory.deserialize(bytes).asInstanceOf[Person]
-    println(s"${result.name} ${result.age}")  // Output: chaokunyang 28
-  }
-}
+val fory = Fory.builder()
+  .withXlang(true)
+  .withCompatible(true)
+  .build()
+ScalaSerializers.registerSerializers(fory)
+fory.register(classOf[Person], "example.Person")
+
+val bytes = fory.serialize(Person("Alice", 30))
+val person = fory.deserialize(bytes).asInstanceOf[Person]
+println(person.name)
 ```
 
-For detailed Scala usage including collection serialization and integration patterns, see [Scala Guide](docs/guide/scala).
-
-#### Kotlin Serialization
-
-Kotlin native mode provides optimized serialization for Kotlin-specific types including data classes, nullable types, and Kotlin collections.
+### Kotlin
 
 ```kotlin
 import org.apache.fory.Fory
@@ -524,285 +599,197 @@ import org.apache.fory.serializer.kotlin.KotlinSerializers
 data class Person(val name: String, val age: Int)
 
 fun main() {
-    // Create Fory instance - should be reused across serializations
     val fory = Fory.builder()
-        .withXlang(false)
-        .requireClassRegistration(true)
+        .withXlang(true)
+        .withCompatible(true)
         .build()
-    // Register Kotlin serializers for Kotlin-specific types
     KotlinSerializers.registerSerializers(fory)
-    // Register your data classes
-    fory.register(Person::class.java)
-    val bytes = fory.serialize(Person("chaokunyang", 28))
-    val result = fory.deserialize(bytes) as Person
-    println("${result.name} ${result.age}")  // Output: chaokunyang 28
+    fory.register(Person::class.java, "example.Person")
+
+    val bytes = fory.serialize(Person("Alice", 30))
+    val person = fory.deserialize(bytes) as Person
+    println(person.name)
 }
 ```
 
-For detailed Kotlin usage including null safety and default value support, see [kotlin/README.md](kotlin/README.md).
+For shared/circular references, polymorphism, numeric IDs versus names, and
+type-mapping rules, see the [cross-language guide](docs/guide/xlang) and
+[type mapping specification](docs/specification/xlang_type_mapping.md).
 
-### Cross-Language Serialization
+## Native mode: same-language serialization
 
-**Only use xlang mode when you need cross-language data exchange.** Xlang mode adds type metadata overhead for cross-language compatibility and only supports types that can be mapped across all languages. For single-language use cases, always prefer native mode for better performance.
+Use native mode when the writer and reader are in the same language. Java and
+Python can serialize broader language-specific object graphs this way. The
+languages below expose an explicit `xlang=false` or native-mode setting; runtimes
+without that switch stay on their documented default path.
 
-The following examples demonstrate serializing a `Person` object across Java and Rust. For other languages (Python, Go, JavaScript, etc.), simply set the xlang mode to `true` and follow the same pattern.
+Keep class/type registration enabled for untrusted input. See the language guides
+for runtime-specific security and compatibility settings.
 
 **Java**
 
 ```java
-import org.apache.fory.*;
-import org.apache.fory.config.*;
+Fory fory = Fory.builder()
+    .withXlang(false)
+    .requireClassRegistration(true)
+    .build();
+// Register, serialize, and deserialize as in the xlang example above.
+```
 
-public class XlangExample {
-  public record Person(String name, int age) {}
+**Python**
 
-  public static void main(String[] args) {
-    // Create Fory instance with XLANG mode. Compatible mode is the xlang default.
-    Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
-    // Register with cross-language type id/name
-    fory.register(Person.class, 1);
-    // fory.register(Person.class, "example.Person");
-    Person person = new Person("chaokunyang", 28);
-    byte[] bytes = fory.serialize(person);
-    // bytes can be deserialized by Rust, Python, Go, or other languages
-    Person result = (Person) fory.deserialize(bytes);
-    System.out.println(result.name + " " + result.age);  // Output: chaokunyang 28
-  }
-}
+```python
+fory = pyfory.Fory(xlang=False, ref=True)
+# Register, serialize, and deserialize as in the xlang example above.
+```
+
+**Go**
+
+```go
+f := fory.New(fory.WithXlang(false))
+// Register, serialize, and deserialize as in the xlang example above.
 ```
 
 **Rust**
 
 ```rust
-use fory::{Fory, ForyStruct};
-
-#[derive(ForyStruct, Debug)]
-struct Person {
-    name: String,
-    age: i32,
-}
-
-fn main() -> Result<(), Error> {
-    let mut fory = Fory::builder().xlang(true).compatible(true).build();
-    fory.register::<Person>(1)?;
-    // fory.register_by_name::<Person>("example.Person")?;
-    let person = Person {
-        name: "chaokunyang".to_string(),
-        age: 28,
-    };
-    let bytes = fory.serialize(&person);
-    // bytes can be deserialized by Java, Python, Go, or other languages
-    let result: Person = fory.deserialize(&bytes)?;
-    println!("{} {}", result.name, result.age);  // Output: chaokunyang 28
-}
+let mut fory = Fory::builder().xlang(false).build();
+// Register, serialize, and deserialize as in the xlang example above.
 ```
 
-**Key Points for Cross-Language Serialization**:
+**C++**
 
-- Enable xlang mode in all languages, for example `withXlang(true)` in Java
-- Compatible mode defaults to `true` when xlang mode is enabled and is recommended for
-  cross-language services because schemas can diverge more easily across languages.
-- Register types with **consistent IDs or names** across all languages:
-  - **By ID** (`fory.register(Person.class, 1)`): Faster serialization, more compact encoding, but requires coordination to avoid ID conflicts
-  - **By name** (`fory.register(Person.class, "example.Person")`): More flexible, less prone to conflicts, easier to manage across teams, but slightly larger encoding
-- Type IDs/names must match across all languages for successful deserialization
-- Only use types that have cross-language mappings (see [Type Mapping](docs/specification/xlang_type_mapping.md))
-
-For examples with **circular references**, **shared references**, and **polymorphism** across languages, see:
-
-- [Cross-Language Serialization Guide](docs/guide/xlang)
-- [Java Serialization Guide - Cross Language](docs/guide/java)
-- [Python Guide - Cross Language](docs/guide/python)
-
-### Row Format Encoding
-
-Row format provides zero-copy random access to serialized data, making it ideal for analytics workloads and data processing pipelines.
-
-#### Java
-
-```java
-import org.apache.fory.format.*;
-import java.util.*;
-import java.util.stream.*;
-
-public class Bar {
-  String f1;
-  List<Long> f2;
-}
-
-public class Foo {
-  int f1;
-  List<Integer> f2;
-  Map<String, Integer> f3;
-  List<Bar> f4;
-}
-
-RowEncoder<Foo> encoder = Encoders.bean(Foo.class);
-Foo foo = new Foo();
-foo.f1 = 10;
-foo.f2 = IntStream.range(0, 1000000).boxed().collect(Collectors.toList());
-foo.f3 = IntStream.range(0, 1000000).boxed().collect(Collectors.toMap(i -> "k"+i, i -> i));
-
-List<Bar> bars = new ArrayList<>(1000000);
-for (int i = 0; i < 1000000; i++) {
-  Bar bar = new Bar();
-  bar.f1 = "s" + i;
-  bar.f2 = LongStream.range(0, 10).boxed().collect(Collectors.toList());
-  bars.add(bar);
-}
-foo.f4 = bars;
-
-// Serialize to row format (can be zero-copy read by Python)
-BinaryRow binaryRow = encoder.toRow(foo);
-
-// Deserialize entire object
-Foo newFoo = encoder.fromRow(binaryRow);
-
-// Zero-copy access to nested fields without full deserialization
-BinaryArray binaryArray2 = binaryRow.getArray(1);  // Access f2 field
-BinaryArray binaryArray4 = binaryRow.getArray(3);  // Access f4 field
-BinaryRow barStruct = binaryArray4.getStruct(10);   // Access 11th Bar element
-long value = barStruct.getArray(1).getInt64(5);     // Access nested value
-
-// Partial deserialization
-RowEncoder<Bar> barEncoder = Encoders.bean(Bar.class);
-Bar newBar = barEncoder.fromRow(barStruct);
-Bar newBar2 = barEncoder.fromRow(binaryArray4.getStruct(20));
+```cpp
+auto fory = Fory::builder().xlang(false).build();
+// Register, serialize, and deserialize as in the xlang example above.
 ```
 
-#### Python
+**Scala**
+
+```scala
+val fory = Fory.builder()
+  .withXlang(false)
+  .requireClassRegistration(true)
+  .build()
+ScalaSerializers.registerSerializers(fory)
+// Register, serialize, and deserialize as in the xlang example above.
+```
+
+**Kotlin**
+
+```kotlin
+val fory = Fory.builder()
+    .withXlang(false)
+    .requireClassRegistration(true)
+    .build()
+KotlinSerializers.registerSerializers(fory)
+// Register, serialize, and deserialize as in the xlang example above.
+```
+
+## Row format
+
+Row format is for random access and partial reads. These examples encode an
+object with an integer array field, then read one array element from the binary
+row without rebuilding the object.
+
+### Python
 
 ```python
 from dataclasses import dataclass
-from typing import List, Dict
-import pyarrow as pa
+from typing import List
+
 import pyfory
 
 @dataclass
-class Bar:
-    f1: str
-    f2: List[pa.int64]
+class User:
+    id: pyfory.Int32
+    name: str
+    scores: List[pyfory.Int32]
 
-@dataclass
-class Foo:
-    f1: pa.int32
-    f2: List[pa.int32]
-    f3: Dict[str, pa.int32]
-    f4: List[Bar]
+encoder = pyfory.encoder(User)
+binary = encoder.to_row(User(1, "Alice", [98, 100, 95])).to_bytes()
 
-encoder = pyfory.encoder(Foo)
-foo = Foo(
-    f1=10,
-    f2=list(range(1000_000)),
-    f3={f"k{i}": i for i in range(1000_000)},
-    f4=[Bar(f1=f"s{i}", f2=list(range(10))) for i in range(1000_000)]
-)
-
-# Serialize to row format
-binary: bytes = encoder.to_row(foo).to_bytes()
-
-# Zero-copy random access without full deserialization
-foo_row = pyfory.RowData(encoder.schema, binary)
-print(foo_row.f2[100000])           # Access element directly
-print(foo_row.f4[100000].f1)        # Access nested field
-print(foo_row.f4[200000].f2[5])     # Access deeply nested field
+row = pyfory.RowData(encoder.schema, binary)
+print(row.name)
+print(row.scores[1])
 ```
 
-For more details on row format, see [Row Format Specification](docs/specification/row_format_spec.md).
+### Java
+
+```java
+public class User {
+  public int id;
+  public String name;
+  public int[] scores;
+}
+
+RowEncoder<User> encoder = Encoders.bean(User.class);
+
+User user = new User();
+user.id = 1;
+user.name = "Alice";
+user.scores = new int[] {98, 100, 95};
+
+BinaryRow row = encoder.toRow(user);
+
+Schema schema = encoder.schema();
+Schema.StringField nameField = schema.stringField("name");
+Schema.ArrayField scoresField = schema.arrayField("scores");
+
+String name = nameField.get(row);
+ArrayData scores = scoresField.get(row);
+int secondScore = scores.getInt32(1);
+```
+
+For Java imports, nested structs, arrays/maps, Arrow integration, and partial
+deserialization, see the
+[Java row-format guide](https://fory.apache.org/docs/guide/java/row_format), the
+[Python row-format guide](docs/guide/python/row-format.md), and the
+[row-format specification](docs/specification/row_format_spec.md).
 
 ## Documentation
 
-### User Guides
+### User guides
 
-| Guide                            | Description                                | Source                                                   | Website                                                            |
-| -------------------------------- | ------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------ |
-| **Java Serialization**           | Comprehensive guide for Java serialization | [java](docs/guide/java)                                  | [📖 View](https://fory.apache.org/docs/guide/java/)                |
-| **Python**                       | Python-specific features and usage         | [python](docs/guide/python)                              | [📖 View](https://fory.apache.org/docs/guide/python/)              |
-| **Rust**                         | Rust implementation and patterns           | [rust](docs/guide/rust)                                  | [📖 View](https://fory.apache.org/docs/guide/rust/)                |
-| **C++**                          | C++ implementation and patterns            | [cpp](docs/guide/cpp)                                    | [📖 View](https://fory.apache.org/docs/guide/cpp/)                 |
-| **Go**                           | Go serialization and runtime usage         | [go](docs/guide/go)                                      | [📖 View](https://fory.apache.org/docs/guide/go/)                  |
-| **JavaScript/NodeJS**            | JavaScript and Node.js serialization guide | [javascript](docs/guide/javascript)                      | [📖 View](https://fory.apache.org/docs/guide/javascript/)          |
-| **C#**                           | C# serialization and .NET usage            | [csharp](docs/guide/csharp)                              | [📖 View](https://fory.apache.org/docs/guide/csharp/)              |
-| **Swift**                        | Swift implementation and patterns          | [swift](docs/guide/swift)                                | [📖 View](https://fory.apache.org/docs/guide/swift/)               |
-| **Dart**                         | Dart serialization and codegen usage       | [dart](docs/guide/dart)                                  | [📖 View](https://fory.apache.org/docs/guide/dart/)                |
-| **Scala**                        | Scala integration and best practices       | [scala](docs/guide/scala)                                | [📖 View](https://fory.apache.org/docs/guide/scala/)               |
-| **Kotlin**                       | Kotlin integration and type support        | [kotlin](docs/guide/kotlin)                              | [📖 View](https://fory.apache.org/docs/guide/kotlin/)              |
-| **Cross-Language Serialization** | Multi-language object exchange             | [xlang](docs/guide/xlang)                                | [📖 View](https://fory.apache.org/docs/guide/xlang/)               |
-| **GraalVM**                      | Native image support and AOT compilation   | [graalvm-support.md](docs/guide/java/graalvm-support.md) | [📖 View](https://fory.apache.org/docs/guide/java/graalvm_support) |
-| **Development**                  | Building and contributing to Fory          | [DEVELOPMENT.md](docs/DEVELOPMENT.md)                    | [📖 View](docs/DEVELOPMENT.md)                                     |
+| Guide                 | Source                                                                   | Website                                                         |
+| --------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| Java                  | [docs/guide/java](docs/guide/java)                                       | [View](https://fory.apache.org/docs/guide/java/)                |
+| Python                | [docs/guide/python](docs/guide/python)                                   | [View](https://fory.apache.org/docs/guide/python/)              |
+| Rust                  | [docs/guide/rust](docs/guide/rust)                                       | [View](https://fory.apache.org/docs/guide/rust/)                |
+| C++                   | [docs/guide/cpp](docs/guide/cpp)                                         | [View](https://fory.apache.org/docs/guide/cpp/)                 |
+| Go                    | [docs/guide/go](docs/guide/go)                                           | [View](https://fory.apache.org/docs/guide/go/)                  |
+| JavaScript/TypeScript | [docs/guide/javascript](docs/guide/javascript)                           | [View](https://fory.apache.org/docs/guide/javascript/)          |
+| C#                    | [docs/guide/csharp](docs/guide/csharp)                                   | [View](https://fory.apache.org/docs/guide/csharp/)              |
+| Swift                 | [docs/guide/swift](docs/guide/swift)                                     | [View](https://fory.apache.org/docs/guide/swift/)               |
+| Dart                  | [docs/guide/dart](docs/guide/dart)                                       | [View](https://fory.apache.org/docs/guide/dart/)                |
+| Scala                 | [docs/guide/scala](docs/guide/scala)                                     | [View](https://fory.apache.org/docs/guide/scala/)               |
+| Kotlin                | [docs/guide/kotlin](docs/guide/kotlin)                                   | [View](https://fory.apache.org/docs/guide/kotlin/)              |
+| Cross-language xlang  | [docs/guide/xlang](docs/guide/xlang)                                     | [View](https://fory.apache.org/docs/guide/xlang/)               |
+| Schema IDL/compiler   | [docs/compiler](docs/compiler)                                           | [View](https://fory.apache.org/docs/compiler/)                  |
+| GraalVM native image  | [docs/guide/java/graalvm-support.md](docs/guide/java/graalvm-support.md) | [View](https://fory.apache.org/docs/guide/java/graalvm_support) |
+| Development           | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)                               | [View](docs/DEVELOPMENT.md)                                     |
 
-### Protocol Specifications
+### Specifications
 
-| Specification           | Description                    | Source                                                                        | Website                                                                             |
-| ----------------------- | ------------------------------ | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| **Xlang Serialization** | Cross-language binary protocol | [xlang_serialization_spec.md](docs/specification/xlang_serialization_spec.md) | [📖 View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
-| **Java Serialization**  | Java-optimized protocol        | [java_serialization_spec.md](docs/specification/java_serialization_spec.md)   | [📖 View](https://fory.apache.org/docs/specification/fory_java_serialization_spec)  |
-| **Row Format**          | Row-based binary format        | [row_format_spec.md](docs/specification/row_format_spec.md)                   | [📖 View](https://fory.apache.org/docs/specification/fory_row_format_spec)          |
-| **Type Mapping**        | Cross-language type conversion | [xlang_type_mapping.md](docs/specification/xlang_type_mapping.md)             | [📖 View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
+| Specification          | Source                                                                        | Website                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Xlang serialization    | [xlang_serialization_spec.md](docs/specification/xlang_serialization_spec.md) | [View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
+| Java serialization     | [java_serialization_spec.md](docs/specification/java_serialization_spec.md)   | [View](https://fory.apache.org/docs/specification/fory_java_serialization_spec)  |
+| Row format             | [row_format_spec.md](docs/specification/row_format_spec.md)                   | [View](https://fory.apache.org/docs/specification/fory_row_format_spec)          |
+| Cross-language mapping | [xlang_type_mapping.md](docs/specification/xlang_type_mapping.md)             | [View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
 
-## Compatibility
+## Community and support
 
-### Schema Compatibility
+- [Slack workspace](https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw)
+- [@ApacheFory on X](https://x.com/ApacheFory)
+- [GitHub issues](https://github.com/apache/fory/issues)
+- Apache Fory mailing lists for development discussion
 
-Apache Fory™ supports class schema forward/backward compatibility across languages, enabling seamless schema evolution in production systems without requiring coordinated upgrades across all services. Fory provides two schema compatibility modes:
+## Contributing
 
-1. **Compatible Mode (xlang default)**: Supports independent schema evolution with forward and backward compatibility. This mode enables field addition/deletion, limited type evolution, and graceful handling of schema mismatches. It is recommended for `xlang=true` because different languages can diverge on schemas more easily. Enable explicitly using `withCompatible(true)` in Java, `compatible=True` in Python, `compatible(true)` in Rust, `WithCompatible(true)` in Go, or the equivalent runtime option.
-
-2. **Schema Consistent Mode**: Assumes identical class schemas between serialization and deserialization peers. This mode offers minimal serialization overhead, smallest data size, and fastest performance. Use it only when schemas do not change, or when all services deploy schema changes at the same time. Disable compatible mode explicitly, for example `withCompatible(false)` in Java.
-
-### Binary Compatibility
-
-**Current Status**: Binary compatibility is **not guaranteed** between Fory major releases as the protocol continues to evolve. Compatibility **is guaranteed** between minor versions (for example, 0.13.x).
-
-**Recommendations**:
-
-- Version your serialized data by Fory major version
-- Plan migration strategies when upgrading major versions
-- See [upgrade guide](docs/guide/java) for details
-
-Major-version compatibility is the boundary for stable serialized data.
-
-## Security
-
-### Overview
-
-Serialization security varies by protocol:
-
-- **Row Format**: Secure with predefined schemas
-- **Object Graph Serialization** (Java/Python native): More flexible but requires careful security configuration
-
-Dynamic serialization can deserialize arbitrary types, which may introduce risks. For example, the deserialization may invoke `init` constructor or `equals/hashCode` method; If the method body contains malicious code, the system will be at risk.
-
-Fory enables class registration **by default** for dynamic protocols, allowing only trusted registered types.
-**Do not disable class registration unless you can ensure your environment is secure**.
-
-If this option is disabled, you are responsible for serialization security. You should implement and configure a customized `TypeChecker` or `DeserializationPolicy` for fine-grained security control.
-
-To report security vulnerabilities in Apache Fory™, please follow the [ASF vulnerability reporting process](https://apache.org/security/#reporting-a-vulnerability).
-
-## Community and Support
-
-### Getting Help
-
-- **Slack**: Join our [Slack workspace](https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw) for community discussions
-- **Twitter/X**: Follow [@ApacheFory](https://x.com/ApacheFory) for updates and announcements
-- **GitHub Issues**: Report bugs and request features at [apache/fory](https://github.com/apache/fory/issues)
-- **Mailing Lists**: Subscribe to Apache Fory mailing lists for development discussions
-
-### Contributing
-
-We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) to get started.
-
-**Ways to Contribute**:
-
-- 🐛 Report bugs and issues
-- 💡 Propose new features
-- 📝 Improve documentation
-- 🔧 Submit pull requests
-- 🧪 Add test cases
-- 📊 Share benchmarks
-
-See [Development Guide](docs/DEVELOPMENT.md) for build instructions and development workflow.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) before sending pull requests. Bug
+reports, docs fixes, tests, benchmarks, and runtime improvements are welcome.
 
 ## License
 

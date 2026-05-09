@@ -43,7 +43,8 @@ public interface ThreadSafeFory extends BaseFory {
 
   /**
    * Deserialize <code>obj</code> from {@code byteBuffer.position()} to {@code byteBuffer.limit()}
-   * without changing the caller buffer position or limit.
+   * without changing the caller buffer position or limit. On Android, heap, direct, and readonly
+   * buffers are copied into Fory-owned heap memory before deserialization.
    */
   Object deserialize(ByteBuffer byteBuffer);
 

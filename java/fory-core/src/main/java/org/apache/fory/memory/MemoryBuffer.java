@@ -3491,8 +3491,8 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Bulk copy method. Copies {@code numBytes} bytes to target unsafe object and pointer. NOTE: This
-   * is a unsafe method, no check here, please be carefully.
+   * JVM-only bulk copy method. Copies {@code numBytes} bytes to target unsafe object and pointer.
+   * Throws on Android before executing unsafe memory access.
    */
   public void copyToUnsafe(long offset, Object target, long targetPointer, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
@@ -3504,8 +3504,8 @@ public final class MemoryBuffer {
   }
 
   /**
-   * Bulk copy method. Copies {@code numBytes} bytes from source unsafe object and pointer. NOTE:
-   * This is an unsafe method, no check here, please be careful.
+   * JVM-only bulk copy method. Copies {@code numBytes} bytes from source unsafe object and pointer.
+   * Throws on Android before executing unsafe memory access.
    */
   public void copyFromUnsafe(long offset, Object source, long sourcePointer, long numBytes) {
     if (AndroidSupport.IS_ANDROID) {

@@ -465,6 +465,27 @@ Entries with null key or null value are encoded as special single-entry chunks w
 
 These chunks always represent exactly one entry.
 
+### JDK collection/map wrappers and views
+
+Java native mode may use specialized serializers for JDK collection/map wrappers and views. These
+serializers do not introduce a new collection/map protocol branch; they write ordinary object,
+collection, or map payloads in serializer-owned value slots.
+
+- Unmodifiable and synchronized wrappers keep the outer wrapper type metadata. The wrapper value
+  payload is the wrapped source collection or map written as a normal referencable object. Android
+  writers use public source implementations for that payload: `ArrayList`, `HashSet`, `TreeSet`,
+  `HashMap`, or `TreeMap`. Readers rewrap the source through `Collections.unmodifiable*` or
+  `Collections.synchronized*`.
+- Recognized sublist view classes write visible elements through `ArrayList` type metadata on
+  Android. This is a narrow sublist-view type-info rule, not a generic collection fallback.
+- `Collections.newSetFromMap` writes a backing-map payload. Android writers use `HashMap` backing
+  type metadata.
+- Immutable JDK collection serializers keep ordinary list/set/map payload semantics. Android readers
+  materialize public unmodifiable containers when JDK internal immutable constructors are not
+  available.
+
+Xlang mode uses the xlang collection/map protocol and does not encode Java wrapper or view internals.
+
 ### Objects and structs
 
 Object values are encoded as:

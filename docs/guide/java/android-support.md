@@ -19,14 +19,16 @@ license: |
   limitations under the License.
 ---
 
-## Android Support Design
+## Android Support
 
-This page records the Android support design target for Java `fory-core`. Android support is not
-complete until the implementation, Android API 26+ instrumented tests, JVM regression tests, and JVM
-benchmark checks land together.
+This page documents the Java `fory-core` Android runtime surface.
 
 The target runtime is Android 8.0+ (API level 26+) in the existing `fory-core` artifact. Android
-support is selected at runtime by `org.apache.fory.platform.AndroidSupport`.
+support is selected at runtime by `org.apache.fory.platform.AndroidSupport`; no separate Android
+artifact is required for core object serialization.
+
+`java/fory-format` is not part of the Android support surface. Row-format direct-memory APIs remain
+JVM-only.
 
 Android does not allow Fory runtime serialization paths to rely on `sun.misc.Unsafe`, private-field
 `MethodHandle` access, dynamic bytecode loading, or `LambdaMetafactory`. Android-specific code paths
@@ -53,6 +55,7 @@ Unsupported or removed behavior:
 - Native-address serialize/deserialize APIs and native-address `MemoryBuffer` wrapping.
 - Raw-address direct `ByteBuffer` zero-copy.
 - Raw unsafe `MemoryBuffer` copy APIs remain JVM-only and throw on Android.
+- `java/fory-format` row-format APIs, including direct-memory binary row copy paths.
 - Object deserialization that cannot be completed through reflection.
 
 ## Codegen
@@ -69,8 +72,17 @@ definition, or generated serializer loading starts.
 
 On Android, `ThreadSafeFory#deserialize(ByteBuffer)` copies the remaining input bytes into a
 Fory-owned heap `MemoryBuffer`, then deserializes from that buffer. Heap, direct, and readonly inputs
-are supported through the copy path. The implementation must preserve the verified existing public
-position/limit behavior.
+are supported through the copy path. The caller buffer position and limit are not changed.
+
+Raw direct-buffer address wrapping remains a JVM-only fast path and is not used on Android.
+
+## Direct Memory And Row Format
+
+Android `fory-core` paths do not execute `sun.misc.Unsafe` operations. `MemoryBuffer#copyToUnsafe`
+and `MemoryBuffer#copyFromUnsafe` are retained as JVM-only direct-memory copy APIs for existing
+JVM users such as `java/fory-format`; they throw before unsafe execution when Android is detected.
+
+Use core object serialization on Android. Do not use `java/fory-format` row-format APIs on Android.
 
 ## JDK Collection And Map Wrappers
 
@@ -92,6 +104,12 @@ while iterating public contents.
 
 Sublist views that would otherwise serialize hidden JDK view state write visible elements through
 the normal `ArrayList` path on Android.
+
+Other JDK collection serializers keep their existing Java native protocol shape while avoiding
+hidden-field unsafe access on Android. `Arrays.asList` writes the existing array payload,
+`Collections.newSetFromMap` writes a `HashMap` backing-map payload, bounded blocking queues derive
+capacity through public APIs, `EnumMap` derives or reflects its key type, and immutable JDK
+collections are materialized through public unmodifiable containers on Android.
 
 In xlang mode, collection and map serialization uses the xlang collection/map protocol and does not
 encode Java wrapper/view internals.

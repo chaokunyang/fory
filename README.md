@@ -50,7 +50,7 @@ exchange, and row-format random access.
 
 ## Performance
 
-**Java serialization**
+**Java** ([benchmarks](docs/benchmarks/java))
 
 In Java serialization benchmarks, Fory reaches up to **170x** the throughput of
 JDK serialization on selected workloads.
@@ -67,71 +67,53 @@ JDK serialization on selected workloads.
 <img src="docs/benchmarks/java/throughput.png" width="95%" alt="Java xlang throughput">
 </p>
 
-See [Java benchmarks](docs/benchmarks/java) for methodology and data.
-
-**Rust**
+**Rust** ([benchmarks](benchmarks/rust))
 
 <p align="center">
 <img src="docs/benchmarks/rust/throughput.png" width="95%" alt="Rust serialization throughput">
 </p>
 
-See [Rust benchmarks](benchmarks/rust).
-
-**C++**
+**C++** ([benchmarks](benchmarks/cpp))
 
 <p align="center">
 <img src="docs/benchmarks/cpp/throughput.png" width="95%" alt="C++ serialization throughput">
 </p>
 
-See [C++ benchmarks](benchmarks/cpp).
-
-**Go**
+**Go** ([benchmarks](benchmarks/go))
 
 <p align="center">
 <img src="docs/benchmarks/go/throughput.png" width="95%" alt="Go serialization throughput">
 </p>
 
-See [Go benchmarks](benchmarks/go).
-
-**Python**
+**Python** ([benchmarks](benchmarks/python))
 
 <p align="center">
 <img src="docs/benchmarks/python/throughput.png" width="95%" alt="Python serialization throughput">
 </p>
 
-See [Python benchmarks](benchmarks/python).
-
-**JavaScript/TypeScript**
+**JavaScript/TypeScript** ([benchmarks](docs/benchmarks/javascript))
 
 <p align="center">
 <img src="docs/benchmarks/javascript/throughput.png" width="95%" alt="JavaScript serialization throughput">
 </p>
 
-See [JavaScript benchmarks](docs/benchmarks/javascript).
-
-**C#**
+**C#** ([benchmarks](docs/benchmarks/csharp))
 
 <p align="center">
 <img src="docs/benchmarks/csharp/throughput.png" width="95%" alt="C# serialization throughput">
 </p>
 
-See [C# benchmarks](docs/benchmarks/csharp).
-
-**Swift**
+**Swift** ([benchmarks](docs/benchmarks/swift))
 
 <p align="center">
 <img src="docs/benchmarks/swift/throughput.png" width="95%" alt="Swift serialization throughput">
 </p>
 
-See [Swift benchmarks](docs/benchmarks/swift).
-
-**Dart**
+**Dart** ([benchmarks](docs/benchmarks/dart))
 
 <p align="center">
 <img src="docs/benchmarks/dart/throughput.png" width="95%" alt="Dart serialization throughput">
 </p>
-
-See [Dart benchmarks](docs/benchmarks/dart).
 
 ## Installation
 

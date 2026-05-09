@@ -27,6 +27,7 @@ import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
@@ -152,6 +153,11 @@ public class CodecUtils {
 
   private static Class<? extends Serializer> loadSerializer(
       String name, Class<?> cls, Fory fory, Callable<Class<? extends Serializer>> func) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Fory runtime code generation is unsupported on Android; "
+              + "interpreter serializers must be used.");
+    }
     int configHash = fory.getConfig().getConfigHash();
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       Tuple3<String, Class<?>, Integer> key = Tuple3.of(name, cls, configHash);

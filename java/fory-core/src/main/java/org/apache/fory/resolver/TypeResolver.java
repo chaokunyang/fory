@@ -73,6 +73,7 @@ import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
@@ -1027,7 +1028,9 @@ public abstract class TypeResolver {
     Class<? extends Serializer> sc =
         getMetaSharedDeserializerClassFromGraalvmRegistry(cls, typeDef);
     if (sc == null) {
-      if (GraalvmSupport.isGraalRuntime()) {
+      if (AndroidSupport.IS_ANDROID) {
+        sc = MetaSharedSerializer.class;
+      } else if (GraalvmSupport.isGraalRuntime()) {
         sc = MetaSharedSerializer.class;
         LOG.warn(
             "Can't generate class at runtime in graalvm for class def {}, use {} instead",

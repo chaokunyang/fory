@@ -36,6 +36,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
@@ -61,7 +62,7 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
 
   public MetaSharedLayerCodecBuilder(
       TypeRef<?> beanType, Fory fory, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
-    super(beanType, fory, GeneratedMetaSharedLayerSerializer.class);
+    super(beanType, checkRuntimeCodegenSupported(fory), GeneratedMetaSharedLayerSerializer.class);
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
@@ -70,6 +71,15 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
     DescriptorGrouper grouper =
         typeResolver(r -> r.createDescriptorGrouper(layerTypeDef, beanClass));
     objectCodecOptimizer = new ObjectCodecOptimizer(beanClass, grouper, false, ctx);
+  }
+
+  private static Fory checkRuntimeCodegenSupported(Fory fory) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Fory runtime code generation is unsupported on Android; "
+              + "interpreter serializers must be used.");
+    }
+    return fory;
   }
 
   private static final Map<Long, Integer> idGenerator = new ConcurrentHashMap<>();

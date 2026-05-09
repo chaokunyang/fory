@@ -34,6 +34,7 @@ import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.ClassLoaderUtils;
@@ -145,6 +146,11 @@ public class AccessorHelper {
 
   /** Don't define accessor for super classes, because they maybe in different package. */
   public static boolean defineAccessorClass(Class<?> beanClass) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Generated field accessors are unsupported on Android; "
+              + "reflection-backed field accessors must be used.");
+    }
     ClassLoader classLoader = beanClass.getClassLoader();
     if (classLoader == null) {
       // Maybe return null if this class was loaded by the bootstrap class loader.

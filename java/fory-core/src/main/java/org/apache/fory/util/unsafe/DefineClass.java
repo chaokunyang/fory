@@ -24,6 +24,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.security.ProtectionDomain;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.util.Preconditions;
 
@@ -38,6 +39,10 @@ public class DefineClass {
       ClassLoader loader,
       ProtectionDomain domain,
       byte[] bytecodes) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Runtime bytecode loading is unsupported on Android.");
+    }
     Preconditions.checkNotNull(loader);
     Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 8);
     if (neighbor != null && JdkVersion.MAJOR_VERSION >= 9) {

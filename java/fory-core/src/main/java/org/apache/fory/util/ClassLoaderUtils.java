@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.util.unsafe.DefineClass;
 
 /** ClassLoader utility for defining class and loading class by strategies. */
@@ -222,10 +223,18 @@ public class ClassLoaderUtils {
 
     public ByteArrayClassLoader(
         Map<String, byte[]> classes, ClassLoader parent, boolean childFirst) {
-      super(childFirst ? null : parent);
+      super(checkRuntimeBytecodeLoadingSupported(childFirst ? null : parent));
       this.childFirst = childFirst;
       this.parent = new ParentClassLoader(parent);
       this.classes = new ConcurrentHashMap<>(classes);
+    }
+
+    private static ClassLoader checkRuntimeBytecodeLoadingSupported(ClassLoader parent) {
+      if (AndroidSupport.IS_ANDROID) {
+        throw new UnsupportedOperationException(
+            "Runtime bytecode loading is unsupported on Android.");
+      }
+      return parent;
     }
 
     @Override
@@ -260,6 +269,10 @@ public class ClassLoaderUtils {
 
     public Class<?> defineClassPublic(String name, byte[] b, ProtectionDomain protectionDomain)
         throws ClassFormatError {
+      if (AndroidSupport.IS_ANDROID) {
+        throw new UnsupportedOperationException(
+            "Runtime bytecode loading is unsupported on Android.");
+      }
       return super.defineClass(name, b, 0, b.length, protectionDomain);
     }
   }

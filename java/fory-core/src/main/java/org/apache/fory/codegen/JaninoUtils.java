@@ -37,6 +37,7 @@ import java.util.stream.Collectors;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.StringUtils;
 import org.codehaus.commons.compiler.util.reflect.ByteArrayClassLoader;
@@ -75,6 +76,11 @@ public class JaninoUtils {
 
   public static Map<String, byte[]> toBytecode(
       ClassLoader parentClassLoader, String codeDir, CompileUnit... compileUnits) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Fory runtime code generation is unsupported on Android; "
+              + "interpreter serializers must be used.");
+    }
     MapResourceFinder sourceFinder = new MapResourceFinder();
     for (CompileUnit unit : compileUnits) {
       String stubFileName = unit.pkg.replace(".", "/") + "/" + unit.mainClassName + ".java";

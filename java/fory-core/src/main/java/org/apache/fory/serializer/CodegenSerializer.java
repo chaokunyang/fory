@@ -27,6 +27,7 @@ import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.resolver.TypeResolver;
 
 /** Util for JIT Serialization. */
@@ -51,6 +52,11 @@ public final class CodegenSerializer {
 
   @SuppressWarnings("unchecked")
   public static <T> Class<Serializer<T>> loadCodegenSerializer(Fory fory, Class<T> cls) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Fory runtime code generation is unsupported on Android; "
+              + "interpreter serializers must be used.");
+    }
     try {
       return (Class<Serializer<T>>) CodecUtils.loadOrGenObjectCodecClass(cls, fory);
     } catch (Exception e) {

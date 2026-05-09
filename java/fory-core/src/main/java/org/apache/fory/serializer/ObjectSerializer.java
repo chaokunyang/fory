@@ -291,6 +291,10 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     return obj;
   }
 
+  int getNumFields() {
+    return buildInFields.length + containerFields.length + otherFields.length;
+  }
+
   public static int computeStructHash(TypeResolver typeResolver, DescriptorGrouper grouper) {
     List<Descriptor> sorted = grouper.getSortedDescriptors();
     String fingerprint = Fingerprint.computeStructFingerprint(typeResolver, sorted);

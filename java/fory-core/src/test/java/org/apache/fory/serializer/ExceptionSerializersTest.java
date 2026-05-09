@@ -121,6 +121,56 @@ public class ExceptionSerializersTest extends ForyTestBase {
   }
 
   @Test
+  public void testThrowableCycleWithMessageConstructor() {
+    Fory fory = builder().withRefTracking(true).withCodegen(false).build();
+    CustomException value =
+        new CustomException("root")
+            .withParentCode(11)
+            .withTags(new ArrayList<>(Arrays.asList("root-tag")));
+    RuntimeException cause = new RuntimeException("cause");
+    value.initCause(cause);
+    cause.initCause(value);
+    CustomException suppressed =
+        new CustomException("suppressed")
+            .withParentCode(12)
+            .withTags(new ArrayList<>(Arrays.asList("suppressed-tag")));
+    suppressed.initCause(value);
+    value.addSuppressed(suppressed);
+
+    CustomException copy = serDe(fory, value);
+
+    Assert.assertEquals(copy.getMessage(), "root");
+    Assert.assertEquals(copy.parentCode, 11);
+    Assert.assertEquals(copy.tags, Arrays.asList("root-tag"));
+    Assert.assertEquals(copy.getCause().getMessage(), "cause");
+    Assert.assertSame(copy.getCause().getCause(), copy);
+    Assert.assertEquals(copy.getSuppressed().length, 1);
+    Assert.assertEquals(copy.getSuppressed()[0].getMessage(), "suppressed");
+    Assert.assertSame(copy.getSuppressed()[0].getCause(), copy);
+    CustomException suppressedCopy = (CustomException) copy.getSuppressed()[0];
+    Assert.assertEquals(suppressedCopy.parentCode, 12);
+    Assert.assertEquals(suppressedCopy.tags, Arrays.asList("suppressed-tag"));
+  }
+
+  @Test
+  public void testThrowableWithoutMessageConstructorUsesFallback() {
+    Fory fory = builder().withRefTracking(true).withCodegen(false).build();
+    IllegalStateException cause = new IllegalStateException("fallback-cause");
+    NoMessageConstructorException value = new NoMessageConstructorException(cause);
+    value.code = 99;
+    value.addSuppressed(new RuntimeException("fallback-suppressed"));
+
+    NoMessageConstructorException copy = serDe(fory, value);
+
+    Assert.assertEquals(copy.getMessage(), value.getMessage());
+    Assert.assertEquals(copy.getCause().getClass(), IllegalStateException.class);
+    Assert.assertEquals(copy.getCause().getMessage(), "fallback-cause");
+    Assert.assertEquals(copy.code, 99);
+    Assert.assertEquals(copy.getSuppressed().length, 1);
+    Assert.assertEquals(copy.getSuppressed()[0].getMessage(), "fallback-suppressed");
+  }
+
+  @Test
   public void testThrowableCompatibleRoundTrip() {
     Fory fory = builder().withRefTracking(true).withCodegen(false).withCompatible(true).build();
     CustomException cause =
@@ -161,6 +211,14 @@ public class ExceptionSerializersTest extends ForyTestBase {
     @Override
     public void close() {
       throw new IllegalStateException("close-failure");
+    }
+  }
+
+  public static class NoMessageConstructorException extends RuntimeException {
+    int code;
+
+    public NoMessageConstructorException(Throwable cause) {
+      super(cause);
     }
   }
 

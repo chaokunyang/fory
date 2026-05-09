@@ -106,6 +106,10 @@ public class MemoryUtils {
    * will be the count of stream.
    */
   public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "ByteArrayOutputStream direct wrapping is not supported on Android");
+    }
     Preconditions.checkNotNull(stream);
     byte[] buf = (byte[]) UnsafeOps.getObject(stream, Offset.BAS_BUF_BUF);
     int count = UnsafeOps.getInt(stream, Offset.BAS_BUF_COUNT);
@@ -118,6 +122,10 @@ public class MemoryUtils {
    * the writerIndex of buffer.
    */
   public static void wrap(MemoryBuffer buffer, ByteArrayOutputStream stream) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "ByteArrayOutputStream direct wrapping is not supported on Android");
+    }
     Preconditions.checkNotNull(stream);
     byte[] bytes = buffer.getHeapMemory();
     Preconditions.checkNotNull(bytes);
@@ -130,6 +138,10 @@ public class MemoryUtils {
    * be the pos of stream.
    */
   public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "ByteArrayInputStream direct wrapping is not supported on Android");
+    }
     Preconditions.checkNotNull(stream);
     byte[] buf = (byte[]) UnsafeOps.getObject(stream, Offset.BIS_BUF_BUF);
     int count = UnsafeOps.getInt(stream, Offset.BIS_BUF_COUNT);

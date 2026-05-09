@@ -58,7 +58,7 @@ public final class ExceptionSerializers {
     private final Config config;
     private final TypeResolver typeResolver;
     private final ObjectCreator<T> objectCreator;
-    private final MethodHandle messageConstructor;
+    private final Constructor<T> messageConstructor;
     private volatile Serializer[] slotsSerializers;
     private volatile boolean rebuildSlotsSerializersAtRuntime;
 
@@ -141,7 +141,7 @@ public final class ExceptionSerializers {
 
     private T newThrowableWithMessage(String detailMessage) {
       try {
-        return (T) messageConstructor.invoke(detailMessage);
+        return messageConstructor.newInstance(detailMessage);
       } catch (Throwable t) {
         throw new ForyException(
             "Failed to construct Throwable type "
@@ -321,8 +321,8 @@ public final class ExceptionSerializers {
     return new ObjectCreators.ParentNoArgCtrObjectCreator<>(type);
   }
 
-  private static MethodHandle getOptionalMessageConstructor(Class<?> type) {
-    Constructor<?> constructor;
+  private static <T extends Throwable> Constructor<T> getOptionalMessageConstructor(Class<T> type) {
+    Constructor<T> constructor;
     try {
       constructor = type.getDeclaredConstructor(String.class);
     } catch (NoSuchMethodException e) {
@@ -330,8 +330,8 @@ public final class ExceptionSerializers {
     }
     try {
       constructor.setAccessible(true);
-      return MethodHandles.lookup().unreflectConstructor(constructor);
-    } catch (IllegalAccessException | RuntimeException e) {
+      return constructor;
+    } catch (RuntimeException e) {
       return null;
     }
   }

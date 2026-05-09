@@ -37,6 +37,8 @@ data class ClassMultipleDefaultsWithDefaults(val v: String, val x: Int = 1, val 
 
 data class ClassComplexDefaultsWithDefaults(val v: String, val list: List<Int> = listOf(1, 2, 3))
 
+data class ClassObjectRequiredWithDefaults(val v: RegularClass, val x: Int = 3)
+
 class DefaultValueTest {
 
   private val support = KotlinDefaultValueSupport()
@@ -84,6 +86,13 @@ class DefaultValueTest {
   }
 
   @Test
+  fun testJvmRequiredObjectDefaultValueExtraction() {
+    val defaults = support.getAllDefaultValues(ClassObjectRequiredWithDefaults::class.java)
+    assertEquals(1, defaults.size)
+    assertEquals(3, defaults["x"])
+  }
+
+  @Test
   fun testGetDefaultValue() {
     // Test existing default values
     assertEquals(1, support.getDefaultValue(ClassWithDefaults::class.java, "x"))
@@ -122,11 +131,7 @@ class DefaultValueTest {
 
   @Test
   fun testDefaultValueDeserialization() {
-    val fory =
-      Fory.builder()
-        .requireClassRegistration(false)
-        .withCompatible(true)
-        .build()
+    val fory = Fory.builder().requireClassRegistration(false).withCompatible(true).build()
     KotlinSerializers.registerSerializers(fory)
     val obj = ClassNoDefaults("test")
     val serialized = fory.serialize(obj)

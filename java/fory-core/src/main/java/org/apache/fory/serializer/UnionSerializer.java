@@ -19,8 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -128,10 +126,9 @@ public class UnionSerializer extends Serializer<Union> {
       java.lang.reflect.Constructor<? extends Union> ctor =
           cls.getDeclaredConstructor(int.class, Object.class);
       ctor.setAccessible(true);
-      MethodHandle handle = MethodHandles.lookup().unreflectConstructor(ctor);
       return (index, value) -> {
         try {
-          return (Union) handle.invoke(index, value);
+          return ctor.newInstance(index, value);
         } catch (Throwable t) {
           throw new IllegalStateException("Failed to construct union type " + cls.getName(), t);
         }

@@ -27,6 +27,7 @@ import kotlin.reflect.jvm.javaType
 import org.apache.fory.collection.ClassValueCache
 import org.apache.fory.logging.Logger
 import org.apache.fory.logging.LoggerFactory
+import org.apache.fory.platform.AndroidSupport
 import org.apache.fory.platform.UnsafeOps
 import org.apache.fory.util.DefaultValueUtils
 
@@ -139,7 +140,7 @@ internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport
       Char::class.java,
       Char::class.javaPrimitiveType -> '\u0000'
       String::class.java -> ""
-      else -> UnsafeOps.newInstance(clazz)
+      else -> if (AndroidSupport.IS_ANDROID) null else UnsafeOps.newInstance(clazz)
     }
   }
 }

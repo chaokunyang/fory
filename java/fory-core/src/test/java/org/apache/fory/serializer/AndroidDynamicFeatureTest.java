@@ -19,6 +19,7 @@
 
 package org.apache.fory.serializer;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -38,11 +39,13 @@ import java.util.function.ToIntFunction;
 import org.apache.fory.Fory;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.scala.SingletonCollectionSerializer;
 import org.apache.fory.serializer.scala.SingletonMapSerializer;
 import org.apache.fory.serializer.scala.SingletonObjectSerializer;
+import org.apache.fory.type.union.Union;
 import org.apache.fory.util.function.Functions;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -83,6 +86,7 @@ public class AndroidDynamicFeatureTest {
           LambdaSerializer.STUB_LAMBDA_CLASS == LambdaSerializer.ReplaceStub.class,
           "Android must not create a runtime lambda stub class");
       verifyReflectiveGetter();
+      verifyMemoryUtilsStreamWrapGuards();
 
       verifyFory(false);
       verifyFory(true);
@@ -121,6 +125,7 @@ public class AndroidDynamicFeatureTest {
           (StringBuilder) fory.deserialize(fory.serialize(new StringBuilder("builder-你好")));
       checkEquals(builder.toString(), "builder-你好", "StringBuilder round trip");
       verifyOutputStreamSerialization(fory);
+      verifyCustomUnionFactory(fory);
       verifyObjectStreamHooks(fory);
       verifyReplaceResolveHooks(fory);
       verifyScalaSingletons(fory);
@@ -162,6 +167,29 @@ public class AndroidDynamicFeatureTest {
       String value = "stream-你好";
       fory.serialize(outputStream, value);
       checkEquals(fory.deserialize(outputStream.toByteArray()), value, "OutputStream round trip");
+    }
+
+    private static void verifyMemoryUtilsStreamWrapGuards() {
+      expectUnsupportedAndroidWrap(
+          () -> MemoryUtils.wrap(new ByteArrayOutputStream(), MemoryUtils.buffer(8)),
+          "ByteArrayOutputStream direct wrapping");
+      expectUnsupportedAndroidWrap(
+          () -> MemoryUtils.wrap(MemoryUtils.buffer(8), new ByteArrayOutputStream()),
+          "ByteArrayOutputStream direct wrapping");
+      expectUnsupportedAndroidWrap(
+          () ->
+              MemoryUtils.wrap(
+                  new ByteArrayInputStream(new byte[] {1, 2, 3}), MemoryUtils.buffer(8)),
+          "ByteArrayInputStream direct wrapping");
+    }
+
+    private static void verifyCustomUnionFactory(Fory fory) {
+      UnionSerializer serializer =
+          new UnionSerializer(fory.getTypeResolver(), AndroidCustomUnion.class);
+      AndroidCustomUnion copied =
+          (AndroidCustomUnion) serializer.copy(null, new AndroidCustomUnion(7, null));
+      checkEquals(copied.getIndex(), 7, "Android custom Union constructor");
+      check(copied.getValue() == null, "Android custom Union value");
     }
 
     private static void verifyObjectStreamHooks(Fory fory) {
@@ -220,6 +248,17 @@ public class AndroidDynamicFeatureTest {
       }
     }
 
+    private static void expectUnsupportedAndroidWrap(Runnable operation, String messageFragment) {
+      try {
+        operation.run();
+        throw new AssertionError("Expected Android unsafe stream wrapping to fail");
+      } catch (UnsupportedOperationException expected) {
+        check(
+            expected.getMessage().contains(messageFragment),
+            "Unexpected unsupported message: " + expected.getMessage());
+      }
+    }
+
     private static void check(boolean value, String message) {
       if (!value) {
         throw new AssertionError(message);
@@ -249,6 +288,12 @@ public class AndroidDynamicFeatureTest {
 
       private AndroidCustomType(int value) {
         this.value = value;
+      }
+    }
+
+    public static final class AndroidCustomUnion extends Union {
+      private AndroidCustomUnion(int index, Object value) {
+        super(index, value);
       }
     }
 

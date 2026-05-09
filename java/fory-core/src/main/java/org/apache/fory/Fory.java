@@ -50,6 +50,7 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeChecker;
@@ -542,7 +543,7 @@ public final class Fory implements BaseFory {
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
     MemoryBuffer buf = getBuffer();
-    if (outputStream.getClass() == ByteArrayOutputStream.class) {
+    if (!AndroidSupport.IS_ANDROID && outputStream.getClass() == ByteArrayOutputStream.class) {
       byte[] oldBytes = buf.getHeapMemory(); // Note: This should not be null.
       assert oldBytes != null;
       MemoryUtils.wrap((ByteArrayOutputStream) outputStream, buf);

@@ -30,7 +30,6 @@ import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.BufferCallback;
 import org.apache.fory.serializer.BufferObject;
-import org.apache.fory.serializer.PrimitiveArraySerializers;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StringSerializer;
@@ -656,23 +655,6 @@ public final class WriteContext {
       bufferObject.writeTo(buffer);
       int size = buffer.writerIndex() - writerIndex;
       Preconditions.checkArgument(size == totalBytes);
-    } else {
-      buffer.writeBoolean(false);
-    }
-  }
-
-  /** Specialized variant of {@link #writeBufferObject(BufferObject)} for primitive arrays. */
-  public void writeBufferObject(PrimitiveArraySerializers.PrimitiveArrayBufferObject bufferObject) {
-    MemoryBuffer buffer = this.buffer;
-    if (bufferCallback == null || bufferCallback.apply(bufferObject)) {
-      buffer.writeBoolean(true);
-      int totalBytes = bufferObject.totalBytes();
-      if (!crossLanguage) {
-        buffer.writeVarUInt32Aligned(totalBytes);
-      } else {
-        buffer.writeVarUInt32(totalBytes);
-      }
-      bufferObject.writeTo(buffer);
     } else {
       buffer.writeBoolean(false);
     }

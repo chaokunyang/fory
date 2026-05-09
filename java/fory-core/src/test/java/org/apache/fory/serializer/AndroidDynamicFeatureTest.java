@@ -120,6 +120,7 @@ public class AndroidDynamicFeatureTest {
       StringBuilder builder =
           (StringBuilder) fory.deserialize(fory.serialize(new StringBuilder("builder-你好")));
       checkEquals(builder.toString(), "builder-你好", "StringBuilder round trip");
+      verifyOutputStreamSerialization(fory);
       verifyObjectStreamHooks(fory);
       verifyReplaceResolveHooks(fory);
       verifyScalaSingletons(fory);
@@ -154,6 +155,13 @@ public class AndroidDynamicFeatureTest {
 
     private static void assertRoundTrip(Fory fory, String value) {
       checkEquals(fory.deserialize(fory.serialize(value)), value, "String round trip");
+    }
+
+    private static void verifyOutputStreamSerialization(Fory fory) {
+      ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+      String value = "stream-你好";
+      fory.serialize(outputStream, value);
+      checkEquals(fory.deserialize(outputStream.toByteArray()), value, "OutputStream round trip");
     }
 
     private static void verifyObjectStreamHooks(Fory fory) {

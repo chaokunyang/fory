@@ -43,6 +43,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -82,43 +83,56 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     private static final long STRING_CODER_FIELD_OFFSET;
 
     static {
-      try {
-        STRING_CODER_FIELD_OFFSET =
-            UnsafeOps.objectFieldOffset(String.class.getDeclaredField("coder"));
-      } catch (NoSuchFieldException e) {
-        throw new RuntimeException(e);
+      if (AndroidSupport.IS_ANDROID) {
+        STRING_CODER_FIELD_OFFSET = -1;
+      } else {
+        try {
+          STRING_CODER_FIELD_OFFSET =
+              UnsafeOps.objectFieldOffset(String.class.getDeclaredField("coder"));
+        } catch (NoSuchFieldException e) {
+          throw new RuntimeException(e);
+        }
       }
     }
   }
 
   static {
-    Field valueField = ReflectionUtils.getFieldNullable(String.class, "value");
-    // Java8 string
-    STRING_VALUE_FIELD_IS_CHARS = valueField != null && valueField.getType() == char[].class;
-    // Java11 string
-    STRING_VALUE_FIELD_IS_BYTES = valueField != null && valueField.getType() == byte[].class;
-    try {
-      // Make offset compatible with graalvm native image.
-      STRING_VALUE_FIELD_OFFSET =
-          UnsafeOps.objectFieldOffset(String.class.getDeclaredField("value"));
-    } catch (NoSuchFieldException e) {
-      throw new RuntimeException(e);
-    }
-    Field countField = ReflectionUtils.getFieldNullable(String.class, "count");
-    Field offsetField = ReflectionUtils.getFieldNullable(String.class, "offset");
-    if (countField != null || offsetField != null) {
-      Preconditions.checkArgument(
-          countField != null && offsetField != null, "Current jdk not supported");
-      Preconditions.checkArgument(
-          countField.getType() == int.class && offsetField.getType() == int.class,
-          "Current jdk not supported");
-      STRING_HAS_COUNT_OFFSET = true;
-      STRING_COUNT_FIELD_OFFSET = UnsafeOps.objectFieldOffset(countField);
-      STRING_OFFSET_FIELD_OFFSET = UnsafeOps.objectFieldOffset(offsetField);
-    } else {
+    if (AndroidSupport.IS_ANDROID) {
+      STRING_VALUE_FIELD_IS_CHARS = false;
+      STRING_VALUE_FIELD_IS_BYTES = false;
+      STRING_VALUE_FIELD_OFFSET = -1;
       STRING_HAS_COUNT_OFFSET = false;
       STRING_COUNT_FIELD_OFFSET = -1;
       STRING_OFFSET_FIELD_OFFSET = -1;
+    } else {
+      Field valueField = ReflectionUtils.getFieldNullable(String.class, "value");
+      // Java8 string
+      STRING_VALUE_FIELD_IS_CHARS = valueField != null && valueField.getType() == char[].class;
+      // Java11 string
+      STRING_VALUE_FIELD_IS_BYTES = valueField != null && valueField.getType() == byte[].class;
+      try {
+        // Make offset compatible with graalvm native image.
+        STRING_VALUE_FIELD_OFFSET =
+            UnsafeOps.objectFieldOffset(String.class.getDeclaredField("value"));
+      } catch (NoSuchFieldException e) {
+        throw new RuntimeException(e);
+      }
+      Field countField = ReflectionUtils.getFieldNullable(String.class, "count");
+      Field offsetField = ReflectionUtils.getFieldNullable(String.class, "offset");
+      if (countField != null || offsetField != null) {
+        Preconditions.checkArgument(
+            countField != null && offsetField != null, "Current jdk not supported");
+        Preconditions.checkArgument(
+            countField.getType() == int.class && offsetField.getType() == int.class,
+            "Current jdk not supported");
+        STRING_HAS_COUNT_OFFSET = true;
+        STRING_COUNT_FIELD_OFFSET = UnsafeOps.objectFieldOffset(countField);
+        STRING_OFFSET_FIELD_OFFSET = UnsafeOps.objectFieldOffset(offsetField);
+      } else {
+        STRING_HAS_COUNT_OFFSET = false;
+        STRING_COUNT_FIELD_OFFSET = -1;
+        STRING_OFFSET_FIELD_OFFSET = -1;
+      }
     }
   }
 
@@ -349,6 +363,10 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Invoked by fory JIT
   public void writeString(MemoryBuffer buffer, String value) {
+    if (AndroidSupport.IS_ANDROID) {
+      writeAndroidString(buffer, value);
+      return;
+    }
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         writeCompressedBytesString(buffer, value);
@@ -379,6 +397,9 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Invoked by fory JIT
   public String readString(MemoryBuffer buffer) {
+    if (AndroidSupport.IS_ANDROID) {
+      return readAndroidString(buffer);
+    }
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         return readCompressedBytesString(buffer);
@@ -393,6 +414,64 @@ public final class StringSerializer extends ImmutableSerializer<String> {
         return readCharsString(buffer);
       }
     }
+  }
+
+  private void writeAndroidString(MemoryBuffer buffer, String value) {
+    char[] chars = value.toCharArray();
+    if (isLatin(chars)) {
+      writeCharsLatin1(buffer, chars, chars.length);
+      return;
+    }
+    if (compressString) {
+      byte[] utf8Bytes = value.getBytes(StandardCharsets.UTF_8);
+      int utf16Bytes = chars.length << 1;
+      if (utf8Bytes.length < utf16Bytes) {
+        writeAndroidUtf8(buffer, utf8Bytes, utf16Bytes);
+        return;
+      }
+    }
+    writeCharsUTF16(buffer, chars, chars.length);
+  }
+
+  private String readAndroidString(MemoryBuffer buffer) {
+    long header = buffer.readVarUint36Small();
+    byte coder = (byte) (header & 0b11);
+    int numBytes = (int) (header >>> 2);
+    if (coder == LATIN1) {
+      return new String(readBytesUnCompressedUTF16(buffer, numBytes), StandardCharsets.ISO_8859_1);
+    } else if (coder == UTF16) {
+      return new String(readCharsUTF16(buffer, numBytes));
+    } else if (coder == UTF8) {
+      int utf8Bytes = writeNumUtf16BytesForUtf8Encoding ? buffer.readInt32() : numBytes;
+      return new String(buffer.readBytes(utf8Bytes), StandardCharsets.UTF_8);
+    } else {
+      throw new RuntimeException("Unknown coder type " + coder);
+    }
+  }
+
+  private void writeAndroidUtf8(MemoryBuffer buffer, byte[] utf8Bytes, int utf16Bytes) {
+    int headerLength = writeNumUtf16BytesForUtf8Encoding ? utf16Bytes : utf8Bytes.length;
+    writeVarUint36Small(buffer, ((long) headerLength << 2) | UTF8);
+    if (writeNumUtf16BytesForUtf8Encoding) {
+      buffer.writeInt32(utf8Bytes.length);
+    }
+    buffer.writeBytes(utf8Bytes);
+  }
+
+  private static void writeVarUint36Small(MemoryBuffer buffer, long value) {
+    int writerIndex = buffer.writerIndex();
+    buffer.ensure(writerIndex + 9);
+    writerIndex += buffer._unsafePutVarUint36Small(writerIndex, value);
+    buffer._unsafeWriterIndex(writerIndex);
+  }
+
+  private static boolean isLatin(char[] chars) {
+    for (char c : chars) {
+      if (c > 0xFF) {
+        return false;
+      }
+    }
+    return true;
   }
 
   @CodegenInvoke
@@ -662,13 +741,17 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
       writerIndex += arrIndex - targetIndex + numBytes;
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        // FIXME JDK11 utf16 string uses little-endian order.
-        UnsafeOps.UNSAFE.copyMemory(
-            chars,
-            UnsafeOps.CHAR_ARRAY_OFFSET,
-            targetArray,
-            UnsafeOps.BYTE_ARRAY_OFFSET + arrIndex,
-            numBytes);
+        if (AndroidSupport.IS_ANDROID) {
+          writeCharsUTF16BEToHeap(chars, arrIndex, numBytes, targetArray);
+        } else {
+          // FIXME JDK11 utf16 string uses little-endian order.
+          UnsafeOps.UNSAFE.copyMemory(
+              chars,
+              UnsafeOps.CHAR_ARRAY_OFFSET,
+              targetArray,
+              UnsafeOps.BYTE_ARRAY_OFFSET + arrIndex,
+              numBytes);
+        }
       } else {
         writeCharsUTF16BEToHeap(chars, arrIndex, numBytes, targetArray);
       }
@@ -829,15 +912,18 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   private static final MethodHandles.Lookup STRING_LOOK_UP =
-      _JDKAccess._trustedLookup(String.class);
+      AndroidSupport.IS_ANDROID ? null : _JDKAccess._trustedLookup(String.class);
   private static final BiFunction<char[], Boolean, String> CHARS_STRING_ZERO_COPY_CTR =
-      getCharsStringZeroCopyCtr();
+      AndroidSupport.IS_ANDROID ? null : getCharsStringZeroCopyCtr();
   private static final BiFunction<byte[], Byte, String> BYTES_STRING_ZERO_COPY_CTR =
-      getBytesStringZeroCopyCtr();
+      AndroidSupport.IS_ANDROID ? null : getBytesStringZeroCopyCtr();
   private static final Function<byte[], String> LATIN_BYTES_STRING_ZERO_COPY_CTR =
-      getLatinBytesStringZeroCopyCtr();
+      AndroidSupport.IS_ANDROID ? null : getLatinBytesStringZeroCopyCtr();
 
   public static String newCharsStringZeroCopy(char[] data) {
+    if (AndroidSupport.IS_ANDROID) {
+      return new String(data);
+    }
     if (!STRING_VALUE_FIELD_IS_CHARS) {
       throw new IllegalStateException("String value isn't char[], current java isn't supported");
     }
@@ -848,6 +934,19 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   // coder param first to make inline call args
   // `(buffer.readByte(), buffer.readBytesWithSizeEmbedded())` work.
   public static String newBytesStringZeroCopy(byte coder, byte[] data) {
+    if (AndroidSupport.IS_ANDROID) {
+      if (coder == LATIN1) {
+        return new String(data, StandardCharsets.ISO_8859_1);
+      } else if (coder == UTF16) {
+        char[] chars = new char[data.length >> 1];
+        for (int i = 0, j = 0; i < data.length; i += 2) {
+          chars[j++] = (char) ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8));
+        }
+        return new String(chars);
+      } else {
+        return new String(data, StandardCharsets.UTF_8);
+      }
+    }
     if (coder == LATIN1) {
       // 700% faster than unsafe put field in java11, only 10% slower than `new String(str)` for
       // string length 230.

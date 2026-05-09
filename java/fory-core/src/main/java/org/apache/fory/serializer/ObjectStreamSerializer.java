@@ -60,6 +60,7 @@ import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
@@ -609,7 +610,11 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       Method writeMethod = null;
       Method readMethod = null;
       Method noDataMethod = null;
-      if (objectStreamClass != null) {
+      if (AndroidSupport.IS_ANDROID) {
+        writeMethod = JavaSerializer.getWriteObjectMethod(type, false);
+        readMethod = JavaSerializer.getReadRefMethod(type, false);
+        noDataMethod = JavaSerializer.getReadRefNoData(type, false);
+      } else if (objectStreamClass != null) {
         writeMethod =
             (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "writeObjectMethod");
         readMethod =
@@ -620,6 +625,15 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.writeObjectMethod = writeMethod;
       this.readObjectMethod = readMethod;
       this.readObjectNoData = noDataMethod;
+      if (AndroidSupport.IS_ANDROID) {
+        makeAccessible(writeObjectMethod);
+        makeAccessible(readObjectMethod);
+        makeAccessible(readObjectNoData);
+        this.writeObjectFunc = null;
+        this.readObjectFunc = null;
+        this.readObjectNoDataFunc = null;
+        return;
+      }
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
       BiConsumer writeObjectFunc = null, readObjectFunc = null;
       Consumer readObjectNoDataFunc = null;
@@ -641,6 +655,17 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.writeObjectFunc = writeObjectFunc;
       this.readObjectFunc = readObjectFunc;
       this.readObjectNoDataFunc = readObjectNoDataFunc;
+    }
+
+    private static void makeAccessible(Method method) {
+      if (method == null) {
+        return;
+      }
+      try {
+        method.setAccessible(true);
+      } catch (RuntimeException e) {
+        throw new ForyException("Failed to make Java serialization hook accessible: " + method, e);
+      }
     }
   }
 
@@ -694,7 +719,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           new MetaSharedLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
 
       // Register JIT callback to replace with JIT serializer when ready
-      if (config.isCodeGenEnabled() && !GraalvmSupport.isGraalRuntime()) {
+      if (config.isCodeGenEnabled()
+          && !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.isGraalRuntime()) {
         SlotsInfo thisInfo = this;
         typeResolver
             .getJITContext()

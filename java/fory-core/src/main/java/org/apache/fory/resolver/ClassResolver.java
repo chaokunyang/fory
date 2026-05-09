@@ -104,6 +104,7 @@ import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -2159,7 +2160,11 @@ public class ClassResolver extends TypeResolver {
       getJITContext().lock();
       // Lambda and JdkProxy serializers use java.lang.Class which is not supported in xlang mode
       if (!isCrossLanguage()) {
-        Serializers.newSerializer(this, LambdaSerializer.STUB_LAMBDA_CLASS, LambdaSerializer.class);
+        Class<?> lambdaSerializerType =
+            AndroidSupport.IS_ANDROID
+                ? LambdaSerializer.ReplaceStub.class
+                : LambdaSerializer.STUB_LAMBDA_CLASS;
+        Serializers.newSerializer(this, lambdaSerializerType, LambdaSerializer.class);
         Serializers.newSerializer(
             this, JdkProxySerializer.SUBT_PROXY.getClass(), JdkProxySerializer.class);
       }

@@ -176,23 +176,27 @@ public final class ExceptionSerializers {
 
   public static final class StackTraceElementSerializer extends Serializer<StackTraceElement> {
     private static final MethodHandles.Lookup LOOKUP =
-        _JDKAccess._trustedLookup(StackTraceElement.class);
+        AndroidSupport.IS_ANDROID ? null : _JDKAccess._trustedLookup(StackTraceElement.class);
     private static final MethodHandle CLASS_LOADER_NAME_GETTER =
-        getOptionalGetter("getClassLoaderName");
+        AndroidSupport.IS_ANDROID ? null : getOptionalGetter("getClassLoaderName");
     private static final MethodHandle MODULE_NAME_GETTER = getOptionalGetter("getModuleName");
     private static final MethodHandle MODULE_VERSION_GETTER = getOptionalGetter("getModuleVersion");
     private static final MethodHandle STACK_TRACE_ELEMENT_CTR_V1 =
-        ReflectionUtils.getCtrHandle(
-            StackTraceElement.class, String.class, String.class, String.class, int.class);
+        AndroidSupport.IS_ANDROID
+            ? null
+            : ReflectionUtils.getCtrHandle(
+                StackTraceElement.class, String.class, String.class, String.class, int.class);
     private static final MethodHandle STACK_TRACE_ELEMENT_CTR_V2 =
-        getOptionalCtr(
-            String.class,
-            String.class,
-            String.class,
-            String.class,
-            String.class,
-            String.class,
-            int.class);
+        AndroidSupport.IS_ANDROID
+            ? null
+            : getOptionalCtr(
+                String.class,
+                String.class,
+                String.class,
+                String.class,
+                String.class,
+                String.class,
+                int.class);
 
     public StackTraceElementSerializer(Config config) {
       super(config, StackTraceElement.class, false, true);
@@ -237,6 +241,9 @@ public final class ExceptionSerializers {
     }
 
     private static MethodHandle getOptionalGetter(String methodName) {
+      if (LOOKUP == null) {
+        return null;
+      }
       try {
         return LOOKUP.findVirtual(
             StackTraceElement.class, methodName, MethodType.methodType(String.class));
@@ -248,6 +255,9 @@ public final class ExceptionSerializers {
     }
 
     private static MethodHandle getOptionalCtr(Class<?>... parameterTypes) {
+      if (LOOKUP == null) {
+        return null;
+      }
       try {
         return LOOKUP.findConstructor(
             StackTraceElement.class, MethodType.methodType(void.class, parameterTypes));
@@ -277,6 +287,9 @@ public final class ExceptionSerializers {
         String methodName,
         String fileName,
         int lineNumber) {
+      if (AndroidSupport.IS_ANDROID) {
+        return new StackTraceElement(declaringClass, methodName, fileName, lineNumber);
+      }
       try {
         if (STACK_TRACE_ELEMENT_CTR_V2 != null) {
           return (StackTraceElement)

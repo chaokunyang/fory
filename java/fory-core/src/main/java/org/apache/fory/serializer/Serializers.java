@@ -24,6 +24,7 @@ import static org.apache.fory.util.function.Functions.makeGetterFunction;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -48,6 +49,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
@@ -267,6 +269,9 @@ public class Serializers {
 
   private static <T> Serializer<T> createSerializer(
       TypeResolver typeResolver, Class<?> type, Class<? extends Serializer> serializerClass) {
+    if (AndroidSupport.IS_ANDROID) {
+      return createSerializerReflectively(typeResolver, type, serializerClass);
+    }
     try {
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
       Config config = typeResolver.getConfig();
@@ -314,6 +319,79 @@ public class Serializers {
     }
   }
 
+  private static <T> Serializer<T> createSerializerReflectively(
+      TypeResolver typeResolver, Class<?> type, Class<? extends Serializer> serializerClass) {
+    Config config = typeResolver.getConfig();
+    try {
+      Constructor<? extends Serializer> ctr =
+          serializerClass.getDeclaredConstructor(TypeResolver.class, Class.class);
+      ctr.setAccessible(true);
+      return (Serializer<T>) ctr.newInstance(typeResolver, type);
+    } catch (NoSuchMethodException e) {
+      ExceptionUtils.ignore(e);
+    } catch (Throwable t) {
+      ExceptionUtils.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+    try {
+      Constructor<? extends Serializer> ctr =
+          serializerClass.getDeclaredConstructor(TypeResolver.class);
+      ctr.setAccessible(true);
+      return (Serializer<T>) ctr.newInstance(typeResolver);
+    } catch (NoSuchMethodException e) {
+      ExceptionUtils.ignore(e);
+    } catch (Throwable t) {
+      ExceptionUtils.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+    try {
+      Constructor<? extends Serializer> ctr =
+          serializerClass.getDeclaredConstructor(Config.class, Class.class);
+      ctr.setAccessible(true);
+      return (Serializer<T>) ctr.newInstance(config, type);
+    } catch (NoSuchMethodException e) {
+      ExceptionUtils.ignore(e);
+    } catch (Throwable t) {
+      ExceptionUtils.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+    try {
+      Constructor<? extends Serializer> ctr = serializerClass.getDeclaredConstructor(Config.class);
+      ctr.setAccessible(true);
+      return (Serializer<T>) ctr.newInstance(config);
+    } catch (NoSuchMethodException e) {
+      ExceptionUtils.ignore(e);
+    } catch (Throwable t) {
+      ExceptionUtils.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+    try {
+      Constructor<? extends Serializer> ctr = serializerClass.getDeclaredConstructor(Class.class);
+      ctr.setAccessible(true);
+      return (Serializer<T>) ctr.newInstance(type);
+    } catch (NoSuchMethodException e) {
+      ExceptionUtils.ignore(e);
+    } catch (Throwable t) {
+      ExceptionUtils.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+    try {
+      Constructor<? extends Serializer> ctr = serializerClass.getDeclaredConstructor();
+      ctr.setAccessible(true);
+      return (Serializer<T>) ctr.newInstance();
+    } catch (NoSuchMethodException e) {
+      throw new IllegalArgumentException(
+          "Serializer "
+              + serializerClass.getName()
+              + " doesn't define a supported constructor for "
+              + type,
+          e);
+    } catch (Throwable t) {
+      ExceptionUtils.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+  }
+
   public static <T> void write(WriteContext writeContext, Serializer<T> serializer, T obj) {
     serializer.write(writeContext, obj);
   }
@@ -326,15 +404,20 @@ public class Serializers {
   private static final Function GET_VALUE;
 
   static {
-    GET_VALUE = (Function) makeGetterFunction(StringBuilder.class.getSuperclass(), "getValue");
-    ToIntFunction<CharSequence> getCoder;
-    try {
-      Method getCoderMethod = StringBuilder.class.getSuperclass().getDeclaredMethod("getCoder");
-      getCoder = (ToIntFunction<CharSequence>) makeGetterFunction(getCoderMethod, int.class);
-    } catch (NoSuchMethodException e) {
-      getCoder = null;
+    if (AndroidSupport.IS_ANDROID) {
+      GET_VALUE = null;
+      GET_CODER = null;
+    } else {
+      GET_VALUE = (Function) makeGetterFunction(StringBuilder.class.getSuperclass(), "getValue");
+      ToIntFunction<CharSequence> getCoder;
+      try {
+        Method getCoderMethod = StringBuilder.class.getSuperclass().getDeclaredMethod("getCoder");
+        getCoder = (ToIntFunction<CharSequence>) makeGetterFunction(getCoderMethod, int.class);
+      } catch (NoSuchMethodException e) {
+        getCoder = null;
+      }
+      GET_CODER = getCoder;
     }
-    GET_CODER = getCoder;
   }
 
   public abstract static class AbstractStringBuilderSerializer<T extends CharSequence>
@@ -351,6 +434,10 @@ public class Serializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       StringSerializer stringSerializer = writeContext.getStringSerializer();
       if (config.isXlang()) {
+        stringSerializer.writeString(buffer, value.toString());
+        return;
+      }
+      if (AndroidSupport.IS_ANDROID) {
         stringSerializer.writeString(buffer, value.toString());
         return;
       }

@@ -27,6 +27,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.unsafe._JDKAccess;
@@ -43,13 +44,18 @@ public class SerializedLambdaSerializer extends Serializer {
   private final TypeResolver typeResolver;
 
   static {
-    try {
-      Method readResolveMethod = JavaSerializer.getReadResolveMethod(SERIALIZED_LAMBDA);
-      Preconditions.checkNotNull(readResolveMethod, "Missing readResolve for " + SERIALIZED_LAMBDA);
-      READ_RESOLVE_HANDLE =
-          _JDKAccess._trustedLookup(SERIALIZED_LAMBDA).unreflect(readResolveMethod);
-    } catch (IllegalAccessException e) {
-      throw new ForyException(e);
+    if (AndroidSupport.IS_ANDROID) {
+      READ_RESOLVE_HANDLE = null;
+    } else {
+      try {
+        Method readResolveMethod = JavaSerializer.getReadResolveMethod(SERIALIZED_LAMBDA);
+        Preconditions.checkNotNull(
+            readResolveMethod, "Missing readResolve for " + SERIALIZED_LAMBDA);
+        READ_RESOLVE_HANDLE =
+            _JDKAccess._trustedLookup(SERIALIZED_LAMBDA).unreflect(readResolveMethod);
+      } catch (IllegalAccessException e) {
+        throw new ForyException(e);
+      }
     }
   }
 
@@ -61,6 +67,7 @@ public class SerializedLambdaSerializer extends Serializer {
 
   @Override
   public void write(WriteContext writeContext, Object value) {
+    throwIfAndroid();
     MemoryBuffer buffer = writeContext.getBuffer();
     SerializedLambda serializedLambda = (SerializedLambda) value;
     writeContext.writeStringRef(serializedLambda.getCapturingClass());
@@ -81,6 +88,7 @@ public class SerializedLambdaSerializer extends Serializer {
 
   @Override
   public Object copy(CopyContext copyContext, Object value) {
+    throwIfAndroid();
     SerializedLambda serializedLambda = (SerializedLambda) value;
     int capturedArgCount = serializedLambda.getCapturedArgCount();
     Object[] capturedArgs = new Object[capturedArgCount];
@@ -102,10 +110,12 @@ public class SerializedLambdaSerializer extends Serializer {
 
   @Override
   public Object read(ReadContext readContext) {
+    throwIfAndroid();
     return readResolve(readUnresolved(readContext));
   }
 
   Object readUnresolved(ReadContext readContext) {
+    throwIfAndroid();
     MemoryBuffer buffer = readContext.getBuffer();
     String capturingClass = readContext.readStringRef();
     String functionalInterfaceClass = readContext.readStringRef();
@@ -135,10 +145,18 @@ public class SerializedLambdaSerializer extends Serializer {
   }
 
   static Object readResolve(Object replacement) {
+    throwIfAndroid();
     try {
       return READ_RESOLVE_HANDLE.invoke(replacement);
     } catch (Throwable e) {
       throw new RuntimeException("Can't deserialize lambda", e);
+    }
+  }
+
+  private static void throwIfAndroid() {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Lambda serialization is unsupported on Android; serialize explicit data objects instead.");
     }
   }
 

@@ -28,9 +28,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import org.apache.fory.collection.MultiKeyWeakMap;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.Preconditions;
@@ -120,6 +123,9 @@ public class Functions {
       GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE ? null : new MultiKeyWeakMap<>();
 
   public static Object makeGetterFunction(Method method) {
+    if (AndroidSupport.IS_ANDROID) {
+      return new ReflectiveGetter(method);
+    }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return graalvmCache.computeIfAbsent(
           Tuple2.of(method, Object.class),
@@ -158,6 +164,9 @@ public class Functions {
   }
 
   public static Object makeGetterFunction(Method method, Class<?> returnType) {
+    if (AndroidSupport.IS_ANDROID) {
+      return new ReflectiveGetter(method);
+    }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return graalvmCache.computeIfAbsent(
           Tuple2.of(method, returnType),
@@ -193,6 +202,85 @@ public class Functions {
   }
 
   public static Tuple2<Class<?>, String> getterMethodInfo(Class<?> type) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "LambdaMetafactory getter metadata is not supported on Android");
+    }
     return _JDKAccess.getterMethodInfo(type);
+  }
+
+  private static final class ReflectiveGetter
+      implements Function<Object, Object>,
+          Predicate<Object>,
+          ToByteFunction<Object>,
+          ToCharFunction<Object>,
+          ToShortFunction<Object>,
+          java.util.function.ToIntFunction<Object>,
+          java.util.function.ToLongFunction<Object>,
+          ToFloatFunction<Object>,
+          java.util.function.ToDoubleFunction<Object> {
+    private final Method method;
+
+    private ReflectiveGetter(Method method) {
+      this.method = method;
+      try {
+        method.setAccessible(true);
+      } catch (RuntimeException e) {
+        throw new ForyException("Failed to make getter method accessible: " + method, e);
+      }
+    }
+
+    @Override
+    public Object apply(Object value) {
+      return invoke(value);
+    }
+
+    @Override
+    public boolean test(Object value) {
+      return (Boolean) invoke(value);
+    }
+
+    @Override
+    public byte applyAsByte(Object value) {
+      return ((Number) invoke(value)).byteValue();
+    }
+
+    @Override
+    public char applyAsChar(Object value) {
+      return (Character) invoke(value);
+    }
+
+    @Override
+    public short applyAsShort(Object value) {
+      return ((Number) invoke(value)).shortValue();
+    }
+
+    @Override
+    public int applyAsInt(Object value) {
+      return ((Number) invoke(value)).intValue();
+    }
+
+    @Override
+    public long applyAsLong(Object value) {
+      return ((Number) invoke(value)).longValue();
+    }
+
+    @Override
+    public float applyAsFloat(Object value) {
+      return ((Number) invoke(value)).floatValue();
+    }
+
+    @Override
+    public double applyAsDouble(Object value) {
+      return ((Number) invoke(value)).doubleValue();
+    }
+
+    private Object invoke(Object value) {
+      try {
+        return method.invoke(value);
+      } catch (Exception e) {
+        throw new ForyException("Failed to invoke getter method reflectively: " + method, e);
+      }
+    }
   }
 }

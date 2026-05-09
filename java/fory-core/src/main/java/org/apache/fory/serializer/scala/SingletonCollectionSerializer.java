@@ -23,6 +23,8 @@ import java.lang.reflect.Field;
 import java.util.Collection;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
@@ -38,14 +40,20 @@ import org.apache.fory.util.Preconditions;
 public class SingletonCollectionSerializer extends CollectionLikeSerializer {
   private final Field field;
   private Object base = null;
+  private Object singleton = null;
   private long offset = -1;
 
   public SingletonCollectionSerializer(TypeResolver typeResolver, Class cls) {
     super(typeResolver, cls, false);
     try {
       field = type.getDeclaredField("MODULE$");
+      if (AndroidSupport.IS_ANDROID) {
+        field.setAccessible(true);
+      }
     } catch (NoSuchFieldException e) {
       throw new RuntimeException(type + " doesn't have `MODULE$` field", e);
+    } catch (RuntimeException e) {
+      throw new ForyException("Failed to make Scala singleton field accessible: " + type, e);
     }
   }
 
@@ -59,6 +67,9 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
 
   @Override
   public Object read(ReadContext readContext) {
+    if (AndroidSupport.IS_ANDROID) {
+      return readAndroidSingleton();
+    }
     long offset = this.offset;
     if (offset == -1) {
       Preconditions.checkArgument(!GraalvmSupport.isGraalBuildTime());
@@ -66,6 +77,19 @@ public class SingletonCollectionSerializer extends CollectionLikeSerializer {
       base = UnsafeOps.UNSAFE.staticFieldBase(field);
     }
     return UnsafeOps.getObject(base, offset);
+  }
+
+  private Object readAndroidSingleton() {
+    Object singleton = this.singleton;
+    if (singleton == null) {
+      try {
+        singleton = field.get(null);
+        this.singleton = singleton;
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw new ForyException("Failed to read Scala singleton field: " + type, e);
+      }
+    }
+    return singleton;
   }
 
   @Override

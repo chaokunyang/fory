@@ -49,6 +49,8 @@ import java.util.stream.Stream;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
+import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.ExceptionUtils;
@@ -101,6 +103,9 @@ public class ReflectionUtils {
     if (ctr == null) {
       return null;
     }
+    if (AndroidSupport.IS_ANDROID) {
+      return null;
+    }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(ctr.getDeclaringClass());
     try {
       return lookup.findConstructor(ctr.getDeclaringClass(), MethodType.methodType(void.class));
@@ -115,6 +120,13 @@ public class ReflectionUtils {
    * no-arg constructor if `checked` not enabled, throws exception if `check` enabled.
    */
   public static MethodHandle getCtrHandle(Class<?> cls, boolean checked) {
+    if (AndroidSupport.IS_ANDROID) {
+      if (checked) {
+        throw new ForyException(
+            "MethodHandle constructor access is not supported on Android for " + cls);
+      }
+      return null;
+    }
     MethodHandle methodHandle = ctrHandleCache.get(cls, () -> createNoArgCtrHandle(cls));
     if (checked && methodHandle == null) {
       throw new RuntimeException(
@@ -130,6 +142,10 @@ public class ReflectionUtils {
       ctrHandleParamsCache = ClassValueCache.newClassKeyCache(32);
 
   public static MethodHandle getCtrHandle(Class<?> cls, Class<?>... types) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new ForyException(
+          "MethodHandle constructor access is not supported on Android for " + cls);
+    }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(cls);
     ConcurrentMap<List<Class<?>>, MethodHandle> map =
         ctrHandleParamsCache.get(cls, ConcurrentHashMap::new);
@@ -430,6 +446,10 @@ public class ReflectionUtils {
   }
 
   public static long getFieldOffset(Field field) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Field offsets are not supported on Android: " + field);
+    }
     if (GraalvmSupport.isGraalBuildTime()) {
       // See more details at
       // https://www.graalvm.org/latest/reference-manual/native-image/metadata/Compatibility/#unsafe-memory-access
@@ -461,10 +481,29 @@ public class ReflectionUtils {
   public static void setObjectFieldValue(Object obj, Field field, Object value) {
     Preconditions.checkArgument(
         !field.getType().isPrimitive(), "Field %s is primitive type", field);
+    if (AndroidSupport.IS_ANDROID) {
+      try {
+        field.setAccessible(true);
+        field.set(obj, value);
+        return;
+      } catch (IllegalAccessException | IllegalArgumentException e) {
+        throw new ForyException("Failed to write object field reflectively: " + field, e);
+      }
+    }
     UnsafeOps.putObject(obj, UnsafeOps.objectFieldOffset(field), value);
   }
 
   public static <T> T getObjectFieldValue(Object obj, Field field) {
+    Preconditions.checkArgument(
+        !field.getType().isPrimitive(), "Field %s is primitive type", field);
+    if (AndroidSupport.IS_ANDROID) {
+      try {
+        field.setAccessible(true);
+        return (T) field.get(obj);
+      } catch (IllegalAccessException | IllegalArgumentException e) {
+        throw new ForyException("Failed to read object field reflectively: " + field, e);
+      }
+    }
     return (T) UnsafeOps.getObject(obj, UnsafeOps.objectFieldOffset(field));
   }
 
@@ -479,6 +518,16 @@ public class ReflectionUtils {
     while (cls != Object.class) {
       try {
         Field field = cls.getDeclaredField(fieldName);
+        Preconditions.checkArgument(
+            !field.getType().isPrimitive(), "Field %s is primitive type", field);
+        if (AndroidSupport.IS_ANDROID) {
+          try {
+            field.setAccessible(true);
+            return field.get(obj);
+          } catch (IllegalAccessException | IllegalArgumentException e) {
+            throw new ForyException("Failed to read object field reflectively: " + field, e);
+          }
+        }
         long fieldOffset = UnsafeOps.objectFieldOffset(field);
         return UnsafeOps.getObject(obj, fieldOffset);
         // CHECKSTYLE.OFF:EmptyCatchBlock

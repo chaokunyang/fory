@@ -1067,13 +1067,55 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     for (SerializationFieldInfo fieldInfo : fieldInfos) {
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       long fieldOffset = fieldAccessor.getFieldOffset();
-      // record class won't go to this path;
-      assert fieldOffset != -1;
+      if (fieldOffset == -1) {
+        Object fieldValue = fieldAccessor.getObject(originObj);
+        fieldAccessor.putObject(
+            newObj, copyFieldValue(copyContext, fieldValue, fieldInfo.dispatchId));
+        continue;
+      }
       if (fieldInfo.isPrimitiveField) {
         copySetPrimitiveField(originObj, newObj, fieldOffset, fieldInfo.dispatchId);
       } else {
         copySetNotPrimitiveField(copyContext, originObj, newObj, fieldOffset, fieldInfo.dispatchId);
       }
+    }
+  }
+
+  private static Object copyFieldValue(CopyContext copyContext, Object fieldValue, int dispatchId) {
+    if (fieldValue == null) {
+      return null;
+    }
+    switch (dispatchId) {
+      case DispatchId.BOOL:
+      case DispatchId.INT8:
+      case DispatchId.UINT8:
+      case DispatchId.EXT_UINT8:
+      case DispatchId.CHAR:
+      case DispatchId.INT16:
+      case DispatchId.UINT16:
+      case DispatchId.EXT_UINT16:
+      case DispatchId.INT32:
+      case DispatchId.VARINT32:
+      case DispatchId.UINT32:
+      case DispatchId.EXT_UINT32:
+      case DispatchId.VAR_UINT32:
+      case DispatchId.EXT_VAR_UINT32:
+      case DispatchId.INT64:
+      case DispatchId.VARINT64:
+      case DispatchId.TAGGED_INT64:
+      case DispatchId.UINT64:
+      case DispatchId.EXT_UINT64:
+      case DispatchId.VAR_UINT64:
+      case DispatchId.EXT_VAR_UINT64:
+      case DispatchId.TAGGED_UINT64:
+      case DispatchId.FLOAT32:
+      case DispatchId.FLOAT64:
+      case DispatchId.FLOAT16:
+      case DispatchId.BFLOAT16:
+      case DispatchId.STRING:
+        return fieldValue;
+      default:
+        return copyContext.copyObject(fieldValue);
     }
   }
 

@@ -22,11 +22,17 @@ package org.apache.fory.serializer;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotSame;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.test.bean.Cyclic;
 import org.apache.fory.util.Preconditions;
 import org.testng.Assert;
@@ -190,5 +196,96 @@ public class ObjectSerializerTest extends ForyTestBase {
     writeSerializer(fory, serializer, buffer, a);
     assertEquals(a, readSerializer(fory, serializer, buffer));
     assertEquals(a, withCopyContext(fory, context -> serializer.copy(context, a)));
+  }
+
+  @Test
+  public void testAndroidObjectSerializerReflectionPaths() throws Exception {
+    String javaBin =
+        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+    Process process =
+        new ProcessBuilder(
+                javaBin,
+                "-cp",
+                System.getProperty("java.class.path"),
+                AndroidObjectSerializerProbe.class.getName())
+            .redirectErrorStream(true)
+            .start();
+    String output = readFully(process.getInputStream());
+    Assert.assertEquals(process.waitFor(), 0, output);
+  }
+
+  private static String readFully(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[1024];
+    int read;
+    while ((read = inputStream.read(buffer)) != -1) {
+      outputStream.write(buffer, 0, read);
+    }
+    return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+  }
+
+  public static final class AndroidObjectSerializerProbe {
+    public static void main(String[] args) {
+      System.setProperty("java.vm.name", "Dalvik");
+      System.setProperty("java.runtime.name", "Android Runtime");
+      check(AndroidSupport.IS_ANDROID, "AndroidSupport should detect Dalvik runtime");
+
+      Fory fory =
+          Fory.builder()
+              .withCodegen(true)
+              .withRefTracking(true)
+              .requireClassRegistration(false)
+              .build();
+      check(!fory.getConfig().isCodeGenEnabled(), "Android must force codegen off");
+
+      PrivateAndroidBean bean = PrivateAndroidBean.create();
+      PrivateAndroidBean restored = (PrivateAndroidBean) fory.deserialize(fory.serialize(bean));
+      bean.assertSameData(restored);
+      check(bean != restored, "Deserialization should create a new object");
+
+      PrivateAndroidBean copied = fory.copy(bean);
+      bean.assertSameData(copied);
+      check(bean != copied, "Copy should create a new object");
+      check(bean.child != copied.child, "Nested object should be copied");
+    }
+
+    private static void check(boolean value, String message) {
+      if (!value) {
+        throw new AssertionError(message);
+      }
+    }
+  }
+
+  private static final class PrivateAndroidBean {
+    private int id;
+    private long count;
+    private Integer boxed;
+    private NestedAndroidBean child;
+
+    private PrivateAndroidBean() {}
+
+    private static PrivateAndroidBean create() {
+      PrivateAndroidBean bean = new PrivateAndroidBean();
+      bean.id = 42;
+      bean.count = 123456789L;
+      bean.boxed = 77;
+      bean.child = new NestedAndroidBean();
+      bean.child.value = 9;
+      return bean;
+    }
+
+    private void assertSameData(PrivateAndroidBean other) {
+      Assert.assertEquals(other.id, id);
+      Assert.assertEquals(other.count, count);
+      Assert.assertEquals(other.boxed, boxed);
+      Assert.assertNotNull(other.child);
+      Assert.assertEquals(other.child.value, child.value);
+    }
+  }
+
+  private static final class NestedAndroidBean {
+    private int value;
+
+    private NestedAndroidBean() {}
   }
 }

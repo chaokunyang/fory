@@ -33,6 +33,8 @@ import java.util.List;
 import java.util.Map;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Utils for java.lang.Record. */
@@ -145,15 +147,25 @@ public class RecordUtils {
 
   private static RecordComponent[] getRecordComponentsUncached(Class<?> type) {
     try {
-      MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
+      MethodHandles.Lookup lookup =
+          AndroidSupport.IS_ANDROID ? null : _JDKAccess._trustedLookup(type);
       Object[] components = (Object[]) GET_RECORD_COMPONENTS.invoke(type);
       RecordComponent[] recordComponents = new RecordComponent[components.length];
       for (int i = 0; i < components.length; i++) {
         Object component = components[i];
         Method accessor = (Method) GET_ACCESSOR.invoke(component);
         Class<?> fieldType = (Class<?>) GET_TYPE.invoke(component);
-        MethodHandle handle = lookup.unreflect(accessor);
-        Object getter = _JDKAccess.makeGetterFunction(lookup, handle, fieldType);
+        Object getter = null;
+        if (AndroidSupport.IS_ANDROID) {
+          try {
+            accessor.setAccessible(true);
+          } catch (RuntimeException e) {
+            throw new ForyException("Failed to make record accessor accessible: " + accessor, e);
+          }
+        } else {
+          MethodHandle handle = lookup.unreflect(accessor);
+          getter = _JDKAccess.makeGetterFunction(lookup, handle, fieldType);
+        }
         recordComponents[i] =
             new RecordComponent(
                 (Class<?>) GET_DECLARING_RECORD.invoke(component),
@@ -181,6 +193,14 @@ public class RecordUtils {
       constructor = type.getDeclaredConstructor(paramTypes);
     } catch (NoSuchMethodException e) {
       throw new RuntimeException(e);
+    }
+    if (AndroidSupport.IS_ANDROID) {
+      try {
+        constructor.setAccessible(true);
+      } catch (RuntimeException e) {
+        throw new ForyException("Failed to make record constructor accessible: " + constructor, e);
+      }
+      return Tuple2.of(constructor, null);
     }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
     if (lookup != null) {

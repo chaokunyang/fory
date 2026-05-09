@@ -26,6 +26,7 @@ import java.lang.reflect.Constructor;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
@@ -48,6 +49,8 @@ import org.apache.fory.util.unsafe._JDKAccess;
  *       with platform-specific unsafe allocation
  *   <li><strong>GraalVM native image compatibility:</strong> Uses {@link
  *       ParentNoArgCtrObjectCreator} for constructor generate-based creation when needed
+ *   <li><strong>Android compatibility:</strong> Uses reflection for records and no-arg
+ *       constructors, and throws when no supported reflective construction path exists
  * </ul>
  *
  * <p>All created ObjectCreator instances are cached using a soft reference cache to improve
@@ -83,6 +86,12 @@ public class ObjectCreators {
       return new RecordObjectCreator<>(type);
     }
     Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type);
+    if (AndroidSupport.IS_ANDROID) {
+      if (noArgConstructor != null) {
+        return new ReflectiveNoArgCtrObjectCreator<>(type, noArgConstructor);
+      }
+      return new UnsupportedObjectCreator<>(type);
+    }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       if (noArgConstructor != null) {
         return new DeclaredNoArgCtrObjectCreator<>(type);
@@ -94,6 +103,52 @@ public class ObjectCreators {
       return new UnsafeObjectCreator<>(type);
     }
     return new DeclaredNoArgCtrObjectCreator<>(type);
+  }
+
+  public static final class ReflectiveNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
+    private final Constructor<T> constructor;
+
+    public ReflectiveNoArgCtrObjectCreator(Class<T> type, Constructor<T> constructor) {
+      super(type);
+      this.constructor = constructor;
+      try {
+        constructor.setAccessible(true);
+      } catch (RuntimeException e) {
+        throw new ForyException("Failed to make no-arg constructor accessible for " + type, e);
+      }
+    }
+
+    @Override
+    public T newInstance() {
+      try {
+        return constructor.newInstance();
+      } catch (Exception e) {
+        throw new ForyException("Failed to create instance using no-arg constructor: " + type, e);
+      }
+    }
+
+    @Override
+    public T newInstanceWithArguments(Object... arguments) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  public static final class UnsupportedObjectCreator<T> extends ObjectCreator<T> {
+    public UnsupportedObjectCreator(Class<T> type) {
+      super(type);
+    }
+
+    @Override
+    public T newInstance() {
+      throw new ForyException(
+          "Android cannot create " + type + " without an accessible no-arg constructor");
+    }
+
+    @Override
+    public T newInstanceWithArguments(Object... arguments) {
+      throw new ForyException(
+          "Android cannot create " + type + " without a supported constructor path");
+    }
   }
 
   public static final class UnsafeObjectCreator<T> extends ObjectCreator<T> {
@@ -145,7 +200,8 @@ public class ObjectCreators {
       Tuple2<Constructor, MethodHandle> tuple2 = RecordUtils.getRecordConstructor(type);
       constructor = tuple2.f0;
       handle = tuple2.f1;
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25) {
+      if (AndroidSupport.IS_ANDROID
+          || (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25)) {
         try {
           constructor.setAccessible(true);
         } catch (Throwable t) {
@@ -164,15 +220,16 @@ public class ObjectCreators {
     public T newInstanceWithArguments(Object... arguments) {
       try {
         // compile-time constant is eligible for dead code elimination.
-        if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25) {
-          // GraalVM 25+ path: workaround for https://github.com/oracle/graal/issues/12106
+        if (AndroidSupport.IS_ANDROID
+            || handle == null
+            || (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25)) {
           return (T) constructor.newInstance(arguments);
         } else {
           // Regular path: use method handle
           return (T) handle.invokeWithArguments(arguments);
         }
       } catch (Throwable e) {
-        throw new RuntimeException(e);
+        throw new ForyException("Failed to create record instance: " + type, e);
       }
     }
   }

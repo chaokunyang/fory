@@ -19,7 +19,14 @@
 
 package org.apache.fory.reflect;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import lombok.AllArgsConstructor;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.FieldAccessor.GeneratedAccessor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -47,5 +54,87 @@ public class FieldAccessorTest {
     Assert.assertEquals(f3.get(struct), "str");
     f3.set(struct, "a");
     Assert.assertEquals(f3.get(struct), "a");
+  }
+
+  @Test
+  public void testAndroidReflectionFieldAccessorPaths() throws Exception {
+    String javaBin =
+        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+    Process process =
+        new ProcessBuilder(
+                javaBin,
+                "-cp",
+                System.getProperty("java.class.path"),
+                AndroidReflectionFieldAccessorProbe.class.getName())
+            .redirectErrorStream(true)
+            .start();
+    String output = readFully(process.getInputStream());
+    Assert.assertEquals(process.waitFor(), 0, output);
+  }
+
+  private static String readFully(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[1024];
+    int read;
+    while ((read = inputStream.read(buffer)) != -1) {
+      outputStream.write(buffer, 0, read);
+    }
+    return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+  }
+
+  public static final class AndroidReflectionFieldAccessorProbe {
+    public static void main(String[] args) throws Exception {
+      System.setProperty("java.vm.name", "Dalvik");
+      System.setProperty("java.runtime.name", "Android Runtime");
+      check(AndroidSupport.IS_ANDROID, "AndroidSupport should detect Dalvik runtime");
+
+      AndroidFields fields = new AndroidFields();
+      assertAccessor("boolValue", fields, true, false);
+      assertAccessor("byteValue", fields, (byte) 1, (byte) 2);
+      assertAccessor("charValue", fields, 'a', 'z');
+      assertAccessor("shortValue", fields, (short) 3, (short) 4);
+      assertAccessor("intValue", fields, 5, 6);
+      assertAccessor("longValue", fields, 7L, 8L);
+      assertAccessor("floatValue", fields, 1.25f, 2.5f);
+      assertAccessor("doubleValue", fields, 3.5d, 4.5d);
+      assertAccessor("objectValue", fields, "before", "after");
+    }
+
+    private static void assertAccessor(
+        String fieldName, AndroidFields fields, Object expected, Object replacement)
+        throws Exception {
+      Field field = AndroidFields.class.getDeclaredField(fieldName);
+      FieldAccessor accessor = FieldAccessor.createAccessor(field);
+      check(
+          accessor instanceof ReflectionFieldAccessor, "Expected reflection accessor for " + field);
+      check(accessor.getFieldOffset() == -1, "Android field accessor should not expose offsets");
+      checkEquals(accessor.get(fields), expected, "initial " + fieldName);
+      accessor.set(fields, replacement);
+      checkEquals(accessor.get(fields), replacement, "updated " + fieldName);
+    }
+
+    private static void check(boolean value, String message) {
+      if (!value) {
+        throw new AssertionError(message);
+      }
+    }
+
+    private static void checkEquals(Object actual, Object expected, String message) {
+      if (!expected.equals(actual)) {
+        throw new AssertionError(message + ": expected " + expected + ", actual " + actual);
+      }
+    }
+  }
+
+  private static final class AndroidFields {
+    private boolean boolValue = true;
+    private byte byteValue = 1;
+    private char charValue = 'a';
+    private short shortValue = 3;
+    private int intValue = 5;
+    private long longValue = 7;
+    private float floatValue = 1.25f;
+    private double doubleValue = 3.5d;
+    private Object objectValue = "before";
   }
 }

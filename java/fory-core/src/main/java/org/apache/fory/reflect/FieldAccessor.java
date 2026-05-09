@@ -22,6 +22,7 @@ package org.apache.fory.reflect;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -32,6 +33,8 @@ import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.type.TypeUtils;
@@ -132,6 +135,12 @@ public abstract class FieldAccessor {
   }
 
   public static FieldAccessor createAccessor(Field field) {
+    if (AndroidSupport.IS_ANDROID) {
+      if (RecordUtils.isRecord(field.getDeclaringClass())) {
+        return new ReflectiveRecordFieldAccessor(field);
+      }
+      return new ReflectionFieldAccessor(field);
+    }
     if (RecordUtils.isRecord(field.getDeclaringClass())) {
       Object getter;
       try {
@@ -181,6 +190,38 @@ public abstract class FieldAccessor {
       return new DoubleAccessor(field);
     } else {
       return new ObjectAccessor(field);
+    }
+  }
+
+  static final class ReflectiveRecordFieldAccessor extends FieldGetter {
+    private final Method accessor;
+
+    ReflectiveRecordFieldAccessor(Field field) {
+      super(field, null);
+      try {
+        accessor = field.getDeclaringClass().getDeclaredMethod(field.getName());
+        accessor.setAccessible(true);
+      } catch (NoSuchMethodException | RuntimeException e) {
+        throw new ForyException("Failed to create record field accessor for " + field, e);
+      }
+    }
+
+    @Override
+    public Object get(Object obj) {
+      checkObj(obj);
+      try {
+        return accessor.invoke(obj);
+      } catch (IllegalAccessException | IllegalArgumentException e) {
+        throw new ForyException("Failed to read record field reflectively: " + field, e);
+      } catch (InvocationTargetException e) {
+        throw new ForyException(
+            "Record accessor threw while reading field: " + field, e.getCause());
+      }
+    }
+
+    @Override
+    public void set(Object obj, Object value) {
+      throw new UnsupportedOperationException("Record field is read-only: " + field);
     }
   }
 

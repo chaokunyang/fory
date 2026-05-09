@@ -72,11 +72,20 @@ JDK serialization on selected workloads.
 <img src="docs/benchmarks/java/throughput.png" width="95%" alt="Java xlang throughput">
 </p>
 
+**Python** [Benchmarks](benchmarks/python)
+
+<p align="center">
+<img src="docs/benchmarks/python/throughput.png" width="95%" alt="Python serialization throughput">
+</p>
+
 **Rust** [Benchmarks](benchmarks/rust)
 
 <p align="center">
 <img src="docs/benchmarks/rust/throughput.png" width="95%" alt="Rust serialization throughput">
 </p>
+
+<details>
+<summary><strong>Benchmarks for <a href="benchmarks/cpp">C++</a>, <a href="benchmarks/go">Go</a>, <a href="docs/benchmarks/javascript">JavaScript/TypeScript</a>, <a href="docs/benchmarks/csharp">C#</a>, <a href="docs/benchmarks/swift">Swift</a>, and <a href="docs/benchmarks/dart">Dart</a></strong></summary>
 
 **C++** [Benchmarks](benchmarks/cpp)
 
@@ -88,12 +97,6 @@ JDK serialization on selected workloads.
 
 <p align="center">
 <img src="docs/benchmarks/go/throughput.png" width="95%" alt="Go serialization throughput">
-</p>
-
-**Python** [Benchmarks](benchmarks/python)
-
-<p align="center">
-<img src="docs/benchmarks/python/throughput.png" width="95%" alt="Python serialization throughput">
 </p>
 
 **JavaScript/TypeScript** [Benchmarks](docs/benchmarks/javascript)
@@ -119,6 +122,8 @@ JDK serialization on selected workloads.
 <p align="center">
 <img src="docs/benchmarks/dart/throughput.png" width="95%" alt="Dart serialization throughput">
 </p>
+
+</details>
 
 ## Installation
 

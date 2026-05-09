@@ -50,6 +50,11 @@ exchange, and row-format random access.
 
 ## Performance
 
+Benchmarks show Fory delivering higher throughput and smaller serialized
+payloads than common serialization frameworks on representative workloads. Java
+has the broadest comparison set; the other charts show runtime-specific results
+across supported languages.
+
 **Java** [Benchmarks](docs/benchmarks/java)
 
 In Java serialization benchmarks, Fory reaches up to **170x** the throughput of

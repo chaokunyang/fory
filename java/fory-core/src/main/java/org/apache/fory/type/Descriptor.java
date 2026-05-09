@@ -59,6 +59,7 @@ import org.apache.fory.annotation.UInt64Type;
 import org.apache.fory.annotation.UInt8Type;
 import org.apache.fory.collection.Cache;
 import org.apache.fory.collection.CacheBuilder;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.reflect.TypeRef;
@@ -370,32 +371,8 @@ public class Descriptor {
     return map;
   }
 
-  private static final ClassValue<Map<String, List<Member>>> sortedDuplicatedMembers =
-      new ClassValue<Map<String, List<Member>>>() {
-        @Override
-        protected Map<String, List<Member>> computeValue(Class<?> type) {
-          SortedMap<Member, Descriptor> allFields = Descriptor.getAllDescriptorsMap(type);
-          Map<String, List<Member>> duplicated = Descriptor.getDuplicateNames(allFields);
-          Map<String, List<Member>> map = new HashMap<>();
-          for (Map.Entry<String, List<Member>> e : duplicated.entrySet()) {
-            e.getValue()
-                .sort(
-                    (f1, f2) -> {
-                      if (f1.getDeclaringClass() == f2.getDeclaringClass()) {
-                        return 0;
-                      } else {
-                        return f1.getDeclaringClass().isAssignableFrom(f2.getDeclaringClass())
-                            ? -1
-                            : 1;
-                      }
-                    });
-            if (map.put(e.getKey(), e.getValue()) != null) {
-              throw new IllegalStateException("Duplicate key");
-            }
-          }
-          return map;
-        }
-      };
+  private static final ClassValueCache<Map<String, List<Member>>> sortedDuplicatedMembers =
+      ClassValueCache.newClassKeyCache(32);
 
   public static Map<String, List<Member>> getDuplicateNames(
       SortedMap<Member, Descriptor> allDescriptorsMap) {
@@ -421,7 +398,28 @@ public class Descriptor {
   }
 
   public static Map<String, List<Member>> getSortedDuplicatedMembers(Class<?> cls) {
-    return sortedDuplicatedMembers.get(cls);
+    return sortedDuplicatedMembers.get(cls, () -> sortedDuplicatedMembers(cls));
+  }
+
+  private static Map<String, List<Member>> sortedDuplicatedMembers(Class<?> type) {
+    SortedMap<Member, Descriptor> allFields = Descriptor.getAllDescriptorsMap(type);
+    Map<String, List<Member>> duplicated = Descriptor.getDuplicateNames(allFields);
+    Map<String, List<Member>> map = new HashMap<>();
+    for (Map.Entry<String, List<Member>> e : duplicated.entrySet()) {
+      e.getValue()
+          .sort(
+              (f1, f2) -> {
+                if (f1.getDeclaringClass() == f2.getDeclaringClass()) {
+                  return 0;
+                } else {
+                  return f1.getDeclaringClass().isAssignableFrom(f2.getDeclaringClass()) ? -1 : 1;
+                }
+              });
+      if (map.put(e.getKey(), e.getValue()) != null) {
+        throw new IllegalStateException("Duplicate key");
+      }
+    }
+    return map;
   }
 
   /**

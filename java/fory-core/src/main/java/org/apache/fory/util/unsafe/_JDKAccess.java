@@ -37,6 +37,7 @@ import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
 import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
@@ -85,13 +86,7 @@ public class _JDKAccess {
     }
   }
 
-  private static final ClassValue<Lookup> lookupCache =
-      new ClassValue<Lookup>() {
-        @Override
-        protected Lookup computeValue(Class type) {
-          return _Lookup._trustedLookup(type);
-        }
-      };
+  private static final ClassValueCache<Lookup> lookupCache = ClassValueCache.newClassKeyCache(32);
 
   // CHECKSTYLE.OFF:MethodName
 
@@ -102,7 +97,7 @@ public class _JDKAccess {
       // as a reachable object.
       return _Lookup._trustedLookup(objectClass);
     }
-    return lookupCache.get(objectClass);
+    return lookupCache.get(objectClass, () -> _Lookup._trustedLookup(objectClass));
   }
 
   public static <T> T tryMakeFunction(

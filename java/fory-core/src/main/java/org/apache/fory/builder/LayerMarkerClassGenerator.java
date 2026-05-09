@@ -22,6 +22,7 @@ package org.apache.fory.builder;
 import java.lang.reflect.Array;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.apache.fory.collection.ClassValueCache;
 
 /**
  * Creates unique marker classes for each layer in a class hierarchy. These marker classes serve as
@@ -50,16 +51,11 @@ public class LayerMarkerClassGenerator {
   private static final int MAX_LAYER_DEPTH = 16;
 
   /**
-   * ClassValue-based cache for layer marker classes. For each target class, we store a map from
-   * layer index to the generated array class marker.
+   * Class-keyed cache for layer marker classes. For each target class, we store a map from layer
+   * index to the generated array class marker.
    */
-  private static final ClassValue<Map<Integer, Class<?>>> layerClassCache =
-      new ClassValue<Map<Integer, Class<?>>>() {
-        @Override
-        protected Map<Integer, Class<?>> computeValue(Class<?> type) {
-          return new ConcurrentHashMap<>();
-        }
-      };
+  private static final ClassValueCache<Map<Integer, Class<?>>> layerClassCache =
+      ClassValueCache.newClassKeyCache(8);
 
   // Pre-fill common exception hierarchy to ensure GraalVM compatibility
   static {
@@ -109,7 +105,7 @@ public class LayerMarkerClassGenerator {
 
     // Pre-generate marker classes for common depths (0-3 covers most hierarchies)
     for (Class<?> cls : exceptionClasses) {
-      Map<Integer, Class<?>> layerMap = layerClassCache.get(cls);
+      Map<Integer, Class<?>> layerMap = layerClassCache.get(cls, ConcurrentHashMap::new);
       for (int i = 0; i < 4; i++) {
         layerMap.computeIfAbsent(i, idx -> createArrayClass(cls, idx));
       }
@@ -122,7 +118,7 @@ public class LayerMarkerClassGenerator {
       throw new IllegalArgumentException(
           "Layer index " + layerIndex + " exceeds maximum depth " + MAX_LAYER_DEPTH);
     }
-    Map<Integer, Class<?>> layerMap = layerClassCache.get(targetClass);
+    Map<Integer, Class<?>> layerMap = layerClassCache.get(targetClass, ConcurrentHashMap::new);
     return layerMap.computeIfAbsent(layerIndex, idx -> createArrayClass(targetClass, idx));
   }
 

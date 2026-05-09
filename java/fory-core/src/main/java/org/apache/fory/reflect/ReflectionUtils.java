@@ -48,6 +48,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.ExceptionUtils;
@@ -92,13 +93,8 @@ public class ReflectionUtils {
     return ctr;
   }
 
-  private static final ClassValue<MethodHandle> ctrHandleCache =
-      new ClassValue<MethodHandle>() {
-        @Override
-        protected MethodHandle computeValue(Class<?> type) {
-          return createNoArgCtrHandle(type);
-        }
-      };
+  private static final ClassValueCache<MethodHandle> ctrHandleCache =
+      ClassValueCache.newClassKeyCache(32);
 
   private static MethodHandle createNoArgCtrHandle(Class<?> cls) {
     Constructor<?> ctr = getNoArgConstructor(cls);
@@ -119,7 +115,7 @@ public class ReflectionUtils {
    * no-arg constructor if `checked` not enabled, throws exception if `check` enabled.
    */
   public static MethodHandle getCtrHandle(Class<?> cls, boolean checked) {
-    MethodHandle methodHandle = ctrHandleCache.get(cls);
+    MethodHandle methodHandle = ctrHandleCache.get(cls, () -> createNoArgCtrHandle(cls));
     if (checked && methodHandle == null) {
       throw new RuntimeException(
           String.format(
@@ -130,18 +126,13 @@ public class ReflectionUtils {
     return methodHandle;
   }
 
-  private static final ClassValue<ConcurrentMap<List<Class<?>>, MethodHandle>>
-      ctrHandleParamsCache =
-          new ClassValue<ConcurrentMap<List<Class<?>>, MethodHandle>>() {
-            @Override
-            protected ConcurrentMap<List<Class<?>>, MethodHandle> computeValue(Class<?> type) {
-              return new ConcurrentHashMap<>();
-            }
-          };
+  private static final ClassValueCache<ConcurrentMap<List<Class<?>>, MethodHandle>>
+      ctrHandleParamsCache = ClassValueCache.newClassKeyCache(32);
 
   public static MethodHandle getCtrHandle(Class<?> cls, Class<?>... types) {
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(cls);
-    ConcurrentMap<List<Class<?>>, MethodHandle> map = ctrHandleParamsCache.get(cls);
+    ConcurrentMap<List<Class<?>>, MethodHandle> map =
+        ctrHandleParamsCache.get(cls, ConcurrentHashMap::new);
     return map.computeIfAbsent(
         Arrays.asList(types),
         k -> {

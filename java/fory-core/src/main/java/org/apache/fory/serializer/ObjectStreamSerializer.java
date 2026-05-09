@@ -44,6 +44,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.LayerMarkerClassGenerator;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
@@ -643,13 +644,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
   }
 
-  private static final ClassValue<StreamTypeInfo> STREAM_CLASS_INFO_CACHE =
-      new ClassValue<StreamTypeInfo>() {
-        @Override
-        protected StreamTypeInfo computeValue(Class<?> type) {
-          return new StreamTypeInfo(type);
-        }
-      };
+  private static final ClassValueCache<StreamTypeInfo> STREAM_CLASS_INFO_CACHE =
+      ClassValueCache.newClassKeyCache(32);
 
   /**
    * Full implementation of SlotInfo for handling object stream serialization. This class manages
@@ -673,7 +669,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     public SlotsInfo(TypeResolver typeResolver, Class<?> type) {
       this.cls = type;
       ObjectStreamClass objectStreamClass = safeObjectStreamClassLookup(type);
-      streamTypeInfo = STREAM_CLASS_INFO_CACHE.get(type);
+      streamTypeInfo = STREAM_CLASS_INFO_CACHE.get(type, () -> new StreamTypeInfo(type));
 
       // Build TypeDef from ObjectStreamClass fields (handles serialPersistentFields).
       // This ensures the serializer uses the same field layout as defined by

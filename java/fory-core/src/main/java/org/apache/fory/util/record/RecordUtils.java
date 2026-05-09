@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.util.unsafe._JDKAccess;
 
@@ -83,78 +84,14 @@ public class RecordUtils {
     GET_ACCESSOR = getAccessor;
   }
 
-  private static final ClassValue<Boolean> isRecordCache =
-      new ClassValue<Boolean>() {
-        @Override
-        protected Boolean computeValue(Class<?> type) {
-          try {
-            return (boolean) IS_RECORD.invoke(type);
-          } catch (IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException(e);
-          }
-        }
-      };
+  private static final ClassValueCache<Boolean> isRecordCache =
+      ClassValueCache.newClassKeyCache(32);
 
-  private static final ClassValue<RecordComponent[]> recordComponentsCache =
-      new ClassValue<RecordComponent[]>() {
-        @Override
-        protected RecordComponent[] computeValue(Class<?> type) {
-          try {
-            MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
-            Object[] components = (Object[]) GET_RECORD_COMPONENTS.invoke(type);
-            RecordComponent[] recordComponents = new RecordComponent[components.length];
-            for (int i = 0; i < components.length; i++) {
-              Object component = components[i];
-              Method accessor = (Method) GET_ACCESSOR.invoke(component);
-              Class<?> fieldType = (Class<?>) GET_TYPE.invoke(component);
-              MethodHandle handle = lookup.unreflect(accessor);
-              Object getter = _JDKAccess.makeGetterFunction(lookup, handle, fieldType);
-              recordComponents[i] =
-                  new RecordComponent(
-                      (Class<?>) GET_DECLARING_RECORD.invoke(component),
-                      (String) GET_NAME.invoke(component),
-                      fieldType,
-                      (Type) GET_GENERIC_TYPE.invoke(component),
-                      accessor,
-                      getter);
-            }
-            return recordComponents;
-          } catch (IllegalAccessException | InvocationTargetException e) {
-            throw new RuntimeException(e);
-          }
-        }
-      };
+  private static final ClassValueCache<RecordComponent[]> recordComponentsCache =
+      ClassValueCache.newClassKeyCache(32);
 
-  private static final ClassValue<Tuple2<Constructor, MethodHandle>> ctrCache =
-      new ClassValue<Tuple2<Constructor, MethodHandle>>() {
-        @Override
-        protected Tuple2<Constructor, MethodHandle> computeValue(Class<?> type) {
-          RecordComponent[] components = RecordUtils.getRecordComponents(type);
-          if (components == null) {
-            return null;
-          }
-          Class<?>[] paramTypes =
-              Arrays.stream(components).map(RecordComponent::getType).toArray(Class<?>[]::new);
-          Constructor constructor;
-          try {
-            constructor = type.getDeclaredConstructor(paramTypes);
-          } catch (NoSuchMethodException e) {
-            throw new RuntimeException(e);
-          }
-          MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
-          if (lookup != null) {
-            try {
-              MethodHandle handle =
-                  lookup.findConstructor(type, MethodType.methodType(void.class, paramTypes));
-              return Tuple2.of(constructor, handle);
-            } catch (NoSuchMethodException | IllegalAccessException e) {
-              return Tuple2.of(constructor, null);
-            }
-          } else {
-            return Tuple2.of(constructor, null);
-          }
-        }
-      };
+  private static final ClassValueCache<Tuple2<Constructor, MethodHandle>> ctrCache =
+      ClassValueCache.newClassKeyCache(32);
 
   /**
    * Returns {@code true} if and only if this class is a record class.
@@ -173,7 +110,7 @@ public class RecordUtils {
     if (IS_RECORD == null) {
       return false;
     }
-    return isRecordCache.get(cls);
+    return isRecordCache.get(cls, () -> isRecordUncached(cls));
   }
 
   /**
@@ -190,12 +127,73 @@ public class RecordUtils {
     if (GET_RECORD_COMPONENTS == null) {
       return null;
     }
-    return recordComponentsCache.get(cls);
+    return recordComponentsCache.get(cls, () -> getRecordComponentsUncached(cls));
   }
 
   /** Returns the record canonical constructor. */
   public static Tuple2<Constructor, MethodHandle> getRecordConstructor(Class<?> cls) {
-    return ctrCache.get(cls);
+    return ctrCache.get(cls, () -> getRecordConstructorUncached(cls));
+  }
+
+  private static boolean isRecordUncached(Class<?> type) {
+    try {
+      return (boolean) IS_RECORD.invoke(type);
+    } catch (IllegalAccessException | InvocationTargetException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static RecordComponent[] getRecordComponentsUncached(Class<?> type) {
+    try {
+      MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
+      Object[] components = (Object[]) GET_RECORD_COMPONENTS.invoke(type);
+      RecordComponent[] recordComponents = new RecordComponent[components.length];
+      for (int i = 0; i < components.length; i++) {
+        Object component = components[i];
+        Method accessor = (Method) GET_ACCESSOR.invoke(component);
+        Class<?> fieldType = (Class<?>) GET_TYPE.invoke(component);
+        MethodHandle handle = lookup.unreflect(accessor);
+        Object getter = _JDKAccess.makeGetterFunction(lookup, handle, fieldType);
+        recordComponents[i] =
+            new RecordComponent(
+                (Class<?>) GET_DECLARING_RECORD.invoke(component),
+                (String) GET_NAME.invoke(component),
+                fieldType,
+                (Type) GET_GENERIC_TYPE.invoke(component),
+                accessor,
+                getter);
+      }
+      return recordComponents;
+    } catch (IllegalAccessException | InvocationTargetException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static Tuple2<Constructor, MethodHandle> getRecordConstructorUncached(Class<?> type) {
+    RecordComponent[] components = RecordUtils.getRecordComponents(type);
+    if (components == null) {
+      return null;
+    }
+    Class<?>[] paramTypes =
+        Arrays.stream(components).map(RecordComponent::getType).toArray(Class<?>[]::new);
+    Constructor constructor;
+    try {
+      constructor = type.getDeclaredConstructor(paramTypes);
+    } catch (NoSuchMethodException e) {
+      throw new RuntimeException(e);
+    }
+    MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(type);
+    if (lookup != null) {
+      try {
+        MethodHandle handle =
+            lookup.findConstructor(type, MethodType.methodType(void.class, paramTypes));
+        return Tuple2.of(constructor, handle);
+      } catch (NoSuchMethodException | IllegalAccessException e) {
+        return Tuple2.of(constructor, null);
+      }
+    } else {
+      return Tuple2.of(constructor, null);
+    }
   }
 
   // Invoked by jit

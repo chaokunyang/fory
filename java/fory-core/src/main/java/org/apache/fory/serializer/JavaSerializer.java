@@ -29,6 +29,7 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.io.ClassLoaderObjectInputStream;
@@ -113,16 +114,11 @@ public class JavaSerializer extends AbstractObjectSerializer {
     throw new IllegalStateException("unreachable code");
   }
 
-  private static final ClassValue<Method> writeObjectMethodCache =
-      new ClassValue<Method>() {
-        @Override
-        protected Method computeValue(Class<?> type) {
-          return getWriteObjectMethod(type, true);
-        }
-      };
+  private static final ClassValueCache<Method> writeObjectMethodCache =
+      ClassValueCache.newClassKeyCache(32);
 
   public static Method getWriteObjectMethod(Class<?> clz) {
-    return writeObjectMethodCache.get(clz);
+    return writeObjectMethodCache.get(clz, () -> getWriteObjectMethod(clz, true));
   }
 
   public static Method getWriteObjectMethod(Class<?> clz, boolean searchParent) {
@@ -142,16 +138,11 @@ public class JavaSerializer extends AbstractObjectSerializer {
         && Modifier.isPrivate(method.getModifiers());
   }
 
-  private static final ClassValue<Method> readObjectMethodCache =
-      new ClassValue<Method>() {
-        @Override
-        protected Method computeValue(Class<?> type) {
-          return getReadRefMethod(type, true);
-        }
-      };
+  private static final ClassValueCache<Method> readObjectMethodCache =
+      ClassValueCache.newClassKeyCache(32);
 
   public static Method getReadRefMethod(Class<?> clz) {
-    return readObjectMethodCache.get(clz);
+    return readObjectMethodCache.get(clz, () -> getReadRefMethod(clz, true));
   }
 
   public static Method getReadRefMethod(Class<?> clz, boolean searchParent) {
@@ -180,48 +171,46 @@ public class JavaSerializer extends AbstractObjectSerializer {
     return null;
   }
 
-  private static final ClassValue<Method> readResolveCache =
-      new ClassValue<Method>() {
-        @Override
-        protected Method computeValue(Class<?> type) {
-          Method readResolve = getMethod(type, "readResolve", true);
-          if (readResolve != null) {
-            if (readResolve.getParameterTypes().length == 0
-                && readResolve.getReturnType() == Object.class) {
-              return readResolve;
-            } else {
-              LOG.warn(
-                  "`readResolve` method doesn't match signature: `ANY-ACCESS-MODIFIER Object readResolve()`");
-            }
-          }
-          return null;
-        }
-      };
+  private static final ClassValueCache<Method> readResolveCache =
+      ClassValueCache.newClassKeyCache(32);
 
   public static Method getReadResolveMethod(Class<?> clz) {
-    return readResolveCache.get(clz);
+    return readResolveCache.get(clz, () -> getReadResolveMethodUncached(clz));
   }
 
-  private static final ClassValue<Method> writeReplaceCache =
-      new ClassValue<Method>() {
-        @Override
-        protected Method computeValue(Class<?> type) {
-          Method writeReplace = getMethod(type, "writeReplace", true);
-          if (writeReplace != null) {
-            if (writeReplace.getParameterTypes().length == 0
-                && writeReplace.getReturnType() == Object.class) {
-              return writeReplace;
-            } else {
-              LOG.warn(
-                  "`writeReplace` method doesn't match signature: `ANY-ACCESS-MODIFIER Object writeReplace()");
-            }
-          }
-          return null;
-        }
-      };
+  private static Method getReadResolveMethodUncached(Class<?> type) {
+    Method readResolve = getMethod(type, "readResolve", true);
+    if (readResolve != null) {
+      if (readResolve.getParameterTypes().length == 0
+          && readResolve.getReturnType() == Object.class) {
+        return readResolve;
+      } else {
+        LOG.warn(
+            "`readResolve` method doesn't match signature: `ANY-ACCESS-MODIFIER Object readResolve()`");
+      }
+    }
+    return null;
+  }
+
+  private static final ClassValueCache<Method> writeReplaceCache =
+      ClassValueCache.newClassKeyCache(32);
 
   public static Method getWriteReplaceMethod(Class<?> clz) {
-    return writeReplaceCache.get(clz);
+    return writeReplaceCache.get(clz, () -> getWriteReplaceMethodUncached(clz));
+  }
+
+  private static Method getWriteReplaceMethodUncached(Class<?> type) {
+    Method writeReplace = getMethod(type, "writeReplace", true);
+    if (writeReplace != null) {
+      if (writeReplace.getParameterTypes().length == 0
+          && writeReplace.getReturnType() == Object.class) {
+        return writeReplace;
+      } else {
+        LOG.warn(
+            "`writeReplace` method doesn't match signature: `ANY-ACCESS-MODIFIER Object writeReplace()");
+      }
+    }
+    return null;
   }
 
   private static Method getMethod(Class<?> clz, String methodName, boolean searchParent) {

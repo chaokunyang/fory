@@ -22,44 +22,50 @@ package org.apache.fory.collection;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 
 @Internal
 public class ClassValueCache<T> {
 
-  private final Cache<Class<?>, T> cache;
+  private static final Object NULL_VALUE = new Object();
 
-  private ClassValueCache(Cache<Class<?>, T> cache) {
+  private final Cache<Class<?>, Object> cache;
+
+  private ClassValueCache(Cache<Class<?>, Object> cache) {
     this.cache = cache;
   }
 
   public T getIfPresent(Class<?> k) {
-    return cache.getIfPresent(k);
+    return unmaskNull(cache.getIfPresent(k));
   }
 
   public T get(Class<?> k, Callable<? extends T> loader) {
     try {
-      return cache.get(k, loader);
+      return unmaskNull(cache.get(k, () -> maskNull(loader.call())));
     } catch (ExecutionException e) {
       throw new RuntimeException(e);
     }
   }
 
   public void put(Class<?> k, T v) {
-    cache.put(k, v);
+    cache.put(k, maskNull(v));
   }
 
   /**
    * Create a cache with weak keys.
    *
-   * <p>when in graalvm, the cache is a concurrent hash map. when in jvm, the cache is a weak hash
-   * map.
+   * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is a
+   * weak hash map.
+   *
+   * <p>Android intentionally uses strong keys and values because Android does not support {@link
+   * ClassValue}; this cache is the Android-safe replacement for direct class-value caches.
    *
    * @param concurrencyLevel the concurrency level
    * @return the cache
    */
   public static <T> ClassValueCache<T> newClassKeyCache(int concurrencyLevel) {
-    if (GraalvmSupport.isGraalBuildTime()) {
+    if (AndroidSupport.IS_ANDROID || GraalvmSupport.isGraalBuildTime()) {
       return new ClassValueCache<>(
           CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build());
     } else {
@@ -71,14 +77,14 @@ public class ClassValueCache<T> {
   /**
    * Create a cache with weak keys and soft values.
    *
-   * <p>when in graalvm, the cache is a concurrent hash map. when in jvm, the cache is a weak hash
-   * map.
+   * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is a
+   * weak hash map.
    *
    * @param concurrencyLevel the concurrency level
    * @return the cache
    */
   public static <T> ClassValueCache<T> newClassKeySoftCache(int concurrencyLevel) {
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+    if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ClassValueCache<>(
           CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build());
     } else {
@@ -89,5 +95,14 @@ public class ClassValueCache<T> {
               .concurrencyLevel(concurrencyLevel)
               .build());
     }
+  }
+
+  private static Object maskNull(Object value) {
+    return value == null ? NULL_VALUE : value;
+  }
+
+  @SuppressWarnings("unchecked")
+  private static <T> T unmaskNull(Object value) {
+    return value == NULL_VALUE ? null : (T) value;
   }
 }

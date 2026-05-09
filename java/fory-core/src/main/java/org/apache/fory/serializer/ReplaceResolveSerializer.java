@@ -28,6 +28,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -157,13 +158,8 @@ public class ReplaceResolveSerializer extends Serializer {
     }
   }
 
-  private static final ClassValue<ReplaceResolveInfo> REPLACE_RESOLVE_INFO_CACHE =
-      new ClassValue<ReplaceResolveInfo>() {
-        @Override
-        protected ReplaceResolveInfo computeValue(Class<?> type) {
-          return new ReplaceResolveInfo(type);
-        }
-      };
+  private static final ClassValueCache<ReplaceResolveInfo> REPLACE_RESOLVE_INFO_CACHE =
+      ClassValueCache.newClassKeyCache(32);
 
   protected static class MethodInfoCache {
     protected final ReplaceResolveInfo info;
@@ -180,7 +176,8 @@ public class ReplaceResolveSerializer extends Serializer {
   }
 
   static MethodInfoCache newJDKMethodInfoCache(TypeResolver typeResolver, Class<?> cls) {
-    ReplaceResolveInfo replaceResolveInfo = REPLACE_RESOLVE_INFO_CACHE.get(cls);
+    ReplaceResolveInfo replaceResolveInfo =
+        REPLACE_RESOLVE_INFO_CACHE.get(cls, () -> new ReplaceResolveInfo(cls));
     MethodInfoCache methodInfoCache = new MethodInfoCache(replaceResolveInfo);
     ClassResolver classResolver = (ClassResolver) typeResolver;
     Class<? extends Serializer> serializerClass;

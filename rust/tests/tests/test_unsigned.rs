@@ -63,7 +63,7 @@ fn test_binary_when_xlang() {
     struct UnsignedData {
         binary: Vec<u8>,
     }
-    fory.register_by_id::<UnsignedData>(100).unwrap();
+    fory.register::<UnsignedData>(100).unwrap();
     let binary = vec![0u8, 1, 2, u8::MAX];
     test_roundtrip(&fory, binary.clone());
     let data = UnsignedData { binary };
@@ -133,7 +133,7 @@ fn test_unsigned_struct_non_compatible() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_id::<UnsignedData>(100).unwrap();
+    fory.register::<UnsignedData>(100).unwrap();
 
     let data = UnsignedData {
         a: u8::MAX,
@@ -174,7 +174,7 @@ fn test_unsigned_struct_compatible() {
     }
 
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register_by_id::<UnsignedData>(100).unwrap();
+    fory.register::<UnsignedData>(100).unwrap();
 
     let data = UnsignedData {
         a: u8::MAX,
@@ -213,8 +213,8 @@ fn test_unsigned_struct_compatible_add_field() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<UnsignedDataV1>(101).unwrap();
-    fory2.register_by_id::<UnsignedDataV2>(101).unwrap();
+    fory1.register::<UnsignedDataV1>(101).unwrap();
+    fory2.register::<UnsignedDataV2>(101).unwrap();
 
     let data_v1 = UnsignedDataV1 { a: 255, b: 65535 };
     let bytes = fory1.serialize(&data_v1).unwrap();
@@ -241,8 +241,8 @@ fn test_unsigned_struct_compatible_remove_field() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<UnsignedDataV1>(102).unwrap();
-    fory2.register_by_id::<UnsignedDataV2>(102).unwrap();
+    fory1.register::<UnsignedDataV1>(102).unwrap();
+    fory2.register::<UnsignedDataV2>(102).unwrap();
 
     let data_v1 = UnsignedDataV1 {
         a: 255,
@@ -298,7 +298,7 @@ fn test_unsigned_with_option_non_compatible() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_id::<OptionalUnsigned>(103).unwrap();
+    fory.register::<OptionalUnsigned>(103).unwrap();
 
     // Test with Some values
     let data_some = OptionalUnsigned {
@@ -342,7 +342,7 @@ fn test_unsigned_with_option_compatible() {
     }
 
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register_by_id::<OptionalUnsigned>(104).unwrap();
+    fory.register::<OptionalUnsigned>(104).unwrap();
 
     // Test with Some values
     let data_some = OptionalUnsigned {
@@ -395,8 +395,8 @@ fn test_unsigned_mixed_fields_compatible() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<MixedDataV1>(105).unwrap();
-    fory2.register_by_id::<MixedDataV2>(105).unwrap();
+    fory1.register::<MixedDataV1>(105).unwrap();
+    fory2.register::<MixedDataV2>(105).unwrap();
 
     let data_v1 = MixedDataV1 {
         required_u8: 255,

@@ -809,20 +809,20 @@ impl TypeResolver {
         Ok(())
     }
 
-    pub fn register_by_id<T: 'static + StructSerializer + Serializer + ForyDefault>(
+    pub fn register<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
         id: u32,
     ) -> Result<(), Error> {
         self.register_struct_type::<T>(id, &EMPTY_STRING, &EMPTY_STRING, true)
     }
 
-    pub fn register_union_by_id<T: 'static + StructSerializer + Serializer + ForyDefault>(
+    pub fn register_union<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
         id: u32,
     ) -> Result<(), Error> {
         if T::fory_static_type_id() != TypeId::UNION {
             return Err(Error::not_allowed(
-                "register_union_by_id requires a union-compatible enum type",
+                "register_union requires a union-compatible enum type",
             ));
         }
         self.register_struct_type::<T>(id, &EMPTY_STRING, &EMPTY_STRING, true)
@@ -1035,7 +1035,7 @@ impl TypeResolver {
         Ok(())
     }
 
-    pub fn register_serializer_by_id<T: Serializer + ForyDefault>(
+    pub fn register_serializer<T: Serializer + ForyDefault>(
         &mut self,
         id: u32,
     ) -> Result<(), Error> {

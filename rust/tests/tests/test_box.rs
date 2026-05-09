@@ -53,7 +53,7 @@ fn test_box_struct() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_id::<Person>(999).unwrap();
+    fory.register::<Person>(999).unwrap();
 
     let person = Person {
         name: "John Doe".to_string(),
@@ -76,7 +76,7 @@ fn test_box_struct_separate() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_id::<Person>(999).unwrap();
+    fory.register::<Person>(999).unwrap();
 
     // Test serializing the Box<Person> directly, not as a field
     let person = Person {

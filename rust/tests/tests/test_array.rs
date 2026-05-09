@@ -257,8 +257,8 @@ register_trait_type!(Shape, Circle, Rectangle);
 #[test]
 fn test_array_box_trait_objects() {
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register_by_id::<Circle>(9001).unwrap();
-    fory.register_by_id::<Rectangle>(9002).unwrap();
+    fory.register::<Circle>(9001).unwrap();
+    fory.register::<Rectangle>(9002).unwrap();
 
     // Create an array of Box<dyn Shape>
     let shapes: [Box<dyn Shape>; 3] = [
@@ -336,8 +336,8 @@ fn test_struct_with_vec_of_arrays() {
 #[test]
 fn test_array_rc_trait_objects() {
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register_by_id::<Circle>(9001).unwrap();
-    fory.register_by_id::<Rectangle>(9002).unwrap();
+    fory.register::<Circle>(9001).unwrap();
+    fory.register::<Rectangle>(9002).unwrap();
 
     // Create Rc<dyn Shape> instances and convert to wrappers
     let circle1: Rc<dyn Shape> = Rc::new(Circle { radius: 2.0 });

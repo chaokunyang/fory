@@ -1005,7 +1005,7 @@ class RustGenerator(BaseGenerator):
         reg_name = self.get_registration_type_name(enum.name, parent_stack)
 
         if self.should_register_by_id(enum):
-            lines.append(f"    fory.register_by_id::<{type_name}>({enum.type_id})?;")
+            lines.append(f"    fory.register::<{type_name}>({enum.type_id})?;")
         else:
             ns = self.package or "default"
             lines.append(
@@ -1041,7 +1041,7 @@ class RustGenerator(BaseGenerator):
 
         # Register this message
         if self.should_register_by_id(message):
-            lines.append(f"    fory.register_by_id::<{type_name}>({message.type_id})?;")
+            lines.append(f"    fory.register::<{type_name}>({message.type_id})?;")
         else:
             ns = self.package or "default"
             lines.append(
@@ -1059,7 +1059,7 @@ class RustGenerator(BaseGenerator):
         reg_name = self.get_registration_type_name(union.name, parent_stack)
 
         if self.should_register_by_id(union):
-            lines.append(f"    fory.register_union_by_id::<{type_name}>({union.type_id})?;")
+            lines.append(f"    fory.register_union::<{type_name}>({union.type_id})?;")
         else:
             ns = self.package or "default"
             lines.append(

@@ -102,9 +102,9 @@
 //!
 //! # fn main() {
 //! let mut fory = Fory::builder().compatible(true).build();
-//! fory.register_by_id::<Dog>(100);
-//! fory.register_by_id::<Cat>(101);
-//! fory.register_by_id::<Zoo>(102);
+//! fory.register::<Dog>(100);
+//! fory.register::<Cat>(101);
+//! fory.register::<Zoo>(102);
 //!
 //! let zoo = Zoo {
 //!     star_animal: Box::new(Dog { name: "Buddy".to_string() }),
@@ -171,7 +171,7 @@
 //! let deserialized_map: HashMap<String, i32> = fory.deserialize(&serialized_map).unwrap();
 //! assert_eq!(map, deserialized_map);
 //! // Register types for object serialization
-//! // fory.register_by_id::<MyStruct>(type_id);
+//! // fory.register::<MyStruct>(type_id);
 //!
 //! // Use row-based serialization for zero-copy operations
 //! // let row_data = to_row(&my_data);

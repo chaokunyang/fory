@@ -286,7 +286,7 @@ fn container_outer_auto_conv() {
 #[test]
 fn collection_inner() {
     let mut fory1 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item>(101).unwrap();
+    fory1.register::<Item>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).build();
     fory2.register_by_name::<Item>("", "item").unwrap();
     for fory in [fory1, fory2] {
@@ -349,7 +349,7 @@ fn collection_inner() {
 #[test]
 fn collection_inner_auto_conv() {
     let mut fory1 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item>(101).unwrap();
+    fory1.register::<Item>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).build();
     fory2.register_by_name::<Item>("", "item").unwrap();
     for fory in [fory1, fory2] {
@@ -417,7 +417,7 @@ fn collection_inner_auto_conv() {
 #[test]
 fn map_inner() {
     let mut fory1 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item>(101).unwrap();
+    fory1.register::<Item>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).build();
     fory2.register_by_name::<Item>("", "item").unwrap();
     for fory in [fory1, fory2] {
@@ -454,7 +454,7 @@ fn map_inner() {
 #[test]
 fn map_inner_auto_conv() {
     let mut fory1 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item>(101).unwrap();
+    fory1.register::<Item>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).build();
     fory2.register_by_name::<Item>("", "item").unwrap();
     for fory in [fory1, fory2] {
@@ -494,7 +494,7 @@ fn map_inner_auto_conv() {
 #[test]
 fn complex() {
     let mut fory1 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item>(101).unwrap();
+    fory1.register::<Item>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).build();
     fory2.register_by_name::<Item>("", "item").unwrap();
     for fory in [fory1, fory2] {

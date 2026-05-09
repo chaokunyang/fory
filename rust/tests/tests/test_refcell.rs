@@ -28,7 +28,7 @@ struct Simple {
 #[test]
 fn test_rc_refcell_simple() {
     let mut fory = Fory::default();
-    fory.register_by_id::<Simple>(3000).unwrap();
+    fory.register::<Simple>(3000).unwrap();
 
     let node = Rc::new(RefCell::new(Simple { value: 42 }));
     let serialized = fory.serialize(&node).unwrap();
@@ -45,8 +45,8 @@ struct Parent {
 #[test]
 fn test_rc_refcell_in_struct() {
     let mut fory = Fory::default();
-    fory.register_by_id::<Simple>(3001).unwrap();
-    fory.register_by_id::<Parent>(3002).unwrap();
+    fory.register::<Simple>(3001).unwrap();
+    fory.register::<Parent>(3002).unwrap();
 
     let child = Rc::new(RefCell::new(Simple { value: 99 }));
     let parent = Parent {

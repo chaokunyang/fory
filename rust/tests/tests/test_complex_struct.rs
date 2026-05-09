@@ -41,8 +41,8 @@ use std::collections::HashMap;
 //     };
 //
 //     let mut fory = Fory::default();
-//     fory.register_by_id::<Animal>(999);
-//     fory.register_by_id::<Person>(1000);
+//     fory.register::<Animal>(999);
+//     fory.register::<Person>(1000);
 //     let bin = fory.serialize(&person);
 //     let obj: Person = fory.deserialize(&bin).expect("");
 //     assert!(obj.f1.is::<Animal>())
@@ -58,7 +58,7 @@ fn enum_without_payload() {
         Blue,
     }
     let mut fory = Fory::default();
-    fory.register_by_id::<Color>(999).unwrap();
+    fory.register::<Color>(999).unwrap();
     let color = Color::Red;
     let bin = fory.serialize(&color).unwrap();
     let color2: Color = fory.deserialize(&bin).expect("");
@@ -109,8 +109,8 @@ fn complex_struct() {
         c6: 4.0,
     };
     let mut fory = Fory::default();
-    fory.register_by_id::<Animal>(899).unwrap();
-    fory.register_by_id::<Person>(999).unwrap();
+    fory.register::<Animal>(899).unwrap();
+    fory.register::<Person>(999).unwrap();
     let bin: Vec<u8> = fory.serialize(&person).unwrap();
     let obj: Person = fory.deserialize(&bin).expect("should success");
     assert_eq!(person, obj);
@@ -142,8 +142,8 @@ fn encode_to_obin() {
         f10: HashMap<i32, f64>,
     }
     let mut fory = Fory::default();
-    fory.register_by_id::<Person>(999).unwrap();
-    fory.register_by_id::<Animal>(899).unwrap();
+    fory.register::<Person>(999).unwrap();
+    fory.register::<Animal>(899).unwrap();
     let bin: Vec<u8> = fory
         .serialize(&Person {
             f1: "Hello".to_string(),

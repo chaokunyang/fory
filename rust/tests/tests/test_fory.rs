@@ -36,8 +36,8 @@ fn test_nested_struct_register_order() {
     let mut fory = Fory::default();
     // outer struct registered first. building fields info should be executed lazily,
     // otherwise the inner struct won't be found.
-    fory.register_by_id::<Data1>(100).unwrap();
-    fory.register_by_id::<Data2>(101).unwrap();
+    fory.register::<Data1>(100).unwrap();
+    fory.register::<Data2>(101).unwrap();
     let data = Data1 {
         value: 42,
         data2: Data2 { value: 24 },
@@ -56,7 +56,7 @@ fn test_serialize_to_appends_bytes() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_id::<Point>(100).unwrap();
+    fory.register::<Point>(100).unwrap();
     let p1 = Point { x: 1, y: 2 };
     let p2 = Point { x: -3, y: 4 };
 
@@ -91,8 +91,8 @@ fn test_serialize_to_detailed() {
     }
 
     let mut fory = Fory::default();
-    fory.register_by_id::<Point>(100).unwrap();
-    fory.register_by_id::<Line>(101).unwrap();
+    fory.register::<Point>(100).unwrap();
+    fory.register::<Line>(101).unwrap();
 
     // Test 1: Basic serialization to empty buffer
     let p1 = Point { x: 10, y: 20 };
@@ -270,7 +270,7 @@ fn test_unregistered_type_error_message() {
 
     let mut fory = Fory::default();
     // Register only the outer type; inner type is intentionally not registered
-    fory.register_by_id::<Outer>(200).unwrap();
+    fory.register::<Outer>(200).unwrap();
     let obj = Outer {
         v: 1,
         inner: Inner { v: 2 },

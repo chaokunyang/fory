@@ -222,10 +222,10 @@ struct AnyMapFixedKey {
 #[test]
 fn test_hashmap_fixed_key_rc_any_field_compatible() {
     let mut writer = Fory::builder().compatible(true).build();
-    writer.register_by_id::<AnyMapFixedKey>(700).unwrap();
+    writer.register::<AnyMapFixedKey>(700).unwrap();
 
     let mut reader = Fory::builder().compatible(true).build();
-    reader.register_by_id::<AnyMapVarKey>(700).unwrap();
+    reader.register::<AnyMapVarKey>(700).unwrap();
 
     let original = AnyMapFixedKey {
         values: HashMap::from([

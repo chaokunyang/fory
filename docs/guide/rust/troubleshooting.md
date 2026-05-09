@@ -33,12 +33,12 @@ This page covers common issues and debugging techniques for Apache Fory™ Rust.
 
 ```rust
 let mut fory = Fory::default();
-fory.register_by_id::<MyStruct>(100)?;  // Register before use
+fory.register::<MyStruct>(100)?;  // Register before use
 ```
 
 Confirm that:
 
-- Every serializable struct or trait implementation calls `fory.register_by_id::<T>(type_id)`
+- Every serializable struct or trait implementation calls `fory.register::<T>(type_id)`
 - The same IDs are reused on the deserialize side
 
 ### Type Mismatch Errors

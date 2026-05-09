@@ -48,8 +48,8 @@ fn test_simple() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Animal1>(999).unwrap();
-    fory2.register_by_id::<Animal2>(999).unwrap();
+    fory1.register::<Animal1>(999).unwrap();
+    fory2.register::<Animal2>(999).unwrap();
     let animal: Animal1 = Animal1 {
         f1: HashMap::from([(1, vec![2])]),
         f2: String::from("hello"),

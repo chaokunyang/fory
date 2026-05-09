@@ -47,8 +47,8 @@ fn simple() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Animal1>(999).unwrap();
-    fory2.register_by_id::<Animal2>(999).unwrap();
+    fory1.register::<Animal1>(999).unwrap();
+    fory2.register::<Animal2>(999).unwrap();
     let animal: Animal1 = Animal1 {
         f1: HashMap::from([(1, vec![2])]),
         f2: String::from("hello"),
@@ -101,8 +101,8 @@ fn compatible_list_array_field_pairs() {
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();
-    writer.register_by_id::<ListPayload>(991).unwrap();
-    reader.register_by_id::<ArrayPayload>(991).unwrap();
+    writer.register::<ListPayload>(991).unwrap();
+    reader.register::<ArrayPayload>(991).unwrap();
     let bytes = writer
         .serialize(&ListPayload {
             payload: vec![1, 2, 3],
@@ -113,8 +113,8 @@ fn compatible_list_array_field_pairs() {
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();
-    writer.register_by_id::<ArrayPayload>(992).unwrap();
-    reader.register_by_id::<ListPayload>(992).unwrap();
+    writer.register::<ArrayPayload>(992).unwrap();
+    reader.register::<ListPayload>(992).unwrap();
     let bytes = writer
         .serialize(&ArrayPayload {
             payload: vec![1, 2, 3],
@@ -125,8 +125,8 @@ fn compatible_list_array_field_pairs() {
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();
-    writer.register_by_id::<NullableListPayload>(993).unwrap();
-    reader.register_by_id::<ArrayPayload>(993).unwrap();
+    writer.register::<NullableListPayload>(993).unwrap();
+    reader.register::<ArrayPayload>(993).unwrap();
     let bytes = writer
         .serialize(&NullableListPayload {
             payload: vec![Some(1), Some(2), Some(3)],
@@ -151,8 +151,8 @@ fn compatible_list_array_field_pairs() {
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();
-    writer.register_by_id::<NestedListPayload>(994).unwrap();
-    reader.register_by_id::<NestedArrayPayload>(994).unwrap();
+    writer.register::<NestedListPayload>(994).unwrap();
+    reader.register::<NestedArrayPayload>(994).unwrap();
     let bytes = writer
         .serialize(&NestedListPayload {
             payload: vec![vec![1, 2], vec![3]],
@@ -179,8 +179,8 @@ fn skip_option() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item1>(999).unwrap();
-    fory2.register_by_id::<Item2>(999).unwrap();
+    fory1.register::<Item1>(999).unwrap();
+    fory2.register::<Item2>(999).unwrap();
     let item1 = Item1 {
         f1: None,
         f2: Some(String::from("f2")),
@@ -218,10 +218,10 @@ fn nonexistent_struct() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item1>(899).unwrap();
-    fory1.register_by_id::<Person1>(999).unwrap();
-    fory2.register_by_id::<Item2>(799).unwrap();
-    fory2.register_by_id::<Person2>(999).unwrap();
+    fory1.register::<Item1>(899).unwrap();
+    fory1.register::<Person1>(999).unwrap();
+    fory2.register::<Item2>(799).unwrap();
+    fory2.register::<Person2>(999).unwrap();
     let person = Person1 {
         f2: Item1 { f1: 42 },
         f3: 24,
@@ -249,7 +249,7 @@ fn option() {
         last: i64,
     }
     let mut fory = Fory::builder().compatible(true).build();
-    fory.register_by_id::<Animal>(999).unwrap();
+    fory.register::<Animal>(999).unwrap();
     let animal: Animal = Animal {
         f1: Some(String::from("f1")),
         f2: None,
@@ -294,8 +294,8 @@ fn nullable() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item1>(999).unwrap();
-    fory2.register_by_id::<Item2>(999).unwrap();
+    fory1.register::<Item1>(999).unwrap();
+    fory2.register::<Item2>(999).unwrap();
 
     let item1 = Item1 {
         f2: 43,
@@ -348,8 +348,8 @@ fn nullable_container() {
 
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item1>(999).unwrap();
-    fory2.register_by_id::<Item2>(999).unwrap();
+    fory1.register::<Item1>(999).unwrap();
+    fory2.register::<Item2>(999).unwrap();
 
     let item1 = Item1 {
         f1: vec![44, 45],
@@ -400,8 +400,8 @@ fn inner_nullable() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item1>(999).unwrap();
-    fory2.register_by_id::<Item2>(999).unwrap();
+    fory1.register::<Item1>(999).unwrap();
+    fory2.register::<Item2>(999).unwrap();
 
     let item1 = Item1 {
         f1: vec![None, Some("hello".to_string())],
@@ -447,10 +447,10 @@ fn nullable_struct() {
     }
     let mut fory1 = Fory::builder().compatible(true).build();
     let mut fory2 = Fory::builder().compatible(true).build();
-    fory1.register_by_id::<Item>(199).unwrap();
-    fory1.register_by_id::<Person1>(200).unwrap();
-    fory2.register_by_id::<Item>(199).unwrap();
-    fory2.register_by_id::<Person2>(200).unwrap();
+    fory1.register::<Item>(199).unwrap();
+    fory1.register::<Person1>(200).unwrap();
+    fory2.register::<Item>(199).unwrap();
+    fory2.register::<Person2>(200).unwrap();
 
     let person1 = Person1 {
         f1: Item {
@@ -523,13 +523,13 @@ fn enum_without_payload() {
     }
 
     let mut fory1 = Fory::builder().compatible(true).xlang(true).build();
-    fory1.register_by_id::<Color1>(101).unwrap();
-    fory1.register_by_id::<Color2>(102).unwrap();
-    fory1.register_by_id::<Person1>(103).unwrap();
+    fory1.register::<Color1>(101).unwrap();
+    fory1.register::<Color2>(102).unwrap();
+    fory1.register::<Person1>(103).unwrap();
     let mut fory2 = Fory::builder().compatible(true).xlang(true).build();
-    fory2.register_by_id::<Color1>(101).unwrap();
-    fory2.register_by_id::<Color2>(102).unwrap();
-    fory2.register_by_id::<Person2>(103).unwrap();
+    fory2.register::<Color1>(101).unwrap();
+    fory2.register::<Color2>(102).unwrap();
+    fory2.register::<Person2>(103).unwrap();
 
     let person1 = Person1 {
         f1: Color1::Blue,
@@ -590,10 +590,10 @@ fn named_enum() {
     }
     let mut fory1 = Fory::builder().compatible(true).xlang(true).build();
     fory1.register_by_name::<Color>("", "a").unwrap();
-    fory1.register_by_id::<Item1>(101).unwrap();
+    fory1.register::<Item1>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).xlang(true).build();
     fory2.register_by_name::<Color>("", "a").unwrap();
-    fory2.register_by_id::<Item2>(101).unwrap();
+    fory2.register::<Item2>(101).unwrap();
     let item1 = Item1 {
         f1: Color::Red,
         f2: Color::Blue,
@@ -645,9 +645,9 @@ fn boxed() {
     }
 
     let mut fory1 = Fory::builder().compatible(true).xlang(true).build();
-    fory1.register_by_id::<Item1>(101).unwrap();
+    fory1.register::<Item1>(101).unwrap();
     let mut fory2 = Fory::builder().compatible(true).xlang(true).build();
-    fory2.register_by_id::<Item2>(101).unwrap();
+    fory2.register::<Item2>(101).unwrap();
 
     let f1 = 1;
     let f2 = 2;
@@ -765,10 +765,10 @@ fn test_struct_with_generic() {
     let mut fory3 = Fory::builder().xlang(true).compatible(false).build();
 
     fn inner_test(fory: &mut Fory) -> Result<(), Error> {
-        fory.register_by_id::<MyStruct>(1)?;
-        fory.register_by_id::<Another>(2)?;
-        fory.register_serializer_by_id::<Wrapper<Another>>(3)?;
-        fory.register_serializer_by_id::<Wrapper<i32>>(4)?;
+        fory.register::<MyStruct>(1)?;
+        fory.register::<Another>(2)?;
+        fory.register_serializer::<Wrapper<Another>>(3)?;
+        fory.register_serializer::<Wrapper<i32>>(4)?;
 
         let w1 = Wrapper::<Another> {
             value: "Value1".into(),

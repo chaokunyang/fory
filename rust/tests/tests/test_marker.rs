@@ -40,7 +40,7 @@ struct StructWithPhantom {
 #[test]
 fn test_struct_with_phantom_data() {
     let mut fory = Fory::default();
-    fory.register_by_id::<StructWithPhantom>(100).unwrap();
+    fory.register::<StructWithPhantom>(100).unwrap();
 
     let value = StructWithPhantom {
         name: "test".to_string(),
@@ -64,8 +64,7 @@ struct StructWithMultiplePhantom {
 #[test]
 fn test_struct_with_multiple_phantom_data() {
     let mut fory = Fory::default();
-    fory.register_by_id::<StructWithMultiplePhantom>(101)
-        .unwrap();
+    fory.register::<StructWithMultiplePhantom>(101).unwrap();
 
     let value = StructWithMultiplePhantom {
         name: "test".to_string(),
@@ -95,8 +94,8 @@ struct OuterWithPhantom {
 #[test]
 fn test_nested_struct_with_phantom_data() {
     let mut fory = Fory::default();
-    fory.register_by_id::<InnerWithPhantom>(102).unwrap();
-    fory.register_by_id::<OuterWithPhantom>(103).unwrap();
+    fory.register::<InnerWithPhantom>(102).unwrap();
+    fory.register::<OuterWithPhantom>(103).unwrap();
 
     let value = OuterWithPhantom {
         inner: InnerWithPhantom {

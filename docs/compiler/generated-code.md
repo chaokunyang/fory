@@ -388,13 +388,13 @@ Generated registration function:
 
 ```rust
 pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {
-    fory.register_union_by_id::<Animal>(106)?;
-    fory.register_by_id::<person::PhoneType>(101)?;
-    fory.register_by_id::<person::PhoneNumber>(102)?;
-    fory.register_by_id::<Person>(100)?;
-    fory.register_by_id::<Dog>(104)?;
-    fory.register_by_id::<Cat>(105)?;
-    fory.register_by_id::<AddressBook>(103)?;
+    fory.register_union::<Animal>(106)?;
+    fory.register::<person::PhoneType>(101)?;
+    fory.register::<person::PhoneNumber>(102)?;
+    fory.register::<Person>(100)?;
+    fory.register::<Dog>(104)?;
+    fory.register::<Cat>(105)?;
+    fory.register::<AddressBook>(103)?;
     Ok(())
 }
 ```
@@ -402,11 +402,11 @@ pub fn register_types(fory: &mut Fory) -> Result<(), fory::Error> {
 For schemas without explicit `[id=...]`, generated registration uses computed numeric IDs:
 
 ```rust
-fory.register_by_id::<Status>(1124725126)?;
-fory.register_union_by_id::<Wrapper>(1471345060)?;
-fory.register_by_id::<Envelope>(3022445236)?;
-fory.register_union_by_id::<envelope::Detail>(1609214087)?;
-fory.register_by_id::<envelope::Payload>(2862577837)?;
+fory.register::<Status>(1124725126)?;
+fory.register_union::<Wrapper>(1471345060)?;
+fory.register::<Envelope>(3022445236)?;
+fory.register_union::<envelope::Detail>(1609214087)?;
+fory.register::<envelope::Payload>(2862577837)?;
 ```
 
 If `option enable_auto_type_id = false;` is set:

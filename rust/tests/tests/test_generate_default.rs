@@ -42,7 +42,7 @@ impl Default for NodeWithCustomDefault {
 #[test]
 fn test_no_default_conflict() {
     let mut fory = Fory::default();
-    fory.register_by_id::<NodeWithCustomDefault>(1).unwrap();
+    fory.register::<NodeWithCustomDefault>(1).unwrap();
 
     let node = NodeWithCustomDefault {
         addr: "192.168.1.1:3000".to_string(),
@@ -81,7 +81,7 @@ impl Default for StatusWithCustomDefault {
 #[test]
 fn test_enum_no_default_conflict() {
     let mut fory = Fory::default();
-    fory.register_by_id::<StatusWithCustomDefault>(2).unwrap();
+    fory.register::<StatusWithCustomDefault>(2).unwrap();
 
     let status = StatusWithCustomDefault::Active;
     let bytes = fory.serialize(&status).unwrap();
@@ -106,8 +106,7 @@ struct StructWithGeneratedDefault {
 #[test]
 fn test_generate_default_struct() {
     let mut fory = Fory::default();
-    fory.register_by_id::<StructWithGeneratedDefault>(3)
-        .unwrap();
+    fory.register::<StructWithGeneratedDefault>(3).unwrap();
 
     let data = StructWithGeneratedDefault { value: 42 };
     let bytes = fory.serialize(&data).unwrap();
@@ -131,7 +130,7 @@ enum EnumWithGeneratedDefault {
 #[test]
 fn test_generate_default_enum() {
     let mut fory = Fory::default();
-    fory.register_by_id::<EnumWithGeneratedDefault>(4).unwrap();
+    fory.register::<EnumWithGeneratedDefault>(4).unwrap();
 
     let data = EnumWithGeneratedDefault::Second;
     let bytes = fory.serialize(&data).unwrap();
@@ -159,8 +158,7 @@ impl Default for StructWithoutGeneratedDefault {
 #[test]
 fn test_generate_default_false() {
     let mut fory = Fory::default();
-    fory.register_by_id::<StructWithoutGeneratedDefault>(5)
-        .unwrap();
+    fory.register::<StructWithoutGeneratedDefault>(5).unwrap();
 
     let data = StructWithoutGeneratedDefault { value: 42 };
     let bytes = fory.serialize(&data).unwrap();

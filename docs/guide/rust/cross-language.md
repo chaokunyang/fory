@@ -32,7 +32,7 @@ let mut fory = Fory::builder()
     .xlang(true).build();
 
 // Register types with consistent IDs across languages
-fory.register_by_id::<MyStruct>(100);
+fory.register::<MyStruct>(100);
 
 // Or use name-based registration
 fory.register_by_name::<MyStruct>("com.example", "MyStruct");
@@ -49,7 +49,7 @@ let mut fory = Fory::builder()
     .compatible(true)
     .xlang(true).build();
 
-fory.register_by_id::<User>(100);  // Same ID in Java, Python, etc.
+fory.register::<User>(100);  // Same ID in Java, Python, etc.
 ```
 
 ### Register by Name
@@ -78,7 +78,7 @@ let mut fory = Fory::builder()
     .compatible(true)
     .xlang(true).build();
 
-fory.register_by_id::<Person>(100);
+fory.register::<Person>(100);
 
 let person = Person {
     name: "Alice".to_string(),

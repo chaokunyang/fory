@@ -48,10 +48,10 @@ struct PersonV2 {
 }
 
 let mut fory1 = Fory::builder().compatible(true).build();
-fory1.register_by_id::<PersonV1>(1);
+fory1.register::<PersonV1>(1);
 
 let mut fory2 = Fory::builder().compatible(true).build();
-fory2.register_by_id::<PersonV2>(1);
+fory2.register::<PersonV2>(1);
 
 let person_v1 = PersonV1 {
     name: "Alice".to_string(),
@@ -121,7 +121,7 @@ enum Value {
 }
 
 let mut fory = Fory::default();
-fory.register_by_id::<Value>(1)?;
+fory.register::<Value>(1)?;
 
 let value = Value::Object { name: "score".to_string(), value: 100 };
 let bytes = fory.serialize(&value)?;

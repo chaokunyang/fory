@@ -68,7 +68,7 @@ where
 #[test]
 fn test_leader_id_with_associated_types() {
     let mut fory = Fory::default();
-    fory.register_by_id::<LeaderId<TestConfig>>(100).unwrap();
+    fory.register::<LeaderId<TestConfig>>(100).unwrap();
 
     let leader_id: LeaderId<TestConfig> = LeaderId {
         term: 1,
@@ -84,7 +84,7 @@ fn test_leader_id_with_associated_types() {
 #[test]
 fn test_leader_id_default_values() {
     let mut fory = Fory::default();
-    fory.register_by_id::<LeaderId<TestConfig>>(100).unwrap();
+    fory.register::<LeaderId<TestConfig>>(100).unwrap();
 
     let leader_id: LeaderId<TestConfig> = LeaderId {
         term: 0,
@@ -100,7 +100,7 @@ fn test_leader_id_default_values() {
 #[test]
 fn test_vec_of_leader_ids() {
     let mut fory = Fory::default();
-    fory.register_by_id::<LeaderId<TestConfig>>(100).unwrap();
+    fory.register::<LeaderId<TestConfig>>(100).unwrap();
 
     let leader_ids: Vec<LeaderId<TestConfig>> = vec![
         LeaderId {
@@ -126,7 +126,7 @@ fn test_vec_of_leader_ids() {
 #[test]
 fn test_option_leader_id() {
     let mut fory = Fory::default();
-    fory.register_by_id::<LeaderId<TestConfig>>(100).unwrap();
+    fory.register::<LeaderId<TestConfig>>(100).unwrap();
 
     // Test with Some value
     let some_leader: Option<LeaderId<TestConfig>> = Some(LeaderId {

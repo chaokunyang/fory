@@ -108,7 +108,7 @@ fn debug_hooks_trigger_for_struct() {
     set_after_read_field_func(after_read);
 
     let mut fory = Fory::default();
-    fory.register_by_id::<DebugSample>(4001).unwrap();
+    fory.register::<DebugSample>(4001).unwrap();
     let sample = DebugSample {
         a: 7,
         b: "debug".to_string(),
@@ -151,7 +151,7 @@ fn debug_hooks_trigger_for_struct() {
     event_log().lock().unwrap().clear();
 
     let mut fory_compat = Fory::builder().compatible(true).build();
-    fory_compat.register_by_id::<DebugSample>(4001).unwrap();
+    fory_compat.register::<DebugSample>(4001).unwrap();
     let compat_bytes = fory_compat.serialize(&sample).unwrap();
     let _: DebugSample = fory_compat.deserialize(compat_bytes.as_slice()).unwrap();
 

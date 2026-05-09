@@ -65,7 +65,7 @@ struct SetContainer {
 #[test]
 fn test_set_container() {
     let mut fory: Fory = Fory::default();
-    fory.register_by_id::<SetContainer>(100).unwrap();
+    fory.register::<SetContainer>(100).unwrap();
 
     let mut btree = BTreeSet::new();
     btree.insert("apple".to_string());
@@ -104,7 +104,7 @@ struct HeapContainer {
 #[test]
 fn test_heap_container() {
     let mut fory: Fory = Fory::default();
-    fory.register_by_id::<HeapContainer>(100).unwrap();
+    fory.register::<HeapContainer>(100).unwrap();
 
     let mut binary_heap = BinaryHeap::new();
     binary_heap.push(3);

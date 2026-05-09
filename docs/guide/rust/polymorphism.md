@@ -65,9 +65,9 @@ struct Zoo {
 }
 
 let mut fory = Fory::builder().compatible(true).build();
-fory.register_by_id::<Dog>(100);
-fory.register_by_id::<Cat>(101);
-fory.register_by_id::<Zoo>(102);
+fory.register::<Dog>(100);
+fory.register::<Cat>(101);
+fory.register::<Zoo>(102);
 
 let zoo = Zoo {
     star_animal: Box::new(Dog {
@@ -154,9 +154,9 @@ struct AnimalShelter {
 }
 
 let mut fory = Fory::builder().compatible(true).build();
-fory.register_by_id::<Dog>(100);
-fory.register_by_id::<Cat>(101);
-fory.register_by_id::<AnimalShelter>(102);
+fory.register::<Dog>(100);
+fory.register::<Cat>(101);
+fory.register::<AnimalShelter>(102);
 
 let shelter = AnimalShelter {
     animals_rc: vec![

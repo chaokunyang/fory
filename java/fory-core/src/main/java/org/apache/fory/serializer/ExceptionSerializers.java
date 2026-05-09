@@ -109,7 +109,7 @@ public final class ExceptionSerializers {
     public T read(ReadContext readContext) {
       Serializer[] slotsSerializers = getSlotsSerializers();
       StackTraceElement[] stackTrace = (StackTraceElement[]) readContext.readRef();
-      if (AndroidSupport.IS_ANDROID && !ThrowableFields.isDetailMessageWritable()) {
+      if (AndroidSupport.IS_ANDROID) {
         return readAndroidThrowableWithoutDetailMessageField(
             readContext, stackTrace, slotsSerializers);
       }
@@ -119,7 +119,7 @@ public final class ExceptionSerializers {
       String detailMessage = readContext.readStringRef();
       List<Throwable> suppressedExceptions = readSuppressedExceptions(readContext);
       skipExtraFields(readContext);
-      restoreDetailMessage(obj, detailMessage);
+      UnsafeOps.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
       if (stackTrace != null) {
         obj.setStackTrace(stackTrace);
       }
@@ -137,8 +137,8 @@ public final class ExceptionSerializers {
         throw new ForyException(
             "Android doesn't support deserializing Throwable type "
                 + type.getName()
-                + " without a String message constructor because Throwable.detailMessage is not "
-                + "reflectively writable.");
+                + " without a String message constructor because private JDK field access is "
+                + "unsupported.");
       }
       int refId = readContext.lastPreservedRefId();
       if (refId >= 0) {
@@ -152,7 +152,7 @@ public final class ExceptionSerializers {
         throw new ForyException(
             "Android doesn't support deserializing cyclic Throwable references for type "
                 + type.getName()
-                + " because Throwable.detailMessage is not reflectively writable.");
+                + " because private JDK field access is unsupported.");
       }
       T obj = newThrowableWithMessage(detailMessage);
       readContext.reference(obj);
@@ -190,14 +190,6 @@ public final class ExceptionSerializers {
                 + type.getName()
                 + " with a String message constructor.",
             t);
-      }
-    }
-
-    private void restoreDetailMessage(T obj, String detailMessage) {
-      if (AndroidSupport.IS_ANDROID) {
-        ThrowableFields.setDetailMessage(obj, detailMessage, type);
-      } else {
-        UnsafeOps.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
       }
     }
 
@@ -527,43 +519,6 @@ public final class ExceptionSerializers {
         DETAIL_MESSAGE_FIELD_OFFSET = UnsafeOps.UNSAFE.objectFieldOffset(detailMessageField);
       } catch (Exception e) {
         throw new RuntimeException(e);
-      }
-    }
-  }
-
-  private static final class ThrowableFields {
-    private static final Field DETAIL_MESSAGE_FIELD = getDetailMessageField();
-
-    private static boolean isDetailMessageWritable() {
-      return DETAIL_MESSAGE_FIELD != null;
-    }
-
-    private static Field getDetailMessageField() {
-      try {
-        Field detailMessageField = Throwable.class.getDeclaredField("detailMessage");
-        detailMessageField.setAccessible(true);
-        return detailMessageField;
-      } catch (RuntimeException | NoSuchFieldException e) {
-        return null;
-      }
-    }
-
-    private static void setDetailMessage(
-        Throwable throwable, String detailMessage, Class<?> throwableType) {
-      if (DETAIL_MESSAGE_FIELD == null) {
-        throw new ForyException(
-            "Android doesn't support restoring Throwable message for type "
-                + throwableType.getName()
-                + " because Throwable.detailMessage is not reflectively accessible.");
-      }
-      try {
-        DETAIL_MESSAGE_FIELD.set(throwable, detailMessage);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw new ForyException(
-            "Android doesn't support restoring Throwable message for type "
-                + throwableType.getName()
-                + " because Throwable.detailMessage is not reflectively writable.",
-            e);
       }
     }
   }

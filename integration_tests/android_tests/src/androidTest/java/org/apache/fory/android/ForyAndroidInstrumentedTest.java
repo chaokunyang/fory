@@ -22,12 +22,17 @@ package org.apache.fory.android;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.Serializable;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.util.ArrayList;
@@ -101,6 +106,27 @@ public class ForyAndroidInstrumentedTest {
     Object copy = roundTrip(fory, value);
 
     assertEquals(value, copy);
+  }
+
+  @Test
+  public void jdkProxyCycleRoundTripAndCopy() {
+    Fory fory = nativeBuilder().build();
+    AndroidProxyHandler handler = new AndroidProxyHandler();
+    AndroidProxyService proxy =
+        (AndroidProxyService)
+            Proxy.newProxyInstance(
+                AndroidProxyService.class.getClassLoader(),
+                new Class[] {AndroidProxyService.class},
+                handler);
+    handler.proxy = proxy;
+
+    AndroidProxyService copy = roundTrip(fory, proxy);
+    assertEquals(42, copy.value());
+    assertSame(copy, copy.self());
+
+    AndroidProxyService copiedAgain = fory.copy(proxy);
+    assertEquals(42, copiedAgain.value());
+    assertSame(copiedAgain, copiedAgain.self());
   }
 
   @Test
@@ -312,6 +338,36 @@ public class ForyAndroidInstrumentedTest {
       value.name = readContext.readString();
       value.api = readContext.getBuffer().readVarInt32();
       return value;
+    }
+  }
+
+  public interface AndroidProxyService {
+    int value();
+
+    AndroidProxyService self();
+  }
+
+  public static final class AndroidProxyHandler implements InvocationHandler, Serializable {
+    public AndroidProxyService proxy;
+
+    public AndroidProxyHandler() {}
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) {
+      switch (method.getName()) {
+        case "value":
+          return 42;
+        case "self":
+          return this.proxy;
+        case "toString":
+          return "AndroidProxyService";
+        case "hashCode":
+          return System.identityHashCode(proxy);
+        case "equals":
+          return proxy == args[0];
+        default:
+          throw new UnsupportedOperationException(method.toString());
+      }
     }
   }
 

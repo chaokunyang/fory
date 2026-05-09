@@ -56,6 +56,9 @@ Unsupported or removed behavior:
 - Raw-address direct `ByteBuffer` zero-copy.
 - Raw unsafe `MemoryBuffer` copy APIs remain JVM-only and throw on Android.
 - `java/fory-format` row-format APIs, including direct-memory binary row copy paths.
+- Field type-use annotation metadata that depends on `Field#getAnnotatedType()` on the JVM.
+  Android API 26 field metadata uses generic field types and field annotations exposed by Android
+  reflection.
 - Object deserialization that cannot be completed through reflection.
 
 ## Codegen

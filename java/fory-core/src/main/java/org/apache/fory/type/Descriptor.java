@@ -153,7 +153,7 @@ public class Descriptor {
   private Descriptor(Field field, Method readMethod) {
     this.field = field;
     // Compute typeRef from field's generic type to include generic info
-    this.typeRef = TypeRef.of(field.getAnnotatedType());
+    this.typeRef = TypeUtils.getFieldTypeRef(field);
     // Use typeRef.getType().getTypeName() to include generic type info (e.g., Collection<Object>)
     // This ensures consistent typeName between serialization and deserialization.
     this.typeName = typeRef.getType().getTypeName();
@@ -309,7 +309,7 @@ public class Descriptor {
   public TypeRef<?> getTypeRef() {
     TypeRef<?> typeRef = this.typeRef;
     if (typeRef == null && field != null) {
-      this.typeRef = typeRef = TypeRef.of(field.getAnnotatedType());
+      this.typeRef = typeRef = TypeUtils.getFieldTypeRef(field);
     }
     return typeRef;
   }
@@ -579,11 +579,11 @@ public class Descriptor {
     } else if (TypeUtils.isCollection(fieldRawType) || TypeUtils.isMap(fieldRawType)) {
       // warm up generic type, sun.reflect.generics.repository.FieldRepository
       // is expensive.
-      compilationService.submit(() -> warmGenericTask(TypeRef.of(field.getAnnotatedType())));
+      compilationService.submit(() -> warmGenericTask(TypeUtils.getFieldTypeRef(field)));
     } else if (fieldRawType.isArray()) {
       Class<?> componentType = fieldRawType.getComponentType();
       if (!componentType.isPrimitive()) {
-        compilationService.submit(() -> warmGenericTask(TypeRef.of(field.getAnnotatedType())));
+        compilationService.submit(() -> warmGenericTask(TypeUtils.getFieldTypeRef(field)));
       }
     }
   }
@@ -674,7 +674,7 @@ public class Descriptor {
           setter = null;
         }
       }
-      TypeRef<?> fieldType = TypeRef.of(field.getAnnotatedType());
+      TypeRef<?> fieldType = TypeUtils.getFieldTypeRef(field);
       descriptorMap.put(field, new Descriptor(field, fieldType, getter, setter));
     }
     // Don't cache descriptors using a static `WeakHashMap<Class<?>, SortedMap<Field, Descriptor>>`，
@@ -697,7 +697,11 @@ public class Descriptor {
   }
 
   public static Annotation getAnnotation(Field field) {
-    return getTypeUseAnnotation(field.getAnnotatedType(), field.getName());
+    AnnotatedType annotatedType = TypeUtils.getFieldAnnotatedType(field);
+    if (annotatedType == null) {
+      return getAnnotation(field.getDeclaredAnnotations(), field.getName());
+    }
+    return getTypeUseAnnotation(annotatedType, field.getName());
   }
 
   public static Annotation getAnnotation(Annotation[] declaredAnnotations, String name) {

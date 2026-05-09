@@ -73,7 +73,7 @@ public class FieldGroups {
     List<Descriptor> descriptors = new ArrayList<>();
     for (Field field : fields) {
       if (!Modifier.isTransient(field.getModifiers()) && !Modifier.isStatic(field.getModifiers())) {
-        descriptors.add(new Descriptor(field, TypeRef.of(field.getAnnotatedType()), null, null));
+        descriptors.add(new Descriptor(field, TypeUtils.getFieldTypeRef(field), null, null));
       }
     }
     DescriptorGrouper descriptorGrouper =
@@ -248,7 +248,7 @@ public class FieldGroups {
       genericType = t;
       Field field = descriptor.getField();
       if (field != null) {
-        TypeUtils.applyRefTrackingOverride(t, field.getAnnotatedType(), resolver.trackingRef());
+        TypeUtils.applyFieldRefTrackingOverride(t, field, resolver.trackingRef());
       }
       if (needsClassInfoHolder(resolver, cls)) {
         classInfoHolder = resolver.nilTypeInfoHolder();

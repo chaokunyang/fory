@@ -299,7 +299,7 @@ public class TypeAnnotationUtils {
 
   public static int getBoxedListArrayTypeId(Field field) {
     validateBoxedListArrayType(field);
-    TypeRef<?> elementTypeRef = TypeUtils.getElementType(TypeRef.of(field.getAnnotatedType()));
+    TypeRef<?> elementTypeRef = TypeUtils.getElementType(TypeUtils.getFieldTypeRef(field));
     int typeId = getArrayTypeIdFromElementType(elementTypeRef);
     if (typeId == Types.UNKNOWN) {
       throw new IllegalArgumentException(

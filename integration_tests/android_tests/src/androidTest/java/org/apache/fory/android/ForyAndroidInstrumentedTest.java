@@ -110,7 +110,7 @@ public class ForyAndroidInstrumentedTest {
 
   @Test
   public void jdkProxyCycleRoundTripAndCopy() {
-    Fory fory = nativeBuilder().build();
+    Fory fory = nativeBuilder().withRefCopy(true).build();
     AndroidProxyHandler handler = new AndroidProxyHandler();
     AndroidProxyService proxy =
         (AndroidProxyService)

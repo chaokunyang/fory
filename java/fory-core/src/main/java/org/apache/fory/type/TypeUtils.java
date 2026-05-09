@@ -83,6 +83,7 @@ import org.apache.fory.collection.UInt32List;
 import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeParameter;
 import org.apache.fory.reflect.TypeRef;
@@ -627,6 +628,28 @@ public class TypeUtils {
         applyRefTrackingOverride(typeParameters[i], annotatedArgs[i], globalTrackingRef);
       }
     }
+  }
+
+  public static TypeRef<?> getFieldTypeRef(Field field) {
+    if (AndroidSupport.IS_ANDROID) {
+      return TypeRef.of(field.getGenericType());
+    }
+    return TypeRef.of(field.getAnnotatedType());
+  }
+
+  public static AnnotatedType getFieldAnnotatedType(Field field) {
+    if (AndroidSupport.IS_ANDROID) {
+      return null;
+    }
+    return field.getAnnotatedType();
+  }
+
+  public static void applyFieldRefTrackingOverride(
+      GenericType genericType, Field field, boolean globalTrackingRef) {
+    if (AndroidSupport.IS_ANDROID) {
+      return;
+    }
+    applyRefTrackingOverride(genericType, field.getAnnotatedType(), globalTrackingRef);
   }
 
   public static <E> TypeRef<ArrayList<E>> arrayListOf(Class<E> elemType) {

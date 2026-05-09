@@ -89,7 +89,7 @@ public class FieldTypes {
   /** Build field type from generics, nested generics will be extracted too. */
   public static FieldType buildFieldType(TypeResolver resolver, Field field) {
     Preconditions.checkNotNull(field);
-    GenericType genericType = resolver.buildGenericType(TypeRef.of(field.getAnnotatedType()));
+    GenericType genericType = resolver.buildGenericType(TypeUtils.getFieldTypeRef(field));
     return buildFieldType(resolver, field, genericType);
   }
 

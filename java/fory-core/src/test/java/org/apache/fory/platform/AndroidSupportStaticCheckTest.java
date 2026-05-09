@@ -35,6 +35,8 @@ import org.testng.annotations.Test;
 public class AndroidSupportStaticCheckTest {
   private static final Pattern DIRECT_CLASS_VALUE =
       Pattern.compile("\\bClassValue\\s*<|new\\s+ClassValue\\s*<");
+  private static final Pattern DIRECT_FIELD_GET_ANNOTATED_TYPE =
+      Pattern.compile("\\.getAnnotatedType\\s*\\(");
   private static final Pattern ANDROID_GATED_SCALA_COMPANION_LOOKUP =
       Pattern.compile(
           "AndroidSupport\\.IS_ANDROID\\s*\\?\\s*null\\s*:\\s*"
@@ -73,6 +75,35 @@ public class AndroidSupportStaticCheckTest {
     assertTrue(
         violations.isEmpty(),
         "Direct ClassValue usage is not Android-safe; use ClassValueCache instead: " + violations);
+  }
+
+  @Test
+  public void testFieldAnnotatedTypeAccessStaysAndroidGated() throws IOException {
+    Path sourceRoot = Paths.get("src/main/java/org/apache/fory");
+    List<String> violations = new ArrayList<>();
+    try (Stream<Path> paths = Files.walk(sourceRoot)) {
+      paths
+          .filter(path -> path.toString().endsWith(".java"))
+          .forEach(
+              path -> {
+                String relativePath = sourceRoot.relativize(path).toString().replace('\\', '/');
+                if ("type/TypeUtils.java".equals(relativePath)) {
+                  return;
+                }
+                try {
+                  String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+                  if (DIRECT_FIELD_GET_ANNOTATED_TYPE.matcher(source).find()) {
+                    violations.add(relativePath);
+                  }
+                } catch (IOException e) {
+                  throw new RuntimeException(e);
+                }
+              });
+    }
+    assertTrue(
+        violations.isEmpty(),
+        "Field#getAnnotatedType is absent on Android API 26; use TypeUtils field helpers: "
+            + violations);
   }
 
   @Test

@@ -50,7 +50,7 @@ exchange, and row-format random access.
 
 ## Performance
 
-**Java** ([benchmarks](docs/benchmarks/java))
+**Java** [Benchmarks](docs/benchmarks/java)
 
 In Java serialization benchmarks, Fory reaches up to **170x** the throughput of
 JDK serialization on selected workloads.
@@ -67,49 +67,49 @@ JDK serialization on selected workloads.
 <img src="docs/benchmarks/java/throughput.png" width="95%" alt="Java xlang throughput">
 </p>
 
-**Rust** ([benchmarks](benchmarks/rust))
+**Rust** [Benchmarks](benchmarks/rust)
 
 <p align="center">
 <img src="docs/benchmarks/rust/throughput.png" width="95%" alt="Rust serialization throughput">
 </p>
 
-**C++** ([benchmarks](benchmarks/cpp))
+**C++** [Benchmarks](benchmarks/cpp)
 
 <p align="center">
 <img src="docs/benchmarks/cpp/throughput.png" width="95%" alt="C++ serialization throughput">
 </p>
 
-**Go** ([benchmarks](benchmarks/go))
+**Go** [Benchmarks](benchmarks/go)
 
 <p align="center">
 <img src="docs/benchmarks/go/throughput.png" width="95%" alt="Go serialization throughput">
 </p>
 
-**Python** ([benchmarks](benchmarks/python))
+**Python** [Benchmarks](benchmarks/python)
 
 <p align="center">
 <img src="docs/benchmarks/python/throughput.png" width="95%" alt="Python serialization throughput">
 </p>
 
-**JavaScript/TypeScript** ([benchmarks](docs/benchmarks/javascript))
+**JavaScript/TypeScript** [Benchmarks](docs/benchmarks/javascript)
 
 <p align="center">
 <img src="docs/benchmarks/javascript/throughput.png" width="95%" alt="JavaScript serialization throughput">
 </p>
 
-**C#** ([benchmarks](docs/benchmarks/csharp))
+**C#** [Benchmarks](docs/benchmarks/csharp)
 
 <p align="center">
 <img src="docs/benchmarks/csharp/throughput.png" width="95%" alt="C# serialization throughput">
 </p>
 
-**Swift** ([benchmarks](docs/benchmarks/swift))
+**Swift** [Benchmarks](docs/benchmarks/swift)
 
 <p align="center">
 <img src="docs/benchmarks/swift/throughput.png" width="95%" alt="Swift serialization throughput">
 </p>
 
-**Dart** ([benchmarks](docs/benchmarks/dart))
+**Dart** [Benchmarks](docs/benchmarks/dart)
 
 <p align="center">
 <img src="docs/benchmarks/dart/throughput.png" width="95%" alt="Dart serialization throughput">
@@ -120,7 +120,7 @@ JDK serialization on selected workloads.
 Pick the runtime you use and run the package-manager command, or paste the
 dependency block into your build file.
 
-### Java
+**Java**
 
 Maven:
 
@@ -138,7 +138,7 @@ Gradle:
 implementation "org.apache.fory:fory-core:0.17.0"
 ```
 
-### Scala
+**Scala**
 
 sbt:
 
@@ -146,7 +146,7 @@ sbt:
 libraryDependencies += "org.apache.fory" %% "fory-scala" % "0.17.0"
 ```
 
-### Kotlin
+**Kotlin**
 
 Gradle:
 
@@ -164,7 +164,7 @@ Maven:
 </dependency>
 ```
 
-### Python
+**Python**
 
 ```bash
 pip install pyfory
@@ -176,7 +176,7 @@ For row-format support:
 pip install "pyfory[format]"
 ```
 
-### Rust
+**Rust**
 
 `Cargo.toml`:
 
@@ -185,7 +185,7 @@ pip install "pyfory[format]"
 fory = "0.17"
 ```
 
-### C++
+**C++**
 
 CMake:
 
@@ -217,13 +217,13 @@ deps = ["@fory//cpp/fory/serialization:fory_serialization"]
 See the [C++ installation guide](https://fory.apache.org/docs/guide/cpp/#installation)
 for complete CMake, Bazel, and source-build details.
 
-### Go
+**Go**
 
 ```bash
 go get github.com/apache/fory/go/fory
 ```
 
-### JavaScript/TypeScript
+**JavaScript/TypeScript**
 
 ```bash
 npm install @apache-fory/core
@@ -235,20 +235,20 @@ For the Node.js string fast path:
 npm install @apache-fory/core @apache-fory/hps
 ```
 
-### C#
+**C#**
 
 ```bash
 dotnet add package Apache.Fory --version 0.17.0
 ```
 
-### Dart
+**Dart**
 
 ```bash
 dart pub add fory:^0.17.0
 dart pub add dev:build_runner
 ```
 
-### Swift
+**Swift**
 
 Add Fory to `Package.swift`:
 
@@ -267,14 +267,14 @@ targets: [
 See the [Swift guide](https://fory.apache.org/docs/guide/swift/) for generated
 serializer setup.
 
-### Development from source
+**Development From Source**
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 Snapshots for Java, Scala, and Kotlin are available from
 `https://repository.apache.org/snapshots/` with the matching `-SNAPSHOT` version.
 
-## Choose a mode
+## Choose Serialization Mode
 
 | Mode                 | Use it when                                                   | Start here                                               |
 | -------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
@@ -300,13 +300,13 @@ For xlang, all peers must agree on type identity. Name-based registration is
 easier to read in examples. Numeric IDs are smaller and faster, but they require
 coordination across every reader and writer.
 
-## Quick start: xlang serialization
+## Cross-Language Serialization
 
 Xlang mode writes the cross-language Fory wire format. Bytes produced by one
 runtime can be read by another when the runtimes use the same type identity,
 compatible mode setting, and field schema.
 
-### Java
+**Java**
 
 ```java
 import org.apache.fory.Fory;
@@ -332,7 +332,7 @@ public class Example {
 }
 ```
 
-### Python
+**Python**
 
 ```python
 from dataclasses import dataclass
@@ -352,7 +352,7 @@ person = fory.deserialize(data)
 print(person.name)
 ```
 
-### Go
+**Go**
 
 ```go
 package main
@@ -383,7 +383,7 @@ func main() {
 }
 ```
 
-### Rust
+**Rust**
 
 ```rust
 use fory::{Error, Fory, ForyStruct};
@@ -408,7 +408,7 @@ fn main() -> Result<(), Error> {
 }
 ```
 
-### C++
+**C++**
 
 ```cpp
 #include "fory/serialization/fory.h"
@@ -434,7 +434,7 @@ int main() {
 }
 ```
 
-### JavaScript/TypeScript
+**JavaScript/TypeScript**
 
 ```ts
 import Fory, { Type } from "@apache-fory/core";
@@ -455,7 +455,7 @@ const person = deserialize(bytes);
 console.log(person.name);
 ```
 
-### C#
+**C#**
 
 ```csharp
 using Apache.Fory;
@@ -480,7 +480,7 @@ Console.WriteLine(person.Name);
 C# always writes the xlang frame header, so there is no separate xlang builder
 flag.
 
-### Dart
+**Dart**
 
 ```dart
 import 'package:fory/fory.dart';
@@ -521,7 +521,7 @@ running:
 dart run build_runner build --delete-conflicting-outputs
 ```
 
-### Swift
+**Swift**
 
 ```swift
 import Fory
@@ -540,7 +540,7 @@ let person: Person = try fory.deserialize(bytes)
 print(person.name)
 ```
 
-### Scala
+**Scala**
 
 ```scala
 import org.apache.fory.Fory
@@ -560,7 +560,7 @@ val person = fory.deserialize(bytes).asInstanceOf[Person]
 println(person.name)
 ```
 
-### Kotlin
+**Kotlin**
 
 ```kotlin
 import org.apache.fory.Fory
@@ -586,7 +586,7 @@ For shared/circular references, polymorphism, numeric IDs versus names, and
 type-mapping rules, see the [cross-language guide](docs/guide/xlang) and
 [type mapping specification](docs/specification/xlang_type_mapping.md).
 
-## Native mode: same-language serialization
+## Native Serialization
 
 Use native mode when the writer and reader are in the same language. Java and
 Python can serialize broader language-specific object graphs this way. The
@@ -656,13 +656,13 @@ KotlinSerializers.registerSerializers(fory)
 // Register, serialize, and deserialize as in the xlang example above.
 ```
 
-## Row format
+## Row Format
 
 Row format is for random access and partial reads. These examples encode an
 object with an integer array field, then read one array element from the binary
 row without rebuilding the object.
 
-### Python
+**Python**
 
 ```python
 from dataclasses import dataclass
@@ -684,7 +684,7 @@ print(row.name)
 print(row.scores[1])
 ```
 
-### Java
+**Java**
 
 ```java
 public class User {
@@ -719,7 +719,7 @@ deserialization, see the
 
 ## Documentation
 
-### User guides
+**User Guides**
 
 | Guide                 | Source                                                                   | Website                                                         |
 | --------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -739,7 +739,7 @@ deserialization, see the
 | GraalVM native image  | [docs/guide/java/graalvm-support.md](docs/guide/java/graalvm-support.md) | [View](https://fory.apache.org/docs/guide/java/graalvm_support) |
 | Development           | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)                               | [View](docs/DEVELOPMENT.md)                                     |
 
-### Specifications
+**Specifications**
 
 | Specification          | Source                                                                        | Website                                                                          |
 | ---------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -748,7 +748,7 @@ deserialization, see the
 | Row format             | [row_format_spec.md](docs/specification/row_format_spec.md)                   | [View](https://fory.apache.org/docs/specification/fory_row_format_spec)          |
 | Cross-language mapping | [xlang_type_mapping.md](docs/specification/xlang_type_mapping.md)             | [View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
 
-## Community and support
+## Community
 
 - [Slack workspace](https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw)
 - [@ApacheFory on X](https://x.com/ApacheFory)

@@ -19,7 +19,7 @@
 
 github:
   description: >-
-    A multi-language serialization framework for idiomatic domain objects, schema IDL, fast object serialization, cross-language data exchange, and row-format random access.
+    A blazingly fast multi-language serialization framework for idiomatic domain objects, schema IDL, and cross-language data exchange.
   homepage: https://fory.apache.org
   labels:
     - javascript

@@ -12,9 +12,8 @@
 [![NuGet](https://img.shields.io/nuget/v/Apache.Fory?logo=nuget&style=for-the-badge)](https://www.nuget.org/packages/Apache.Fory)
 [![pub.dev](https://img.shields.io/pub/v/fory?logo=dart&style=for-the-badge)](https://pub.dev/packages/fory)
 
-**Apache Fory™** is a multi-language serialization framework for idiomatic
-domain objects, schema IDL, fast object serialization, cross-language data
-exchange, and row-format random access.
+**Apache Fory™** is a blazingly fast multi-language serialization framework for
+idiomatic domain objects, schema IDL, and cross-language data exchange.
 
 <https://fory.apache.org>
 

@@ -390,8 +390,8 @@ public class MemoryBufferTest {
     for (int i = 0; i < chars.length; i++) {
       chars[i] = (char) random.nextInt();
     }
-    buf.writePrimitiveArrayWithSize(bytes, UnsafeOps.BYTE_ARRAY_OFFSET, bytes.length);
-    buf.writePrimitiveArrayWithSize(chars, UnsafeOps.CHAR_ARRAY_OFFSET, chars.length * 2);
+    buf.writeBytesWithSize(bytes);
+    buf.writeCharsWithSize(chars);
     assertEquals(bytes, buf.readBytesAndSize());
     assertEquals(chars, buf.readChars(buf.readVarUInt32()));
   }

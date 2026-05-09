@@ -386,7 +386,8 @@ Primitive byte arrays are encoded as:
 
 ### Primitive arrays
 
-Primitive arrays use `writePrimitiveArrayWithSize` unless compression is enabled:
+Primitive arrays write a byte-length prefix followed by the little-endian primitive payload unless
+compression is enabled:
 
 ```
 | varuint32: byte_length | raw bytes |

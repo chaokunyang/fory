@@ -582,7 +582,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     if (NativeByteOrder.IS_LITTLE_ENDIAN) {
       char[] chars = new char[numBytes >> 1];
       // FIXME JDK11 utf16 string uses little-endian order.
-      buffer.readChars(chars, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
+      buffer.readChars(chars, numBytes >> 1);
       return chars;
     } else {
       return readCharsUTF16BE(buffer, numBytes);

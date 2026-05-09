@@ -26,11 +26,11 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.PrimitiveArraySerializers.PrimitiveArrayBufferObject;
 import org.apache.fory.serializer.PrimitiveArraySerializers.PrimitiveArraySerializer;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.ArrayCompressionUtils;
 import org.apache.fory.util.PrimitiveArrayCompressionType;
 
@@ -135,7 +135,7 @@ public final class CompressedArraySerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       if (writeContext.getBufferCallback() != null) {
         writeContext.writeBufferObject(
-            new PrimitiveArrayBufferObject(value, UnsafeOps.INT_ARRAY_OFFSET, 4, value.length));
+            new PrimitiveArrayBufferObject(value, Types.INT32_ARRAY, 4, value.length));
         return;
       }
 
@@ -159,22 +159,17 @@ public final class CompressedArraySerializers {
     }
 
     private void writeUncompressed(MemoryBuffer buffer, int[] value) {
-      int size = Math.multiplyExact(value.length, 4);
-      buffer.writePrimitiveArrayWithSize(value, UnsafeOps.INT_ARRAY_OFFSET, size);
+      buffer.writeIntsWithSize(value);
     }
 
     private void writeCompressedBytes(MemoryBuffer buffer, int[] value) {
       byte[] compressed = ArrayCompressionUtils.compressToBytes(value);
-      int byteOffset = UnsafeOps.INT_ARRAY_OFFSET;
-      buffer.writePrimitiveArrayWithSize(compressed, byteOffset, compressed.length);
+      buffer.writeBytesWithSize(compressed);
     }
 
     private void writeCompressedShorts(MemoryBuffer buffer, int[] value) {
       short[] compressed = ArrayCompressionUtils.compressToShorts(value);
-      int shortOffset = UnsafeOps.SHORT_ARRAY_OFFSET;
-      int shortElemSize = 2;
-      int size = Math.multiplyExact(compressed.length, shortElemSize);
-      buffer.writePrimitiveArrayWithSize(compressed, shortOffset, size);
+      buffer.writeShortsWithSize(compressed);
     }
 
     @Override
@@ -212,40 +207,24 @@ public final class CompressedArraySerializers {
     private int[] readFromBufferObject(ReadContext readContext) {
       MemoryBuffer buf = readContext.readBufferObject();
       int size = buf.remaining();
-      int numElements = size / 4;
-      int[] values = new int[numElements];
-      if (size > 0) {
-        buf.copyToUnsafe(0, values, UnsafeOps.INT_ARRAY_OFFSET, size);
-      }
-      return values;
+      return buf.readInts(size);
     }
 
     private int[] readCompressedFromBytes(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      int byteOffset = UnsafeOps.BYTE_ARRAY_OFFSET;
-      byte[] values = new byte[size];
-      buffer.readToUnsafe(values, byteOffset, size);
+      byte[] values = buffer.readBytes(size);
       return ArrayCompressionUtils.decompressFromBytes(values);
     }
 
     private int[] readCompressedFromShorts(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      int shortOffset = UnsafeOps.SHORT_ARRAY_OFFSET;
-      int shortElemSize = 2;
-      int numElements = size / shortElemSize;
-      short[] values = new short[numElements];
-      buffer.readToUnsafe(values, shortOffset, size);
+      short[] values = buffer.readShorts(size);
       return ArrayCompressionUtils.decompressFromShorts(values);
     }
 
     private int[] readUncompressed(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      int numElements = size / 4;
-      int[] values = new int[numElements];
-      if (size > 0) {
-        buffer.readToUnsafe(values, UnsafeOps.INT_ARRAY_OFFSET, size);
-      }
-      return values;
+      return buffer.readInts(size);
     }
   }
 
@@ -260,7 +239,7 @@ public final class CompressedArraySerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       if (writeContext.getBufferCallback() != null) {
         writeContext.writeBufferObject(
-            new PrimitiveArrayBufferObject(value, UnsafeOps.LONG_ARRAY_OFFSET, 8, value.length));
+            new PrimitiveArrayBufferObject(value, Types.INT64_ARRAY, 8, value.length));
         return;
       }
 
@@ -282,15 +261,11 @@ public final class CompressedArraySerializers {
 
     private void writeCompressedInts(MemoryBuffer buffer, long[] value) {
       int[] compressed = ArrayCompressionUtils.compressToInts(value);
-      var intOffset = UnsafeOps.INT_ARRAY_OFFSET;
-      var intElemSize = 4;
-      int size = Math.multiplyExact(compressed.length, intElemSize);
-      buffer.writePrimitiveArrayWithSize(compressed, intOffset, size);
+      buffer.writeIntsWithSize(compressed);
     }
 
     private void writeUncompressed(MemoryBuffer buffer, long[] value) {
-      int size = Math.multiplyExact(value.length, 8);
-      buffer.writePrimitiveArrayWithSize(value, UnsafeOps.LONG_ARRAY_OFFSET, size);
+      buffer.writeLongsWithSize(value);
     }
 
     @Override
@@ -326,34 +301,18 @@ public final class CompressedArraySerializers {
     private long[] readFromBufferObject(ReadContext readContext) {
       MemoryBuffer buf = readContext.readBufferObject();
       int size = buf.remaining();
-      int numElements = size / 8;
-      long[] values = new long[numElements];
-      if (size > 0) {
-        buf.copyToUnsafe(0, values, UnsafeOps.LONG_ARRAY_OFFSET, size);
-      }
-      return values;
+      return buf.readLongs(size);
     }
 
     private long[] readCompressedFromInts(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      int intOffset = UnsafeOps.INT_ARRAY_OFFSET;
-      int intElemSize = 4;
-      int numElements = size / intElemSize;
-      int[] values = new int[numElements];
-      if (size > 0) {
-        buffer.readToUnsafe(values, intOffset, size);
-      }
+      int[] values = buffer.readInts(size);
       return ArrayCompressionUtils.decompressFromInts(values);
     }
 
     private long[] readUncompressed(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      int numElements = size / 8;
-      long[] values = new long[numElements];
-      if (size > 0) {
-        buffer.readToUnsafe(values, UnsafeOps.LONG_ARRAY_OFFSET, size);
-      }
-      return values;
+      return buffer.readLongs(size);
     }
   }
 }

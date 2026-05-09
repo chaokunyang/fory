@@ -44,7 +44,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeExtMeta;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeResolver;
@@ -290,81 +289,77 @@ final class CompatibleCollectionArrayReader {
     switch (arrayTypeId) {
       case Types.BOOL_ARRAY:
         {
-          boolean[] values = new boolean[numElements];
-          buffer.readToUnsafe(values, UnsafeOps.BOOLEAN_ARRAY_OFFSET, numElements);
-          return values;
+          return buffer.readBooleans(numElements);
         }
       case Types.INT8_ARRAY:
       case Types.UINT8_ARRAY:
         {
-          byte[] values = new byte[numElements];
-          buffer.readToUnsafe(values, UnsafeOps.BYTE_ARRAY_OFFSET, numElements);
-          return values;
+          return buffer.readBytes(numElements);
         }
       case Types.INT16_ARRAY:
       case Types.UINT16_ARRAY:
       case Types.FLOAT16_ARRAY:
       case Types.BFLOAT16_ARRAY:
         {
-          short[] values = new short[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, UnsafeOps.SHORT_ARRAY_OFFSET, numElements * 2);
+            return buffer.readShorts(numElements * 2);
           } else {
+            short[] values = new short[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt16();
             }
+            return values;
           }
-          return values;
         }
       case Types.INT32_ARRAY:
       case Types.UINT32_ARRAY:
         {
-          int[] values = new int[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, UnsafeOps.INT_ARRAY_OFFSET, numElements * 4);
+            return buffer.readInts(numElements * 4);
           } else {
+            int[] values = new int[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt32();
             }
+            return values;
           }
-          return values;
         }
       case Types.INT64_ARRAY:
       case Types.UINT64_ARRAY:
         {
-          long[] values = new long[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, UnsafeOps.LONG_ARRAY_OFFSET, numElements * 8);
+            return buffer.readLongs(numElements * 8);
           } else {
+            long[] values = new long[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt64();
             }
+            return values;
           }
-          return values;
         }
       case Types.FLOAT32_ARRAY:
         {
-          float[] values = new float[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, UnsafeOps.FLOAT_ARRAY_OFFSET, numElements * 4);
+            return buffer.readFloats(numElements * 4);
           } else {
+            float[] values = new float[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat32();
             }
+            return values;
           }
-          return values;
         }
       case Types.FLOAT64_ARRAY:
         {
-          double[] values = new double[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            buffer.readToUnsafe(values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numElements * 8);
+            return buffer.readDoubles(numElements * 8);
           } else {
+            double[] values = new double[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat64();
             }
+            return values;
           }
-          return values;
         }
       default:
         throw new IllegalArgumentException("Unsupported dense array type id " + arrayTypeId);

@@ -26,7 +26,6 @@ import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.Preconditions;
 
 @NotThreadSafe
@@ -103,18 +102,6 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
         throw new DeserializationException("Failed to read the provided byte channel", e);
       }
     }
-  }
-
-  @Override
-  public void readToUnsafe(Object target, long targetPointer, int numBytes) {
-    MemoryBuffer buf = memoryBuffer;
-    int remaining = buf.remaining();
-    if (remaining < numBytes) {
-      fillBuffer(numBytes - remaining);
-    }
-    long address = buf.getUnsafeReaderAddress();
-    UnsafeOps.copyMemory(null, address, target, targetPointer, numBytes);
-    buf.increaseReaderIndex(numBytes);
   }
 
   @Override

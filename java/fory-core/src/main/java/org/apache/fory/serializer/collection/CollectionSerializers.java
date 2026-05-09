@@ -757,8 +757,7 @@ public class CollectionSerializers {
     public void write(WriteContext writeContext, BitSet set) {
       MemoryBuffer buffer = writeContext.getBuffer();
       long[] values = set.toLongArray();
-      buffer.writePrimitiveArrayWithSize(
-          values, UnsafeOps.LONG_ARRAY_OFFSET, Math.multiplyExact(values.length, 8));
+      buffer.writeLongsWithSize(values);
     }
 
     @Override

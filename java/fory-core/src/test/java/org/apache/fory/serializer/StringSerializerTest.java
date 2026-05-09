@@ -139,7 +139,7 @@ public class StringSerializerTest extends ForyTestBase {
     final char[] chars =
         (char[]) UnsafeOps.getObject(value, ReflectionUtils.getFieldOffset(String.class, "value"));
     int numBytes = MathUtils.doubleExact(value.length());
-    buffer.writePrimitiveArrayWithSize(chars, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
+    buffer.writeCharsWithSize(chars);
   }
 
   @Test

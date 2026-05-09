@@ -27,6 +27,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -41,27 +42,22 @@ public class SubListSerializers {
 
   private interface Stub {}
 
+  private static final class SubListStub implements Stub {}
+
+  private static final class RandomAccessSubListStub implements Stub {}
+
+  private static final class ArrayListSubListStub implements Stub {}
+
   static {
-    Class<?> sublistClass;
-    try {
-      sublistClass = Class.forName("java.util.SubList");
-    } catch (ClassNotFoundException e) {
-      sublistClass = ReflectionUtils.loadClass("java.util.AbstractList$SubList");
-    }
-    SubListClass = sublistClass;
-    Class<?> randomAccessSubListClass;
-    try {
-      randomAccessSubListClass = Class.forName("java.util.RandomAccessSubList");
-    } catch (ClassNotFoundException e) {
-      randomAccessSubListClass =
-          ReflectionUtils.loadClass("java.util.AbstractList$RandomAccessSubList");
-    }
-    RandomAccessSubListClass = randomAccessSubListClass;
-    try {
-      ArrayListSubListClass = Class.forName("java.util.ArrayList$SubList");
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException(e);
-    }
+    SubListClass =
+        loadClassOrStub(SubListStub.class, "java.util.SubList", "java.util.AbstractList$SubList");
+    RandomAccessSubListClass =
+        loadClassOrStub(
+            RandomAccessSubListStub.class,
+            "java.util.RandomAccessSubList",
+            "java.util.AbstractList$RandomAccessSubList");
+    ArrayListSubListClass =
+        loadClassOrStub(ArrayListSubListStub.class, "java.util.ArrayList$SubList");
   }
 
   public static void registerSerializers(TypeResolver classResolver, boolean preserveView) {
@@ -69,7 +65,10 @@ public class SubListSerializers {
     // ImmutableCollectionSerializers
     for (Class<?> cls :
         new Class[] {SubListClass, RandomAccessSubListClass, ArrayListSubListClass}) {
-      if (classResolver.trackingRef() && preserveView && !classResolver.isCrossLanguage()) {
+      if (classResolver.trackingRef()
+          && preserveView
+          && !classResolver.isCrossLanguage()
+          && !AndroidSupport.IS_ANDROID) {
         classResolver.registerInternalSerializer(
             cls, new SubListViewSerializer(classResolver, cls));
       } else {
@@ -77,6 +76,35 @@ public class SubListSerializers {
             cls, new SubListSerializer(classResolver, (Class<List>) cls));
       }
     }
+  }
+
+  public static boolean isSubListClass(Class<?> cls) {
+    if (cls == SubListClass || cls == RandomAccessSubListClass || cls == ArrayListSubListClass) {
+      return true;
+    }
+    String name = cls.getName();
+    return name.equals("java.util.SubList")
+        || name.equals("java.util.RandomAccessSubList")
+        || name.equals("java.util.AbstractList$SubList")
+        || name.equals("java.util.AbstractList$RandomAccessSubList")
+        || name.equals("java.util.ArrayList$SubList")
+        || name.equals("java.util.AbstractList$SubAbstractList")
+        || name.equals("java.util.AbstractList$SubAbstractListRandomAccess")
+        || name.equals("java.util.ImmutableCollections$SubList");
+  }
+
+  private static Class<?> loadClassOrStub(Class<?> stubClass, String... classNames) {
+    for (String className : classNames) {
+      try {
+        return Class.forName(className);
+      } catch (ClassNotFoundException e) {
+        // Try the next JDK/libcore spelling.
+      }
+    }
+    if (AndroidSupport.IS_ANDROID) {
+      return stubClass;
+    }
+    return ReflectionUtils.loadClass(classNames[classNames.length - 1]);
   }
 
   public static final class SubListViewSerializer extends CollectionSerializer<List> {

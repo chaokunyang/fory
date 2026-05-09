@@ -1,0 +1,361 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.fory.serializer.collection;
+
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.EnumMap;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import org.apache.fory.Fory;
+import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.platform.AndroidSupport;
+import org.testng.Assert;
+import org.testng.annotations.Test;
+
+public class AndroidCollectionFeatureTest {
+  @Test
+  public void testAndroidCollectionFeaturePaths() throws Exception {
+    String javaBin =
+        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+    ArrayList<String> command = new ArrayList<>();
+    command.add(javaBin);
+    if (!System.getProperty("java.specification.version").startsWith("1.")) {
+      command.add("--add-opens");
+      command.add("java.base/java.util=ALL-UNNAMED");
+    }
+    command.add("-cp");
+    command.add(System.getProperty("java.class.path"));
+    command.add(AndroidCollectionFeatureProbe.class.getName());
+    Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+    String output = readFully(process.getInputStream());
+    Assert.assertEquals(process.waitFor(), 0, output);
+  }
+
+  private static String readFully(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[1024];
+    int read;
+    while ((read = inputStream.read(buffer)) != -1) {
+      outputStream.write(buffer, 0, read);
+    }
+    return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+  }
+
+  public static final class AndroidCollectionFeatureProbe {
+    public static void main(String[] args) throws Exception {
+      System.setProperty("java.vm.name", "Dalvik");
+      System.setProperty("java.runtime.name", "Android Runtime");
+      check(AndroidSupport.IS_ANDROID, "AndroidSupport should detect Dalvik runtime");
+
+      Fory fory =
+          Fory.builder()
+              .withCodegen(true)
+              .withRefTracking(true)
+              .requireClassRegistration(false)
+              .build();
+      check(!fory.getConfig().isCodeGenEnabled(), "Android must force codegen off");
+      verifyUnmodifiableWrappers(fory);
+      verifySynchronizedWrappers(fory);
+      verifyWrapperReferenceAlignment(fory);
+      verifySubList(fory);
+      verifyArraysAsList(fory);
+      verifySetFromMap(fory);
+      verifyQueues(fory);
+      verifyEnumMap(fory);
+      verifyImmutableCollections(fory);
+      verifyChildContainerFields();
+    }
+
+    private static void verifyUnmodifiableWrappers(Fory fory) {
+      List<String> list = Collections.unmodifiableList(Arrays.asList("a", "b"));
+      List<String> listRestored = (List<String>) roundTrip(fory, list);
+      checkEquals(listRestored, list, "unmodifiable list");
+      expectUnsupportedAdd(listRestored);
+
+      Set<String> set = Collections.unmodifiableSet(new HashSet<>(Arrays.asList("x", "y")));
+      Set<String> setRestored = (Set<String>) roundTrip(fory, set);
+      checkEquals(setRestored, set, "unmodifiable set");
+      expectUnsupportedAdd(setRestored);
+
+      TreeSet<String> sortedSource = new TreeSet<>(new LengthComparator());
+      Collections.addAll(sortedSource, "bbb", "a", "cc");
+      SortedSet<String> sorted = Collections.unmodifiableSortedSet(sortedSource);
+      SortedSet<String> sortedRestored = (SortedSet<String>) roundTrip(fory, sorted);
+      checkEquals(sortedRestored, sorted, "unmodifiable sorted set");
+      check(
+          sortedRestored.comparator() instanceof LengthComparator,
+          "unmodifiable sorted set comparator");
+      expectUnsupportedAdd(sortedRestored);
+
+      Map<String, Integer> map = Collections.unmodifiableMap(singletonMap("one", 1));
+      Map<String, Integer> mapRestored = (Map<String, Integer>) roundTrip(fory, map);
+      checkEquals(mapRestored, map, "unmodifiable map");
+      expectUnsupportedPut(mapRestored);
+
+      TreeMap<String, Integer> sortedMapSource = new TreeMap<>(new LengthComparator());
+      sortedMapSource.put("bbb", 3);
+      sortedMapSource.put("a", 1);
+      sortedMapSource.put("cc", 2);
+      SortedMap<String, Integer> sortedMap = Collections.unmodifiableSortedMap(sortedMapSource);
+      SortedMap<String, Integer> sortedMapRestored =
+          (SortedMap<String, Integer>) roundTrip(fory, sortedMap);
+      checkEquals(sortedMapRestored, sortedMap, "unmodifiable sorted map");
+      check(
+          sortedMapRestored.comparator() instanceof LengthComparator,
+          "unmodifiable sorted map comparator");
+      expectUnsupportedPut(sortedMapRestored);
+    }
+
+    private static void verifySynchronizedWrappers(Fory fory) {
+      List<String> list = Collections.synchronizedList(new ArrayList<>(Arrays.asList("a", "b")));
+      checkEquals(roundTrip(fory, list), list, "synchronized list");
+
+      Set<String> set = Collections.synchronizedSet(new HashSet<>(Arrays.asList("x", "y")));
+      checkEquals(roundTrip(fory, set), set, "synchronized set");
+
+      TreeSet<String> sortedSource = new TreeSet<>(new LengthComparator());
+      Collections.addAll(sortedSource, "bbb", "a", "cc");
+      SortedSet<String> sorted = Collections.synchronizedSortedSet(sortedSource);
+      SortedSet<String> sortedRestored = (SortedSet<String>) roundTrip(fory, sorted);
+      checkEquals(sortedRestored, sorted, "synchronized sorted set");
+      check(sortedRestored.comparator() instanceof LengthComparator, "synchronized set comparator");
+
+      Map<String, Integer> map = Collections.synchronizedMap(singletonMap("one", 1));
+      checkEquals(roundTrip(fory, map), map, "synchronized map");
+
+      TreeMap<String, Integer> sortedMapSource = new TreeMap<>(new LengthComparator());
+      sortedMapSource.put("bbb", 3);
+      sortedMapSource.put("a", 1);
+      sortedMapSource.put("cc", 2);
+      SortedMap<String, Integer> sortedMap = Collections.synchronizedSortedMap(sortedMapSource);
+      SortedMap<String, Integer> sortedMapRestored =
+          (SortedMap<String, Integer>) roundTrip(fory, sortedMap);
+      checkEquals(sortedMapRestored, sortedMap, "synchronized sorted map");
+      check(
+          sortedMapRestored.comparator() instanceof LengthComparator,
+          "synchronized map comparator");
+    }
+
+    private static void verifyWrapperReferenceAlignment(Fory fory) {
+      List<String> wrapper = Collections.unmodifiableList(Arrays.asList("a", "b"));
+      ArrayList<String> repeated = new ArrayList<>();
+      repeated.add("tail");
+      ArrayList<Object> graph = new ArrayList<>();
+      graph.add(wrapper);
+      graph.add(repeated);
+      graph.add(repeated);
+      graph.add(wrapper);
+
+      List<Object> restored = (List<Object>) roundTrip(fory, graph);
+      check(restored.get(1) == restored.get(2), "wrapper source must not shift later ref ids");
+      check(restored.get(0) == restored.get(3), "wrapper outer ref id");
+    }
+
+    private static void verifySubList(Fory fory) {
+      List<Integer> subList = new ArrayList<>(Arrays.asList(1, 2, 3, 4)).subList(1, 3);
+      Object restored = roundTrip(fory, subList);
+      check(
+          restored.getClass() == ArrayList.class,
+          "Android sublist should deserialize as ArrayList");
+      checkEquals(restored, Arrays.asList(2, 3), "sublist visible elements");
+    }
+
+    private static void verifyArraysAsList(Fory fory) {
+      List<String> list = Arrays.asList("a", "b", "c");
+      checkEquals(roundTrip(fory, list), list, "Arrays.asList");
+      checkEquals(fory.copy(list), list, "Arrays.asList copy");
+    }
+
+    private static void verifySetFromMap(Fory fory) {
+      Set<String> set = Collections.newSetFromMap(new HashMap<String, Boolean>());
+      Collections.addAll(set, "a", "b");
+      Set<String> restored = (Set<String>) roundTrip(fory, set);
+      checkEquals(restored, set, "SetFromMap");
+      Set<String> copy = (Set<String>) fory.copy(set);
+      checkEquals(copy, set, "SetFromMap copy");
+    }
+
+    private static void verifyQueues(Fory fory) {
+      ArrayBlockingQueue<String> arrayQueue = new ArrayBlockingQueue<>(5);
+      arrayQueue.add("a");
+      arrayQueue.add("b");
+      ArrayBlockingQueue<String> arrayRestored =
+          (ArrayBlockingQueue<String>) roundTrip(fory, arrayQueue);
+      checkEquals(
+          new ArrayList<>(arrayRestored), new ArrayList<>(arrayQueue), "ArrayBlockingQueue");
+      checkEquals(arrayRestored.remainingCapacity(), 3, "ArrayBlockingQueue capacity");
+
+      LinkedBlockingQueue<String> linkedQueue = new LinkedBlockingQueue<>(6);
+      linkedQueue.add("a");
+      linkedQueue.add("b");
+      LinkedBlockingQueue<String> linkedRestored =
+          (LinkedBlockingQueue<String>) roundTrip(fory, linkedQueue);
+      checkEquals(
+          new ArrayList<>(linkedRestored), new ArrayList<>(linkedQueue), "LinkedBlockingQueue");
+      checkEquals(linkedRestored.remainingCapacity(), 4, "LinkedBlockingQueue capacity");
+    }
+
+    private static void verifyEnumMap(Fory fory) {
+      EnumMap<TestEnum, String> map = new EnumMap<>(TestEnum.class);
+      map.put(TestEnum.ONE, "one");
+      map.put(TestEnum.TWO, "two");
+      checkEquals(roundTrip(fory, map), map, "EnumMap");
+
+      EnumMap<TestEnum, String> empty = new EnumMap<>(TestEnum.class);
+      checkEquals(roundTrip(fory, empty), empty, "empty EnumMap");
+    }
+
+    private static void verifyImmutableCollections(Fory fory) throws Exception {
+      List<String> list = immutableList("a", "b");
+      List<String> listRestored = (List<String>) roundTrip(fory, list);
+      checkEquals(listRestored, list, "immutable list");
+      expectUnsupportedAdd(listRestored);
+
+      Set<String> set = immutableSet("x", "y");
+      Set<String> setRestored = (Set<String>) roundTrip(fory, set);
+      checkEquals(setRestored, set, "immutable set");
+      expectUnsupportedAdd(setRestored);
+
+      Map<String, Integer> map = immutableMap("one", 1, "two", 2);
+      Map<String, Integer> mapRestored = (Map<String, Integer>) roundTrip(fory, map);
+      checkEquals(mapRestored, map, "immutable map");
+      expectUnsupportedPut(mapRestored);
+    }
+
+    private static void verifyChildContainerFields() {
+      Fory fory =
+          Fory.builder()
+              .withCodegen(true)
+              .withRefTracking(true)
+              .requireClassRegistration(false)
+              .withCompatibleMode(CompatibleMode.COMPATIBLE)
+              .build();
+      AndroidChildArrayList value = new AndroidChildArrayList("label");
+      value.add("a");
+      value.add("b");
+      AndroidChildArrayList restored = (AndroidChildArrayList) roundTrip(fory, value);
+      checkEquals(restored, value, "child ArrayList elements");
+      checkEquals(restored.label, "label", "child ArrayList field");
+    }
+
+    private static Object roundTrip(Fory fory, Object value) {
+      return fory.deserialize(fory.serialize(value));
+    }
+
+    private static <K, V> Map<K, V> singletonMap(K key, V value) {
+      HashMap<K, V> map = new HashMap<>();
+      map.put(key, value);
+      return map;
+    }
+
+    private static List<String> immutableList(String... values) throws Exception {
+      Method method = List.class.getMethod("of", Object[].class);
+      return (List<String>) method.invoke(null, new Object[] {values});
+    }
+
+    private static Set<String> immutableSet(String... values) throws Exception {
+      Method method = Set.class.getMethod("of", Object[].class);
+      return (Set<String>) method.invoke(null, new Object[] {values});
+    }
+
+    private static Map<String, Integer> immutableMap(
+        String key1, int value1, String key2, int value2) throws Exception {
+      Method method =
+          Map.class.getMethod("of", Object.class, Object.class, Object.class, Object.class);
+      return (Map<String, Integer>) method.invoke(null, key1, value1, key2, value2);
+    }
+
+    private static void expectUnsupportedAdd(Collection collection) {
+      try {
+        collection.add(new Object());
+        throw new AssertionError("Expected add to be unsupported");
+      } catch (UnsupportedOperationException expected) {
+        // Expected.
+      }
+    }
+
+    private static void expectUnsupportedPut(Map map) {
+      try {
+        map.put(new Object(), new Object());
+        throw new AssertionError("Expected put to be unsupported");
+      } catch (UnsupportedOperationException expected) {
+        // Expected.
+      }
+    }
+
+    private static void check(boolean value, String message) {
+      if (!value) {
+        throw new AssertionError(message);
+      }
+    }
+
+    private static void checkEquals(Object actual, Object expected, String message) {
+      if (!expected.equals(actual)) {
+        throw new AssertionError(message + ": expected " + expected + ", actual " + actual);
+      }
+    }
+
+    public enum TestEnum {
+      ONE,
+      TWO
+    }
+
+    public static final class LengthComparator implements Comparator<String>, Serializable {
+      @Override
+      public int compare(String left, String right) {
+        int lengthCompare = Integer.compare(left.length(), right.length());
+        if (lengthCompare != 0) {
+          return lengthCompare;
+        }
+        return left.compareTo(right);
+      }
+    }
+
+    public static final class AndroidChildArrayList extends ArrayList<String> {
+      private String label;
+
+      public AndroidChildArrayList() {}
+
+      AndroidChildArrayList(String label) {
+        this.label = label;
+      }
+    }
+  }
+}

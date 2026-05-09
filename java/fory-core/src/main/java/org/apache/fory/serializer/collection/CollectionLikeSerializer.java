@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.collection;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.reflect.Constructor;
 import java.util.Collection;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.CodegenInvoke;
@@ -29,6 +30,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefMode;
@@ -45,6 +47,7 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private MethodHandle constructor;
+  private Constructor<?> reflectionConstructor;
   private int numElements;
   protected final Config config;
   protected final int maxCollectionSize;
@@ -463,6 +466,11 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   public Collection newCollection(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
     numElements = readCollectionSize(buffer);
+    if (AndroidSupport.IS_ANDROID) {
+      T instance = newAndroidCollectionInstance();
+      readContext.reference(instance);
+      return (Collection) instance;
+    }
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -483,6 +491,9 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   /** Create a new empty collection for copy. */
   public Collection newCollection(Collection collection) {
     numElements = collection.size();
+    if (AndroidSupport.IS_ANDROID) {
+      return (Collection) newAndroidCollectionInstance();
+    }
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -490,6 +501,20 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       return (Collection) constructor.invoke();
     } catch (Throwable e) {
       // reduce code size of critical path.
+      throw buildException(e);
+    }
+  }
+
+  private T newAndroidCollectionInstance() {
+    try {
+      Constructor<?> constructor = reflectionConstructor;
+      if (constructor == null) {
+        constructor = type.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        reflectionConstructor = constructor;
+      }
+      return (T) constructor.newInstance();
+    } catch (Throwable e) {
       throw buildException(e);
     }
   }

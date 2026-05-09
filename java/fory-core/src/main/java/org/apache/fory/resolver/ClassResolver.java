@@ -1567,6 +1567,7 @@ public class ClassResolver extends TypeResolver {
   // Invoked by fory JIT.
   @Override
   public TypeInfo getTypeInfo(Class<?> cls) {
+    cls = getAndroidWriteType(cls);
     TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo == null || typeInfo.serializer == null) {
       addSerializer(cls, createSerializer(cls));
@@ -1588,6 +1589,7 @@ public class ClassResolver extends TypeResolver {
   /** Get classinfo by cache, update cache if miss. */
   @Override
   public TypeInfo getTypeInfo(Class<?> cls, TypeInfoHolder classInfoHolder) {
+    cls = getAndroidWriteType(cls);
     TypeInfo typeInfo = classInfoHolder.typeInfo;
     if (typeInfo.getType() != cls) {
       typeInfo = classInfoMap.get(cls);
@@ -1622,6 +1624,7 @@ public class ClassResolver extends TypeResolver {
 
   @Internal
   public TypeInfo getOrUpdateTypeInfo(Class<?> cls) {
+    cls = getAndroidWriteType(cls);
     TypeInfo typeInfo = typeInfoCache;
     if (typeInfo.type != cls) {
       typeInfo = classInfoMap.get(cls);
@@ -1632,6 +1635,13 @@ public class ClassResolver extends TypeResolver {
       typeInfoCache = typeInfo;
     }
     return typeInfo;
+  }
+
+  private static Class<?> getAndroidWriteType(Class<?> cls) {
+    if (AndroidSupport.IS_ANDROID && SubListSerializers.isSubListClass(cls)) {
+      return ArrayList.class;
+    }
+    return cls;
   }
 
   private TypeInfo getOrUpdateTypeInfo(short classId) {

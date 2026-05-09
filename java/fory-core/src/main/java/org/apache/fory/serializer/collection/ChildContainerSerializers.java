@@ -52,6 +52,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
@@ -628,7 +629,7 @@ public class ChildContainerSerializers {
     int layerIndex = 0;
     while (!superClasses.contains(cls)) {
       Serializer slotsSerializer;
-      if (typeResolver.getConfig().isCompatible()) {
+      if (typeResolver.getConfig().isCompatible() && !AndroidSupport.IS_ANDROID) {
         TypeDef layerTypeDef = typeResolver.getTypeDef(cls, false);
         // Use layer index within class hierarchy (not global counter)
         // This ensures unique marker classes for each layer

@@ -40,10 +40,13 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.ExceptionUtils;
+import org.apache.fory.util.Preconditions;
 
 /** Serializer for synchronized Collections and Maps created via Collections. */
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -81,16 +84,29 @@ public class SynchronizedSerializers {
 
     private final Function factory;
     private final long offset;
+    private final TypeInfo sourceTypeInfo;
 
     public SynchronizedCollectionSerializer(
-        TypeResolver typeResolver, Class cls, Function factory, long offset) {
+        TypeResolver typeResolver,
+        Class cls,
+        Function factory,
+        long offset,
+        TypeInfo sourceTypeInfo) {
       super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
+      this.sourceTypeInfo = sourceTypeInfo;
     }
 
     @Override
     public void write(WriteContext writeContext, Collection object) {
+      Preconditions.checkArgument(object.getClass() == type);
+      if (AndroidSupport.IS_ANDROID) {
+        synchronized (object) {
+          writeAndroidSourceRef(writeContext, newAndroidWriteSource(object), sourceTypeInfo);
+        }
+        return;
+      }
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
       Object unwrapped = UnsafeOps.getObject(object, offset);
       synchronized (object) {
@@ -106,24 +122,70 @@ public class SynchronizedSerializers {
 
     @Override
     public Collection copy(CopyContext copyContext, Collection object) {
+      if (AndroidSupport.IS_ANDROID) {
+        synchronized (object) {
+          Collection mutableSource = newAndroidMutableSource(copyContext, object);
+          Collection result = (Collection) factory.apply(mutableSource);
+          copyContext.reference(object, result);
+          copyElements(copyContext, object, mutableSource);
+          return result;
+        }
+      }
       final Object collection = UnsafeOps.getObject(object, offset);
       return (Collection) factory.apply(copyContext.copyObject(collection));
+    }
+
+    private Collection newAndroidMutableSource(CopyContext copyContext, Collection value) {
+      if (value instanceof SortedSet) {
+        Object comparator = copyContext.copyObject(((SortedSet) value).comparator());
+        return new TreeSet((java.util.Comparator) comparator);
+      } else if (value instanceof Set) {
+        return new HashSet(value.size());
+      } else {
+        return new ArrayList(value.size());
+      }
+    }
+
+    private Collection newAndroidWriteSource(Collection value) {
+      Collection source;
+      if (value instanceof SortedSet) {
+        source = new TreeSet(((SortedSet) value).comparator());
+      } else if (value instanceof Set) {
+        source = new HashSet(value.size());
+      } else {
+        source = new ArrayList(value.size());
+      }
+      source.addAll(value);
+      return source;
     }
   }
 
   public static final class SynchronizedMapSerializer extends MapSerializer<Map> {
     private final Function factory;
     private final long offset;
+    private final TypeInfo sourceTypeInfo;
 
     public SynchronizedMapSerializer(
-        TypeResolver typeResolver, Class cls, Function factory, long offset) {
+        TypeResolver typeResolver,
+        Class cls,
+        Function factory,
+        long offset,
+        TypeInfo sourceTypeInfo) {
       super(typeResolver, cls, false);
       this.factory = factory;
       this.offset = offset;
+      this.sourceTypeInfo = sourceTypeInfo;
     }
 
     @Override
     public void write(WriteContext writeContext, Map object) {
+      Preconditions.checkArgument(object.getClass() == type);
+      if (AndroidSupport.IS_ANDROID) {
+        synchronized (object) {
+          writeAndroidSourceRef(writeContext, newAndroidWriteSource(object), sourceTypeInfo);
+        }
+        return;
+      }
       // the ordinal could be replaced by s.th. else (e.g. a explicitly managed "id")
       Object unwrapped = UnsafeOps.getObject(object, offset);
       synchronized (object) {
@@ -133,6 +195,15 @@ public class SynchronizedSerializers {
 
     @Override
     public Map copy(CopyContext copyContext, Map originMap) {
+      if (AndroidSupport.IS_ANDROID) {
+        synchronized (originMap) {
+          Map mutableSource = newAndroidMutableSource(copyContext, originMap);
+          Map result = (Map) factory.apply(mutableSource);
+          copyContext.reference(originMap, result);
+          copyEntry(copyContext, originMap, mutableSource);
+          return result;
+        }
+      }
       final Object unwrappedMap = UnsafeOps.getObject(originMap, offset);
       return (Map) factory.apply(copyContext.copyObject(unwrappedMap));
     }
@@ -141,6 +212,26 @@ public class SynchronizedSerializers {
     public Map read(ReadContext readContext) {
       final Object sourceCollection = readContext.readRef();
       return (Map) factory.apply(sourceCollection);
+    }
+
+    private Map newAndroidMutableSource(CopyContext copyContext, Map value) {
+      if (value instanceof SortedMap) {
+        Object comparator = copyContext.copyObject(((SortedMap) value).comparator());
+        return new TreeMap((java.util.Comparator) comparator);
+      } else {
+        return new HashMap(value.size());
+      }
+    }
+
+    private Map newAndroidWriteSource(Map value) {
+      Map source;
+      if (value instanceof SortedMap) {
+        source = new TreeMap(((SortedMap) value).comparator());
+      } else {
+        source = new HashMap(value.size());
+      }
+      source.putAll(value);
+      return source;
     }
   }
 
@@ -157,10 +248,41 @@ public class SynchronizedSerializers {
       TypeResolver typeResolver, Tuple2<Class<?>, Function> factory) {
     if (Collection.class.isAssignableFrom(factory.f0)) {
       return new SynchronizedCollectionSerializer(
-          typeResolver, factory.f0, factory.f1, Offset.SOURCE_COLLECTION_FIELD_OFFSET);
+          typeResolver,
+          factory.f0,
+          factory.f1,
+          AndroidSupport.IS_ANDROID ? -1 : Offset.SOURCE_COLLECTION_FIELD_OFFSET,
+          sourceCollectionTypeInfo(typeResolver, factory.f0));
     } else {
       return new SynchronizedMapSerializer(
-          typeResolver, factory.f0, factory.f1, Offset.SOURCE_MAP_FIELD_OFFSET);
+          typeResolver,
+          factory.f0,
+          factory.f1,
+          AndroidSupport.IS_ANDROID ? -1 : Offset.SOURCE_MAP_FIELD_OFFSET,
+          sourceMapTypeInfo(typeResolver, factory.f0));
+    }
+  }
+
+  private static void writeAndroidSourceRef(
+      WriteContext writeContext, Object value, TypeInfo sourceTypeInfo) {
+    writeContext.writeRef(value, sourceTypeInfo);
+  }
+
+  private static TypeInfo sourceCollectionTypeInfo(TypeResolver typeResolver, Class<?> cls) {
+    if (SortedSet.class.isAssignableFrom(cls)) {
+      return typeResolver.getTypeInfo(TreeSet.class);
+    } else if (Set.class.isAssignableFrom(cls)) {
+      return typeResolver.getTypeInfo(HashSet.class);
+    } else {
+      return typeResolver.getTypeInfo(ArrayList.class);
+    }
+  }
+
+  private static TypeInfo sourceMapTypeInfo(TypeResolver typeResolver, Class<?> cls) {
+    if (SortedMap.class.isAssignableFrom(cls)) {
+      return typeResolver.getTypeInfo(TreeMap.class);
+    } else {
+      return typeResolver.getTypeInfo(HashMap.class);
     }
   }
 

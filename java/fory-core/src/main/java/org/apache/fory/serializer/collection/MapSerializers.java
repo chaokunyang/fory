@@ -21,6 +21,7 @@ package org.apache.fory.serializer.collection;
 
 import java.io.Externalizable;
 import java.lang.invoke.MethodHandle;
+import java.lang.reflect.Field;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -38,7 +39,9 @@ import org.apache.fory.collection.MapSnapshot;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
@@ -331,14 +334,31 @@ public class MapSerializers {
   }
 
   public static class EnumMapSerializer extends MapSerializer<EnumMap> {
-    // Make offset compatible with graalvm native image.
-    private static final long keyTypeFieldOffset;
+    private static final class KeyTypeFieldOffset {
+      // Make offset compatible with graalvm native image.
+      private static final long VALUE;
 
-    static {
-      try {
-        keyTypeFieldOffset = UnsafeOps.objectFieldOffset(EnumMap.class.getDeclaredField("keyType"));
-      } catch (final Exception e) {
-        throw new RuntimeException(e);
+      static {
+        try {
+          VALUE = UnsafeOps.objectFieldOffset(EnumMap.class.getDeclaredField("keyType"));
+        } catch (final Exception e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+
+    private static final class AndroidKeyTypeField {
+      private static final Field VALUE;
+
+      static {
+        try {
+          Field field = EnumMap.class.getDeclaredField("keyType");
+          field.setAccessible(true);
+          VALUE = field;
+        } catch (ReflectiveOperationException | SecurityException e) {
+          throw new ForyException(
+              "Android cannot access EnumMap key type for empty EnumMap serialization", e);
+        }
       }
     }
 
@@ -352,7 +372,7 @@ public class MapSerializers {
     public Map onMapWrite(WriteContext writeContext, EnumMap value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
-      Class keyType = (Class) UnsafeOps.getObject(value, keyTypeFieldOffset);
+      Class keyType = getKeyType(value);
       ((ClassResolver) typeResolver).writeClassAndUpdateCache(writeContext, keyType);
       return value;
     }
@@ -368,6 +388,22 @@ public class MapSerializers {
     @Override
     public EnumMap copy(CopyContext copyContext, EnumMap originMap) {
       return new EnumMap(originMap);
+    }
+
+    private static Class<?> getKeyType(EnumMap value) {
+      if (AndroidSupport.IS_ANDROID) {
+        if (!value.isEmpty()) {
+          Enum key = (Enum) value.keySet().iterator().next();
+          return key.getDeclaringClass();
+        }
+        try {
+          return (Class<?>) AndroidKeyTypeField.VALUE.get(value);
+        } catch (IllegalAccessException e) {
+          throw new ForyException(
+              "Android cannot access EnumMap key type for empty EnumMap serialization", e);
+        }
+      }
+      return (Class<?>) UnsafeOps.getObject(value, KeyTypeFieldOffset.VALUE);
     }
   }
 

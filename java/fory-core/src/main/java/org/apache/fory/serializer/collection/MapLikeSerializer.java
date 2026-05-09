@@ -33,6 +33,7 @@ import static org.apache.fory.serializer.collection.MapFlags.VALUE_HAS_NULL;
 import static org.apache.fory.type.TypeUtils.MAP_TYPE;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.reflect.Constructor;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -44,6 +45,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
@@ -80,6 +82,7 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   }
 
   protected MethodHandle constructor;
+  private Constructor<?> reflectionConstructor;
   protected final Config config;
   protected final int maxCollectionSize;
   protected final boolean supportCodegenHook;
@@ -958,6 +961,11 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   public Map newMap(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
     numElements = readMapSize(buffer);
+    if (AndroidSupport.IS_ANDROID) {
+      Map instance = (Map) newAndroidMapInstance();
+      readContext.reference(instance);
+      return instance;
+    }
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -978,6 +986,9 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
   /** Create a new empty map for copy. */
   public Map newMap(Map map) {
     numElements = map.size();
+    if (AndroidSupport.IS_ANDROID) {
+      return (Map) newAndroidMapInstance();
+    }
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -986,6 +997,21 @@ public abstract class MapLikeSerializer<T> extends Serializer<T> {
     } catch (Throwable e) {
       throw new IllegalArgumentException(
           "Please provide public no arguments constructor for class " + type, e);
+    }
+  }
+
+  private T newAndroidMapInstance() {
+    try {
+      Constructor<?> constructor = reflectionConstructor;
+      if (constructor == null) {
+        constructor = type.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        reflectionConstructor = constructor;
+      }
+      return (T) constructor.newInstance();
+    } catch (Throwable e) {
+      throw new IllegalArgumentException(
+          "Please provide Android-accessible no arguments constructor for class " + type, e);
     }
   }
 

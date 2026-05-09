@@ -19,9 +19,17 @@
 
 package org.apache.fory.config;
 
-import static org.testng.Assert.*;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertTrue;
 
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.meta.MetaCompressor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -101,5 +109,69 @@ public class ForyBuilderTest {
     assertTrue(explicitSchemaConsistent.getConfig().checkClassVersion());
     assertFalse(explicitSchemaConsistentReverseOrder.getConfig().isCompatible());
     assertTrue(explicitSchemaConsistentReverseOrder.getConfig().checkClassVersion());
+  }
+
+  @Test
+  public void testCodegenDefaultsOnOrdinaryJvm() {
+    Fory defaultFory = new ForyBuilder().build();
+    Fory explicitCodegen = new ForyBuilder().withCodegen(true).build();
+    Fory interpreter = new ForyBuilder().withCodegen(false).build();
+    ThreadSafeFory threadSafeInterpreter =
+        new ForyBuilder().withCodegen(false).buildThreadSafeForyPool(1);
+
+    assertTrue(defaultFory.getConfig().isCodeGenEnabled());
+    assertTrue(explicitCodegen.getConfig().isCodeGenEnabled());
+    assertFalse(interpreter.getConfig().isCodeGenEnabled());
+    assertFalse(threadSafeInterpreter.execute(fory -> fory.getConfig().isCodeGenEnabled()));
+  }
+
+  @Test
+  public void testGraalvmRuntimeForcesCodegenOff() throws Exception {
+    String javaBin =
+        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
+    Process process =
+        new ProcessBuilder(
+                javaBin,
+                "-Dorg.graalvm.nativeimage.imagecode=runtime",
+                "-cp",
+                System.getProperty("java.class.path"),
+                GraalvmCodegenConfigMain.class.getName())
+            .redirectErrorStream(true)
+            .start();
+    String output = readFully(process.getInputStream());
+    assertEquals(process.waitFor(), 0, output);
+  }
+
+  private static String readFully(InputStream inputStream) throws IOException {
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+    byte[] buffer = new byte[1024];
+    int read;
+    while ((read = inputStream.read(buffer)) != -1) {
+      outputStream.write(buffer, 0, read);
+    }
+    return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+  }
+
+  public static final class GraalvmCodegenConfigMain {
+    public static void main(String[] args) {
+      Fory defaultFory = new ForyBuilder().build();
+      Fory explicitCodegen = new ForyBuilder().withCodegen(true).build();
+      Fory interpreter = new ForyBuilder().withCodegen(false).build();
+      Fory asyncRequested = new ForyBuilder().withCodegen(true).withAsyncCompilation(true).build();
+
+      assertDisabled(defaultFory, "default");
+      assertDisabled(explicitCodegen, "explicit codegen");
+      assertDisabled(interpreter, "explicit interpreter");
+      assertDisabled(asyncRequested, "async requested");
+      if (asyncRequested.getConfig().isAsyncCompilationEnabled()) {
+        throw new AssertionError("GraalVM runtime must force async compilation off");
+      }
+    }
+
+    private static void assertDisabled(Fory fory, String label) {
+      if (fory.getConfig().isCodeGenEnabled()) {
+        throw new AssertionError(label + " codegen should be disabled");
+      }
+    }
   }
 }

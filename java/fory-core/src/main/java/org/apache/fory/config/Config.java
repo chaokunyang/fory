@@ -87,7 +87,8 @@ public class Config implements Serializable {
     requireClassRegistration = builder.requireClassRegistration;
     suppressClassRegistrationWarnings = builder.suppressClassRegistrationWarnings;
     registerGuavaTypes = builder.registerGuavaTypes;
-    codeGenEnabled = builder.codeGenEnabled;
+    codeGenEnabled =
+        Objects.requireNonNull(builder.codeGenEnabled, "ForyBuilder.finish must resolve codegen");
     checkClassVersion = builder.checkClassVersion;
     compatible = builder.isCompatible();
     checkJdkClassSerializable = builder.checkJdkClassSerializable;

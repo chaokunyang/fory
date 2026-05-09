@@ -33,8 +33,8 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Serializers for jdk9+ java.util.ImmutableCollections. */
@@ -77,7 +77,7 @@ public class ImmutableCollectionSerializers {
                 .findConstructor(MapN, MethodType.methodType(void.class, Object[].class));
       } catch (ClassNotFoundException | NoSuchMethodException | IllegalAccessException e) {
         e.printStackTrace();
-        UnsafeOps.throwException(e);
+        ExceptionUtils.throwException(e);
       }
     } else {
       // Use stub class as placeholder to ensure jdk8 registered id consistent with JDK9+.

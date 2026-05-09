@@ -19,6 +19,7 @@ package org.apache.fory.platform;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 import sun.misc.Unsafe;
 
@@ -271,17 +272,12 @@ public final class UnsafeOps {
     return true;
   }
 
-  /** Raises an exception bypassing compiler checks for checked exceptions. */
-  public static void throwException(Throwable t) {
-    UNSAFE.throwException(t);
-  }
-
   /** Create an instance of <code>type</code>. This method don't call constructor. */
   public static <T> T newInstance(Class<T> type) {
     try {
       return type.cast(UNSAFE.allocateInstance(type));
     } catch (InstantiationException e) {
-      throwException(e);
+      ExceptionUtils.throwException(e);
     }
     throw new IllegalStateException("unreachable");
   }

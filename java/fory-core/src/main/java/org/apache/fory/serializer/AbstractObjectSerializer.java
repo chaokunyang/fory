@@ -55,6 +55,7 @@ import org.apache.fory.type.unsigned.UInt16;
 import org.apache.fory.type.unsigned.UInt32;
 import org.apache.fory.type.unsigned.UInt64;
 import org.apache.fory.type.unsigned.UInt8;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
@@ -1019,7 +1020,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       copyContext.reference(originObj, t);
       return t;
     } catch (Throwable e) {
-      UnsafeOps.throwException(e);
+      ExceptionUtils.throwException(e);
     }
     return originObj;
   }
@@ -1244,7 +1245,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         }
       } catch (NoSuchFieldException e) {
         // impossible
-        UnsafeOps.throwException(e);
+        ExceptionUtils.throwException(e);
       }
     } else {
       for (Field field : ReflectionUtils.getFields(type, true)) {

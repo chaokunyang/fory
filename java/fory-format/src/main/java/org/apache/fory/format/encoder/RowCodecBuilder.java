@@ -90,7 +90,7 @@ public class RowCodecBuilder<T> extends BaseCodecBuilder<RowCodecBuilder<T>> {
         } catch (final ReflectiveOperationException e) {
           throw new EncoderException("Failed to construct codec for " + beanClass, e);
         } catch (final Throwable e) {
-          throw ExceptionUtils.throwAnyway(e);
+          throw ExceptionUtils.throwException(e);
         }
       }
     };

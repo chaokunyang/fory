@@ -72,7 +72,8 @@ public class ExceptionUtils {
 
   public static void ignore(Object... args) {}
 
-  public static RuntimeException throwAnyway(Throwable t) {
+  /** Raises an exception bypassing compiler checks for checked exceptions. */
+  public static RuntimeException throwException(Throwable t) {
     throw ExceptionUtils.<RuntimeException>throwEvadingChecks(t);
   }
 

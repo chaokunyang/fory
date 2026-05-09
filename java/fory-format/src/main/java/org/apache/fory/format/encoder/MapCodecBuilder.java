@@ -100,7 +100,7 @@ public class MapCodecBuilder<M extends Map<?, ?>> extends BaseCodecBuilder<MapCo
         try {
           return (GeneratedMapEncoder) constructorHandle.invokeExact(references);
         } catch (final Throwable t) {
-          throw ExceptionUtils.throwAnyway(t);
+          throw ExceptionUtils.throwException(t);
         }
       }
     };

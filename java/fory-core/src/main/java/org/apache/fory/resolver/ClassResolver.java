@@ -105,7 +105,6 @@ import org.apache.fory.meta.Encoders;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
@@ -170,6 +169,7 @@ import org.apache.fory.type.unsigned.UInt16;
 import org.apache.fory.type.unsigned.UInt32;
 import org.apache.fory.type.unsigned.UInt64;
 import org.apache.fory.type.unsigned.UInt8;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
@@ -1658,7 +1658,7 @@ public class ClassResolver extends TypeResolver {
       // constructor failed later. For example, some final type field doesn't
       // support serialization.
       resetSerializer(cls, serializer);
-      UnsafeOps.throwException(t);
+      ExceptionUtils.throwException(t);
       throw new IllegalStateException("unreachable");
     }
   }

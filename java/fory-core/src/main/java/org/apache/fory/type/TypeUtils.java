@@ -92,7 +92,7 @@ import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordUtils;
 
 /** Type utils for common type inference and extraction. */
-@SuppressWarnings({"UnstableApiUsage", "unchecked"})
+@SuppressWarnings("unchecked")
 public class TypeUtils {
   private static final String SQL_DATE_CLASS_NAME = "java.sql.Date";
   private static final String SQL_TIME_CLASS_NAME = "java.sql.Time";

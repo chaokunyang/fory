@@ -114,7 +114,7 @@ public class ArrayCodecBuilder<C extends Collection<?>>
         try {
           return (GeneratedArrayEncoder) constructorHandle.invokeExact(references);
         } catch (final Throwable t) {
-          throw ExceptionUtils.throwAnyway(t);
+          throw ExceptionUtils.throwException(t);
         }
       }
     };

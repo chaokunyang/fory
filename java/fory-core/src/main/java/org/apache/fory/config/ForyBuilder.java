@@ -32,7 +32,6 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.apache.fory.meta.MetaCompressor;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.pool.ThreadPoolFory;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.SharedRegistry;
@@ -42,6 +41,7 @@ import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.TimeSerializers;
 import org.apache.fory.serializer.collection.GuavaCollectionSerializers;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
 
 /** Builder class to config and create {@link Fory}. */
@@ -650,7 +650,7 @@ public final class ForyBuilder {
     } catch (Throwable t) {
       t.printStackTrace();
       LOG.error("Fory creation failed with classloader {}", classLoader);
-      UnsafeOps.throwException(t);
+      ExceptionUtils.throwException(t);
       throw new RuntimeException(t);
     }
   }

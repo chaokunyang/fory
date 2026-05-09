@@ -61,9 +61,9 @@ import org.apache.fory.collection.Cache;
 import org.apache.fory.collection.CacheBuilder;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.converter.FieldConverter;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
@@ -494,7 +494,7 @@ public class Descriptor {
         }
       } catch (NoSuchFieldException e) {
         // impossible
-        UnsafeOps.throwException(e);
+        ExceptionUtils.throwException(e);
       }
       currentDescriptorMap = new TreeMap<>(descriptorMap);
       return Tuple2.of(descriptorMap, currentDescriptorMap);

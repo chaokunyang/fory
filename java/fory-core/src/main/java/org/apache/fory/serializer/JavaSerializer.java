@@ -38,9 +38,9 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.BigEndian;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.util.ExceptionUtils;
 
 /**
  * Serializes objects using Java's built in serialization to be compatible with java serialization.
@@ -85,7 +85,7 @@ public class JavaSerializer extends AbstractObjectSerializer {
       objectOutputStream.writeObject(value);
       objectOutputStream.flush();
     } catch (IOException e) {
-      UnsafeOps.throwException(e);
+      ExceptionUtils.throwException(e);
     } finally {
       objectOutput.clearWriteContext();
     }
@@ -106,7 +106,7 @@ public class JavaSerializer extends AbstractObjectSerializer {
       }
       return objectInputStream.readObject();
     } catch (IOException | ClassNotFoundException e) {
-      UnsafeOps.throwException(e);
+      ExceptionUtils.throwException(e);
     } finally {
       objectInput.clearReadContext();
     }

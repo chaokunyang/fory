@@ -50,6 +50,7 @@ import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
@@ -108,7 +109,7 @@ public class ReflectionUtils {
     try {
       return lookup.findConstructor(ctr.getDeclaringClass(), MethodType.methodType(void.class));
     } catch (NoSuchMethodException | IllegalAccessException e) {
-      UnsafeOps.throwException(e);
+      ExceptionUtils.throwException(e);
       throw new IllegalStateException("unreachable");
     }
   }
@@ -147,7 +148,7 @@ public class ReflectionUtils {
           try {
             return lookup.findConstructor(cls, MethodType.methodType(void.class, types));
           } catch (NoSuchMethodException | IllegalAccessException e) {
-            UnsafeOps.throwException(e);
+            ExceptionUtils.throwException(e);
             throw new IllegalStateException("unreachable");
           }
         });
@@ -304,7 +305,7 @@ public class ReflectionUtils {
     try {
       return cls.getDeclaredField(fieldName);
     } catch (NoSuchFieldException e) {
-      UnsafeOps.throwException(e);
+      ExceptionUtils.throwException(e);
       throw new IllegalStateException("Unreachable");
     }
   }

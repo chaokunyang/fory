@@ -665,6 +665,27 @@ KotlinSerializers.registerSerializers(fory)
 // Register, serialize, and deserialize as in the xlang example above.
 ```
 
+## Schema IDL
+
+Fory IDL is Fory's schema language for shared data models. It supports
+references, nullable fields, lists, maps, arrays, enums, messages, and unions,
+and generates native data structures for supported languages. Use it when
+multiple languages need one shared contract.
+
+```protobuf
+package tree;
+
+message TreeNode {
+    string id = 1;
+    string name = 2;
+
+    list<ref TreeNode> children = 3;
+    ref(weak=true) TreeNode parent = 4; // back-pointer
+}
+```
+
+See the [Fory IDL and compiler guide](https://fory.apache.org/docs/compiler).
+
 ## Row Format
 
 Row format is for random access and partial reads. These examples encode an

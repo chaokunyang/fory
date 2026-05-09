@@ -32,16 +32,14 @@ references.
 
 - **Efficient Cross-Language Encoding**: Exchange payloads across supported
   languages with compact binary encoding, metadata packing, schema evolution,
-  type mapping, shared/circular references, and polymorphic runtime types.
+  shared/circular references, and polymorphic runtime types.
 - **Domain Objects First**: Serialize Java classes, Python dataclasses, Go
   structs, Rust/C++ structs, and generated or annotated model types directly.
   Preserve shared and circular references when object identity matters.
-- **Reference-Aware Schema IDL**: Fory is the first schema IDL to bring
-  references into the type system, so shared and circular references are part of
-  the schema instead of runtime-only behavior. It also provides a rich type
-  system for numbers, strings, lists, maps, arrays, enums, structs, and unions.
-  Define schemas once, then generate native domain objects that fit each
-  language's type system without forcing wrapper types into user code.
+- **Reference-Aware Schema IDL**: Support shared and circular references
+  directly in the schema, alongside numbers, strings, lists, maps, arrays,
+  enums, structs, and unions. Define schemas once, then generate native domain
+  objects for each language without forcing wrapper types into user code.
 - **Row-Format Random Access**: Read fields, arrays, and nested values without
   rebuilding full objects, with zero-copy access, partial reads, and Arrow
   integration.
@@ -214,16 +212,14 @@ FetchContent_MakeAvailable(fory)
 target_link_libraries(my_app PRIVATE fory::serialization)
 ```
 
-Bazel `MODULE.bazel`:
+Bazel:
 
 ```bazel
+# MODULE.bazel
 bazel_dep(name = "fory", version = "0.17.0")
 git_override(module_name = "fory", remote = "https://github.com/apache/fory.git", commit = "v0.17.0")
-```
 
-Bazel `BUILD`:
-
-```bazel
+# BUILD
 deps = ["@fory//cpp/fory/serialization:fory_serialization"]
 ```
 

@@ -66,6 +66,8 @@ public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : UnsafeOps.UNSAFE;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
+  // Avoid copyMemory call overhead for small JVM int-array reads; larger arrays use bulk copy.
+  private static final int SMALL_INT_ARRAY_DIRECT_READ_THRESHOLD = 32;
 
   private static final class DirectBufferAccess {
     private static final long BUFFER_ADDRESS_FIELD_OFFSET;
@@ -3273,7 +3275,13 @@ public final class MemoryBuffer {
 
   public boolean[] readBooleans(int numBytes) {
     boolean[] values = new boolean[numBytes];
-    readBooleans(values, 0, numBytes);
+    if (AndroidSupport.IS_ANDROID) {
+      int readerIdx = preparePrimitiveArrayRead(numBytes);
+      MemoryOps.readBooleans(heapMemory, androidHeapIndexUnchecked(readerIdx), values, 0, numBytes);
+      readerIndex = readerIdx + numBytes;
+      return values;
+    }
+    readJvmPrimitiveArrayPayload(values, UnsafeOps.BOOLEAN_ARRAY_OFFSET, numBytes);
     return values;
   }
 
@@ -3291,7 +3299,13 @@ public final class MemoryBuffer {
   /** This method should be used to read data written by {@link #writeCharsWithSize}. */
   public char[] readChars(int numBytes) {
     final char[] chars = new char[numBytes >> 1];
-    readChars(chars, 0, chars.length);
+    if (AndroidSupport.IS_ANDROID) {
+      int readerIdx = preparePrimitiveArrayRead(numBytes);
+      MemoryOps.readChars(heapMemory, androidHeapIndexUnchecked(readerIdx), chars, 0, chars.length);
+      readerIndex = readerIdx + numBytes;
+      return chars;
+    }
+    readJvmPrimitiveArrayPayload(chars, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
     return chars;
   }
 
@@ -3320,7 +3334,14 @@ public final class MemoryBuffer {
   public short[] readShorts(int numBytes) {
     int numElements = numBytes >> 1;
     short[] values = new short[numElements];
-    readShorts(values, 0, numElements);
+    if (AndroidSupport.IS_ANDROID) {
+      int readerIdx = preparePrimitiveArrayRead(numBytes);
+      MemoryOps.readShorts(
+          heapMemory, androidHeapIndexUnchecked(readerIdx), values, 0, numElements);
+      readerIndex = readerIdx + numBytes;
+      return values;
+    }
+    readJvmPrimitiveArrayPayload(values, UnsafeOps.SHORT_ARRAY_OFFSET, numBytes);
     return values;
   }
 
@@ -3339,26 +3360,58 @@ public final class MemoryBuffer {
   public int[] readInts(int numBytes) {
     int numElements = numBytes >> 2;
     int[] values = new int[numElements];
-    readInts(values, 0, numElements);
+    if (AndroidSupport.IS_ANDROID) {
+      readAndroidInts(values, numBytes, numElements);
+    } else if (numElements <= SMALL_INT_ARRAY_DIRECT_READ_THRESHOLD) {
+      int readerIdx = preparePrimitiveArrayRead(numBytes);
+      long pointer = address + readerIdx;
+      for (int i = 0; i < numElements; i++) {
+        values[i] = UNSAFE.getInt(heapMemory, pointer + ((long) i << 2));
+      }
+      readerIndex = readerIdx + numBytes;
+    } else {
+      readJvmPrimitiveArrayPayload(values, UnsafeOps.INT_ARRAY_OFFSET, numBytes);
+    }
     return values;
   }
 
   public void readInts(int[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 4);
     if (AndroidSupport.IS_ANDROID) {
-      int readerIdx = preparePrimitiveArrayRead(numBytes);
-      MemoryOps.readInts(
-          heapMemory, androidHeapIndexUnchecked(readerIdx), values, offset, numElements);
-      readerIndex = readerIdx + numBytes;
+      readAndroidInts(values, offset, numElements, numBytes);
       return;
     }
     readPrimitiveArray(values, UnsafeOps.INT_ARRAY_OFFSET + ((long) offset << 2), numBytes);
   }
 
+  private void readAndroidInts(int[] values, int numBytes, int numElements) {
+    readAndroidInts(values, 0, numElements, numBytes);
+  }
+
+  private void readAndroidInts(int[] values, int offset, int numElements, int numBytes) {
+    int readerIdx = preparePrimitiveArrayRead(numBytes);
+    MemoryOps.readInts(
+        heapMemory, androidHeapIndexUnchecked(readerIdx), values, offset, numElements);
+    readerIndex = readerIdx + numBytes;
+  }
+
   public long[] readLongs(int numBytes) {
     int numElements = numBytes >> 3;
     final long[] values = new long[numElements];
-    readLongs(values, 0, numElements);
+    if (AndroidSupport.IS_ANDROID) {
+      int readerIdx = preparePrimitiveArrayRead(numBytes);
+      MemoryOps.readLongs(heapMemory, androidHeapIndexUnchecked(readerIdx), values, 0, numElements);
+      readerIndex = readerIdx + numBytes;
+      return values;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      checkReadableBytes(numBytes);
+      readerIdx = readerIndex;
+    }
+    UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, values, UnsafeOps.LONG_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
     return values;
   }
 
@@ -3377,7 +3430,14 @@ public final class MemoryBuffer {
   public float[] readFloats(int numBytes) {
     int numElements = numBytes >> 2;
     float[] values = new float[numElements];
-    readFloats(values, 0, numElements);
+    if (AndroidSupport.IS_ANDROID) {
+      int readerIdx = preparePrimitiveArrayRead(numBytes);
+      MemoryOps.readFloats(
+          heapMemory, androidHeapIndexUnchecked(readerIdx), values, 0, numElements);
+      readerIndex = readerIdx + numBytes;
+      return values;
+    }
+    readJvmPrimitiveArrayPayload(values, UnsafeOps.FLOAT_ARRAY_OFFSET, numBytes);
     return values;
   }
 
@@ -3396,7 +3456,14 @@ public final class MemoryBuffer {
   public double[] readDoubles(int numBytes) {
     int numElements = numBytes >> 3;
     double[] values = new double[numElements];
-    readDoubles(values, 0, numElements);
+    if (AndroidSupport.IS_ANDROID) {
+      int readerIdx = preparePrimitiveArrayRead(numBytes);
+      MemoryOps.readDoubles(
+          heapMemory, androidHeapIndexUnchecked(readerIdx), values, 0, numElements);
+      readerIndex = readerIdx + numBytes;
+      return values;
+    }
+    readJvmPrimitiveArrayPayload(values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numBytes);
     return values;
   }
 
@@ -3422,6 +3489,10 @@ public final class MemoryBuffer {
   }
 
   private void readPrimitiveArray(Object target, long targetPointer, int numBytes) {
+    readJvmPrimitiveArrayPayload(target, targetPointer, numBytes);
+  }
+
+  private void readJvmPrimitiveArrayPayload(Object target, long targetPointer, int numBytes) {
     int readerIdx = preparePrimitiveArrayRead(numBytes);
     UNSAFE.copyMemory(heapMemory, address + readerIdx, target, targetPointer, numBytes);
     readerIndex = readerIdx + numBytes;

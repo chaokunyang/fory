@@ -50,38 +50,26 @@ exchange, and row-format random access.
 
 ## Performance
 
-Charts labeled "compatible" use schema evolution mode. Other Java charts use
-schema-consistent mode, where writer and reader class schemas are expected to
-match.
-
-### Java serialization
+**Java serialization**
 
 In Java serialization benchmarks, Fory reaches up to **170x** the throughput of
 JDK serialization on selected workloads.
-
-**Serialization throughput**
 
 <p align="center">
 <img src="docs/benchmarks/java/java_repo_serialization_throughput.png" width="95%" alt="Java serialization throughput">
 </p>
 
-**Deserialization throughput**
-
 <p align="center">
 <img src="docs/benchmarks/java/java_repo_deserialization_throughput.png" width="95%" alt="Java deserialization throughput">
 </p>
-
-**Xlang throughput**
 
 <p align="center">
 <img src="docs/benchmarks/java/throughput.png" width="95%" alt="Java xlang throughput">
 </p>
 
-See [Java benchmarks](docs/benchmarks/java) for the full methodology and data.
+See [Java benchmarks](docs/benchmarks/java) for methodology and data.
 
-### Other runtime benchmarks
-
-### Rust
+**Rust**
 
 <p align="center">
 <img src="docs/benchmarks/rust/throughput.png" width="95%" alt="Rust serialization throughput">
@@ -89,7 +77,7 @@ See [Java benchmarks](docs/benchmarks/java) for the full methodology and data.
 
 See [Rust benchmarks](benchmarks/rust).
 
-### C++
+**C++**
 
 <p align="center">
 <img src="docs/benchmarks/cpp/throughput.png" width="95%" alt="C++ serialization throughput">
@@ -97,7 +85,7 @@ See [Rust benchmarks](benchmarks/rust).
 
 See [C++ benchmarks](benchmarks/cpp).
 
-### Go
+**Go**
 
 <p align="center">
 <img src="docs/benchmarks/go/throughput.png" width="95%" alt="Go serialization throughput">
@@ -105,7 +93,7 @@ See [C++ benchmarks](benchmarks/cpp).
 
 See [Go benchmarks](benchmarks/go).
 
-### Python
+**Python**
 
 <p align="center">
 <img src="docs/benchmarks/python/throughput.png" width="95%" alt="Python serialization throughput">
@@ -113,7 +101,7 @@ See [Go benchmarks](benchmarks/go).
 
 See [Python benchmarks](benchmarks/python).
 
-### JavaScript/TypeScript
+**JavaScript/TypeScript**
 
 <p align="center">
 <img src="docs/benchmarks/javascript/throughput.png" width="95%" alt="JavaScript serialization throughput">
@@ -121,7 +109,7 @@ See [Python benchmarks](benchmarks/python).
 
 See [JavaScript benchmarks](docs/benchmarks/javascript).
 
-### C#
+**C#**
 
 <p align="center">
 <img src="docs/benchmarks/csharp/throughput.png" width="95%" alt="C# serialization throughput">
@@ -129,7 +117,7 @@ See [JavaScript benchmarks](docs/benchmarks/javascript).
 
 See [C# benchmarks](docs/benchmarks/csharp).
 
-### Swift
+**Swift**
 
 <p align="center">
 <img src="docs/benchmarks/swift/throughput.png" width="95%" alt="Swift serialization throughput">
@@ -137,7 +125,7 @@ See [C# benchmarks](docs/benchmarks/csharp).
 
 See [Swift benchmarks](docs/benchmarks/swift).
 
-### Dart
+**Dart**
 
 <p align="center">
 <img src="docs/benchmarks/dart/throughput.png" width="95%" alt="Dart serialization throughput">

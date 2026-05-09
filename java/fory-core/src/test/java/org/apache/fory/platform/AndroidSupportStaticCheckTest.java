@@ -35,6 +35,21 @@ import org.testng.annotations.Test;
 public class AndroidSupportStaticCheckTest {
   private static final Pattern DIRECT_CLASS_VALUE =
       Pattern.compile("\\bClassValue\\s*<|new\\s+ClassValue\\s*<");
+  private static final Pattern ANDROID_GATED_SCALA_COMPANION_LOOKUP =
+      Pattern.compile(
+          "AndroidSupport\\.IS_ANDROID\\s*\\?\\s*null\\s*:\\s*"
+              + "_JDKAccess\\._trustedLookup\\(companionClass\\)",
+          Pattern.DOTALL);
+  private static final Pattern ANDROID_GATED_SCALA_CLASS_LOOKUP =
+      Pattern.compile(
+          "AndroidSupport\\.IS_ANDROID\\s*\\?\\s*null\\s*:\\s*"
+              + "_JDKAccess\\._trustedLookup\\(cls\\)",
+          Pattern.DOTALL);
+  private static final Pattern ANDROID_REFLECTIVE_SCALA_DEFAULT_INVOKE =
+      Pattern.compile(
+          "if \\(AndroidSupport\\.IS_ANDROID\\).*method\\.setAccessible\\(true\\).*"
+              + "method\\.invoke\\(target\\)",
+          Pattern.DOTALL);
 
   @Test
   public void testNoDirectClassValueUsageInCoreSources() throws IOException {
@@ -58,5 +73,20 @@ public class AndroidSupportStaticCheckTest {
     assertTrue(
         violations.isEmpty(),
         "Direct ClassValue usage is not Android-safe; use ClassValueCache instead: " + violations);
+  }
+
+  @Test
+  public void testScalaDefaultValuesDoNotUseTrustedLookupOnAndroid() throws IOException {
+    Path sourcePath = Paths.get("src/main/java/org/apache/fory/util/DefaultValueUtils.java");
+    String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+    assertTrue(
+        ANDROID_GATED_SCALA_COMPANION_LOOKUP.matcher(source).find(),
+        "Scala companion default values must not use _JDKAccess trusted lookup on Android");
+    assertTrue(
+        ANDROID_GATED_SCALA_CLASS_LOOKUP.matcher(source).find(),
+        "Regular Scala default values must not use _JDKAccess trusted lookup on Android");
+    assertTrue(
+        ANDROID_REFLECTIVE_SCALA_DEFAULT_INVOKE.matcher(source).find(),
+        "Android Scala default values must invoke default methods through direct reflection");
   }
 }

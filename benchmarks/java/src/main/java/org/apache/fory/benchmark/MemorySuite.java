@@ -101,8 +101,7 @@ public class MemorySuite {
   // @Benchmark
   public Object charsCopyAligned(MemoryState state) {
     state.heapBuffer.writerIndex(0);
-    state.heapBuffer.writePrimitiveArrayWithSize(
-        state.chars, UnsafeOps.CHAR_ARRAY_OFFSET, state.chars.length * 2);
+    state.heapBuffer.writeCharsWithSize(state.chars);
     return state.heapBuffer;
   }
 
@@ -110,16 +109,14 @@ public class MemorySuite {
   public Object charsCopyUnaligned(MemoryState state) {
     state.heapBuffer.writerIndex(0);
     state.heapBuffer.writeBoolean(false);
-    state.heapBuffer.writePrimitiveArrayWithSize(
-        state.chars, UnsafeOps.CHAR_ARRAY_OFFSET, state.chars.length * 2);
+    state.heapBuffer.writeCharsWithSize(state.chars);
     return state.heapBuffer;
   }
 
   // @Benchmark
   public Object longsCopyAligned(MemoryState state) {
     state.heapBuffer.writerIndex(0);
-    state.heapBuffer.writePrimitiveArrayWithSize(
-        state.longs, UnsafeOps.LONG_ARRAY_OFFSET, state.longs.length * 8);
+    state.heapBuffer.writeLongsWithSize(state.longs);
     return state.heapBuffer;
   }
 
@@ -127,8 +124,7 @@ public class MemorySuite {
   public Object longsCopyUnaligned(MemoryState state) {
     state.heapBuffer.writerIndex(0);
     state.heapBuffer.writeBoolean(false);
-    state.heapBuffer.writePrimitiveArrayWithSize(
-        state.longs, UnsafeOps.LONG_ARRAY_OFFSET, state.longs.length * 8);
+    state.heapBuffer.writeLongsWithSize(state.longs);
     return state.heapBuffer;
   }
 

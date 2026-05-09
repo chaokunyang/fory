@@ -56,7 +56,7 @@ public class ClassValueCache<T> {
    * Create a cache with weak keys.
    *
    * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is a
-   * weak hash map.
+   * weak-key, soft-value hash map.
    *
    * <p>Android intentionally uses strong keys and values because Android does not support {@link
    * ClassValue}; this cache is the Android-safe replacement for direct class-value caches.
@@ -70,7 +70,11 @@ public class ClassValueCache<T> {
           CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build());
     } else {
       return new ClassValueCache<>(
-          CacheBuilder.newBuilder().weakKeys().concurrencyLevel(concurrencyLevel).build());
+          CacheBuilder.newBuilder()
+              .weakKeys()
+              .softValues()
+              .concurrencyLevel(concurrencyLevel)
+              .build());
     }
   }
 
@@ -78,7 +82,7 @@ public class ClassValueCache<T> {
    * Create a cache with weak keys and soft values.
    *
    * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is a
-   * weak hash map.
+   * weak-key, soft-value hash map.
    *
    * @param concurrencyLevel the concurrency level
    * @return the cache

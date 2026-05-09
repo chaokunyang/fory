@@ -25,25 +25,29 @@ idiomatic domain objects, schema IDL, and cross-language data exchange.
 
 ## Why Fory
 
-- **Domain-object first**: Serialize Java classes, Python dataclasses, Go
+Fory is built for fast, compact serialization across languages and runtimes. It
+works with idiomatic objects in each language, supports shared schemas when you
+need a contract, and preserves object features such as shared and circular
+references.
+
+- **Efficient Cross-Language Encoding**: Exchange payloads across supported
+  languages with compact binary encoding, metadata packing, schema evolution,
+  type mapping, shared/circular references, and polymorphic runtime types.
+- **Domain Objects First**: Serialize Java classes, Python dataclasses, Go
   structs, Rust/C++ structs, and generated or annotated model types directly.
-  You do not need an IDL file to start.
-- **Schema IDL with native domain objects**: For shared schemas, define numbers,
-  strings, lists, maps, arrays, enums, structs, and unions once, then generate
-  domain objects that use each language's native types.
-- **Fast paths in one codebase**: Native serialization, xlang serialization,
-  and row format all benefit from Fory's optimized runtime work, including Java
-  JIT serializers and generated/static serializers in other runtimes.
-- **Xlang wire format**: Exchange payloads across supported languages with
-  compact binary encoding, metadata packing, cross-language type mapping, and
-  polymorphic runtime types.
-- **Shared and circular references**: Preserve object identity for graphs that
-  need it.
-- **Schema evolution**: Add or delete fields while services deploy
-  independently, with compatible mode handling forward and backward reads.
-- **Row format**: Use zero-copy random access, partial reads/deserialization,
-  and Arrow integration when jobs need fields instead of whole objects.
-- **Broad runtime support**: Java, Python, C++, Go, Rust,
+  Preserve shared and circular references when object identity matters.
+- **Reference-Aware Schema IDL**: Fory is the first schema IDL to bring
+  references into the type system, so shared and circular references are part of
+  the schema instead of runtime-only behavior. It also provides a rich type
+  system for numbers, strings, lists, maps, arrays, enums, structs, and unions.
+  Define schemas once, then generate native domain objects that fit each
+  language's type system without forcing wrapper types into user code.
+- **Row-Format Random Access**: Read fields, arrays, and nested values without
+  rebuilding full objects, with zero-copy access, partial reads, and Arrow
+  integration.
+- **Optimized Runtimes**: Java JIT serializers and generated/static serializers
+  in other runtimes keep hot paths fast and payloads compact.
+- **Language And Platform Support**: Java, Python, C++, Go, Rust,
   JavaScript/TypeScript, C#, Swift, Dart, Scala, and Kotlin, including GraalVM
   native image, Dart VM/Flutter/web, and Node.js/browser JavaScript.
 

@@ -103,7 +103,7 @@ Fory Go enables seamless data exchange with Java, Python, C++, Rust, and JavaScr
 ```go
 // Go
 f := fory.New()
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStructByName(User{}, "example.User")
 data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 // 'data' can be deserialized by Java, Python, etc.
 ```

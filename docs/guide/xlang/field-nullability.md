@@ -167,7 +167,7 @@ type Person struct {
 }
 
 fory := forygo.NewFory(forygo.WithXlang(true), forygo.WithCompatible(true))
-fory.RegisterNamedStruct(Person{}, "example.Person")
+fory.RegisterStructByName(Person{}, "example.Person")
 ```
 
 ### C++

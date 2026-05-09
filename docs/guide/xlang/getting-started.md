@@ -161,7 +161,7 @@ fory.register_type(Person, typename="example.Person")
 **Go:**
 
 ```go
-fory.RegisterNamedStruct(Person{}, "example.Person")
+fory.RegisterStructByName(Person{}, "example.Person")
 ```
 
 **Rust:**

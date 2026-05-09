@@ -242,7 +242,7 @@ f.RegisterExtension(MyType{}, 100, &MySerializer{})
 More flexible but more serialization cost, type name included in serialized data:
 
 ```go
-f.RegisterNamedExtension(MyType{}, "myapp.MyType", &MySerializer{})
+f.RegisterExtensionByName(MyType{}, "myapp.MyType", &MySerializer{})
 ```
 
 ## Best Practices

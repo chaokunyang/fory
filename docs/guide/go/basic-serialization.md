@@ -35,7 +35,7 @@ f.RegisterStruct(User{}, 1)
 f.RegisterStruct(Order{}, 2)
 
 // Or register with a name (more flexible, less prone to ID conflicts, but higher serialization cost)
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStructByName(User{}, "example.User")
 
 // Register enum types
 f.RegisterEnum(Color(0), 3)

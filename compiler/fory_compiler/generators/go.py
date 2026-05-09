@@ -1570,7 +1570,7 @@ class GoGenerator(BaseGenerator):
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
             lines.append(
-                f'\tif err := f.RegisterNamedEnum({code_name}(0), "{ns}.{type_name}"); err != nil {{'
+                f'\tif err := f.RegisterEnumByName({code_name}(0), "{ns}.{type_name}"); err != nil {{'
             )
             lines.append("\t\treturn err")
             lines.append("\t}")
@@ -1613,7 +1613,7 @@ class GoGenerator(BaseGenerator):
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
             lines.append(
-                f'\tif err := f.RegisterNamedStruct({code_name}{{}}, "{ns}.{type_name}"); err != nil {{'
+                f'\tif err := f.RegisterStructByName({code_name}{{}}, "{ns}.{type_name}"); err != nil {{'
             )
             lines.append("\t\treturn err")
             lines.append("\t}")
@@ -1647,7 +1647,7 @@ class GoGenerator(BaseGenerator):
         else:
             ns = self.schema.package or "default"
             lines.append(
-                f'\tif err := f.RegisterNamedUnion({code_name}{{}}, "{ns}.{type_name}", {serializer_expr}); err != nil {{'
+                f'\tif err := f.RegisterUnionByName({code_name}{{}}, "{ns}.{type_name}", {serializer_expr}); err != nil {{'
             )
             lines.append("\t\treturn err")
             lines.append("\t}")

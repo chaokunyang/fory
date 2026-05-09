@@ -280,7 +280,7 @@ Ensure the same field IDs are used across all languages for corresponding fields
 
 ```go
 // Go
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStructByName(User{}, "example.User")
 
 // Java - must match exactly
 fory.register(User.class, "example.User");

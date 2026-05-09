@@ -400,7 +400,7 @@ type Person struct {
 
 func main() {
     f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-    if err := f.RegisterNamedStruct(Person{}, "example.Person"); err != nil {
+    if err := f.RegisterStructByName(Person{}, "example.Person"); err != nil {
         panic(err)
     }
 

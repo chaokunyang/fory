@@ -287,14 +287,14 @@ func (f *Fory) RegisterUnion(type_ any, typeID uint32, serializer Serializer) er
 	return f.typeResolver.RegisterUnion(t, typeID, serializer)
 }
 
-// RegisterNamedUnion registers a union type with a namespace + type name for cross-language serialization.
+// RegisterUnionByName registers a union type by namespace + type name for cross-language serialization.
 // type_ can be either a reflect.Type or an instance of the union type.
 // serializer must implement union payload encoding/decoding.
 //
 //go:noinline
-func (f *Fory) RegisterNamedUnion(type_ any, typeName string, serializer Serializer) error {
+func (f *Fory) RegisterUnionByName(type_ any, typeName string, serializer Serializer) error {
 	if serializer == nil {
-		return fmt.Errorf("RegisterNamedUnion requires a non-nil serializer")
+		return fmt.Errorf("RegisterUnionByName requires a non-nil serializer")
 	}
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
@@ -306,7 +306,7 @@ func (f *Fory) RegisterNamedUnion(type_ any, typeName string, serializer Seriali
 		}
 	}
 	if t.Kind() != reflect.Struct {
-		return fmt.Errorf("RegisterNamedUnion only supports struct types; got: %v", t.Kind())
+		return fmt.Errorf("RegisterUnionByName only supports struct types; got: %v", t.Kind())
 	}
 	namespace := ""
 	name := typeName
@@ -314,16 +314,16 @@ func (f *Fory) RegisterNamedUnion(type_ any, typeName string, serializer Seriali
 		namespace = typeName[:lastDot]
 		name = typeName[lastDot+1:]
 	}
-	return f.typeResolver.RegisterNamedUnion(t, namespace, name, serializer)
+	return f.typeResolver.RegisterUnionByName(t, namespace, name, serializer)
 }
 
-// RegisterNamedStruct registers a named struct type for cross-language serialization
-// type_ can be either a reflect.Type or an instance of the type
-// typeName can include a namespace prefix separated by "." (e.g., "example.Foo")
-// Note: For enum types, use RegisterNamedEnum instead.
+// RegisterStructByName registers a struct type by namespace + type name for cross-language serialization.
+// type_ can be either a reflect.Type or an instance of the type.
+// typeName can include a namespace prefix separated by "." (e.g., "example.Foo").
+// Note: For enum types, use RegisterEnumByName instead.
 //
 //go:noinline
-func (f *Fory) RegisterNamedStruct(type_ any, typeName string) error {
+func (f *Fory) RegisterStructByName(type_ any, typeName string) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -334,7 +334,7 @@ func (f *Fory) RegisterNamedStruct(type_ any, typeName string) error {
 		}
 	}
 	if t.Kind() != reflect.Struct {
-		return fmt.Errorf("RegisterNamedStruct only supports struct types; for enum types use RegisterNamedEnum. Got: %v", t.Kind())
+		return fmt.Errorf("RegisterStructByName only supports struct types; for enum types use RegisterEnumByName. Got: %v", t.Kind())
 	}
 	// Split typeName by last "." to extract namespace and type name
 	namespace := ""
@@ -343,7 +343,7 @@ func (f *Fory) RegisterNamedStruct(type_ any, typeName string) error {
 		namespace = typeName[:lastDot]
 		name = typeName[lastDot+1:]
 	}
-	return f.typeResolver.RegisterNamedStruct(t, 0, namespace, name)
+	return f.typeResolver.RegisterStructByName(t, namespace, name)
 }
 
 // RegisterEnum registers an enum type with a numeric ID for cross-language serialization.
@@ -379,13 +379,13 @@ func (f *Fory) RegisterEnum(type_ any, typeID uint32) error {
 	return f.typeResolver.RegisterEnum(t, typeID)
 }
 
-// RegisterNamedEnum registers an enum type with a name for cross-language serialization.
+// RegisterEnumByName registers an enum type by namespace + type name for cross-language serialization.
 // In Go, enums are typically defined as int-based types (e.g., type Color int32).
-// type_ can be either a reflect.Type or an instance of the enum type
-// typeName can include a namespace prefix separated by "." (e.g., "example.Color")
+// type_ can be either a reflect.Type or an instance of the enum type.
+// typeName can include a namespace prefix separated by "." (e.g., "example.Color").
 //
 //go:noinline
-func (f *Fory) RegisterNamedEnum(type_ any, typeName string) error {
+func (f *Fory) RegisterEnumByName(type_ any, typeName string) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -402,7 +402,7 @@ func (f *Fory) RegisterNamedEnum(type_ any, typeName string) error {
 		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		// OK
 	default:
-		return fmt.Errorf("RegisterNamedEnum only supports numeric types (Go enums); got: %v", t.Kind())
+		return fmt.Errorf("RegisterEnumByName only supports numeric types (Go enums); got: %v", t.Kind())
 	}
 
 	// Split typeName by last "." to extract namespace and type name
@@ -412,7 +412,7 @@ func (f *Fory) RegisterNamedEnum(type_ any, typeName string) error {
 		namespace = typeName[:lastDot]
 		name = typeName[lastDot+1:]
 	}
-	return f.typeResolver.RegisterNamedEnum(t, namespace, name)
+	return f.typeResolver.RegisterEnumByName(t, namespace, name)
 }
 
 // RegisterExtension registers a type as an extension type with a numeric ID.
@@ -436,7 +436,7 @@ func (f *Fory) RegisterExtension(type_ any, typeID uint32, serializer ExtensionS
 	return f.typeResolver.RegisterExtension(t, typeID, serializer)
 }
 
-// RegisterNamedExtension registers a type as an extension type (NAMED_EXT) for cross-language serialization.
+// RegisterExtensionByName registers an extension type by namespace + type name for cross-language serialization.
 // Extension types use a custom serializer provided by the user.
 // This is used for types with custom serializers in cross-language serialization.
 //
@@ -456,10 +456,10 @@ func (f *Fory) RegisterExtension(type_ any, typeID uint32, serializer ExtensionS
 //	}
 //
 //	// Register with custom serializer
-//	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
+//	f.RegisterExtensionByName(MyExt{}, "my_ext", &MyExtSerializer{})
 //
 //go:noinline
-func (f *Fory) RegisterNamedExtension(type_ any, typeName string, serializer ExtensionSerializer) error {
+func (f *Fory) RegisterExtensionByName(type_ any, typeName string, serializer ExtensionSerializer) error {
 	var t reflect.Type
 	if rt, ok := type_.(reflect.Type); ok {
 		t = rt
@@ -469,7 +469,7 @@ func (f *Fory) RegisterNamedExtension(type_ any, typeName string, serializer Ext
 			t = t.Elem()
 		}
 	}
-	return f.typeResolver.RegisterNamedExtension(t, "", typeName, serializer)
+	return f.typeResolver.RegisterExtensionByName(t, "", typeName, serializer)
 }
 
 // Reset clears internal state for reuse

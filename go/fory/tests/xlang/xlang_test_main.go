@@ -770,9 +770,9 @@ func testNamedSimpleStruct() {
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
 	// Use namespace "demo" to match Java's fory.register(Color.class, "demo", "color"), etc.
-	f.RegisterNamedEnum(Color(0), "demo.color")
-	f.RegisterNamedStruct(Item{}, "demo.item")
-	f.RegisterNamedStruct(SimpleStruct{}, "demo.simple_struct")
+	f.RegisterEnumByName(Color(0), "demo.color")
+	f.RegisterStructByName(Item{}, "demo.item")
+	f.RegisterStructByName(SimpleStruct{}, "demo.simple_struct")
 
 	var obj SimpleStruct
 	if err := f.Deserialize(data, &obj); err != nil {
@@ -791,8 +791,8 @@ func testStructEvolvingOverride() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterNamedStruct(EvolvingOverrideStruct{}, "test.evolving_yes")
-	f.RegisterNamedStruct(FixedOverrideStruct{}, "test.evolving_off")
+	f.RegisterStructByName(EvolvingOverrideStruct{}, "test.evolving_yes")
+	f.RegisterStructByName(FixedOverrideStruct{}, "test.evolving_off")
 
 	buffer := fory.NewByteBuffer(data)
 	var evolving EvolvingOverrideStruct
@@ -1174,8 +1174,8 @@ func testSkipNameCustom() {
 	data := readFile(dataFile)
 
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
-	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
-	f.RegisterNamedStruct(EmptyWrapper{}, "my_wrapper")
+	f.RegisterExtensionByName(MyExt{}, "my_ext", &MyExtSerializer{})
+	f.RegisterStructByName(EmptyWrapper{}, "my_wrapper")
 
 	var obj EmptyWrapper
 	if err := f.Deserialize(data, &obj); err != nil {
@@ -1197,10 +1197,10 @@ func testConsistentNamed() {
 	// Java uses SCHEMA_CONSISTENT mode which doesn't enable metaShare
 	// So Go should NOT expect meta offset field
 	f := fory.New(fory.WithXlang(true), fory.WithCompatible(false))
-	f.RegisterNamedEnum(Color(0), "color")
-	f.RegisterNamedStruct(MyStruct{}, "my_struct")
+	f.RegisterEnumByName(Color(0), "color")
+	f.RegisterStructByName(MyStruct{}, "my_struct")
 	// MyExt uses an extension serializer in Java (MyExtSerializer), so register as extension type
-	f.RegisterNamedExtension(MyExt{}, "my_ext", &MyExtSerializer{})
+	f.RegisterExtensionByName(MyExt{}, "my_ext", &MyExtSerializer{})
 
 	buf := fory.NewByteBuffer(data)
 	values := make([]any, 9)

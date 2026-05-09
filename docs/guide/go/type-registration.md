@@ -58,7 +58,7 @@ Register a struct with a type name string. This is more flexible but has higher 
 
 ```go
 f := fory.New()
-err := f.RegisterNamedStruct(User{}, "example.User")
+err := f.RegisterStructByName(User{}, "example.User")
 if err != nil {
     panic(err)
 }
@@ -92,7 +92,7 @@ err := f.RegisterEnum(Status(0), 1)
 ### Register by Name
 
 ```go
-err := f.RegisterNamedEnum(Status(0), "example.Status")
+err := f.RegisterEnumByName(Status(0), "example.Status")
 ```
 
 ## Extension Types
@@ -106,7 +106,7 @@ f := fory.New()
 err := f.RegisterExtension(CustomType{}, 1, &CustomSerializer{})
 
 // Or register by name
-err = f.RegisterNamedExtension(CustomType{}, "example.Custom", &CustomSerializer{})
+err = f.RegisterExtensionByName(CustomType{}, "example.Custom", &CustomSerializer{})
 ```
 
 See [Custom Serializers](custom-serializers.md) for details on implementing the `ExtensionSerializer` interface.
@@ -196,7 +196,7 @@ All languages use the same type name:
 **Go**:
 
 ```go
-f.RegisterNamedStruct(User{}, "example.User")
+f.RegisterStructByName(User{}, "example.User")
 ```
 
 **Java**:

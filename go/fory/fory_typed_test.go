@@ -180,7 +180,7 @@ func TestSerializeGenericComplex(t *testing.T) {
 			Name  string
 			Value int32
 		}
-		err := f.RegisterNamedStruct(TestStruct{}, "example.TestStruct")
+		err := f.RegisterStructByName(TestStruct{}, "example.TestStruct")
 		require.NoError(t, err)
 
 		original := TestStruct{Name: "test", Value: 100}
@@ -249,7 +249,7 @@ func TestSerializeDeserializeRoundTrip(t *testing.T) {
 			ID   int64
 			Name string
 		}
-		f.RegisterNamedStruct(CustomStruct{}, "test.CustomStruct")
+		f.RegisterStructByName(CustomStruct{}, "test.CustomStruct")
 
 		original := CustomStruct{ID: 123, Name: "test"}
 		data, err := Serialize(f, &original)

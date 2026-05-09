@@ -90,11 +90,11 @@ func (f *Fory) Deserialize(data []byte, v any) error {
 	return inner.Deserialize(data, v)
 }
 
-// RegisterNamedStruct registers a named struct type for cross-language serialization
-func (f *Fory) RegisterNamedStruct(type_ any, typeName string) error {
+// RegisterStructByName registers a struct type by namespace + type name for cross-language serialization.
+func (f *Fory) RegisterStructByName(type_ any, typeName string) error {
 	inner := f.acquire()
 	defer f.release(inner)
-	return inner.RegisterNamedStruct(type_, typeName)
+	return inner.RegisterStructByName(type_, typeName)
 }
 
 // ============================================================================

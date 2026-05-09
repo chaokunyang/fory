@@ -246,12 +246,12 @@ func TestNumericPointerOptionalInterop(t *testing.T) {
 
 	t.Run("PointerToOptionalNull", func(t *testing.T) {
 		writer := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, writer.RegisterNamedStruct(NumericPtrStruct{}, "NumericInterop"))
+		require.NoError(t, writer.RegisterStructByName(NumericPtrStruct{}, "NumericInterop"))
 		data, err := writer.Marshal(&NumericPtrStruct{})
 		require.NoError(t, err)
 
 		reader := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, reader.RegisterNamedStruct(NumericOptStruct{}, "NumericInterop"))
+		require.NoError(t, reader.RegisterStructByName(NumericOptStruct{}, "NumericInterop"))
 		var out NumericOptStruct
 		require.NoError(t, reader.Unmarshal(data, &out))
 
@@ -271,12 +271,12 @@ func TestNumericPointerOptionalInterop(t *testing.T) {
 
 	t.Run("PointerToOptionalValue", func(t *testing.T) {
 		writer := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, writer.RegisterNamedStruct(NumericPtrStruct{}, "NumericInterop"))
+		require.NoError(t, writer.RegisterStructByName(NumericPtrStruct{}, "NumericInterop"))
 		data, err := writer.Marshal(&ptrValues)
 		require.NoError(t, err)
 
 		reader := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, reader.RegisterNamedStruct(NumericOptStruct{}, "NumericInterop"))
+		require.NoError(t, reader.RegisterStructByName(NumericOptStruct{}, "NumericInterop"))
 		var out NumericOptStruct
 		require.NoError(t, reader.Unmarshal(data, &out))
 
@@ -285,12 +285,12 @@ func TestNumericPointerOptionalInterop(t *testing.T) {
 
 	t.Run("OptionalToPointerNull", func(t *testing.T) {
 		writer := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, writer.RegisterNamedStruct(NumericOptStruct{}, "NumericInterop"))
+		require.NoError(t, writer.RegisterStructByName(NumericOptStruct{}, "NumericInterop"))
 		data, err := writer.Marshal(&NumericOptStruct{})
 		require.NoError(t, err)
 
 		reader := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, reader.RegisterNamedStruct(NumericPtrStruct{}, "NumericInterop"))
+		require.NoError(t, reader.RegisterStructByName(NumericPtrStruct{}, "NumericInterop"))
 		var out NumericPtrStruct
 		require.NoError(t, reader.Unmarshal(data, &out))
 
@@ -310,12 +310,12 @@ func TestNumericPointerOptionalInterop(t *testing.T) {
 
 	t.Run("OptionalToPointerValue", func(t *testing.T) {
 		writer := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, writer.RegisterNamedStruct(NumericOptStruct{}, "NumericInterop"))
+		require.NoError(t, writer.RegisterStructByName(NumericOptStruct{}, "NumericInterop"))
 		data, err := writer.Marshal(&optValues)
 		require.NoError(t, err)
 
 		reader := New(WithXlang(true), WithCompatible(true))
-		require.NoError(t, reader.RegisterNamedStruct(NumericPtrStruct{}, "NumericInterop"))
+		require.NoError(t, reader.RegisterStructByName(NumericPtrStruct{}, "NumericInterop"))
 		var out NumericPtrStruct
 		require.NoError(t, reader.Unmarshal(data, &out))
 

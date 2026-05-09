@@ -111,7 +111,7 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fory := NewFory(WithRefTracking(false))
 
-			if err := fory.RegisterNamedStruct(tt.testStruct, tt.tagName); err != nil {
+			if err := fory.RegisterStructByName(tt.testStruct, tt.tagName); err != nil {
 				t.Fatalf("Failed to register tag type: %v", err)
 			}
 
@@ -132,7 +132,7 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 
 			// basic checks
 			assert.True(t, decodedTypeDef.typeId == originalTypeDef.typeId || decodedTypeDef.typeId == -originalTypeDef.typeId, "TypeId mismatch")
-			assert.Equal(t, originalTypeDef.registerByName, decodedTypeDef.registerByName, "RegisterNamedStruct mismatch")
+			assert.Equal(t, originalTypeDef.registerByName, decodedTypeDef.registerByName, "RegisterStructByName mismatch")
 			assert.Equal(t, originalTypeDef.compressed, decodedTypeDef.compressed, "Compressed flag mismatch")
 			assert.Equal(t, len(originalTypeDef.fieldDefs), len(decodedTypeDef.fieldDefs), "Field count mismatch")
 
@@ -224,7 +224,7 @@ func TestTypeDefNullableFields(t *testing.T) {
 	fory := NewFory(WithRefTracking(false))
 
 	// Register the type
-	if err := fory.RegisterNamedStruct(Item1{}, "test.Item1"); err != nil {
+	if err := fory.RegisterStructByName(Item1{}, "test.Item1"); err != nil {
 		t.Fatalf("Failed to register type: %v", err)
 	}
 
@@ -460,7 +460,7 @@ func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
 
 func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
 	fory := NewFory(WithCompatible(true))
-	require.NoError(t, fory.RegisterNamedStruct(SimpleStruct{}, "example.SimpleStruct"))
+	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
 	require.NoError(t, err)
 	require.NotEmpty(t, typeDef.encoded)
@@ -486,7 +486,7 @@ func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
 
 func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {
 	fory := NewFory(WithCompatible(true))
-	require.NoError(t, fory.RegisterNamedStruct(SimpleStruct{}, "example.SimpleStruct"))
+	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
 	require.NoError(t, err)
 	require.NotNil(t, typeDef.nsName)

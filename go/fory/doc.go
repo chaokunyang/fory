@@ -105,7 +105,7 @@ Types must be registered before serialization. Registration can be done by ID
 	f.RegisterStruct(Order{}, 2)
 
 	// Register by name (more flexible)
-	f.RegisterNamedStruct(User{}, "example.User")
+	f.RegisterStructByName(User{}, "example.User")
 
 	// Register enum types
 	f.RegisterEnum(Status(0), 3)

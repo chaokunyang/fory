@@ -659,8 +659,8 @@ if err := f.RegisterStruct(Envelope_Payload{}, 2862577837); err != nil { ... }
 If `option enable_auto_type_id = false;` is set:
 
 ```go
-if err := f.RegisterNamedStruct(Config{}, "myapp.models.Config"); err != nil { ... }
-if err := f.RegisterNamedUnion(Holder{}, "myapp.models.Holder", fory.NewUnionSerializer(...)); err != nil { ... }
+if err := f.RegisterStructByName(Config{}, "myapp.models.Config"); err != nil { ... }
+if err := f.RegisterUnionByName(Holder{}, "myapp.models.Holder", fory.NewUnionSerializer(...)); err != nil { ... }
 ```
 
 `go_nested_type_style` controls nested type naming:

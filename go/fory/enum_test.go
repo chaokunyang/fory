@@ -76,7 +76,7 @@ func TestEnumReadRejectsMismatchedRegisteredTypeInfo(t *testing.T) {
 
 func TestNamedEnumReadConsumesNamedTypeInfo(t *testing.T) {
 	f := NewFory(WithXlang(true), WithCompatible(false))
-	require.NoError(t, f.RegisterNamedEnum(namedAuditEnum(0), "example.NamedAuditEnum"))
+	require.NoError(t, f.RegisterEnumByName(namedAuditEnum(0), "example.NamedAuditEnum"))
 	enumType := reflect.TypeOf(namedAuditEnum(0))
 	serializer, err := f.typeResolver.getSerializerByType(enumType, false)
 	require.NoError(t, err)

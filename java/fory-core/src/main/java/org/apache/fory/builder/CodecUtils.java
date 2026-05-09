@@ -44,8 +44,7 @@ public class CodecUtils {
   // TODO(chaokunyang) how to uninstall org.apache.fory.codegen/builder classes for graalvm build
   // time
   //  maybe use a temporal URLClassLoader
-  public static <T> Class<? extends Serializer<T>> loadOrGenObjectCodecClass(
-      Class<T> cls, Fory fory) {
+  public static <T> Class<? extends Serializer> loadOrGenObjectCodecClass(Class<T> cls, Fory fory) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
         "loadOrGenObjectCodecClass",
@@ -54,7 +53,7 @@ public class CodecUtils {
         () -> loadOrGenCodecClass(cls, fory, new ObjectCodecBuilder(cls, fory)));
   }
 
-  public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedCodecClass(
+  public static <T> Class<? extends Serializer> loadOrGenMetaSharedCodecClass(
       Fory fory, Class<T> cls, TypeDef typeDef) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
@@ -66,7 +65,7 @@ public class CodecUtils {
                 cls, fory, new MetaSharedCodecBuilder(TypeRef.of(cls), fory, typeDef)));
   }
 
-  public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedCodecClass(
+  public static <T> Class<? extends Serializer> loadOrGenMetaSharedCodecClass(
       TypeResolver typeResolver, Class<T> cls, TypeDef typeDef) {
     return typeResolver
         .getJITContext()
@@ -82,7 +81,7 @@ public class CodecUtils {
    * @param layerMarkerClass the marker class for this layer
    * @return the generated serializer class
    */
-  public static <T> Class<? extends Serializer<T>> loadOrGenMetaSharedLayerCodecClass(
+  public static <T> Class<? extends Serializer> loadOrGenMetaSharedLayerCodecClass(
       Class<T> cls, Fory fory, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
@@ -98,8 +97,8 @@ public class CodecUtils {
   }
 
   @SuppressWarnings("unchecked")
-  static <T> Class<? extends Serializer<T>> loadOrGenCodecClass(
-      Class<T> beanClass, Fory fory, BaseObjectCodecBuilder codecBuilder) {
+  static Class<? extends Serializer> loadOrGenCodecClass(
+      Class<?> beanClass, Fory fory, BaseObjectCodecBuilder codecBuilder) {
     // use genCodeFunc to avoid gen code repeatedly
     CompileUnit compileUnit =
         new CompileUnit(
@@ -121,7 +120,7 @@ public class CodecUtils {
             Collections.singletonList(compileUnit), compileState -> compileState.lock.lock());
     String className = codecBuilder.codecQualifiedClassName(beanClass);
     try {
-      return (Class<? extends Serializer<T>>) classLoader.loadClass(className);
+      return (Class<? extends Serializer>) classLoader.loadClass(className);
     } catch (ClassNotFoundException e) {
       throw new IllegalStateException("Impossible because we just compiled class", e);
     }
@@ -151,8 +150,8 @@ public class CodecUtils {
     return codeGenerator;
   }
 
-  private static <T> Class<? extends Serializer<T>> loadSerializer(
-      String name, Class<?> cls, Fory fory, Callable<Class<? extends Serializer<T>>> func) {
+  private static Class<? extends Serializer> loadSerializer(
+      String name, Class<?> cls, Fory fory, Callable<Class<? extends Serializer>> func) {
     int configHash = fory.getConfig().getConfigHash();
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       Tuple3<String, Class<?>, Integer> key = Tuple3.of(name, cls, configHash);

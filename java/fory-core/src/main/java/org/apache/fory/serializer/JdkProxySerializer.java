@@ -52,11 +52,10 @@ public class JdkProxySerializer extends Serializer {
       if (delegate == null) {
         throw new NullPointerException("delegate cannot be null");
       }
-      this.delegate = delegate;
+      this.delegate = unwrapInvocationHandler(delegate);
     }
 
-    @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    InvocationHandler getDelegate() {
       InvocationHandler handler = delegate;
       if (handler == null) {
         throw new IllegalStateException(
@@ -64,7 +63,12 @@ public class JdkProxySerializer extends Serializer {
                 + "Cannot call methods on proxy during deserialization or logging. "
                 + "On Android, proxy must not be used as Map/Set key or printed before handler is ready.");
       }
-      return handler.invoke(proxy, method, args);
+      return handler;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+      return getDelegate().invoke(proxy, method, args);
     }
   }
 
@@ -100,17 +104,17 @@ public class JdkProxySerializer extends Serializer {
   @Override
   public void write(WriteContext writeContext, Object value) {
     writeContext.writeRef(value.getClass().getInterfaces());
-    writeContext.writeRef(Proxy.getInvocationHandler(value));
+    writeContext.writeRef(unwrapInvocationHandler(Proxy.getInvocationHandler(value)));
   }
 
   @Override
   public Object copy(CopyContext copyContext, Object value) {
     Class<?>[] interfaces = value.getClass().getInterfaces();
-    InvocationHandler invocationHandler = Proxy.getInvocationHandler(value);
+    InvocationHandler invocationHandler =
+        unwrapInvocationHandler(Proxy.getInvocationHandler(value));
     Preconditions.checkNotNull(interfaces);
-    Preconditions.checkNotNull(invocationHandler);
     if (!copyContext.copyTrackingRef()) {
-      InvocationHandler copyHandler = (InvocationHandler) copyContext.copyObject(invocationHandler);
+      InvocationHandler copyHandler = copyContext.copyObject(invocationHandler);
       Preconditions.checkNotNull(copyHandler);
       return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, copyHandler);
     }
@@ -119,7 +123,7 @@ public class JdkProxySerializer extends Serializer {
       Object proxy =
           Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, deferredHandler);
       copyContext.reference(value, proxy);
-      InvocationHandler copyHandler = (InvocationHandler) copyContext.copyObject(invocationHandler);
+      InvocationHandler copyHandler = copyContext.copyObject(invocationHandler);
       Preconditions.checkNotNull(copyHandler);
       deferredHandler.setDelegate(copyHandler);
       return proxy;
@@ -136,8 +140,8 @@ public class JdkProxySerializer extends Serializer {
     final Class<?>[] interfaces = (Class<?>[]) readContext.readRef();
     Preconditions.checkNotNull(interfaces);
     if (!needToWriteRef) {
-      InvocationHandler invocationHandler = (InvocationHandler) readContext.readRef();
-      Preconditions.checkNotNull(invocationHandler);
+      InvocationHandler invocationHandler =
+          unwrapInvocationHandler((InvocationHandler) readContext.readRef());
       return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, invocationHandler);
     }
     if (AndroidSupport.IS_ANDROID) {
@@ -145,17 +149,25 @@ public class JdkProxySerializer extends Serializer {
       Object proxy =
           Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, deferredHandler);
       readContext.setReadRef(refId, proxy);
-      InvocationHandler invocationHandler = (InvocationHandler) readContext.readRef();
-      Preconditions.checkNotNull(invocationHandler);
+      InvocationHandler invocationHandler =
+          unwrapInvocationHandler((InvocationHandler) readContext.readRef());
       deferredHandler.setDelegate(invocationHandler);
       return proxy;
     }
     Object proxy = Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, STUB_HANDLER);
     readContext.setReadRef(refId, proxy);
-    InvocationHandler invocationHandler = (InvocationHandler) readContext.readRef();
-    Preconditions.checkNotNull(invocationHandler);
+    InvocationHandler invocationHandler =
+        unwrapInvocationHandler((InvocationHandler) readContext.readRef());
     UnsafeOps.putObject(proxy, ProxyHandlerField.OFFSET, invocationHandler);
     return proxy;
+  }
+
+  private static InvocationHandler unwrapInvocationHandler(InvocationHandler invocationHandler) {
+    Preconditions.checkNotNull(invocationHandler);
+    while (invocationHandler instanceof DeferredInvocationHandler) {
+      invocationHandler = ((DeferredInvocationHandler) invocationHandler).getDelegate();
+    }
+    return invocationHandler;
   }
 
   public static class ReplaceStub {}

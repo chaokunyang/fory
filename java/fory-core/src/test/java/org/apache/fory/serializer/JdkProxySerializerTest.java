@@ -26,6 +26,7 @@ import static org.testng.Assert.assertTrue;
 
 import java.io.ObjectStreamException;
 import java.io.Serializable;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -156,6 +157,43 @@ public class JdkProxySerializerTest extends ForyTestBase {
     RefTestInvocationHandler copyHandler =
         (RefTestInvocationHandler) Proxy.getInvocationHandler(copy);
     assertEquals(copyHandler.getProxy(), copy);
+  }
+
+  @Test
+  public void testDeferredInvocationHandlerIsUnwrapped() throws Exception {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
+    InvocationHandler deferredHandler = newDeferredInvocationHandler(new TestInvocationHandler());
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                fory.getClassLoader(), new Class[] {Function.class}, deferredHandler);
+
+    Function deserializedFunction = (Function) fory.deserialize(fory.serialize(function));
+    assertEquals(deserializedFunction.apply(null), 1);
+    assertTrue(Proxy.getInvocationHandler(deserializedFunction) instanceof TestInvocationHandler);
+
+    Function copy = fory.copy(function);
+    assertEquals(copy.apply(null), 1);
+    assertTrue(Proxy.getInvocationHandler(copy) instanceof TestInvocationHandler);
+  }
+
+  private static InvocationHandler newDeferredInvocationHandler(InvocationHandler delegate)
+      throws Exception {
+    Class<?> deferredHandlerClass =
+        Class.forName(JdkProxySerializer.class.getName() + "$DeferredInvocationHandler");
+    Constructor<?> constructor = deferredHandlerClass.getDeclaredConstructor();
+    constructor.setAccessible(true);
+    Object deferredHandler = constructor.newInstance();
+    Method setDelegate =
+        deferredHandlerClass.getDeclaredMethod("setDelegate", InvocationHandler.class);
+    setDelegate.setAccessible(true);
+    setDelegate.invoke(deferredHandler, delegate);
+    return (InvocationHandler) deferredHandler;
   }
 
   @Test

@@ -25,6 +25,7 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
+import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -342,6 +343,55 @@ public class ThreadSafeForyTest extends ForyTestBase {
       fory.serialize(buffer, "abc");
       Assert.assertEquals(fory.deserialize(buffer, String.class), "abc");
     }
+  }
+
+  @Test
+  public void testDeserializeByteBufferPreservesPositionAndLimit() {
+    Fory writer = Fory.builder().requireClassRegistration(false).build();
+    String value = "thread-safe-byte-buffer";
+    byte[] payload = writer.serialize(value);
+    for (ThreadSafeFory fory :
+        new ThreadSafeFory[] {
+          Fory.builder().requireClassRegistration(false).buildThreadSafeFory(),
+          Fory.builder().requireClassRegistration(false).buildThreadLocalFory(),
+          Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2)
+        }) {
+      for (ByteBuffer buffer : byteBufferViews(payload)) {
+        int position = buffer.position();
+        int limit = buffer.limit();
+        assertEquals(fory.deserialize(buffer), value);
+        assertEquals(buffer.position(), position);
+        assertEquals(buffer.limit(), limit);
+      }
+    }
+  }
+
+  private static ByteBuffer[] byteBufferViews(byte[] payload) {
+    ByteBuffer heap = ByteBuffer.wrap(wrapWithPadding(payload));
+    heap.position(3);
+    heap.limit(3 + payload.length);
+
+    ByteBuffer heapReadOnly = ByteBuffer.wrap(wrapWithPadding(payload)).asReadOnlyBuffer();
+    heapReadOnly.position(3);
+    heapReadOnly.limit(3 + payload.length);
+
+    ByteBuffer direct = ByteBuffer.allocateDirect(payload.length + 6);
+    direct.position(3);
+    direct.put(payload);
+    direct.position(3);
+    direct.limit(3 + payload.length);
+
+    ByteBuffer directReadOnly = direct.asReadOnlyBuffer();
+    directReadOnly.position(3);
+    directReadOnly.limit(3 + payload.length);
+
+    return new ByteBuffer[] {heap, heapReadOnly, direct, directReadOnly};
+  }
+
+  private static byte[] wrapWithPadding(byte[] payload) {
+    byte[] bytes = new byte[payload.length + 6];
+    System.arraycopy(payload, 0, bytes, 3, payload.length);
+    return bytes;
   }
 
   @Data

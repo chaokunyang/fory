@@ -41,7 +41,10 @@ public interface ThreadSafeFory extends BaseFory {
    */
   <R> R execute(Function<Fory, R> action);
 
-  /** Deserialize <code>obj</code> from a {@link ByteBuffer}. */
+  /**
+   * Deserialize <code>obj</code> from {@code byteBuffer.position()} to {@code byteBuffer.limit()}
+   * without changing the caller buffer position or limit.
+   */
   Object deserialize(ByteBuffer byteBuffer);
 
   /**

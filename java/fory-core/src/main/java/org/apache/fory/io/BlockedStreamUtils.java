@@ -102,17 +102,16 @@ public class BlockedStreamUtils {
   }
 
   private static void readByteBuffer(ReadableByteChannel channel, ByteBuffer buffer, int size) {
-    int read;
+    int read = 0;
     buffer.limit(buffer.position() + size);
     try {
-      read = channel.read(buffer);
       while (read < size) {
         int len = channel.read(buffer);
         if (len == -1) {
           throw new DeserializationException(
               String.format("Channel only have %s, but need %s", read, size));
         }
-        read += channel.read(buffer);
+        read += len;
       }
     } catch (IOException e) {
       throw new RuntimeException(e);

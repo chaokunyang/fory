@@ -23,6 +23,9 @@ import static org.testng.Assert.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.memory.MemoryBuffer;
@@ -54,6 +57,53 @@ public class BlockedStreamUtilsTest extends ForyTestBase {
         new MemoryBufferReadableChannel(MemoryBuffer.fromByteArray(stream.toByteArray()))) {
       assertEquals(BlockedStreamUtils.deserialize(fory, channel), foo);
       assertEquals(BlockedStreamUtils.deserialize(fory, channel, Foo.class), foo);
+    }
+  }
+
+  @Test
+  public void testDeserializeChunkedChannel() throws IOException {
+    Fory fory = builder().withCodegen(false).build();
+    ByteArrayOutputStream stream = new ByteArrayOutputStream();
+    Foo foo = Foo.create();
+    BlockedStreamUtils.serialize(fory, stream, foo);
+    BlockedStreamUtils.serialize(fory, stream, foo);
+    try (ChunkedReadableByteChannel channel =
+        new ChunkedReadableByteChannel(stream.toByteArray(), 1)) {
+      assertEquals(BlockedStreamUtils.deserialize(fory, channel), foo);
+      assertEquals(BlockedStreamUtils.deserialize(fory, channel, Foo.class), foo);
+    }
+  }
+
+  private static final class ChunkedReadableByteChannel implements ReadableByteChannel {
+    private final byte[] data;
+    private final int chunkSize;
+    private int position;
+    private boolean open = true;
+
+    private ChunkedReadableByteChannel(byte[] data, int chunkSize) {
+      this.data = data;
+      this.chunkSize = chunkSize;
+    }
+
+    @Override
+    public int read(ByteBuffer dst) {
+      if (position >= data.length) {
+        return -1;
+      }
+      int length = Math.min(Math.min(dst.remaining(), chunkSize), data.length - position);
+      dst.put(data, position, length);
+      position += length;
+      return length;
+    }
+
+    @Override
+    public boolean isOpen() {
+      return open;
+    }
+
+    @Override
+    public void close() throws IOException {
+      open = false;
     }
   }
 }

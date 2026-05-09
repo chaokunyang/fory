@@ -20,6 +20,8 @@ package org.apache.fory.memory;
 
 import static org.apache.fory.util.Preconditions.checkArgument;
 
+import java.lang.reflect.Field;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.apache.fory.annotation.CodegenInvoke;
@@ -64,6 +66,29 @@ public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : UnsafeOps.UNSAFE;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
+
+  private static final class DirectBufferAccess {
+    private static final long BUFFER_ADDRESS_FIELD_OFFSET;
+
+    static {
+      try {
+        Field addressField = Buffer.class.getDeclaredField("address");
+        BUFFER_ADDRESS_FIELD_OFFSET = UnsafeOps.objectFieldOffset(addressField);
+        checkArgument(BUFFER_ADDRESS_FIELD_OFFSET != 0);
+      } catch (NoSuchFieldException e) {
+        throw new IllegalStateException(e);
+      }
+    }
+  }
+
+  private static long directBufferAddress(ByteBuffer buffer) {
+    checkArgument(buffer.isDirect(), "Can't get address of a non-direct ByteBuffer.");
+    try {
+      return UnsafeOps.getLong(buffer, DirectBufferAccess.BUFFER_ADDRESS_FIELD_OFFSET);
+    } catch (Throwable t) {
+      throw new Error("Could not access direct byte buffer address field.", t);
+    }
+  }
 
   // Global allocator instance that can be customized
   private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();
@@ -155,7 +180,7 @@ public final class MemoryBuffer {
    */
   private MemoryBuffer(
       long offHeapAddress, int size, ByteBuffer offHeapBuffer, ForyStreamReader streamReader) {
-    initDirectBuffer(offHeapAddress, size, offHeapBuffer);
+    initOffHeapBuffer(offHeapAddress, size, offHeapBuffer);
     if (streamReader != null) {
       this.streamReader = streamReader;
     } else {
@@ -163,7 +188,7 @@ public final class MemoryBuffer {
     }
   }
 
-  public void initDirectBuffer(long offHeapAddress, int size, ByteBuffer offHeapBuffer) {
+  private void initOffHeapBuffer(long offHeapAddress, int size, ByteBuffer offHeapBuffer) {
     this.offHeapBuffer = offHeapBuffer;
     if (offHeapAddress <= 0) {
       throw new IllegalArgumentException("negative pointer or size");
@@ -181,6 +206,20 @@ public final class MemoryBuffer {
     this.address = offHeapAddress;
     this.addressLimit = this.address + size;
     this.size = size;
+  }
+
+  public void initByteBuffer(ByteBuffer buffer, int size) {
+    if (buffer.isDirect()) {
+      if (AndroidSupport.IS_ANDROID) {
+        throw new UnsupportedOperationException(
+            "Direct ByteBuffer memory is not supported on Android");
+      }
+      initOffHeapBuffer(directBufferAddress(buffer), size, buffer);
+    } else if (buffer.hasArray()) {
+      initHeapBuffer(buffer.array(), buffer.arrayOffset(), size);
+    } else {
+      throw new IllegalArgumentException("ByteBuffer must be direct or expose an array");
+    }
   }
 
   private class BoundChecker extends AbstractStreamReader {
@@ -282,24 +321,6 @@ public final class MemoryBuffer {
     }
   }
 
-  /**
-   * Returns the memory address of off-heap memory buffers.
-   *
-   * @return absolute memory address outside the heap
-   * @throws IllegalStateException if the memory buffer does not represent off-heap memory
-   */
-  public long getAddress() {
-    if (heapMemory == null) {
-      return address;
-    } else {
-      throw new IllegalStateException("Memory buffer does not represent off heap memory");
-    }
-  }
-
-  public long getUnsafeAddress() {
-    return address;
-  }
-
   // ------------------------------------------------------------------------
   //                    Random Access get() and put() methods
   // ------------------------------------------------------------------------
@@ -368,8 +389,15 @@ public final class MemoryBuffer {
       throw new IllegalArgumentException("read only buffer");
     }
     final int targetPos = target.position();
-    if (target.isDirect()) {
-      final long targetAddr = ByteBufferUtil.getAddress(target) + targetPos;
+    if (AndroidSupport.IS_ANDROID) {
+      checkAndroidHeapBuffer();
+      if (offset <= size - numBytes) {
+        target.put(heapMemory, heapOffset + offset, numBytes);
+      } else {
+        throwOOBException();
+      }
+    } else if (target.isDirect()) {
+      final long targetAddr = directBufferAddress(target) + targetPos;
       final long sourceAddr = address + offset;
       if (sourceAddr <= addressLimit - numBytes) {
         UnsafeOps.copyMemory(heapMemory, sourceAddr, null, targetAddr, numBytes);
@@ -380,7 +408,9 @@ public final class MemoryBuffer {
       assert target.hasArray();
       get(offset, target.array(), targetPos + target.arrayOffset(), numBytes);
     }
-    ByteBufferUtil.position(target, targetPos + numBytes);
+    if (target.position() == targetPos) {
+      ByteBufferUtil.position(target, targetPos + numBytes);
+    }
   }
 
   public void put(int offset, ByteBuffer source, int numBytes) {
@@ -389,8 +419,15 @@ public final class MemoryBuffer {
       throwOOBException();
     }
     final int sourcePos = source.position();
-    if (source.isDirect()) {
-      final long sourceAddr = ByteBufferUtil.getAddress(source) + sourcePos;
+    if (AndroidSupport.IS_ANDROID) {
+      checkAndroidHeapBuffer();
+      if (offset <= size - numBytes) {
+        source.get(heapMemory, heapOffset + offset, numBytes);
+      } else {
+        throwOOBException();
+      }
+    } else if (source.isDirect()) {
+      final long sourceAddr = directBufferAddress(source) + sourcePos;
       final long targetAddr = address + offset;
       if (targetAddr <= addressLimit - numBytes) {
         UnsafeOps.copyMemory(null, sourceAddr, heapMemory, targetAddr, numBytes);
@@ -401,7 +438,9 @@ public final class MemoryBuffer {
       assert source.hasArray();
       put(offset, source.array(), sourcePos + source.arrayOffset(), numBytes);
     }
-    ByteBufferUtil.position(source, sourcePos + numBytes);
+    if (source.position() == sourcePos) {
+      ByteBufferUtil.position(source, sourcePos + numBytes);
+    }
   }
 
   public void put(int index, byte[] src) {
@@ -439,6 +478,15 @@ public final class MemoryBuffer {
     return UNSAFE.getByte(heapMemory, pos);
   }
 
+  // CHECKSTYLE.OFF:MethodName
+  public byte _unsafeGetByte(int index) {
+    // CHECKSTYLE.ON:MethodName
+    if (AndroidSupport.IS_ANDROID) {
+      return MemoryOps.getByte(heapMemory, androidHeapIndexUnchecked(index));
+    }
+    return UNSAFE.getByte(heapMemory, address + index);
+  }
+
   public void putByte(int index, int b) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.putByte(heapMemory, androidHeapIndex(index, 1), (byte) b);
@@ -459,6 +507,16 @@ public final class MemoryBuffer {
     UNSAFE.putByte(heapMemory, pos, b);
   }
 
+  // CHECKSTYLE.OFF:MethodName
+  public void _unsafePutByte(int index, byte b) {
+    // CHECKSTYLE.ON:MethodName
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.putByte(heapMemory, androidHeapIndexUnchecked(index), b);
+      return;
+    }
+    UNSAFE.putByte(heapMemory, address + index, b);
+  }
+
   public boolean getBoolean(int index) {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.getBoolean(heapMemory, androidHeapIndex(index, 1));
@@ -468,7 +526,26 @@ public final class MemoryBuffer {
     return UNSAFE.getByte(heapMemory, pos) != 0;
   }
 
+  // CHECKSTYLE.OFF:MethodName
+  public boolean _unsafeGetBoolean(int index) {
+    // CHECKSTYLE.ON:MethodName
+    if (AndroidSupport.IS_ANDROID) {
+      return MemoryOps.getBoolean(heapMemory, androidHeapIndexUnchecked(index));
+    }
+    return UNSAFE.getByte(heapMemory, address + index) != 0;
+  }
+
   public void putBoolean(int index, boolean value) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.putBoolean(heapMemory, androidHeapIndexUnchecked(index), value);
+      return;
+    }
+    UNSAFE.putByte(heapMemory, address + index, (value ? (byte) 1 : (byte) 0));
+  }
+
+  // CHECKSTYLE.OFF:MethodName
+  public void _unsafePutBoolean(int index, boolean value) {
+    // CHECKSTYLE.ON:MethodName
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.putBoolean(heapMemory, androidHeapIndexUnchecked(index), value);
       return;
@@ -486,6 +563,16 @@ public final class MemoryBuffer {
     return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
   }
 
+  // CHECKSTYLE.OFF:MethodName
+  public char _unsafeGetChar(int index) {
+    // CHECKSTYLE.ON:MethodName
+    if (AndroidSupport.IS_ANDROID) {
+      return (char) MemoryOps.getInt16(heapMemory, androidHeapIndexUnchecked(index));
+    }
+    char c = UNSAFE.getChar(heapMemory, address + index);
+    return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
+  }
+
   public void putChar(int index, char value) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.putInt16(heapMemory, androidHeapIndex(index, 2), (short) value);
@@ -497,6 +584,19 @@ public final class MemoryBuffer {
       value = Character.reverseBytes(value);
     }
     UNSAFE.putChar(heapMemory, pos, value);
+  }
+
+  // CHECKSTYLE.OFF:MethodName
+  public void _unsafePutChar(int index, char value) {
+    // CHECKSTYLE.ON:MethodName
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.putInt16(heapMemory, androidHeapIndexUnchecked(index), (short) value);
+      return;
+    }
+    if (!LITTLE_ENDIAN) {
+      value = Character.reverseBytes(value);
+    }
+    UNSAFE.putChar(heapMemory, address + index, value);
   }
 
   public short getInt16(int index) {
@@ -650,6 +750,12 @@ public final class MemoryBuffer {
     return Float.intBitsToFloat(v);
   }
 
+  // CHECKSTYLE.OFF:MethodName
+  public float _unsafeGetFloat32(int index) {
+    // CHECKSTYLE.ON:MethodName
+    return Float.intBitsToFloat(_unsafeGetInt32(index));
+  }
+
   public void putFloat32(int index, float value) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.putFloat32(heapMemory, androidHeapIndex(index, 4), value);
@@ -662,6 +768,12 @@ public final class MemoryBuffer {
       v = Integer.reverseBytes(v);
     }
     UNSAFE.putInt(heapMemory, pos, v);
+  }
+
+  // CHECKSTYLE.OFF:MethodName
+  public void _unsafePutFloat32(int index, float value) {
+    // CHECKSTYLE.ON:MethodName
+    _unsafePutInt32(index, Float.floatToRawIntBits(value));
   }
 
   public double getFloat64(int index) {
@@ -677,6 +789,12 @@ public final class MemoryBuffer {
     return Double.longBitsToDouble(v);
   }
 
+  // CHECKSTYLE.OFF:MethodName
+  public double _unsafeGetFloat64(int index) {
+    // CHECKSTYLE.ON:MethodName
+    return Double.longBitsToDouble(_unsafeGetInt64(index));
+  }
+
   public void putFloat64(int index, double value) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.putFloat64(heapMemory, androidHeapIndex(index, 8), value);
@@ -689,6 +807,12 @@ public final class MemoryBuffer {
       v = Long.reverseBytes(v);
     }
     UNSAFE.putLong(heapMemory, pos, v);
+  }
+
+  // CHECKSTYLE.OFF:MethodName
+  public void _unsafePutFloat64(int index, double value) {
+    // CHECKSTYLE.ON:MethodName
+    _unsafePutInt64(index, Double.doubleToRawLongBits(value));
   }
 
   // Check should be done outside to avoid this method got into the critical path.
@@ -736,12 +860,6 @@ public final class MemoryBuffer {
   public int _unsafeHeapWriterIndex() {
     // CHECKSTYLE.ON:MethodName
     return writerIndex + heapOffset;
-  }
-
-  // CHECKSTYLE.OFF:MethodName
-  public long _unsafeWriterAddress() {
-    // CHECKSTYLE.ON:MethodName
-    return address + writerIndex;
   }
 
   // CHECKSTYLE.OFF:MethodName
@@ -1805,10 +1923,6 @@ public final class MemoryBuffer {
       // in this case, diff must be greater than 0.
       streamReader.fillBuffer(readerIdx - size);
     }
-  }
-
-  public long getUnsafeReaderAddress() {
-    return address + readerIndex;
   }
 
   public int remaining() {
@@ -2991,12 +3105,7 @@ public final class MemoryBuffer {
     if (dstIndex < 0 || dstIndex > dst.length - length) {
       throwIndexOOBExceptionForRead();
     }
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copy(heapMemory, androidHeapIndexUnchecked(readerIdx), dst, dstIndex, length);
-      readerIndex = readerIdx + length;
-      return;
-    }
-    copyToUnsafe(readerIdx, dst, UnsafeOps.BYTE_ARRAY_OFFSET + dstIndex, length);
+    get(readerIdx, dst, dstIndex, length);
     readerIndex = readerIdx + length;
   }
 
@@ -3341,32 +3450,6 @@ public final class MemoryBuffer {
 
   // ------------------------- Read Methods Finished -------------------------------------
 
-  /**
-   * Bulk copy method. Copies {@code numBytes} bytes to target unsafe object and pointer. NOTE: This
-   * is a unsafe method, no check here, please be carefully.
-   */
-  public void copyToUnsafe(long offset, Object target, long targetPointer, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      throw new UnsupportedOperationException("Raw unsafe memory copy is not supported on Android");
-    }
-    final long thisPointer = this.address + offset;
-    checkArgument(thisPointer + numBytes <= addressLimit);
-    UnsafeOps.copyMemory(this.heapMemory, thisPointer, target, targetPointer, numBytes);
-  }
-
-  /**
-   * Bulk copy method. Copies {@code numBytes} bytes from source unsafe object and pointer. NOTE:
-   * This is an unsafe method, no check here, please be careful.
-   */
-  public void copyFromUnsafe(long offset, Object source, long sourcePointer, long numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      throw new UnsupportedOperationException("Raw unsafe memory copy is not supported on Android");
-    }
-    final long thisPointer = this.address + offset;
-    checkArgument(thisPointer + numBytes <= addressLimit);
-    UnsafeOps.copyMemory(source, sourcePointer, this.heapMemory, thisPointer, numBytes);
-  }
-
   public void copyTo(int offset, MemoryBuffer target, int targetOffset, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
       if (heapMemory != null && target.heapMemory != null) {
@@ -3407,6 +3490,32 @@ public final class MemoryBuffer {
     source.copyTo(sourcePointer, this, offset, numBytes);
   }
 
+  /**
+   * Bulk copy method. Copies {@code numBytes} bytes to target unsafe object and pointer. NOTE: This
+   * is a unsafe method, no check here, please be carefully.
+   */
+  public void copyToUnsafe(long offset, Object target, long targetPointer, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException("Raw unsafe memory copy is not supported on Android");
+    }
+    final long thisPointer = this.address + offset;
+    checkArgument(thisPointer + numBytes <= addressLimit);
+    UNSAFE.copyMemory(this.heapMemory, thisPointer, target, targetPointer, numBytes);
+  }
+
+  /**
+   * Bulk copy method. Copies {@code numBytes} bytes from source unsafe object and pointer. NOTE:
+   * This is an unsafe method, no check here, please be careful.
+   */
+  public void copyFromUnsafe(long offset, Object source, long sourcePointer, long numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException("Raw unsafe memory copy is not supported on Android");
+    }
+    final long thisPointer = this.address + offset;
+    checkArgument(thisPointer + numBytes <= addressLimit);
+    UNSAFE.copyMemory(source, sourcePointer, heapMemory, thisPointer, numBytes);
+  }
+
   public byte[] getBytes(int index, int length) {
     if (index == 0 && heapMemory != null && heapOffset == 0) {
       // Arrays.copyOf is an intrinsics, which is faster
@@ -3416,11 +3525,7 @@ public final class MemoryBuffer {
       throwIndexOOBExceptionForRead(length);
     }
     byte[] data = new byte[length];
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copy(heapMemory, androidHeapIndexUnchecked(index), data, 0, length);
-      return data;
-    }
-    copyToUnsafe(index, data, UnsafeOps.BYTE_ARRAY_OFFSET, length);
+    get(index, data, 0, length);
     return data;
   }
 
@@ -3431,11 +3536,7 @@ public final class MemoryBuffer {
     if (index > size - length) {
       throwOOBException();
     }
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copy(heapMemory, androidHeapIndexUnchecked(index), dst, dstIndex, length);
-      return;
-    }
-    copyToUnsafe(index, dst, UnsafeOps.BYTE_ARRAY_OFFSET + dstIndex, length);
+    get(index, dst, dstIndex, length);
   }
 
   public MemoryBuffer slice(int offset) {
@@ -3467,12 +3568,12 @@ public final class MemoryBuffer {
       ByteBuffer offHeapBuffer = this.offHeapBuffer;
       if (offHeapBuffer != null) {
         ByteBuffer duplicate = offHeapBuffer.duplicate();
-        int start = (int) (address - ByteBufferUtil.getAddress(duplicate));
+        int start = (int) (address - directBufferAddress(duplicate));
         ByteBufferUtil.position(duplicate, start + offset);
         duplicate.limit(start + offset + length);
         return duplicate.slice();
       } else {
-        return ByteBufferUtil.createDirectByteBufferFromNativeAddress(address + offset, length);
+        throw new IllegalStateException("Memory buffer does not own a ByteBuffer");
       }
     }
   }
@@ -3594,13 +3695,7 @@ public final class MemoryBuffer {
               : (int) Math.min(newCapacity * 1.5d, Integer.MAX_VALUE - 8);
 
       byte[] data = new byte[newSize];
-      if (AndroidSupport.IS_ANDROID) {
-        buffer.checkAndroidHeapBuffer();
-        MemoryOps.copy(buffer.heapMemory, buffer.heapOffset, data, 0, buffer.size());
-        buffer.initHeapBuffer(data, 0, data.length);
-        return;
-      }
-      buffer.copyToUnsafe(0, data, UnsafeOps.BYTE_ARRAY_OFFSET, buffer.size());
+      buffer.get(0, data, 0, buffer.size());
       buffer.initHeapBuffer(data, 0, data.length);
     }
   }
@@ -3656,27 +3751,33 @@ public final class MemoryBuffer {
    * @param buffer a direct buffer or heap buffer
    */
   public static MemoryBuffer fromByteBuffer(ByteBuffer buffer) {
-    if (buffer.isDirect()) {
+    if (AndroidSupport.IS_ANDROID) {
+      ByteBuffer duplicate = buffer.duplicate();
+      byte[] bytes = new byte[duplicate.remaining()];
+      duplicate.get(bytes);
+      return fromByteArray(bytes);
+    } else if (buffer.isDirect()) {
       return new MemoryBuffer(
-          ByteBufferUtil.getAddress(buffer) + buffer.position(), buffer.remaining(), buffer);
-    } else {
+          directBufferAddress(buffer) + buffer.position(), buffer.remaining(), buffer);
+    } else if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
       return new MemoryBuffer(buffer.array(), offset, buffer.remaining());
+    } else {
+      ByteBuffer duplicate = buffer.duplicate();
+      byte[] bytes = new byte[duplicate.remaining()];
+      duplicate.get(bytes);
+      return fromByteArray(bytes);
     }
   }
 
   public static MemoryBuffer fromDirectByteBuffer(
       ByteBuffer buffer, int size, ForyStreamReader streamReader) {
-    long offHeapAddress = ByteBufferUtil.getAddress(buffer) + buffer.position();
+    if (AndroidSupport.IS_ANDROID) {
+      throw new UnsupportedOperationException(
+          "Direct ByteBuffer memory is not supported on Android");
+    }
+    long offHeapAddress = directBufferAddress(buffer) + buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
-  }
-
-  /**
-   * Creates a new memory buffer that represents the provided native memory. The buffer will change
-   * into a heap buffer automatically if not enough.
-   */
-  public static MemoryBuffer fromNativeAddress(long address, int size) {
-    return new MemoryBuffer(address, size, null);
   }
 
   /**

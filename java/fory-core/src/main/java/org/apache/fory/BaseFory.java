@@ -172,12 +172,6 @@ public interface BaseFory {
   /** Return serialized <code>obj</code> as a byte array. */
   byte[] serialize(Object obj, BufferCallback callback);
 
-  /**
-   * Serialize <code>obj</code> to a off-heap buffer specified by <code>address</code> and <code>
-   * size</code>.
-   */
-  MemoryBuffer serialize(Object obj, long address, int size);
-
   /** Serialize data into buffer. */
   MemoryBuffer serialize(MemoryBuffer buffer, Object obj);
 
@@ -200,12 +194,6 @@ public interface BaseFory {
   <T> T deserialize(ForyReadableChannel channel, Class<T> type);
 
   Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers);
-
-  /**
-   * Deserialize <code>obj</code> from a off-heap buffer specified by <code>address</code> and
-   * <code>size</code>.
-   */
-  Object deserialize(long address, int size);
 
   /** Deserialize <code>obj</code> from a <code>buffer</code>. */
   Object deserialize(MemoryBuffer buffer);

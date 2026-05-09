@@ -52,6 +52,7 @@ Unsupported or removed behavior:
   ids, but write/read/copy operations throw an unsupported exception.
 - Native-address serialize/deserialize APIs and native-address `MemoryBuffer` wrapping.
 - Raw-address direct `ByteBuffer` zero-copy.
+- Raw unsafe `MemoryBuffer` copy APIs remain JVM-only and throw on Android.
 - Object deserialization that cannot be completed through reflection.
 
 ## Codegen

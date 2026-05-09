@@ -35,7 +35,6 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
 
@@ -186,16 +185,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   }
 
   @Override
-  public MemoryBuffer serialize(Object obj, long address, int size) {
-    PooledEntry entry = acquire();
-    try {
-      return entry.fory.serialize(obj, address, size);
-    } finally {
-      release(entry);
-    }
-  }
-
-  @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj) {
     PooledEntry entry = acquire();
     try {
@@ -296,16 +285,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   }
 
   @Override
-  public Object deserialize(long address, int size) {
-    PooledEntry entry = acquire();
-    try {
-      return entry.fory.deserialize(address, size);
-    } finally {
-      release(entry);
-    }
-  }
-
-  @Override
   public Object deserialize(MemoryBuffer buffer) {
     PooledEntry entry = acquire();
     try {
@@ -319,7 +298,7 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   public Object deserialize(ByteBuffer byteBuffer) {
     PooledEntry entry = acquire();
     try {
-      return entry.fory.deserialize(MemoryUtils.wrap(byteBuffer));
+      return deserializeByteBuffer(entry.fory, byteBuffer);
     } finally {
       release(entry);
     }

@@ -66,7 +66,6 @@ import org.apache.fory.exception.InsecureException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.ArraySerializersTest;
@@ -287,25 +286,19 @@ public class ForyTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "referenceTrackingConfig")
-  public void testOffHeap(boolean referenceTracking) {
+  public void testDirectBuffer(boolean referenceTracking) {
     Fory fory =
         Fory.builder()
             .withXlang(false)
             .withRefTracking(referenceTracking)
             .requireClassRegistration(false)
             .build();
-    long ptr = 0;
-    try {
-      int size = 1024;
-      ptr = UnsafeOps.allocateMemory(size);
-      MemoryBuffer buffer = fory.serialize(new A(), ptr, size);
-      assertNull(buffer.getHeapMemory());
+    MemoryBuffer buffer = MemoryUtils.wrap(ByteBuffer.allocateDirect(1024));
+    fory.serialize(buffer, new A());
+    assertNull(buffer.getHeapMemory());
 
-      Object obj = fory.deserialize(ptr, size);
-      assertEquals(new A(), obj);
-    } finally {
-      UnsafeOps.freeMemory(ptr);
-    }
+    Object obj = fory.deserialize(buffer);
+    assertEquals(new A(), obj);
   }
 
   public static class Outer {

@@ -475,9 +475,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       System.arraycopy(bytes, 0, targetArray, arrIndex, bytesLen);
     } else {
       writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      long offHeapAddress = buffer.getUnsafeAddress();
-      UnsafeOps.copyMemory(
-          bytes, UnsafeOps.BYTE_ARRAY_OFFSET, null, offHeapAddress + writerIndex, bytesLen);
+      buffer.put(writerIndex, bytes, 0, bytesLen);
     }
     writerIndex += bytesLen;
     buffer._unsafeWriterIndex(writerIndex);

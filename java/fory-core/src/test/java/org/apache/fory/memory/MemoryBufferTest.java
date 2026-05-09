@@ -31,7 +31,6 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.UnsafeOps;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -233,35 +232,6 @@ public class MemoryBufferTest {
   public void testBufferUnsafeWrite() {
     {
       MemoryBuffer buffer = MemoryUtils.buffer(1024);
-      byte[] heapMemory = buffer.getHeapMemory();
-      long pos = buffer.getUnsafeAddress();
-      assertEquals(buffer._unsafeWriterAddress(), pos);
-      assertEquals(buffer.getUnsafeReaderAddress(), pos);
-      UnsafeOps.putByte(heapMemory, pos, Byte.MIN_VALUE);
-      pos += 1;
-      UnsafeOps.putShort(heapMemory, pos, Short.MAX_VALUE);
-      pos += 2;
-      LittleEndian.putInt32(heapMemory, pos, Integer.MIN_VALUE);
-      pos += 4;
-      UnsafeOps.putLong(heapMemory, pos, Long.MAX_VALUE);
-      pos += 8;
-      LittleEndian.putFloat64(heapMemory, pos, -1);
-      pos += 8;
-      LittleEndian.putFloat32(heapMemory, pos, -1);
-      assertEquals(buffer.getFloat32((int) (pos - UnsafeOps.BYTE_ARRAY_OFFSET)), -1);
-      pos -= 8;
-      assertEquals(buffer.getFloat64((int) (pos - UnsafeOps.BYTE_ARRAY_OFFSET)), -1);
-      pos -= 8;
-      assertEquals(LittleEndian.getInt64(heapMemory, pos), Long.MAX_VALUE);
-      pos -= 4;
-      assertEquals(LittleEndian.getInt32(heapMemory, pos), Integer.MIN_VALUE);
-      pos -= 2;
-      assertEquals(buffer.getInt16((int) (pos - UnsafeOps.BYTE_ARRAY_OFFSET)), Short.MAX_VALUE);
-      pos -= 1;
-      assertEquals(buffer.getByte((int) (pos - UnsafeOps.BYTE_ARRAY_OFFSET)), Byte.MIN_VALUE);
-    }
-    {
-      MemoryBuffer buffer = MemoryUtils.buffer(1024);
       int index = 0;
       buffer.putByte(index, Byte.MIN_VALUE);
       index += 1;
@@ -328,24 +298,6 @@ public class MemoryBufferTest {
       direct.position(5);
       MemoryBuffer buffer = MemoryUtils.wrap(direct);
       assertEquals(buffer.sliceAsByteBuffer(), direct);
-      Assert.assertEquals(
-          ByteBufferUtil.getAddress(buffer.sliceAsByteBuffer()),
-          ByteBufferUtil.getAddress(direct) + 5);
-    }
-    {
-      long address = 0;
-      try {
-        address = UnsafeOps.allocateMemory(10);
-        ByteBuffer direct = ByteBufferUtil.wrapDirectBuffer(address, 10);
-        direct.put(data);
-        direct.flip();
-        direct.position(5);
-        MemoryBuffer buffer = MemoryUtils.wrap(direct);
-        assertEquals(buffer.sliceAsByteBuffer(), direct);
-        assertEquals(ByteBufferUtil.getAddress(buffer.sliceAsByteBuffer()), address + 5);
-      } finally {
-        UnsafeOps.freeMemory(address);
-      }
     }
   }
 

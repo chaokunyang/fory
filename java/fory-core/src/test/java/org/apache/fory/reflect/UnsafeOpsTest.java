@@ -19,22 +19,14 @@
 
 package org.apache.fory.reflect;
 
-import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 
-import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import org.apache.fory.logging.Logger;
-import org.apache.fory.logging.LoggerFactory;
-import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.platform.UnsafeOps;
 import org.testng.annotations.Test;
 
 public class UnsafeOpsTest {
-
-  private static final Logger LOG = LoggerFactory.getLogger(UnsafeOpsTest.class);
-
   @Test
   public void testArrayEquals() {
     byte[] bytes = "123456781234567".getBytes(StandardCharsets.UTF_8);
@@ -97,70 +89,5 @@ public class UnsafeOpsTest {
       System.out.format("Arrays.equals cost %sns %sms\n", duration, duration / 1000_000);
     }
     return eq;
-  }
-
-  @Test
-  public void wrapDirectBuffer() {
-    long address = 0;
-    try {
-      int size = 16;
-      address = UnsafeOps.allocateMemory(size);
-      ByteBuffer buffer = ByteBufferUtil.wrapDirectBuffer(address, size);
-      buffer.putLong(0, 1);
-      assertEquals(1, buffer.getLong(0));
-    } finally {
-      UnsafeOps.freeMemory(address);
-    }
-  }
-
-  @Test(enabled = false)
-  public void benchmarkWrapDirectBuffer() {
-    long address = 0;
-    try {
-      int size = 16;
-      address = UnsafeOps.allocateMemory(size);
-      long nums = 100_000_000;
-      ByteBuffer buffer = null;
-      {
-        for (int i = 0; i < nums; i++) {
-          buffer = ByteBufferUtil.wrapDirectBuffer(address, size);
-        }
-        long startTime = System.nanoTime();
-        for (int i = 0; i < nums; i++) {
-          buffer = ByteBufferUtil.wrapDirectBuffer(address, size);
-        }
-        long duration = System.nanoTime() - startTime;
-        buffer.putLong(0, 1);
-        LOG.info("wrapDirectBuffer costs " + duration + "ns " + duration / 1000_000 + "ms\n");
-      }
-      {
-        for (int i = 0; i < nums; i++) {
-          ByteBufferUtil.wrapDirectBuffer(buffer, address, size);
-        }
-        long startTime = System.nanoTime();
-        for (int i = 0; i < nums; i++) {
-          ByteBufferUtil.wrapDirectBuffer(buffer, address, size);
-        }
-        long duration = System.nanoTime() - startTime;
-        buffer.putLong(0, 1);
-        LOG.info("wrap into buffer costs " + duration + "ns " + duration / 1000_000 + "ms\n");
-      }
-      {
-        byte[] arr = new byte[32];
-        ByteBuffer buf = null;
-        for (int i = 0; i < nums; i++) {
-          buf = ByteBuffer.wrap(arr);
-        }
-        long startTime = System.nanoTime();
-        for (int i = 0; i < nums; i++) {
-          buf = ByteBuffer.wrap(arr);
-        }
-        long duration = System.nanoTime() - startTime;
-        buf.putLong(0, 1);
-        LOG.info("ByteBuffer.wrap " + duration + "ns " + duration / 1000_000 + "ms\n");
-      }
-    } finally {
-      UnsafeOps.freeMemory(address);
-    }
   }
 }

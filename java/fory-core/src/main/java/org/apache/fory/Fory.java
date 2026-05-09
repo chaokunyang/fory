@@ -259,13 +259,6 @@ public final class Fory implements BaseFory {
   }
 
   @Override
-  public MemoryBuffer serialize(Object obj, long address, int size) {
-    MemoryBuffer buffer = MemoryUtils.buffer(address, size);
-    serialize(buffer, obj, null);
-    return buffer;
-  }
-
-  @Override
   public byte[] serialize(Object obj) {
     MemoryBuffer buf = getBuffer();
     buf.writerIndex(0);
@@ -411,11 +404,6 @@ public final class Fory implements BaseFory {
   @Override
   public Object deserialize(byte[] bytes, Iterable<MemoryBuffer> outOfBandBuffers) {
     return deserialize(MemoryUtils.wrap(bytes), outOfBandBuffers);
-  }
-
-  @Override
-  public Object deserialize(long address, int size) {
-    return deserialize(MemoryUtils.buffer(address, size), (Iterable<MemoryBuffer>) null);
   }
 
   @Override

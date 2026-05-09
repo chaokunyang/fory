@@ -24,7 +24,6 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
-import org.apache.fory.platform.UnsafeOps;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -123,7 +122,7 @@ public class MemoryAllocatorTest {
             // Use default grow logic but with custom marker
             int newSize = newCapacity + 10; // Add 10 as marker
             byte[] data = new byte[newSize];
-            buffer.copyToUnsafe(0, data, UnsafeOps.BYTE_ARRAY_OFFSET, buffer.size());
+            buffer.get(0, data, 0, buffer.size());
             buffer.initHeapBuffer(data, 0, data.length);
           }
         };

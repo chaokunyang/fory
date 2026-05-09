@@ -33,7 +33,6 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
 
@@ -103,11 +102,6 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   }
 
   @Override
-  public MemoryBuffer serialize(Object obj, long address, int size) {
-    return currentFory().serialize(obj, address, size);
-  }
-
-  @Override
   public MemoryBuffer serialize(MemoryBuffer buffer, Object obj) {
     return currentFory().serialize(buffer, obj);
   }
@@ -158,18 +152,13 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   }
 
   @Override
-  public Object deserialize(long address, int size) {
-    return currentFory().deserialize(address, size);
-  }
-
-  @Override
   public Object deserialize(MemoryBuffer buffer) {
     return currentFory().deserialize(buffer);
   }
 
   @Override
   public Object deserialize(ByteBuffer byteBuffer) {
-    return currentFory().deserialize(MemoryUtils.wrap(byteBuffer));
+    return deserializeByteBuffer(currentFory(), byteBuffer);
   }
 
   @Override

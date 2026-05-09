@@ -22,6 +22,7 @@ package org.apache.fory.memory;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.Preconditions;
 
@@ -30,10 +31,6 @@ public class MemoryUtils {
 
   public static MemoryBuffer buffer(int size) {
     return wrap(new byte[size]);
-  }
-
-  public static MemoryBuffer buffer(long address, int size) {
-    return MemoryBuffer.fromNativeAddress(address, size);
   }
 
   /**
@@ -59,12 +56,23 @@ public class MemoryUtils {
    * @param buffer a direct buffer or heap buffer
    */
   public static MemoryBuffer wrap(ByteBuffer buffer) {
-    if (buffer.isDirect()) {
+    if (AndroidSupport.IS_ANDROID) {
+      return copyToHeapBuffer(buffer);
+    } else if (buffer.isDirect()) {
       return MemoryBuffer.fromByteBuffer(buffer);
-    } else {
+    } else if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
       return MemoryBuffer.fromByteArray(buffer.array(), offset, buffer.remaining());
+    } else {
+      return copyToHeapBuffer(buffer);
     }
+  }
+
+  private static MemoryBuffer copyToHeapBuffer(ByteBuffer buffer) {
+    ByteBuffer duplicate = buffer.duplicate();
+    byte[] bytes = new byte[duplicate.remaining()];
+    duplicate.get(bytes);
+    return MemoryBuffer.fromByteArray(bytes);
   }
 
   // Lazy load offset and also follow graalvm offset auto replace pattern.

@@ -28,6 +28,7 @@ import org.apache.fory.context.MapRefReader;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 
 /** Util for java exceptions. */
@@ -48,7 +49,7 @@ public class ExceptionUtils {
    */
   public static StackOverflowError trySetStackOverflowErrorMessage(
       StackOverflowError e, String message) {
-    if (detailMessageField != null) {
+    if (detailMessageField != null && !AndroidSupport.IS_ANDROID) {
       ReflectionUtils.setObjectFieldValue(e, detailMessageField, message);
       return e;
     } else {

@@ -47,8 +47,7 @@ import org.apache.fory.util.unsafe._JDKAccess;
 /**
  * Field accessor for primitive types and object types.
  *
- * <p>Note for primitive types, there will be box/unbox overhead. Use {@link UnsafeFieldAccessor} if
- * possible to avoid this overhead.
+ * <p>Note for primitive types, there will be box/unbox overhead.
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class FieldAccessor {

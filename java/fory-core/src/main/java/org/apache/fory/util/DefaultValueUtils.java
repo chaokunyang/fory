@@ -32,6 +32,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.TypeResolver;
@@ -401,6 +402,10 @@ public class DefaultValueUtils {
       FieldAccessor fieldAccessor = defaultField.getFieldAccessor();
       if (fieldAccessor != null) {
         Object defaultValue = defaultField.getDefaultValue();
+        if (AndroidSupport.IS_ANDROID) {
+          fieldAccessor.set(obj, defaultValue);
+          continue;
+        }
         long fieldOffset = fieldAccessor.getFieldOffset();
         switch (defaultField.dispatchId) {
           case Types.BOOL:

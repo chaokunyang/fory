@@ -30,10 +30,10 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   by generated serializers, do extra self-review: inspect the generated output impact, preserve
   unsafe/codegen optimizations unless intentionally changing them, and run validation appropriate to
   the regression risk.
-- Android serializer support must not fork the JVM wire protocol unless the design explicitly
-  defines a bidirectionally compatible protocol change. If Android and JVM use different execution
-  paths for the same serializer family, add both Android-read-JVM and JVM-read-Android regression
-  coverage.
+- Android and JVM serializers must use a unified wire protocol: each side must be able to
+  deserialize data written by the other side. If implementation paths diverge, the writer must emit
+  enough metadata for either reader to identify and parse that path correctly; add both
+  Android-read-JVM and JVM-read-Android regression coverage.
 - In `MemoryBuffer`, Android branches are intentional method-boundary exits. Each
   `if (AndroidSupport.IS_ANDROID)` branch must contain exactly one `MemoryOps` call and no local
   Android heap logic. Keep heap index math, direct field updates, typed array loops, and

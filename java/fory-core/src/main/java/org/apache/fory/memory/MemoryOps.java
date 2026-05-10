@@ -19,6 +19,10 @@
 
 package org.apache.fory.memory;
 
+import static org.apache.fory.util.Preconditions.checkArgument;
+
+import java.nio.ByteBuffer;
+
 /**
  * Android-safe byte-array memory operations.
  *
@@ -27,6 +31,925 @@ package org.apache.fory.memory;
  */
 final class MemoryOps {
   private MemoryOps() {}
+
+  private static int heapIndex(MemoryBuffer buffer, int index) {
+    return buffer.heapOffset + index;
+  }
+
+  private static void checkHeap(MemoryBuffer buffer) {
+    if (buffer.heapMemory == null) {
+      throw new UnsupportedOperationException("Only heap MemoryBuffer is supported on Android");
+    }
+  }
+
+  private static void checkPosition(MemoryBuffer buffer, int index, int length) {
+    if (BoundsChecking.BOUNDS_CHECKING_ENABLED && (index < 0 || index > buffer.size - length)) {
+      throwOOBException(buffer);
+    }
+  }
+
+  private static void throwOOBException(MemoryBuffer buffer) {
+    throw new IndexOutOfBoundsException(
+        String.format(
+            "size: %d, address %s, addressLimit %d",
+            buffer.size, buffer.address, buffer.addressLimit));
+  }
+
+  private static void throwIndexOOBExceptionForRead(MemoryBuffer buffer, int length) {
+    throw new IndexOutOfBoundsException(
+        String.format(
+            "readerIndex: %d (expected: 0 <= readerIndex <= size(%d)), length %d",
+            buffer.readerIndex, buffer.size, length));
+  }
+
+  static void throwDirectByteBufferUnsupported() {
+    throw new UnsupportedOperationException("Direct ByteBuffer memory is not supported on Android");
+  }
+
+  static MemoryBuffer directByteBufferUnsupported() {
+    throw new UnsupportedOperationException("Direct ByteBuffer memory is not supported on Android");
+  }
+
+  static void throwRawUnsafeMemoryCopyUnsupported() {
+    throw new UnsupportedOperationException("Raw unsafe memory copy is not supported on Android");
+  }
+
+  static MemoryBuffer fromByteBuffer(ByteBuffer buffer) {
+    ByteBuffer duplicate = buffer.duplicate();
+    byte[] bytes = new byte[duplicate.remaining()];
+    duplicate.get(bytes);
+    return MemoryBuffer.fromByteArray(bytes);
+  }
+
+  static void get(MemoryBuffer buffer, int offset, ByteBuffer target, int numBytes) {
+    if ((offset | numBytes | (offset + numBytes)) < 0) {
+      throwOOBException(buffer);
+    }
+    if (target.remaining() < numBytes) {
+      throwOOBException(buffer);
+    }
+    if (target.isReadOnly()) {
+      throw new IllegalArgumentException("read only buffer");
+    }
+    int targetPos = target.position();
+    checkHeap(buffer);
+    if (offset <= buffer.size - numBytes) {
+      target.put(buffer.heapMemory, heapIndex(buffer, offset), numBytes);
+    } else {
+      throwOOBException(buffer);
+    }
+    if (target.position() == targetPos) {
+      ByteBufferUtil.position(target, targetPos + numBytes);
+    }
+  }
+
+  static void put(MemoryBuffer buffer, int offset, ByteBuffer source, int numBytes) {
+    int remaining = source.remaining();
+    if ((offset | numBytes | (offset + numBytes) | (remaining - numBytes)) < 0) {
+      throwOOBException(buffer);
+    }
+    int sourcePos = source.position();
+    checkHeap(buffer);
+    if (offset <= buffer.size - numBytes) {
+      source.get(buffer.heapMemory, heapIndex(buffer, offset), numBytes);
+    } else {
+      throwOOBException(buffer);
+    }
+    if (source.position() == sourcePos) {
+      ByteBufferUtil.position(source, sourcePos + numBytes);
+    }
+  }
+
+  static byte getByte(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 1);
+    return getByte(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static byte unsafeGetByte(MemoryBuffer buffer, int index) {
+    return getByte(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putByte(MemoryBuffer buffer, int index, int value) {
+    checkPosition(buffer, index, 1);
+    putByte(buffer.heapMemory, heapIndex(buffer, index), (byte) value);
+  }
+
+  static void putByte(MemoryBuffer buffer, int index, byte value) {
+    checkPosition(buffer, index, 1);
+    putByte(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void unsafePutByte(MemoryBuffer buffer, int index, byte value) {
+    putByte(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static boolean getBoolean(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 1);
+    return getBoolean(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static boolean unsafeGetBoolean(MemoryBuffer buffer, int index) {
+    return getBoolean(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putBoolean(MemoryBuffer buffer, int index, boolean value) {
+    putBoolean(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static char getChar(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 2);
+    return (char) getInt16(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static char unsafeGetChar(MemoryBuffer buffer, int index) {
+    return (char) getInt16(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putChar(MemoryBuffer buffer, int index, char value) {
+    checkPosition(buffer, index, 2);
+    putInt16(buffer.heapMemory, heapIndex(buffer, index), (short) value);
+  }
+
+  static void unsafePutChar(MemoryBuffer buffer, int index, char value) {
+    putInt16(buffer.heapMemory, heapIndex(buffer, index), (short) value);
+  }
+
+  static short getInt16(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 2);
+    return getInt16(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static short unsafeGetInt16(MemoryBuffer buffer, int index) {
+    return getInt16(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putInt16(MemoryBuffer buffer, int index, short value) {
+    checkPosition(buffer, index, 2);
+    putInt16(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void unsafePutInt16(MemoryBuffer buffer, int index, short value) {
+    putInt16(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static int getInt32(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 4);
+    return getInt32(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static int unsafeGetInt32(MemoryBuffer buffer, int index) {
+    return getInt32(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putInt32(MemoryBuffer buffer, int index, int value) {
+    checkPosition(buffer, index, 4);
+    putInt32(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void unsafePutInt32(MemoryBuffer buffer, int index, int value) {
+    putInt32(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static long getInt64(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 8);
+    return getInt64(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static long unsafeGetInt64(MemoryBuffer buffer, int index) {
+    return getInt64(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putInt64(MemoryBuffer buffer, int index, long value) {
+    checkPosition(buffer, index, 8);
+    putInt64(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void unsafePutInt64(MemoryBuffer buffer, int index, long value) {
+    putInt64(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static float getFloat32(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 4);
+    return getFloat32(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putFloat32(MemoryBuffer buffer, int index, float value) {
+    checkPosition(buffer, index, 4);
+    putFloat32(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static double getFloat64(MemoryBuffer buffer, int index) {
+    checkPosition(buffer, index, 8);
+    return getFloat64(buffer.heapMemory, heapIndex(buffer, index));
+  }
+
+  static void putFloat64(MemoryBuffer buffer, int index, double value) {
+    checkPosition(buffer, index, 8);
+    putFloat64(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void writeBoolean(MemoryBuffer buffer, boolean value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 1;
+    buffer.ensure(newIdx);
+    putBoolean(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void unsafeWriteByte(MemoryBuffer buffer, byte value) {
+    int writerIdx = buffer.writerIndex;
+    putByte(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = writerIdx + 1;
+  }
+
+  static void writeByte(MemoryBuffer buffer, byte value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 1;
+    buffer.ensure(newIdx);
+    putByte(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeChar(MemoryBuffer buffer, char value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 2;
+    buffer.ensure(newIdx);
+    putInt16(buffer.heapMemory, heapIndex(buffer, writerIdx), (short) value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeInt16(MemoryBuffer buffer, short value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 2;
+    buffer.ensure(newIdx);
+    putInt16(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeInt32(MemoryBuffer buffer, int value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 4;
+    buffer.ensure(newIdx);
+    putInt32(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeInt64(MemoryBuffer buffer, long value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 8;
+    buffer.ensure(newIdx);
+    putInt64(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeFloat32(MemoryBuffer buffer, float value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 4;
+    buffer.ensure(newIdx);
+    putFloat32(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeFloat64(MemoryBuffer buffer, double value) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + 8;
+    buffer.ensure(newIdx);
+    putFloat64(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = newIdx;
+  }
+
+  static int writeVarInt32(MemoryBuffer buffer, int value) {
+    buffer.ensure(buffer.writerIndex + 8);
+    return unsafeWriteVarInt32(buffer, value);
+  }
+
+  static int unsafeWriteVarInt32(MemoryBuffer buffer, int value) {
+    return unsafeWriteVarUInt32(buffer, (value << 1) ^ (value >> 31));
+  }
+
+  static int writeVarUInt32(MemoryBuffer buffer, int value) {
+    buffer.ensure(buffer.writerIndex + 8);
+    return unsafeWriteVarUInt32(buffer, value);
+  }
+
+  static int unsafeWriteVarUInt32(MemoryBuffer buffer, int value) {
+    int writerIdx = buffer.writerIndex;
+    int varintBytes = putVarUInt32(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = writerIdx + varintBytes;
+    return varintBytes;
+  }
+
+  static int writeVarUInt32Small7(MemoryBuffer buffer, int value) {
+    buffer.ensure(buffer.writerIndex + 8);
+    int writerIdx = buffer.writerIndex;
+    int varintBytes = putVarUInt32Small7(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = writerIdx + varintBytes;
+    return varintBytes;
+  }
+
+  static int unsafePutVarUInt32(MemoryBuffer buffer, int index, int value) {
+    return putVarUInt32(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static int unsafePutVarUint36Small(MemoryBuffer buffer, int index, long value) {
+    return putVarUint36Small(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static int writeVarUInt32Aligned(MemoryBuffer buffer, int value) {
+    int writerIdx = buffer.writerIndex;
+    buffer.ensure(writerIdx + 10);
+    byte[] heapMemory = buffer.heapMemory;
+    int heapIdx = heapIndex(buffer, writerIdx);
+    int dataBytes = 1;
+    int shifted = value >>> 6;
+    while (shifted != 0) {
+      dataBytes++;
+      shifted >>>= 6;
+    }
+    for (int i = 0; i < dataBytes; i++) {
+      int b = (value >>> (i * 6)) & 0x3F;
+      if (i != dataBytes - 1) {
+        b |= 0x80;
+      }
+      putByte(heapMemory, heapIdx + i, (byte) b);
+    }
+    int paddingBytes = (4 - ((writerIdx + dataBytes) & 0x3)) & 0x3;
+    int bytesWritten = dataBytes + paddingBytes;
+    if (paddingBytes == 0) {
+      putByte(
+          heapMemory,
+          heapIdx + dataBytes - 1,
+          (byte) (getByte(heapMemory, heapIdx + dataBytes - 1) | 0x40));
+    } else {
+      for (int i = 0; i < paddingBytes - 1; i++) {
+        putByte(heapMemory, heapIdx + dataBytes + i, (byte) 0);
+      }
+      putByte(heapMemory, heapIdx + bytesWritten - 1, (byte) 0x40);
+    }
+    buffer.writerIndex = writerIdx + bytesWritten;
+    return bytesWritten;
+  }
+
+  static int writeVarInt64(MemoryBuffer buffer, long value) {
+    buffer.ensure(buffer.writerIndex + 9);
+    return unsafeWriteVarUInt64(buffer, (value << 1) ^ (value >> 63));
+  }
+
+  static int unsafeWriteVarInt64(MemoryBuffer buffer, long value) {
+    return unsafeWriteVarUInt64(buffer, (value << 1) ^ (value >> 63));
+  }
+
+  static int writeVarUInt64(MemoryBuffer buffer, long value) {
+    buffer.ensure(buffer.writerIndex + 9);
+    return unsafeWriteVarUInt64(buffer, value);
+  }
+
+  static int unsafeWriteVarUInt64(MemoryBuffer buffer, long value) {
+    int writerIdx = buffer.writerIndex;
+    int varintBytes = putVarUInt64(buffer.heapMemory, heapIndex(buffer, writerIdx), value);
+    buffer.writerIndex = writerIdx + varintBytes;
+    return varintBytes;
+  }
+
+  static int unsafeWriteTaggedUInt64(MemoryBuffer buffer, long value) {
+    int writerIdx = buffer.writerIndex;
+    int heapIndex = heapIndex(buffer, writerIdx);
+    if (value >= 0 && value <= Integer.MAX_VALUE) {
+      putInt32(buffer.heapMemory, heapIndex, ((int) value) << 1);
+      buffer.writerIndex = writerIdx + 4;
+      return 4;
+    }
+    putByte(buffer.heapMemory, heapIndex, (byte) 1);
+    putInt64(buffer.heapMemory, heapIndex + 1, value);
+    buffer.writerIndex = writerIdx + 9;
+    return 9;
+  }
+
+  static int unsafeWriteTaggedInt64(MemoryBuffer buffer, long value) {
+    int writerIdx = buffer.writerIndex;
+    int heapIndex = heapIndex(buffer, writerIdx);
+    if (value >= Integer.MIN_VALUE / 2L && value <= Integer.MAX_VALUE / 2L) {
+      putInt32(buffer.heapMemory, heapIndex, ((int) value) << 1);
+      buffer.writerIndex = writerIdx + 4;
+      return 4;
+    }
+    putByte(buffer.heapMemory, heapIndex, (byte) 1);
+    putInt64(buffer.heapMemory, heapIndex + 1, value);
+    buffer.writerIndex = writerIdx + 9;
+    return 9;
+  }
+
+  static void writeBooleans(MemoryBuffer buffer, boolean[] values, int offset, int numElements) {
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + numElements;
+    buffer.ensure(newIdx);
+    writeBooleans(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeChars(MemoryBuffer buffer, char[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 2);
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + numBytes;
+    buffer.ensure(newIdx);
+    writeChars(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeShorts(MemoryBuffer buffer, short[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 2);
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + numBytes;
+    buffer.ensure(newIdx);
+    writeShorts(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeInts(MemoryBuffer buffer, int[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 4);
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + numBytes;
+    buffer.ensure(newIdx);
+    writeInts(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeLongs(MemoryBuffer buffer, long[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 8);
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + numBytes;
+    buffer.ensure(newIdx);
+    writeLongs(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeFloats(MemoryBuffer buffer, float[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 4);
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + numBytes;
+    buffer.ensure(newIdx);
+    writeFloats(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeDoubles(MemoryBuffer buffer, double[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 8);
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + numBytes;
+    buffer.ensure(newIdx);
+    writeDoubles(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
+    buffer.writerIndex = newIdx;
+  }
+
+  private static int prepareRead(MemoryBuffer buffer, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    int remaining = buffer.size - readerIdx;
+    if (remaining < numBytes) {
+      buffer.streamReader.fillBuffer(numBytes - remaining);
+    }
+    return readerIdx;
+  }
+
+  static byte readByte(MemoryBuffer buffer) {
+    int readerIdx = prepareRead(buffer, 1);
+    buffer.readerIndex = readerIdx + 1;
+    return getByte(buffer.heapMemory, heapIndex(buffer, readerIdx));
+  }
+
+  static boolean readBoolean(MemoryBuffer buffer) {
+    return readByte(buffer) != 0;
+  }
+
+  static int readUInt8(MemoryBuffer buffer) {
+    return readByte(buffer) & 0b11111111;
+  }
+
+  static char readChar(MemoryBuffer buffer) {
+    int readerIdx = prepareRead(buffer, 2);
+    buffer.readerIndex = readerIdx + 2;
+    return (char) getInt16(buffer.heapMemory, heapIndex(buffer, readerIdx));
+  }
+
+  static short readInt16(MemoryBuffer buffer) {
+    int readerIdx = prepareRead(buffer, 2);
+    buffer.readerIndex = readerIdx + 2;
+    return getInt16(buffer.heapMemory, heapIndex(buffer, readerIdx));
+  }
+
+  static int readInt32(MemoryBuffer buffer) {
+    int readerIdx = prepareRead(buffer, 4);
+    buffer.readerIndex = readerIdx + 4;
+    return getInt32(buffer.heapMemory, heapIndex(buffer, readerIdx));
+  }
+
+  static long readInt64(MemoryBuffer buffer) {
+    int readerIdx = prepareRead(buffer, 8);
+    buffer.readerIndex = readerIdx + 8;
+    return getInt64(buffer.heapMemory, heapIndex(buffer, readerIdx));
+  }
+
+  static long readTaggedUInt64(MemoryBuffer buffer) {
+    int readIdx = buffer.readerIndex;
+    ensureReadableFrom(buffer, readIdx, 4);
+    int i = getInt32(buffer.heapMemory, heapIndex(buffer, readIdx));
+    if ((i & 0b1) != 0b1) {
+      buffer.readerIndex = readIdx + 4;
+      return i >>> 1;
+    }
+    ensureReadableFrom(buffer, readIdx, 9);
+    buffer.readerIndex = readIdx + 9;
+    return getInt64(buffer.heapMemory, heapIndex(buffer, readIdx) + 1);
+  }
+
+  static long readTaggedInt64(MemoryBuffer buffer) {
+    int readIdx = buffer.readerIndex;
+    ensureReadableFrom(buffer, readIdx, 4);
+    int i = getInt32(buffer.heapMemory, heapIndex(buffer, readIdx));
+    if ((i & 0b1) != 0b1) {
+      buffer.readerIndex = readIdx + 4;
+      return i >> 1;
+    }
+    ensureReadableFrom(buffer, readIdx, 9);
+    buffer.readerIndex = readIdx + 9;
+    return getInt64(buffer.heapMemory, heapIndex(buffer, readIdx) + 1);
+  }
+
+  static float readFloat32(MemoryBuffer buffer) {
+    return Float.intBitsToFloat(readInt32(buffer));
+  }
+
+  static double readFloat64(MemoryBuffer buffer) {
+    return Double.longBitsToDouble(readInt64(buffer));
+  }
+
+  static int readVarInt32(MemoryBuffer buffer) {
+    int result = readVarUInt32(buffer);
+    return (result >>> 1) ^ -(result & 1);
+  }
+
+  static int readVarUInt32(MemoryBuffer buffer) {
+    int readIdx = buffer.readerIndex;
+    if (buffer.size - readIdx < 5) {
+      return readVarUInt32Slow(buffer);
+    }
+    int heapIndex = heapIndex(buffer, readIdx);
+    int result = readVarUInt32(buffer.heapMemory, heapIndex);
+    buffer.readerIndex = readIdx + varUInt32Bytes(buffer.heapMemory, heapIndex);
+    return result;
+  }
+
+  static long readVarUint36Small(MemoryBuffer buffer) {
+    int readIdx = buffer.readerIndex;
+    if (buffer.size - readIdx < 5) {
+      return readVarUint36Slow(buffer);
+    }
+    int heapIndex = heapIndex(buffer, readIdx);
+    long result = readVarUint36Small(buffer.heapMemory, heapIndex);
+    buffer.readerIndex = readIdx + varUint36SmallBytes(buffer.heapMemory, heapIndex);
+    return result;
+  }
+
+  static long readVarInt64(MemoryBuffer buffer) {
+    long result = readVarUInt64(buffer);
+    return (result >>> 1) ^ -(result & 1);
+  }
+
+  static long readVarUInt64(MemoryBuffer buffer) {
+    int readIdx = buffer.readerIndex;
+    if (buffer.size - readIdx < 9) {
+      return readVarUInt64Slow(buffer);
+    }
+    int heapIndex = heapIndex(buffer, readIdx);
+    long result = readVarUInt64(buffer.heapMemory, heapIndex);
+    buffer.readerIndex = readIdx + varUInt64Bytes(buffer.heapMemory, heapIndex);
+    return result;
+  }
+
+  static int readAlignedVarUInt32(MemoryBuffer buffer) {
+    int b = readByte(buffer);
+    int result = b & 0x3F;
+    if ((b & 0x80) != 0) {
+      b = readByte(buffer);
+      result |= (b & 0x3F) << 6;
+      if ((b & 0x80) != 0) {
+        b = readByte(buffer);
+        result |= (b & 0x3F) << 12;
+        if ((b & 0x80) != 0) {
+          b = readByte(buffer);
+          result |= (b & 0x3F) << 18;
+          if ((b & 0x80) != 0) {
+            b = readByte(buffer);
+            result |= (b & 0x3F) << 24;
+            if ((b & 0x80) != 0) {
+              b = readByte(buffer);
+              result |= (b & 0x3F) << 30;
+            }
+          }
+        }
+      }
+    }
+    if ((b & 0x40) == 0) {
+      b = readByte(buffer);
+      if ((b & 0x40) == 0) {
+        b = readByte(buffer);
+        if ((b & 0x40) == 0) {
+          b = readByte(buffer);
+          checkArgument((b & 0x40) != 0, "At most 3 padding bytes.");
+        }
+      }
+    }
+    return result;
+  }
+
+  static long readBytesAsInt64(MemoryBuffer buffer, int len) {
+    int readerIdx = buffer.readerIndex;
+    int remaining = buffer.size - readerIdx;
+    if (remaining >= 8) {
+      buffer.readerIndex = readerIdx + len;
+      return getInt64(buffer.heapMemory, heapIndex(buffer, readerIdx))
+          & (0xffffffffffffffffL >>> ((8 - len) * 8));
+    }
+    if (remaining < len) {
+      buffer.streamReader.fillBuffer(len - remaining);
+    }
+    readerIdx = buffer.readerIndex;
+    buffer.readerIndex = readerIdx + len;
+    long result = 0;
+    int start = heapIndex(buffer, readerIdx);
+    for (int i = 0; i < len; i++) {
+      result |= (((long) buffer.heapMemory[start + i]) & 0xff) << (i * 8);
+    }
+    return result;
+  }
+
+  static int readBinarySize(MemoryBuffer buffer) {
+    int binarySize = readVarUInt32(buffer);
+    int diff = buffer.size - buffer.readerIndex;
+    if (diff < binarySize) {
+      buffer.streamReader.fillBuffer(diff);
+    }
+    return binarySize;
+  }
+
+  static boolean[] readBooleans(MemoryBuffer buffer, int numBytes) {
+    boolean[] values = new boolean[numBytes];
+    readBooleans(buffer, values, 0, numBytes);
+    return values;
+  }
+
+  static void readBooleans(MemoryBuffer buffer, boolean[] values, int offset, int numElements) {
+    if (buffer.readerIndex > buffer.size - numElements) {
+      buffer.streamReader.readBooleans(values, offset, numElements);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    readBooleans(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    buffer.readerIndex = readerIdx + numElements;
+  }
+
+  static char[] readChars(MemoryBuffer buffer, int numBytes) {
+    char[] values = new char[numBytes >> 1];
+    readChars(buffer, values, 0, values.length);
+    return values;
+  }
+
+  static void readChars(MemoryBuffer buffer, char[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 2);
+    if (buffer.readerIndex > buffer.size - numBytes) {
+      buffer.streamReader.readChars(values, offset, numElements);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    readChars(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static short[] readShorts(MemoryBuffer buffer, int numBytes) {
+    int numElements = numBytes >> 1;
+    short[] values = new short[numElements];
+    readShorts(buffer, values, 0, numElements);
+    return values;
+  }
+
+  static void readShorts(MemoryBuffer buffer, short[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 2);
+    if (buffer.readerIndex > buffer.size - numBytes) {
+      buffer.streamReader.readShorts(values, offset, numElements);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    readShorts(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static int[] readInts(MemoryBuffer buffer, int numBytes) {
+    int numElements = numBytes >> 2;
+    int[] values = new int[numElements];
+    readInts(buffer, values, 0, numElements);
+    return values;
+  }
+
+  static void readInts(MemoryBuffer buffer, int[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 4);
+    if (buffer.readerIndex > buffer.size - numBytes) {
+      buffer.streamReader.readInts(values, offset, numElements);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    readInts(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static long[] readLongs(MemoryBuffer buffer, int numBytes) {
+    int numElements = numBytes >> 3;
+    long[] values = new long[numElements];
+    readLongs(buffer, values, 0, numElements);
+    return values;
+  }
+
+  static void readLongs(MemoryBuffer buffer, long[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 8);
+    if (buffer.readerIndex > buffer.size - numBytes) {
+      buffer.streamReader.readLongs(values, offset, numElements);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    readLongs(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static float[] readFloats(MemoryBuffer buffer, int numBytes) {
+    int numElements = numBytes >> 2;
+    float[] values = new float[numElements];
+    readFloats(buffer, values, 0, numElements);
+    return values;
+  }
+
+  static void readFloats(MemoryBuffer buffer, float[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 4);
+    if (buffer.readerIndex > buffer.size - numBytes) {
+      buffer.streamReader.readFloats(values, offset, numElements);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    readFloats(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static double[] readDoubles(MemoryBuffer buffer, int numBytes) {
+    int numElements = numBytes >> 3;
+    double[] values = new double[numElements];
+    readDoubles(buffer, values, 0, numElements);
+    return values;
+  }
+
+  static void readDoubles(MemoryBuffer buffer, double[] values, int offset, int numElements) {
+    int numBytes = Math.multiplyExact(numElements, 8);
+    if (buffer.readerIndex > buffer.size - numBytes) {
+      buffer.streamReader.readDoubles(values, offset, numElements);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    readDoubles(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void copyTo(
+      MemoryBuffer source, int offset, MemoryBuffer target, int targetOffset, int numBytes) {
+    if (source.heapMemory != null
+        && target.heapMemory != null
+        && (numBytes | offset | targetOffset) >= 0
+        && offset <= source.size - numBytes
+        && targetOffset <= target.size - numBytes) {
+      copy(
+          source.heapMemory,
+          heapIndex(source, offset),
+          target.heapMemory,
+          heapIndex(target, targetOffset),
+          numBytes);
+      return;
+    }
+    throw new IndexOutOfBoundsException(
+        String.format(
+            "offset=%d, targetOffset=%d, numBytes=%d, size=%d, targetSize=%d",
+            offset, targetOffset, numBytes, source.size, target.size));
+  }
+
+  static boolean equalTo(
+      MemoryBuffer buffer, MemoryBuffer other, int offset1, int offset2, int len) {
+    checkArgument(offset1 >= 0 && offset1 <= buffer.size - len);
+    checkArgument(other != null && offset2 >= 0 && offset2 <= other.size - len);
+    int pos1 = heapIndex(buffer, offset1);
+    int pos2 = heapIndex(other, offset2);
+    for (int i = 0; i < len; i++) {
+      if (buffer.heapMemory[pos1 + i] != other.heapMemory[pos2 + i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static boolean equalTo(MemoryBuffer buffer, byte[] bytes, int bytesOffset, int offset, int len) {
+    int pos = heapIndex(buffer, offset);
+    for (int i = 0; i < len; i++) {
+      if (buffer.heapMemory[pos + i] != bytes[bytesOffset + i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private static void ensureReadableFrom(MemoryBuffer buffer, int readIdx, int numBytes) {
+    int diff = buffer.size - readIdx;
+    if (diff < numBytes) {
+      buffer.streamReader.fillBuffer(numBytes - diff);
+    }
+  }
+
+  private static long readVarUint36Slow(MemoryBuffer buffer) {
+    long b = readByte(buffer);
+    long result = b & 0x7F;
+    if ((b & 0x80) != 0) {
+      b = readByte(buffer);
+      result |= (b & 0x7F) << 7;
+      if ((b & 0x80) != 0) {
+        b = readByte(buffer);
+        result |= (b & 0x7F) << 14;
+        if ((b & 0x80) != 0) {
+          b = readByte(buffer);
+          result |= (b & 0x7F) << 21;
+          if ((b & 0x80) != 0) {
+            b = readByte(buffer);
+            result |= (b & 0xFF) << 28;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  private static int readVarUInt32Slow(MemoryBuffer buffer) {
+    int b = readByte(buffer) & 0xFF;
+    int result = b & 0x7F;
+    if ((b & 0x80) != 0) {
+      b = readByte(buffer) & 0xFF;
+      result |= (b & 0x7F) << 7;
+      if ((b & 0x80) != 0) {
+        b = readByte(buffer) & 0xFF;
+        result |= (b & 0x7F) << 14;
+        if ((b & 0x80) != 0) {
+          b = readByte(buffer) & 0xFF;
+          result |= (b & 0x7F) << 21;
+          if ((b & 0x80) != 0) {
+            b = readByte(buffer) & 0xFF;
+            if ((b & 0xF0) != 0) {
+              throwMalformedVarUInt32(b);
+            }
+            result |= b << 28;
+          }
+        }
+      }
+    }
+    return result;
+  }
+
+  private static long readVarUInt64Slow(MemoryBuffer buffer) {
+    long b = readByte(buffer);
+    long result = b & 0x7F;
+    if ((b & 0x80) != 0) {
+      b = readByte(buffer);
+      result |= (b & 0x7F) << 7;
+      if ((b & 0x80) != 0) {
+        b = readByte(buffer);
+        result |= (b & 0x7F) << 14;
+        if ((b & 0x80) != 0) {
+          b = readByte(buffer);
+          result |= (b & 0x7F) << 21;
+          if ((b & 0x80) != 0) {
+            b = readByte(buffer);
+            result |= (b & 0x7F) << 28;
+            if ((b & 0x80) != 0) {
+              b = readByte(buffer);
+              result |= (b & 0x7F) << 35;
+              if ((b & 0x80) != 0) {
+                b = readByte(buffer);
+                result |= (b & 0x7F) << 42;
+                if ((b & 0x80) != 0) {
+                  b = readByte(buffer);
+                  result |= (b & 0x7F) << 49;
+                  if ((b & 0x80) != 0) {
+                    b = readByte(buffer);
+                    result |= b << 56;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return result;
+  }
 
   static boolean getBoolean(byte[] source, int index) {
     return source[index] != 0;

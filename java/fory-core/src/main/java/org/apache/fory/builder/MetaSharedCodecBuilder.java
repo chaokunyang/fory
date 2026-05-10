@@ -41,7 +41,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
@@ -84,7 +83,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
   public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
-    super(beanType, checkRuntimeCodegenSupported(fory), GeneratedMetaSharedSerializer.class);
+    super(beanType, fory, GeneratedMetaSharedSerializer.class);
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
@@ -132,15 +131,6 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
     }
     this.defaultValueLanguage = defaultValueLanguage;
     this.defaultValueFields = defaultValueFields;
-  }
-
-  private static Fory checkRuntimeCodegenSupported(Fory fory) {
-    if (AndroidSupport.IS_ANDROID) {
-      throw new UnsupportedOperationException(
-          "Fory runtime code generation is unsupported on Android; "
-              + "interpreter serializers must be used.");
-    }
-    return fory;
   }
 
   // Must be static to be shared across the whole process life.

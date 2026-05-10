@@ -25,6 +25,16 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - In Java codec hot paths, avoid `Preconditions.checkArgument` for attacker-controlled primitive
   validation. Use direct primitive branches and throw on the cold error path to preserve inlining and
   avoid varargs/helper overhead.
+- Do not introduce codegen or generated-serializer changes that may cause behavior or performance
+  regressions. When editing `java/fory-core/src/main/java/org/apache/fory/builder/**` or APIs used
+  by generated serializers, do extra self-review: inspect the generated output impact, preserve
+  unsafe/codegen optimizations unless intentionally changing them, and run validation appropriate to
+  the regression risk.
+- In `MemoryBuffer`, Android branches are intentional method-boundary exits. Each
+  `if (AndroidSupport.IS_ANDROID)` branch must contain exactly one `MemoryOps` call and no local
+  Android heap logic. Keep heap index math, direct field updates, typed array loops, and
+  reader/writer index changes in `MemoryOps`; do not add Android-named helpers, heap wrapper
+  helpers, or Android-specific `MemoryBuffer` subclasses.
 - Keep GraalVM feature code as a thin metadata/registration layer. Build time should publish metadata needed for runtime reconstruction, not retain concrete generated or user serializer instances in the image heap.
 - If changes touch GraalVM bootstrap, serializer retention, native-image metadata, or `ObjectStreamSerializer` GraalVM behavior, verify the native-image build and run the produced binary; a plain Java compile is insufficient.
 - Put latest-JDK or virtual-thread tests in the latest-JDK test modules with the matching compiler/profile floor, and centralize runtime-version probing in existing compatibility utilities.

@@ -120,6 +120,56 @@ public class ForyReadableChannel implements ForyStreamReader, ReadableByteChanne
   }
 
   @Override
+  public void readBooleans(boolean[] dst, int dstIndex, int length) {
+    ensureBuffered(length);
+    memoryBuffer.readBooleans(dst, dstIndex, length);
+  }
+
+  @Override
+  public void readChars(char[] dst, int dstIndex, int length) {
+    ensureBuffered(Math.multiplyExact(length, 2));
+    memoryBuffer.readChars(dst, dstIndex, length);
+  }
+
+  @Override
+  public void readShorts(short[] dst, int dstIndex, int length) {
+    ensureBuffered(Math.multiplyExact(length, 2));
+    memoryBuffer.readShorts(dst, dstIndex, length);
+  }
+
+  @Override
+  public void readInts(int[] dst, int dstIndex, int length) {
+    ensureBuffered(Math.multiplyExact(length, 4));
+    memoryBuffer.readInts(dst, dstIndex, length);
+  }
+
+  @Override
+  public void readLongs(long[] dst, int dstIndex, int length) {
+    ensureBuffered(Math.multiplyExact(length, 8));
+    memoryBuffer.readLongs(dst, dstIndex, length);
+  }
+
+  @Override
+  public void readFloats(float[] dst, int dstIndex, int length) {
+    ensureBuffered(Math.multiplyExact(length, 4));
+    memoryBuffer.readFloats(dst, dstIndex, length);
+  }
+
+  @Override
+  public void readDoubles(double[] dst, int dstIndex, int length) {
+    ensureBuffered(Math.multiplyExact(length, 8));
+    memoryBuffer.readDoubles(dst, dstIndex, length);
+  }
+
+  private void ensureBuffered(int numBytes) {
+    MemoryBuffer buf = memoryBuffer;
+    int remaining = buf.remaining();
+    if (remaining < numBytes) {
+      fillBuffer(numBytes - remaining);
+    }
+  }
+
+  @Override
   public void readToByteBuffer(ByteBuffer dst, int length) {
     MemoryBuffer buf = memoryBuffer;
     int remaining = buf.remaining();

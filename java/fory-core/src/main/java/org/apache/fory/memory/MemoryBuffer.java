@@ -235,6 +235,22 @@ public class MemoryBuffer {
     }
 
     @Override
+    public void readTo(byte[] dst, int dstIndex, int length) {
+      throwIndexOOBExceptionForRead(length);
+    }
+
+    @Override
+    public void readToByteBuffer(ByteBuffer dst, int length) {
+      throwIndexOOBExceptionForRead(length);
+    }
+
+    @Override
+    public int readToByteBuffer(ByteBuffer dst) {
+      throwIndexOOBExceptionForRead(dst.remaining());
+      return 0;
+    }
+
+    @Override
     public MemoryBuffer getBuffer() {
       return MemoryBuffer.this;
     }
@@ -3233,6 +3249,10 @@ public class MemoryBuffer {
 
   public boolean[] readBooleans(int numBytes) {
     boolean[] values = new boolean[numBytes];
+    if (readerIndex > size - numBytes) {
+      streamReader.readBooleans(values, 0, numBytes);
+      return values;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readBooleans(heapMemory, androidHeapIndexUnchecked(readerIdx), values, 0, numBytes);
@@ -3244,6 +3264,10 @@ public class MemoryBuffer {
   }
 
   public void readBooleans(boolean[] values, int offset, int numElements) {
+    if (readerIndex > size - numElements) {
+      streamReader.readBooleans(values, offset, numElements);
+      return;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numElements);
       MemoryOps.readBooleans(
@@ -3251,12 +3275,16 @@ public class MemoryBuffer {
       readerIndex = readerIdx + numElements;
       return;
     }
-    readPrimitiveArray(values, UnsafeOps.BOOLEAN_ARRAY_OFFSET + offset, numElements);
+    readJvmPrimitiveArrayPayload(values, UnsafeOps.BOOLEAN_ARRAY_OFFSET + offset, numElements);
   }
 
   /** This method should be used to read data written by {@link #writeCharsWithSize}. */
   public char[] readChars(int numBytes) {
     final char[] chars = new char[numBytes >> 1];
+    if (readerIndex > size - numBytes) {
+      streamReader.readChars(chars, 0, chars.length);
+      return chars;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readChars(heapMemory, androidHeapIndexUnchecked(readerIdx), chars, 0, chars.length);
@@ -3273,6 +3301,10 @@ public class MemoryBuffer {
 
   public void readChars(char[] chars, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 2);
+    if (readerIndex > size - numBytes) {
+      streamReader.readChars(chars, offset, numElements);
+      return;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readChars(
@@ -3280,7 +3312,8 @@ public class MemoryBuffer {
       readerIndex = readerIdx + numBytes;
       return;
     }
-    readPrimitiveArray(chars, UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1), numBytes);
+    readJvmPrimitiveArrayPayload(
+        chars, UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1), numBytes);
   }
 
   @CodegenInvoke
@@ -3292,6 +3325,10 @@ public class MemoryBuffer {
   public short[] readShorts(int numBytes) {
     int numElements = numBytes >> 1;
     short[] values = new short[numElements];
+    if (readerIndex > size - numBytes) {
+      streamReader.readShorts(values, 0, numElements);
+      return values;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readShorts(
@@ -3305,6 +3342,10 @@ public class MemoryBuffer {
 
   public void readShorts(short[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 2);
+    if (readerIndex > size - numBytes) {
+      streamReader.readShorts(values, offset, numElements);
+      return;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readShorts(
@@ -3312,13 +3353,16 @@ public class MemoryBuffer {
       readerIndex = readerIdx + numBytes;
       return;
     }
-    readPrimitiveArray(values, UnsafeOps.SHORT_ARRAY_OFFSET + ((long) offset << 1), numBytes);
+    readJvmPrimitiveArrayPayload(
+        values, UnsafeOps.SHORT_ARRAY_OFFSET + ((long) offset << 1), numBytes);
   }
 
   public int[] readInts(int numBytes) {
     int numElements = numBytes >> 2;
     int[] values = new int[numElements];
-    if (AndroidSupport.IS_ANDROID) {
+    if (readerIndex > size - numBytes) {
+      streamReader.readInts(values, 0, numElements);
+    } else if (AndroidSupport.IS_ANDROID) {
       readAndroidInts(values, numBytes, numElements);
     } else if (numElements <= SMALL_INT_ARRAY_DIRECT_READ_THRESHOLD) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
@@ -3335,11 +3379,16 @@ public class MemoryBuffer {
 
   public void readInts(int[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 4);
+    if (readerIndex > size - numBytes) {
+      streamReader.readInts(values, offset, numElements);
+      return;
+    }
     if (AndroidSupport.IS_ANDROID) {
       readAndroidInts(values, offset, numElements, numBytes);
       return;
     }
-    readPrimitiveArray(values, UnsafeOps.INT_ARRAY_OFFSET + ((long) offset << 2), numBytes);
+    readJvmPrimitiveArrayPayload(
+        values, UnsafeOps.INT_ARRAY_OFFSET + ((long) offset << 2), numBytes);
   }
 
   private void readAndroidInts(int[] values, int numBytes, int numElements) {
@@ -3356,6 +3405,10 @@ public class MemoryBuffer {
   public long[] readLongs(int numBytes) {
     int numElements = numBytes >> 3;
     final long[] values = new long[numElements];
+    if (readerIndex > size - numBytes) {
+      streamReader.readLongs(values, 0, numElements);
+      return values;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readLongs(heapMemory, androidHeapIndexUnchecked(readerIdx), values, 0, numElements);
@@ -3363,10 +3416,6 @@ public class MemoryBuffer {
       return values;
     }
     int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
-      checkReadableBytes(numBytes);
-      readerIdx = readerIndex;
-    }
     UNSAFE.copyMemory(
         heapMemory, address + readerIdx, values, UnsafeOps.LONG_ARRAY_OFFSET, numBytes);
     readerIndex = readerIdx + numBytes;
@@ -3375,6 +3424,10 @@ public class MemoryBuffer {
 
   public void readLongs(long[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 8);
+    if (readerIndex > size - numBytes) {
+      streamReader.readLongs(values, offset, numElements);
+      return;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readLongs(
@@ -3382,12 +3435,17 @@ public class MemoryBuffer {
       readerIndex = readerIdx + numBytes;
       return;
     }
-    readPrimitiveArray(values, UnsafeOps.LONG_ARRAY_OFFSET + ((long) offset << 3), numBytes);
+    readJvmPrimitiveArrayPayload(
+        values, UnsafeOps.LONG_ARRAY_OFFSET + ((long) offset << 3), numBytes);
   }
 
   public float[] readFloats(int numBytes) {
     int numElements = numBytes >> 2;
     float[] values = new float[numElements];
+    if (readerIndex > size - numBytes) {
+      streamReader.readFloats(values, 0, numElements);
+      return values;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readFloats(
@@ -3401,6 +3459,10 @@ public class MemoryBuffer {
 
   public void readFloats(float[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 4);
+    if (readerIndex > size - numBytes) {
+      streamReader.readFloats(values, offset, numElements);
+      return;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readFloats(
@@ -3408,12 +3470,17 @@ public class MemoryBuffer {
       readerIndex = readerIdx + numBytes;
       return;
     }
-    readPrimitiveArray(values, UnsafeOps.FLOAT_ARRAY_OFFSET + ((long) offset << 2), numBytes);
+    readJvmPrimitiveArrayPayload(
+        values, UnsafeOps.FLOAT_ARRAY_OFFSET + ((long) offset << 2), numBytes);
   }
 
   public double[] readDoubles(int numBytes) {
     int numElements = numBytes >> 3;
     double[] values = new double[numElements];
+    if (readerIndex > size - numBytes) {
+      streamReader.readDoubles(values, 0, numElements);
+      return values;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readDoubles(
@@ -3427,6 +3494,10 @@ public class MemoryBuffer {
 
   public void readDoubles(double[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 8);
+    if (readerIndex > size - numBytes) {
+      streamReader.readDoubles(values, offset, numElements);
+      return;
+    }
     if (AndroidSupport.IS_ANDROID) {
       int readerIdx = preparePrimitiveArrayRead(numBytes);
       MemoryOps.readDoubles(
@@ -3434,7 +3505,8 @@ public class MemoryBuffer {
       readerIndex = readerIdx + numBytes;
       return;
     }
-    readPrimitiveArray(values, UnsafeOps.DOUBLE_ARRAY_OFFSET + ((long) offset << 3), numBytes);
+    readJvmPrimitiveArrayPayload(
+        values, UnsafeOps.DOUBLE_ARRAY_OFFSET + ((long) offset << 3), numBytes);
   }
 
   private int preparePrimitiveArrayRead(int numBytes) {
@@ -3444,10 +3516,6 @@ public class MemoryBuffer {
       readerIdx = readerIndex;
     }
     return readerIdx;
-  }
-
-  private void readPrimitiveArray(Object target, long targetPointer, int numBytes) {
-    readJvmPrimitiveArrayPayload(target, targetPointer, numBytes);
   }
 
   private void readJvmPrimitiveArrayPayload(Object target, long targetPointer, int numBytes) {

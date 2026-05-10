@@ -342,6 +342,30 @@ public class ArraySerializersTest extends ForyTestBase {
   }
 
   @Test
+  public void testPrimitiveArrayReadRejectsTruncatedPayload() {
+    Fory fory = Fory.builder().withMaxBinarySize(64).build();
+    Class<?>[] arrayTypes =
+        new Class<?>[] {
+          boolean[].class,
+          byte[].class,
+          char[].class,
+          short[].class,
+          int[].class,
+          long[].class,
+          float[].class,
+          double[].class
+        };
+    int[] byteSizes = new int[] {1, 1, 2, 2, 4, 8, 4, 8};
+    for (int i = 0; i < arrayTypes.length; i++) {
+      Class<?> arrayType = arrayTypes[i];
+      int byteSize = byteSizes[i];
+      assertThrows(
+          IndexOutOfBoundsException.class,
+          () -> readTruncatedPrimitiveArrayPayload(fory, arrayType, byteSize));
+    }
+  }
+
+  @Test
   public void testPrimitiveArrayReadRejectsNegativeDecodedBinaryPayload() {
     Fory fixedWidthFory = Fory.builder().build();
     assertThrows(
@@ -371,6 +395,16 @@ public class ArraySerializersTest extends ForyTestBase {
       buffer.writeVarUInt32Small7(byteSize);
       readContext.prepare(buffer, null, false);
     }
+    return fory.getSerializer(arrayType).read(readContext);
+  }
+
+  private static Object readTruncatedPrimitiveArrayPayload(
+      Fory fory, Class<?> arrayType, int byteSize) {
+    ReadContext readContext = fory.getReadContext();
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
+    buffer.writeVarUInt32Small7(byteSize);
+    readContext.prepare(
+        MemoryBuffer.fromByteArray(buffer.getBytes(0, buffer.writerIndex())), null, false);
     return fory.getSerializer(arrayType).read(readContext);
   }
 

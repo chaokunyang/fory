@@ -77,16 +77,8 @@ public class StreamTest extends ForyTestBase {
       buffer0.writeTaggedInt64(Long.MAX_VALUE);
     }
     byte[] bytes = buffer0.getBytes(0, buffer0.writerIndex());
-    ForyInputStream stream =
-        ForyStreamReader.of(
-            new ByteArrayInputStream(bytes) {
-              @Override
-              public synchronized int read(byte[] b, int off, int len) {
-                buffer0.readBytes(b, off, 1);
-                return 1;
-              }
-            });
-    MemoryBuffer buffer = MemoryBuffer.fromByteArray(bytes, 0, 0, stream);
+    ForyInputStream stream = ForyStreamReader.of(new ChunkedInputStream(bytes, 1));
+    MemoryBuffer buffer = stream.getBuffer();
     for (int i = 0; i < 10; i++) {
       assertEquals(buffer.readByte(), i);
       assertEquals(buffer.readChar(), i);
@@ -367,6 +359,48 @@ public class StreamTest extends ForyTestBase {
     }
   }
 
+  private static final class ChunkedInputStream extends ByteArrayInputStream {
+    private final int chunkSize;
+
+    private ChunkedInputStream(byte[] data, int chunkSize) {
+      super(data);
+      this.chunkSize = chunkSize;
+    }
+
+    @Override
+    public synchronized int read(byte[] b, int off, int len) {
+      return super.read(b, off, Math.min(chunkSize, len));
+    }
+  }
+
+  private static final class TrackingForyInputStream extends ForyInputStream {
+    private boolean readIntsCalled;
+
+    private TrackingForyInputStream(InputStream stream, int bufferSize) {
+      super(stream, bufferSize);
+    }
+
+    @Override
+    public void readInts(int[] dst, int dstIndex, int length) {
+      readIntsCalled = true;
+      super.readInts(dst, dstIndex, length);
+    }
+  }
+
+  private static final class TrackingForyReadableChannel extends ForyReadableChannel {
+    private boolean readLongsCalled;
+
+    private TrackingForyReadableChannel(ReadableByteChannel channel, ByteBuffer buffer) {
+      super(channel, buffer);
+    }
+
+    @Override
+    public void readLongs(long[] dst, int dstIndex, int length) {
+      readLongsCalled = true;
+      super.readLongs(dst, dstIndex, length);
+    }
+  }
+
   @Test
   public void testBigBufferStreamingMetaShared() throws IOException {
     Fory fory = builder().withCompatible(true).build();
@@ -391,6 +425,32 @@ public class StreamTest extends ForyTestBase {
     assertEquals(fory.deserialize(stream), list);
     assertEquals(fory.deserialize(stream), new long[5000]);
     assertEquals(fory.deserialize(stream), new int[5000]);
+  }
+
+  @Test
+  public void testPrimitiveArrayStreamReaderUsesTypedReads() throws IOException {
+    Fory fory = builder().requireClassRegistration(false).build();
+
+    int[] ints = new int[257];
+    for (int i = 0; i < ints.length; i++) {
+      ints[i] = i * 17;
+    }
+    TrackingForyInputStream input =
+        new TrackingForyInputStream(new ChunkedInputStream(fory.serialize(ints), 1), 3);
+    Assert.assertEquals((int[]) fory.deserialize(input), ints);
+    assertTrue(input.readIntsCalled);
+
+    long[] longs = new long[257];
+    for (int i = 0; i < longs.length; i++) {
+      longs[i] = ((long) i << 40) + i;
+    }
+    byte[] serialized = fory.serialize(longs);
+    try (TrackingForyReadableChannel channel =
+        new TrackingForyReadableChannel(
+            new ChunkedReadableByteChannel(serialized, 1), ByteBuffer.allocateDirect(5))) {
+      Assert.assertEquals((long[]) fory.deserialize(channel), longs);
+      assertTrue(channel.readLongsCalled);
+    }
   }
 
   @Test

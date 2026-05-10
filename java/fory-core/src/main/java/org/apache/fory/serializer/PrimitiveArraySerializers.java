@@ -184,9 +184,6 @@ public final class PrimitiveArraySerializers {
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
       }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
-      }
       return buffer.readBooleans(size);
     }
   }
@@ -226,9 +223,6 @@ public final class PrimitiveArraySerializers {
       int size = buffer.readVarUInt32Small7();
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
-      }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
       }
       return buffer.readBytes(size);
     }
@@ -303,9 +297,6 @@ public final class PrimitiveArraySerializers {
       }
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
-      }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
       }
       int numElements = size >>> 1;
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
@@ -422,9 +413,6 @@ public final class PrimitiveArraySerializers {
       }
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
-      }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
       }
       int numElements = size >>> 2;
       if (size > 0) {
@@ -549,9 +537,6 @@ public final class PrimitiveArraySerializers {
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
       }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
-      }
       int numElements = size >>> 3;
       if (size > 0) {
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
@@ -673,9 +658,6 @@ public final class PrimitiveArraySerializers {
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
       }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
-      }
       int numElements = size >>> 2;
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         return buffer.readFloats(size);
@@ -760,9 +742,6 @@ public final class PrimitiveArraySerializers {
       }
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
-      }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
       }
       int numElements = size >>> 3;
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
@@ -879,9 +858,6 @@ public final class PrimitiveArraySerializers {
     }
     if (size < 0 || size > maxBinarySize) {
       throwInvalidBinarySize(size, maxBinarySize);
-    }
-    if (size > buffer.remaining()) {
-      buffer.checkReadableBytes(size);
     }
     int numElements = size >>> 1;
     if (NativeByteOrder.IS_LITTLE_ENDIAN) {

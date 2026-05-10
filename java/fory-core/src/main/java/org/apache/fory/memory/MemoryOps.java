@@ -691,126 +691,308 @@ final class MemoryOps {
     return binarySize;
   }
 
-  static boolean[] readBooleans(MemoryBuffer buffer, int numBytes) {
-    boolean[] values = new boolean[numBytes];
-    readBooleans(buffer, values, 0, numBytes);
-    return values;
+  static void readByteArrayPayload(MemoryBuffer buffer, byte[] values, int numBytes) {
+    if (buffer.readerIndex > buffer.size - numBytes) {
+      buffer.streamReader.readTo(values, 0, numBytes);
+      return;
+    }
+    int readerIdx = buffer.readerIndex;
+    System.arraycopy(buffer.heapMemory, heapIndex(buffer, readerIdx), values, 0, numBytes);
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void readBooleanArrayPayload(MemoryBuffer buffer, boolean[] values, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
+      buffer.streamReader.readBooleans(values, 0, numBytes);
+      return;
+    }
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    for (int i = 0; i < numBytes; i++) {
+      values[i] = source[sourceIndex + i] != 0;
+    }
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void readCharArrayPayload(MemoryBuffer buffer, char[] values, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
+      buffer.streamReader.readChars(values, 0, numBytes >>> 1);
+      return;
+    }
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = sourceIndex + numBytes;
+    for (int i = 0; sourceIndex < end; i++, sourceIndex += 2) {
+      values[i] = (char) ((source[sourceIndex] & 0xFF) | (source[sourceIndex + 1] << 8));
+    }
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void readInt16ArrayPayload(MemoryBuffer buffer, short[] values, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
+      buffer.streamReader.readShorts(values, 0, numBytes >>> 1);
+      return;
+    }
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = sourceIndex + numBytes;
+    for (int i = 0; sourceIndex < end; i++, sourceIndex += 2) {
+      values[i] = (short) ((source[sourceIndex] & 0xFF) | (source[sourceIndex + 1] << 8));
+    }
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void readInt32ArrayPayload(MemoryBuffer buffer, int[] values, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
+      buffer.streamReader.readInts(values, 0, numBytes >>> 2);
+      return;
+    }
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = sourceIndex + numBytes;
+    for (int i = 0; sourceIndex < end; i++, sourceIndex += 4) {
+      values[i] =
+          (source[sourceIndex] & 0xFF)
+              | ((source[sourceIndex + 1] & 0xFF) << 8)
+              | ((source[sourceIndex + 2] & 0xFF) << 16)
+              | (source[sourceIndex + 3] << 24);
+    }
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void readInt64ArrayPayload(MemoryBuffer buffer, long[] values, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
+      buffer.streamReader.readLongs(values, 0, numBytes >>> 3);
+      return;
+    }
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = sourceIndex + numBytes;
+    for (int i = 0; sourceIndex < end; i++, sourceIndex += 8) {
+      values[i] =
+          ((long) source[sourceIndex] & 0xFF)
+              | (((long) source[sourceIndex + 1] & 0xFF) << 8)
+              | (((long) source[sourceIndex + 2] & 0xFF) << 16)
+              | (((long) source[sourceIndex + 3] & 0xFF) << 24)
+              | (((long) source[sourceIndex + 4] & 0xFF) << 32)
+              | (((long) source[sourceIndex + 5] & 0xFF) << 40)
+              | (((long) source[sourceIndex + 6] & 0xFF) << 48)
+              | ((long) source[sourceIndex + 7] << 56);
+    }
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void readFloat32ArrayPayload(MemoryBuffer buffer, float[] values, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
+      buffer.streamReader.readFloats(values, 0, numBytes >>> 2);
+      return;
+    }
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = sourceIndex + numBytes;
+    for (int i = 0; sourceIndex < end; i++, sourceIndex += 4) {
+      values[i] =
+          Float.intBitsToFloat(
+              (source[sourceIndex] & 0xFF)
+                  | ((source[sourceIndex + 1] & 0xFF) << 8)
+                  | ((source[sourceIndex + 2] & 0xFF) << 16)
+                  | (source[sourceIndex + 3] << 24));
+    }
+    buffer.readerIndex = readerIdx + numBytes;
+  }
+
+  static void readFloat64ArrayPayload(MemoryBuffer buffer, double[] values, int numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
+      buffer.streamReader.readDoubles(values, 0, numBytes >>> 3);
+      return;
+    }
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = sourceIndex + numBytes;
+    for (int i = 0; sourceIndex < end; i++, sourceIndex += 8) {
+      values[i] =
+          Double.longBitsToDouble(
+              ((long) source[sourceIndex] & 0xFF)
+                  | (((long) source[sourceIndex + 1] & 0xFF) << 8)
+                  | (((long) source[sourceIndex + 2] & 0xFF) << 16)
+                  | (((long) source[sourceIndex + 3] & 0xFF) << 24)
+                  | (((long) source[sourceIndex + 4] & 0xFF) << 32)
+                  | (((long) source[sourceIndex + 5] & 0xFF) << 40)
+                  | (((long) source[sourceIndex + 6] & 0xFF) << 48)
+                  | ((long) source[sourceIndex + 7] << 56));
+    }
+    buffer.readerIndex = readerIdx + numBytes;
   }
 
   static void readBooleans(MemoryBuffer buffer, boolean[] values, int offset, int numElements) {
-    if (buffer.readerIndex > buffer.size - numElements) {
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException(buffer);
+    }
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numElements) {
       buffer.streamReader.readBooleans(values, offset, numElements);
       return;
     }
-    int readerIdx = buffer.readerIndex;
-    readBooleans(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = offset + numElements;
+    for (int i = offset; i < end; i++) {
+      values[i] = source[sourceIndex++] != 0;
+    }
     buffer.readerIndex = readerIdx + numElements;
   }
 
-  static char[] readChars(MemoryBuffer buffer, int numBytes) {
-    char[] values = new char[numBytes >> 1];
-    readChars(buffer, values, 0, values.length);
-    return values;
-  }
-
   static void readChars(MemoryBuffer buffer, char[] values, int offset, int numElements) {
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException(buffer);
+    }
     int numBytes = Math.multiplyExact(numElements, 2);
-    if (buffer.readerIndex > buffer.size - numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readChars(values, offset, numElements);
       return;
     }
-    int readerIdx = buffer.readerIndex;
-    readChars(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = offset + numElements;
+    for (int i = offset; i < end; i++, sourceIndex += 2) {
+      values[i] = (char) ((source[sourceIndex] & 0xFF) | (source[sourceIndex + 1] << 8));
+    }
     buffer.readerIndex = readerIdx + numBytes;
-  }
-
-  static short[] readShorts(MemoryBuffer buffer, int numBytes) {
-    int numElements = numBytes >> 1;
-    short[] values = new short[numElements];
-    readShorts(buffer, values, 0, numElements);
-    return values;
   }
 
   static void readShorts(MemoryBuffer buffer, short[] values, int offset, int numElements) {
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException(buffer);
+    }
     int numBytes = Math.multiplyExact(numElements, 2);
-    if (buffer.readerIndex > buffer.size - numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readShorts(values, offset, numElements);
       return;
     }
-    int readerIdx = buffer.readerIndex;
-    readShorts(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = offset + numElements;
+    for (int i = offset; i < end; i++, sourceIndex += 2) {
+      values[i] = (short) ((source[sourceIndex] & 0xFF) | (source[sourceIndex + 1] << 8));
+    }
     buffer.readerIndex = readerIdx + numBytes;
-  }
-
-  static int[] readInts(MemoryBuffer buffer, int numBytes) {
-    int numElements = numBytes >> 2;
-    int[] values = new int[numElements];
-    readInts(buffer, values, 0, numElements);
-    return values;
   }
 
   static void readInts(MemoryBuffer buffer, int[] values, int offset, int numElements) {
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException(buffer);
+    }
     int numBytes = Math.multiplyExact(numElements, 4);
-    if (buffer.readerIndex > buffer.size - numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readInts(values, offset, numElements);
       return;
     }
-    int readerIdx = buffer.readerIndex;
-    readInts(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = offset + numElements;
+    for (int i = offset; i < end; i++, sourceIndex += 4) {
+      values[i] =
+          (source[sourceIndex] & 0xFF)
+              | ((source[sourceIndex + 1] & 0xFF) << 8)
+              | ((source[sourceIndex + 2] & 0xFF) << 16)
+              | (source[sourceIndex + 3] << 24);
+    }
     buffer.readerIndex = readerIdx + numBytes;
-  }
-
-  static long[] readLongs(MemoryBuffer buffer, int numBytes) {
-    int numElements = numBytes >> 3;
-    long[] values = new long[numElements];
-    readLongs(buffer, values, 0, numElements);
-    return values;
   }
 
   static void readLongs(MemoryBuffer buffer, long[] values, int offset, int numElements) {
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException(buffer);
+    }
     int numBytes = Math.multiplyExact(numElements, 8);
-    if (buffer.readerIndex > buffer.size - numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readLongs(values, offset, numElements);
       return;
     }
-    int readerIdx = buffer.readerIndex;
-    readLongs(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = offset + numElements;
+    for (int i = offset; i < end; i++, sourceIndex += 8) {
+      values[i] =
+          ((long) source[sourceIndex] & 0xFF)
+              | (((long) source[sourceIndex + 1] & 0xFF) << 8)
+              | (((long) source[sourceIndex + 2] & 0xFF) << 16)
+              | (((long) source[sourceIndex + 3] & 0xFF) << 24)
+              | (((long) source[sourceIndex + 4] & 0xFF) << 32)
+              | (((long) source[sourceIndex + 5] & 0xFF) << 40)
+              | (((long) source[sourceIndex + 6] & 0xFF) << 48)
+              | ((long) source[sourceIndex + 7] << 56);
+    }
     buffer.readerIndex = readerIdx + numBytes;
-  }
-
-  static float[] readFloats(MemoryBuffer buffer, int numBytes) {
-    int numElements = numBytes >> 2;
-    float[] values = new float[numElements];
-    readFloats(buffer, values, 0, numElements);
-    return values;
   }
 
   static void readFloats(MemoryBuffer buffer, float[] values, int offset, int numElements) {
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException(buffer);
+    }
     int numBytes = Math.multiplyExact(numElements, 4);
-    if (buffer.readerIndex > buffer.size - numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readFloats(values, offset, numElements);
       return;
     }
-    int readerIdx = buffer.readerIndex;
-    readFloats(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = offset + numElements;
+    for (int i = offset; i < end; i++, sourceIndex += 4) {
+      values[i] =
+          Float.intBitsToFloat(
+              (source[sourceIndex] & 0xFF)
+                  | ((source[sourceIndex + 1] & 0xFF) << 8)
+                  | ((source[sourceIndex + 2] & 0xFF) << 16)
+                  | (source[sourceIndex + 3] << 24));
+    }
     buffer.readerIndex = readerIdx + numBytes;
   }
 
-  static double[] readDoubles(MemoryBuffer buffer, int numBytes) {
-    int numElements = numBytes >> 3;
-    double[] values = new double[numElements];
-    readDoubles(buffer, values, 0, numElements);
-    return values;
-  }
-
   static void readDoubles(MemoryBuffer buffer, double[] values, int offset, int numElements) {
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException(buffer);
+    }
     int numBytes = Math.multiplyExact(numElements, 8);
-    if (buffer.readerIndex > buffer.size - numBytes) {
+    int readerIdx = buffer.readerIndex;
+    if (readerIdx > buffer.size - numBytes) {
       buffer.streamReader.readDoubles(values, offset, numElements);
       return;
     }
-    int readerIdx = buffer.readerIndex;
-    readDoubles(buffer.heapMemory, heapIndex(buffer, readerIdx), values, offset, numElements);
+    byte[] source = buffer.heapMemory;
+    int sourceIndex = heapIndex(buffer, readerIdx);
+    int end = offset + numElements;
+    for (int i = offset; i < end; i++, sourceIndex += 8) {
+      values[i] =
+          Double.longBitsToDouble(
+              ((long) source[sourceIndex] & 0xFF)
+                  | (((long) source[sourceIndex + 1] & 0xFF) << 8)
+                  | (((long) source[sourceIndex + 2] & 0xFF) << 16)
+                  | (((long) source[sourceIndex + 3] & 0xFF) << 24)
+                  | (((long) source[sourceIndex + 4] & 0xFF) << 32)
+                  | (((long) source[sourceIndex + 5] & 0xFF) << 40)
+                  | (((long) source[sourceIndex + 6] & 0xFF) << 48)
+                  | ((long) source[sourceIndex + 7] << 56));
+    }
     buffer.readerIndex = readerIdx + numBytes;
   }
 
@@ -1181,24 +1363,10 @@ final class MemoryOps {
     }
   }
 
-  static void readBooleans(
-      byte[] source, int sourceIndex, boolean[] target, int targetIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = source[sourceIndex + i] != 0;
-    }
-  }
-
   static void writeChars(
       byte[] target, int targetIndex, char[] source, int sourceIndex, int length) {
     for (int i = 0; i < length; i++) {
       putInt16(target, targetIndex + i * 2, (short) source[sourceIndex + i]);
-    }
-  }
-
-  static void readChars(
-      byte[] source, int sourceIndex, char[] target, int targetIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = (char) getInt16(source, sourceIndex + i * 2);
     }
   }
 
@@ -1209,22 +1377,9 @@ final class MemoryOps {
     }
   }
 
-  static void readShorts(
-      byte[] source, int sourceIndex, short[] target, int targetIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = getInt16(source, sourceIndex + i * 2);
-    }
-  }
-
   static void writeInts(byte[] target, int targetIndex, int[] source, int sourceIndex, int length) {
     for (int i = 0; i < length; i++) {
       putInt32(target, targetIndex + i * 4, source[sourceIndex + i]);
-    }
-  }
-
-  static void readInts(byte[] source, int sourceIndex, int[] target, int targetIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = getInt32(source, sourceIndex + i * 4);
     }
   }
 
@@ -1235,13 +1390,6 @@ final class MemoryOps {
     }
   }
 
-  static void readLongs(
-      byte[] source, int sourceIndex, long[] target, int targetIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = getInt64(source, sourceIndex + i * 8);
-    }
-  }
-
   static void writeFloats(
       byte[] target, int targetIndex, float[] source, int sourceIndex, int length) {
     for (int i = 0; i < length; i++) {
@@ -1249,24 +1397,10 @@ final class MemoryOps {
     }
   }
 
-  static void readFloats(
-      byte[] source, int sourceIndex, float[] target, int targetIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = getFloat32(source, sourceIndex + i * 4);
-    }
-  }
-
   static void writeDoubles(
       byte[] target, int targetIndex, double[] source, int sourceIndex, int length) {
     for (int i = 0; i < length; i++) {
       putFloat64(target, targetIndex + i * 8, source[sourceIndex + i]);
-    }
-  }
-
-  static void readDoubles(
-      byte[] source, int sourceIndex, double[] target, int targetIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = getFloat64(source, sourceIndex + i * 8);
     }
   }
 }

@@ -35,6 +35,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   Android heap logic. Keep heap index math, direct field updates, typed array loops, and
   reader/writer index changes in `MemoryOps`; do not add Android-named helpers, heap wrapper
   helpers, or Android-specific `MemoryBuffer` subclasses.
+- In `MemoryBuffer` and `MemoryOps` hot paths, duplicate small straight-line copy/read/write logic
+  when that keeps control flow direct. Do not add private helper indirection to hot paths just to
+  reduce local code duplication; keep helpers for slow, cold, or error paths.
 - Keep GraalVM feature code as a thin metadata/registration layer. Build time should publish metadata needed for runtime reconstruction, not retain concrete generated or user serializer instances in the image heap.
 - If changes touch GraalVM bootstrap, serializer retention, native-image metadata, or `ObjectStreamSerializer` GraalVM behavior, verify the native-image build and run the produced binary; a plain Java compile is insufficient.
 - Put latest-JDK or virtual-thread tests in the latest-JDK test modules with the matching compiler/profile floor, and centralize runtime-version probing in existing compatibility utilities.

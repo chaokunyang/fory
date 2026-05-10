@@ -808,10 +808,8 @@ public class CollectionSerializers {
       if (size > maxBinarySize) {
         throwBinarySizeLimitExceeded(size, maxBinarySize);
       }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
-      }
-      long[] values = buffer.readLongs(size);
+      long[] values = new long[size >>> 3];
+      buffer.readInt64ArrayPayload(values, size);
       return BitSet.valueOf(values);
     }
   }

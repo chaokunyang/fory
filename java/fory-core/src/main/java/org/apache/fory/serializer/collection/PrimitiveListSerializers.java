@@ -149,9 +149,6 @@ public class PrimitiveListSerializers {
       if (size > maxBinarySize) {
         throwBinarySizeLimitExceeded(size, maxBinarySize);
       }
-      if (size > buffer.remaining()) {
-        buffer.checkReadableBytes(size);
-      }
       return size;
     }
 
@@ -165,9 +162,6 @@ public class PrimitiveListSerializers {
           throwBinarySizeLimitExceeded((long) size * elemSize, maxBinarySize);
         }
         byteSize = size * elemSize;
-        if (byteSize > buffer.remaining()) {
-          buffer.checkReadableBytes(byteSize);
-        }
         return size;
       } else {
         byteSize = buffer.readVarUInt32Small7();
@@ -180,9 +174,6 @@ public class PrimitiveListSerializers {
       }
       if (byteSize > maxBinarySize) {
         throwBinarySizeLimitExceeded(byteSize, maxBinarySize);
-      }
-      if (byteSize > buffer.remaining()) {
-        buffer.checkReadableBytes(byteSize);
       }
       return byteSize / elemSize;
     }
@@ -211,11 +202,9 @@ public class PrimitiveListSerializers {
     public BoolList read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readOneByteHeader(buffer);
-      BoolList list = new BoolList(size);
-      for (int i = 0; i < size; i++) {
-        list.add(buffer.readBoolean());
-      }
-      return list;
+      boolean[] array = new boolean[size];
+      buffer.readBooleanArrayPayload(array, size);
+      return new BoolList(array);
     }
 
     @Override
@@ -246,7 +235,7 @@ public class PrimitiveListSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readOneByteHeader(buffer);
       byte[] array = new byte[size];
-      buffer.readBytes(array);
+      buffer.readByteArrayPayload(array, size);
       return new Int8List(array);
     }
 
@@ -284,12 +273,11 @@ public class PrimitiveListSerializers {
     public Int16List read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readFixedWidthHeader(buffer, 2);
-      int byteSize = size * 2;
-      short[] array;
+      int byteSize = size << 1;
+      short[] array = new short[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readShorts(byteSize);
+        buffer.readInt16ArrayPayload(array, byteSize);
       } else {
-        array = new short[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt16();
         }
@@ -338,12 +326,11 @@ public class PrimitiveListSerializers {
         return readInt32Compressed(buffer);
       }
       int size = readFixedWidthHeader(buffer, 4);
-      int byteSize = size * 4;
-      int[] array;
+      int byteSize = size << 2;
+      int[] array = new int[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readInts(byteSize);
+        buffer.readInt32ArrayPayload(array, byteSize);
       } else {
-        array = new int[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt32();
         }
@@ -425,12 +412,11 @@ public class PrimitiveListSerializers {
         return readInt64Compressed(buffer, config.longEncoding());
       }
       int size = readFixedWidthHeader(buffer, 8);
-      int byteSize = size * 8;
-      long[] array;
+      int byteSize = size << 3;
+      long[] array = new long[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readLongs(byteSize);
+        buffer.readInt64ArrayPayload(array, byteSize);
       } else {
-        array = new long[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt64();
         }
@@ -503,7 +489,7 @@ public class PrimitiveListSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readOneByteHeader(buffer);
       byte[] array = new byte[size];
-      buffer.readBytes(array);
+      buffer.readByteArrayPayload(array, size);
       return new UInt8List(array);
     }
 
@@ -541,12 +527,11 @@ public class PrimitiveListSerializers {
     public UInt16List read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readFixedWidthHeader(buffer, 2);
-      int byteSize = size * 2;
-      short[] array;
+      int byteSize = size << 1;
+      short[] array = new short[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readShorts(byteSize);
+        buffer.readInt16ArrayPayload(array, byteSize);
       } else {
-        array = new short[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt16();
         }
@@ -595,12 +580,11 @@ public class PrimitiveListSerializers {
         return readUInt32Compressed(buffer);
       }
       int size = readFixedWidthHeader(buffer, 4);
-      int byteSize = size * 4;
-      int[] array;
+      int byteSize = size << 2;
+      int[] array = new int[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readInts(byteSize);
+        buffer.readInt32ArrayPayload(array, byteSize);
       } else {
-        array = new int[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt32();
         }
@@ -682,12 +666,11 @@ public class PrimitiveListSerializers {
         return readUInt64Compressed(buffer, config.longEncoding());
       }
       int size = readFixedWidthHeader(buffer, 8);
-      int byteSize = size * 8;
-      long[] array;
+      int byteSize = size << 3;
+      long[] array = new long[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readLongs(byteSize);
+        buffer.readInt64ArrayPayload(array, byteSize);
       } else {
-        array = new long[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt64();
         }
@@ -766,12 +749,11 @@ public class PrimitiveListSerializers {
     public Float32List read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readFixedWidthHeader(buffer, 4);
-      int byteSize = size * 4;
-      float[] array;
+      int byteSize = size << 2;
+      float[] array = new float[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readFloats(byteSize);
+        buffer.readFloat32ArrayPayload(array, byteSize);
       } else {
-        array = new float[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readFloat32();
         }
@@ -813,12 +795,11 @@ public class PrimitiveListSerializers {
     public Float64List read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readFixedWidthHeader(buffer, 8);
-      int byteSize = size * 8;
-      double[] array;
+      int byteSize = size << 3;
+      double[] array = new double[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readDoubles(byteSize);
+        buffer.readFloat64ArrayPayload(array, byteSize);
       } else {
-        array = new double[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readFloat64();
         }
@@ -860,12 +841,11 @@ public class PrimitiveListSerializers {
     public Float16List read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readFixedWidthHeader(buffer, 2);
-      int byteSize = size * 2;
-      short[] array;
+      int byteSize = size << 1;
+      short[] array = new short[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readShorts(byteSize);
+        buffer.readInt16ArrayPayload(array, byteSize);
       } else {
-        array = new short[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt16();
         }
@@ -907,12 +887,11 @@ public class PrimitiveListSerializers {
     public BFloat16List read(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
       int size = readFixedWidthHeader(buffer, 2);
-      int byteSize = size * 2;
-      short[] array;
+      int byteSize = size << 1;
+      short[] array = new short[size];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        array = buffer.readShorts(byteSize);
+        buffer.readInt16ArrayPayload(array, byteSize);
       } else {
-        array = new short[size];
         for (int i = 0; i < size; i++) {
           array[i] = buffer.readInt16();
         }

@@ -40,7 +40,7 @@ Apache Fory™ provides blazingly fast Java object serialization with JIT compil
 - **100% JDK Serialization Compatible**: Supports `writeObject`/`readObject`/`writeReplace`/`readResolve`/`readObjectNoData`/`Externalizable`
 - **Java 8-24 Support**: Works across all modern Java versions including Java 17+ records
 - **GraalVM Native Image**: AOT compilation support without reflection configuration
-- **Android API 26+ Support**: Core object serialization works on Android without runtime code generation or `sun.misc.Unsafe` execution
+- **Android API 26+ Support**: Core object serialization works on Android without runtime code generation.
 
 ### Advanced Features
 

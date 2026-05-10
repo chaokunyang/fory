@@ -20,8 +20,6 @@ package org.apache.fory.memory;
 
 import static org.apache.fory.util.Preconditions.checkArgument;
 
-import java.lang.reflect.Field;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.apache.fory.annotation.CodegenInvoke;
@@ -47,9 +45,8 @@ import sun.misc.Unsafe;
  *   <li>aligned int/long encoding.
  * </ul>
  *
- * <p>Note that JVM heap buffers use this class directly so that hot methods stay monomorphic and
- * can be inlined by the just-in-time compiler. Android heap buffers use a private subclass for
- * heap-only operations, keeping Android-safe code out of ordinary JVM hot paths.
+ * <p>Note that this class is designed to final so that all the methods in this class can be inlined
+ * by the just-in-time compiler.
  *
  * <p>TODO(chaokunyang) Let grow/readerIndex/writerIndex handled in this class and Make immutable
  * part as separate class, and use composition in this class. In this way, all fields can be final
@@ -63,36 +60,10 @@ import sun.misc.Unsafe;
  * jit may stop inline for some reasons: NodeCountInliningCutoff,
  * DesiredMethodLimit,MaxRecursiveInlineLevel,FreqInlineSize,MaxInlineSize
  */
-public class MemoryBuffer {
+public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : UnsafeOps.UNSAFE;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
-  // Avoid copyMemory call overhead for small JVM int-array reads; larger arrays use bulk copy.
-  private static final int SMALL_INT_ARRAY_DIRECT_READ_THRESHOLD = 32;
-
-  private static final class DirectBufferAccess {
-    private static final long BUFFER_ADDRESS_FIELD_OFFSET;
-
-    static {
-      try {
-        Field addressField = Buffer.class.getDeclaredField("address");
-        BUFFER_ADDRESS_FIELD_OFFSET = UnsafeOps.objectFieldOffset(addressField);
-        checkArgument(BUFFER_ADDRESS_FIELD_OFFSET != 0);
-      } catch (NoSuchFieldException e) {
-        throw new IllegalStateException(e);
-      }
-    }
-  }
-
-  private static long directBufferAddress(ByteBuffer buffer) {
-    checkArgument(buffer.isDirect(), "Can't get address of a non-direct ByteBuffer.");
-    try {
-      return UnsafeOps.getLong(buffer, DirectBufferAccess.BUFFER_ADDRESS_FIELD_OFFSET);
-    } catch (Throwable t) {
-      throw new Error("Could not access direct byte buffer address field.", t);
-    }
-  }
-
   // Global allocator instance that can be customized
   private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();
 
@@ -220,7 +191,7 @@ public class MemoryBuffer {
       if (AndroidSupport.IS_ANDROID) {
         MemoryOps.throwDirectByteBufferUnsupported();
       } else {
-        initOffHeapBuffer(directBufferAddress(buffer), size, buffer);
+        initOffHeapBuffer(ByteBufferUtil.getAddress(buffer), size, buffer);
       }
     } else if (buffer.hasArray()) {
       initHeapBuffer(buffer.array(), buffer.arrayOffset(), size);
@@ -394,7 +365,7 @@ public class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.get(this, offset, target, numBytes);
     } else if (target.isDirect()) {
-      final long targetAddr = directBufferAddress(target) + targetPos;
+      final long targetAddr = ByteBufferUtil.getAddress(target) + targetPos;
       final long sourceAddr = address + offset;
       if (sourceAddr <= addressLimit - numBytes) {
         UnsafeOps.copyMemory(heapMemory, sourceAddr, null, targetAddr, numBytes);
@@ -419,7 +390,7 @@ public class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.put(this, offset, source, numBytes);
     } else if (source.isDirect()) {
-      final long sourceAddr = directBufferAddress(source) + sourcePos;
+      final long sourceAddr = ByteBufferUtil.getAddress(source) + sourcePos;
       final long targetAddr = address + offset;
       if (targetAddr <= addressLimit - numBytes) {
         UnsafeOps.copyMemory(null, sourceAddr, heapMemory, targetAddr, numBytes);
@@ -3084,43 +3055,203 @@ public class MemoryBuffer {
     return arr;
   }
 
-  public boolean[] readBooleans(int numBytes) {
+  /**
+   * Reads a size-validated primitive byte-array payload into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readByteArrayPayload(byte[] values, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readBooleans(this, numBytes);
+      MemoryOps.readByteArrayPayload(this, values, numBytes);
+      return;
     }
-    boolean[] values = new boolean[numBytes];
-    if (readerIndex > size - numBytes) {
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readTo(values, 0, numBytes);
+      return;
+    }
+    byte[] heapMemory = this.heapMemory;
+    if (heapMemory != null) {
+      System.arraycopy(heapMemory, heapOffset + readerIdx, values, 0, numBytes);
+    } else {
+      UNSAFE.copyMemory(null, address + readerIdx, values, UnsafeOps.BYTE_ARRAY_OFFSET, numBytes);
+    }
+    readerIndex = readerIdx + numBytes;
+  }
+
+  /**
+   * Reads a size-validated primitive boolean-array payload into {@code values}. The caller owns
+   * size validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readBooleanArrayPayload(boolean[] values, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.readBooleanArrayPayload(this, values, numBytes);
+      return;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
       streamReader.readBooleans(values, 0, numBytes);
-      return values;
+      return;
     }
-    readJvmPrimitiveArrayPayload(values, UnsafeOps.BOOLEAN_ARRAY_OFFSET, numBytes);
-    return values;
+    UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, values, UnsafeOps.BOOLEAN_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
+  }
+
+  /**
+   * Reads a size-validated primitive char-array payload into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readCharArrayPayload(char[] values, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.readCharArrayPayload(this, values, numBytes);
+      return;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readChars(values, 0, numBytes >>> 1);
+      return;
+    }
+    UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, values, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
+  }
+
+  /**
+   * Reads a size-validated primitive int16-array payload into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readInt16ArrayPayload(short[] values, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.readInt16ArrayPayload(this, values, numBytes);
+      return;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readShorts(values, 0, numBytes >>> 1);
+      return;
+    }
+    UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, values, UnsafeOps.SHORT_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
+  }
+
+  /**
+   * Reads a size-validated primitive int32-array payload into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readInt32ArrayPayload(int[] values, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.readInt32ArrayPayload(this, values, numBytes);
+      return;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      readInt32ArrayPayloadFromStream(values, numBytes);
+      return;
+    }
+    int numElements = numBytes >>> 2;
+    if (numElements <= 32) {
+      long pointer = address + readerIdx;
+      for (int i = 0; i < numElements; i++) {
+        values[i] = UNSAFE.getInt(heapMemory, pointer + ((long) i << 2));
+      }
+    } else {
+      UNSAFE.copyMemory(
+          heapMemory, address + readerIdx, values, UnsafeOps.INT_ARRAY_OFFSET, numBytes);
+    }
+    readerIndex = readerIdx + numBytes;
+  }
+
+  private void readInt32ArrayPayloadFromStream(int[] values, int numBytes) {
+    streamReader.readInts(values, 0, numBytes >>> 2);
+  }
+
+  /**
+   * Reads a size-validated primitive int64-array payload into {@code values}. The caller owns size
+   * validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readInt64ArrayPayload(long[] values, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.readInt64ArrayPayload(this, values, numBytes);
+      return;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readLongs(values, 0, numBytes >>> 3);
+      return;
+    }
+    UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, values, UnsafeOps.LONG_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
+  }
+
+  /**
+   * Reads a size-validated primitive float32-array payload into {@code values}. The caller owns
+   * size validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readFloat32ArrayPayload(float[] values, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.readFloat32ArrayPayload(this, values, numBytes);
+      return;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readFloats(values, 0, numBytes >>> 2);
+      return;
+    }
+    UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, values, UnsafeOps.FLOAT_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
+  }
+
+  /**
+   * Reads a size-validated primitive float64-array payload into {@code values}. The caller owns
+   * size validation and destination allocation; this method reads payload bytes only, not the size
+   * prefix.
+   */
+  public void readFloat64ArrayPayload(double[] values, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.readFloat64ArrayPayload(this, values, numBytes);
+      return;
+    }
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readDoubles(values, 0, numBytes >>> 3);
+      return;
+    }
+    UNSAFE.copyMemory(
+        heapMemory, address + readerIdx, values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   public void readBooleans(boolean[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readBooleans(this, values, offset, numElements);
     } else {
+      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+          < 0) {
+        throwOOBException();
+      }
       if (readerIndex > size - numElements) {
         streamReader.readBooleans(values, offset, numElements);
         return;
       }
-      readJvmPrimitiveArrayPayload(values, UnsafeOps.BOOLEAN_ARRAY_OFFSET + offset, numElements);
+      int readerIdx = readerIndex;
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + readerIdx,
+          values,
+          UnsafeOps.BOOLEAN_ARRAY_OFFSET + offset,
+          numElements);
+      readerIndex = readerIdx + numElements;
     }
-  }
-
-  /** This method should be used to read data written by {@link #writeCharsWithSize}. */
-  public char[] readChars(int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readChars(this, numBytes);
-    }
-    final char[] chars = new char[numBytes >> 1];
-    if (readerIndex > size - numBytes) {
-      streamReader.readChars(chars, 0, chars.length);
-      return chars;
-    }
-    readJvmPrimitiveArrayPayload(chars, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
-    return chars;
   }
 
   public void readChars(char[] chars, int numElements) {
@@ -3131,33 +3262,32 @@ public class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readChars(this, chars, offset, numElements);
     } else {
+      if ((offset | numElements | (offset + numElements) | (chars.length - offset - numElements))
+          < 0) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 2);
       if (readerIndex > size - numBytes) {
         streamReader.readChars(chars, offset, numElements);
         return;
       }
-      readJvmPrimitiveArrayPayload(
-          chars, UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1), numBytes);
+      int readerIdx = readerIndex;
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + readerIdx,
+          chars,
+          UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1),
+          numBytes);
+      readerIndex = readerIdx + numBytes;
     }
   }
 
   @CodegenInvoke
   public char[] readCharsAndSize() {
     final int numBytes = readBinarySize();
-    return readChars(numBytes);
-  }
-
-  public short[] readShorts(int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readShorts(this, numBytes);
-    }
     int numElements = numBytes >> 1;
-    short[] values = new short[numElements];
-    if (readerIndex > size - numBytes) {
-      streamReader.readShorts(values, 0, numElements);
-      return values;
-    }
-    readJvmPrimitiveArrayPayload(values, UnsafeOps.SHORT_ARRAY_OFFSET, numBytes);
+    char[] values = new char[numElements];
+    readChars(values, 0, numElements);
     return values;
   }
 
@@ -3165,151 +3295,120 @@ public class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readShorts(this, values, offset, numElements);
     } else {
+      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+          < 0) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 2);
       if (readerIndex > size - numBytes) {
         streamReader.readShorts(values, offset, numElements);
         return;
       }
-      readJvmPrimitiveArrayPayload(
-          values, UnsafeOps.SHORT_ARRAY_OFFSET + ((long) offset << 1), numBytes);
-    }
-  }
-
-  public int[] readInts(int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInts(this, numBytes);
-    }
-    int numElements = numBytes >> 2;
-    int[] values = new int[numElements];
-    if (readerIndex > size - numBytes) {
-      streamReader.readInts(values, 0, numElements);
-    } else if (numElements <= SMALL_INT_ARRAY_DIRECT_READ_THRESHOLD) {
-      int readerIdx = preparePrimitiveArrayRead(numBytes);
-      long pointer = address + readerIdx;
-      for (int i = 0; i < numElements; i++) {
-        values[i] = UNSAFE.getInt(heapMemory, pointer + ((long) i << 2));
-      }
+      int readerIdx = readerIndex;
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + readerIdx,
+          values,
+          UnsafeOps.SHORT_ARRAY_OFFSET + ((long) offset << 1),
+          numBytes);
       readerIndex = readerIdx + numBytes;
-    } else {
-      readJvmPrimitiveArrayPayload(values, UnsafeOps.INT_ARRAY_OFFSET, numBytes);
     }
-    return values;
   }
 
   public void readInts(int[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readInts(this, values, offset, numElements);
     } else {
+      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+          < 0) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 4);
       if (readerIndex > size - numBytes) {
         streamReader.readInts(values, offset, numElements);
         return;
       }
-      readJvmPrimitiveArrayPayload(
-          values, UnsafeOps.INT_ARRAY_OFFSET + ((long) offset << 2), numBytes);
+      int readerIdx = readerIndex;
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + readerIdx,
+          values,
+          UnsafeOps.INT_ARRAY_OFFSET + ((long) offset << 2),
+          numBytes);
+      readerIndex = readerIdx + numBytes;
     }
-  }
-
-  public long[] readLongs(int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readLongs(this, numBytes);
-    }
-    int numElements = numBytes >> 3;
-    final long[] values = new long[numElements];
-    if (readerIndex > size - numBytes) {
-      streamReader.readLongs(values, 0, numElements);
-      return values;
-    }
-    int readerIdx = readerIndex;
-    UNSAFE.copyMemory(
-        heapMemory, address + readerIdx, values, UnsafeOps.LONG_ARRAY_OFFSET, numBytes);
-    readerIndex = readerIdx + numBytes;
-    return values;
   }
 
   public void readLongs(long[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readLongs(this, values, offset, numElements);
     } else {
+      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+          < 0) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 8);
       if (readerIndex > size - numBytes) {
         streamReader.readLongs(values, offset, numElements);
         return;
       }
-      readJvmPrimitiveArrayPayload(
-          values, UnsafeOps.LONG_ARRAY_OFFSET + ((long) offset << 3), numBytes);
+      int readerIdx = readerIndex;
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + readerIdx,
+          values,
+          UnsafeOps.LONG_ARRAY_OFFSET + ((long) offset << 3),
+          numBytes);
+      readerIndex = readerIdx + numBytes;
     }
-  }
-
-  public float[] readFloats(int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readFloats(this, numBytes);
-    }
-    int numElements = numBytes >> 2;
-    float[] values = new float[numElements];
-    if (readerIndex > size - numBytes) {
-      streamReader.readFloats(values, 0, numElements);
-      return values;
-    }
-    readJvmPrimitiveArrayPayload(values, UnsafeOps.FLOAT_ARRAY_OFFSET, numBytes);
-    return values;
   }
 
   public void readFloats(float[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readFloats(this, values, offset, numElements);
     } else {
+      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+          < 0) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 4);
       if (readerIndex > size - numBytes) {
         streamReader.readFloats(values, offset, numElements);
         return;
       }
-      readJvmPrimitiveArrayPayload(
-          values, UnsafeOps.FLOAT_ARRAY_OFFSET + ((long) offset << 2), numBytes);
+      int readerIdx = readerIndex;
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + readerIdx,
+          values,
+          UnsafeOps.FLOAT_ARRAY_OFFSET + ((long) offset << 2),
+          numBytes);
+      readerIndex = readerIdx + numBytes;
     }
-  }
-
-  public double[] readDoubles(int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readDoubles(this, numBytes);
-    }
-    int numElements = numBytes >> 3;
-    double[] values = new double[numElements];
-    if (readerIndex > size - numBytes) {
-      streamReader.readDoubles(values, 0, numElements);
-      return values;
-    }
-    readJvmPrimitiveArrayPayload(values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numBytes);
-    return values;
   }
 
   public void readDoubles(double[] values, int offset, int numElements) {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.readDoubles(this, values, offset, numElements);
     } else {
+      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+          < 0) {
+        throwOOBException();
+      }
       int numBytes = Math.multiplyExact(numElements, 8);
       if (readerIndex > size - numBytes) {
         streamReader.readDoubles(values, offset, numElements);
         return;
       }
-      readJvmPrimitiveArrayPayload(
-          values, UnsafeOps.DOUBLE_ARRAY_OFFSET + ((long) offset << 3), numBytes);
+      int readerIdx = readerIndex;
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + readerIdx,
+          values,
+          UnsafeOps.DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
+          numBytes);
+      readerIndex = readerIdx + numBytes;
     }
-  }
-
-  private int preparePrimitiveArrayRead(int numBytes) {
-    int readerIdx = readerIndex;
-    if (readerIdx > size - numBytes) {
-      checkReadableBytes(numBytes);
-      readerIdx = readerIndex;
-    }
-    return readerIdx;
-  }
-
-  private void readJvmPrimitiveArrayPayload(Object target, long targetPointer, int numBytes) {
-    int readerIdx = preparePrimitiveArrayRead(numBytes);
-    UNSAFE.copyMemory(heapMemory, address + readerIdx, target, targetPointer, numBytes);
-    readerIndex = readerIdx + numBytes;
   }
 
   public void checkReadableBytes(int minimumReadableBytes) {
@@ -3440,7 +3539,7 @@ public class MemoryBuffer {
       ByteBuffer offHeapBuffer = this.offHeapBuffer;
       if (offHeapBuffer != null) {
         ByteBuffer duplicate = offHeapBuffer.duplicate();
-        int start = (int) (address - directBufferAddress(duplicate));
+        int start = (int) (address - ByteBufferUtil.getAddress(duplicate));
         ByteBufferUtil.position(duplicate, start + offset);
         duplicate.limit(start + offset + length);
         return duplicate.slice();
@@ -3612,7 +3711,7 @@ public class MemoryBuffer {
       return MemoryOps.fromByteBuffer(buffer);
     } else if (buffer.isDirect()) {
       return new MemoryBuffer(
-          directBufferAddress(buffer) + buffer.position(), buffer.remaining(), buffer);
+          ByteBufferUtil.getAddress(buffer) + buffer.position(), buffer.remaining(), buffer);
     } else if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
       return new MemoryBuffer(buffer.array(), offset, buffer.remaining());
@@ -3629,7 +3728,7 @@ public class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.directByteBufferUnsupported();
     }
-    long offHeapAddress = directBufferAddress(buffer) + buffer.position();
+    long offHeapAddress = ByteBufferUtil.getAddress(buffer) + buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
   }
 

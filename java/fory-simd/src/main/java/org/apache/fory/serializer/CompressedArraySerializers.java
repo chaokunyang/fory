@@ -25,6 +25,7 @@ import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
@@ -46,6 +47,20 @@ public final class CompressedArraySerializers {
 
   private CompressedArraySerializers() {
     // Utility class
+  }
+
+  private static void validateBinarySize(int size, int maxBinarySize, int elemSize) {
+    if (size < 0) {
+      throw new DeserializationException("Binary payload size must be non-negative: " + size);
+    }
+    if (size > maxBinarySize) {
+      throw new DeserializationException(
+          "Binary payload size " + size + " exceeds max binary size " + maxBinarySize);
+    }
+    if ((size & (elemSize - 1)) != 0) {
+      throw new DeserializationException(
+          "Binary payload size " + size + " is not aligned to element size " + elemSize);
+    }
   }
 
   /**
@@ -207,24 +222,34 @@ public final class CompressedArraySerializers {
     private int[] readFromBufferObject(ReadContext readContext) {
       MemoryBuffer buf = readContext.readBufferObject();
       int size = buf.remaining();
-      return buf.readInts(size);
+      validateBinarySize(size, maxBinarySize, 4);
+      int[] values = new int[size >>> 2];
+      buf.readInt32ArrayPayload(values, size);
+      return values;
     }
 
     private int[] readCompressedFromBytes(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      byte[] values = buffer.readBytes(size);
+      validateBinarySize(size, maxBinarySize, 1);
+      byte[] values = new byte[size];
+      buffer.readByteArrayPayload(values, size);
       return ArrayCompressionUtils.decompressFromBytes(values);
     }
 
     private int[] readCompressedFromShorts(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      short[] values = buffer.readShorts(size);
+      validateBinarySize(size, maxBinarySize, 2);
+      short[] values = new short[size >>> 1];
+      buffer.readInt16ArrayPayload(values, size);
       return ArrayCompressionUtils.decompressFromShorts(values);
     }
 
     private int[] readUncompressed(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      return buffer.readInts(size);
+      validateBinarySize(size, maxBinarySize, 4);
+      int[] values = new int[size >>> 2];
+      buffer.readInt32ArrayPayload(values, size);
+      return values;
     }
   }
 
@@ -301,18 +326,26 @@ public final class CompressedArraySerializers {
     private long[] readFromBufferObject(ReadContext readContext) {
       MemoryBuffer buf = readContext.readBufferObject();
       int size = buf.remaining();
-      return buf.readLongs(size);
+      validateBinarySize(size, maxBinarySize, 8);
+      long[] values = new long[size >>> 3];
+      buf.readInt64ArrayPayload(values, size);
+      return values;
     }
 
     private long[] readCompressedFromInts(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      int[] values = buffer.readInts(size);
+      validateBinarySize(size, maxBinarySize, 4);
+      int[] values = new int[size >>> 2];
+      buffer.readInt32ArrayPayload(values, size);
       return ArrayCompressionUtils.decompressFromInts(values);
     }
 
     private long[] readUncompressed(MemoryBuffer buffer) {
       int size = buffer.readVarUInt32Small7();
-      return buffer.readLongs(size);
+      validateBinarySize(size, maxBinarySize, 8);
+      long[] values = new long[size >>> 3];
+      buffer.readInt64ArrayPayload(values, size);
+      return values;
     }
   }
 }

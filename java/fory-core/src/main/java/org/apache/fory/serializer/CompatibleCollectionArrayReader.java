@@ -281,85 +281,89 @@ final class CompatibleCollectionArrayReader {
     int byteSize = buffer.readVarUInt32Small7();
     int elemSize = elementSize(arrayTypeId);
     validateBinarySize(readContext.getConfig(), buffer, byteSize, elemSize);
-    return readPrimitiveElements(buffer, byteSize / elemSize, arrayTypeId);
+    return readPrimitiveElements(buffer, byteSize, byteSize / elemSize, arrayTypeId);
   }
 
   private static Object readPrimitiveElements(
-      MemoryBuffer buffer, int numElements, int arrayTypeId) {
+      MemoryBuffer buffer, int byteSize, int numElements, int arrayTypeId) {
     switch (arrayTypeId) {
       case Types.BOOL_ARRAY:
         {
-          return buffer.readBooleans(numElements);
+          boolean[] values = new boolean[numElements];
+          buffer.readBooleanArrayPayload(values, byteSize);
+          return values;
         }
       case Types.INT8_ARRAY:
       case Types.UINT8_ARRAY:
         {
-          return buffer.readBytes(numElements);
+          byte[] values = new byte[numElements];
+          buffer.readByteArrayPayload(values, byteSize);
+          return values;
         }
       case Types.INT16_ARRAY:
       case Types.UINT16_ARRAY:
       case Types.FLOAT16_ARRAY:
       case Types.BFLOAT16_ARRAY:
         {
+          short[] values = new short[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            return buffer.readShorts(numElements * 2);
+            buffer.readInt16ArrayPayload(values, byteSize);
           } else {
-            short[] values = new short[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt16();
             }
-            return values;
           }
+          return values;
         }
       case Types.INT32_ARRAY:
       case Types.UINT32_ARRAY:
         {
+          int[] values = new int[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            return buffer.readInts(numElements * 4);
+            buffer.readInt32ArrayPayload(values, byteSize);
           } else {
-            int[] values = new int[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt32();
             }
-            return values;
           }
+          return values;
         }
       case Types.INT64_ARRAY:
       case Types.UINT64_ARRAY:
         {
+          long[] values = new long[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            return buffer.readLongs(numElements * 8);
+            buffer.readInt64ArrayPayload(values, byteSize);
           } else {
-            long[] values = new long[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readInt64();
             }
-            return values;
           }
+          return values;
         }
       case Types.FLOAT32_ARRAY:
         {
+          float[] values = new float[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            return buffer.readFloats(numElements * 4);
+            buffer.readFloat32ArrayPayload(values, byteSize);
           } else {
-            float[] values = new float[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat32();
             }
-            return values;
           }
+          return values;
         }
       case Types.FLOAT64_ARRAY:
         {
+          double[] values = new double[numElements];
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            return buffer.readDoubles(numElements * 8);
+            buffer.readFloat64ArrayPayload(values, byteSize);
           } else {
-            double[] values = new double[numElements];
             for (int i = 0; i < numElements; i++) {
               values[i] = buffer.readFloat64();
             }
-            return values;
           }
+          return values;
         }
       default:
         throw new IllegalArgumentException("Unsupported dense array type id " + arrayTypeId);
@@ -670,9 +674,6 @@ final class CompatibleCollectionArrayReader {
     if (byteSize % elemSize != 0) {
       throw new DeserializationException(
           "Binary payload size " + byteSize + " is not aligned to element size " + elemSize);
-    }
-    if (byteSize > buffer.remaining()) {
-      buffer.checkReadableBytes(byteSize);
     }
   }
 }

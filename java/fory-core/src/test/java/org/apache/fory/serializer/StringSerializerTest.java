@@ -97,7 +97,9 @@ public class StringSerializerTest extends ForyTestBase {
       if (STRING_VALUE_FIELD_IS_BYTES) {
         return readJDK11String(buffer);
       } else if (STRING_VALUE_FIELD_IS_CHARS) {
-        return StringSerializer.newCharsStringZeroCopy(buffer.readChars(buffer.readVarUInt32()));
+        char[] chars = new char[buffer.readVarUInt32() >>> 1];
+        buffer.readChars(chars, 0, chars.length);
+        return StringSerializer.newCharsStringZeroCopy(chars);
       }
       return null;
     } catch (Exception e) {

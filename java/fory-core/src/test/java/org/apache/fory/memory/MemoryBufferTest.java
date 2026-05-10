@@ -364,7 +364,9 @@ public class MemoryBufferTest {
     buf.writeBytesWithSize(bytes);
     buf.writeCharsWithSize(chars);
     assertEquals(bytes, buf.readBytesAndSize());
-    assertEquals(chars, buf.readChars(buf.readVarUInt32()));
+    char[] readChars = new char[buf.readVarUInt32() >>> 1];
+    buf.readChars(readChars, 0, readChars.length);
+    assertEquals(chars, readChars);
   }
 
   @Test

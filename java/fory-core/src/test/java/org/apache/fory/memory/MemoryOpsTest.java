@@ -143,59 +143,67 @@ public class MemoryOpsTest {
   @Test
   public void testPrimitiveArrayRoundTrip() {
     byte[] bytes = new byte[128];
+    MemoryBuffer buffer = MemoryBuffer.fromByteArray(bytes);
 
     boolean[] booleans = {true, false, true};
     boolean[] booleanCopy = new boolean[booleans.length];
     MemoryOps.writeBooleans(bytes, 1, booleans, 0, booleans.length);
-    MemoryOps.readBooleans(bytes, 1, booleanCopy, 0, booleanCopy.length);
+    buffer.readerIndex(1);
+    MemoryOps.readBooleans(buffer, booleanCopy, 0, booleanCopy.length);
     assertEquals(booleanCopy, booleans);
 
     char[] chars = {'a', '\u4f60', '\u597d'};
     char[] charCopy = new char[chars.length];
     MemoryOps.writeChars(bytes, 8, chars, 0, chars.length);
-    MemoryOps.readChars(bytes, 8, charCopy, 0, charCopy.length);
+    buffer.readerIndex(8);
+    MemoryOps.readChars(buffer, charCopy, 0, charCopy.length);
     assertEquals(charCopy, chars);
 
     short[] shorts = {Short.MIN_VALUE, -1, 0, Short.MAX_VALUE};
     short[] shortCopy = new short[shorts.length];
     MemoryOps.writeShorts(bytes, 16, shorts, 0, shorts.length);
-    MemoryOps.readShorts(bytes, 16, shortCopy, 0, shortCopy.length);
+    buffer.readerIndex(16);
+    MemoryOps.readShorts(buffer, shortCopy, 0, shortCopy.length);
     assertEquals(shortCopy, shorts);
 
     int[] ints = {Integer.MIN_VALUE, -1, 0, Integer.MAX_VALUE};
     int[] intCopy = new int[ints.length];
     MemoryOps.writeInts(bytes, 24, ints, 0, ints.length);
-    MemoryOps.readInts(bytes, 24, intCopy, 0, intCopy.length);
+    buffer.readerIndex(24);
+    MemoryOps.readInts(buffer, intCopy, 0, intCopy.length);
     assertEquals(intCopy, ints);
 
     long[] longs = {Long.MIN_VALUE, -1L, 0L, Long.MAX_VALUE};
     long[] longCopy = new long[longs.length];
     MemoryOps.writeLongs(bytes, 40, longs, 0, longs.length);
-    MemoryOps.readLongs(bytes, 40, longCopy, 0, longCopy.length);
+    buffer.readerIndex(40);
+    MemoryOps.readLongs(buffer, longCopy, 0, longCopy.length);
     assertEquals(longCopy, longs);
 
     float[] floats = {Float.NaN, Float.NEGATIVE_INFINITY, -1.5f, 0f, Float.MAX_VALUE};
     float[] floatCopy = new float[floats.length];
     MemoryOps.writeFloats(bytes, 72, floats, 0, floats.length);
-    MemoryOps.readFloats(bytes, 72, floatCopy, 0, floatCopy.length);
+    buffer.readerIndex(72);
+    MemoryOps.readFloats(buffer, floatCopy, 0, floatCopy.length);
     assertEquals(floatRawBits(floatCopy), floatRawBits(floats));
 
     double[] doubles = {Double.NaN, Double.NEGATIVE_INFINITY, -1.5d, 0d, Double.MAX_VALUE};
     double[] doubleCopy = new double[doubles.length];
     MemoryOps.writeDoubles(bytes, 88, doubles, 0, doubles.length);
-    MemoryOps.readDoubles(bytes, 88, doubleCopy, 0, doubleCopy.length);
+    buffer.readerIndex(88);
+    MemoryOps.readDoubles(buffer, doubleCopy, 0, doubleCopy.length);
     assertEquals(doubleRawBits(doubleCopy), doubleRawBits(doubles));
   }
 
   @Test
-  public void testMemoryOpsDoesNotUseUnsafeOrByteBuffer() throws IOException {
+  public void testMemoryOpsDoesNotUseUnsafeOrByteBufferWrappers() throws IOException {
     String source =
         new String(
             Files.readAllBytes(Paths.get("src/main/java/org/apache/fory/memory/MemoryOps.java")),
             StandardCharsets.UTF_8);
     assertFalse(source.contains("sun.misc.Unsafe"));
     assertFalse(source.contains("UnsafeOps"));
-    assertFalse(source.contains("ByteBuffer"));
+    assertFalse(source.contains("ByteBuffer.wrap"));
   }
 
   private static int[] floatRawBits(float[] values) {

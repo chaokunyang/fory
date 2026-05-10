@@ -178,13 +178,17 @@ public final class PrimitiveArraySerializers {
         if (size > maxBinarySize) {
           throwBinarySizeLimitExceeded(size, maxBinarySize);
         }
-        return buf.readBooleans(size);
+        boolean[] values = new boolean[size];
+        buf.readBooleanArrayPayload(values, size);
+        return values;
       }
       int size = buffer.readVarUInt32Small7();
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
       }
-      return buffer.readBooleans(size);
+      boolean[] values = new boolean[size];
+      buffer.readBooleanArrayPayload(values, size);
+      return values;
     }
   }
 
@@ -218,13 +222,17 @@ public final class PrimitiveArraySerializers {
         if (size > maxBinarySize) {
           throwBinarySizeLimitExceeded(size, maxBinarySize);
         }
-        return buf.readBytes(size);
+        byte[] values = new byte[size];
+        buf.readByteArrayPayload(values, size);
+        return values;
       }
       int size = buffer.readVarUInt32Small7();
       if (size < 0 || size > maxBinarySize) {
         throwInvalidBinarySize(size, maxBinarySize);
       }
-      return buffer.readBytes(size);
+      byte[] values = new byte[size];
+      buffer.readByteArrayPayload(values, size);
+      return values;
     }
   }
 
@@ -283,13 +291,13 @@ public final class PrimitiveArraySerializers {
           throwBinarySizeLimitExceeded(size, maxBinarySize);
         }
         int numElements = size >>> 1;
+        char[] values = new char[numElements];
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-          return buf.readChars(size);
+          buf.readCharArrayPayload(values, size);
         } else {
-          char[] values = new char[numElements];
           readCharBySwapEndian(buf, values, numElements);
-          return values;
         }
+        return values;
       }
       int size = buffer.readVarUInt32Small7();
       if ((size & 1) != 0) {
@@ -299,13 +307,13 @@ public final class PrimitiveArraySerializers {
         throwInvalidBinarySize(size, maxBinarySize);
       }
       int numElements = size >>> 1;
+      char[] values = new char[numElements];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        return buffer.readChars(size);
+        buffer.readCharArrayPayload(values, size);
       } else {
-        char[] values = new char[numElements];
         readCharBySwapEndian(buffer, values, numElements);
-        return values;
       }
+      return values;
     }
 
     private void readCharBySwapEndian(MemoryBuffer buffer, char[] values, int numElements) {
@@ -393,16 +401,15 @@ public final class PrimitiveArraySerializers {
           throwBinarySizeLimitExceeded(size, maxBinarySize);
         }
         int numElements = size >>> 2;
+        int[] values = new int[numElements];
         if (size > 0) {
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            return buf.readInts(size);
+            buf.readInt32ArrayPayload(values, size);
           } else {
-            int[] values = new int[numElements];
             readInt32BySwapEndian(buf, values, numElements);
-            return values;
           }
         }
-        return new int[numElements];
+        return values;
       }
       if (!config.isXlang() && config.compressIntArray()) {
         return readInt32Compressed(buffer);
@@ -415,16 +422,15 @@ public final class PrimitiveArraySerializers {
         throwInvalidBinarySize(size, maxBinarySize);
       }
       int numElements = size >>> 2;
+      int[] values = new int[numElements];
       if (size > 0) {
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-          return buffer.readInts(size);
+          buffer.readInt32ArrayPayload(values, size);
         } else {
-          int[] values = new int[numElements];
           readInt32BySwapEndian(buffer, values, numElements);
-          return values;
         }
       }
-      return new int[numElements];
+      return values;
     }
 
     private void readInt32BySwapEndian(MemoryBuffer buffer, int[] values, int numElements) {
@@ -516,16 +522,15 @@ public final class PrimitiveArraySerializers {
           throwBinarySizeLimitExceeded(size, maxBinarySize);
         }
         int numElements = size >>> 3;
+        long[] values = new long[numElements];
         if (size > 0) {
           if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-            return buf.readLongs(size);
+            buf.readInt64ArrayPayload(values, size);
           } else {
-            long[] values = new long[numElements];
             readInt64BySwapEndian(buf, values, numElements);
-            return values;
           }
         }
-        return new long[numElements];
+        return values;
       }
       if (compressLongArray) {
         return readInt64Compressed(buffer, config.longEncoding());
@@ -538,16 +543,15 @@ public final class PrimitiveArraySerializers {
         throwInvalidBinarySize(size, maxBinarySize);
       }
       int numElements = size >>> 3;
+      long[] values = new long[numElements];
       if (size > 0) {
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-          return buffer.readLongs(size);
+          buffer.readInt64ArrayPayload(values, size);
         } else {
-          long[] values = new long[numElements];
           readInt64BySwapEndian(buffer, values, numElements);
-          return values;
         }
       }
-      return new long[numElements];
+      return values;
     }
 
     private void readInt64BySwapEndian(MemoryBuffer buffer, long[] values, int numElements) {
@@ -643,13 +647,13 @@ public final class PrimitiveArraySerializers {
           throwBinarySizeLimitExceeded(size, maxBinarySize);
         }
         int numElements = size >>> 2;
+        float[] values = new float[numElements];
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-          return buf.readFloats(size);
+          buf.readFloat32ArrayPayload(values, size);
         } else {
-          float[] values = new float[numElements];
           readFloat32BySwapEndian(buf, values, numElements);
-          return values;
         }
+        return values;
       }
       int size = buffer.readVarUInt32Small7();
       if ((size & 3) != 0) {
@@ -659,13 +663,13 @@ public final class PrimitiveArraySerializers {
         throwInvalidBinarySize(size, maxBinarySize);
       }
       int numElements = size >>> 2;
+      float[] values = new float[numElements];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        return buffer.readFloats(size);
+        buffer.readFloat32ArrayPayload(values, size);
       } else {
-        float[] values = new float[numElements];
         readFloat32BySwapEndian(buffer, values, numElements);
-        return values;
       }
+      return values;
     }
 
     private void readFloat32BySwapEndian(MemoryBuffer buffer, float[] values, int numElements) {
@@ -728,13 +732,13 @@ public final class PrimitiveArraySerializers {
           throwBinarySizeLimitExceeded(size, maxBinarySize);
         }
         int numElements = size >>> 3;
+        double[] values = new double[numElements];
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-          return buf.readDoubles(size);
+          buf.readFloat64ArrayPayload(values, size);
         } else {
-          double[] values = new double[numElements];
           readFloat64BySwapEndian(buf, values, numElements);
-          return values;
         }
+        return values;
       }
       int size = buffer.readVarUInt32Small7();
       if ((size & 7) != 0) {
@@ -744,13 +748,13 @@ public final class PrimitiveArraySerializers {
         throwInvalidBinarySize(size, maxBinarySize);
       }
       int numElements = size >>> 3;
+      double[] values = new double[numElements];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        return buffer.readDoubles(size);
+        buffer.readFloat64ArrayPayload(values, size);
       } else {
-        double[] values = new double[numElements];
         readFloat64BySwapEndian(buffer, values, numElements);
-        return values;
       }
+      return values;
     }
 
     private void readFloat64BySwapEndian(MemoryBuffer buffer, double[] values, int numElements) {
@@ -844,13 +848,13 @@ public final class PrimitiveArraySerializers {
         throwBinarySizeLimitExceeded(size, maxBinarySize);
       }
       int numElements = size >>> 1;
+      short[] values = new short[numElements];
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-        return buf.readShorts(size);
+        buf.readInt16ArrayPayload(values, size);
       } else {
-        short[] values = new short[numElements];
         readInt16BySwapEndian(buf, values, numElements);
-        return values;
       }
+      return values;
     }
     int size = buffer.readVarUInt32Small7();
     if ((size & 1) != 0) {
@@ -860,13 +864,13 @@ public final class PrimitiveArraySerializers {
       throwInvalidBinarySize(size, maxBinarySize);
     }
     int numElements = size >>> 1;
+    short[] values = new short[numElements];
     if (NativeByteOrder.IS_LITTLE_ENDIAN) {
-      return buffer.readShorts(size);
+      buffer.readInt16ArrayPayload(values, size);
     } else {
-      short[] values = new short[numElements];
       readInt16BySwapEndian(buffer, values, numElements);
-      return values;
     }
+    return values;
   }
 
   private static void readInt16BySwapEndian(MemoryBuffer buffer, short[] values, int numElements) {

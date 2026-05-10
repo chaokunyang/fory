@@ -28,6 +28,7 @@ import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
@@ -51,8 +52,16 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class AndroidCollectionFeatureTest {
+  private static final String ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX =
+      "ANDROID_CHILD_CONTAINER_PAYLOAD=";
+
   @Test
   public void testAndroidCollectionFeaturePaths() throws Exception {
+    Fory jvmFory = newCompatibleChildContainerFory();
+    AndroidCollectionFeatureProbe.AndroidChildArrayList jvmValue =
+        newChildContainerValue("jvm-label");
+    String jvmPayload = Base64.getEncoder().encodeToString(jvmFory.serialize(jvmValue));
+
     String javaBin =
         System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
     ArrayList<String> command = new ArrayList<>();
@@ -64,9 +73,23 @@ public class AndroidCollectionFeatureTest {
     command.add("-cp");
     command.add(System.getProperty("java.class.path"));
     command.add(AndroidCollectionFeatureProbe.class.getName());
+    command.add(jvmPayload);
     Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
     String output = readFully(process.getInputStream());
     Assert.assertEquals(process.waitFor(), 0, output);
+
+    String androidPayload = null;
+    for (String line : output.split("\\r?\\n")) {
+      if (line.startsWith(ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX)) {
+        androidPayload = line.substring(ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX.length());
+      }
+    }
+    Assert.assertNotNull(androidPayload, output);
+    AndroidCollectionFeatureProbe.AndroidChildArrayList restored =
+        (AndroidCollectionFeatureProbe.AndroidChildArrayList)
+            jvmFory.deserialize(Base64.getDecoder().decode(androidPayload));
+    Assert.assertEquals(restored, newChildContainerValue("android-label"));
+    Assert.assertEquals(restored.label, "android-label");
   }
 
   private static String readFully(InputStream inputStream) throws IOException {
@@ -79,8 +102,27 @@ public class AndroidCollectionFeatureTest {
     return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
   }
 
+  private static Fory newCompatibleChildContainerFory() {
+    return Fory.builder()
+        .withCodegen(true)
+        .withRefTracking(true)
+        .requireClassRegistration(false)
+        .withCompatibleMode(CompatibleMode.COMPATIBLE)
+        .build();
+  }
+
+  private static AndroidCollectionFeatureProbe.AndroidChildArrayList newChildContainerValue(
+      String label) {
+    AndroidCollectionFeatureProbe.AndroidChildArrayList value =
+        new AndroidCollectionFeatureProbe.AndroidChildArrayList(label);
+    value.add("a");
+    value.add("b");
+    return value;
+  }
+
   public static final class AndroidCollectionFeatureProbe {
     public static void main(String[] args) throws Exception {
+      check(args.length == 1, "Expected JVM child-container payload argument");
       System.setProperty("java.vm.name", "Dalvik");
       System.setProperty("java.runtime.name", "Android Runtime");
       check(AndroidSupport.IS_ANDROID, "AndroidSupport should detect Dalvik runtime");
@@ -103,7 +145,7 @@ public class AndroidCollectionFeatureTest {
       if (JdkVersion.MAJOR_VERSION >= 9) {
         verifyImmutableCollections(fory);
       }
-      verifyChildContainerFields();
+      verifyChildContainerFields(Base64.getDecoder().decode(args[0]));
     }
 
     private static void verifyUnmodifiableWrappers(Fory fory) {
@@ -262,20 +304,19 @@ public class AndroidCollectionFeatureTest {
       expectUnsupportedPut(mapRestored);
     }
 
-    private static void verifyChildContainerFields() {
-      Fory fory =
-          Fory.builder()
-              .withCodegen(true)
-              .withRefTracking(true)
-              .requireClassRegistration(false)
-              .withCompatibleMode(CompatibleMode.COMPATIBLE)
-              .build();
-      AndroidChildArrayList value = new AndroidChildArrayList("label");
-      value.add("a");
-      value.add("b");
+    private static void verifyChildContainerFields(byte[] jvmPayload) {
+      Fory fory = newCompatibleChildContainerFory();
+      AndroidChildArrayList jvmRestored = (AndroidChildArrayList) fory.deserialize(jvmPayload);
+      checkEquals(jvmRestored, newChildContainerValue("jvm-label"), "JVM child ArrayList elements");
+      checkEquals(jvmRestored.label, "jvm-label", "JVM child ArrayList field");
+
+      AndroidChildArrayList value = newChildContainerValue("android-label");
       AndroidChildArrayList restored = (AndroidChildArrayList) roundTrip(fory, value);
       checkEquals(restored, value, "child ArrayList elements");
-      checkEquals(restored.label, "label", "child ArrayList field");
+      checkEquals(restored.label, "android-label", "child ArrayList field");
+      System.out.println(
+          ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX
+              + Base64.getEncoder().encodeToString(fory.serialize(value)));
     }
 
     private static Object roundTrip(Fory fory, Object value) {

@@ -24,12 +24,29 @@ import org.apache.fory.annotation.Internal;
 /** Android runtime detection that is safe to load before Unsafe-backed platform classes. */
 @Internal
 public final class AndroidSupport {
+  private static final String ANDROID_ENABLED_ENV = "FORY_ANDROID_ENABLED";
+
   public static final boolean IS_ANDROID = isAndroid();
 
   private AndroidSupport() {}
 
   private static boolean isAndroid() {
+    String androidEnabled = System.getenv(ANDROID_ENABLED_ENV);
+    if (androidEnabled != null && !androidEnabled.isEmpty()) {
+      return parseAndroidEnabled(androidEnabled);
+    }
     return "Dalvik".equals(System.getProperty("java.vm.name", ""))
         || System.getProperty("java.runtime.name", "").contains("Android");
+  }
+
+  private static boolean parseAndroidEnabled(String value) {
+    if ("1".equals(value) || "true".equalsIgnoreCase(value)) {
+      return true;
+    }
+    if ("0".equals(value) || "false".equalsIgnoreCase(value)) {
+      return false;
+    }
+    throw new IllegalArgumentException(
+        ANDROID_ENABLED_ENV + " must be 1, true, 0, or false, but was " + value);
   }
 }

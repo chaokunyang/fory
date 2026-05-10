@@ -45,6 +45,11 @@ public class SingletonMapSerializer extends MapLikeSerializer {
   public SingletonMapSerializer(TypeResolver typeResolver, Class cls) {
     super(typeResolver, cls, false);
     try {
+      Class.forName(type.getName(), true, type.getClassLoader());
+    } catch (final ClassNotFoundException e) {
+      throw new RuntimeException(e);
+    }
+    try {
       field = type.getDeclaredField("MODULE$");
       if (AndroidSupport.IS_ANDROID) {
         field.setAccessible(true);

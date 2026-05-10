@@ -46,6 +46,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import org.apache.fory.Fory;
 import org.apache.fory.config.CompatibleMode;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -99,7 +100,9 @@ public class AndroidCollectionFeatureTest {
       verifySetFromMap(fory);
       verifyQueues(fory);
       verifyEnumMap(fory);
-      verifyImmutableCollections(fory);
+      if (JdkVersion.MAJOR_VERSION >= 9) {
+        verifyImmutableCollections(fory);
+      }
       verifyChildContainerFields();
     }
 

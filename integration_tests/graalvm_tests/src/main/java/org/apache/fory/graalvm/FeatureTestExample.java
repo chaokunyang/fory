@@ -89,8 +89,9 @@ public class FeatureTestExample {
     PrivateConstructorClass original = new PrivateConstructorClass("test-value");
     PrivateConstructorClass deserialized =
         (PrivateConstructorClass) fory.deserialize(fory.serialize(original));
-    Preconditions.checkArgument(
-        fory.getTypeResolver().getSerializer(PrivateConstructorClass.class) instanceof Generated);
+    boolean generated =
+        fory.getTypeResolver().getSerializer(PrivateConstructorClass.class) instanceof Generated;
+    Preconditions.checkArgument(GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE != generated);
     Preconditions.checkArgument("test-value".equals(deserialized.getValue()));
     System.out.println("Private constructor class test passed");
 

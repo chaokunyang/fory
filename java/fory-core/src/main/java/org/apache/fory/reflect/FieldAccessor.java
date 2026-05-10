@@ -135,13 +135,10 @@ public abstract class FieldAccessor {
   }
 
   public static FieldAccessor createAccessor(Field field) {
-    if (AndroidSupport.IS_ANDROID) {
-      if (RecordUtils.isRecord(field.getDeclaringClass())) {
+    if (RecordUtils.isRecord(field.getDeclaringClass())) {
+      if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         return new ReflectiveRecordFieldAccessor(field);
       }
-      return new ReflectionFieldAccessor(field);
-    }
-    if (RecordUtils.isRecord(field.getDeclaringClass())) {
       Object getter;
       try {
         Method getterMethod = field.getDeclaringClass().getDeclaredMethod(field.getName());
@@ -168,6 +165,9 @@ public abstract class FieldAccessor {
       } else {
         return new ObjectGetter(field, (Function) getter);
       }
+    }
+    if (AndroidSupport.IS_ANDROID) {
+      return new ReflectionFieldAccessor(field);
     }
     if (GraalvmSupport.isGraalBuildTime()) {
       return new GeneratedAccessor(field);

@@ -163,6 +163,31 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
     return deserializeByteBuffer(currentFory(), byteBuffer);
   }
 
+  @Override
+  public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
+    return currentFory().deserialize(buffer, outOfBandBuffers);
+  }
+
+  @Override
+  public Object deserialize(ForyInputStream inputStream) {
+    return currentFory().deserialize(inputStream);
+  }
+
+  @Override
+  public Object deserialize(ForyInputStream inputStream, Iterable<MemoryBuffer> outOfBandBuffers) {
+    return currentFory().deserialize(inputStream, outOfBandBuffers);
+  }
+
+  @Override
+  public Object deserialize(ForyReadableChannel channel) {
+    return currentFory().deserialize(channel);
+  }
+
+  @Override
+  public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
+    return currentFory().deserialize(channel, outOfBandBuffers);
+  }
+
   private static Object deserializeByteBuffer(Fory fory, ByteBuffer byteBuffer) {
     if (!AndroidSupport.IS_ANDROID && !byteBuffer.isReadOnly()) {
       return fory.deserialize(MemoryUtils.wrap(byteBuffer));
@@ -191,31 +216,6 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
       buffer.readerIndex(0);
       buffer.writerIndex(0);
     }
-  }
-
-  @Override
-  public Object deserialize(MemoryBuffer buffer, Iterable<MemoryBuffer> outOfBandBuffers) {
-    return currentFory().deserialize(buffer, outOfBandBuffers);
-  }
-
-  @Override
-  public Object deserialize(ForyInputStream inputStream) {
-    return currentFory().deserialize(inputStream);
-  }
-
-  @Override
-  public Object deserialize(ForyInputStream inputStream, Iterable<MemoryBuffer> outOfBandBuffers) {
-    return currentFory().deserialize(inputStream, outOfBandBuffers);
-  }
-
-  @Override
-  public Object deserialize(ForyReadableChannel channel) {
-    return currentFory().deserialize(channel);
-  }
-
-  @Override
-  public Object deserialize(ForyReadableChannel channel, Iterable<MemoryBuffer> outOfBandBuffers) {
-    return currentFory().deserialize(channel, outOfBandBuffers);
   }
 
   @Override

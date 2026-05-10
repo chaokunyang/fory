@@ -58,6 +58,7 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
@@ -161,7 +162,7 @@ public class CollectionSerializers {
         super.write(writeContext, value);
       } else {
         Object[] array =
-            AndroidSupport.IS_ANDROID
+            AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
                 ? value.toArray()
                 : (Object[]) UnsafeOps.getObject(value, ArrayFieldOffset.VALUE);
         writeContext.writeRef(array);
@@ -587,9 +588,9 @@ public class CollectionSerializers {
         set = Collections.newSetFromMap(mapSerializer.newMap(readContext));
         setNumElements(mapSerializer.getAndClearNumElements());
       } else {
-        if (AndroidSupport.IS_ANDROID) {
+        if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
           throw new UnsupportedOperationException(
-              "Android cannot read legacy SetFromMap payloads that require hidden JDK field "
+              "This runtime cannot read legacy SetFromMap payloads that require hidden JDK field "
                   + "restoration");
         }
         Map map = (Map) mapSerializer.read(readContext);
@@ -609,7 +610,7 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       assert !config.isXlang();
-      if (AndroidSupport.IS_ANDROID) {
+      if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         return Collections.newSetFromMap(new HashMap(originCollection.size()));
       }
       Map<?, Boolean> map =
@@ -626,7 +627,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       final Map<?, Boolean> map;
       final TypeInfo typeInfo;
-      if (AndroidSupport.IS_ANDROID) {
+      if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         HashMap source = new HashMap<>(value.size());
         for (Object element : value) {
           source.put(element, Boolean.TRUE);
@@ -880,7 +881,7 @@ public class CollectionSerializers {
     }
 
     private static int getCapacity(ArrayBlockingQueue queue) {
-      if (AndroidSupport.IS_ANDROID) {
+      if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         return queue.size() + queue.remainingCapacity();
       }
       Object[] items = (Object[]) UnsafeOps.getObject(queue, ItemsOffset.VALUE);
@@ -947,7 +948,7 @@ public class CollectionSerializers {
     }
 
     private static int getCapacity(LinkedBlockingQueue queue) {
-      if (AndroidSupport.IS_ANDROID) {
+      if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         return queue.size() + queue.remainingCapacity();
       }
       return UnsafeOps.getInt(queue, CapacityOffset.VALUE);

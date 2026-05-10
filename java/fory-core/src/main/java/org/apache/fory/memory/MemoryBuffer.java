@@ -355,11 +355,11 @@ public class MemoryBuffer {
     return buffer.heapMemory;
   }
 
-  private static int androidHeapIndex(MemoryBuffer buffer, int index, int length) {
+  private static int androidHeapIndexOf(MemoryBuffer buffer, int index, int length) {
     return buffer.androidHeapIndex(index, length);
   }
 
-  private static int androidHeapIndexUnchecked(MemoryBuffer buffer, int index) {
+  private static int androidHeapIndexUncheckedOf(MemoryBuffer buffer, int index) {
     return buffer.androidHeapIndexUnchecked(index);
   }
 
@@ -379,7 +379,7 @@ public class MemoryBuffer {
     return buffer.heapOffset;
   }
 
-  private static void throwOOBExceptionForRange(MemoryBuffer buffer, int offset, int length) {
+  private static void throwRangeOOB(MemoryBuffer buffer, int offset, int length) {
     buffer.throwOOBExceptionForRange(offset, length);
   }
 
@@ -3691,47 +3691,47 @@ public class MemoryBuffer {
 
     @Override
     public void putByte(int index, int b) {
-      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndex(this, index, 1), (byte) b);
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexOf(this, index, 1), (byte) b);
     }
 
     @Override
     public void putByte(int index, byte b) {
-      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndex(this, index, 1), b);
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexOf(this, index, 1), b);
     }
 
     @Override
     public void _unsafePutByte(int index, byte b) {
-      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), b);
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexUncheckedOf(this, index), b);
     }
 
     @Override
     public void putInt16(int index, short value) {
-      MemoryOps.putInt16(androidHeapMemory(this), androidHeapIndex(this, index, 2), value);
+      MemoryOps.putInt16(androidHeapMemory(this), androidHeapIndexOf(this, index, 2), value);
     }
 
     @Override
     public void _unsafePutInt16(int index, short value) {
-      MemoryOps.putInt16(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+      MemoryOps.putInt16(androidHeapMemory(this), androidHeapIndexUncheckedOf(this, index), value);
     }
 
     @Override
     public void putInt32(int index, int value) {
-      MemoryOps.putInt32(androidHeapMemory(this), androidHeapIndex(this, index, 4), value);
+      MemoryOps.putInt32(androidHeapMemory(this), androidHeapIndexOf(this, index, 4), value);
     }
 
     @Override
     public void _unsafePutInt32(int index, int value) {
-      MemoryOps.putInt32(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+      MemoryOps.putInt32(androidHeapMemory(this), androidHeapIndexUncheckedOf(this, index), value);
     }
 
     @Override
     public void putInt64(int index, long value) {
-      MemoryOps.putInt64(androidHeapMemory(this), androidHeapIndex(this, index, 8), value);
+      MemoryOps.putInt64(androidHeapMemory(this), androidHeapIndexOf(this, index, 8), value);
     }
 
     @Override
     public void _unsafePutInt64(int index, long value) {
-      MemoryOps.putInt64(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+      MemoryOps.putInt64(androidHeapMemory(this), androidHeapIndexUncheckedOf(this, index), value);
     }
 
     @Override
@@ -3740,14 +3740,15 @@ public class MemoryBuffer {
       final int newIdx = writerIdx + 1;
       ensure(newIdx);
       MemoryOps.putBoolean(
-          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+          androidHeapMemory(this), androidHeapIndexUncheckedOf(this, writerIdx), value);
       androidWriterIndex(this, newIdx);
     }
 
     @Override
     public void _unsafeWriteByte(byte value) {
       final int writerIdx = androidWriterIndex(this);
-      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      MemoryOps.putByte(
+          androidHeapMemory(this), androidHeapIndexUncheckedOf(this, writerIdx), value);
       androidWriterIndex(this, writerIdx + 1);
     }
 
@@ -3756,7 +3757,8 @@ public class MemoryBuffer {
       final int writerIdx = androidWriterIndex(this);
       final int newIdx = writerIdx + 1;
       ensure(newIdx);
-      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      MemoryOps.putByte(
+          androidHeapMemory(this), androidHeapIndexUncheckedOf(this, writerIdx), value);
       androidWriterIndex(this, newIdx);
     }
 
@@ -3771,7 +3773,7 @@ public class MemoryBuffer {
       final int newIdx = writerIdx + 2;
       ensure(newIdx);
       MemoryOps.putInt16(
-          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+          androidHeapMemory(this), androidHeapIndexUncheckedOf(this, writerIdx), value);
       androidWriterIndex(this, newIdx);
     }
 
@@ -3781,7 +3783,7 @@ public class MemoryBuffer {
       final int newIdx = writerIdx + 4;
       ensure(newIdx);
       MemoryOps.putInt32(
-          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+          androidHeapMemory(this), androidHeapIndexUncheckedOf(this, writerIdx), value);
       androidWriterIndex(this, newIdx);
     }
 
@@ -3791,7 +3793,7 @@ public class MemoryBuffer {
       final int newIdx = writerIdx + 8;
       ensure(newIdx);
       MemoryOps.putInt64(
-          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+          androidHeapMemory(this), androidHeapIndexUncheckedOf(this, writerIdx), value);
       androidWriterIndex(this, newIdx);
     }
 
@@ -3801,7 +3803,7 @@ public class MemoryBuffer {
       ensure(writerIdx + 8);
       int varintBytes =
           MemoryOps.putVarUInt32Small7(
-              androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+              androidHeapMemory(this), androidHeapIndexUncheckedOf(this, writerIdx), value);
       androidWriterIndex(this, writerIdx + varintBytes);
       return varintBytes;
     }
@@ -3809,13 +3811,13 @@ public class MemoryBuffer {
     @Override
     public int _unsafePutVarUInt32(int index, int value) {
       return MemoryOps.putVarUInt32(
-          androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+          androidHeapMemory(this), androidHeapIndexUncheckedOf(this, index), value);
     }
 
     @Override
     public MemoryBuffer slice(int offset, int length) {
       if (offset + length > androidSize(this)) {
-        throwOOBExceptionForRange(this, offset, length);
+        throwRangeOOB(this, offset, length);
       }
       return new AndroidHeapMemoryBuffer(
           androidHeapMemory(this), androidHeapOffset(this) + offset, length);

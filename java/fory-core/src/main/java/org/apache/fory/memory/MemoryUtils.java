@@ -68,13 +68,6 @@ public class MemoryUtils {
     }
   }
 
-  private static MemoryBuffer copyToHeapBuffer(ByteBuffer buffer) {
-    ByteBuffer duplicate = buffer.duplicate();
-    byte[] bytes = new byte[duplicate.remaining()];
-    duplicate.get(bytes);
-    return MemoryBuffer.fromByteArray(bytes);
-  }
-
   // Lazy load offset and also follow graalvm offset auto replace pattern.
   private static class Offset {
     private static final long BAS_BUF_BUF;
@@ -148,5 +141,12 @@ public class MemoryUtils {
     int pos = UnsafeOps.getInt(stream, Offset.BIS_BUF_POS);
     buffer.pointTo(buf, 0, count);
     buffer.readerIndex(pos);
+  }
+
+  private static MemoryBuffer copyToHeapBuffer(ByteBuffer buffer) {
+    ByteBuffer duplicate = buffer.duplicate();
+    byte[] bytes = new byte[duplicate.remaining()];
+    duplicate.get(bytes);
+    return MemoryBuffer.fromByteArray(bytes);
   }
 }

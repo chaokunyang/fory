@@ -47,7 +47,6 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   private MethodHandle constructor;
-  private Constructor<?> reflectionConstructor;
   private int numElements;
   protected final Config config;
   protected final int maxCollectionSize;
@@ -467,9 +466,15 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
     MemoryBuffer buffer = readContext.getBuffer();
     numElements = readCollectionSize(buffer);
     if (AndroidSupport.IS_ANDROID) {
-      T instance = newAndroidCollectionInstance();
-      readContext.reference(instance);
-      return (Collection) instance;
+      try {
+        Constructor<?> constructor = type.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        T instance = (T) constructor.newInstance();
+        readContext.reference(instance);
+        return (Collection) instance;
+      } catch (Throwable e) {
+        throw buildException(e);
+      }
     }
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
@@ -492,7 +497,13 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
   public Collection newCollection(Collection collection) {
     numElements = collection.size();
     if (AndroidSupport.IS_ANDROID) {
-      return (Collection) newAndroidCollectionInstance();
+      try {
+        Constructor<?> constructor = type.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        return (Collection) constructor.newInstance();
+      } catch (Throwable e) {
+        throw buildException(e);
+      }
     }
     if (constructor == null) {
       constructor = ReflectionUtils.getCtrHandle(type, true);
@@ -501,20 +512,6 @@ public abstract class CollectionLikeSerializer<T> extends Serializer<T> {
       return (Collection) constructor.invoke();
     } catch (Throwable e) {
       // reduce code size of critical path.
-      throw buildException(e);
-    }
-  }
-
-  private T newAndroidCollectionInstance() {
-    try {
-      Constructor<?> constructor = reflectionConstructor;
-      if (constructor == null) {
-        constructor = type.getDeclaredConstructor();
-        constructor.setAccessible(true);
-        reflectionConstructor = constructor;
-      }
-      return (T) constructor.newInstance();
-    } catch (Throwable e) {
       throw buildException(e);
     }
   }

@@ -630,21 +630,21 @@ public class TypeUtils {
     }
   }
 
-  public static TypeRef<?> getFieldTypeRef(Field field) {
+  static TypeRef<?> getFieldTypeRef(Field field) {
     if (AndroidSupport.IS_ANDROID) {
       return TypeRef.of(field.getGenericType());
     }
     return TypeRef.of(field.getAnnotatedType());
   }
 
-  public static AnnotatedType getFieldAnnotatedType(Field field) {
+  static AnnotatedType getFieldAnnotatedType(Field field) {
     if (AndroidSupport.IS_ANDROID) {
       return null;
     }
     return field.getAnnotatedType();
   }
 
-  public static void applyFieldRefTrackingOverride(
+  static void applyFieldRefTrackingOverride(
       GenericType genericType, Field field, boolean globalTrackingRef) {
     if (AndroidSupport.IS_ANDROID) {
       return;

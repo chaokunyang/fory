@@ -47,8 +47,9 @@ import sun.misc.Unsafe;
  *   <li>aligned int/long encoding.
  * </ul>
  *
- * <p>Note that this class is designed to final so that all the methods in this class can be inlined
- * by the just-in-time compiler.
+ * <p>Note that JVM heap buffers use this class directly so that hot methods stay monomorphic and
+ * can be inlined by the just-in-time compiler. Android heap buffers use a private subclass for
+ * heap-only operations, keeping Android-safe code out of ordinary JVM hot paths.
  *
  * <p>TODO(chaokunyang) Let grow/readerIndex/writerIndex handled in this class and Make immutable
  * part as separate class, and use composition in this class. In this way, all fields can be final
@@ -62,7 +63,7 @@ import sun.misc.Unsafe;
  * jit may stop inline for some reasons: NodeCountInliningCutoff,
  * DesiredMethodLimit,MaxRecursiveInlineLevel,FreqInlineSize,MaxInlineSize
  */
-public final class MemoryBuffer {
+public class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : UnsafeOps.UNSAFE;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
@@ -350,6 +351,38 @@ public final class MemoryBuffer {
     return heapOffset + index;
   }
 
+  private static byte[] androidHeapMemory(MemoryBuffer buffer) {
+    return buffer.heapMemory;
+  }
+
+  private static int androidHeapIndex(MemoryBuffer buffer, int index, int length) {
+    return buffer.androidHeapIndex(index, length);
+  }
+
+  private static int androidHeapIndexUnchecked(MemoryBuffer buffer, int index) {
+    return buffer.androidHeapIndexUnchecked(index);
+  }
+
+  private static int androidWriterIndex(MemoryBuffer buffer) {
+    return buffer.writerIndex;
+  }
+
+  private static void androidWriterIndex(MemoryBuffer buffer, int writerIndex) {
+    buffer.writerIndex = writerIndex;
+  }
+
+  private static int androidSize(MemoryBuffer buffer) {
+    return buffer.size;
+  }
+
+  private static int androidHeapOffset(MemoryBuffer buffer) {
+    return buffer.heapOffset;
+  }
+
+  private static void throwOOBExceptionForRange(MemoryBuffer buffer, int offset, int length) {
+    buffer.throwOOBExceptionForRange(offset, length);
+  }
+
   private void checkAndroidHeapBuffer() {
     if (heapMemory == null) {
       throw new UnsupportedOperationException("Direct memory access is not supported on Android");
@@ -490,20 +523,12 @@ public final class MemoryBuffer {
   }
 
   public void putByte(int index, int b) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putByte(heapMemory, androidHeapIndex(index, 1), (byte) b);
-      return;
-    }
     final long pos = address + index;
     checkPosition(index, pos, 1);
     UNSAFE.putByte(heapMemory, pos, (byte) b);
   }
 
   public void putByte(int index, byte b) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putByte(heapMemory, androidHeapIndex(index, 1), b);
-      return;
-    }
     final long pos = address + index;
     checkPosition(index, pos, 1);
     UNSAFE.putByte(heapMemory, pos, b);
@@ -512,10 +537,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutByte(int index, byte b) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putByte(heapMemory, androidHeapIndexUnchecked(index), b);
-      return;
-    }
     UNSAFE.putByte(heapMemory, address + index, b);
   }
 
@@ -612,10 +633,6 @@ public final class MemoryBuffer {
   }
 
   public void putInt16(int index, short value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt16(heapMemory, androidHeapIndex(index, 2), value);
-      return;
-    }
     final long pos = address + index;
     checkPosition(index, pos, 2);
     if (!LITTLE_ENDIAN) {
@@ -637,10 +654,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt16(int index, short value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt16(heapMemory, androidHeapIndexUnchecked(index), value);
-      return;
-    }
     if (!LITTLE_ENDIAN) {
       value = Short.reverseBytes(value);
     }
@@ -658,10 +671,6 @@ public final class MemoryBuffer {
   }
 
   public void putInt32(int index, int value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt32(heapMemory, androidHeapIndex(index, 4), value);
-      return;
-    }
     final long pos = address + index;
     checkPosition(index, pos, 4);
     if (!LITTLE_ENDIAN) {
@@ -683,10 +692,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt32(int index, int value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt32(heapMemory, androidHeapIndexUnchecked(index), value);
-      return;
-    }
     if (!LITTLE_ENDIAN) {
       value = Integer.reverseBytes(value);
     }
@@ -704,10 +709,6 @@ public final class MemoryBuffer {
   }
 
   public void putInt64(int index, long value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt64(heapMemory, androidHeapIndex(index, 8), value);
-      return;
-    }
     final long pos = address + index;
     checkPosition(index, pos, 8);
     if (!LITTLE_ENDIAN) {
@@ -729,10 +730,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt64(int index, long value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt64(heapMemory, androidHeapIndexUnchecked(index), value);
-      return;
-    }
     if (!LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
     }
@@ -881,11 +878,6 @@ public final class MemoryBuffer {
     final int writerIdx = writerIndex;
     final int newIdx = writerIdx + 1;
     ensure(newIdx);
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putBoolean(heapMemory, androidHeapIndexUnchecked(writerIdx), value);
-      writerIndex = newIdx;
-      return;
-    }
     final long pos = address + writerIdx;
     UNSAFE.putByte(heapMemory, pos, (byte) (value ? 1 : 0));
     writerIndex = newIdx;
@@ -896,11 +888,6 @@ public final class MemoryBuffer {
     // CHECKSTYLE.ON:MethodName
     final int writerIdx = writerIndex;
     final int newIdx = writerIdx + 1;
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putByte(heapMemory, androidHeapIndexUnchecked(writerIdx), value);
-      writerIndex = newIdx;
-      return;
-    }
     final long pos = address + writerIdx;
     UNSAFE.putByte(heapMemory, pos, value);
     writerIndex = newIdx;
@@ -914,11 +901,6 @@ public final class MemoryBuffer {
     final int writerIdx = writerIndex;
     final int newIdx = writerIdx + 1;
     ensure(newIdx);
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putByte(heapMemory, androidHeapIndexUnchecked(writerIdx), value);
-      writerIndex = newIdx;
-      return;
-    }
     final long pos = address + writerIdx;
     UNSAFE.putByte(heapMemory, pos, value);
     writerIndex = newIdx;
@@ -949,11 +931,6 @@ public final class MemoryBuffer {
     final int writerIdx = writerIndex;
     final int newIdx = writerIdx + 2;
     ensure(newIdx);
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt16(heapMemory, androidHeapIndexUnchecked(writerIdx), value);
-      writerIndex = newIdx;
-      return;
-    }
     if (!LITTLE_ENDIAN) {
       value = Short.reverseBytes(value);
     }
@@ -965,11 +942,6 @@ public final class MemoryBuffer {
     final int writerIdx = writerIndex;
     final int newIdx = writerIdx + 4;
     ensure(newIdx);
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt32(heapMemory, androidHeapIndexUnchecked(writerIdx), value);
-      writerIndex = newIdx;
-      return;
-    }
     if (!LITTLE_ENDIAN) {
       value = Integer.reverseBytes(value);
     }
@@ -981,11 +953,6 @@ public final class MemoryBuffer {
     final int writerIdx = writerIndex;
     final int newIdx = writerIdx + 8;
     ensure(newIdx);
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt64(heapMemory, androidHeapIndexUnchecked(writerIdx), value);
-      writerIndex = newIdx;
-      return;
-    }
     if (!LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
     }
@@ -1087,12 +1054,6 @@ public final class MemoryBuffer {
    */
   public int writeVarUInt32Small7(int value) {
     ensure(writerIndex + 8);
-    if (AndroidSupport.IS_ANDROID) {
-      int varintBytes =
-          MemoryOps.putVarUInt32Small7(heapMemory, androidHeapIndexUnchecked(writerIndex), value);
-      writerIndex += varintBytes;
-      return varintBytes;
-    }
     if (value >>> 7 == 0) {
       UNSAFE.putByte(heapMemory, address + writerIndex++, (byte) value);
       return 1;
@@ -1126,9 +1087,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafePutVarUInt32(int index, int value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.putVarUInt32(heapMemory, androidHeapIndexUnchecked(index), value);
-    }
     int encoded = (value & 0x7F);
     if (value >>> 7 == 0) {
       UNSAFE.putByte(heapMemory, address + index, (byte) value);
@@ -3721,6 +3679,149 @@ public final class MemoryBuffer {
         heapMemory, pos, bytes, UnsafeOps.BYTE_ARRAY_OFFSET + bytesOffset, len);
   }
 
+  private static final class AndroidHeapMemoryBuffer extends MemoryBuffer {
+    private AndroidHeapMemoryBuffer(byte[] buffer, int offset, int length) {
+      super(buffer, offset, length);
+    }
+
+    private AndroidHeapMemoryBuffer(
+        byte[] buffer, int offset, int length, ForyStreamReader streamReader) {
+      super(buffer, offset, length, streamReader);
+    }
+
+    @Override
+    public void putByte(int index, int b) {
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndex(this, index, 1), (byte) b);
+    }
+
+    @Override
+    public void putByte(int index, byte b) {
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndex(this, index, 1), b);
+    }
+
+    @Override
+    public void _unsafePutByte(int index, byte b) {
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), b);
+    }
+
+    @Override
+    public void putInt16(int index, short value) {
+      MemoryOps.putInt16(androidHeapMemory(this), androidHeapIndex(this, index, 2), value);
+    }
+
+    @Override
+    public void _unsafePutInt16(int index, short value) {
+      MemoryOps.putInt16(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+    }
+
+    @Override
+    public void putInt32(int index, int value) {
+      MemoryOps.putInt32(androidHeapMemory(this), androidHeapIndex(this, index, 4), value);
+    }
+
+    @Override
+    public void _unsafePutInt32(int index, int value) {
+      MemoryOps.putInt32(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+    }
+
+    @Override
+    public void putInt64(int index, long value) {
+      MemoryOps.putInt64(androidHeapMemory(this), androidHeapIndex(this, index, 8), value);
+    }
+
+    @Override
+    public void _unsafePutInt64(int index, long value) {
+      MemoryOps.putInt64(androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+    }
+
+    @Override
+    public void writeBoolean(boolean value) {
+      final int writerIdx = androidWriterIndex(this);
+      final int newIdx = writerIdx + 1;
+      ensure(newIdx);
+      MemoryOps.putBoolean(
+          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      androidWriterIndex(this, newIdx);
+    }
+
+    @Override
+    public void _unsafeWriteByte(byte value) {
+      final int writerIdx = androidWriterIndex(this);
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      androidWriterIndex(this, writerIdx + 1);
+    }
+
+    @Override
+    public void writeByte(byte value) {
+      final int writerIdx = androidWriterIndex(this);
+      final int newIdx = writerIdx + 1;
+      ensure(newIdx);
+      MemoryOps.putByte(androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      androidWriterIndex(this, newIdx);
+    }
+
+    @Override
+    public void writeByte(int value) {
+      writeByte((byte) value);
+    }
+
+    @Override
+    public void writeInt16(short value) {
+      final int writerIdx = androidWriterIndex(this);
+      final int newIdx = writerIdx + 2;
+      ensure(newIdx);
+      MemoryOps.putInt16(
+          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      androidWriterIndex(this, newIdx);
+    }
+
+    @Override
+    public void writeInt32(int value) {
+      final int writerIdx = androidWriterIndex(this);
+      final int newIdx = writerIdx + 4;
+      ensure(newIdx);
+      MemoryOps.putInt32(
+          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      androidWriterIndex(this, newIdx);
+    }
+
+    @Override
+    public void writeInt64(long value) {
+      final int writerIdx = androidWriterIndex(this);
+      final int newIdx = writerIdx + 8;
+      ensure(newIdx);
+      MemoryOps.putInt64(
+          androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      androidWriterIndex(this, newIdx);
+    }
+
+    @Override
+    public int writeVarUInt32Small7(int value) {
+      final int writerIdx = androidWriterIndex(this);
+      ensure(writerIdx + 8);
+      int varintBytes =
+          MemoryOps.putVarUInt32Small7(
+              androidHeapMemory(this), androidHeapIndexUnchecked(this, writerIdx), value);
+      androidWriterIndex(this, writerIdx + varintBytes);
+      return varintBytes;
+    }
+
+    @Override
+    public int _unsafePutVarUInt32(int index, int value) {
+      return MemoryOps.putVarUInt32(
+          androidHeapMemory(this), androidHeapIndexUnchecked(this, index), value);
+    }
+
+    @Override
+    public MemoryBuffer slice(int offset, int length) {
+      if (offset + length > androidSize(this)) {
+        throwOOBExceptionForRange(this, offset, length);
+      }
+      return new AndroidHeapMemoryBuffer(
+          androidHeapMemory(this), androidHeapOffset(this) + offset, length);
+    }
+  }
+
   @Override
   public String toString() {
     return "MemoryBuffer{"
@@ -3801,16 +3902,25 @@ public final class MemoryBuffer {
 
   /** Creates a new memory buffer that targets to the given heap memory region. */
   public static MemoryBuffer fromByteArray(byte[] buffer, int offset, int length) {
+    if (AndroidSupport.IS_ANDROID) {
+      return new AndroidHeapMemoryBuffer(buffer, offset, length);
+    }
     return new MemoryBuffer(buffer, offset, length, null);
   }
 
   public static MemoryBuffer fromByteArray(
       byte[] buffer, int offset, int length, ForyStreamReader streamReader) {
+    if (AndroidSupport.IS_ANDROID) {
+      return new AndroidHeapMemoryBuffer(buffer, offset, length, streamReader);
+    }
     return new MemoryBuffer(buffer, offset, length, streamReader);
   }
 
   /** Creates a new memory buffer that targets to the given heap memory region. */
   public static MemoryBuffer fromByteArray(byte[] buffer) {
+    if (AndroidSupport.IS_ANDROID) {
+      return new AndroidHeapMemoryBuffer(buffer, 0, buffer.length);
+    }
     return new MemoryBuffer(buffer, 0, buffer.length);
   }
 

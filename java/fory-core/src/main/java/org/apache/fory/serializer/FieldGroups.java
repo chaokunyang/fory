@@ -27,6 +27,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.function.Function;
 import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
@@ -73,7 +74,11 @@ public class FieldGroups {
     List<Descriptor> descriptors = new ArrayList<>();
     for (Field field : fields) {
       if (!Modifier.isTransient(field.getModifiers()) && !Modifier.isStatic(field.getModifiers())) {
-        descriptors.add(new Descriptor(field, TypeUtils.getFieldTypeRef(field), null, null));
+        TypeRef<?> typeRef =
+            AndroidSupport.IS_ANDROID
+                ? TypeRef.of(field.getGenericType())
+                : TypeRef.of(field.getAnnotatedType());
+        descriptors.add(new Descriptor(field, typeRef, null, null));
       }
     }
     DescriptorGrouper descriptorGrouper =
@@ -248,7 +253,8 @@ public class FieldGroups {
       genericType = t;
       Field field = descriptor.getField();
       if (field != null) {
-        TypeUtils.applyFieldRefTrackingOverride(t, field, resolver.trackingRef());
+        TypeUtils.applyRefTrackingOverride(
+            t, AndroidSupport.IS_ANDROID ? null : field.getAnnotatedType(), resolver.trackingRef());
       }
       if (needsClassInfoHolder(resolver, cls)) {
         classInfoHolder = resolver.nilTypeInfoHolder();

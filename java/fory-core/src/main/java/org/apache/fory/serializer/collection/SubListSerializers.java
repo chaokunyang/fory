@@ -78,21 +78,6 @@ public class SubListSerializers {
     }
   }
 
-  public static boolean isSubListClass(Class<?> cls) {
-    if (cls == SubListClass || cls == RandomAccessSubListClass || cls == ArrayListSubListClass) {
-      return true;
-    }
-    String name = cls.getName();
-    return name.equals("java.util.SubList")
-        || name.equals("java.util.RandomAccessSubList")
-        || name.equals("java.util.AbstractList$SubList")
-        || name.equals("java.util.AbstractList$RandomAccessSubList")
-        || name.equals("java.util.ArrayList$SubList")
-        || name.equals("java.util.AbstractList$SubAbstractList")
-        || name.equals("java.util.AbstractList$SubAbstractListRandomAccess")
-        || name.equals("java.util.ImmutableCollections$SubList");
-  }
-
   private static Class<?> loadClassOrStub(Class<?> stubClass, String... classNames) {
     for (String className : classNames) {
       try {

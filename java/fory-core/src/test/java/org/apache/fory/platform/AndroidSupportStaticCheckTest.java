@@ -37,6 +37,9 @@ public class AndroidSupportStaticCheckTest {
       Pattern.compile("\\bClassValue\\s*<|new\\s+ClassValue\\s*<");
   private static final Pattern DIRECT_FIELD_GET_ANNOTATED_TYPE =
       Pattern.compile("\\.getAnnotatedType\\s*\\(");
+  private static final Pattern ANDROID_GATED_FIELD_GET_ANNOTATED_TYPE =
+      Pattern.compile(
+          "AndroidSupport\\.IS_ANDROID[\\s\\S]{0,160}\\.getAnnotatedType\\s*\\(", Pattern.DOTALL);
   private static final Pattern ANDROID_GATED_SCALA_COMPANION_LOOKUP =
       Pattern.compile(
           "AndroidSupport\\.IS_ANDROID\\s*\\?\\s*null\\s*:\\s*"
@@ -92,8 +95,14 @@ public class AndroidSupportStaticCheckTest {
                 }
                 try {
                   String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
-                  if (DIRECT_FIELD_GET_ANNOTATED_TYPE.matcher(source).find()) {
-                    violations.add(relativePath);
+                  java.util.regex.Matcher matcher = DIRECT_FIELD_GET_ANNOTATED_TYPE.matcher(source);
+                  while (matcher.find()) {
+                    int start = Math.max(0, matcher.start() - 160);
+                    String context = source.substring(start, matcher.end());
+                    if (!ANDROID_GATED_FIELD_GET_ANNOTATED_TYPE.matcher(context).find()) {
+                      violations.add(relativePath);
+                      break;
+                    }
                   }
                 } catch (IOException e) {
                   throw new RuntimeException(e);
@@ -102,7 +111,7 @@ public class AndroidSupportStaticCheckTest {
     }
     assertTrue(
         violations.isEmpty(),
-        "Field#getAnnotatedType is absent on Android API 26; use TypeUtils field helpers: "
+        "Field#getAnnotatedType is absent on Android API 26; gate direct access with AndroidSupport: "
             + violations);
   }
 

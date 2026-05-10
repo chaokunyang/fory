@@ -35,11 +35,13 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -50,7 +52,6 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Generics;
-import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.unsigned.UInt16;
 import org.apache.fory.type.unsigned.UInt32;
 import org.apache.fory.type.unsigned.UInt64;
@@ -1281,9 +1282,11 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       try {
         for (RecordComponent component : components) {
           Field field = type.getDeclaredField(component.getName());
-          descriptors.add(
-              new Descriptor(
-                  field, TypeUtils.getFieldTypeRef(field), component.getAccessor(), null));
+          TypeRef<?> typeRef =
+              AndroidSupport.IS_ANDROID
+                  ? TypeRef.of(field.getGenericType())
+                  : TypeRef.of(field.getAnnotatedType());
+          descriptors.add(new Descriptor(field, typeRef, component.getAccessor(), null));
         }
       } catch (NoSuchFieldException e) {
         // impossible
@@ -1292,7 +1295,11 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     } else {
       for (Field field : ReflectionUtils.getFields(type, true)) {
         if (!Modifier.isStatic(field.getModifiers())) {
-          descriptors.add(new Descriptor(field, TypeUtils.getFieldTypeRef(field), null, null));
+          TypeRef<?> typeRef =
+              AndroidSupport.IS_ANDROID
+                  ? TypeRef.of(field.getGenericType())
+                  : TypeRef.of(field.getAnnotatedType());
+          descriptors.add(new Descriptor(field, typeRef, null, null));
         }
       }
     }

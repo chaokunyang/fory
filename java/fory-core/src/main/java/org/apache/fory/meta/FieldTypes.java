@@ -51,6 +51,7 @@ import org.apache.fory.collection.UInt8List;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -89,7 +90,11 @@ public class FieldTypes {
   /** Build field type from generics, nested generics will be extracted too. */
   public static FieldType buildFieldType(TypeResolver resolver, Field field) {
     Preconditions.checkNotNull(field);
-    GenericType genericType = resolver.buildGenericType(TypeUtils.getFieldTypeRef(field));
+    TypeRef<?> typeRef =
+        AndroidSupport.IS_ANDROID
+            ? TypeRef.of(field.getGenericType())
+            : TypeRef.of(field.getAnnotatedType());
+    GenericType genericType = resolver.buildGenericType(typeRef);
     return buildFieldType(resolver, field, genericType);
   }
 

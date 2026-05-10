@@ -1567,7 +1567,19 @@ public class ClassResolver extends TypeResolver {
   // Invoked by fory JIT.
   @Override
   public TypeInfo getTypeInfo(Class<?> cls) {
-    cls = getAndroidWriteType(cls);
+    if (AndroidSupport.IS_ANDROID) {
+      String className = cls.getName();
+      if (className.equals("java.util.SubList")
+          || className.equals("java.util.RandomAccessSubList")
+          || className.equals("java.util.AbstractList$SubList")
+          || className.equals("java.util.AbstractList$RandomAccessSubList")
+          || className.equals("java.util.ArrayList$SubList")
+          || className.equals("java.util.AbstractList$SubAbstractList")
+          || className.equals("java.util.AbstractList$SubAbstractListRandomAccess")
+          || className.equals("java.util.ImmutableCollections$SubList")) {
+        cls = ArrayList.class;
+      }
+    }
     TypeInfo typeInfo = classInfoMap.get(cls);
     if (typeInfo == null || typeInfo.serializer == null) {
       addSerializer(cls, createSerializer(cls));
@@ -1589,7 +1601,19 @@ public class ClassResolver extends TypeResolver {
   /** Get classinfo by cache, update cache if miss. */
   @Override
   public TypeInfo getTypeInfo(Class<?> cls, TypeInfoHolder classInfoHolder) {
-    cls = getAndroidWriteType(cls);
+    if (AndroidSupport.IS_ANDROID) {
+      String className = cls.getName();
+      if (className.equals("java.util.SubList")
+          || className.equals("java.util.RandomAccessSubList")
+          || className.equals("java.util.AbstractList$SubList")
+          || className.equals("java.util.AbstractList$RandomAccessSubList")
+          || className.equals("java.util.ArrayList$SubList")
+          || className.equals("java.util.AbstractList$SubAbstractList")
+          || className.equals("java.util.AbstractList$SubAbstractListRandomAccess")
+          || className.equals("java.util.ImmutableCollections$SubList")) {
+        cls = ArrayList.class;
+      }
+    }
     TypeInfo typeInfo = classInfoHolder.typeInfo;
     if (typeInfo.getType() != cls) {
       typeInfo = classInfoMap.get(cls);
@@ -1624,7 +1648,19 @@ public class ClassResolver extends TypeResolver {
 
   @Internal
   public TypeInfo getOrUpdateTypeInfo(Class<?> cls) {
-    cls = getAndroidWriteType(cls);
+    if (AndroidSupport.IS_ANDROID) {
+      String className = cls.getName();
+      if (className.equals("java.util.SubList")
+          || className.equals("java.util.RandomAccessSubList")
+          || className.equals("java.util.AbstractList$SubList")
+          || className.equals("java.util.AbstractList$RandomAccessSubList")
+          || className.equals("java.util.ArrayList$SubList")
+          || className.equals("java.util.AbstractList$SubAbstractList")
+          || className.equals("java.util.AbstractList$SubAbstractListRandomAccess")
+          || className.equals("java.util.ImmutableCollections$SubList")) {
+        cls = ArrayList.class;
+      }
+    }
     TypeInfo typeInfo = typeInfoCache;
     if (typeInfo.type != cls) {
       typeInfo = classInfoMap.get(cls);
@@ -1635,13 +1671,6 @@ public class ClassResolver extends TypeResolver {
       typeInfoCache = typeInfo;
     }
     return typeInfo;
-  }
-
-  private static Class<?> getAndroidWriteType(Class<?> cls) {
-    if (AndroidSupport.IS_ANDROID && SubListSerializers.isSubListClass(cls)) {
-      return ArrayList.class;
-    }
-    return cls;
   }
 
   private TypeInfo getOrUpdateTypeInfo(short classId) {

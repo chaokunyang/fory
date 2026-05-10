@@ -38,7 +38,6 @@ import org.apache.fory.util.Preconditions;
 public class SingletonObjectSerializer extends Serializer {
   private final Field field;
   private Object base = null;
-  private Object singleton = null;
   private long offset = -1;
 
   public SingletonObjectSerializer(TypeResolver typeResolver, Class type) {
@@ -66,7 +65,11 @@ public class SingletonObjectSerializer extends Serializer {
   @Override
   public Object read(ReadContext readContext) {
     if (AndroidSupport.IS_ANDROID) {
-      return readAndroidSingleton();
+      try {
+        return field.get(null);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw new ForyException("Failed to read Scala singleton field: " + type, e);
+      }
     }
     long offset = this.offset;
     if (offset == -1) {
@@ -75,18 +78,5 @@ public class SingletonObjectSerializer extends Serializer {
       base = UnsafeOps.UNSAFE.staticFieldBase(field);
     }
     return UnsafeOps.getObject(base, offset);
-  }
-
-  private Object readAndroidSingleton() {
-    Object singleton = this.singleton;
-    if (singleton == null) {
-      try {
-        singleton = field.get(null);
-        this.singleton = singleton;
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw new ForyException("Failed to read Scala singleton field: " + type, e);
-      }
-    }
-    return singleton;
   }
 }

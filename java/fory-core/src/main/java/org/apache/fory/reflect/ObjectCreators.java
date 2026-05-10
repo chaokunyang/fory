@@ -105,10 +105,10 @@ public class ObjectCreators {
     return new DeclaredNoArgCtrObjectCreator<>(type);
   }
 
-  public static final class ReflectiveNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
+  private static final class ReflectiveNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
     private final Constructor<T> constructor;
 
-    public ReflectiveNoArgCtrObjectCreator(Class<T> type, Constructor<T> constructor) {
+    private ReflectiveNoArgCtrObjectCreator(Class<T> type, Constructor<T> constructor) {
       super(type);
       this.constructor = constructor;
       try {
@@ -133,8 +133,8 @@ public class ObjectCreators {
     }
   }
 
-  public static final class UnsupportedObjectCreator<T> extends ObjectCreator<T> {
-    public UnsupportedObjectCreator(Class<T> type) {
+  private static final class UnsupportedObjectCreator<T> extends ObjectCreator<T> {
+    private UnsupportedObjectCreator(Class<T> type) {
       super(type);
     }
 

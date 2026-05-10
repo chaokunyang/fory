@@ -1651,8 +1651,11 @@ public abstract class TypeResolver {
     Map<String, GenericType> map = new HashMap<>();
     Map<String, GenericType> map2 = new HashMap<>();
     for (Field field : ReflectionUtils.getFields(cls, true)) {
-      AnnotatedType annotatedType = TypeUtils.getFieldAnnotatedType(field);
-      TypeRef<?> typeRef = TypeUtils.getFieldTypeRef(field);
+      AnnotatedType annotatedType = AndroidSupport.IS_ANDROID ? null : field.getAnnotatedType();
+      TypeRef<?> typeRef =
+          AndroidSupport.IS_ANDROID
+              ? TypeRef.of(field.getGenericType())
+              : TypeRef.of(annotatedType);
       GenericType genericType = buildGenericType(typeRef);
       TypeUtils.applyRefTrackingOverride(genericType, annotatedType, trackingRef());
       buildGenericMap(map, genericType);

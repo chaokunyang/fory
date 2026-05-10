@@ -133,6 +133,20 @@ public class MemoryBufferTest {
       check(buffer.readFloat32(), Float.MAX_VALUE);
       check(buffer.readFloat64(), Double.MAX_VALUE);
 
+      buffer = MemoryBuffer.newHeapBuffer(32);
+      buffer.putByte(0, (byte) 7);
+      buffer.putInt16(1, (short) 8);
+      buffer.putInt32(3, 9);
+      buffer.putInt64(7, 10L);
+      check(buffer.getByte(0), (byte) 7);
+      check(buffer.getInt16(1), (short) 8);
+      check(buffer.getInt32(3), 9);
+      check(buffer.getInt64(7), 10L);
+
+      MemoryBuffer slice = buffer.slice(3, 4);
+      slice.putInt32(0, 11);
+      check(buffer.getInt32(3), 11);
+
       buffer = MemoryBuffer.newHeapBuffer(1);
       check(buffer.writeVarUInt32(-1), 5);
       check(buffer.writeVarInt32(Integer.MIN_VALUE), 5);
@@ -167,6 +181,11 @@ public class MemoryBufferTest {
       check(target.equalTo(new byte[] {1, 2, 3, 4}, 0, 0, 4), true);
       check(source.equalTo(target, 0, 0, 4), true);
       check(source.getBytes(1, 2), new byte[] {2, 3});
+
+      assertThrows(
+          UnsupportedOperationException.class, () -> source.copyToUnsafe(0, new byte[4], 0, 4));
+      assertThrows(
+          UnsupportedOperationException.class, () -> target.copyFromUnsafe(0, new byte[4], 0, 4));
     }
 
     private static void check(boolean actual, boolean expected) {

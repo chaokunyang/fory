@@ -22,6 +22,7 @@ package org.apache.fory;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -356,6 +357,42 @@ public final class Fory implements BaseFory {
   @Override
   public Object deserialize(byte[] bytes) {
     return deserialize(MemoryUtils.wrap(bytes), (Iterable<MemoryBuffer>) null);
+  }
+
+  @Override
+  public Object deserialize(ByteBuffer byteBuffer) {
+    if (!AndroidSupport.IS_ANDROID && !byteBuffer.isReadOnly()) {
+      return deserializeByteBufferZeroCopy(byteBuffer);
+    }
+    return deserializeByteBufferByCopy(byteBuffer);
+  }
+
+  private Object deserializeByteBufferZeroCopy(ByteBuffer byteBuffer) {
+    return deserialize(MemoryUtils.wrap(byteBuffer));
+  }
+
+  private Object deserializeByteBufferByCopy(ByteBuffer byteBuffer) {
+    int size = byteBuffer.remaining();
+    MemoryBuffer buffer = getBuffer();
+    byte[] heapMemory = buffer.getHeapMemory();
+    if (heapMemory == null || heapMemory.length < size) {
+      heapMemory = new byte[size];
+    }
+    ByteBuffer source = byteBuffer.duplicate();
+    if (source.hasArray()) {
+      System.arraycopy(
+          source.array(), source.arrayOffset() + source.position(), heapMemory, 0, size);
+    } else {
+      source.get(heapMemory, 0, size);
+    }
+    buffer.initHeapBuffer(heapMemory, 0, size);
+    buffer.readerIndex(0);
+    buffer.writerIndex(size);
+    try {
+      return deserialize(buffer);
+    } finally {
+      resetBuffer();
+    }
   }
 
   @Override

@@ -350,8 +350,9 @@ public class ThreadSafeForyTest extends ForyTestBase {
     Fory writer = Fory.builder().requireClassRegistration(false).build();
     String value = "thread-safe-byte-buffer";
     byte[] payload = writer.serialize(value);
-    for (ThreadSafeFory fory :
-        new ThreadSafeFory[] {
+    for (BaseFory fory :
+        new BaseFory[] {
+          Fory.builder().requireClassRegistration(false).build(),
           Fory.builder().requireClassRegistration(false).buildThreadSafeFory(),
           Fory.builder().requireClassRegistration(false).buildThreadLocalFory(),
           Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2)

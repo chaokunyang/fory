@@ -26,8 +26,7 @@ import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 import sun.misc.Unsafe;
 
-// Derived from
-// https://github.com/apache/spark/blob/921fb289f003317d89120faa6937e4abd359195c/common/unsafe/src/main/java/org/apache/spark/unsafe/Platform.java.
+// Derived from Apache Spark's unsafe memory utility.
 
 /** A utility class for unsafe memory operations. */
 @Internal

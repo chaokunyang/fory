@@ -81,6 +81,17 @@ final class MemoryOps {
     return MemoryBuffer.fromByteArray(bytes);
   }
 
+  static void initHeapBuffer(MemoryBuffer buffer, byte[] heapMemory, int offset, int length) {
+    if (heapMemory == null) {
+      throw new NullPointerException("buffer");
+    }
+    buffer.heapMemory = heapMemory;
+    buffer.heapOffset = offset;
+    buffer.address = offset;
+    buffer.size = length;
+    buffer.addressLimit = (long) offset + length;
+  }
+
   static void get(MemoryBuffer buffer, int offset, ByteBuffer target, int numBytes) {
     if ((offset | numBytes | (offset + numBytes)) < 0) {
       throwOOBException(buffer);

@@ -263,10 +263,14 @@ jobs:
         run: python ./ci/run_ci.py java --version windows_java21
 
   android:
-    name: Android Instrumented Tests
+    name: Android Instrumented Tests API ${{ matrix.api-level }}
     needs: changes
     if: needs.changes.outputs.java_code == 'true'
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [26, 36]
     steps:
       - uses: actions/checkout@v5
       - name: Set up JDK 17
@@ -297,18 +301,18 @@ jobs:
       - name: Run Android instrumented tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 26
+          api-level: ${{ matrix.api-level }}
           arch: x86_64
           target: default
           working-directory: integration_tests/android_tests
           script: |
-            yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
+            yes | sdkmanager "platforms;android-${{ matrix.api-level }}" "build-tools;35.0.0"
             gradle --no-daemon --stacktrace connectedCheck
       - name: Upload Android Test Report
         uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: android-test-reports
+          name: android-test-reports-api-${{ matrix.api-level }}
           path: |
             integration_tests/android_tests/build/reports/androidTests/**
             integration_tests/android_tests/build/outputs/androidTest-results/**

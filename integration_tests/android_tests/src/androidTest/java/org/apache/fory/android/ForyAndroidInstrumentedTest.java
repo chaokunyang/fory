@@ -163,6 +163,8 @@ public class ForyAndroidInstrumentedTest {
     EnumMap<AndroidEnum, String> enumMap = new EnumMap<>(AndroidEnum.class);
     enumMap.put(AndroidEnum.BLUE, "blue");
     assertEquals(enumMap, roundTrip(fory, enumMap));
+    assertEquals(
+        new EnumMap<>(AndroidEnum.class), roundTrip(fory, new EnumMap<>(AndroidEnum.class)));
   }
 
   @Test

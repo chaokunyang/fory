@@ -76,7 +76,9 @@ public class ReflectionUtils {
 
   public static boolean hasPublicNoArgConstructor(Class<?> clazz) {
     Constructor<?> constructor = getNoArgConstructor(clazz);
-    return constructor != null && Modifier.isPublic(constructor.getModifiers());
+    return constructor != null
+        && Modifier.isPublic(clazz.getModifiers())
+        && Modifier.isPublic(constructor.getModifiers());
   }
 
   static <T> Constructor<T> getNoArgConstructor(Class<T> clazz) {
@@ -104,7 +106,10 @@ public class ReflectionUtils {
       return null;
     }
     if (AndroidSupport.IS_ANDROID) {
-      return null;
+      if (!Modifier.isPublic(cls.getModifiers()) || !Modifier.isPublic(ctr.getModifiers())) {
+        return null;
+      }
+      return findPublicConstructor(cls);
     }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(ctr.getDeclaringClass());
     try {
@@ -120,13 +125,6 @@ public class ReflectionUtils {
    * no-arg constructor if `checked` not enabled, throws exception if `check` enabled.
    */
   public static MethodHandle getCtrHandle(Class<?> cls, boolean checked) {
-    if (AndroidSupport.IS_ANDROID) {
-      if (checked) {
-        throw new ForyException(
-            "MethodHandle constructor access is not supported on Android for " + cls);
-      }
-      return null;
-    }
     MethodHandle methodHandle = ctrHandleCache.get(cls, () -> createNoArgCtrHandle(cls));
     if (checked && methodHandle == null) {
       throw new RuntimeException(
@@ -143,8 +141,18 @@ public class ReflectionUtils {
 
   public static MethodHandle getCtrHandle(Class<?> cls, Class<?>... types) {
     if (AndroidSupport.IS_ANDROID) {
-      throw new ForyException(
-          "MethodHandle constructor access is not supported on Android for " + cls);
+      if (!Modifier.isPublic(cls.getModifiers())) {
+        throw new ForyException("Public constructor access is not supported for non-public " + cls);
+      }
+      try {
+        Constructor<?> constructor = cls.getConstructor(types);
+        if (!Modifier.isPublic(constructor.getModifiers())) {
+          throw new ForyException("Public constructor is not available for " + cls);
+        }
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.throwException(e);
+      }
+      return findPublicConstructor(cls, types);
     }
     MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(cls);
     ConcurrentMap<List<Class<?>>, MethodHandle> map =
@@ -159,6 +167,16 @@ public class ReflectionUtils {
             throw new IllegalStateException("unreachable");
           }
         });
+  }
+
+  private static MethodHandle findPublicConstructor(Class<?> cls, Class<?>... types) {
+    try {
+      return MethodHandles.publicLookup()
+          .findConstructor(cls, MethodType.methodType(void.class, types));
+    } catch (NoSuchMethodException | IllegalAccessException e) {
+      ExceptionUtils.throwException(e);
+      throw new IllegalStateException("unreachable");
+    }
   }
 
   /**

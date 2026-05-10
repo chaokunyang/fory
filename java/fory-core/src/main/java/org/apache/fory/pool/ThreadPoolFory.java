@@ -35,8 +35,6 @@ import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.serializer.BufferCallback;
 
@@ -300,7 +298,7 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
   public Object deserialize(ByteBuffer byteBuffer) {
     PooledEntry entry = acquire();
     try {
-      return deserializeByteBuffer(entry.fory, byteBuffer);
+      return entry.fory.deserialize(byteBuffer);
     } finally {
       release(entry);
     }
@@ -353,36 +351,6 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
       return entry.fory.deserialize(channel, outOfBandBuffers);
     } finally {
       release(entry);
-    }
-  }
-
-  private static Object deserializeByteBuffer(Fory fory, ByteBuffer byteBuffer) {
-    if (!AndroidSupport.IS_ANDROID && !byteBuffer.isReadOnly()) {
-      return fory.deserialize(MemoryUtils.wrap(byteBuffer));
-    }
-    int size = byteBuffer.remaining();
-    MemoryBuffer buffer = fory.getBuffer();
-    byte[] heapMemory = buffer.getHeapMemory();
-    if (heapMemory == null || heapMemory.length < size) {
-      heapMemory = new byte[size];
-    }
-    int restoreSize = heapMemory.length;
-    ByteBuffer source = byteBuffer.duplicate();
-    if (source.hasArray()) {
-      System.arraycopy(
-          source.array(), source.arrayOffset() + source.position(), heapMemory, 0, size);
-    } else {
-      source.get(heapMemory, 0, size);
-    }
-    buffer.initHeapBuffer(heapMemory, 0, size);
-    buffer.readerIndex(0);
-    buffer.writerIndex(size);
-    try {
-      return fory.deserialize(buffer);
-    } finally {
-      buffer.initHeapBuffer(heapMemory, 0, restoreSize);
-      buffer.readerIndex(0);
-      buffer.writerIndex(0);
     }
   }
 

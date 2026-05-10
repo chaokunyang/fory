@@ -20,6 +20,7 @@
 package org.apache.fory;
 
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.function.Function;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
@@ -184,6 +185,13 @@ public interface BaseFory {
 
   /** Deserialize <code>obj</code> from a byte array. */
   Object deserialize(byte[] bytes);
+
+  /**
+   * Deserialize <code>obj</code> from {@code byteBuffer.position()} to {@code byteBuffer.limit()}
+   * without changing the caller buffer position or limit. On Android, heap, direct, and readonly
+   * buffers are copied into Fory-owned heap memory before deserialization.
+   */
+  Object deserialize(ByteBuffer byteBuffer);
 
   <T> T deserialize(byte[] bytes, Class<T> type);
 

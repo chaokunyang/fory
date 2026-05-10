@@ -119,9 +119,9 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.Platform;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
@@ -420,7 +420,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
    */
   protected void addCommonImports() {
     ctx.addImports(
-        Fory.class, MemoryBuffer.class, WriteContext.class, ReadContext.class, Platform.class);
+        Fory.class, MemoryBuffer.class, WriteContext.class, ReadContext.class, UnsafeOps.class);
     ctx.addImports(TypeInfo.class, TypeInfoHolder.class, ClassResolver.class);
     ctx.addImport(Generated.class);
     ctx.addImports(LazyInitBeanSerializer.class, EnumSerializer.class);

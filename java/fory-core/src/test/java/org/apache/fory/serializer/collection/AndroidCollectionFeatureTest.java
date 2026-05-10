@@ -54,13 +54,21 @@ import org.testng.annotations.Test;
 public class AndroidCollectionFeatureTest {
   private static final String ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX =
       "ANDROID_CHILD_CONTAINER_PAYLOAD=";
+  private static final String ANDROID_SUBLIST_PAYLOAD_PREFIX = "ANDROID_SUBLIST_PAYLOAD=";
+  private static final String ANDROID_ENUM_MAP_PAYLOAD_PREFIX = "ANDROID_ENUM_MAP_PAYLOAD=";
+  private static final String ANDROID_EMPTY_ENUM_MAP_PAYLOAD_PREFIX =
+      "ANDROID_EMPTY_ENUM_MAP_PAYLOAD=";
 
   @Test
   public void testAndroidCollectionFeaturePaths() throws Exception {
     Fory jvmFory = newCompatibleChildContainerFory();
     AndroidCollectionFeatureProbe.AndroidChildArrayList jvmValue =
         newChildContainerValue("jvm-label");
-    String jvmPayload = Base64.getEncoder().encodeToString(jvmFory.serialize(jvmValue));
+    String jvmPayload = encode(jvmFory, jvmValue);
+    String jvmSubListPayload = encode(jvmFory, newSubListValue());
+    String jvmEnumMapPayload = encode(jvmFory, newEnumMapValue());
+    String jvmEmptyEnumMapPayload =
+        encode(jvmFory, new EnumMap<>(AndroidCollectionFeatureProbe.TestEnum.class));
 
     String javaBin =
         System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
@@ -74,22 +82,50 @@ public class AndroidCollectionFeatureTest {
     command.add(System.getProperty("java.class.path"));
     command.add(AndroidCollectionFeatureProbe.class.getName());
     command.add(jvmPayload);
+    command.add(jvmSubListPayload);
+    command.add(jvmEnumMapPayload);
+    command.add(jvmEmptyEnumMapPayload);
     Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
     String output = readFully(process.getInputStream());
     Assert.assertEquals(process.waitFor(), 0, output);
 
-    String androidPayload = null;
+    Map<String, String> payloads = new HashMap<>();
     for (String line : output.split("\\r?\\n")) {
       if (line.startsWith(ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX)) {
-        androidPayload = line.substring(ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX.length());
+        payloads.put(ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX, line);
+      } else if (line.startsWith(ANDROID_SUBLIST_PAYLOAD_PREFIX)) {
+        payloads.put(ANDROID_SUBLIST_PAYLOAD_PREFIX, line);
+      } else if (line.startsWith(ANDROID_ENUM_MAP_PAYLOAD_PREFIX)) {
+        payloads.put(ANDROID_ENUM_MAP_PAYLOAD_PREFIX, line);
+      } else if (line.startsWith(ANDROID_EMPTY_ENUM_MAP_PAYLOAD_PREFIX)) {
+        payloads.put(ANDROID_EMPTY_ENUM_MAP_PAYLOAD_PREFIX, line);
       }
     }
-    Assert.assertNotNull(androidPayload, output);
     AndroidCollectionFeatureProbe.AndroidChildArrayList restored =
         (AndroidCollectionFeatureProbe.AndroidChildArrayList)
-            jvmFory.deserialize(Base64.getDecoder().decode(androidPayload));
+            jvmFory.deserialize(decodePayload(payloads, ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX));
     Assert.assertEquals(restored, newChildContainerValue("android-label"));
     Assert.assertEquals(restored.label, "android-label");
+    Object subListRestored =
+        jvmFory.deserialize(decodePayload(payloads, ANDROID_SUBLIST_PAYLOAD_PREFIX));
+    Assert.assertEquals(subListRestored, Arrays.asList(2, 3));
+    Assert.assertEquals(subListRestored.getClass(), ArrayList.class);
+    Assert.assertEquals(
+        jvmFory.deserialize(decodePayload(payloads, ANDROID_ENUM_MAP_PAYLOAD_PREFIX)),
+        newEnumMapValue());
+    Assert.assertEquals(
+        jvmFory.deserialize(decodePayload(payloads, ANDROID_EMPTY_ENUM_MAP_PAYLOAD_PREFIX)),
+        new EnumMap<>(AndroidCollectionFeatureProbe.TestEnum.class));
+  }
+
+  private static String encode(Fory fory, Object value) {
+    return Base64.getEncoder().encodeToString(fory.serialize(value));
+  }
+
+  private static byte[] decodePayload(Map<String, String> payloads, String prefix) {
+    String line = payloads.get(prefix);
+    Assert.assertNotNull(line, "Missing " + prefix);
+    return Base64.getDecoder().decode(line.substring(prefix.length()));
   }
 
   private static String readFully(InputStream inputStream) throws IOException {
@@ -120,9 +156,23 @@ public class AndroidCollectionFeatureTest {
     return value;
   }
 
+  private static List<Integer> newSubListValue() {
+    return new ArrayList<>(Arrays.asList(1, 2, 3, 4)).subList(1, 3);
+  }
+
+  private static EnumMap<AndroidCollectionFeatureProbe.TestEnum, String> newEnumMapValue() {
+    EnumMap<AndroidCollectionFeatureProbe.TestEnum, String> map =
+        new EnumMap<>(AndroidCollectionFeatureProbe.TestEnum.class);
+    map.put(AndroidCollectionFeatureProbe.TestEnum.ONE, "one");
+    map.put(AndroidCollectionFeatureProbe.TestEnum.TWO, "two");
+    return map;
+  }
+
   public static final class AndroidCollectionFeatureProbe {
     public static void main(String[] args) throws Exception {
-      check(args.length == 1, "Expected JVM child-container payload argument");
+      check(
+          args.length == 4,
+          "Expected JVM child-container, sublist, enum-map, and empty-enum-map payloads");
       System.setProperty("java.vm.name", "Dalvik");
       System.setProperty("java.runtime.name", "Android Runtime");
       check(AndroidSupport.IS_ANDROID, "AndroidSupport should detect Dalvik runtime");
@@ -132,6 +182,7 @@ public class AndroidCollectionFeatureTest {
               .withCodegen(true)
               .withRefTracking(true)
               .requireClassRegistration(false)
+              .withCompatibleMode(CompatibleMode.COMPATIBLE)
               .build();
       check(!fory.getConfig().isCodeGenEnabled(), "Android must force codegen off");
       verifyUnmodifiableWrappers(fory);
@@ -146,6 +197,10 @@ public class AndroidCollectionFeatureTest {
         verifyImmutableCollections(fory);
       }
       verifyChildContainerFields(Base64.getDecoder().decode(args[0]));
+      verifyJvmSubListPayload(fory, Base64.getDecoder().decode(args[1]));
+      verifyJvmEnumMapPayloads(
+          fory, Base64.getDecoder().decode(args[2]), Base64.getDecoder().decode(args[3]));
+      writeAndroidFeaturePayloads(fory);
     }
 
     private static void verifyUnmodifiableWrappers(Fory fory) {
@@ -317,6 +372,32 @@ public class AndroidCollectionFeatureTest {
       System.out.println(
           ANDROID_CHILD_CONTAINER_PAYLOAD_PREFIX
               + Base64.getEncoder().encodeToString(fory.serialize(value)));
+    }
+
+    private static void verifyJvmSubListPayload(Fory fory, byte[] jvmPayload) {
+      Object restored = fory.deserialize(jvmPayload);
+      checkEquals(restored, Arrays.asList(2, 3), "JVM sublist payload");
+    }
+
+    private static void verifyJvmEnumMapPayloads(
+        Fory fory, byte[] jvmEnumMapPayload, byte[] jvmEmptyEnumMapPayload) {
+      checkEquals(fory.deserialize(jvmEnumMapPayload), newEnumMapValue(), "JVM EnumMap payload");
+      checkEquals(
+          fory.deserialize(jvmEmptyEnumMapPayload),
+          new EnumMap<>(TestEnum.class),
+          "JVM empty EnumMap payload");
+    }
+
+    private static void writeAndroidFeaturePayloads(Fory fory) {
+      System.out.println(
+          ANDROID_SUBLIST_PAYLOAD_PREFIX
+              + Base64.getEncoder().encodeToString(fory.serialize(newSubListValue())));
+      System.out.println(
+          ANDROID_ENUM_MAP_PAYLOAD_PREFIX
+              + Base64.getEncoder().encodeToString(fory.serialize(newEnumMapValue())));
+      System.out.println(
+          ANDROID_EMPTY_ENUM_MAP_PAYLOAD_PREFIX
+              + Base64.getEncoder().encodeToString(fory.serialize(new EnumMap<>(TestEnum.class))));
     }
 
     private static Object roundTrip(Fory fory, Object value) {

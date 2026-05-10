@@ -41,7 +41,7 @@ The Android target includes:
 
 - `Fory#serialize(Object)` returning `byte[]`.
 - `Fory#deserialize(byte[])`.
-- `ThreadSafeFory#deserialize(ByteBuffer)` through copy into a Fory-owned heap `MemoryBuffer`.
+- `BaseFory#deserialize(ByteBuffer)` through copy into a Fory-owned heap `MemoryBuffer`.
 - Stream, channel, and out-of-band buffer APIs through safe heap, byte-array, or `ByteBuffer` copy
   paths.
 - Interpreter object serializers with reflection-backed field access.
@@ -73,17 +73,17 @@ definition, or generated serializer loading starts.
 
 ## ByteBuffer
 
-On Android, `ThreadSafeFory#deserialize(ByteBuffer)` copies the remaining input bytes into a
-Fory-owned heap `MemoryBuffer`, then deserializes from that buffer. Heap, direct, and readonly inputs
-are supported through the copy path. The caller buffer position and limit are not changed.
+On Android, `BaseFory#deserialize(ByteBuffer)` copies the remaining input bytes into a Fory-owned
+heap `MemoryBuffer`, then deserializes from that buffer. Heap, direct, and readonly inputs are
+supported through the copy path. The caller buffer position and limit are not changed.
 
 Raw direct-buffer address wrapping remains a JVM-only fast path and is not used on Android.
 
 ## Direct Memory And Row Format
 
-Android `fory-core` paths do not execute `sun.misc.Unsafe` operations. `MemoryBuffer#copyToUnsafe`
-and `MemoryBuffer#copyFromUnsafe` are retained as JVM-only direct-memory copy APIs for existing
-JVM users such as `java/fory-format`; they throw before unsafe execution when Android is detected.
+Android `fory-core` paths do not execute `sun.misc.Unsafe` operations. Direct-memory copy APIs are
+JVM-only paths for existing JVM users such as `java/fory-format`; they throw before unsafe execution
+when Android is detected.
 
 Use core object serialization on Android. Do not use `java/fory-format` row-format APIs on Android.
 
@@ -105,13 +105,14 @@ The wrapper read path rewraps that source through `Collections.unmodifiable*` or
 `Collections.synchronized*`. Synchronized wrapper write and copy paths must hold the wrapper lock
 while iterating public contents.
 
-Sublist views that would otherwise serialize hidden JDK view state write visible elements through
-the normal `ArrayList` path on Android.
+Sublist views keep a unified serializer protocol. Android writes visible elements; JVM may write
+source-list view metadata when supported. Both Android and JVM readers accept both payload modes.
 
 Other JDK collection serializers keep their existing Java native protocol shape while avoiding
 hidden-field unsafe access on Android. `Arrays.asList` writes the existing array payload,
 `Collections.newSetFromMap` writes a `HashMap` backing-map payload, bounded blocking queues derive
-capacity through public APIs, `EnumMap` derives or reflects its key type, and immutable JDK
+capacity through public APIs, non-empty `EnumMap` derives its key type from the first key, empty
+Android `EnumMap` writes a self-describing Java-serialization fallback, and immutable JDK
 collections are materialized through public unmodifiable containers on Android.
 
 In xlang mode, collection and map serialization uses the xlang collection/map protocol and does not

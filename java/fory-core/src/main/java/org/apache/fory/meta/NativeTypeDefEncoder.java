@@ -34,7 +34,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
@@ -45,6 +44,7 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.MurmurHash3;
 
@@ -72,67 +72,65 @@ public class NativeTypeDefEncoder {
     }
   }
 
-  static List<Field> buildFields(TypeResolver typeResolver, Class<?> cls, boolean resolveParent) {
+  static List<Descriptor> buildDescriptors(
+      TypeResolver typeResolver, Class<?> cls, boolean resolveParent) {
     DescriptorGrouper descriptorGrouper =
         typeResolver.getFieldDescriptorGrouper(cls, resolveParent, false, IDENTITY_DESCRIPTOR);
-    List<Field> fields = new ArrayList<>();
-    descriptorGrouper
-        .getPrimitiveDescriptors()
-        .forEach(descriptor -> fields.add(descriptor.getField()));
-    descriptorGrouper
-        .getBoxedDescriptors()
-        .forEach(descriptor -> fields.add(descriptor.getField()));
-    descriptorGrouper
-        .getBuildInDescriptors()
-        .forEach(descriptor -> fields.add(descriptor.getField()));
+    List<Descriptor> descriptors = new ArrayList<>();
+    descriptorGrouper.getPrimitiveDescriptors().forEach(descriptors::add);
+    descriptorGrouper.getBoxedDescriptors().forEach(descriptors::add);
+    descriptorGrouper.getBuildInDescriptors().forEach(descriptors::add);
     // Order must match ObjectSerializer serialization order: buildIn, container, other
-    descriptorGrouper
-        .getCollectionDescriptors()
-        .forEach(descriptor -> fields.add(descriptor.getField()));
-    descriptorGrouper.getMapDescriptors().forEach(descriptor -> fields.add(descriptor.getField()));
-    descriptorGrouper
-        .getOtherDescriptors()
-        .forEach(descriptor -> fields.add(descriptor.getField()));
-    return fields;
+    descriptorGrouper.getCollectionDescriptors().forEach(descriptors::add);
+    descriptorGrouper.getMapDescriptors().forEach(descriptors::add);
+    descriptorGrouper.getOtherDescriptors().forEach(descriptors::add);
+    return descriptors;
   }
 
   public static List<FieldInfo> buildFieldsInfo(ClassResolver resolver, Class<?> cls) {
-    return buildFieldsInfo(resolver, buildFields(resolver, cls, true));
+    return buildFieldsInfoFromDescriptors(resolver, buildDescriptors(resolver, cls, true));
   }
 
   public static List<FieldInfo> buildFieldsInfo(TypeResolver resolver, List<Field> fields) {
+    List<Descriptor> descriptors = new ArrayList<>(fields.size());
+    for (Field field : fields) {
+      descriptors.add(new Descriptor(field, TypeUtils.getFieldTypeRef(field), null, null));
+    }
+    return buildFieldsInfoFromDescriptors(resolver, descriptors);
+  }
+
+  public static List<FieldInfo> buildFieldsInfoFromDescriptors(
+      TypeResolver resolver, List<Descriptor> descriptors) {
     List<FieldInfo> fieldInfos = new ArrayList<>();
     Set<Integer> usedTagIds = new HashSet<>();
-    for (Field field : fields) {
-      // Check for @ForyField annotation to extract tag ID
-      ForyField foryField = field.getAnnotation(ForyField.class);
-      FieldType fieldType = FieldTypes.buildFieldType(resolver, field);
+    for (Descriptor descriptor : descriptors) {
+      FieldType fieldType = FieldTypes.buildFieldType(resolver, descriptor);
 
       FieldInfo fieldInfo;
-      if (foryField != null) {
-        int tagId = foryField.id();
+      if (descriptor.hasForyFieldPolicy()) {
+        int tagId = descriptor.getForyFieldId();
         if (tagId >= 0) {
           if (!usedTagIds.add(tagId)) {
             throw new IllegalArgumentException(
                 "Duplicate tag id: "
                     + tagId
                     + ", field: "
-                    + field
+                    + descriptor.getName()
                     + ", class: "
-                    + field.getDeclaringClass());
+                    + descriptor.getDeclaringClass());
           }
           // Create FieldInfo with tag ID for optimized serialization
           fieldInfo =
               new FieldInfo(
-                  field.getDeclaringClass().getName(), field.getName(), fieldType, (short) tagId);
+                  descriptor.getDeclaringClass(), descriptor.getName(), fieldType, (short) tagId);
         } else {
           // tagId == -1 means opt-out, use field name
           fieldInfo =
-              new FieldInfo(field.getDeclaringClass().getName(), field.getName(), fieldType);
+              new FieldInfo(descriptor.getDeclaringClass(), descriptor.getName(), fieldType);
         }
       } else {
         // No annotation, use field name
-        fieldInfo = new FieldInfo(field.getDeclaringClass().getName(), field.getName(), fieldType);
+        fieldInfo = new FieldInfo(descriptor.getDeclaringClass(), descriptor.getName(), fieldType);
       }
       fieldInfos.add(fieldInfo);
     }
@@ -142,6 +140,13 @@ public class NativeTypeDefEncoder {
   /** Build class definition from fields of class. */
   static TypeDef buildTypeDef(ClassResolver classResolver, Class<?> type, List<Field> fields) {
     return buildTypeDefWithFieldInfos(classResolver, type, buildFieldsInfo(classResolver, fields));
+  }
+
+  /** Build class definition from descriptors of class. */
+  static TypeDef buildTypeDefFromDescriptors(
+      ClassResolver classResolver, Class<?> type, List<Descriptor> descriptors) {
+    return buildTypeDefWithFieldInfos(
+        classResolver, type, buildFieldsInfoFromDescriptors(classResolver, descriptors));
   }
 
   public static TypeDef buildTypeDefWithFieldInfos(

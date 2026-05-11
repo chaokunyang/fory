@@ -32,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -43,6 +42,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -63,43 +63,53 @@ class TypeDefEncoder {
     DescriptorGrouper descriptorGrouper =
         resolver.getFieldDescriptorGrouper(type, true, false, IDENTITY_DESCRIPTOR);
     TypeInfo typeInfo = resolver.getTypeInfo(type);
-    List<Field> fields;
+    List<Descriptor> descriptors;
     int typeId = typeInfo.getTypeId();
     if (Types.isStructType(typeId)) {
-      fields =
-          descriptorGrouper.getSortedDescriptors().stream()
-              .map(Descriptor::getField)
-              .collect(Collectors.toList());
+      descriptors = descriptorGrouper.getSortedDescriptors();
     } else {
-      fields = new ArrayList<>();
+      descriptors = new ArrayList<>();
     }
-    return buildTypeDefWithFieldInfos(resolver, type, buildFieldsInfo(resolver, type, fields));
+    return buildTypeDefWithFieldInfos(
+        resolver, type, buildFieldsInfoFromDescriptors(resolver, type, descriptors));
   }
 
   static List<FieldInfo> buildFieldsInfo(TypeResolver resolver, Class<?> type, List<Field> fields) {
+    List<Descriptor> descriptors = new ArrayList<>(fields.size());
+    for (Field field : fields) {
+      descriptors.add(new Descriptor(field, TypeUtils.getFieldTypeRef(field), null, null));
+    }
+    return buildFieldsInfoFromDescriptors(resolver, type, descriptors);
+  }
+
+  static List<FieldInfo> buildFieldsInfoFromDescriptors(
+      TypeResolver resolver, Class<?> type, List<Descriptor> descriptors) {
     Set<Integer> usedTagIds = new HashSet<>();
-    return fields.stream()
+    return descriptors.stream()
         .map(
-            field -> {
-              ForyField foryField = field.getAnnotation(ForyField.class);
-              FieldType fieldType = FieldTypes.buildFieldType(resolver, field);
-              if (foryField != null) {
-                int tagId = foryField.id();
+            descriptor -> {
+              FieldType fieldType = FieldTypes.buildFieldType(resolver, descriptor);
+              if (descriptor.hasForyFieldPolicy()) {
+                int tagId = descriptor.getForyFieldId();
                 if (tagId >= 0) {
                   if (!usedTagIds.add(tagId)) {
                     throw new IllegalArgumentException(
                         "Duplicate tag id "
                             + tagId
                             + " for field "
-                            + field.getName()
+                            + descriptor.getName()
                             + " in class "
                             + type.getName());
                   }
-                  return new FieldInfo(type.getName(), field.getName(), fieldType, (short) tagId);
+                  return new FieldInfo(
+                      descriptor.getDeclaringClass(),
+                      descriptor.getName(),
+                      fieldType,
+                      (short) tagId);
                 }
                 // tagId == -1 means use field name, fall through to create regular FieldInfo
               }
-              return new FieldInfo(type.getName(), field.getName(), fieldType);
+              return new FieldInfo(descriptor.getDeclaringClass(), descriptor.getName(), fieldType);
             })
         .collect(Collectors.toList());
   }

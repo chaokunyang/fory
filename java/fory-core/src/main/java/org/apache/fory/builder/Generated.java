@@ -23,6 +23,7 @@ import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -114,6 +115,29 @@ public interface Generated {
     @Override
     public void write(WriteContext writeContext, Object value) {
       serializer.write(writeContext, value);
+    }
+  }
+
+  /**
+   * Base class for GraalVM build-time compatible read serializers for remote {@link TypeDef}
+   * schemas.
+   */
+  abstract class GeneratedCompatibleMetaSharedSerializer extends GeneratedSerializer
+      implements Generated {
+    public GeneratedCompatibleMetaSharedSerializer(TypeResolver typeResolver, Class<?> cls) {
+      super(typeResolver, cls);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Object value) {
+      throw new UnsupportedOperationException(
+          "GraalVM compatible meta-shared serializers are read-only");
+    }
+
+    @Override
+    public Object copy(CopyContext copyContext, Object value) {
+      throw new UnsupportedOperationException(
+          "GraalVM compatible meta-shared serializers do not implement copy");
     }
   }
 

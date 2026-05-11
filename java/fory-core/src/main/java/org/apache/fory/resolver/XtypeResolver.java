@@ -611,8 +611,7 @@ public class XtypeResolver extends TypeResolver {
 
   @Override
   public boolean isMonomorphic(Descriptor descriptor) {
-    ForyField foryField = descriptor.getForyField();
-    ForyField.Dynamic dynamic = foryField != null ? foryField.dynamic() : ForyField.Dynamic.AUTO;
+    ForyField.Dynamic dynamic = descriptor.getMorphic();
     switch (dynamic) {
       case TRUE:
         return false;

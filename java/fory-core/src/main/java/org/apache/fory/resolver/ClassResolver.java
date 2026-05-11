@@ -70,7 +70,6 @@ import java.util.function.Supplier;
 import javax.annotation.concurrent.NotThreadSafe;
 import org.apache.fory.ForyCopyable;
 import org.apache.fory.annotation.CodegenInvoke;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.JITContext;
@@ -977,9 +976,8 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   public boolean isMonomorphic(Descriptor descriptor) {
-    ForyField foryField = descriptor.getForyField();
-    if (foryField != null) {
-      switch (foryField.dynamic()) {
+    if (descriptor.hasForyFieldPolicy()) {
+      switch (descriptor.getMorphic()) {
         case TRUE:
           return false;
         case FALSE:
@@ -1546,8 +1544,8 @@ public class ClassResolver extends TypeResolver {
       if (codegen) {
         LOG.info("Object of type {} can't be serialized by jit", cls);
       }
-      // Always use ObjectSerializer for both modes
-      return ObjectSerializer.class;
+      Class<? extends Serializer> serializerClass = getStaticGeneratedStructSerializerClass(cls);
+      return serializerClass == null ? ObjectSerializer.class : serializerClass;
     }
   }
 

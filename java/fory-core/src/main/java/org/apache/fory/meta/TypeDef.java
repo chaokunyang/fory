@@ -19,7 +19,7 @@
 
 package org.apache.fory.meta;
 
-import static org.apache.fory.meta.NativeTypeDefEncoder.buildFields;
+import static org.apache.fory.meta.NativeTypeDefEncoder.buildDescriptors;
 
 import java.io.ObjectStreamClass;
 import java.io.Serializable;
@@ -371,8 +371,18 @@ public class TypeDef implements Serializable {
         this, cls, () -> buildDescriptors(resolver, cls));
   }
 
+  public List<Descriptor> getDescriptors(
+      TypeResolver resolver, Class<?> cls, Collection<Descriptor> localDescriptors) {
+    return buildDescriptors(resolver, cls, localDescriptors);
+  }
+
   private List<Descriptor> buildDescriptors(TypeResolver resolver, Class<?> cls) {
     Collection<Descriptor> fieldDescriptors = resolver.getFieldDescriptors(cls, true);
+    return buildDescriptors(resolver, cls, fieldDescriptors);
+  }
+
+  private List<Descriptor> buildDescriptors(
+      TypeResolver resolver, Class<?> cls, Collection<Descriptor> fieldDescriptors) {
     Map<String, Descriptor> descriptorsMap = new HashMap<>();
     Map<Short, Descriptor> fieldIdToDescriptorMap = new HashMap<>();
 
@@ -381,20 +391,18 @@ public class TypeDef implements Serializable {
       if (descriptorsMap.put(fullName, descriptor) != null) {
         throw new IllegalStateException("Duplicate key");
       }
-      if (descriptor.getForyField() != null) {
-        int fieldId = descriptor.getForyField().id();
-        if (fieldId >= 0) {
-          if (fieldIdToDescriptorMap.containsKey((short) fieldId)) {
-            throw new IllegalArgumentException(
-                "Duplicate field id "
-                    + fieldId
-                    + " for field "
-                    + descriptor.getName()
-                    + " in class "
-                    + cls.getName());
-          }
-          fieldIdToDescriptorMap.put((short) fieldId, descriptor);
+      if (descriptor.hasForyFieldId()) {
+        int fieldId = descriptor.getForyFieldId();
+        if (fieldIdToDescriptorMap.containsKey((short) fieldId)) {
+          throw new IllegalArgumentException(
+              "Duplicate field id "
+                  + fieldId
+                  + " for field "
+                  + descriptor.getName()
+                  + " in class "
+                  + cls.getName());
         }
+        fieldIdToDescriptorMap.put((short) fieldId, descriptor);
       }
     }
     List<Descriptor> descriptors = new ArrayList<>(fieldsInfo.size());
@@ -426,8 +434,10 @@ public class TypeDef implements Serializable {
     if (resolver.isCrossLanguage()) {
       return TypeDefEncoder.buildTypeDef((XtypeResolver) resolver, cls);
     }
-    return NativeTypeDefEncoder.buildTypeDef(
-        (ClassResolver) resolver, cls, buildFields(resolver, cls, resolveParent));
+    return NativeTypeDefEncoder.buildTypeDefFromDescriptors(
+        (ClassResolver) resolver,
+        cls,
+        NativeTypeDefEncoder.buildDescriptors(resolver, cls, resolveParent));
   }
 
   /** Build class definition from fields of class. */

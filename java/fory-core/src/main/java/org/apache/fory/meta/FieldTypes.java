@@ -32,8 +32,6 @@ import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.Objects;
-import org.apache.fory.annotation.ArrayType;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
@@ -77,8 +75,8 @@ public class FieldTypes {
     }
     if (parsedType.isArray()) {
       Tuple2<Class<?>, Integer> info = getArrayComponentInfo(parsedType);
-      Field field = descriptor.getField();
-      if (!field.getType().isArray() || getArrayDimensions(field.getType()) != info.f1) {
+      Class<?> rawType = descriptor.getRawType();
+      if (!rawType.isArray() || getArrayDimensions(rawType) != info.f1) {
         return false;
       }
       return info.f0.isEnum();
@@ -91,26 +89,34 @@ public class FieldTypes {
     Preconditions.checkNotNull(field);
     TypeRef<?> typeRef = TypeUtils.getFieldTypeRef(field);
     GenericType genericType = resolver.buildGenericType(typeRef);
-    return buildFieldType(resolver, field, genericType);
+    return buildFieldType(resolver, new Descriptor(field, typeRef, null, null), genericType);
+  }
+
+  /** Build field type from a descriptor, including generated descriptor TypeRef metadata. */
+  public static FieldType buildFieldType(TypeResolver resolver, Descriptor descriptor) {
+    Preconditions.checkNotNull(descriptor);
+    GenericType genericType = resolver.buildGenericType(descriptor.getTypeRef());
+    return buildFieldType(resolver, descriptor, genericType);
   }
 
   /** Build field type from generics, nested generics will be extracted too. */
   private static FieldType buildFieldType(
-      TypeResolver resolver, Field field, GenericType genericType) {
+      TypeResolver resolver, Descriptor descriptor, GenericType genericType) {
     Preconditions.checkNotNull(genericType);
+    Field field = descriptor == null ? null : descriptor.getField();
     Class<?> rawType = genericType.getCls();
     boolean isXlang = resolver.isCrossLanguage();
     // Get type ID for both xlang and native mode
     // This supports unsigned types and field-configurable compression in both modes
     int typeId;
-    Annotation typeAnnotation = field == null ? null : Descriptor.getAnnotation(field);
+    Annotation typeAnnotation = descriptor == null ? null : descriptor.getTypeAnnotation();
     boolean primitiveList = TypeUtils.isPrimitiveListClass(rawType);
-    boolean primitiveListArray = field != null && field.isAnnotationPresent(ArrayType.class);
+    boolean primitiveListArray = descriptor != null && TypeAnnotationUtils.isArrayType(descriptor);
     boolean boxedListArray =
         isXlang
-            && field != null
+            && descriptor != null
             && !primitiveList
-            && TypeAnnotationUtils.isBoxedListArrayType(field);
+            && TypeAnnotationUtils.isBoxedListArrayType(descriptor);
     int primitiveListElementTypeId =
         primitiveList
             ? TypeAnnotationUtils.getPrimitiveListElementTypeId(typeAnnotation, rawType, isXlang)
@@ -124,21 +130,26 @@ public class FieldTypes {
               ? TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType)
               : Types.LIST;
     } else if (boxedListArray) {
-      typeId = TypeAnnotationUtils.getBoxedListArrayTypeId(field);
+      typeId = TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor);
     } else if (primitiveListElementTypeId != Types.UNKNOWN) {
       typeId = TypeAnnotationUtils.getPrimitiveListTypeId(typeAnnotation, rawType);
     } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
       if (field != null) {
-        typeId = Types.getDescriptorTypeId(resolver, field);
+        typeId =
+            descriptor == null
+                ? Types.getDescriptorTypeId(resolver, field)
+                : Types.getDescriptorTypeId(resolver, descriptor);
       } else {
         typeId = Types.getTypeId(resolver, rawType);
       }
-    } else if (rawType.isArray() && rawType.getComponentType().isPrimitive() && field != null) {
+    } else if (rawType.isArray()
+        && rawType.getComponentType().isPrimitive()
+        && descriptor != null) {
       // For primitive arrays with type annotations, use getDescriptorTypeId to parse annotation.
       // This allows @UInt8Type etc. to override the default byte[] bytes schema.
-      typeId = Types.getDescriptorTypeId(resolver, field);
-    } else if (typeAnnotation != null && rawType.isArray() && field != null) {
-      typeId = Types.getDescriptorTypeId(resolver, field);
+      typeId = Types.getDescriptorTypeId(resolver, descriptor);
+    } else if (typeAnnotation != null && rawType.isArray() && descriptor != null) {
+      typeId = Types.getDescriptorTypeId(resolver, descriptor);
     } else {
       TypeInfo info =
           isXlang && rawType == Object.class ? null : resolver.getTypeInfo(rawType, false);
@@ -195,12 +206,9 @@ public class FieldTypes {
     }
 
     // Apply @ForyField annotation if present
-    if (field != null) {
-      ForyField foryField = field.getAnnotation(ForyField.class);
-      if (foryField != null) {
-        nullable = foryField.nullable();
-        trackingRef = foryField.ref();
-      }
+    if (descriptor != null && descriptor.hasForyFieldPolicy()) {
+      nullable = descriptor.isNullable();
+      trackingRef = descriptor.isTrackingRef();
     }
 
     boolean isUnionType = Types.isUnionType(typeId);

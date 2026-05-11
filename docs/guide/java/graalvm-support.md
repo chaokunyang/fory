@@ -38,6 +38,13 @@ Fory generates serialization code at GraalVM build time when you:
 
 Note: Fory's `asyncCompilationEnabled` option is automatically disabled for GraalVM native image since runtime JIT is not supported.
 
+`@ForyStruct` annotation-processor static serializers are not the GraalVM native-image serializer
+path. Native image builds use the Fory GraalVM registry: equal local and remote `TypeDef` hashes use
+the existing meta-shared generated serializer, while mismatched remote schemas use a build-time
+generated read-only compatible serializer cached by remote `TypeDef` id. Runtime native images load
+those cached classes from the registry and do not attempt annotation-generated static serializer
+lookup, Janino, or runtime class definition.
+
 ## Basic Usage
 
 ### Step 0: Add the GraalVM Support Dependency

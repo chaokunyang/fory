@@ -130,26 +130,33 @@ public class GenericType {
 
   public static GenericType build(TypeRef<?> typeRef, Predicate<Type> finalPredicate) {
     Type type = typeRef.getType();
+    if (typeRef.hasExplicitTypeArguments()) {
+      List<TypeRef<?>> explicitTypeArguments = typeRef.getTypeArguments();
+      List<GenericType> list = new ArrayList<>(explicitTypeArguments.size());
+      for (TypeRef<?> explicitTypeArgument : explicitTypeArguments) {
+        list.add(GenericType.build(explicitTypeArgument, finalPredicate));
+      }
+      GenericType[] genericTypes = list.toArray(new GenericType[0]);
+      return new GenericType(typeRef, finalPredicate.test(type), genericTypes);
+    }
+    if (typeRef.isArray()) {
+      TypeRef<?> explicitComponentType = typeRef.getComponentType();
+      return new GenericType(
+          typeRef,
+          finalPredicate.test(type),
+          GenericType.build(explicitComponentType, finalPredicate));
+    }
     if (type instanceof ParameterizedType) {
       // List<String>, List<T>, Map<String, List<String>>, SomeClass<T>
       Type[] actualTypeArguments = ((ParameterizedType) type).getActualTypeArguments();
-      List<TypeRef<?>> explicitTypeArguments =
-          typeRef.hasExplicitTypeArguments() ? typeRef.getTypeArguments() : null;
       List<GenericType> list = new ArrayList<>();
       for (int i = 0; i < actualTypeArguments.length; i++) {
-        GenericType build =
-            explicitTypeArguments != null
-                ? GenericType.build(explicitTypeArguments.get(i), finalPredicate)
-                : GenericType.build(actualTypeArguments[i], finalPredicate);
-        list.add(build);
+        list.add(GenericType.build(actualTypeArguments[i], finalPredicate));
       }
       GenericType[] genericTypes = list.toArray(new GenericType[0]);
       return new GenericType(typeRef, finalPredicate.test(type), genericTypes);
     } else if (type instanceof GenericArrayType) { // List<String>[] or T[]
-      TypeRef<?> componentType =
-          typeRef.getComponentType() != null
-              ? typeRef.getComponentType()
-              : TypeRef.of(((GenericArrayType) type).getGenericComponentType());
+      TypeRef<?> componentType = TypeRef.of(((GenericArrayType) type).getGenericComponentType());
       return new GenericType(typeRef, finalPredicate.test(type), build(componentType));
     } else if (type instanceof Class && ((Class<?>) type).isArray()) {
       TypeRef<?> componentType = typeRef.getComponentType();

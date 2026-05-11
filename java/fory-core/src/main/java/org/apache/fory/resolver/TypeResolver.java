@@ -22,6 +22,7 @@ package org.apache.fory.resolver;
 import static org.apache.fory.type.Types.INVALID_USER_TYPE_ID;
 
 import java.lang.reflect.AnnotatedType;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
 import java.lang.reflect.Type;
@@ -44,6 +45,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.CodecUtils;
+import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
 import org.apache.fory.builder.Generated.GeneratedObjectSerializer;
 import org.apache.fory.builder.JITContext;
@@ -84,6 +86,7 @@ import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
 import org.apache.fory.serializer.UnknownClass.UnknownStruct;
@@ -1028,34 +1031,52 @@ public abstract class TypeResolver {
     Class<? extends Serializer> sc =
         getMetaSharedDeserializerClassFromGraalvmRegistry(cls, typeDef);
     if (sc == null) {
-      if (AndroidSupport.IS_ANDROID) {
+      if (GraalvmSupport.isGraalBuildTime() && config.isCodeGenEnabled()) {
+        sc = loadGraalvmMetaSharedDeserializerClass(cls, typeDef);
+      } else if (AndroidSupport.IS_ANDROID || !config.isCodeGenEnabled()) {
+        sc = getStaticGeneratedStructSerializerClass(cls);
+      }
+      if (sc == null && AndroidSupport.IS_ANDROID) {
         sc = MetaSharedSerializer.class;
-      } else if (GraalvmSupport.isGraalRuntime()) {
+      } else if (sc == null && GraalvmSupport.isGraalRuntime()) {
         sc = MetaSharedSerializer.class;
         LOG.warn(
             "Can't generate class at runtime in graalvm for class def {}, use {} instead",
             typeDef,
             sc);
-      } else {
+      } else if (sc == null && config.isCodeGenEnabled()) {
         sc =
             jitContext.registerSerializerJITCallback(
                 () -> MetaSharedSerializer.class,
                 () -> CodecUtils.loadOrGenMetaSharedCodecClass(this, cls, typeDef),
                 c -> typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, c)));
+      } else if (sc == null) {
+        sc = MetaSharedSerializer.class;
       }
     }
     if (GraalvmSupport.isGraalBuildTime()
-        && GeneratedMetaSharedSerializer.class.isAssignableFrom(sc)) {
+        && (GeneratedMetaSharedSerializer.class.isAssignableFrom(sc)
+            || GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(sc))) {
       getGraalvmClassRegistry().putIfAbsentDeserializerClass(typeDef.getId(), sc);
       typeInfo.setSerializer(this, new MetaSharedSerializer(this, cls, typeDef));
       return typeInfo;
     }
-    if (sc == MetaSharedSerializer.class) {
+    if (StaticGeneratedStructSerializer.class.isAssignableFrom(sc)) {
+      typeInfo.setSerializer(this, newStaticGeneratedStructSerializer(sc, cls, typeDef));
+    } else if (sc == MetaSharedSerializer.class) {
       typeInfo.setSerializer(this, new MetaSharedSerializer(this, cls, typeDef));
     } else {
       typeInfo.setSerializer(this, Serializers.newSerializer(this, cls, sc));
     }
     return typeInfo;
+  }
+
+  private Class<? extends Serializer> loadGraalvmMetaSharedDeserializerClass(
+      Class<?> cls, TypeDef typeDef) {
+    if (typeDef.getId() == TypeDef.buildTypeDef(this, cls).getId()) {
+      return CodecUtils.loadOrGenMetaSharedCodecClass(this, cls, typeDef);
+    }
+    return CodecUtils.loadOrGenCompatibleMetaSharedCodecClass(this, cls, typeDef);
   }
 
   protected int buildUnregisteredTypeId(Class<?> cls, Serializer<?> serializer) {
@@ -1084,7 +1105,8 @@ public abstract class TypeResolver {
         || serializer instanceof GeneratedMetaSharedSerializer
         || serializer instanceof LazyInitBeanSerializer
         || serializer instanceof ObjectSerializer
-        || serializer instanceof MetaSharedSerializer;
+        || serializer instanceof MetaSharedSerializer
+        || serializer instanceof StaticGeneratedStructSerializer;
   }
 
   protected static boolean isStructSerializerClass(Class<? extends Serializer> serializerClass) {
@@ -1092,7 +1114,8 @@ public abstract class TypeResolver {
         || GeneratedMetaSharedSerializer.class.isAssignableFrom(serializerClass)
         || LazyInitBeanSerializer.class.isAssignableFrom(serializerClass)
         || ObjectSerializer.class.isAssignableFrom(serializerClass)
-        || MetaSharedSerializer.class.isAssignableFrom(serializerClass);
+        || MetaSharedSerializer.class.isAssignableFrom(serializerClass)
+        || StaticGeneratedStructSerializer.class.isAssignableFrom(serializerClass);
   }
 
   protected TypeDef readTypeDef(MemoryBuffer buffer, long header) {
@@ -1311,8 +1334,8 @@ public abstract class TypeResolver {
         }
       }
     } else {
-      // Always use ObjectSerializer for both modes
-      return ObjectSerializer.class;
+      Class<? extends Serializer> serializerClass = getStaticGeneratedStructSerializerClass(cls);
+      return serializerClass == null ? ObjectSerializer.class : serializerClass;
     }
   }
 
@@ -1427,19 +1450,34 @@ public abstract class TypeResolver {
   }
 
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
+    List<Descriptor> staticDescriptors = getStaticGeneratedStructDescriptors(clz);
+    if (staticDescriptors != null) {
+      return buildFieldDescriptors(clz, searchParent, staticDescriptors);
+    }
     SortedMap<Member, Descriptor> allDescriptors = getAllDescriptorsMap(clz, searchParent);
     List<Descriptor> result = new ArrayList<>(allDescriptors.size());
 
+    List<Descriptor> descriptors = new ArrayList<>(allDescriptors.size());
+    for (Map.Entry<Member, Descriptor> entry : allDescriptors.entrySet()) {
+      Member member = entry.getKey();
+      if (member instanceof Field) {
+        descriptors.add(entry.getValue());
+      }
+    }
+    return buildFieldDescriptors(clz, searchParent, descriptors);
+  }
+
+  private List<Descriptor> buildFieldDescriptors(
+      Class<?> clz, boolean searchParent, List<Descriptor> descriptors) {
+    List<Descriptor> result = new ArrayList<>(descriptors.size());
     boolean globalRefTracking = trackingRef();
     boolean isXlang = isCrossLanguage();
 
-    for (Map.Entry<Member, Descriptor> entry : allDescriptors.entrySet()) {
-      Member member = entry.getKey();
-      Descriptor descriptor = entry.getValue();
-      if (!(member instanceof Field)) {
+    for (Descriptor descriptor : descriptors) {
+      if (!searchParent && !descriptor.getDeclaringClass().equals(clz.getName())) {
         continue;
       }
-      boolean hasForyField = descriptor.getForyField() != null;
+      boolean hasForyField = descriptor.hasForyFieldPolicy();
       // Compute the final isTrackingRef value:
       // For xlang mode: "Reference tracking is disabled by default" (xlang spec)
       //   - Only enable ref tracking if explicitly set via @ForyField(ref=true)
@@ -1474,6 +1512,84 @@ public abstract class TypeResolver {
     return result;
   }
 
+  protected final Class<? extends Serializer> getStaticGeneratedStructSerializerClass(
+      Class<?> cls) {
+    if (GraalvmSupport.isGraalBuildTime() || GraalvmSupport.isGraalRuntime()) {
+      return null;
+    }
+    if (!cls.isAnnotationPresent(ForyStruct.class)) {
+      return null;
+    }
+    String generatedName = cls.getName() + "__ForyStaticSerializer__";
+    Class<?> serializerClass = loadStaticGeneratedStructSerializerClass(cls, generatedName);
+    if (serializerClass == null) {
+      return null;
+    }
+    if (!StaticGeneratedStructSerializer.class.isAssignableFrom(serializerClass)) {
+      throw new ForyException(
+          "Generated static serializer "
+              + generatedName
+              + " for "
+              + cls.getName()
+              + " does not extend "
+              + StaticGeneratedStructSerializer.class.getName());
+    }
+    return (Class<? extends Serializer>) serializerClass.asSubclass(Serializer.class);
+  }
+
+  private Class<?> loadStaticGeneratedStructSerializerClass(Class<?> cls, String generatedName) {
+    ClassLoader classLoader = cls.getClassLoader();
+    Class<?> serializerClass = loadStaticGeneratedStructSerializerClass(generatedName, classLoader);
+    if (serializerClass != null || classLoader == extRegistry.classLoader) {
+      return serializerClass;
+    }
+    return loadStaticGeneratedStructSerializerClass(generatedName, extRegistry.classLoader);
+  }
+
+  private Class<?> loadStaticGeneratedStructSerializerClass(
+      String generatedName, ClassLoader classLoader) {
+    try {
+      return Class.forName(generatedName, false, classLoader);
+    } catch (ClassNotFoundException e) {
+      return null;
+    } catch (LinkageError e) {
+      throw new ForyException("Failed to load generated static serializer " + generatedName, e);
+    }
+  }
+
+  protected final StaticGeneratedStructSerializer<?> newStaticGeneratedStructSerializer(
+      Class<? extends Serializer> serializerClass, Class<?> cls, TypeDef typeDef) {
+    try {
+      Constructor<? extends Serializer> constructor =
+          serializerClass.getDeclaredConstructor(TypeResolver.class, Class.class, TypeDef.class);
+      constructor.setAccessible(true);
+      return (StaticGeneratedStructSerializer<?>) constructor.newInstance(this, cls, typeDef);
+    } catch (NoSuchMethodException e) {
+      throw new ForyException(
+          "Generated static serializer "
+              + serializerClass.getName()
+              + " must define constructor (TypeResolver, Class, TypeDef)",
+          e);
+    } catch (ReflectiveOperationException e) {
+      throw new ForyException(
+          "Failed to create generated static serializer "
+              + serializerClass.getName()
+              + " for "
+              + cls.getName(),
+          e);
+    }
+  }
+
+  private List<Descriptor> getStaticGeneratedStructDescriptors(Class<?> cls) {
+    Class<? extends Serializer> serializerClass = getStaticGeneratedStructSerializerClass(cls);
+    if (serializerClass == null) {
+      return null;
+    }
+    StaticGeneratedStructSerializer<?> serializer =
+        (StaticGeneratedStructSerializer<?>) Serializers.newSerializer(this, cls, serializerClass);
+    return serializer.getDescriptors();
+  }
+
   /**
    * Gets the sort key for a field descriptor.
    *
@@ -1485,9 +1601,8 @@ public abstract class TypeResolver {
    * @return the sort key (tag ID as string or snake_case name)
    */
   protected static String getFieldSortKey(Descriptor descriptor) {
-    ForyField foryField = descriptor.getForyField();
-    if (foryField != null && foryField.id() >= 0) {
-      return String.valueOf(foryField.id());
+    if (descriptor.hasForyFieldId()) {
+      return String.valueOf(descriptor.getForyFieldId());
     }
     String name = descriptor.getName();
     if (name != null && name.startsWith("$tag")) {
@@ -1525,9 +1640,8 @@ public abstract class TypeResolver {
   }
 
   private static Integer getFieldSortId(Descriptor descriptor) {
-    ForyField foryField = descriptor.getForyField();
-    if (foryField != null && foryField.id() >= 0) {
-      return foryField.id();
+    if (descriptor.hasForyFieldId()) {
+      return descriptor.getForyFieldId();
     }
     String name = descriptor.getName();
     if (name != null && name.startsWith("$tag")) {
@@ -1621,10 +1735,9 @@ public abstract class TypeResolver {
     if (isCrossLanguage()) {
       // For xlang mode: apply xlang defaults
       // This must match what TypeDefEncoder.buildFieldType uses for TypeDef metadata
-      ForyField foryField = descriptor.getForyField();
-      if (foryField != null) {
+      if (descriptor.hasForyFieldPolicy()) {
         // Use explicit annotation value
-        return foryField.nullable();
+        return descriptor.isNullable();
       }
       // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);

@@ -152,6 +152,10 @@ public class FieldGroups {
     return new FieldGroups(allBuildIn, containerFields, otherFields);
   }
 
+  static SerializationFieldInfo buildFieldInfo(TypeResolver typeResolver, Descriptor descriptor) {
+    return new SerializationFieldInfo(typeResolver, descriptor);
+  }
+
   public static final class SerializationFieldInfo {
     public final Descriptor descriptor;
     public final Class<?> type;

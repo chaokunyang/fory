@@ -71,6 +71,14 @@ warning. Explicit `withCodegen(false)` and platform-default disabled codegen do 
 Android runtime codegen entry points must fail before Janino, class definition, generated accessor
 definition, or generated serializer loading starts.
 
+`@ForyStruct` build-time static serializers are allowed on Android because they are compiled by
+javac before the app is built. Android loads them by deterministic generated class name when present,
+including compatible-mode reads. This lookup is not gated on an Android-only public API, does not
+enable Janino or runtime class definition, and uses the same wire protocol as ordinary JVM Fory.
+For reflection metadata, Fory checks whether the runtime actually exposes `Field#getAnnotatedType()`
+before using type-use annotations; older Android runtimes that do not expose it must use generated
+static descriptors for nested type-use metadata.
+
 ## ByteBuffer
 
 On Android, `BaseFory#deserialize(ByteBuffer)` copies the remaining input bytes into a Fory-owned

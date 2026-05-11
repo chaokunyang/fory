@@ -297,6 +297,32 @@ public class TypeAnnotationUtils {
     return true;
   }
 
+  public static boolean isBoxedListArrayType(Descriptor descriptor) {
+    Field field = descriptor.getField();
+    if (field != null) {
+      return isBoxedListArrayType(field);
+    }
+    if (!descriptor.isArrayType()) {
+      return false;
+    }
+    Class<?> rawType = descriptor.getRawType();
+    if (TypeUtils.isPrimitiveListClass(rawType)) {
+      return false;
+    }
+    if (!List.class.isAssignableFrom(rawType)) {
+      if (Collection.class.isAssignableFrom(rawType)) {
+        throw new IllegalArgumentException(
+            "@ArrayType can only be applied to Fory primitive-list carriers or ordered "
+                + "java.util.List<T> fields, but got "
+                + rawType.getName());
+      }
+      throw new IllegalArgumentException(
+          "@ArrayType can only be applied to Fory primitive-list carriers or ordered "
+              + "java.util.List<T> fields; primitive arrays already use array<T> schema");
+    }
+    return true;
+  }
+
   public static int getBoxedListArrayTypeId(Field field) {
     validateBoxedListArrayType(field);
     TypeRef<?> elementTypeRef = TypeUtils.getElementType(TypeUtils.getFieldTypeRef(field));
@@ -305,6 +331,25 @@ public class TypeAnnotationUtils {
       throw new IllegalArgumentException(
           "@ArrayType List<T> field "
               + field
+              + " must use a bool, numeric, float16, or bfloat16 element type");
+    }
+    return typeId;
+  }
+
+  public static int getBoxedListArrayTypeId(Descriptor descriptor) {
+    Field field = descriptor.getField();
+    if (field != null) {
+      return getBoxedListArrayTypeId(field);
+    }
+    if (!isBoxedListArrayType(descriptor)) {
+      return Types.UNKNOWN;
+    }
+    TypeRef<?> elementTypeRef = TypeUtils.getElementType(descriptor.getTypeRef());
+    int typeId = getArrayTypeIdFromElementType(elementTypeRef);
+    if (typeId == Types.UNKNOWN) {
+      throw new IllegalArgumentException(
+          "@ArrayType List<T> field "
+              + descriptor.getName()
               + " must use a bool, numeric, float16, or bfloat16 element type");
     }
     return typeId;
@@ -503,6 +548,9 @@ public class TypeAnnotationUtils {
   }
 
   public static boolean isArrayType(Descriptor descriptor) {
+    if (descriptor.isArrayType()) {
+      return true;
+    }
     if (descriptor.getField() != null
         && descriptor.getField().isAnnotationPresent(ArrayType.class)) {
       return true;

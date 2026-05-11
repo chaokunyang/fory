@@ -37,6 +37,8 @@ public class DescriptorBuilder {
   Method readMethod;
   Method writeMethod;
   ForyField foryField;
+  ForyFieldPolicy foryFieldPolicy;
+  boolean arrayType;
   boolean nullable;
   boolean trackingRef;
   FieldConverter fieldConverter;
@@ -52,6 +54,8 @@ public class DescriptorBuilder {
     this.readMethod = descriptor.getReadMethod();
     this.writeMethod = descriptor.getWriteMethod();
     this.foryField = descriptor.getForyField();
+    this.foryFieldPolicy = descriptor.getForyFieldPolicy();
+    this.arrayType = descriptor.isArrayType();
     this.nullable = descriptor.isNullable();
     this.trackingRef = descriptor.isTrackingRef();
     this.fieldConverter = descriptor.getFieldConverter();
@@ -114,6 +118,17 @@ public class DescriptorBuilder {
 
   public DescriptorBuilder foryField(ForyField foryField) {
     this.foryField = foryField;
+    this.foryFieldPolicy = ForyFieldPolicy.from(foryField);
+    return this;
+  }
+
+  public DescriptorBuilder foryFieldPolicy(ForyFieldPolicy foryFieldPolicy) {
+    this.foryFieldPolicy = foryFieldPolicy;
+    return this;
+  }
+
+  public DescriptorBuilder arrayType(boolean arrayType) {
+    this.arrayType = arrayType;
     return this;
   }
 

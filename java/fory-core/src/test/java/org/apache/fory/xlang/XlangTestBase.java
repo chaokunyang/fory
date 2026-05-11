@@ -1259,6 +1259,8 @@ public abstract class XlangTestBase extends ForyTestBase {
   static class MyStruct {
     int id;
 
+    public MyStruct() {}
+
     public MyStruct(int id) {
       this.id = id;
     }

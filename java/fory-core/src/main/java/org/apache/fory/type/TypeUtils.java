@@ -83,7 +83,6 @@ import org.apache.fory.collection.UInt32List;
 import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
 import org.apache.fory.meta.TypeExtMeta;
-import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeParameter;
 import org.apache.fory.reflect.TypeRef;
@@ -98,6 +97,7 @@ public class TypeUtils {
   private static final String SQL_DATE_CLASS_NAME = "java.sql.Date";
   private static final String SQL_TIME_CLASS_NAME = "java.sql.Time";
   private static final String SQL_TIMESTAMP_CLASS_NAME = "java.sql.Timestamp";
+  private static final boolean FIELD_ANNOTATED_TYPE_SUPPORTED = isFieldAnnotatedTypeSupported();
 
   public static final String JAVA_BOOLEAN = "boolean";
   public static final String JAVA_BYTE = "byte";
@@ -542,7 +542,7 @@ public class TypeUtils {
 
   /** Returns element type of iterable. */
   public static TypeRef<?> getElementType(TypeRef<?> typeRef) {
-    if (typeRef.hasTypeExtMeta() && typeRef.hasExplicitTypeArguments()) {
+    if (typeRef.hasExplicitTypeArguments()) {
       List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
       if (typeArguments.size() == 1) {
         Class<?> rawType = getRawType(typeRef);
@@ -631,17 +631,26 @@ public class TypeUtils {
   }
 
   public static TypeRef<?> getFieldTypeRef(Field field) {
-    if (AndroidSupport.IS_ANDROID) {
-      return TypeRef.of(field.getGenericType());
+    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
+      return TypeRef.of(field.getAnnotatedType());
     }
-    return TypeRef.of(field.getAnnotatedType());
+    return TypeRef.of(field.getGenericType());
   }
 
   public static AnnotatedType getFieldAnnotatedType(Field field) {
-    if (AndroidSupport.IS_ANDROID) {
-      return null;
+    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
+      return field.getAnnotatedType();
     }
-    return field.getAnnotatedType();
+    return null;
+  }
+
+  private static boolean isFieldAnnotatedTypeSupported() {
+    try {
+      Field.class.getMethod("getAnnotatedType");
+      return true;
+    } catch (NoSuchMethodException | LinkageError e) {
+      return false;
+    }
   }
 
   public static void applyFieldRefTrackingOverride(

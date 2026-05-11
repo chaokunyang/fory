@@ -44,6 +44,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.fory.annotation.ArrayType;
 import org.apache.fory.annotation.BFloat16Type;
 import org.apache.fory.annotation.Expose;
 import org.apache.fory.annotation.Float16Type;
@@ -101,7 +102,9 @@ public class Descriptor {
   private final Method readMethod;
   private final Method writeMethod;
   private final ForyField foryField;
+  private final ForyFieldPolicy foryFieldPolicy;
   private final Annotation typeAnnotation;
+  private final boolean arrayType;
   private boolean nullable;
   // trackingRef should only be true if explicitly set to true via @ForyField(ref=true)
   // If no annotation or ref not specified, trackingRef stays false and type-based tracking applies
@@ -121,11 +124,13 @@ public class Descriptor {
     this.writeMethod = writeMethod;
     this.typeRef = typeRef;
     this.foryField = this.field.getAnnotation(ForyField.class);
+    this.foryFieldPolicy = ForyFieldPolicy.from(foryField);
     typeAnnotation = getAnnotation(field);
+    arrayType = field.isAnnotationPresent(ArrayType.class);
     if (!typeRef.isPrimitive()) {
-      this.nullable = foryField == null || foryField.nullable();
+      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
     }
-    this.trackingRef = foryField != null && foryField.ref();
+    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
   }
 
   public Descriptor(
@@ -145,9 +150,49 @@ public class Descriptor {
     this.readMethod = null;
     this.writeMethod = null;
     this.foryField = null;
+    this.foryFieldPolicy = null;
     typeAnnotation = null;
+    arrayType = false;
     this.nullable = nullable;
     this.trackingRef = trackingRef;
+  }
+
+  public Descriptor(
+      TypeRef<?> typeRef,
+      String typeName,
+      String name,
+      int modifier,
+      String declaringClass,
+      ForyFieldPolicy foryFieldPolicy) {
+    this(typeRef, typeName, name, modifier, declaringClass, foryFieldPolicy, false);
+  }
+
+  public Descriptor(
+      TypeRef<?> typeRef,
+      String typeName,
+      String name,
+      int modifier,
+      String declaringClass,
+      ForyFieldPolicy foryFieldPolicy,
+      boolean arrayType) {
+    this.field = null;
+    this.typeName = typeName;
+    this.name = name;
+    this.modifier = modifier;
+    this.declaringClass = declaringClass;
+    this.typeRef = typeRef;
+    this.readMethod = null;
+    this.writeMethod = null;
+    this.foryField = null;
+    this.foryFieldPolicy = foryFieldPolicy;
+    typeAnnotation = null;
+    this.arrayType = arrayType;
+    if (typeRef.isPrimitive()) {
+      this.nullable = false;
+    } else {
+      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
+    }
+    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
   }
 
   private Descriptor(Field field, Method readMethod) {
@@ -163,11 +208,13 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = this.field.getAnnotation(ForyField.class);
+    this.foryFieldPolicy = ForyFieldPolicy.from(foryField);
     typeAnnotation = getAnnotation(field);
+    arrayType = field.isAnnotationPresent(ArrayType.class);
     if (!field.getType().isPrimitive()) {
-      this.nullable = foryField == null || foryField.nullable();
+      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
     }
-    this.trackingRef = foryField != null && foryField.ref();
+    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
   }
 
   private Descriptor(Method readMethod) {
@@ -182,12 +229,14 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = readMethod.getAnnotation(ForyField.class);
+    this.foryFieldPolicy = ForyFieldPolicy.from(foryField);
     typeAnnotation =
         getTypeUseAnnotation(readMethod.getAnnotatedReturnType(), readMethod.getName());
+    arrayType = readMethod.isAnnotationPresent(ArrayType.class);
     if (!readMethod.getReturnType().isPrimitive()) {
-      this.nullable = foryField == null || foryField.nullable();
+      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
     }
-    this.trackingRef = foryField != null && foryField.ref();
+    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
   }
 
   public Descriptor(DescriptorBuilder builder) {
@@ -201,7 +250,13 @@ public class Descriptor {
     this.writeMethod = builder.writeMethod;
     this.trackingRef = builder.trackingRef;
     this.foryField = this.field == null ? null : this.field.getAnnotation(ForyField.class);
+    this.foryFieldPolicy =
+        builder.foryFieldPolicy != null ? builder.foryFieldPolicy : ForyFieldPolicy.from(foryField);
     typeAnnotation = field == null ? null : getAnnotation(field);
+    arrayType =
+        builder.arrayType
+            || (field != null && field.isAnnotationPresent(ArrayType.class))
+            || (readMethod != null && readMethod.isAnnotationPresent(ArrayType.class));
     // Use builder.nullable directly - this is set by DescriptorBuilder.nullable()
     // and should be respected, especially for xlang compatible mode where remote
     // TypeDef's nullable flag may differ from local field's nullable
@@ -281,20 +336,40 @@ public class Descriptor {
     return foryField;
   }
 
+  public ForyFieldPolicy getForyFieldPolicy() {
+    return foryFieldPolicy;
+  }
+
+  public boolean hasForyFieldPolicy() {
+    return foryFieldPolicy != null;
+  }
+
+  public boolean hasForyFieldId() {
+    return foryFieldPolicy != null && foryFieldPolicy.id() >= 0;
+  }
+
+  public int getForyFieldId() {
+    return foryFieldPolicy == null ? -1 : foryFieldPolicy.id();
+  }
+
   /**
    * Returns the morphic setting for this field.
    *
    * @return the morphic setting from @ForyField annotation, or AUTO if not specified
    */
   public ForyField.Dynamic getMorphic() {
-    if (foryField != null) {
-      return foryField.dynamic();
+    if (foryFieldPolicy != null) {
+      return foryFieldPolicy.dynamic();
     }
     return ForyField.Dynamic.AUTO;
   }
 
   public Annotation getTypeAnnotation() {
     return typeAnnotation;
+  }
+
+  public boolean isArrayType() {
+    return arrayType;
   }
 
   /** Try not use {@link TypeRef#getRawType()} since it's expensive. */

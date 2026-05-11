@@ -21,7 +21,9 @@ package org.apache.fory.collection;
 
 import java.lang.ref.SoftReference;
 import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
@@ -72,7 +74,7 @@ public class ClassValueCache<T> {
     if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ClassValueCache<>(new MapStore(concurrencyLevel));
     } else {
-      return new ClassValueCache<>(new JvmClassValueStore(false));
+      return new ClassValueCache<>(new ClassValueStore(false));
     }
   }
 
@@ -89,7 +91,7 @@ public class ClassValueCache<T> {
     if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ClassValueCache<>(new MapStore(concurrencyLevel));
     } else {
-      return new ClassValueCache<>(new JvmClassValueStore(true));
+      return new ClassValueCache<>(new ClassValueStore(true));
     }
   }
 
@@ -102,22 +104,30 @@ public class ClassValueCache<T> {
   }
 
   private static final class MapStore implements Store {
-    private final Cache<Class<?>, Object> cache;
+    private final ConcurrentMap<Class<?>, Object> cache;
 
     private MapStore(int concurrencyLevel) {
-      cache = CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build();
+      cache = new ConcurrentHashMap<>(concurrencyLevel);
     }
 
     @Override
     public Object getIfPresent(Class<?> key) {
-      return cache.getIfPresent(key);
+      return cache.get(key);
     }
 
     @Override
     public Object get(Class<?> key, Callable<Object> loader) {
       try {
-        return cache.get(key, loader);
-      } catch (ExecutionException e) {
+        Object value = cache.get(key);
+        if (value != null) {
+          return value;
+        }
+        value = loader.call();
+        Object racedValue = cache.putIfAbsent(key, value);
+        return racedValue == null ? value : racedValue;
+      } catch (RuntimeException e) {
+        throw e;
+      } catch (Exception e) {
         throw new RuntimeException(e);
       }
     }
@@ -128,64 +138,62 @@ public class ClassValueCache<T> {
     }
   }
 
-  private static final class JvmClassValueStore implements Store {
+  private static final class ClassValueStore implements Store {
     private final boolean softValues;
-    private final ClassValue<Holder> classValue =
-        new ClassValue<Holder>() {
+    // ClassValue has no explicit put API, so each class maps to a mutable cell while class
+    // unloading still follows ClassValue reachability.
+    private final ClassValue<AtomicReference<Object>> classValue =
+        new ClassValue<AtomicReference<Object>>() {
           @Override
-          protected Holder computeValue(Class<?> type) {
-            return new Holder(softValues);
+          protected AtomicReference<Object> computeValue(Class<?> type) {
+            return new AtomicReference<>();
           }
         };
 
-    private JvmClassValueStore(boolean softValues) {
+    private ClassValueStore(boolean softValues) {
       this.softValues = softValues;
     }
 
     @Override
     public Object getIfPresent(Class<?> key) {
-      return classValue.get(key).get();
+      return unwrap(classValue.get(key).get());
     }
 
     @Override
     public Object get(Class<?> key, Callable<Object> loader) throws Exception {
-      return classValue.get(key).get(loader);
+      AtomicReference<Object> ref = classValue.get(key);
+      Object current = unwrap(ref.get());
+      if (current != null) {
+        return current;
+      }
+      synchronized (ref) {
+        current = unwrap(ref.get());
+        if (current != null) {
+          return current;
+        }
+        current = loader.call();
+        ref.set(wrap(current));
+        return current;
+      }
     }
 
     @Override
     public void put(Class<?> key, Object value) {
-      classValue.get(key).put(value);
-    }
-  }
-
-  private static final class Holder {
-    private final boolean softValue;
-    private volatile Object value;
-
-    private Holder(boolean softValue) {
-      this.softValue = softValue;
+      classValue.get(key).set(wrap(value));
     }
 
-    private Object get() {
-      Object current = value;
-      if (softValue && current instanceof SoftReference) {
-        return ((SoftReference<?>) current).get();
+    private Object wrap(Object value) {
+      if (softValues) {
+        return new SoftReference<>(value);
       }
-      return current;
+      return value;
     }
 
-    private synchronized Object get(Callable<Object> loader) throws Exception {
-      Object current = get();
-      if (current != null) {
-        return current;
+    private Object unwrap(Object value) {
+      if (softValues && value instanceof SoftReference) {
+        return ((SoftReference<?>) value).get();
       }
-      current = loader.call();
-      put(current);
-      return current;
-    }
-
-    private void put(Object value) {
-      this.value = softValue ? new SoftReference<>(value) : value;
+      return value;
     }
   }
 

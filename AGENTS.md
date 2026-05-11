@@ -30,7 +30,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Reject semantic hacks. Do not bypass broken semantics by deleting cases, simplifying callers, adding coercion hooks, or using workaround fallbacks; fix the underlying bug and prove it with focused tests.
 - Protect hot paths. Avoid per-call allocations, callback objects, result tuples or records, unnecessary runtime branches, and wrapper-class substitutions in hot codec/runtime paths; prefer conditional imports and allocation-free concrete implementations where they fit the language.
 - Keep public APIs minimal. Public APIs must match user ownership and mental model, not internal implementation details; generated flows stay type-owned, while manual serializer registration stays explicit.
-- Use semantic naming only. Name things after protocol or domain concepts, not history, runtime origin, or workaround style; avoid vague names such as `Internal`, `java_style_*`, `Runtime`, `Session`, `Plan`, or `Binding` when they do not name the real concept.
+- Use semantic naming only. Name things after protocol or domain concepts, not history, runtime origin, or workaround style; avoid vague names such as `Internal`, `java_style_*`, `Runtime`, `Session`, `Plan`, or `Binding` when they do not name the real concept. Never name a class or method with a `Plan` suffix; use the real domain concept instead.
 - Keep one implementation path. Do not keep parallel helpers, serializers, harnesses, wrappers, or registration flows for the same concept; extend the existing owner path instead of inventing another one.
 - Follow current scope exactly. The latest explicit user instruction overrides earlier plans, and when scope narrows, remove leaked out-of-scope edits immediately.
 - Preserve user corrections. When a user corrects code behavior, ownership, invariants, or review feedback in a way that should prevent repeat mistakes, encode the corrected rule where future agents will see it: prefer the nearest source comment for non-obvious code invariants, or the owning docs/spec for user-visible or protocol behavior. If the correction changes API usage, defaults, generated output, tests, or cross-runtime behavior, update the matching docs, examples, or source comments in the same task so future agents do not repeat the violation. Keep the note concise, English-only, and avoid comments that merely restate obvious code.
@@ -61,7 +61,7 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Do not replace existing C, C++, Cython, unsafe, or other low-level optimized paths with simpler high-level implementations just to make a refactor easier.
 - If a refactor accidentally changes logic or implementation strategy, revert that part and re-implement the refactor around the existing logic.
 - Use English only in code, comments, and documentation.
-- After editing any Markdown file, run `prettier --write <file>` on each changed Markdown file before finishing.
+- After editing Markdown files outside `tasks/`, run `prettier --write <file>` on each changed Markdown file before finishing. Do not format Markdown under `tasks/`.
 - Add comments only when behavior is hard to understand or an algorithm is non-obvious.
 - Do not remove existing code comments unless they are stale, misleading, redundant, or no longer necessary after the change.
 - Only add tests that verify internal behaviors or fix specific bugs; do not create unnecessary tests unless requested.

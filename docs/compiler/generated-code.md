@@ -154,6 +154,18 @@ public class Person {
 }
 ```
 
+When a message or inherited schema option sets `evolving=false`, the Java generator emits
+`@ForyStruct(evolving = Evolution.DISABLED)` and imports `ForyStruct.Evolution` so the generated
+class uses fixed-schema struct encoding:
+
+```java
+import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.ForyStruct.Evolution;
+
+@ForyStruct(evolving = Evolution.DISABLED)
+public class StableMessage { ... }
+```
+
 Unions generate classes extending `org.apache.fory.type.union.Union`:
 
 ```java

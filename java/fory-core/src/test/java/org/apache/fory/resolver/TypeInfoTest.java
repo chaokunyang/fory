@@ -25,6 +25,7 @@ import static org.testng.Assert.assertTrue;
 
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.ForyStruct.Evolution;
 import org.apache.fory.type.Types;
 import org.testng.annotations.Test;
 
@@ -33,7 +34,12 @@ public class TypeInfoTest {
     public int id;
   }
 
-  @ForyStruct(evolving = false)
+  @ForyStruct(evolving = Evolution.ENABLED)
+  public static class ExplicitEvolvingStruct {
+    public int id;
+  }
+
+  @ForyStruct(evolving = Evolution.DISABLED)
   public static class FixedStruct {
     public int id;
   }
@@ -50,13 +56,18 @@ public class TypeInfoTest {
   public void testStructEvolvingOverride() {
     Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
     fory.register(EvolvingStruct.class, "test", "EvolvingStruct");
+    fory.register(ExplicitEvolvingStruct.class, "test", "ExplicitEvolvingStruct");
     fory.register(FixedStruct.class, "test", "FixedStruct");
 
     TypeInfo evolvingInfo = fory.getTypeResolver().getTypeInfo(EvolvingStruct.class, false);
+    TypeInfo explicitEvolvingInfo =
+        fory.getTypeResolver().getTypeInfo(ExplicitEvolvingStruct.class, false);
     TypeInfo fixedInfo = fory.getTypeResolver().getTypeInfo(FixedStruct.class, false);
     assertNotNull(evolvingInfo);
+    assertNotNull(explicitEvolvingInfo);
     assertNotNull(fixedInfo);
     assertEquals(evolvingInfo.getTypeId(), Types.NAMED_COMPATIBLE_STRUCT);
+    assertEquals(explicitEvolvingInfo.getTypeId(), Types.NAMED_COMPATIBLE_STRUCT);
     assertEquals(fixedInfo.getTypeId(), Types.NAMED_STRUCT);
 
     EvolvingStruct evolving = new EvolvingStruct();
@@ -70,5 +81,30 @@ public class TypeInfoTest {
     assertTrue(fixedPayload.length < evolvingPayload.length);
     assertEquals(fory.deserialize(evolvingPayload, EvolvingStruct.class).id, evolving.id);
     assertEquals(fory.deserialize(fixedPayload, FixedStruct.class).id, fixed.id);
+  }
+
+  @Test
+  public void testStructEvolvingOverrideForRegisteredClasses() {
+    Fory fory = Fory.builder().withXlang(false).withCompatible(true).build();
+    fory.register(EvolvingStruct.class, 100);
+    fory.register(ExplicitEvolvingStruct.class, 101);
+    fory.register(FixedStruct.class, 102);
+
+    assertEquals(
+        fory.getTypeResolver().getTypeInfo(EvolvingStruct.class, false).getTypeId(),
+        Types.COMPATIBLE_STRUCT);
+    assertEquals(
+        fory.getTypeResolver().getTypeInfo(ExplicitEvolvingStruct.class, false).getTypeId(),
+        Types.COMPATIBLE_STRUCT);
+    assertEquals(
+        fory.getTypeResolver().getTypeInfo(FixedStruct.class, false).getTypeId(), Types.STRUCT);
+  }
+
+  @Test(
+      expectedExceptions = IllegalStateException.class,
+      expectedExceptionsMessageRegExp = ".*schema evolution metadata.*")
+  public void testStructEvolutionEnabledRequiresMetadata() {
+    Fory fory = Fory.builder().withXlang(false).withCompatible(false).build();
+    fory.register(ExplicitEvolvingStruct.class, "test", "ExplicitEvolvingStruct");
   }
 }

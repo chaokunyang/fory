@@ -436,7 +436,7 @@ class JavaGenerator(BaseGenerator):
         if comment:
             lines.append(comment)
         if not self.get_effective_evolving(message):
-            lines.append("@ForyStruct(evolving = false)")
+            lines.append("@ForyStruct(evolving = Evolution.DISABLED)")
         lines.append(f"public class {message.name} {{")
 
         # Generate nested enums as static inner classes
@@ -590,6 +590,7 @@ class JavaGenerator(BaseGenerator):
 
         if not self.get_effective_evolving(message):
             imports.add("org.apache.fory.annotation.ForyStruct")
+            imports.add("org.apache.fory.annotation.ForyStruct.Evolution")
 
         # Add imports for equals/hashCode
         imports.add("java.util.Objects")
@@ -1042,7 +1043,7 @@ class JavaGenerator(BaseGenerator):
         if comment:
             lines.append(comment)
         if not self.get_effective_evolving(message):
-            lines.append("@ForyStruct(evolving = false)")
+            lines.append("@ForyStruct(evolving = Evolution.DISABLED)")
         lines.append(f"public static class {message.name} {{")
 
         # Generate nested enums

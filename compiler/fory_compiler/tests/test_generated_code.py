@@ -610,6 +610,29 @@ def test_java_unsigned_carriers_and_integer_encoding_annotations():
     )
 
 
+def test_java_evolving_false_generation_uses_struct_evolution_enum():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message Stable [evolving=false] {
+                string name = 1;
+
+                message NestedStable [evolving=false] {
+                    int32 id = 1;
+                }
+            }
+            """
+        )
+    )
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "import org.apache.fory.annotation.ForyStruct;" in java_output
+    assert "import org.apache.fory.annotation.ForyStruct.Evolution;" in java_output
+    assert java_output.count("@ForyStruct(evolving = Evolution.DISABLED)") == 2
+    assert "@ForyStruct(evolving = false)" not in java_output
+
+
 def test_java_nested_integer_annotations_in_generic_containers():
     schema = parse_fdl(
         dedent(

@@ -48,14 +48,21 @@ System.out.println(fory.deserialize(bytes));
 
 This compatible mode involves serializing class metadata into the serialized output. Despite Fory's use of sophisticated compression techniques to minimize overhead, there is still some additional space cost associated with class metadata.
 
-### Disable Evolution for Stable Classes
+### Per-Class Evolution Policy
 
-If a class schema is stable and will not change, you can opt out of schema evolution on a per-class basis to avoid compatible metadata overhead. Annotate the class with `@ForyStruct(evolving = false)` to force `STRUCT/NAMED_STRUCT` type IDs even when Compatible mode is enabled.
+`@ForyStruct` can set a per-class evolution policy:
+
+- `Evolution.INHERIT`: follow the Fory instance's compatible/meta-share configuration. This is the default.
+- `Evolution.ENABLED`: require schema evolution metadata for this class. Registration or type resolution fails if the Fory instance cannot emit that metadata.
+- `Evolution.DISABLED`: force fixed-schema `STRUCT/NAMED_STRUCT` encoding even when compatible metadata is otherwise enabled.
+
+If a class schema is stable and will not change, opt out of schema evolution on that class to avoid compatible metadata overhead:
 
 ```java
 import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.ForyStruct.Evolution;
 
-@ForyStruct(evolving = false)
+@ForyStruct(evolving = Evolution.DISABLED)
 public class StableMessage {
   public int id;
   public String name;

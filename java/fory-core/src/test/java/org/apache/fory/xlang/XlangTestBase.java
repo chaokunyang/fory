@@ -40,6 +40,7 @@ import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.ArrayType;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.ForyStruct.Evolution;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Int8Type;
@@ -195,7 +196,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   }
 
   @Data
-  @ForyStruct(evolving = false)
+  @ForyStruct(evolving = Evolution.DISABLED)
   protected static class FixedOverrideStruct {
     String f1;
   }

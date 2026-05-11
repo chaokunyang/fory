@@ -43,6 +43,7 @@ import java.util.function.Function;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.ForyStruct.Evolution;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
@@ -1091,18 +1092,36 @@ public abstract class TypeResolver {
     if (serializer != null && !isStructSerializer(serializer)) {
       return Types.NAMED_EXT;
     }
-    if (isCompatible() && isStructEvolving(cls)) {
-      return metaContextShareEnabled ? Types.NAMED_COMPATIBLE_STRUCT : Types.NAMED_STRUCT;
+    if (useStructEvolution(cls, isCompatible() && metaContextShareEnabled)) {
+      return Types.NAMED_COMPATIBLE_STRUCT;
     }
     return Types.NAMED_STRUCT;
   }
 
-  protected boolean isStructEvolving(Class<?> cls) {
-    if (cls == null) {
+  protected boolean useStructEvolution(Class<?> cls, boolean inheritedEvolutionEnabled) {
+    Evolution evolution = getStructEvolution(cls);
+    if (evolution == Evolution.DISABLED) {
+      return false;
+    }
+    if (inheritedEvolutionEnabled) {
       return true;
     }
+    if (evolution == Evolution.ENABLED) {
+      throw new IllegalStateException(
+          String.format(
+              "Class %s is annotated with @ForyStruct(evolving = ENABLED), but this Fory "
+                  + "instance is not configured to write schema evolution metadata",
+              cls.getName()));
+    }
+    return false;
+  }
+
+  private Evolution getStructEvolution(Class<?> cls) {
+    if (cls == null) {
+      return Evolution.INHERIT;
+    }
     ForyStruct annotation = cls.getAnnotation(ForyStruct.class);
-    return annotation == null || annotation.evolving();
+    return annotation == null ? Evolution.INHERIT : annotation.evolving();
   }
 
   protected static boolean isStructSerializer(Serializer<?> serializer) {

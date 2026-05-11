@@ -687,7 +687,7 @@ public class ClassResolver extends TypeResolver {
     } else if (serializer != null && !isStructSerializer(serializer)) {
       return Types.EXT;
     } else {
-      return metaContextShareEnabled && isStructEvolving(cls)
+      return useStructEvolution(cls, metaContextShareEnabled)
           ? Types.COMPATIBLE_STRUCT
           : Types.STRUCT;
     }

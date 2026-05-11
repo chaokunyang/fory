@@ -30,12 +30,24 @@ import java.lang.annotation.Target;
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface ForyStruct {
+  enum Evolution {
+    /** Follow Fory global compatible/meta-share options. */
+    INHERIT,
+
+    /** Require schema evolution metadata for this struct. */
+    ENABLED,
+
+    /** Require fixed-schema struct encoding for this struct. */
+    DISABLED
+  }
+
   /**
-   * Whether the annotated type should use schema evolution in compatible mode.
+   * Per-struct schema evolution policy.
    *
-   * <p>When {@code true} (default), compatible mode uses COMPATIBLE_STRUCT/NAMED_COMPATIBLE_STRUCT
-   * to include schema metadata for evolution. When {@code false}, STRUCT/NAMED_STRUCT is used to
-   * avoid that overhead.
+   * <p>{@link Evolution#INHERIT} follows the Fory instance's compatible/meta-share configuration.
+   * {@link Evolution#ENABLED} requires that configuration to emit schema evolution metadata for
+   * this struct. {@link Evolution#DISABLED} uses fixed-schema struct encoding even when compatible
+   * metadata is otherwise enabled.
    */
-  boolean evolving() default true;
+  Evolution evolving() default Evolution.INHERIT;
 }

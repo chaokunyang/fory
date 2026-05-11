@@ -51,6 +51,7 @@ import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
 import org.testng.Assert;
+import org.testng.SkipException;
 import org.testng.annotations.Test;
 
 public class ForyStructProcessorTest {
@@ -258,6 +259,7 @@ public class ForyStructProcessorTest {
 
   @Test
   public void testRecordReadAndCopyUseCanonicalConstructor() throws Exception {
+    assumeRecordSupport();
     CompilationResult result =
         compile(
             "test.RecordStruct",
@@ -467,8 +469,10 @@ public class ForyStructProcessorTest {
     Path root = Files.createTempDirectory("fory-processor-test");
     Path sourceRoot = root.resolve("src");
     Path classRoot = root.resolve("classes");
+    Path generatedRoot = root.resolve("generated");
     Files.createDirectories(sourceRoot);
     Files.createDirectories(classRoot);
+    Files.createDirectories(generatedRoot);
     Path sourceFile = sourceRoot.resolve(typeName.replace('.', '/') + ".java");
     Files.createDirectories(sourceFile.getParent());
     Files.write(sourceFile, source.getBytes(StandardCharsets.UTF_8));
@@ -484,13 +488,31 @@ public class ForyStructProcessorTest {
               "-d",
               classRoot.toString(),
               "-s",
-              root.resolve("generated").toString());
+              generatedRoot.toString());
       JavaCompiler.CompilationTask task =
           compiler.getTask(null, fileManager, diagnostics, options, null, units);
       task.setProcessors(Collections.singletonList(new ForyStructProcessor()));
       return new CompilationResult(
-          classRoot, root.resolve("generated"), task.call(), diagnostics.getDiagnostics());
+          classRoot, generatedRoot, task.call(), diagnostics.getDiagnostics());
     }
+  }
+
+  private static void assumeRecordSupport() {
+    if (javaSpecificationVersion() < 16) {
+      throw new SkipException("Record source tests require JDK 16 or newer");
+    }
+  }
+
+  private static int javaSpecificationVersion() {
+    String version = System.getProperty("java.specification.version");
+    if (version.startsWith("1.")) {
+      version = version.substring(2);
+    }
+    int dotIndex = version.indexOf('.');
+    if (dotIndex >= 0) {
+      version = version.substring(0, dotIndex);
+    }
+    return Integer.parseInt(version);
   }
 
   private static void setField(Class<?> type, Object target, String name, Object value)

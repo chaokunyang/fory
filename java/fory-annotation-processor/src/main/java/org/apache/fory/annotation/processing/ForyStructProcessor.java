@@ -21,7 +21,9 @@ package org.apache.fory.annotation.processing;
 
 import java.io.IOException;
 import java.io.Writer;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -80,6 +82,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
   private Filer filer;
   private Elements elements;
   private javax.lang.model.util.Types types;
+  // JDK 8 javac can omit nested TYPE_USE annotations from TypeMirror, so recover them from
+  // javac's public tree API reflectively while keeping this processor targetable to Java 8.
+  private Object trees;
 
   @Override
   public synchronized void init(ProcessingEnvironment processingEnv) {
@@ -88,6 +93,18 @@ public final class ForyStructProcessor extends AbstractProcessor {
     filer = processingEnv.getFiler();
     elements = processingEnv.getElementUtils();
     types = processingEnv.getTypeUtils();
+    try {
+      ClassLoader javacLoader = processingEnv.getClass().getClassLoader();
+      Class<?> treesClass =
+          Class.forName(
+              "com.sun.source.util.Trees",
+              false,
+              javacLoader == null ? ClassLoader.getSystemClassLoader() : javacLoader);
+      trees =
+          treesClass.getMethod("instance", ProcessingEnvironment.class).invoke(null, processingEnv);
+    } catch (ReflectiveOperationException | IllegalArgumentException e) {
+      trees = null;
+    }
   }
 
   @Override
@@ -241,7 +258,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
               + "; use a record component or mark the field @Ignore/transient",
           field);
     }
-    SourceTypeNode typeNode = buildTypeNode(field.asType());
+    SourceTypeNode typeNode = buildFieldTypeNode(field);
     String erasedType = canonicalName(types.erasure(field.asType()));
     String declaringClass =
         elements.getBinaryName((TypeElement) field.getEnclosingElement()).toString();
@@ -504,8 +521,32 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return value;
   }
 
+  private SourceTypeNode buildFieldTypeNode(VariableElement field) {
+    return buildTypeNode(field.asType(), typeTree(field));
+  }
+
+  private Object typeTree(VariableElement field) {
+    if (trees == null) {
+      return null;
+    }
+    Object path = invoke(trees, "getPath", new Class<?>[] {Element.class}, field);
+    if (path == null) {
+      return null;
+    }
+    Object leaf = invoke(path, "getLeaf");
+    if (!isInstance("com.sun.source.tree.VariableTree", leaf)) {
+      return null;
+    }
+    return invoke(leaf, "getType");
+  }
+
   private SourceTypeNode buildTypeNode(TypeMirror type) {
+    return buildTypeNode(type, null);
+  }
+
+  private SourceTypeNode buildTypeNode(TypeMirror type, Object tree) {
     TypeKind kind = type.getKind();
+    TypeTreeInfo treeInfo = typeTreeInfo(tree);
     if (kind == TypeKind.TYPEVAR) {
       TypeVariable typeVariable = (TypeVariable) type;
       return buildTypeNode(typeVariable.getUpperBound());
@@ -519,18 +560,33 @@ public final class ForyStructProcessor extends AbstractProcessor {
     List<SourceTypeNode> arguments = new ArrayList<>();
     SourceTypeNode componentType = null;
     if (kind == TypeKind.ARRAY) {
-      componentType = buildTypeNode(((ArrayType) type).getComponentType());
+      componentType =
+          buildTypeNode(((ArrayType) type).getComponentType(), treeInfo.arrayComponentTree());
     } else if (type instanceof DeclaredType) {
+      List<?> argumentTrees = treeInfo.typeArgumentTrees();
+      int index = 0;
       for (TypeMirror argument : ((DeclaredType) type).getTypeArguments()) {
-        arguments.add(buildTypeNode(argument));
+        Object argumentTree = index < argumentTrees.size() ? argumentTrees.get(index) : null;
+        arguments.add(buildTypeNode(argument, argumentTree));
+        index++;
       }
     }
     String rawType = canonicalName(types.erasure(type));
-    String extMeta = typeExtMetaExpression(type, rawType);
+    String extMeta = typeExtMetaExpression(type, rawType, treeInfo.annotations);
     boolean primitive = kind.isPrimitive();
     boolean nestedStruct = isForyStructType(type);
     return new SourceTypeNode(
         rawType, typeName(type), extMeta, arguments, componentType, primitive, nestedStruct);
+  }
+
+  private TypeTreeInfo typeTreeInfo(Object tree) {
+    List<?> annotations = Collections.emptyList();
+    Object current = tree;
+    while (isInstance("com.sun.source.tree.AnnotatedTypeTree", current)) {
+      annotations = listValue(invoke(current, "getAnnotations"));
+      current = invoke(current, "getUnderlyingType");
+    }
+    return new TypeTreeInfo(annotations, current);
   }
 
   private boolean isForyStructType(TypeMirror type) {
@@ -539,40 +595,40 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return element instanceof TypeElement && hasAnnotation(element, FORY_STRUCT);
   }
 
-  private String typeExtMetaExpression(TypeMirror type, String rawType) {
-    String typeId = scalarTypeId(type, rawType);
-    AnnotationMirror refMirror = annotationMirror(type, REF);
-    if (typeId == null && refMirror == null) {
+  private String typeExtMetaExpression(TypeMirror type, String rawType, List<?> treeAnnotations) {
+    String typeId = scalarTypeId(type, rawType, treeAnnotations);
+    TypeUseAnnotation ref = typeUseAnnotation(type, treeAnnotations, REF);
+    if (typeId == null && ref == null) {
       return null;
     }
     return "meta("
         + (typeId == null ? "Types.UNKNOWN" : typeId)
         + ", true, "
-        + booleanValue(refMirror, "enable", true)
+        + booleanValue(ref, "enable", true)
         + ")";
   }
 
-  private String scalarTypeId(TypeMirror type, String rawType) {
-    if (hasTypeAnnotation(type, INT8_TYPE)) {
+  private String scalarTypeId(TypeMirror type, String rawType, List<?> treeAnnotations) {
+    if (hasTypeAnnotation(type, treeAnnotations, INT8_TYPE)) {
       return rawType.equals("byte[]") ? "Types.INT8_ARRAY" : "Types.INT8";
     }
-    if (hasTypeAnnotation(type, UINT8_TYPE)) {
+    if (hasTypeAnnotation(type, treeAnnotations, UINT8_TYPE)) {
       return rawType.equals("byte[]") ? "Types.UINT8_ARRAY" : "Types.UINT8";
     }
-    if (hasTypeAnnotation(type, UINT16_TYPE)) {
+    if (hasTypeAnnotation(type, treeAnnotations, UINT16_TYPE)) {
       return rawType.equals("short[]") ? "Types.UINT16_ARRAY" : "Types.UINT16";
     }
-    AnnotationMirror uint32Mirror = typeAnnotationMirror(type, UINT32_TYPE);
-    if (uint32Mirror != null) {
-      String encoding = int32Encoding(uint32Mirror);
+    TypeUseAnnotation uint32 = typeUseAnnotation(type, treeAnnotations, UINT32_TYPE);
+    if (uint32 != null) {
+      String encoding = int32Encoding(uint32);
       if (rawType.equals("int[]")) {
         return "Types.UINT32_ARRAY";
       }
       return "FIXED".equals(encoding) ? "Types.UINT32" : "Types.VAR_UINT32";
     }
-    AnnotationMirror uint64Mirror = typeAnnotationMirror(type, UINT64_TYPE);
-    if (uint64Mirror != null) {
-      String encoding = int64Encoding(uint64Mirror);
+    TypeUseAnnotation uint64 = typeUseAnnotation(type, treeAnnotations, UINT64_TYPE);
+    if (uint64 != null) {
+      String encoding = int64Encoding(uint64);
       if (rawType.equals("long[]")) {
         return "Types.UINT64_ARRAY";
       }
@@ -581,30 +637,45 @@ public final class ForyStructProcessor extends AbstractProcessor {
       }
       return "TAGGED".equals(encoding) ? "Types.TAGGED_UINT64" : "Types.VAR_UINT64";
     }
-    AnnotationMirror int32Mirror = typeAnnotationMirror(type, INT32_TYPE);
-    if (int32Mirror != null) {
-      String encoding = int32Encoding(int32Mirror);
+    TypeUseAnnotation int32 = typeUseAnnotation(type, treeAnnotations, INT32_TYPE);
+    if (int32 != null) {
+      String encoding = int32Encoding(int32);
       return "FIXED".equals(encoding) ? "Types.INT32" : "Types.VARINT32";
     }
-    AnnotationMirror int64Mirror = typeAnnotationMirror(type, INT64_TYPE);
-    if (int64Mirror != null) {
-      String encoding = int64Encoding(int64Mirror);
+    TypeUseAnnotation int64 = typeUseAnnotation(type, treeAnnotations, INT64_TYPE);
+    if (int64 != null) {
+      String encoding = int64Encoding(int64);
       if ("FIXED".equals(encoding)) {
         return "Types.INT64";
       }
       return "TAGGED".equals(encoding) ? "Types.TAGGED_INT64" : "Types.VARINT64";
     }
-    if (hasTypeAnnotation(type, FLOAT16_TYPE)) {
+    if (hasTypeAnnotation(type, treeAnnotations, FLOAT16_TYPE)) {
       return "Types.FLOAT16_ARRAY";
     }
-    if (hasTypeAnnotation(type, BFLOAT16_TYPE)) {
+    if (hasTypeAnnotation(type, treeAnnotations, BFLOAT16_TYPE)) {
       return "Types.BFLOAT16_ARRAY";
     }
     return null;
   }
 
-  private boolean hasTypeAnnotation(TypeMirror type, String annotationName) {
-    return typeAnnotationMirror(type, annotationName) != null;
+  private boolean hasTypeAnnotation(
+      TypeMirror type, List<?> treeAnnotations, String annotationName) {
+    return typeUseAnnotation(type, treeAnnotations, annotationName) != null;
+  }
+
+  private TypeUseAnnotation typeUseAnnotation(
+      TypeMirror type, List<?> treeAnnotations, String annotationName) {
+    AnnotationMirror mirror = typeAnnotationMirror(type, annotationName);
+    if (mirror != null) {
+      return new TypeUseAnnotation(mirror, null);
+    }
+    for (Object annotationTree : treeAnnotations) {
+      if (isAnnotationTree(annotationTree, annotationName)) {
+        return new TypeUseAnnotation(null, annotationTree);
+      }
+    }
+    return null;
   }
 
   private AnnotationMirror typeAnnotationMirror(TypeMirror type, String annotationName) {
@@ -617,6 +688,20 @@ public final class ForyStructProcessor extends AbstractProcessor {
       return null;
     }
     return annotationMirror(componentType, annotationName);
+  }
+
+  private boolean isAnnotationTree(Object annotationTree, String annotationName) {
+    Object annotationType = invoke(annotationTree, "getAnnotationType");
+    if (annotationType == null) {
+      return false;
+    }
+    String treeName = annotationType.toString();
+    return treeName.equals(annotationName) || treeName.equals(simpleName(annotationName));
+  }
+
+  private String simpleName(String className) {
+    int index = className.lastIndexOf('.');
+    return index < 0 ? className : className.substring(index + 1);
   }
 
   private AnnotationMirror annotationMirror(TypeMirror type, String annotationName) {
@@ -645,10 +730,14 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return annotationMirror(element, annotationName) != null;
   }
 
-  private boolean booleanValue(AnnotationMirror mirror, String name, boolean defaultValue) {
-    if (mirror == null) {
+  private boolean booleanValue(TypeUseAnnotation annotation, String name, boolean defaultValue) {
+    if (annotation == null) {
       return defaultValue;
     }
+    if (annotation.mirror == null) {
+      return Boolean.parseBoolean(treeAnnotationValue(annotation.tree, name, defaultValue));
+    }
+    AnnotationMirror mirror = annotation.mirror;
     for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
         mirror.getElementValues().entrySet()) {
       if (entry.getKey().getSimpleName().contentEquals(name)) {
@@ -658,18 +747,22 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return defaultValue;
   }
 
-  private String int32Encoding(AnnotationMirror mirror) {
-    return enumValue(mirror, "encoding", "VARINT");
+  private String int32Encoding(TypeUseAnnotation annotation) {
+    return enumValue(annotation, "encoding", "VARINT");
   }
 
-  private String int64Encoding(AnnotationMirror mirror) {
-    return enumValue(mirror, "encoding", "VARINT");
+  private String int64Encoding(TypeUseAnnotation annotation) {
+    return enumValue(annotation, "encoding", "VARINT");
   }
 
-  private String enumValue(AnnotationMirror mirror, String name, String defaultValue) {
-    if (mirror == null) {
+  private String enumValue(TypeUseAnnotation annotation, String name, String defaultValue) {
+    if (annotation == null) {
       return defaultValue;
     }
+    if (annotation.mirror == null) {
+      return enumConstant(treeAnnotationValue(annotation.tree, name, defaultValue));
+    }
+    AnnotationMirror mirror = annotation.mirror;
     for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
         mirror.getElementValues().entrySet()) {
       if (entry.getKey().getSimpleName().contentEquals(name)) {
@@ -677,6 +770,106 @@ public final class ForyStructProcessor extends AbstractProcessor {
       }
     }
     return defaultValue;
+  }
+
+  private String treeAnnotationValue(Object annotationTree, String name, Object defaultValue) {
+    for (Object argument : listValue(invoke(annotationTree, "getArguments"))) {
+      Object valueTree = argument;
+      if (isInstance("com.sun.source.tree.AssignmentTree", argument)) {
+        Object variable = invoke(argument, "getVariable");
+        if (variable == null || !variable.toString().equals(name)) {
+          continue;
+        }
+        valueTree = invoke(argument, "getExpression");
+      }
+      return valueTree.toString();
+    }
+    return String.valueOf(defaultValue);
+  }
+
+  private String enumConstant(String value) {
+    int index = value.lastIndexOf('.');
+    return index < 0 ? value : value.substring(index + 1);
+  }
+
+  private static boolean isInstance(String className, Object value) {
+    if (value == null) {
+      return false;
+    }
+    return hasType(value.getClass(), className);
+  }
+
+  private static boolean hasType(Class<?> type, String className) {
+    if (type == null) {
+      return false;
+    }
+    if (type.getName().equals(className)) {
+      return true;
+    }
+    for (Class<?> interfaceType : type.getInterfaces()) {
+      if (hasType(interfaceType, className)) {
+        return true;
+      }
+    }
+    return hasType(type.getSuperclass(), className);
+  }
+
+  private static Object invoke(Object target, String methodName) {
+    return invoke(target, methodName, new Class<?>[0]);
+  }
+
+  private static Object invoke(
+      Object target, String methodName, Class<?>[] parameterTypes, Object... args) {
+    if (target == null) {
+      return null;
+    }
+    try {
+      Method method = target.getClass().getMethod(methodName, parameterTypes);
+      return method.invoke(target, args);
+    } catch (ReflectiveOperationException e) {
+      return null;
+    }
+  }
+
+  private static List<?> listValue(Object value) {
+    if (value instanceof List<?>) {
+      return (List<?>) value;
+    }
+    return Collections.emptyList();
+  }
+
+  private static final class TypeTreeInfo {
+    final List<?> annotations;
+    final Object tree;
+
+    TypeTreeInfo(List<?> annotations, Object tree) {
+      this.annotations = annotations;
+      this.tree = tree;
+    }
+
+    Object arrayComponentTree() {
+      if (isInstance("com.sun.source.tree.ArrayTypeTree", tree)) {
+        return invoke(tree, "getType");
+      }
+      return null;
+    }
+
+    List<?> typeArgumentTrees() {
+      if (isInstance("com.sun.source.tree.ParameterizedTypeTree", tree)) {
+        return listValue(invoke(tree, "getTypeArguments"));
+      }
+      return Collections.emptyList();
+    }
+  }
+
+  private static final class TypeUseAnnotation {
+    final AnnotationMirror mirror;
+    final Object tree;
+
+    TypeUseAnnotation(AnnotationMirror mirror, Object tree) {
+      this.mirror = mirror;
+      this.tree = tree;
+    }
   }
 
   private ForyFieldMeta foryField(VariableElement field) {

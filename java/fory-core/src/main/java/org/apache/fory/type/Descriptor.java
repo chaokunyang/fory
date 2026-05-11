@@ -102,7 +102,7 @@ public class Descriptor {
   private final Method readMethod;
   private final Method writeMethod;
   private final ForyField foryField;
-  private final ForyFieldPolicy foryFieldPolicy;
+  private final FieldSpec fieldSpec;
   private final Annotation typeAnnotation;
   private final boolean arrayType;
   private boolean nullable;
@@ -124,13 +124,13 @@ public class Descriptor {
     this.writeMethod = writeMethod;
     this.typeRef = typeRef;
     this.foryField = this.field.getAnnotation(ForyField.class);
-    this.foryFieldPolicy = ForyFieldPolicy.from(foryField);
+    this.fieldSpec = FieldSpec.from(foryField);
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
     if (!typeRef.isPrimitive()) {
-      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
+      this.nullable = fieldSpec == null || fieldSpec.nullable();
     }
-    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
+    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
   }
 
   public Descriptor(
@@ -150,7 +150,7 @@ public class Descriptor {
     this.readMethod = null;
     this.writeMethod = null;
     this.foryField = null;
-    this.foryFieldPolicy = null;
+    this.fieldSpec = null;
     typeAnnotation = null;
     arrayType = false;
     this.nullable = nullable;
@@ -163,8 +163,8 @@ public class Descriptor {
       String name,
       int modifier,
       String declaringClass,
-      ForyFieldPolicy foryFieldPolicy) {
-    this(typeRef, typeName, name, modifier, declaringClass, foryFieldPolicy, false);
+      FieldSpec fieldSpec) {
+    this(typeRef, typeName, name, modifier, declaringClass, fieldSpec, false);
   }
 
   public Descriptor(
@@ -173,7 +173,7 @@ public class Descriptor {
       String name,
       int modifier,
       String declaringClass,
-      ForyFieldPolicy foryFieldPolicy,
+      FieldSpec fieldSpec,
       boolean arrayType) {
     this.field = null;
     this.typeName = typeName;
@@ -184,15 +184,15 @@ public class Descriptor {
     this.readMethod = null;
     this.writeMethod = null;
     this.foryField = null;
-    this.foryFieldPolicy = foryFieldPolicy;
+    this.fieldSpec = fieldSpec;
     typeAnnotation = null;
     this.arrayType = arrayType;
     if (typeRef.isPrimitive()) {
       this.nullable = false;
     } else {
-      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
+      this.nullable = fieldSpec == null || fieldSpec.nullable();
     }
-    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
+    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
   }
 
   private Descriptor(Field field, Method readMethod) {
@@ -208,13 +208,13 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = this.field.getAnnotation(ForyField.class);
-    this.foryFieldPolicy = ForyFieldPolicy.from(foryField);
+    this.fieldSpec = FieldSpec.from(foryField);
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
     if (!field.getType().isPrimitive()) {
-      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
+      this.nullable = fieldSpec == null || fieldSpec.nullable();
     }
-    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
+    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
   }
 
   private Descriptor(Method readMethod) {
@@ -229,14 +229,14 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = readMethod.getAnnotation(ForyField.class);
-    this.foryFieldPolicy = ForyFieldPolicy.from(foryField);
+    this.fieldSpec = FieldSpec.from(foryField);
     typeAnnotation =
         getTypeUseAnnotation(readMethod.getAnnotatedReturnType(), readMethod.getName());
     arrayType = readMethod.isAnnotationPresent(ArrayType.class);
     if (!readMethod.getReturnType().isPrimitive()) {
-      this.nullable = foryFieldPolicy == null || foryFieldPolicy.nullable();
+      this.nullable = fieldSpec == null || fieldSpec.nullable();
     }
-    this.trackingRef = foryFieldPolicy != null && foryFieldPolicy.trackingRef();
+    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
   }
 
   public Descriptor(DescriptorBuilder builder) {
@@ -250,8 +250,7 @@ public class Descriptor {
     this.writeMethod = builder.writeMethod;
     this.trackingRef = builder.trackingRef;
     this.foryField = this.field == null ? null : this.field.getAnnotation(ForyField.class);
-    this.foryFieldPolicy =
-        builder.foryFieldPolicy != null ? builder.foryFieldPolicy : ForyFieldPolicy.from(foryField);
+    this.fieldSpec = builder.fieldSpec != null ? builder.fieldSpec : FieldSpec.from(foryField);
     typeAnnotation = field == null ? null : getAnnotation(field);
     arrayType =
         builder.arrayType
@@ -336,20 +335,20 @@ public class Descriptor {
     return foryField;
   }
 
-  public ForyFieldPolicy getForyFieldPolicy() {
-    return foryFieldPolicy;
+  public FieldSpec getFieldSpec() {
+    return fieldSpec;
   }
 
-  public boolean hasForyFieldPolicy() {
-    return foryFieldPolicy != null;
+  public boolean hasFieldSpec() {
+    return fieldSpec != null;
   }
 
   public boolean hasForyFieldId() {
-    return foryFieldPolicy != null && foryFieldPolicy.id() >= 0;
+    return fieldSpec != null && fieldSpec.id() >= 0;
   }
 
   public int getForyFieldId() {
-    return foryFieldPolicy == null ? -1 : foryFieldPolicy.id();
+    return fieldSpec == null ? -1 : fieldSpec.id();
   }
 
   /**
@@ -358,8 +357,8 @@ public class Descriptor {
    * @return the morphic setting from @ForyField annotation, or AUTO if not specified
    */
   public ForyField.Dynamic getMorphic() {
-    if (foryFieldPolicy != null) {
-      return foryFieldPolicy.dynamic();
+    if (fieldSpec != null) {
+      return fieldSpec.dynamic();
     }
     return ForyField.Dynamic.AUTO;
   }

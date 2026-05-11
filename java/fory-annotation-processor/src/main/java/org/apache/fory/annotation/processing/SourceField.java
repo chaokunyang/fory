@@ -37,7 +37,7 @@ final class SourceField {
   final String readAccess;
   final AccessKind writeAccessKind;
   final String writeAccess;
-  final boolean hasForyFieldPolicy;
+  final boolean hasFieldSpec;
   final int foryFieldId;
   final boolean nullable;
   final boolean trackingRef;
@@ -56,7 +56,7 @@ final class SourceField {
       String readAccess,
       AccessKind writeAccessKind,
       String writeAccess,
-      boolean hasForyFieldPolicy,
+      boolean hasFieldSpec,
       int foryFieldId,
       boolean nullable,
       boolean trackingRef,
@@ -73,7 +73,7 @@ final class SourceField {
     this.readAccess = readAccess;
     this.writeAccessKind = writeAccessKind;
     this.writeAccess = writeAccess;
-    this.hasForyFieldPolicy = hasForyFieldPolicy;
+    this.hasFieldSpec = hasFieldSpec;
     this.foryFieldId = foryFieldId;
     this.nullable = nullable;
     this.trackingRef = trackingRef;

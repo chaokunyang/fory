@@ -64,7 +64,7 @@ final class StaticSerializerSourceWriter {
     builder.append("import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;\n");
     builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer;\n");
     builder.append("import org.apache.fory.type.Descriptor;\n");
-    builder.append("import org.apache.fory.type.ForyFieldPolicy;\n");
+    builder.append("import org.apache.fory.type.FieldSpec;\n");
     builder.append("import org.apache.fory.type.Types;\n\n");
   }
 
@@ -111,7 +111,7 @@ final class StaticSerializerSourceWriter {
           .append(", \"")
           .append(escape(field.declaringClass))
           .append("\", ")
-          .append(foryFieldPolicyExpression(field))
+          .append(fieldSpecExpression(field))
           .append(", ")
           .append(field.arrayType)
           .append("));\n");
@@ -124,11 +124,11 @@ final class StaticSerializerSourceWriter {
     builder.append("  }\n\n");
   }
 
-  private String foryFieldPolicyExpression(SourceField field) {
-    if (!field.hasForyFieldPolicy) {
+  private String fieldSpecExpression(SourceField field) {
+    if (!field.hasFieldSpec) {
       return "null";
     }
-    return "ForyFieldPolicy.of("
+    return "FieldSpec.of("
         + field.foryFieldId
         + ", "
         + field.nullable

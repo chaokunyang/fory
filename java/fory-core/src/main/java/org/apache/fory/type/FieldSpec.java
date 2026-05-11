@@ -25,26 +25,25 @@ import org.apache.fory.annotation.Internal;
 
 /** Descriptor-owned representation of {@link ForyField} values for generated descriptors. */
 @Internal
-public final class ForyFieldPolicy {
+public final class FieldSpec {
   private final int id;
   private final boolean nullable;
   private final boolean trackingRef;
   private final ForyField.Dynamic dynamic;
 
-  public static ForyFieldPolicy of(
+  public static FieldSpec of(
       int id, boolean nullable, boolean trackingRef, ForyField.Dynamic dynamic) {
-    return new ForyFieldPolicy(id, nullable, trackingRef, dynamic);
+    return new FieldSpec(id, nullable, trackingRef, dynamic);
   }
 
-  public static ForyFieldPolicy from(ForyField field) {
+  public static FieldSpec from(ForyField field) {
     if (field == null) {
       return null;
     }
     return of(field.id(), field.nullable(), field.ref(), field.dynamic());
   }
 
-  private ForyFieldPolicy(
-      int id, boolean nullable, boolean trackingRef, ForyField.Dynamic dynamic) {
+  private FieldSpec(int id, boolean nullable, boolean trackingRef, ForyField.Dynamic dynamic) {
     this.id = id;
     this.nullable = nullable;
     this.trackingRef = trackingRef;
@@ -72,10 +71,10 @@ public final class ForyFieldPolicy {
     if (this == o) {
       return true;
     }
-    if (!(o instanceof ForyFieldPolicy)) {
+    if (!(o instanceof FieldSpec)) {
       return false;
     }
-    ForyFieldPolicy that = (ForyFieldPolicy) o;
+    FieldSpec that = (FieldSpec) o;
     return id == that.id
         && nullable == that.nullable
         && trackingRef == that.trackingRef

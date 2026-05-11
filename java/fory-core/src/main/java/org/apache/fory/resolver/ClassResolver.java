@@ -976,7 +976,7 @@ public class ClassResolver extends TypeResolver {
 
   @Override
   public boolean isMonomorphic(Descriptor descriptor) {
-    if (descriptor.hasForyFieldPolicy()) {
+    if (descriptor.hasFieldSpec()) {
       switch (descriptor.getMorphic()) {
         case TRUE:
           return false;

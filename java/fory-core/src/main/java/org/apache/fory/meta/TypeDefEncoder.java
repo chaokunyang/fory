@@ -89,7 +89,7 @@ class TypeDefEncoder {
         .map(
             descriptor -> {
               FieldType fieldType = FieldTypes.buildFieldType(resolver, descriptor);
-              if (descriptor.hasForyFieldPolicy()) {
+              if (descriptor.hasFieldSpec()) {
                 int tagId = descriptor.getForyFieldId();
                 if (tagId >= 0) {
                   if (!usedTagIds.add(tagId)) {

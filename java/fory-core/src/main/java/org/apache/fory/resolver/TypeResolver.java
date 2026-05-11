@@ -1477,7 +1477,7 @@ public abstract class TypeResolver {
       if (!searchParent && !descriptor.getDeclaringClass().equals(clz.getName())) {
         continue;
       }
-      boolean hasForyField = descriptor.hasForyFieldPolicy();
+      boolean hasForyField = descriptor.hasFieldSpec();
       // Compute the final isTrackingRef value:
       // For xlang mode: "Reference tracking is disabled by default" (xlang spec)
       //   - Only enable ref tracking if explicitly set via @ForyField(ref=true)
@@ -1735,7 +1735,7 @@ public abstract class TypeResolver {
     if (isCrossLanguage()) {
       // For xlang mode: apply xlang defaults
       // This must match what TypeDefEncoder.buildFieldType uses for TypeDef metadata
-      if (descriptor.hasForyFieldPolicy()) {
+      if (descriptor.hasFieldSpec()) {
         // Use explicit annotation value
         return descriptor.isNullable();
       }

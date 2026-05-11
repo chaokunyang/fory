@@ -107,7 +107,7 @@ public class NativeTypeDefEncoder {
       FieldType fieldType = FieldTypes.buildFieldType(resolver, descriptor);
 
       FieldInfo fieldInfo;
-      if (descriptor.hasForyFieldPolicy()) {
+      if (descriptor.hasFieldSpec()) {
         int tagId = descriptor.getForyFieldId();
         if (tagId >= 0) {
           if (!usedTagIds.add(tagId)) {

@@ -362,13 +362,9 @@ public final class Fory implements BaseFory {
   @Override
   public Object deserialize(ByteBuffer byteBuffer) {
     if (!AndroidSupport.IS_ANDROID && !byteBuffer.isReadOnly()) {
-      return deserializeByteBufferZeroCopy(byteBuffer);
+      return deserialize(MemoryUtils.wrap(byteBuffer));
     }
     return deserializeByteBufferByCopy(byteBuffer);
-  }
-
-  private Object deserializeByteBufferZeroCopy(ByteBuffer byteBuffer) {
-    return deserialize(MemoryUtils.wrap(byteBuffer));
   }
 
   private Object deserializeByteBufferByCopy(ByteBuffer byteBuffer) {

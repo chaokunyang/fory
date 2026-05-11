@@ -114,7 +114,7 @@ public class Fingerprint {
       // Get ref flag from @ForyField annotation only (compile-time info)
       // If annotation is absent or ref not explicitly set to true, ref is 0
       // This allows fingerprint to be computed at compile time for C++/Rust
-      char ref = (descriptor.hasFieldSpec() && descriptor.isTrackingRef()) ? '1' : '0';
+      char ref = (descriptor.hasForyField() && descriptor.isTrackingRef()) ? '1' : '0';
 
       // Get nullable flag:
       // - Primitives are always non-nullable
@@ -127,7 +127,7 @@ public class Fingerprint {
       } else if (resolver.isCrossLanguage()) {
         // For xlang: nullable defaults to false, except for Optional types, boxed types
         // If @ForyField annotation is present, use its nullable value
-        if (descriptor.hasFieldSpec()) {
+        if (descriptor.hasForyField()) {
           nullable = descriptor.isNullable() ? '1' : '0';
         } else {
           // Default: Optional types, boxed primitives are nullable

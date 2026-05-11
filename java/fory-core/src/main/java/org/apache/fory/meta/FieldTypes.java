@@ -206,7 +206,7 @@ public class FieldTypes {
     }
 
     // Apply @ForyField annotation if present
-    if (descriptor != null && descriptor.hasFieldSpec()) {
+    if (descriptor != null && descriptor.hasForyField()) {
       nullable = descriptor.isNullable();
       trackingRef = descriptor.isTrackingRef();
     }

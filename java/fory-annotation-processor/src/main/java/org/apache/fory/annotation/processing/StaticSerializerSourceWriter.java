@@ -64,7 +64,6 @@ final class StaticSerializerSourceWriter {
     builder.append("import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;\n");
     builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer;\n");
     builder.append("import org.apache.fory.type.Descriptor;\n");
-    builder.append("import org.apache.fory.type.FieldSpec;\n");
     builder.append("import org.apache.fory.type.Types;\n\n");
   }
 
@@ -111,7 +110,15 @@ final class StaticSerializerSourceWriter {
           .append(", \"")
           .append(escape(field.declaringClass))
           .append("\", ")
-          .append(fieldSpecExpression(field))
+          .append(field.hasForyField)
+          .append(", ")
+          .append(field.foryFieldId)
+          .append(", ")
+          .append(field.nullable)
+          .append(", ")
+          .append(field.trackingRef)
+          .append(", ForyField.Dynamic.")
+          .append(field.dynamic)
           .append(", ")
           .append(field.arrayType)
           .append("));\n");
@@ -122,21 +129,6 @@ final class StaticSerializerSourceWriter {
     builder.append("  public List<Descriptor> getDescriptors() {\n");
     builder.append("    return DESCRIPTORS;\n");
     builder.append("  }\n\n");
-  }
-
-  private String fieldSpecExpression(SourceField field) {
-    if (!field.hasFieldSpec) {
-      return "null";
-    }
-    return "FieldSpec.of("
-        + field.foryFieldId
-        + ", "
-        + field.nullable
-        + ", "
-        + field.trackingRef
-        + ", ForyField.Dynamic."
-        + field.dynamic
-        + ")";
   }
 
   private void writeConstructors() {

@@ -205,7 +205,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
   private void validateForyFieldId(
       String binaryName, Map<Integer, VariableElement> fieldIds, VariableElement field) {
     ForyFieldMeta foryField = foryField(field);
-    if (foryField.hasPolicy && foryField.id >= 0) {
+    if (foryField.hasForyField && foryField.id >= 0) {
       VariableElement previousField = fieldIds.put(foryField.id, field);
       if (previousField != null) {
         throw new InvalidStructException(
@@ -291,10 +291,10 @@ public final class ForyStructProcessor extends AbstractProcessor {
         readAccess,
         writeKind,
         writeAccess,
-        foryField.hasPolicy,
+        foryField.hasForyField,
         foryField.id,
-        foryField.hasPolicy ? foryField.nullable : !typeNode.primitive,
-        foryField.hasPolicy && foryField.ref,
+        foryField.hasForyField ? foryField.nullable : !typeNode.primitive,
+        foryField.hasForyField && foryField.ref,
         foryField.dynamic);
   }
 
@@ -772,14 +772,14 @@ public final class ForyStructProcessor extends AbstractProcessor {
   private static final class ForyFieldMeta {
     static final ForyFieldMeta NONE = new ForyFieldMeta(false, -1, false, false, "AUTO");
 
-    final boolean hasPolicy;
+    final boolean hasForyField;
     final int id;
     final boolean nullable;
     final boolean ref;
     final String dynamic;
 
-    ForyFieldMeta(boolean hasPolicy, int id, boolean nullable, boolean ref, String dynamic) {
-      this.hasPolicy = hasPolicy;
+    ForyFieldMeta(boolean hasForyField, int id, boolean nullable, boolean ref, String dynamic) {
+      this.hasForyField = hasForyField;
       this.id = id;
       this.nullable = nullable;
       this.ref = ref;

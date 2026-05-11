@@ -102,7 +102,9 @@ public class Descriptor {
   private final Method readMethod;
   private final Method writeMethod;
   private final ForyField foryField;
-  private final FieldSpec fieldSpec;
+  private final boolean hasForyField;
+  private final int foryFieldId;
+  private final ForyField.Dynamic dynamic;
   private final Annotation typeAnnotation;
   private final boolean arrayType;
   private boolean nullable;
@@ -124,13 +126,15 @@ public class Descriptor {
     this.writeMethod = writeMethod;
     this.typeRef = typeRef;
     this.foryField = this.field.getAnnotation(ForyField.class);
-    this.fieldSpec = FieldSpec.from(foryField);
+    this.hasForyField = foryField != null;
+    this.foryFieldId = hasForyField ? foryField.id() : -1;
+    this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
     if (!typeRef.isPrimitive()) {
-      this.nullable = fieldSpec == null || fieldSpec.nullable();
+      this.nullable = !hasForyField || foryField.nullable();
     }
-    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
+    this.trackingRef = hasForyField && foryField.ref();
   }
 
   public Descriptor(
@@ -150,7 +154,9 @@ public class Descriptor {
     this.readMethod = null;
     this.writeMethod = null;
     this.foryField = null;
-    this.fieldSpec = null;
+    this.hasForyField = false;
+    this.foryFieldId = -1;
+    this.dynamic = ForyField.Dynamic.AUTO;
     typeAnnotation = null;
     arrayType = false;
     this.nullable = nullable;
@@ -163,8 +169,23 @@ public class Descriptor {
       String name,
       int modifier,
       String declaringClass,
-      FieldSpec fieldSpec) {
-    this(typeRef, typeName, name, modifier, declaringClass, fieldSpec, false);
+      boolean hasForyField,
+      int foryFieldId,
+      boolean nullable,
+      boolean trackingRef,
+      ForyField.Dynamic dynamic) {
+    this(
+        typeRef,
+        typeName,
+        name,
+        modifier,
+        declaringClass,
+        hasForyField,
+        foryFieldId,
+        nullable,
+        trackingRef,
+        dynamic,
+        false);
   }
 
   public Descriptor(
@@ -173,7 +194,11 @@ public class Descriptor {
       String name,
       int modifier,
       String declaringClass,
-      FieldSpec fieldSpec,
+      boolean hasForyField,
+      int foryFieldId,
+      boolean nullable,
+      boolean trackingRef,
+      ForyField.Dynamic dynamic,
       boolean arrayType) {
     this.field = null;
     this.typeName = typeName;
@@ -184,15 +209,17 @@ public class Descriptor {
     this.readMethod = null;
     this.writeMethod = null;
     this.foryField = null;
-    this.fieldSpec = fieldSpec;
+    this.hasForyField = hasForyField;
+    this.foryFieldId = hasForyField ? foryFieldId : -1;
+    this.dynamic = hasForyField ? Objects.requireNonNull(dynamic) : ForyField.Dynamic.AUTO;
     typeAnnotation = null;
     this.arrayType = arrayType;
     if (typeRef.isPrimitive()) {
       this.nullable = false;
     } else {
-      this.nullable = fieldSpec == null || fieldSpec.nullable();
+      this.nullable = nullable;
     }
-    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
+    this.trackingRef = hasForyField && trackingRef;
   }
 
   private Descriptor(Field field, Method readMethod) {
@@ -208,13 +235,15 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = this.field.getAnnotation(ForyField.class);
-    this.fieldSpec = FieldSpec.from(foryField);
+    this.hasForyField = foryField != null;
+    this.foryFieldId = hasForyField ? foryField.id() : -1;
+    this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
     if (!field.getType().isPrimitive()) {
-      this.nullable = fieldSpec == null || fieldSpec.nullable();
+      this.nullable = !hasForyField || foryField.nullable();
     }
-    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
+    this.trackingRef = hasForyField && foryField.ref();
   }
 
   private Descriptor(Method readMethod) {
@@ -229,14 +258,16 @@ public class Descriptor {
     this.readMethod = readMethod;
     this.writeMethod = null;
     this.foryField = readMethod.getAnnotation(ForyField.class);
-    this.fieldSpec = FieldSpec.from(foryField);
+    this.hasForyField = foryField != null;
+    this.foryFieldId = hasForyField ? foryField.id() : -1;
+    this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation =
         getTypeUseAnnotation(readMethod.getAnnotatedReturnType(), readMethod.getName());
     arrayType = readMethod.isAnnotationPresent(ArrayType.class);
     if (!readMethod.getReturnType().isPrimitive()) {
-      this.nullable = fieldSpec == null || fieldSpec.nullable();
+      this.nullable = !hasForyField || foryField.nullable();
     }
-    this.trackingRef = fieldSpec != null && fieldSpec.trackingRef();
+    this.trackingRef = hasForyField && foryField.ref();
   }
 
   public Descriptor(DescriptorBuilder builder) {
@@ -249,8 +280,19 @@ public class Descriptor {
     this.readMethod = builder.readMethod;
     this.writeMethod = builder.writeMethod;
     this.trackingRef = builder.trackingRef;
-    this.foryField = this.field == null ? null : this.field.getAnnotation(ForyField.class);
-    this.fieldSpec = builder.fieldSpec != null ? builder.fieldSpec : FieldSpec.from(foryField);
+    this.foryField =
+        builder.foryField != null
+            ? builder.foryField
+            : (this.field == null ? null : this.field.getAnnotation(ForyField.class));
+    if (builder.hasForyField) {
+      this.hasForyField = true;
+      this.foryFieldId = builder.foryFieldId;
+      this.dynamic = Objects.requireNonNull(builder.dynamic);
+    } else {
+      this.hasForyField = foryField != null;
+      this.foryFieldId = hasForyField ? foryField.id() : -1;
+      this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
+    }
     typeAnnotation = field == null ? null : getAnnotation(field);
     arrayType =
         builder.arrayType
@@ -335,20 +377,20 @@ public class Descriptor {
     return foryField;
   }
 
-  public FieldSpec getFieldSpec() {
-    return fieldSpec;
+  public boolean hasForyField() {
+    return hasForyField;
   }
 
-  public boolean hasFieldSpec() {
-    return fieldSpec != null;
+  public ForyField.Dynamic getForyFieldDynamic() {
+    return dynamic;
   }
 
   public boolean hasForyFieldId() {
-    return fieldSpec != null && fieldSpec.id() >= 0;
+    return hasForyField && foryFieldId >= 0;
   }
 
   public int getForyFieldId() {
-    return fieldSpec == null ? -1 : fieldSpec.id();
+    return foryFieldId;
   }
 
   /**
@@ -357,10 +399,7 @@ public class Descriptor {
    * @return the morphic setting from @ForyField annotation, or AUTO if not specified
    */
   public ForyField.Dynamic getMorphic() {
-    if (fieldSpec != null) {
-      return fieldSpec.dynamic();
-    }
-    return ForyField.Dynamic.AUTO;
+    return dynamic;
   }
 
   public Annotation getTypeAnnotation() {

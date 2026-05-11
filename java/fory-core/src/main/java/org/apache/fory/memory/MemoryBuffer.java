@@ -3303,18 +3303,8 @@ public final class MemoryBuffer {
         streamReader.readInts(values, 0, numBytes >>> 2);
         return;
       }
-      int numElements = numBytes >>> 2;
-      if (numElements <= 32) {
-        // Small int payloads are common in generated user-type reads. Local loads avoid the fixed
-        // copyMemory cost without adding helper indirection to this hot path.
-        long pointer = address + readerIdx;
-        for (int i = 0; i < numElements; i++) {
-          values[i] = UNSAFE.getInt(heapMemory, pointer + ((long) i << 2));
-        }
-      } else {
-        UNSAFE.copyMemory(
-            heapMemory, address + readerIdx, values, UnsafeOps.INT_ARRAY_OFFSET, numBytes);
-      }
+      UNSAFE.copyMemory(
+          heapMemory, address + readerIdx, values, UnsafeOps.INT_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }

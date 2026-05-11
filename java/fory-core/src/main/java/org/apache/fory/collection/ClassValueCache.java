@@ -19,6 +19,7 @@
 
 package org.apache.fory.collection;
 
+import java.lang.ref.SoftReference;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import org.apache.fory.annotation.Internal;
@@ -30,70 +31,161 @@ public class ClassValueCache<T> {
 
   private static final Object NULL_VALUE = new Object();
 
-  private final Cache<Class<?>, Object> cache;
+  private final Store store;
 
-  private ClassValueCache(Cache<Class<?>, Object> cache) {
-    this.cache = cache;
+  private ClassValueCache(Store store) {
+    this.store = store;
   }
 
   public T getIfPresent(Class<?> k) {
-    return unmaskNull(cache.getIfPresent(k));
+    return unmaskNull(store.getIfPresent(k));
   }
 
   public T get(Class<?> k, Callable<? extends T> loader) {
     try {
-      return unmaskNull(cache.get(k, () -> maskNull(loader.call())));
-    } catch (ExecutionException e) {
+      return unmaskNull(store.get(k, () -> maskNull(loader.call())));
+    } catch (RuntimeException e) {
+      throw e;
+    } catch (Exception e) {
       throw new RuntimeException(e);
     }
   }
 
   public void put(Class<?> k, T v) {
-    cache.put(k, maskNull(v));
+    store.put(k, maskNull(v));
   }
 
   /**
    * Create a cache with weak keys.
    *
-   * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is a
-   * weak-key hash map.
+   * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is
+   * backed by {@link ClassValue}.
    *
-   * <p>Android intentionally uses strong keys and values because Android does not support {@link
-   * ClassValue}; this cache is the Android-safe replacement for direct class-value caches.
+   * <p>The normal JVM path must use {@link ClassValue}: several cached values contain fields,
+   * method handles, or generated classes that point back to the key class. A regular weak-key map
+   * would keep those values strongly reachable and prevent class unloading.
    *
    * @param concurrencyLevel the concurrency level
    * @return the cache
    */
   public static <T> ClassValueCache<T> newClassKeyCache(int concurrencyLevel) {
-    if (AndroidSupport.IS_ANDROID || GraalvmSupport.isGraalBuildTime()) {
-      return new ClassValueCache<>(
-          CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build());
+    if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return new ClassValueCache<>(new MapStore(concurrencyLevel));
     } else {
-      return new ClassValueCache<>(
-          CacheBuilder.newBuilder().weakKeys().concurrencyLevel(concurrencyLevel).build());
+      return new ClassValueCache<>(new JvmClassValueStore(false));
     }
   }
 
   /**
    * Create a cache with weak keys and soft values.
    *
-   * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is a
-   * weak-key, soft-value hash map.
+   * <p>when in graalvm or Android, the cache is a concurrent hash map. when in jvm, the cache is
+   * backed by {@link ClassValue} with soft values.
    *
    * @param concurrencyLevel the concurrency level
    * @return the cache
    */
   public static <T> ClassValueCache<T> newClassKeySoftCache(int concurrencyLevel) {
     if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return new ClassValueCache<>(
-          CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build());
+      return new ClassValueCache<>(new MapStore(concurrencyLevel));
     } else {
-      return new ClassValueCache<>(
-          CacheBuilder.newBuilder()
-              .weakKeys()
-              .softValues()
-              .concurrencyLevel(concurrencyLevel)
-              .build());
+      return new ClassValueCache<>(new JvmClassValueStore(true));
+    }
+  }
+
+  private interface Store {
+    Object getIfPresent(Class<?> key);
+
+    Object get(Class<?> key, Callable<Object> loader) throws Exception;
+
+    void put(Class<?> key, Object value);
+  }
+
+  private static final class MapStore implements Store {
+    private final Cache<Class<?>, Object> cache;
+
+    private MapStore(int concurrencyLevel) {
+      cache = CacheBuilder.newBuilder().concurrencyLevel(concurrencyLevel).build();
+    }
+
+    @Override
+    public Object getIfPresent(Class<?> key) {
+      return cache.getIfPresent(key);
+    }
+
+    @Override
+    public Object get(Class<?> key, Callable<Object> loader) {
+      try {
+        return cache.get(key, loader);
+      } catch (ExecutionException e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void put(Class<?> key, Object value) {
+      cache.put(key, value);
+    }
+  }
+
+  private static final class JvmClassValueStore implements Store {
+    private final boolean softValues;
+    private final ClassValue<Holder> classValue =
+        new ClassValue<Holder>() {
+          @Override
+          protected Holder computeValue(Class<?> type) {
+            return new Holder(softValues);
+          }
+        };
+
+    private JvmClassValueStore(boolean softValues) {
+      this.softValues = softValues;
+    }
+
+    @Override
+    public Object getIfPresent(Class<?> key) {
+      return classValue.get(key).get();
+    }
+
+    @Override
+    public Object get(Class<?> key, Callable<Object> loader) throws Exception {
+      return classValue.get(key).get(loader);
+    }
+
+    @Override
+    public void put(Class<?> key, Object value) {
+      classValue.get(key).put(value);
+    }
+  }
+
+  private static final class Holder {
+    private final boolean softValue;
+    private volatile Object value;
+
+    private Holder(boolean softValue) {
+      this.softValue = softValue;
+    }
+
+    private Object get() {
+      Object current = value;
+      if (softValue && current instanceof SoftReference) {
+        return ((SoftReference<?>) current).get();
+      }
+      return current;
+    }
+
+    private synchronized Object get(Callable<Object> loader) throws Exception {
+      Object current = get();
+      if (current != null) {
+        return current;
+      }
+      current = loader.call();
+      put(current);
+      return current;
+    }
+
+    private void put(Object value) {
+      this.value = softValue ? new SoftReference<>(value) : value;
     }
   }
 

@@ -66,9 +66,13 @@ public class AndroidSupportStaticCheckTest {
           .forEach(
               path -> {
                 try {
+                  String relativePath = sourceRoot.relativize(path).toString().replace('\\', '/');
+                  if ("collection/ClassValueCache.java".equals(relativePath)) {
+                    return;
+                  }
                   String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
                   if (DIRECT_CLASS_VALUE.matcher(source).find()) {
-                    violations.add(sourceRoot.relativize(path).toString());
+                    violations.add(relativePath);
                   }
                 } catch (IOException e) {
                   throw new RuntimeException(e);

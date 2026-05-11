@@ -77,4 +77,4 @@ Fory fory = Fory.builder()
 - [Schema Evolution](schema-evolution.md) - Compatible mode and meta sharing
 - [Compression](compression.md) - Int, long, and array compression details
 - [Type Registration](type-registration.md) - Class registration options
-- [Static Struct Serializers](static-struct-serializers.md) - Build-time `@ForyStruct` serializers for `codegen=false` and Android
+- [Static Generated Serializers](static-generated-serializers.md) - Annotation-processor static generated serializers for `@ForyStruct`, `codegen=false`, and Android

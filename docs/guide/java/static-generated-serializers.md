@@ -1,7 +1,7 @@
 ---
-title: Static Struct Serializers
+title: Static Generated Serializers
 sidebar_position: 15
-id: static_struct_serializers
+id: static_generated_serializers
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,9 +19,9 @@ license: |
   limitations under the License.
 ---
 
-Build-time static serializers are generated for Java classes annotated with `@ForyStruct`. They
-provide a non-JIT serializer path for ordinary JVM runtimes using `ForyBuilder#withCodegen(false)`
-and for Android, where runtime bytecode generation is disabled.
+The Fory Java annotation processor generates build-time static generated serializers for classes
+annotated with `@ForyStruct`. They provide a non-JIT serializer path for ordinary JVM runtimes using
+`ForyBuilder#withCodegen(false)` and for Android, where runtime bytecode generation is disabled.
 
 ## Enabling The Processor
 
@@ -60,21 +60,17 @@ enclosing class and does not generate inner serializer classes.
 
 ## Runtime Selection
 
-Static serializers are used when available on:
+Annotation-processor static generated serializers are used when available on:
 
 - ordinary JVMs with `ForyBuilder#withCodegen(false)`.
 - Android runtimes, because runtime code generation is disabled there.
 - compatible-mode meta-share reads when a generated static serializer exists for the target struct.
 
-Ordinary JVM `codegen=true` keeps the runtime-generated serializer precedence. Static serializer
-lookup is deterministic by generated class name and does not scan the classpath.
+Ordinary JVM `codegen=true` keeps the runtime-generated serializer precedence. Static generated
+serializer lookup is deterministic by generated class name and does not scan the classpath.
 
-GraalVM native image does not use annotation-processor-generated static serializer classes. Native
-image builds use the GraalVM registry path: matching local and remote `TypeDef` hashes use the
-existing meta-shared generated serializer, and mismatched hashes use a build-time generated
-read-only compatible serializer cached by local Java class. At runtime, the compatible serializer
-constructor receives the current remote `TypeDef` and derives the remote-field layout from that
-metadata.
+GraalVM native image does not use annotation-processor-generated static serializer classes. Use the
+GraalVM guide for native-image build-time serializer generation.
 
 ## Field Access Rules
 
@@ -110,9 +106,9 @@ while avoiding Android reflection gaps.
 
 ## Compatible Reads
 
-Generated static serializers include normal read/write/copy methods and a compatible read method.
-The compatible path consumes remote schema metadata, matches remote fields to local fields, skips
-unknown fields, and preserves Java defaults for missing fields.
+Annotation-processor static generated serializers include normal read/write/copy methods and a
+compatible read method. The compatible path consumes remote schema metadata, matches remote fields
+to local fields, skips unknown fields, and preserves Java defaults for missing fields.
 
 Field matching assigns dense generated matched ids for the generated branch table. Those ids are
 local dispatch ids only; they are not `@ForyField.id` values and are not wire ids. Remote field order

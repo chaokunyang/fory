@@ -1,11 +1,12 @@
 # Fory Annotation Processor
 
-`fory-annotation-processor` generates build-time static serializers for Java classes annotated with
-`@ForyStruct`.
+`fory-annotation-processor` generates build-time static generated serializers for Java classes
+annotated with `@ForyStruct`.
 
 For ordinary JVM applications, prefer Fory's runtime generated serializers. Runtime generation is
-optimized for the active JVM and is usually more efficient than javac-generated static serializers.
-That is the normal high-performance path for server and desktop JVM deployments.
+optimized for the active JVM and is usually more efficient than annotation-processor static
+generated serializers. That is the normal high-performance path for server and desktop JVM
+deployments.
 
 Use this annotation processor when runtime source generation, bytecode generation, or dynamic class
 loading is not acceptable. The main target is Android, where runtime code generation is disabled.
@@ -23,4 +24,4 @@ runtime loads them deterministically by name when static serializers are availab
 codegen is disabled.
 
 For the full user-facing guide, see
-[`docs/guide/java/static-struct-serializers.md`](../../docs/guide/java/static-struct-serializers.md).
+[`docs/guide/java/static-generated-serializers.md`](../../docs/guide/java/static-generated-serializers.md).

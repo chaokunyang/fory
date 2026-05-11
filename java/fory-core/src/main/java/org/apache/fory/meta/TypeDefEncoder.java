@@ -102,14 +102,11 @@ class TypeDefEncoder {
                             + type.getName());
                   }
                   return new FieldInfo(
-                      descriptor.getDeclaringClass(),
-                      descriptor.getName(),
-                      fieldType,
-                      (short) tagId);
+                      type.getName(), descriptor.getName(), fieldType, (short) tagId);
                 }
                 // tagId == -1 means use field name, fall through to create regular FieldInfo
               }
-              return new FieldInfo(descriptor.getDeclaringClass(), descriptor.getName(), fieldType);
+              return new FieldInfo(type.getName(), descriptor.getName(), fieldType);
             })
         .collect(Collectors.toList());
   }

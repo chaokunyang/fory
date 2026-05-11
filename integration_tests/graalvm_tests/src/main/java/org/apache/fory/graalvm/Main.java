@@ -29,6 +29,7 @@ public class Main {
     XlangExample.main(args);
     CompatibleExample.main(args);
     ScopedCompatibleExample.main(args);
+    CompatibleDifferentSchemaExample.main(args);
     RecordExample.main(args);
     CompatibleRecordExample.main(args);
     RecordExample2.main(args);

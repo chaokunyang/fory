@@ -136,6 +136,10 @@ final class MemoryOps {
     return getByte(buffer.heapMemory, heapIndex(buffer, index));
   }
 
+  static byte getByte(byte[] source, int index) {
+    return source[index];
+  }
+
   static byte unsafeGetByte(MemoryBuffer buffer, int index) {
     return getByte(buffer.heapMemory, heapIndex(buffer, index));
   }
@@ -150,6 +154,10 @@ final class MemoryOps {
     putByte(buffer.heapMemory, heapIndex(buffer, index), value);
   }
 
+  static void putByte(byte[] target, int index, byte value) {
+    target[index] = value;
+  }
+
   static void unsafePutByte(MemoryBuffer buffer, int index, byte value) {
     putByte(buffer.heapMemory, heapIndex(buffer, index), value);
   }
@@ -159,12 +167,20 @@ final class MemoryOps {
     return getBoolean(buffer.heapMemory, heapIndex(buffer, index));
   }
 
+  static boolean getBoolean(byte[] source, int index) {
+    return source[index] != 0;
+  }
+
   static boolean unsafeGetBoolean(MemoryBuffer buffer, int index) {
     return getBoolean(buffer.heapMemory, heapIndex(buffer, index));
   }
 
   static void putBoolean(MemoryBuffer buffer, int index, boolean value) {
     putBoolean(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void putBoolean(byte[] target, int index, boolean value) {
+    target[index] = (byte) (value ? 1 : 0);
   }
 
   static char getChar(MemoryBuffer buffer, int index) {
@@ -190,6 +206,10 @@ final class MemoryOps {
     return getInt16(buffer.heapMemory, heapIndex(buffer, index));
   }
 
+  static short getInt16(byte[] source, int index) {
+    return (short) ((source[index] & 0xFF) | (source[index + 1] << 8));
+  }
+
   static short unsafeGetInt16(MemoryBuffer buffer, int index) {
     return getInt16(buffer.heapMemory, heapIndex(buffer, index));
   }
@@ -197,6 +217,11 @@ final class MemoryOps {
   static void putInt16(MemoryBuffer buffer, int index, short value) {
     checkPosition(buffer, index, 2);
     putInt16(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void putInt16(byte[] target, int index, short value) {
+    target[index] = (byte) value;
+    target[index + 1] = (byte) (value >>> 8);
   }
 
   static void unsafePutInt16(MemoryBuffer buffer, int index, short value) {
@@ -208,6 +233,13 @@ final class MemoryOps {
     return getInt32(buffer.heapMemory, heapIndex(buffer, index));
   }
 
+  static int getInt32(byte[] source, int index) {
+    return (source[index] & 0xFF)
+        | ((source[index + 1] & 0xFF) << 8)
+        | ((source[index + 2] & 0xFF) << 16)
+        | (source[index + 3] << 24);
+  }
+
   static int unsafeGetInt32(MemoryBuffer buffer, int index) {
     return getInt32(buffer.heapMemory, heapIndex(buffer, index));
   }
@@ -215,6 +247,13 @@ final class MemoryOps {
   static void putInt32(MemoryBuffer buffer, int index, int value) {
     checkPosition(buffer, index, 4);
     putInt32(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void putInt32(byte[] target, int index, int value) {
+    target[index] = (byte) value;
+    target[index + 1] = (byte) (value >>> 8);
+    target[index + 2] = (byte) (value >>> 16);
+    target[index + 3] = (byte) (value >>> 24);
   }
 
   static void unsafePutInt32(MemoryBuffer buffer, int index, int value) {
@@ -226,6 +265,17 @@ final class MemoryOps {
     return getInt64(buffer.heapMemory, heapIndex(buffer, index));
   }
 
+  static long getInt64(byte[] source, int index) {
+    return ((long) source[index] & 0xFF)
+        | (((long) source[index + 1] & 0xFF) << 8)
+        | (((long) source[index + 2] & 0xFF) << 16)
+        | (((long) source[index + 3] & 0xFF) << 24)
+        | (((long) source[index + 4] & 0xFF) << 32)
+        | (((long) source[index + 5] & 0xFF) << 40)
+        | (((long) source[index + 6] & 0xFF) << 48)
+        | ((long) source[index + 7] << 56);
+  }
+
   static long unsafeGetInt64(MemoryBuffer buffer, int index) {
     return getInt64(buffer.heapMemory, heapIndex(buffer, index));
   }
@@ -233,6 +283,17 @@ final class MemoryOps {
   static void putInt64(MemoryBuffer buffer, int index, long value) {
     checkPosition(buffer, index, 8);
     putInt64(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void putInt64(byte[] target, int index, long value) {
+    target[index] = (byte) value;
+    target[index + 1] = (byte) (value >>> 8);
+    target[index + 2] = (byte) (value >>> 16);
+    target[index + 3] = (byte) (value >>> 24);
+    target[index + 4] = (byte) (value >>> 32);
+    target[index + 5] = (byte) (value >>> 40);
+    target[index + 6] = (byte) (value >>> 48);
+    target[index + 7] = (byte) (value >>> 56);
   }
 
   static void unsafePutInt64(MemoryBuffer buffer, int index, long value) {
@@ -244,9 +305,17 @@ final class MemoryOps {
     return getFloat32(buffer.heapMemory, heapIndex(buffer, index));
   }
 
+  static float getFloat32(byte[] source, int index) {
+    return Float.intBitsToFloat(getInt32(source, index));
+  }
+
   static void putFloat32(MemoryBuffer buffer, int index, float value) {
     checkPosition(buffer, index, 4);
     putFloat32(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void putFloat32(byte[] target, int index, float value) {
+    putInt32(target, index, Float.floatToRawIntBits(value));
   }
 
   static double getFloat64(MemoryBuffer buffer, int index) {
@@ -254,9 +323,17 @@ final class MemoryOps {
     return getFloat64(buffer.heapMemory, heapIndex(buffer, index));
   }
 
+  static double getFloat64(byte[] source, int index) {
+    return Double.longBitsToDouble(getInt64(source, index));
+  }
+
   static void putFloat64(MemoryBuffer buffer, int index, double value) {
     checkPosition(buffer, index, 8);
     putFloat64(buffer.heapMemory, heapIndex(buffer, index), value);
+  }
+
+  static void putFloat64(byte[] target, int index, double value) {
+    putInt64(target, index, Double.doubleToRawLongBits(value));
   }
 
   static void writeBoolean(MemoryBuffer buffer, boolean value) {
@@ -458,6 +535,13 @@ final class MemoryOps {
     buffer.writerIndex = newIdx;
   }
 
+  static void writeBooleans(
+      byte[] target, int targetIndex, boolean[] source, int sourceIndex, int length) {
+    for (int i = 0; i < length; i++) {
+      target[targetIndex + i] = (byte) (source[sourceIndex + i] ? 1 : 0);
+    }
+  }
+
   static void writeBytesWithSize(MemoryBuffer buffer, byte[] values) {
     writeVarUInt32Small7(buffer, values.length);
     int writerIdx = buffer.writerIndex;
@@ -517,6 +601,13 @@ final class MemoryOps {
     buffer.writerIndex = newIdx;
   }
 
+  static void writeChars(
+      byte[] target, int targetIndex, char[] source, int sourceIndex, int length) {
+    for (int i = 0; i < length; i++) {
+      putInt16(target, targetIndex + i * 2, (short) source[sourceIndex + i]);
+    }
+  }
+
   static void writeShorts(MemoryBuffer buffer, short[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 2);
     int writerIdx = buffer.writerIndex;
@@ -524,6 +615,13 @@ final class MemoryOps {
     buffer.ensure(newIdx);
     writeShorts(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
     buffer.writerIndex = newIdx;
+  }
+
+  static void writeShorts(
+      byte[] target, int targetIndex, short[] source, int sourceIndex, int length) {
+    for (int i = 0; i < length; i++) {
+      putInt16(target, targetIndex + i * 2, source[sourceIndex + i]);
+    }
   }
 
   static void writeInts(MemoryBuffer buffer, int[] values, int offset, int numElements) {
@@ -535,6 +633,12 @@ final class MemoryOps {
     buffer.writerIndex = newIdx;
   }
 
+  static void writeInts(byte[] target, int targetIndex, int[] source, int sourceIndex, int length) {
+    for (int i = 0; i < length; i++) {
+      putInt32(target, targetIndex + i * 4, source[sourceIndex + i]);
+    }
+  }
+
   static void writeLongs(MemoryBuffer buffer, long[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 8);
     int writerIdx = buffer.writerIndex;
@@ -542,6 +646,13 @@ final class MemoryOps {
     buffer.ensure(newIdx);
     writeLongs(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
     buffer.writerIndex = newIdx;
+  }
+
+  static void writeLongs(
+      byte[] target, int targetIndex, long[] source, int sourceIndex, int length) {
+    for (int i = 0; i < length; i++) {
+      putInt64(target, targetIndex + i * 8, source[sourceIndex + i]);
+    }
   }
 
   static void writeFloats(MemoryBuffer buffer, float[] values, int offset, int numElements) {
@@ -553,6 +664,13 @@ final class MemoryOps {
     buffer.writerIndex = newIdx;
   }
 
+  static void writeFloats(
+      byte[] target, int targetIndex, float[] source, int sourceIndex, int length) {
+    for (int i = 0; i < length; i++) {
+      putFloat32(target, targetIndex + i * 4, source[sourceIndex + i]);
+    }
+  }
+
   static void writeDoubles(MemoryBuffer buffer, double[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 8);
     int writerIdx = buffer.writerIndex;
@@ -560,6 +678,13 @@ final class MemoryOps {
     buffer.ensure(newIdx);
     writeDoubles(buffer.heapMemory, heapIndex(buffer, writerIdx), values, offset, numElements);
     buffer.writerIndex = newIdx;
+  }
+
+  static void writeDoubles(
+      byte[] target, int targetIndex, double[] source, int sourceIndex, int length) {
+    for (int i = 0; i < length; i++) {
+      putFloat64(target, targetIndex + i * 8, source[sourceIndex + i]);
+    }
   }
 
   private static int prepareRead(MemoryBuffer buffer, int numBytes) {
@@ -648,6 +773,11 @@ final class MemoryOps {
     return (result >>> 1) ^ -(result & 1);
   }
 
+  static int readVarInt32(byte[] source, int index) {
+    int result = readVarUInt32(source, index);
+    return (result >>> 1) ^ -(result & 1);
+  }
+
   static int readVarUInt32(MemoryBuffer buffer) {
     int readIdx = buffer.readerIndex;
     if (buffer.size - readIdx < 5) {
@@ -657,6 +787,24 @@ final class MemoryOps {
     int result = readVarUInt32(buffer.heapMemory, heapIndex);
     buffer.readerIndex = readIdx + varUInt32Bytes(buffer.heapMemory, heapIndex);
     return result;
+  }
+
+  static int readVarUInt32(byte[] source, int index) {
+    int result = 0;
+    int shift = 0;
+    for (int i = 0; i < 4; i++) {
+      int b = source[index + i] & 0xFF;
+      result |= (b & 0x7F) << shift;
+      if ((b & 0x80) == 0) {
+        return result;
+      }
+      shift += 7;
+    }
+    int fifthByte = source[index + 4] & 0xFF;
+    if ((fifthByte & 0xF0) != 0) {
+      throwMalformedVarUInt32(fifthByte);
+    }
+    return result | (fifthByte << 28);
   }
 
   static long readVarUint36Small(MemoryBuffer buffer) {
@@ -670,8 +818,27 @@ final class MemoryOps {
     return result;
   }
 
+  static long readVarUint36Small(byte[] source, int index) {
+    long result = 0;
+    int shift = 0;
+    for (int i = 0; i < 4; i++) {
+      int b = source[index + i] & 0xFF;
+      result |= (long) (b & 0x7F) << shift;
+      if ((b & 0x80) == 0) {
+        return result;
+      }
+      shift += 7;
+    }
+    return result | ((long) source[index + 4] & 0xFF) << 28;
+  }
+
   static long readVarInt64(MemoryBuffer buffer) {
     long result = readVarUInt64(buffer);
+    return (result >>> 1) ^ -(result & 1);
+  }
+
+  static long readVarInt64(byte[] source, int index) {
+    long result = readVarUInt64(source, index);
     return (result >>> 1) ^ -(result & 1);
   }
 
@@ -684,6 +851,20 @@ final class MemoryOps {
     long result = readVarUInt64(buffer.heapMemory, heapIndex);
     buffer.readerIndex = readIdx + varUInt64Bytes(buffer.heapMemory, heapIndex);
     return result;
+  }
+
+  static long readVarUInt64(byte[] source, int index) {
+    long result = 0;
+    int shift = 0;
+    for (int i = 0; i < 8; i++) {
+      int b = source[index + i] & 0xFF;
+      result |= (long) (b & 0x7F) << shift;
+      if ((b & 0x80) == 0) {
+        return result;
+      }
+      shift += 7;
+    }
+    return result | ((long) source[index + 8] & 0xFF) << 56;
   }
 
   static int readAlignedVarUInt32(MemoryBuffer buffer) {
@@ -1194,83 +1375,6 @@ final class MemoryOps {
     return result;
   }
 
-  static boolean getBoolean(byte[] source, int index) {
-    return source[index] != 0;
-  }
-
-  static void putBoolean(byte[] target, int index, boolean value) {
-    target[index] = (byte) (value ? 1 : 0);
-  }
-
-  static byte getByte(byte[] source, int index) {
-    return source[index];
-  }
-
-  static void putByte(byte[] target, int index, byte value) {
-    target[index] = value;
-  }
-
-  static short getInt16(byte[] source, int index) {
-    return (short) ((source[index] & 0xFF) | (source[index + 1] << 8));
-  }
-
-  static void putInt16(byte[] target, int index, short value) {
-    target[index] = (byte) value;
-    target[index + 1] = (byte) (value >>> 8);
-  }
-
-  static int getInt32(byte[] source, int index) {
-    return (source[index] & 0xFF)
-        | ((source[index + 1] & 0xFF) << 8)
-        | ((source[index + 2] & 0xFF) << 16)
-        | (source[index + 3] << 24);
-  }
-
-  static void putInt32(byte[] target, int index, int value) {
-    target[index] = (byte) value;
-    target[index + 1] = (byte) (value >>> 8);
-    target[index + 2] = (byte) (value >>> 16);
-    target[index + 3] = (byte) (value >>> 24);
-  }
-
-  static long getInt64(byte[] source, int index) {
-    return ((long) source[index] & 0xFF)
-        | (((long) source[index + 1] & 0xFF) << 8)
-        | (((long) source[index + 2] & 0xFF) << 16)
-        | (((long) source[index + 3] & 0xFF) << 24)
-        | (((long) source[index + 4] & 0xFF) << 32)
-        | (((long) source[index + 5] & 0xFF) << 40)
-        | (((long) source[index + 6] & 0xFF) << 48)
-        | ((long) source[index + 7] << 56);
-  }
-
-  static void putInt64(byte[] target, int index, long value) {
-    target[index] = (byte) value;
-    target[index + 1] = (byte) (value >>> 8);
-    target[index + 2] = (byte) (value >>> 16);
-    target[index + 3] = (byte) (value >>> 24);
-    target[index + 4] = (byte) (value >>> 32);
-    target[index + 5] = (byte) (value >>> 40);
-    target[index + 6] = (byte) (value >>> 48);
-    target[index + 7] = (byte) (value >>> 56);
-  }
-
-  static float getFloat32(byte[] source, int index) {
-    return Float.intBitsToFloat(getInt32(source, index));
-  }
-
-  static void putFloat32(byte[] target, int index, float value) {
-    putInt32(target, index, Float.floatToRawIntBits(value));
-  }
-
-  static double getFloat64(byte[] source, int index) {
-    return Double.longBitsToDouble(getInt64(source, index));
-  }
-
-  static void putFloat64(byte[] target, int index, double value) {
-    putInt64(target, index, Double.doubleToRawLongBits(value));
-  }
-
   static void copy(byte[] source, int sourceIndex, byte[] target, int targetIndex, int length) {
     System.arraycopy(source, sourceIndex, target, targetIndex, length);
   }
@@ -1325,29 +1429,6 @@ final class MemoryOps {
     return index - start;
   }
 
-  static int readVarInt32(byte[] source, int index) {
-    int result = readVarUInt32(source, index);
-    return (result >>> 1) ^ -(result & 1);
-  }
-
-  static int readVarUInt32(byte[] source, int index) {
-    int result = 0;
-    int shift = 0;
-    for (int i = 0; i < 4; i++) {
-      int b = source[index + i] & 0xFF;
-      result |= (b & 0x7F) << shift;
-      if ((b & 0x80) == 0) {
-        return result;
-      }
-      shift += 7;
-    }
-    int fifthByte = source[index + 4] & 0xFF;
-    if ((fifthByte & 0xF0) != 0) {
-      throwMalformedVarUInt32(fifthByte);
-    }
-    return result | (fifthByte << 28);
-  }
-
   static int varUInt32Bytes(byte[] source, int index) {
     for (int i = 0; i < 4; i++) {
       if ((source[index + i] & 0x80) == 0) {
@@ -1361,20 +1442,6 @@ final class MemoryOps {
     return 5;
   }
 
-  static long readVarUint36Small(byte[] source, int index) {
-    long result = 0;
-    int shift = 0;
-    for (int i = 0; i < 4; i++) {
-      int b = source[index + i] & 0xFF;
-      result |= (long) (b & 0x7F) << shift;
-      if ((b & 0x80) == 0) {
-        return result;
-      }
-      shift += 7;
-    }
-    return result | ((long) source[index + 4] & 0xFF) << 28;
-  }
-
   static int varUint36SmallBytes(byte[] source, int index) {
     for (int i = 0; i < 4; i++) {
       if ((source[index + i] & 0x80) == 0) {
@@ -1382,25 +1449,6 @@ final class MemoryOps {
       }
     }
     return 5;
-  }
-
-  static long readVarInt64(byte[] source, int index) {
-    long result = readVarUInt64(source, index);
-    return (result >>> 1) ^ -(result & 1);
-  }
-
-  static long readVarUInt64(byte[] source, int index) {
-    long result = 0;
-    int shift = 0;
-    for (int i = 0; i < 8; i++) {
-      int b = source[index + i] & 0xFF;
-      result |= (long) (b & 0x7F) << shift;
-      if ((b & 0x80) == 0) {
-        return result;
-      }
-      shift += 7;
-    }
-    return result | ((long) source[index + 8] & 0xFF) << 56;
   }
 
   static int varUInt64Bytes(byte[] source, int index) {
@@ -1415,53 +1463,5 @@ final class MemoryOps {
   private static void throwMalformedVarUInt32(int fifthByte) {
     throw new IllegalArgumentException(
         "Malformed varuint32 fifth byte " + fifthByte + " exceeds 32 bits");
-  }
-
-  static void writeBooleans(
-      byte[] target, int targetIndex, boolean[] source, int sourceIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      target[targetIndex + i] = (byte) (source[sourceIndex + i] ? 1 : 0);
-    }
-  }
-
-  static void writeChars(
-      byte[] target, int targetIndex, char[] source, int sourceIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      putInt16(target, targetIndex + i * 2, (short) source[sourceIndex + i]);
-    }
-  }
-
-  static void writeShorts(
-      byte[] target, int targetIndex, short[] source, int sourceIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      putInt16(target, targetIndex + i * 2, source[sourceIndex + i]);
-    }
-  }
-
-  static void writeInts(byte[] target, int targetIndex, int[] source, int sourceIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      putInt32(target, targetIndex + i * 4, source[sourceIndex + i]);
-    }
-  }
-
-  static void writeLongs(
-      byte[] target, int targetIndex, long[] source, int sourceIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      putInt64(target, targetIndex + i * 8, source[sourceIndex + i]);
-    }
-  }
-
-  static void writeFloats(
-      byte[] target, int targetIndex, float[] source, int sourceIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      putFloat32(target, targetIndex + i * 4, source[sourceIndex + i]);
-    }
-  }
-
-  static void writeDoubles(
-      byte[] target, int targetIndex, double[] source, int sourceIndex, int length) {
-    for (int i = 0; i < length; i++) {
-      putFloat64(target, targetIndex + i * 8, source[sourceIndex + i]);
-    }
   }
 }

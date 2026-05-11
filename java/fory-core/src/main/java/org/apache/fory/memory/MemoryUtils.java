@@ -57,7 +57,8 @@ public class MemoryUtils {
    */
   public static MemoryBuffer wrap(ByteBuffer buffer) {
     if (AndroidSupport.IS_ANDROID) {
-      // Android ByteBuffer roots copy into a Fory-owned heap buffer; never read direct-buffer native
+      // Android ByteBuffer roots copy into a Fory-owned heap buffer; never read direct-buffer
+      // native
       // addresses or depend on read-only buffers exposing arrays.
       return copyToHeapBuffer(buffer);
     } else if (buffer.isDirect()) {

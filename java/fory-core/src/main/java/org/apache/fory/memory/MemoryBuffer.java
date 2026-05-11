@@ -3305,6 +3305,8 @@ public final class MemoryBuffer {
       }
       int numElements = numBytes >>> 2;
       if (numElements <= 32) {
+        // Small int payloads are common in generated user-type reads. Local loads avoid the fixed
+        // copyMemory cost without adding helper indirection to this hot path.
         long pointer = address + readerIdx;
         for (int i = 0; i < numElements; i++) {
           values[i] = UNSAFE.getInt(heapMemory, pointer + ((long) i << 2));

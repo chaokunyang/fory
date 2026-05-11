@@ -167,6 +167,8 @@ public abstract class FieldAccessor {
       }
     }
     if (AndroidSupport.IS_ANDROID) {
+      // Android field access must stay reflection-owned: no Unsafe offsets, trusted lookups,
+      // generated accessors, or primitive-specific reflection subclasses.
       return new ReflectionFieldAccessor(field);
     }
     if (GraalvmSupport.isGraalBuildTime()) {

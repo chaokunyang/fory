@@ -24,7 +24,13 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import org.apache.fory.memory.MemoryBuffer;
 
-/** A streaming reader to make {@link MemoryBuffer} to support streaming reading. */
+/**
+ * A streaming reader to make {@link MemoryBuffer} to support streaming reading.
+ *
+ * <p>Typed array defaults are the stream fallback for MemoryBuffer payload readers. Keep callers on
+ * typed destination arrays instead of raw object offsets; implementations may override these methods
+ * for specialized bulk IO.
+ */
 public interface ForyStreamReader {
 
   /**

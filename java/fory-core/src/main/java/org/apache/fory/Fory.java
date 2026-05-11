@@ -364,6 +364,8 @@ public final class Fory implements BaseFory {
     if (!AndroidSupport.IS_ANDROID && !byteBuffer.isReadOnly()) {
       return deserialize(MemoryUtils.wrap(byteBuffer));
     }
+    // Android must not inspect direct-buffer native addresses, and read-only buffers may not expose
+    // arrays. Copy through a duplicate so this root API preserves the caller's ByteBuffer position.
     return deserializeByteBufferByCopy(byteBuffer);
   }
 

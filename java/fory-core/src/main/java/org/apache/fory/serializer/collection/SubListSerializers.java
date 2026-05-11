@@ -240,6 +240,7 @@ public class SubListSerializers {
       Field fallbackSourceField = null;
       Field offsetField = null;
       Field sizeField = null;
+      boolean syntheticRootSource = false;
       int intFields = 0;
       int sourceFields = 0;
       for (Field field : type.getDeclaredFields()) {
@@ -259,6 +260,12 @@ public class SubListSerializers {
           sourceFields++;
           if ("root".equals(name) || "l".equals(name) || "list".equals(name)) {
             sourceField = field;
+            syntheticRootSource = false;
+          } else if (sourceField == null && field.isSynthetic() && name.startsWith("this$")) {
+            // JDK 8 ArrayList$SubList keeps the root list in the synthetic outer field. Its
+            // named "offset" field is root-relative, so do not use the "parent" list field here.
+            sourceField = field;
+            syntheticRootSource = true;
           } else if (fallbackSourceField == null) {
             fallbackSourceField = field;
           }
@@ -267,7 +274,11 @@ public class SubListSerializers {
       if (sourceField == null && sourceFields == 1) {
         sourceField = fallbackSourceField;
       }
-      if (sourceField == null || offsetField == null || sizeField == null || intFields != 2) {
+      boolean jdk8ArrayListSubListLayout = syntheticRootSource && intFields == 3;
+      if (sourceField == null
+          || offsetField == null
+          || sizeField == null
+          || (intFields != 2 && !jdk8ArrayListSubListLayout)) {
         return null;
       }
       return new ViewFields(

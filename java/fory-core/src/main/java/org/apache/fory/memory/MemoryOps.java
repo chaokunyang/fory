@@ -458,6 +458,56 @@ final class MemoryOps {
     buffer.writerIndex = newIdx;
   }
 
+  static void writeBytesWithSize(MemoryBuffer buffer, byte[] values) {
+    writeVarUInt32Small7(buffer, values.length);
+    int writerIdx = buffer.writerIndex;
+    int newIdx = writerIdx + values.length;
+    buffer.ensure(newIdx);
+    System.arraycopy(values, 0, buffer.heapMemory, heapIndex(buffer, writerIdx), values.length);
+    buffer.writerIndex = newIdx;
+  }
+
+  static void writeBooleansWithSize(MemoryBuffer buffer, boolean[] values) {
+    writeVarUInt32Small7(buffer, values.length);
+    writeBooleans(buffer, values, 0, values.length);
+  }
+
+  static void writeCharsWithSize(MemoryBuffer buffer, char[] values) {
+    int numBytes = Math.multiplyExact(values.length, 2);
+    writeVarUInt32Small7(buffer, numBytes);
+    writeChars(buffer, values, 0, values.length);
+  }
+
+  static void writeShortsWithSize(MemoryBuffer buffer, short[] values) {
+    int numBytes = Math.multiplyExact(values.length, 2);
+    writeVarUInt32Small7(buffer, numBytes);
+    writeShorts(buffer, values, 0, values.length);
+  }
+
+  static void writeIntsWithSize(MemoryBuffer buffer, int[] values) {
+    int numBytes = Math.multiplyExact(values.length, 4);
+    writeVarUInt32Small7(buffer, numBytes);
+    writeInts(buffer, values, 0, values.length);
+  }
+
+  static void writeLongsWithSize(MemoryBuffer buffer, long[] values) {
+    int numBytes = Math.multiplyExact(values.length, 8);
+    writeVarUInt32Small7(buffer, numBytes);
+    writeLongs(buffer, values, 0, values.length);
+  }
+
+  static void writeFloatsWithSize(MemoryBuffer buffer, float[] values) {
+    int numBytes = Math.multiplyExact(values.length, 4);
+    writeVarUInt32Small7(buffer, numBytes);
+    writeFloats(buffer, values, 0, values.length);
+  }
+
+  static void writeDoublesWithSize(MemoryBuffer buffer, double[] values) {
+    int numBytes = Math.multiplyExact(values.length, 8);
+    writeVarUInt32Small7(buffer, numBytes);
+    writeDoubles(buffer, values, 0, values.length);
+  }
+
   static void writeChars(MemoryBuffer buffer, char[] values, int offset, int numElements) {
     int numBytes = Math.multiplyExact(numElements, 2);
     int writerIdx = buffer.writerIndex;

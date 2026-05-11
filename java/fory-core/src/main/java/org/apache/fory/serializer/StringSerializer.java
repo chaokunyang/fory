@@ -364,7 +364,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   // Invoked by fory JIT
   public void writeString(MemoryBuffer buffer, String value) {
     if (AndroidSupport.IS_ANDROID) {
-      writeAndroidString(buffer, value);
+      writeStringSlow(buffer, value);
       return;
     }
     if (STRING_VALUE_FIELD_IS_BYTES) {
@@ -398,7 +398,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   // Invoked by fory JIT
   public String readString(MemoryBuffer buffer) {
     if (AndroidSupport.IS_ANDROID) {
-      return readAndroidString(buffer);
+      return readStringSlow(buffer);
     }
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
@@ -416,7 +416,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     }
   }
 
-  private void writeAndroidString(MemoryBuffer buffer, String value) {
+  private void writeStringSlow(MemoryBuffer buffer, String value) {
     char[] chars = value.toCharArray();
     if (isLatin(chars)) {
       writeCharsLatin1(buffer, chars, chars.length);
@@ -426,14 +426,14 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       byte[] utf8Bytes = value.getBytes(StandardCharsets.UTF_8);
       int utf16Bytes = chars.length << 1;
       if (utf8Bytes.length < utf16Bytes) {
-        writeAndroidUtf8(buffer, utf8Bytes, utf16Bytes);
+        writeStringUtf8Slow(buffer, utf8Bytes, utf16Bytes);
         return;
       }
     }
     writeCharsUTF16(buffer, chars, chars.length);
   }
 
-  private String readAndroidString(MemoryBuffer buffer) {
+  private String readStringSlow(MemoryBuffer buffer) {
     long header = buffer.readVarUint36Small();
     byte coder = (byte) (header & 0b11);
     int numBytes = (int) (header >>> 2);
@@ -449,7 +449,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     }
   }
 
-  private void writeAndroidUtf8(MemoryBuffer buffer, byte[] utf8Bytes, int utf16Bytes) {
+  private void writeStringUtf8Slow(MemoryBuffer buffer, byte[] utf8Bytes, int utf16Bytes) {
     int headerLength = writeNumUtf16BytesForUtf8Encoding ? utf16Bytes : utf8Bytes.length;
     writeVarUint36Small(buffer, ((long) headerLength << 2) | UTF8);
     if (writeNumUtf16BytesForUtf8Encoding) {
@@ -554,7 +554,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       System.arraycopy(bytes, 0, targetArray, arrIndex, bytesLen);
     } else {
       writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      buffer.put(writerIndex, bytes, 0, bytesLen);
+      buffer.copyFromUnsafe(writerIndex, bytes, UnsafeOps.BYTE_ARRAY_OFFSET, bytesLen);
     }
     writerIndex += bytesLen;
     buffer._unsafeWriterIndex(writerIndex);
@@ -742,7 +742,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       writerIndex += arrIndex - targetIndex + numBytes;
       if (NativeByteOrder.IS_LITTLE_ENDIAN) {
         if (AndroidSupport.IS_ANDROID) {
-          writeCharsUTF16BEToHeap(chars, arrIndex, numBytes, targetArray);
+          writeCharsUTF16ToHeapSlow(chars, arrIndex, numBytes, targetArray);
         } else {
           // FIXME JDK11 utf16 string uses little-endian order.
           UnsafeOps.UNSAFE.copyMemory(
@@ -922,7 +922,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   public static String newCharsStringZeroCopy(char[] data) {
     if (AndroidSupport.IS_ANDROID) {
-      return new String(data);
+      return newCharsStringSlow(data);
     }
     if (!STRING_VALUE_FIELD_IS_CHARS) {
       throw new IllegalStateException("String value isn't char[], current java isn't supported");
@@ -931,21 +931,15 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return CHARS_STRING_ZERO_COPY_CTR.apply(data, Boolean.TRUE);
   }
 
+  private static String newCharsStringSlow(char[] data) {
+    return new String(data);
+  }
+
   // coder param first to make inline call args
   // `(buffer.readByte(), buffer.readBytesWithSizeEmbedded())` work.
   public static String newBytesStringZeroCopy(byte coder, byte[] data) {
     if (AndroidSupport.IS_ANDROID) {
-      if (coder == LATIN1) {
-        return new String(data, StandardCharsets.ISO_8859_1);
-      } else if (coder == UTF16) {
-        char[] chars = new char[data.length >> 1];
-        for (int i = 0, j = 0; i < data.length; i += 2) {
-          chars[j++] = (char) ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8));
-        }
-        return new String(chars);
-      } else {
-        return new String(data, StandardCharsets.UTF_8);
-      }
+      return newBytesStringSlow(coder, data);
     }
     if (coder == LATIN1) {
       // 700% faster than unsafe put field in java11, only 10% slower than `new String(str)` for
@@ -967,6 +961,20 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       // `invokeExact` must pass exact params with exact types:
       // `(Object) data, coder` will throw WrongMethodTypeException
       return BYTES_STRING_ZERO_COPY_CTR.apply(data, coder);
+    }
+  }
+
+  private static String newBytesStringSlow(byte coder, byte[] data) {
+    if (coder == LATIN1) {
+      return new String(data, StandardCharsets.ISO_8859_1);
+    } else if (coder == UTF16) {
+      char[] chars = new char[data.length >> 1];
+      for (int i = 0, j = 0; i < data.length; i += 2) {
+        chars[j++] = (char) ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8));
+      }
+      return new String(chars);
+    } else {
+      return new String(data, StandardCharsets.UTF_8);
     }
   }
 
@@ -1068,6 +1076,11 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       targetArray[i] = (byte) c;
       targetArray[i + 1] = (byte) (c >>> 8);
     }
+  }
+
+  private static void writeCharsUTF16ToHeapSlow(
+      char[] chars, int arrIndex, int numBytes, byte[] targetArray) {
+    writeCharsUTF16BEToHeap(chars, arrIndex, numBytes, targetArray);
   }
 
   private int offHeapWriteCharsUTF16(

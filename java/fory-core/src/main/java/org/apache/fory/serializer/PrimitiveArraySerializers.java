@@ -317,13 +317,13 @@ public final class PrimitiveArraySerializers {
     }
 
     private void readCharBySwapEndian(MemoryBuffer buffer, char[] values, int numElements) {
-      int idx = buffer.readerIndex();
-      int size = numElements * 2;
-      buffer.checkReadableBytes(size);
+      int size = numElements << 1;
+      // Do not loop through MemoryBuffer._unsafeGet* here; those helpers carry Android dispatch.
+      // Copy the payload once, then byte-swap the destination values locally.
+      buffer.readCharArrayPayload(values, size);
       for (int i = 0; i < numElements; i++) {
-        values[i] = (char) buffer._unsafeGetInt16(idx + i * 2);
+        values[i] = Character.reverseBytes(values[i]);
       }
-      buffer._increaseReaderIndexUnsafe(size);
     }
   }
 
@@ -434,13 +434,13 @@ public final class PrimitiveArraySerializers {
     }
 
     private void readInt32BySwapEndian(MemoryBuffer buffer, int[] values, int numElements) {
-      int idx = buffer.readerIndex();
-      int size = numElements * 4;
-      buffer.checkReadableBytes(size);
+      int size = numElements << 2;
+      // Do not loop through MemoryBuffer._unsafeGet* here; those helpers carry Android dispatch.
+      // Copy the payload once, then byte-swap the destination values locally.
+      buffer.readInt32ArrayPayload(values, size);
       for (int i = 0; i < numElements; i++) {
-        values[i] = buffer._unsafeGetInt32(idx + i * 4);
+        values[i] = Integer.reverseBytes(values[i]);
       }
-      buffer._increaseReaderIndexUnsafe(size);
     }
 
     private void writeInt32Compressed(MemoryBuffer buffer, int[] value) {
@@ -555,13 +555,13 @@ public final class PrimitiveArraySerializers {
     }
 
     private void readInt64BySwapEndian(MemoryBuffer buffer, long[] values, int numElements) {
-      int idx = buffer.readerIndex();
-      int size = numElements * 8;
-      buffer.checkReadableBytes(size);
+      int size = numElements << 3;
+      // Do not loop through MemoryBuffer._unsafeGet* here; those helpers carry Android dispatch.
+      // Copy the payload once, then byte-swap the destination values locally.
+      buffer.readInt64ArrayPayload(values, size);
       for (int i = 0; i < numElements; i++) {
-        values[i] = buffer._unsafeGetInt64(idx + i * 8);
+        values[i] = Long.reverseBytes(values[i]);
       }
-      buffer._increaseReaderIndexUnsafe(size);
     }
 
     private void writeInt64Compressed(
@@ -673,13 +673,13 @@ public final class PrimitiveArraySerializers {
     }
 
     private void readFloat32BySwapEndian(MemoryBuffer buffer, float[] values, int numElements) {
-      int idx = buffer.readerIndex();
-      int size = numElements * 4;
-      buffer.checkReadableBytes(size);
+      int size = numElements << 2;
+      // Do not loop through MemoryBuffer._unsafeGet* here; those helpers carry Android dispatch.
+      // Copy the payload once, then byte-swap the destination values locally.
+      buffer.readFloat32ArrayPayload(values, size);
       for (int i = 0; i < numElements; i++) {
-        values[i] = Float.intBitsToFloat(buffer._unsafeGetInt32(idx + i * 4));
+        values[i] = Float.intBitsToFloat(Integer.reverseBytes(Float.floatToRawIntBits(values[i])));
       }
-      buffer._increaseReaderIndexUnsafe(size);
     }
   }
 
@@ -758,13 +758,14 @@ public final class PrimitiveArraySerializers {
     }
 
     private void readFloat64BySwapEndian(MemoryBuffer buffer, double[] values, int numElements) {
-      int idx = buffer.readerIndex();
-      int size = numElements * 8;
-      buffer.checkReadableBytes(size);
+      int size = numElements << 3;
+      // Do not loop through MemoryBuffer._unsafeGet* here; those helpers carry Android dispatch.
+      // Copy the payload once, then byte-swap the destination values locally.
+      buffer.readFloat64ArrayPayload(values, size);
       for (int i = 0; i < numElements; i++) {
-        values[i] = Double.longBitsToDouble(buffer._unsafeGetInt64(idx + i * 8));
+        values[i] =
+            Double.longBitsToDouble(Long.reverseBytes(Double.doubleToRawLongBits(values[i])));
       }
-      buffer._increaseReaderIndexUnsafe(size);
     }
   }
 
@@ -874,13 +875,13 @@ public final class PrimitiveArraySerializers {
   }
 
   private static void readInt16BySwapEndian(MemoryBuffer buffer, short[] values, int numElements) {
-    int idx = buffer.readerIndex();
-    int size = numElements * 2;
-    buffer.checkReadableBytes(size);
+    int size = numElements << 1;
+    // Do not loop through MemoryBuffer._unsafeGet* here; those helpers carry Android dispatch.
+    // Copy the payload once, then byte-swap the destination values locally.
+    buffer.readInt16ArrayPayload(values, size);
     for (int i = 0; i < numElements; i++) {
-      values[i] = buffer._unsafeGetInt16(idx + i * 2);
+      values[i] = Short.reverseBytes(values[i]);
     }
-    buffer._increaseReaderIndexUnsafe(size);
   }
 
   public static void registerDefaultSerializers(TypeResolver resolver) {

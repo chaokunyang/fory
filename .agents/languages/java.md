@@ -42,6 +42,13 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - In `MemoryBuffer` and `MemoryOps` hot paths, duplicate small straight-line copy/read/write logic
   when that keeps control flow direct. Do not add private helper indirection to hot paths just to
   reduce local code duplication; keep helpers for slow, cold, or error paths.
+- In `MemoryBuffer` small-varint read/write hot paths, once Android has exited through the single
+  `MemoryOps` call, keep JVM bulk loads/stores local with raw Unsafe operations instead of routing
+  through branchful `_unsafeGet*` or `_unsafePut*` helpers. Add or preserve source comments that
+  explain this inlining invariant when editing these methods.
+- In primitive-array swap-endian readers, do not loop through `MemoryBuffer._unsafeGet*` helpers.
+  Copy the payload through the typed payload API, then swap destination values locally so the path
+  stays stream-safe and avoids Android-dispatch helper drift.
 - Keep GraalVM feature code as a thin metadata/registration layer. Build time should publish metadata needed for runtime reconstruction, not retain concrete generated or user serializer instances in the image heap.
 - If changes touch GraalVM bootstrap, serializer retention, native-image metadata, or `ObjectStreamSerializer` GraalVM behavior, verify the native-image build and run the produced binary; a plain Java compile is insufficient.
 - Put latest-JDK or virtual-thread tests in the latest-JDK test modules with the matching compiler/profile floor, and centralize runtime-version probing in existing compatibility utilities.

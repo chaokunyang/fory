@@ -381,6 +381,7 @@ public class GraalvmSupport {
     private final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     private final Map<Class<?>, Class<? extends Serializer>> objectSerializerClassMap;
     private final Map<Long, Class<? extends Serializer>> deserializerClassMap;
+    private final Map<Class<?>, Class<? extends Serializer>> compatibleDeserializerClassMap;
     private final Map<Long, Class<? extends Serializer>> layerSerializerClassMap;
 
     private GraalvmClassRegistry() {
@@ -388,6 +389,7 @@ public class GraalvmSupport {
       serializerClassMap = new ConcurrentHashMap<>();
       objectSerializerClassMap = new ConcurrentHashMap<>();
       deserializerClassMap = new ConcurrentHashMap<>();
+      compatibleDeserializerClassMap = new ConcurrentHashMap<>();
       layerSerializerClassMap = new ConcurrentHashMap<>();
     }
 
@@ -445,6 +447,15 @@ public class GraalvmSupport {
       return Collections.unmodifiableMap(deserializerClassMap);
     }
 
+    public Class<? extends Serializer> getCompatibleDeserializerClass(Class<?> cls) {
+      return getRegisteredClassValue(compatibleDeserializerClassMap, cls);
+    }
+
+    public void putCompatibleDeserializerClass(
+        Class<?> cls, Class<? extends Serializer> serializerClass) {
+      compatibleDeserializerClassMap.put(cls, serializerClass);
+    }
+
     public Class<? extends Serializer> getLayerSerializerClass(long typeDefId) {
       return layerSerializerClassMap.get(typeDefId);
     }
@@ -459,6 +470,7 @@ public class GraalvmSupport {
       serializerClasses.addAll(serializerClassMap.values());
       serializerClasses.addAll(objectSerializerClassMap.values());
       serializerClasses.addAll(deserializerClassMap.values());
+      serializerClasses.addAll(compatibleDeserializerClassMap.values());
       return serializerClasses;
     }
 
@@ -466,6 +478,7 @@ public class GraalvmSupport {
       serializerClassMap.clear();
       objectSerializerClassMap.clear();
       deserializerClassMap.clear();
+      compatibleDeserializerClassMap.clear();
       layerSerializerClassMap.clear();
       resolvers.clear();
     }

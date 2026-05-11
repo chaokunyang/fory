@@ -82,7 +82,7 @@ public class CodecUtils {
         fory,
         () ->
             loadOrGenCodecClass(
-                cls, fory, new CompatibleMetaSharedCodecBuilder(TypeRef.of(cls), fory, typeDef)));
+                cls, fory, new StaticCompatibleCodecBuilder(TypeRef.of(cls), fory, typeDef)));
   }
 
   public static <T> Class<? extends Serializer<T>> loadOrGenCompatibleMetaSharedCodecClass(

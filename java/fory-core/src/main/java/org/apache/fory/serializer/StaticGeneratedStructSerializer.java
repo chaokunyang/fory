@@ -189,6 +189,15 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     return remoteField.matchedId;
   }
 
+  protected final boolean hasFieldConverter(RemoteFieldInfo remoteField) {
+    return remoteField.serializationFieldInfo.fieldConverter != null;
+  }
+
+  protected final void setConvertedField(
+      Object targetObject, Object fieldValue, RemoteFieldInfo remoteField) {
+    remoteField.serializationFieldInfo.fieldConverter.set(targetObject, fieldValue);
+  }
+
   protected final Object copyFieldValue(
       CopyContext copyContext, Object fieldValue, SerializationFieldInfo fieldInfo) {
     return copyContext.copyObject(fieldValue, fieldInfo.dispatchId);

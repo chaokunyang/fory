@@ -20,6 +20,8 @@
 package org.apache.fory.annotation.processing;
 
 final class StaticSerializerSourceWriter {
+  private static final int DISPATCH_GROUP_SIZE = 8;
+
   private final SourceStruct struct;
   private final StringBuilder builder = new StringBuilder(16384);
 
@@ -354,6 +356,20 @@ final class StaticSerializerSourceWriter {
     builder.append("      return readSchemaConsistent(readContext);\n");
     builder.append("    }\n");
     if (struct.record) {
+      builder.append("    Object[] values = new Object[DESCRIPTORS.size()];\n");
+      for (SourceField field : struct.fields) {
+        builder
+            .append("    values[")
+            .append(field.id)
+            .append("] = ")
+            .append(field.defaultValue())
+            .append(";\n");
+      }
+      builder.append("    for (int i = 0; i < remoteFields.size(); i++) {\n");
+      builder.append("      RemoteFieldInfo remoteField = remoteFields.get(i);\n");
+      builder.append(
+          "      readCompatibleRecordField(readContext, values, remoteField, matchedId(remoteField));\n");
+      builder.append("    }\n");
       for (SourceField field : struct.fields) {
         builder
             .append("    ")
@@ -361,26 +377,9 @@ final class StaticSerializerSourceWriter {
             .append(" field")
             .append(field.id)
             .append(" = ")
-            .append(field.defaultValue())
+            .append(field.castExpression("values[" + field.id + "]"))
             .append(";\n");
       }
-      builder.append("    for (int i = 0; i < remoteFields.size(); i++) {\n");
-      builder.append("      RemoteFieldInfo remoteField = remoteFields.get(i);\n");
-      builder.append("      switch (matchedId(remoteField)) {\n");
-      for (SourceField field : struct.fields) {
-        builder.append("        case ").append(field.id).append(":\n");
-        builder
-            .append("          field")
-            .append(field.id)
-            .append(" = ")
-            .append(field.castExpression("readRemoteField(readContext, remoteField)"))
-            .append(";\n");
-        builder.append("          break;\n");
-      }
-      builder.append("        default:\n");
-      builder.append("          skipField(readContext, remoteField);\n");
-      builder.append("      }\n");
-      builder.append("    }\n");
       builder.append("    return new ").append(struct.typeName).append("(");
       appendRecordConstructorArguments("field");
       builder.append(");\n");
@@ -389,24 +388,115 @@ final class StaticSerializerSourceWriter {
       builder.append("    readContext.reference(value);\n");
       builder.append("    for (int i = 0; i < remoteFields.size(); i++) {\n");
       builder.append("      RemoteFieldInfo remoteField = remoteFields.get(i);\n");
-      builder.append("      switch (matchedId(remoteField)) {\n");
-      for (SourceField field : struct.fields) {
-        builder.append("        case ").append(field.id).append(":\n");
-        builder
-            .append("          ")
-            .append(
-                field.writeStatement(
-                    "value", field.castExpression("readRemoteField(readContext, remoteField)")))
-            .append("\n");
-        builder.append("          break;\n");
-      }
-      builder.append("        default:\n");
-      builder.append("          skipField(readContext, remoteField);\n");
-      builder.append("      }\n");
+      builder.append(
+          "      readCompatibleField(readContext, value, remoteField, matchedId(remoteField));\n");
       builder.append("    }\n");
       builder.append("    return value;\n");
     }
     builder.append("  }\n\n");
+    writeCompatibleDispatchMethods();
+  }
+
+  private void writeCompatibleDispatchMethods() {
+    int groupCount = (struct.fields.size() + DISPATCH_GROUP_SIZE - 1) / DISPATCH_GROUP_SIZE;
+    if (struct.record) {
+      writeCompatibleDispatchRouter("readCompatibleRecordField", true, groupCount);
+      for (int group = 0; group < groupCount; group++) {
+        writeCompatibleRecordDispatchGroup(group);
+      }
+    } else {
+      writeCompatibleDispatchRouter("readCompatibleField", false, groupCount);
+      for (int group = 0; group < groupCount; group++) {
+        writeCompatibleBeanDispatchGroup(group);
+      }
+    }
+  }
+
+  private void writeCompatibleDispatchRouter(String methodName, boolean record, int groupCount) {
+    builder.append("  private void ").append(methodName).append("(");
+    appendCompatibleDispatchParameters(record);
+    builder.append(") {\n");
+    for (int group = 0; group < groupCount; group++) {
+      int upperBound = Math.min(struct.fields.size(), (group + 1) * DISPATCH_GROUP_SIZE);
+      if (group == 0) {
+        builder.append("    if (matchedId >= 0 && matchedId < ").append(upperBound).append(") {\n");
+      } else {
+        builder.append("    if (matchedId < ").append(upperBound).append(") {\n");
+      }
+      builder.append("      ").append(methodName).append(group).append("(");
+      appendCompatibleDispatchArguments(record);
+      builder.append(");\n");
+      builder.append("      return;\n");
+      builder.append("    }\n");
+    }
+    builder.append("    skipField(readContext, remoteField);\n");
+    builder.append("  }\n\n");
+  }
+
+  private void writeCompatibleBeanDispatchGroup(int group) {
+    int start = group * DISPATCH_GROUP_SIZE;
+    int end = Math.min(struct.fields.size(), start + DISPATCH_GROUP_SIZE);
+    builder.append("  private void readCompatibleField").append(group).append("(");
+    appendCompatibleDispatchParameters(false);
+    builder.append(") {\n");
+    builder.append("    switch (matchedId) {\n");
+    for (int i = start; i < end; i++) {
+      SourceField field = struct.fields.get(i);
+      builder.append("      case ").append(field.id).append(":\n");
+      builder
+          .append("        ")
+          .append(
+              field.writeStatement(
+                  "value", field.castExpression("readRemoteField(readContext, remoteField)")))
+          .append("\n");
+      builder.append("        return;\n");
+    }
+    builder.append("      default:\n");
+    builder.append("        skipField(readContext, remoteField);\n");
+    builder.append("    }\n");
+    builder.append("  }\n\n");
+  }
+
+  private void writeCompatibleRecordDispatchGroup(int group) {
+    int start = group * DISPATCH_GROUP_SIZE;
+    int end = Math.min(struct.fields.size(), start + DISPATCH_GROUP_SIZE);
+    builder.append("  private void readCompatibleRecordField").append(group).append("(");
+    appendCompatibleDispatchParameters(true);
+    builder.append(") {\n");
+    builder.append("    switch (matchedId) {\n");
+    for (int i = start; i < end; i++) {
+      SourceField field = struct.fields.get(i);
+      builder.append("      case ").append(field.id).append(":\n");
+      builder
+          .append("        values[")
+          .append(field.id)
+          .append("] = readRemoteField(readContext, remoteField);\n");
+      builder.append("        return;\n");
+    }
+    builder.append("      default:\n");
+    builder.append("        skipField(readContext, remoteField);\n");
+    builder.append("    }\n");
+    builder.append("  }\n\n");
+  }
+
+  private void appendCompatibleDispatchParameters(boolean record) {
+    builder.append("ReadContext readContext, ");
+    if (record) {
+      builder.append("Object[] values, ");
+    } else {
+      builder.append(struct.typeName).append(" value, ");
+    }
+    builder.append("RemoteFieldInfo remoteField, int matchedId");
+  }
+
+  private void appendCompatibleDispatchArguments(boolean record) {
+    builder.append("readContext, ");
+    if (record) {
+      builder.append("values, ");
+    } else {
+      builder.append("value, ");
+    }
+    builder.append("remoteField, matchedId");
   }
 
   private void writeCopy() {

@@ -41,9 +41,9 @@ Note: Fory's `asyncCompilationEnabled` option is automatically disabled for Graa
 `@ForyStruct` annotation-processor static serializers are not the GraalVM native-image serializer
 path. Native image builds use the Fory GraalVM registry: equal local and remote `TypeDef` hashes use
 the existing meta-shared generated serializer, while mismatched remote schemas use a build-time
-generated read-only compatible serializer cached by remote `TypeDef` id. Runtime native images load
-those cached classes from the registry and do not attempt annotation-generated static serializer
-lookup, Janino, or runtime class definition.
+generated read-only compatible serializer cached by local Java class. Runtime native images load
+that cached class from the registry, pass the current remote `TypeDef` into its constructor, and do
+not attempt annotation-generated static serializer lookup, Janino, or runtime class definition.
 
 ## Basic Usage
 

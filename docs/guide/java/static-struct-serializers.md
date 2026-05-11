@@ -72,7 +72,9 @@ lookup is deterministic by generated class name and does not scan the classpath.
 GraalVM native image does not use annotation-processor-generated static serializer classes. Native
 image builds use the GraalVM registry path: matching local and remote `TypeDef` hashes use the
 existing meta-shared generated serializer, and mismatched hashes use a build-time generated
-read-only compatible serializer cached by remote `TypeDef` id.
+read-only compatible serializer cached by local Java class. At runtime, the compatible serializer
+constructor receives the current remote `TypeDef` and derives the remote-field layout from that
+metadata.
 
 ## Field Access Rules
 

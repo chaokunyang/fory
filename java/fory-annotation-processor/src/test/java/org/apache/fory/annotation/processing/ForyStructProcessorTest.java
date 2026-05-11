@@ -20,6 +20,7 @@
 package org.apache.fory.annotation.processing;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -41,10 +42,11 @@ import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
@@ -266,6 +268,10 @@ public class ForyStructProcessorTest {
                 + "  @Ignore public String ignored() { return ignored; }\n"
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
+    String generatedSource =
+        result.generatedSource("test/RecordStruct__ForyStaticSerializer__.java");
+    Assert.assertTrue(generatedSource.contains("private void readCompatibleRecordField0("));
+    Assert.assertTrue(generatedSource.contains("switch (matchedId)"));
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.RecordStruct");
       Object value =
@@ -315,6 +321,13 @@ public class ForyStructProcessorTest {
                 + "}\n");
     Assert.assertTrue(writerResult.success, writerResult.diagnostics());
     Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    String generatedSource =
+        readerResult.generatedSource("test/EvolvingStruct__ForyStaticSerializer__.java");
+    Assert.assertTrue(
+        generatedSource.contains(
+            "readCompatibleField(readContext, value, remoteField, matchedId(remoteField))"));
+    Assert.assertTrue(generatedSource.contains("private void readCompatibleField0("));
+    Assert.assertTrue(generatedSource.contains("switch (matchedId)"));
     try (URLClassLoader writerLoader = writerResult.classLoader();
         URLClassLoader readerLoader = readerResult.classLoader()) {
       Class<?> writerType = writerLoader.loadClass("test.EvolvingStruct");
@@ -355,7 +368,7 @@ public class ForyStructProcessorTest {
   }
 
   @Test
-  public void testGraalvmCompatibleMetaSharedGeneratorIsReadOnly() throws Exception {
+  public void testGraalvmStaticCompatibleSerializerReadsRuntimeRemoteTypeDef() throws Exception {
     if (AndroidSupport.IS_ANDROID) {
       return;
     }
@@ -365,6 +378,7 @@ public class ForyStructProcessorTest {
             "package test;\n"
                 + "public class NativeImageStruct {\n"
                 + "  public int id;\n"
+                + "  public int legacy;\n"
                 + "  public NativeImageStruct() {}\n"
                 + "}\n");
     CompilationResult readerResult =
@@ -409,9 +423,36 @@ public class ForyStructProcessorTest {
               reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
       Assert.assertTrue(
           GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(serializerClass));
+      Constructor<? extends Serializer<Object>> constructor =
+          serializerClass.getConstructor(
+              org.apache.fory.resolver.TypeResolver.class, Class.class, TypeDef.class);
       Serializer<Object> serializer =
-          Serializers.newSerializer(
-              reader.getTypeResolver(), (Class<Object>) readerType, serializerClass);
+          constructor.newInstance(
+              reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "id", 42);
+      setField(writerType, writerValue, "legacy", 99);
+      MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
+      MetaSharedSerializer<Object> writerSerializer =
+          new MetaSharedSerializer<>(
+              writer.getTypeResolver(), (Class<Object>) writerType, remoteTypeDef);
+      writer.getWriteContext().prepare(buffer, null);
+      try {
+        writerSerializer.write(writer.getWriteContext(), writerValue);
+      } finally {
+        writer.getWriteContext().reset();
+      }
+      buffer.readerIndex(0);
+      reader.getReadContext().prepare(buffer, null, false);
+      Object result;
+      try {
+        result = serializer.read(reader.getReadContext());
+      } finally {
+        reader.getReadContext().reset();
+      }
+      Assert.assertSame(result.getClass(), readerType);
+      Assert.assertEquals(getField(readerType, result, "id"), 42);
+      Assert.assertEquals(getField(readerType, result, "added"), "default");
       Assert.assertThrows(
           UnsupportedOperationException.class,
           () ->
@@ -447,7 +488,8 @@ public class ForyStructProcessorTest {
       JavaCompiler.CompilationTask task =
           compiler.getTask(null, fileManager, diagnostics, options, null, units);
       task.setProcessors(Collections.singletonList(new ForyStructProcessor()));
-      return new CompilationResult(classRoot, task.call(), diagnostics.getDiagnostics());
+      return new CompilationResult(
+          classRoot, root.resolve("generated"), task.call(), diagnostics.getDiagnostics());
     }
   }
 
@@ -489,12 +531,17 @@ public class ForyStructProcessorTest {
 
   private static final class CompilationResult {
     final Path classRoot;
+    final Path generatedRoot;
     final boolean success;
     final List<Diagnostic<? extends JavaFileObject>> diagnostics;
 
     CompilationResult(
-        Path classRoot, boolean success, List<Diagnostic<? extends JavaFileObject>> diagnostics) {
+        Path classRoot,
+        Path generatedRoot,
+        boolean success,
+        List<Diagnostic<? extends JavaFileObject>> diagnostics) {
       this.classRoot = classRoot;
+      this.generatedRoot = generatedRoot;
       this.success = success;
       this.diagnostics = new ArrayList<>(diagnostics);
     }
@@ -502,6 +549,11 @@ public class ForyStructProcessorTest {
     URLClassLoader classLoader() throws IOException {
       URL[] urls = {classRoot.toUri().toURL()};
       return new URLClassLoader(urls, ForyStructProcessorTest.class.getClassLoader());
+    }
+
+    String generatedSource(String relativePath) throws IOException {
+      return new String(
+          Files.readAllBytes(generatedRoot.resolve(relativePath)), StandardCharsets.UTF_8);
     }
 
     String diagnostics() {

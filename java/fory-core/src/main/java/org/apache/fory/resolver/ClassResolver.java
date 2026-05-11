@@ -1765,7 +1765,7 @@ public class ClassResolver extends TypeResolver {
   private Class<? extends Serializer> getMetaSharedDeserializerClassForGraalvmBuild(
       Class<?> cls, TypeDef typeDef) {
     Class<? extends Serializer> serializerClass =
-        getMetaSharedDeserializerClassFromGraalvmRegistry(cls, typeDef);
+        getGraalvmClassRegistry().getDeserializerClass(typeDef.getId());
     if (serializerClass != null) {
       return serializerClass;
     }
@@ -1792,6 +1792,9 @@ public class ClassResolver extends TypeResolver {
       getGraalvmClassRegistry()
           .putDeserializerClass(
               typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
+      getGraalvmClassRegistry()
+          .putCompatibleDeserializerClass(
+              cls, CodecUtils.loadOrGenCompatibleMetaSharedCodecClass(this, cls, typeDef));
     }
     typeInfoCache = NIL_TYPE_INFO;
     if (RecordUtils.isRecord(cls)) {

@@ -21,9 +21,11 @@ package org.apache.fory.builder;
 
 import java.lang.reflect.Field;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -31,6 +33,8 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.MetaSharedLayerSerializerBase;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer;
+import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -118,14 +122,17 @@ public interface Generated {
     }
   }
 
-  /**
-   * Base class for GraalVM build-time compatible read serializers for remote {@link TypeDef}
-   * schemas.
-   */
-  abstract class GeneratedCompatibleMetaSharedSerializer extends GeneratedSerializer
-      implements Generated {
-    public GeneratedCompatibleMetaSharedSerializer(TypeResolver typeResolver, Class<?> cls) {
-      super(typeResolver, cls);
+  /** Base class for GraalVM build-time compatible read serializers. */
+  abstract class GeneratedCompatibleMetaSharedSerializer
+      extends StaticGeneratedStructSerializer<Object> implements Generated {
+    public GeneratedCompatibleMetaSharedSerializer(
+        TypeResolver typeResolver, Class<?> cls, TypeDef typeDef, List<Descriptor> descriptors) {
+      super(typeResolver, cls, typeDef, descriptors);
+    }
+
+    @Override
+    public final Object read(ReadContext readContext) {
+      return readCompatible(readContext);
     }
 
     @Override

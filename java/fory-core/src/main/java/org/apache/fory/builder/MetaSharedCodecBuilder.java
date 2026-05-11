@@ -30,7 +30,6 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
-import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
 import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
@@ -82,27 +81,13 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   private final TypeDef typeDef;
   private final String defaultValueLanguage;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
-  private final boolean writeDelegate;
-  private final String codecKind;
 
   public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
-    this(beanType, fory, typeDef, GeneratedMetaSharedSerializer.class, true, "MetaShared");
-  }
-
-  protected MetaSharedCodecBuilder(
-      TypeRef<?> beanType,
-      Fory fory,
-      TypeDef typeDef,
-      Class<?> parentSerializerClass,
-      boolean writeDelegate,
-      String codecKind) {
-    super(beanType, fory, parentSerializerClass);
+    super(beanType, fory, GeneratedMetaSharedSerializer.class);
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
     this.typeDef = typeDef;
-    this.writeDelegate = writeDelegate;
-    this.codecKind = codecKind;
     DescriptorGrouper grouper = typeResolver(r -> r.createDescriptorGrouper(typeDef, beanClass));
     List<Descriptor> sortedDescriptors = grouper.getSortedDescriptors();
     if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
@@ -161,7 +146,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
         id = idGenerator.computeIfAbsent(typeDef.getId(), k -> idGenerator.size());
       }
     }
-    return codecKind + id;
+    return "MetaShared" + id;
   }
 
   @Override
@@ -186,19 +171,17 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
             ctx.type(concreteTypeResolverType),
             "cls",
             POJO_CLASS_TYPE_NAME);
-    if (writeDelegate) {
-      constructorCode +=
-          StringUtils.format(
-              "${serializer} = ${builderClass}.setCodegenSerializer(${typeResolver}, ${cls}, this);\n",
-              "serializer",
-              SERIALIZER_FIELD_NAME,
-              "builderClass",
-              MetaSharedCodecBuilder.class.getName(),
-              "typeResolver",
-              CONSTRUCTOR_TYPE_RESOLVER_NAME,
-              "cls",
-              POJO_CLASS_TYPE_NAME);
-    }
+    constructorCode +=
+        StringUtils.format(
+            "${serializer} = ${builderClass}.setCodegenSerializer(${typeResolver}, ${cls}, this);\n",
+            "serializer",
+            SERIALIZER_FIELD_NAME,
+            "builderClass",
+            MetaSharedCodecBuilder.class.getName(),
+            "typeResolver",
+            CONSTRUCTOR_TYPE_RESOLVER_NAME,
+            "cls",
+            POJO_CLASS_TYPE_NAME);
     ctx.clearExprState();
     Expression decodeExpr = buildDecodeExpression();
     String decodeCode = decodeExpr.genCode(ctx).code();
@@ -231,7 +214,6 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedMetaSharedSerializer.class);
-    ctx.addImport(GeneratedCompatibleMetaSharedSerializer.class);
   }
 
   // Invoked by JIT.

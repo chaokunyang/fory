@@ -43,7 +43,6 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.NestingKind;
 import javax.lang.model.element.PackageElement;
-import javax.lang.model.element.RecordComponentElement;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.ArrayType;
@@ -337,13 +336,39 @@ public final class ForyStructProcessor extends AbstractProcessor {
       fieldsByName.put(field.getSimpleName().toString(), field);
     }
     List<VariableElement> fields = new ArrayList<>();
-    for (RecordComponentElement component : type.getRecordComponents()) {
+    for (Element component : recordComponents(type)) {
       VariableElement field = fieldsByName.get(component.getSimpleName().toString());
       if (field != null) {
         fields.add(field);
       }
     }
     return fields;
+  }
+
+  private List<Element> recordComponents(TypeElement type) {
+    // Keep the processor artifact compilable on JDK 11 while still using record components
+    // when a newer compiler model provides them.
+    Object components;
+    try {
+      components = TypeElement.class.getMethod("getRecordComponents").invoke(type);
+    } catch (NoSuchMethodException e) {
+      throw new InvalidStructException(
+          "Record @ForyStruct processing requires a compiler with record component support", type);
+    } catch (ReflectiveOperationException e) {
+      throw new InvalidStructException("Failed to inspect record components: " + e, type);
+    }
+    if (!(components instanceof List<?>)) {
+      throw new InvalidStructException("Unexpected record component model for " + type, type);
+    }
+    List<?> componentList = (List<?>) components;
+    List<Element> componentElements = new ArrayList<>(componentList.size());
+    for (Object component : componentList) {
+      if (!(component instanceof Element)) {
+        throw new InvalidStructException("Unexpected record component model for " + type, type);
+      }
+      componentElements.add((Element) component);
+    }
+    return componentElements;
   }
 
   private boolean isSerializableRecordField(VariableElement field, TypeElement owner) {

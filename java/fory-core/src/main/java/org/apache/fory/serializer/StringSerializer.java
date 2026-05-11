@@ -553,8 +553,14 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       writerIndex += arrIndex - targetIndex;
       System.arraycopy(bytes, 0, targetArray, arrIndex, bytesLen);
     } else {
-      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
-      buffer.copyFromUnsafe(writerIndex, bytes, UnsafeOps.BYTE_ARRAY_OFFSET, bytesLen);
+      final long targetAddress = buffer._unsafeWriterAddress();
+      final int headerBytes = buffer._unsafePutVarUint36Small(writerIndex, header);
+      writerIndex += headerBytes;
+      // The preceding ensure makes this copy bounds-safe. Keep the direct copy local so generated
+      // string serializers do not route every off-heap string payload through checked raw-copy
+      // helpers.
+      UnsafeOps.copyMemory(
+          bytes, UnsafeOps.BYTE_ARRAY_OFFSET, null, targetAddress + headerBytes, bytesLen);
     }
     writerIndex += bytesLen;
     buffer._unsafeWriterIndex(writerIndex);

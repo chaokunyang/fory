@@ -361,36 +361,7 @@ public final class Fory implements BaseFory {
 
   @Override
   public Object deserialize(ByteBuffer byteBuffer) {
-    if (!AndroidSupport.IS_ANDROID && !byteBuffer.isReadOnly()) {
-      return deserialize(MemoryUtils.wrap(byteBuffer));
-    }
-    // Android must not inspect direct-buffer native addresses, and read-only buffers may not expose
-    // arrays. Copy through a duplicate so this root API preserves the caller's ByteBuffer position.
-    return deserializeByteBufferByCopy(byteBuffer);
-  }
-
-  private Object deserializeByteBufferByCopy(ByteBuffer byteBuffer) {
-    int size = byteBuffer.remaining();
-    MemoryBuffer buffer = getBuffer();
-    byte[] heapMemory = buffer.getHeapMemory();
-    if (heapMemory == null || heapMemory.length < size) {
-      heapMemory = new byte[size];
-    }
-    ByteBuffer source = byteBuffer.duplicate();
-    if (source.hasArray()) {
-      System.arraycopy(
-          source.array(), source.arrayOffset() + source.position(), heapMemory, 0, size);
-    } else {
-      source.get(heapMemory, 0, size);
-    }
-    buffer.initHeapBuffer(heapMemory, 0, size);
-    buffer.readerIndex(0);
-    buffer.writerIndex(size);
-    try {
-      return deserialize(buffer);
-    } finally {
-      resetBuffer();
-    }
+    return deserialize(MemoryUtils.wrap(byteBuffer));
   }
 
   @Override

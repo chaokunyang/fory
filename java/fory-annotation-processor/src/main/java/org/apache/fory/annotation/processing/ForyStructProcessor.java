@@ -354,11 +354,11 @@ public final class ForyStructProcessor extends AbstractProcessor {
     if (type.getKind().isPrimitive()) {
       return false;
     }
-    if (mode == SerializerMode.NATIVE) {
-      return true;
-    }
     if (foryField.hasForyField) {
       return foryField.nullable;
+    }
+    if (mode == SerializerMode.NATIVE) {
+      return true;
     }
     return isOptionalType(type);
   }

@@ -390,23 +390,27 @@ public class ForyStructProcessorTest {
         compile(
             "test.RoundTripStruct",
             "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.UInt16Type;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "@ForyStruct public class RoundTripStruct {\n"
                 + "  public int id;\n"
                 + "  public @UInt16Type int code;\n"
                 + "  public String name;\n"
+                + "  @ForyField(id = 4) public String strictName;\n"
                 + "  public RoundTripStruct() {}\n"
                 + "}\n");
     CompilationResult runtimeResult =
         compile(
             "test.RoundTripStruct",
             "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.UInt16Type;\n"
                 + "public class RoundTripStruct {\n"
                 + "  public int id;\n"
                 + "  public @UInt16Type int code;\n"
                 + "  public String name;\n"
+                + "  @ForyField(id = 4) public String strictName;\n"
                 + "  public RoundTripStruct() {}\n"
                 + "}\n");
     Assert.assertTrue(staticResult.success, staticResult.diagnostics());
@@ -433,6 +437,11 @@ public class ForyStructProcessorTest {
       setField(staticType, staticValue, "id", 101);
       setField(staticType, staticValue, "code", 513);
       setField(staticType, staticValue, "name", compatible ? "compatible-static" : "static");
+      setField(
+          staticType,
+          staticValue,
+          "strictName",
+          compatible ? "compatible-strict-static" : "strict-static");
       Object runtimeRoundTrip = runtimeFory.deserialize(staticFory.serialize(staticValue));
       Assert.assertSame(runtimeRoundTrip.getClass(), runtimeType);
       Assert.assertEquals(getField(runtimeType, runtimeRoundTrip, "id"), 101);
@@ -440,11 +449,19 @@ public class ForyStructProcessorTest {
       Assert.assertEquals(
           getField(runtimeType, runtimeRoundTrip, "name"),
           compatible ? "compatible-static" : "static");
+      Assert.assertEquals(
+          getField(runtimeType, runtimeRoundTrip, "strictName"),
+          compatible ? "compatible-strict-static" : "strict-static");
 
       Object runtimeValue = runtimeType.getConstructor().newInstance();
       setField(runtimeType, runtimeValue, "id", 202);
       setField(runtimeType, runtimeValue, "code", 1024);
       setField(runtimeType, runtimeValue, "name", compatible ? "compatible-runtime" : "runtime");
+      setField(
+          runtimeType,
+          runtimeValue,
+          "strictName",
+          compatible ? "compatible-strict-runtime" : "strict-runtime");
       Object staticRoundTrip = staticFory.deserialize(runtimeFory.serialize(runtimeValue));
       Assert.assertSame(staticRoundTrip.getClass(), staticType);
       Assert.assertEquals(getField(staticType, staticRoundTrip, "id"), 202);
@@ -452,6 +469,9 @@ public class ForyStructProcessorTest {
       Assert.assertEquals(
           getField(staticType, staticRoundTrip, "name"),
           compatible ? "compatible-runtime" : "runtime");
+      Assert.assertEquals(
+          getField(staticType, staticRoundTrip, "strictName"),
+          compatible ? "compatible-strict-runtime" : "strict-runtime");
     }
   }
 

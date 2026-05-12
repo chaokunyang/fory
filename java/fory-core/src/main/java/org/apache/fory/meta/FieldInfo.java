@@ -91,7 +91,7 @@ public final class FieldInfo implements Serializable {
    * reflection should be used to get the descriptor.
    */
   Descriptor toDescriptor(TypeResolver resolver, Descriptor descriptor) {
-    TypeRef<?> declared = descriptor != null ? descriptor.getTypeRef() : null;
+    TypeRef<?> declared = descriptor != null ? descriptor.getTypeRef() : primitiveListCarrierType();
     TypeRef<?> typeRef = fieldType.toTypeToken(resolver, declared);
     String typeName = fieldType.getTypeName(resolver, typeRef);
     if (fieldType instanceof FieldTypes.RegisteredFieldType) {
@@ -264,6 +264,28 @@ public final class FieldInfo implements Serializable {
   private static boolean isListField(FieldTypes.FieldType fieldType) {
     return fieldType instanceof FieldTypes.CollectionFieldType
         && fieldType.getTypeId() == Types.LIST;
+  }
+
+  private TypeRef<?> primitiveListCarrierType() {
+    if (!(fieldType instanceof FieldTypes.CollectionFieldType)) {
+      return null;
+    }
+    FieldTypes.CollectionFieldType collectionFieldType = (FieldTypes.CollectionFieldType) fieldType;
+    FieldTypes.FieldType elementType = collectionFieldType.getElementType();
+    if (!(elementType instanceof FieldTypes.RegisteredFieldType)
+        || elementType.nullable()
+        || elementType.trackingRef()) {
+      return null;
+    }
+    int elementTypeId = ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
+    Class<?> carrierClass = FieldTypes.getPrimitiveListClassForElementType(elementTypeId);
+    if (carrierClass == null) {
+      return null;
+    }
+    // Native registered TypeDefs may not carry the writer class name for a removed field. A
+    // LIST field with a non-null primitive element is the schema marker emitted by primitive-list
+    // carriers, whose payload omits the native collection class header.
+    return TypeRef.of(carrierClass);
   }
 
   private static int listElementTypeId(FieldTypes.FieldType fieldType) {

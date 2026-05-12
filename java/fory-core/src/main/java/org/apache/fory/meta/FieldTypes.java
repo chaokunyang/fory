@@ -768,6 +768,45 @@ public class FieldTypes {
     }
   }
 
+  static Class<?> getPrimitiveListClassForElementType(int typeId) {
+    switch (typeId) {
+      case Types.BOOL:
+        return BoolList.class;
+      case Types.INT8:
+        return Int8List.class;
+      case Types.UINT8:
+        return UInt8List.class;
+      case Types.INT16:
+        return Int16List.class;
+      case Types.UINT16:
+        return UInt16List.class;
+      case Types.INT32:
+      case Types.VARINT32:
+        return Int32List.class;
+      case Types.UINT32:
+      case Types.VAR_UINT32:
+        return UInt32List.class;
+      case Types.INT64:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
+        return Int64List.class;
+      case Types.UINT64:
+      case Types.VAR_UINT64:
+      case Types.TAGGED_UINT64:
+        return UInt64List.class;
+      case Types.FLOAT32:
+        return Float32List.class;
+      case Types.FLOAT16:
+        return Float16List.class;
+      case Types.BFLOAT16:
+        return BFloat16List.class;
+      case Types.FLOAT64:
+        return Float64List.class;
+      default:
+        return null;
+    }
+  }
+
   private static Class<?> getPrimitiveListClass(int typeId) {
     switch (typeId) {
       case Types.BOOL_ARRAY:

@@ -173,6 +173,50 @@ final class CompatibleCollectionArrayReader {
     return null;
   }
 
+  static boolean incompatibleCollectionArrayMatch(
+      TypeResolver resolver, FieldInfo remoteFieldInfo, Descriptor localDescriptor) {
+    if (localDescriptor == null || !resolver.isCrossLanguage()) {
+      return false;
+    }
+    if (readAction(resolver, remoteFieldInfo, localDescriptor) != null) {
+      return false;
+    }
+    FieldTypes.FieldType remoteFieldType = remoteFieldInfo.getFieldType();
+    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
+    return incompatibleCollectionArrayMatch(remoteFieldType, localFieldType);
+  }
+
+  private static boolean incompatibleCollectionArrayMatch(
+      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
+    int remoteListElementTypeId = listElementTypeId(remoteFieldType);
+    int localArrayTypeId = arrayTypeId(localFieldType);
+    if (remoteListElementTypeId != Types.UNKNOWN
+        && localArrayTypeId != Types.UNKNOWN
+        && localArrayTypeId == denseArrayTypeId(remoteListElementTypeId)) {
+      return true;
+    }
+    int remoteArrayTypeId = arrayTypeId(remoteFieldType);
+    int localListElementTypeId = listElementTypeId(localFieldType);
+    if (remoteArrayTypeId != Types.UNKNOWN
+        && localListElementTypeId != Types.UNKNOWN
+        && remoteArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+      return true;
+    }
+    if (remoteFieldType instanceof FieldTypes.CollectionFieldType
+        && localFieldType instanceof FieldTypes.CollectionFieldType) {
+      return incompatibleCollectionArrayMatch(
+          ((FieldTypes.CollectionFieldType) remoteFieldType).getElementType(),
+          ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
+    }
+    if (remoteFieldType instanceof FieldTypes.ArrayFieldType
+        && localFieldType instanceof FieldTypes.ArrayFieldType) {
+      return incompatibleCollectionArrayMatch(
+          ((FieldTypes.ArrayFieldType) remoteFieldType).getComponentType(),
+          ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
+    }
+    return false;
+  }
+
   static Object read(ReadContext readContext, RefMode refMode, ReadAction action) {
     return read(
         readContext,

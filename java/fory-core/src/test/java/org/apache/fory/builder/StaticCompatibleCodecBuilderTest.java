@@ -46,6 +46,7 @@ import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.mockito.MockedStatic;
@@ -326,6 +327,14 @@ public class StaticCompatibleCodecBuilderTest {
           CodecUtils.loadOrGenStaticCompatibleCodecClass(
               reader.getTypeResolver(), readerClass, typeDefB);
       Assert.assertNotEquals(serializerA, serializerB);
+
+      GraalvmSupport.GraalvmClassRegistry registry = GraalvmSupport.getClassRegistry(0);
+      registry.putCompatibleDeserializerClass(readerType, typeDefA.getId(), serializerA);
+      registry.putCompatibleDeserializerClass(readerType, typeDefB.getId(), serializerB);
+      Assert.assertSame(
+          registry.getCompatibleDeserializerClass(readerType, typeDefA.getId()), serializerA);
+      Assert.assertSame(
+          registry.getCompatibleDeserializerClass(readerType, typeDefB.getId()), serializerB);
     }
   }
 

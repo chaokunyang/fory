@@ -130,7 +130,7 @@ final class StaticSerializerSourceWriter {
     }
     builder.append("    return Collections.unmodifiableList(descriptors);\n");
     builder.append("  }\n\n");
-    builder.append("  private static List<Descriptor> getGeneratedDescriptors() {\n");
+    builder.append("  public static List<Descriptor> getGeneratedDescriptors() {\n");
     builder.append("    return DESCRIPTORS;\n");
     builder.append("  }\n\n");
     builder.append("  @Override\n");

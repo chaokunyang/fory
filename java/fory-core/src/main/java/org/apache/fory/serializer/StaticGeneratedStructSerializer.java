@@ -257,6 +257,15 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final boolean canReadRemoteField(
       RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
+    if (remoteField.incompatibleCollectionArrayMatch) {
+      throw new DeserializationException(
+          "Cannot read remote field "
+              + remoteField.descriptor.getName()
+              + " as local field "
+              + localFieldInfo.descriptor.getName()
+              + ": compatible list/array adaptation requires a matching non-null primitive element"
+              + " schema and does not apply recursively");
+    }
     if (remoteField.compatibleCollectionArrayReadAction != null) {
       return true;
     }
@@ -544,6 +553,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     private final Descriptor descriptor;
     private final SerializationFieldInfo serializationFieldInfo;
     private final CompatibleCollectionArrayReader.ReadAction compatibleCollectionArrayReadAction;
+    private final boolean incompatibleCollectionArrayMatch;
 
     private RemoteFieldInfo(
         TypeResolver typeResolver,
@@ -558,6 +568,9 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       this.serializationFieldInfo = serializationFieldInfo;
       this.compatibleCollectionArrayReadAction =
           CompatibleCollectionArrayReader.readAction(typeResolver, fieldInfo, localDescriptor);
+      this.incompatibleCollectionArrayMatch =
+          CompatibleCollectionArrayReader.incompatibleCollectionArrayMatch(
+              typeResolver, fieldInfo, localDescriptor);
     }
   }
 }

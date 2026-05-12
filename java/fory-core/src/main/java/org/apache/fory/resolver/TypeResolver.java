@@ -1062,7 +1062,7 @@ public abstract class TypeResolver {
     }
     if (GraalvmSupport.isGraalBuildTime()
         && GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(sc)) {
-      getGraalvmClassRegistry().putCompatibleDeserializerClass(cls, sc);
+      getGraalvmClassRegistry().putCompatibleDeserializerClass(cls, typeDef.getId(), sc);
       typeInfo.setSerializer(this, new MetaSharedSerializer(this, cls, typeDef));
       return typeInfo;
     }
@@ -1658,8 +1658,7 @@ public abstract class TypeResolver {
       Class<? extends Serializer> serializerClass, Class<?> cls, TypeDef typeDef) {
     try {
       Constructor<? extends Serializer> constructor =
-          serializerClass.getDeclaredConstructor(TypeResolver.class, Class.class, TypeDef.class);
-      constructor.setAccessible(true);
+          serializerClass.getConstructor(TypeResolver.class, Class.class, TypeDef.class);
       return (StaticGeneratedStructSerializer<?>) constructor.newInstance(this, cls, typeDef);
     } catch (NoSuchMethodException e) {
       throw new ForyException(
@@ -1691,8 +1690,7 @@ public abstract class TypeResolver {
       return null;
     }
     try {
-      Method descriptorsMethod = serializerClass.getDeclaredMethod("getGeneratedDescriptors");
-      descriptorsMethod.setAccessible(true);
+      Method descriptorsMethod = serializerClass.getMethod("getGeneratedDescriptors");
       return (List<Descriptor>) descriptorsMethod.invoke(null);
     } catch (NoSuchMethodException e) {
       // Descriptor discovery must be side-effect free; instantiating the generated serializer here
@@ -2059,7 +2057,7 @@ public abstract class TypeResolver {
     if (deserializerClass != null) {
       return deserializerClass;
     }
-    deserializerClass = registry.getCompatibleDeserializerClass(cls);
+    deserializerClass = registry.getCompatibleDeserializerClass(cls, typeDef.getId());
     if (deserializerClass != null
         && (!GraalvmSupport.isGraalBuildTime()
             || typeDef.getId() != TypeDef.buildTypeDef(this, cls).getId())) {

@@ -579,7 +579,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
   }
 
   private SourceTypeNode buildFieldTypeNode(VariableElement field, boolean nullable) {
-    return buildTypeNode(field.asType(), typeTree(field), Boolean.toString(nullable));
+    return buildTypeNode(field.asType(), typeTree(field), Boolean.toString(nullable), field, false);
   }
 
   private Object typeTree(VariableElement field) {
@@ -598,15 +598,21 @@ public final class ForyStructProcessor extends AbstractProcessor {
   }
 
   private SourceTypeNode buildTypeNode(TypeMirror type) {
-    return buildTypeNode(type, null, "true");
+    return buildTypeNode(type, null, "true", null, false);
   }
 
-  private SourceTypeNode buildTypeNode(TypeMirror type, Object tree, String typeExtNullable) {
+  private SourceTypeNode buildTypeNode(
+      TypeMirror type,
+      Object tree,
+      String typeExtNullable,
+      Element errorElement,
+      boolean arrayComponent) {
     TypeKind kind = type.getKind();
     TypeTreeInfo treeInfo = typeTreeInfo(tree);
     if (kind == TypeKind.TYPEVAR) {
       TypeVariable typeVariable = (TypeVariable) type;
-      return buildTypeNode(typeVariable.getUpperBound(), null, typeExtNullable);
+      return buildTypeNode(
+          typeVariable.getUpperBound(), null, typeExtNullable, errorElement, arrayComponent);
     }
     if (kind == TypeKind.WILDCARD) {
       WildcardType wildcard = (WildcardType) type;
@@ -614,7 +620,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
       return buildTypeNode(
           bound == null ? elements.getTypeElement("java.lang.Object").asType() : bound,
           null,
-          typeExtNullable);
+          typeExtNullable,
+          errorElement,
+          arrayComponent);
     }
     List<SourceTypeNode> arguments = new ArrayList<>();
     SourceTypeNode componentType = null;
@@ -622,18 +630,25 @@ public final class ForyStructProcessor extends AbstractProcessor {
       TypeMirror componentMirror = ((ArrayType) type).getComponentType();
       componentType =
           buildTypeNode(
-              componentMirror, treeInfo.arrayComponentTree(), nestedNullable(componentMirror));
+              componentMirror,
+              treeInfo.arrayComponentTree(),
+              nestedNullable(componentMirror),
+              errorElement,
+              true);
     } else if (type instanceof DeclaredType) {
       List<?> argumentTrees = treeInfo.typeArgumentTrees();
       int index = 0;
       for (TypeMirror argument : ((DeclaredType) type).getTypeArguments()) {
         Object argumentTree = index < argumentTrees.size() ? argumentTrees.get(index) : null;
-        arguments.add(buildTypeNode(argument, argumentTree, nestedNullable(argument)));
+        arguments.add(
+            buildTypeNode(argument, argumentTree, nestedNullable(argument), errorElement, false));
         index++;
       }
     }
     String rawType = canonicalName(types.erasure(type));
-    String extMeta = typeExtMetaExpression(type, rawType, treeInfo.annotations, typeExtNullable);
+    String extMeta =
+        typeExtMetaExpression(
+            type, rawType, treeInfo.annotations, typeExtNullable, errorElement, arrayComponent);
     boolean primitive = kind.isPrimitive();
     boolean nestedStruct = isCompatibleForyStructType(type);
     return new SourceTypeNode(
@@ -681,8 +696,13 @@ public final class ForyStructProcessor extends AbstractProcessor {
   }
 
   private String typeExtMetaExpression(
-      TypeMirror type, String rawType, List<?> treeAnnotations, String nullable) {
-    String typeId = scalarTypeId(type, rawType, treeAnnotations);
+      TypeMirror type,
+      String rawType,
+      List<?> treeAnnotations,
+      String nullable,
+      Element errorElement,
+      boolean arrayComponent) {
+    String typeId = scalarTypeId(type, rawType, treeAnnotations, errorElement, arrayComponent);
     TypeUseAnnotation ref = typeUseAnnotation(type, treeAnnotations, REF);
     if (typeId == null && ref == null) {
       return null;
@@ -700,18 +720,58 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return Boolean.toString(!type.getKind().isPrimitive());
   }
 
-  private String scalarTypeId(TypeMirror type, String rawType, List<?> treeAnnotations) {
+  private String scalarTypeId(
+      TypeMirror type,
+      String rawType,
+      List<?> treeAnnotations,
+      Element errorElement,
+      boolean arrayComponent) {
     if (hasTypeAnnotation(type, treeAnnotations, INT8_TYPE)) {
+      validateScalarCarrier(
+          "@Int8Type",
+          rawType,
+          errorElement,
+          "byte",
+          "java.lang.Byte",
+          "byte[]",
+          "org.apache.fory.collection.Int8List");
       return rawType.equals("byte[]") ? "Types.INT8_ARRAY" : "Types.INT8";
     }
     if (hasTypeAnnotation(type, treeAnnotations, UINT8_TYPE)) {
+      validateScalarCarrier(
+          "@UInt8Type",
+          rawType,
+          errorElement,
+          arrayComponent
+              ? new String[] {"byte"}
+              : new String[] {
+                "int", "java.lang.Integer", "byte[]", "org.apache.fory.collection.UInt8List"
+              });
       return rawType.equals("byte[]") ? "Types.UINT8_ARRAY" : "Types.UINT8";
     }
     if (hasTypeAnnotation(type, treeAnnotations, UINT16_TYPE)) {
+      validateScalarCarrier(
+          "@UInt16Type",
+          rawType,
+          errorElement,
+          arrayComponent
+              ? new String[] {"short"}
+              : new String[] {
+                "int", "java.lang.Integer", "short[]", "org.apache.fory.collection.UInt16List"
+              });
       return rawType.equals("short[]") ? "Types.UINT16_ARRAY" : "Types.UINT16";
     }
     TypeUseAnnotation uint32 = typeUseAnnotation(type, treeAnnotations, UINT32_TYPE);
     if (uint32 != null) {
+      validateScalarCarrier(
+          "@UInt32Type",
+          rawType,
+          errorElement,
+          arrayComponent
+              ? new String[] {"int"}
+              : new String[] {
+                "long", "java.lang.Long", "int[]", "org.apache.fory.collection.UInt32List"
+              });
       String encoding = int32Encoding(uint32);
       if (rawType.equals("int[]")) {
         return "Types.UINT32_ARRAY";
@@ -720,6 +780,15 @@ public final class ForyStructProcessor extends AbstractProcessor {
     }
     TypeUseAnnotation uint64 = typeUseAnnotation(type, treeAnnotations, UINT64_TYPE);
     if (uint64 != null) {
+      validateScalarCarrier(
+          "@UInt64Type",
+          rawType,
+          errorElement,
+          arrayComponent
+              ? new String[] {"long"}
+              : new String[] {
+                "long", "java.lang.Long", "long[]", "org.apache.fory.collection.UInt64List"
+              });
       String encoding = int64Encoding(uint64);
       if (rawType.equals("long[]")) {
         return "Types.UINT64_ARRAY";
@@ -731,11 +800,25 @@ public final class ForyStructProcessor extends AbstractProcessor {
     }
     TypeUseAnnotation int32 = typeUseAnnotation(type, treeAnnotations, INT32_TYPE);
     if (int32 != null) {
+      validateScalarCarrier(
+          "@Int32Type",
+          rawType,
+          errorElement,
+          "int",
+          "java.lang.Integer",
+          "org.apache.fory.collection.Int32List");
       String encoding = int32Encoding(int32);
       return "FIXED".equals(encoding) ? "Types.INT32" : "Types.VARINT32";
     }
     TypeUseAnnotation int64 = typeUseAnnotation(type, treeAnnotations, INT64_TYPE);
     if (int64 != null) {
+      validateScalarCarrier(
+          "@Int64Type",
+          rawType,
+          errorElement,
+          "long",
+          "java.lang.Long",
+          "org.apache.fory.collection.Int64List");
       String encoding = int64Encoding(int64);
       if ("FIXED".equals(encoding)) {
         return "Types.INT64";
@@ -743,12 +826,33 @@ public final class ForyStructProcessor extends AbstractProcessor {
       return "TAGGED".equals(encoding) ? "Types.TAGGED_INT64" : "Types.VARINT64";
     }
     if (hasTypeAnnotation(type, treeAnnotations, FLOAT16_TYPE)) {
+      validateScalarCarrier(
+          "@Float16Type",
+          rawType,
+          errorElement,
+          arrayComponent ? new String[] {"short"} : new String[] {"short[]"});
       return "Types.FLOAT16_ARRAY";
     }
     if (hasTypeAnnotation(type, treeAnnotations, BFLOAT16_TYPE)) {
+      validateScalarCarrier(
+          "@BFloat16Type",
+          rawType,
+          errorElement,
+          arrayComponent ? new String[] {"short"} : new String[] {"short[]"});
       return "Types.BFLOAT16_ARRAY";
     }
     return null;
+  }
+
+  private void validateScalarCarrier(
+      String annotationName, String rawType, Element errorElement, String... allowedTypes) {
+    for (String allowedType : allowedTypes) {
+      if (rawType.equals(allowedType)) {
+        return;
+      }
+    }
+    throw new InvalidStructException(
+        annotationName + " is not compatible with field type " + rawType, errorElement);
   }
 
   private boolean hasTypeAnnotation(

@@ -214,7 +214,8 @@ public class FieldGroups {
       isPrimitiveField = typeRef.getRawType().isPrimitive();
       fieldConverter = d.getFieldConverter();
       // Primitive-list carrier TypeExtMeta describes the element wire type, not the field
-      // nullability/ref mode. The field mode must stay aligned with Descriptor/TypeDef metadata.
+      // nullability/ref mode. Treating it as field metadata writes an extra null marker that
+      // remote TypeDef payload readers then consume as list length.
       TypeExtMeta extMeta = typeRef.getTypeExtMeta();
       if (extMeta != null && !primitiveListArray && !primitiveListCollection) {
         nullable = extMeta.nullable();

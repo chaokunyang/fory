@@ -122,6 +122,8 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 		U8List      []uint8  `fory:"id=4"`
 		U8Dense     []uint8  `fory:"id=5,type=array(element=uint8)"`
 		Bytes       []byte   `fory:"id=6,type=bytes"`
+		Strings     []string `fory:"id=7"`
+		StringByID  map[int32]string
 	}
 
 	f := New(WithXlang(true), WithCompatible(false))
@@ -135,6 +137,8 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 	require.EqualValues(t, VARINT32, defaultListPrimitive.elemTypeID)
 	require.EqualValues(t, LIST, defaultListSpec.Type.TypeId())
 	require.EqualValues(t, VARINT32, defaultListSpec.Type.Element.TypeId())
+	require.False(t, defaultListSpec.Type.Element.Nullable)
+	require.False(t, defaultListSpec.Type.typeDefProjection(false).Element.Nullable)
 
 	denseSpec := mustParseFieldSpec(t, typ.Field(1))
 	denseSerializer, err := serializerForTypeSpec(f.typeResolver, typ.Field(1).Type, denseSpec.Type)
@@ -149,12 +153,16 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 	require.True(t, ok)
 	require.EqualValues(t, INT32, explicitPrimitive.elemTypeID)
 	require.EqualValues(t, LIST, explicitSpec.Type.TypeId())
+	require.False(t, explicitSpec.Type.Element.Nullable)
+	require.False(t, explicitSpec.Type.typeDefProjection(false).Element.Nullable)
 
 	ptrsSpec := mustParseFieldSpec(t, typ.Field(3))
 	ptrsSerializer, err := serializerForTypeSpec(f.typeResolver, typ.Field(3).Type, ptrsSpec.Type)
 	require.NoError(t, err)
 	require.IsType(t, &sliceSerializer{}, ptrsSerializer)
 	require.EqualValues(t, LIST, ptrsSpec.Type.TypeId())
+	require.True(t, ptrsSpec.Type.Element.Nullable)
+	require.True(t, ptrsSpec.Type.typeDefProjection(false).Element.Nullable)
 
 	u8ListSpec := mustParseFieldSpec(t, typ.Field(4))
 	u8ListSerializer, err := serializerForTypeSpec(f.typeResolver, typ.Field(4).Type, u8ListSpec.Type)
@@ -164,6 +172,8 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 	require.EqualValues(t, UINT8, u8Primitive.elemTypeID)
 	require.EqualValues(t, LIST, u8ListSpec.Type.TypeId())
 	require.EqualValues(t, UINT8, u8ListSpec.Type.Element.TypeId())
+	require.False(t, u8ListSpec.Type.Element.Nullable)
+	require.False(t, u8ListSpec.Type.typeDefProjection(false).Element.Nullable)
 
 	u8DenseSpec := mustParseFieldSpec(t, typ.Field(5))
 	u8DenseSerializer, err := serializerForTypeSpec(f.typeResolver, typ.Field(5).Type, u8DenseSpec.Type)
@@ -176,6 +186,17 @@ func TestFieldSpecSerializerSelection(t *testing.T) {
 	require.NoError(t, err)
 	require.IsType(t, encodedByteSliceSerializer{}, bytesSerializer)
 	require.EqualValues(t, BINARY, bytesSpec.Type.TypeId())
+
+	stringsSpec := mustParseFieldSpec(t, typ.Field(7))
+	require.EqualValues(t, LIST, stringsSpec.Type.TypeId())
+	require.False(t, stringsSpec.Type.Element.Nullable)
+	require.True(t, stringsSpec.Type.typeDefProjection(false).Element.Nullable)
+
+	mapSpec := mustParseFieldSpec(t, typ.Field(8))
+	mapProjection := mapSpec.Type.typeDefProjection(false)
+	require.EqualValues(t, MAP, mapProjection.TypeId())
+	require.True(t, mapProjection.Key.Nullable)
+	require.True(t, mapProjection.Value.Nullable)
 }
 
 func TestGroupFieldsUsesFlatOrderForFullyTaggedStructs(t *testing.T) {

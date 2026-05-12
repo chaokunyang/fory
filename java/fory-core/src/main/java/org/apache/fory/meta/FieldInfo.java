@@ -129,6 +129,18 @@ public final class FieldInfo implements Serializable {
               ? null
               : FieldTypes.buildFieldType(resolver, descriptor.getField());
       int peerArrayTypeId = arrayTypeId(fieldType);
+      // Static @ArrayType List<T> descriptors are fieldless, but the generated accessor still
+      // reads and writes a List. Preserve the local descriptor so field metadata installs the
+      // boxed-list dense-array serializer instead of treating the accessor value as a primitive
+      // array.
+      if (peerArrayTypeId != Types.UNKNOWN
+          && TypeAnnotationUtils.isBoxedListArrayType(descriptor)
+          && peerArrayTypeId == TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor)) {
+        return new DescriptorBuilder(descriptor)
+            .trackingRef(remoteTrackingRef)
+            .nullable(remoteNullable)
+            .build();
+      }
       if (peerArrayTypeId != Types.UNKNOWN
           && peerArrayTypeId == arrayTypeId(localFieldType)
           && TypeAnnotationUtils.isArrayType(descriptor)) {
@@ -214,9 +226,10 @@ public final class FieldInfo implements Serializable {
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localField);
     int peerListElementTypeId = listElementTypeId(fieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
+      int nonNullablePeerListElementTypeId = nonNullableListElementTypeId(fieldType);
       int localArrayTypeId = arrayTypeId(localFieldType);
       return localArrayTypeId != Types.UNKNOWN
-          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId);
+          && localArrayTypeId == denseArrayTypeId(nonNullablePeerListElementTypeId);
     }
     int peerArrayTypeId = arrayTypeId(fieldType);
     if (peerArrayTypeId != Types.UNKNOWN) {
@@ -289,6 +302,10 @@ public final class FieldInfo implements Serializable {
   }
 
   private static int listElementTypeId(FieldTypes.FieldType fieldType) {
+    return listElementTypeId(fieldType, false);
+  }
+
+  private static int listElementTypeId(FieldTypes.FieldType fieldType, boolean requireNonNullable) {
     if (!(fieldType instanceof FieldTypes.CollectionFieldType)
         || fieldType.getTypeId() != Types.LIST) {
       return Types.UNKNOWN;
@@ -296,9 +313,16 @@ public final class FieldInfo implements Serializable {
     FieldTypes.FieldType elementType =
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
+      if (requireNonNullable && (elementType.nullable() || elementType.trackingRef())) {
+        return Types.UNKNOWN;
+      }
       return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
     }
     return Types.UNKNOWN;
+  }
+
+  private static int nonNullableListElementTypeId(FieldTypes.FieldType fieldType) {
+    return listElementTypeId(fieldType, true);
   }
 
   private static int arrayTypeId(FieldTypes.FieldType fieldType) {

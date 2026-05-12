@@ -616,6 +616,73 @@ public class ForyStructProcessorTest {
     }
   }
 
+  @Test
+  public void testStaticArrayTypeListWritesDenseArrayPayload() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.DenseListStruct",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.ArrayType;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.UInt32Type;\n"
+                + "import org.apache.fory.type.Float16;\n"
+                + "@ForyStruct public class DenseListStruct {\n"
+                + "  @ArrayType public List<Integer> values;\n"
+                + "  @ArrayType public List<@UInt32Type Long> unsignedValues;\n"
+                + "  @ArrayType public List<Float16> float16Values;\n"
+                + "  public DenseListStruct() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.DenseListStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.Float16Type;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.UInt32Type;\n"
+                + "@ForyStruct public class DenseListStruct {\n"
+                + "  public int[] values;\n"
+                + "  public @UInt32Type int[] unsignedValues;\n"
+                + "  public @Float16Type short[] float16Values;\n"
+                + "  public DenseListStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.DenseListStruct");
+      Class<?> readerType = readerLoader.loadClass("test.DenseListStruct");
+      Fory writer = xlangCompatibleFory(writerLoader, writerType, false, "DenseListStruct");
+      Fory reader = xlangCompatibleFory(readerLoader, readerType, false, "DenseListStruct");
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "values", Arrays.asList(1, 2, 3));
+      setField(
+          writerType,
+          writerValue,
+          "unsignedValues",
+          Arrays.asList(1L, 2L, Integer.toUnsignedLong(-1)));
+      setField(
+          writerType,
+          writerValue,
+          "float16Values",
+          Arrays.asList(
+              org.apache.fory.type.Float16.fromBits((short) 0x0000),
+              org.apache.fory.type.Float16.fromBits((short) 0x3C00)));
+
+      Object result = reader.deserialize(writer.serialize(writerValue));
+      Assert.assertSame(result.getClass(), readerType);
+      Assert.assertTrue(
+          Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {1, 2, 3}));
+      Assert.assertTrue(
+          Arrays.equals(
+              (int[]) getField(readerType, result, "unsignedValues"), new int[] {1, 2, -1}));
+      Assert.assertTrue(
+          Arrays.equals(
+              (short[]) getField(readerType, result, "float16Values"),
+              new short[] {(short) 0x0000, (short) 0x3C00}));
+    }
+  }
+
   private static Fory xlangCompatibleFory(ClassLoader classLoader, Class<?> type, boolean codegen) {
     return xlangCompatibleFory(classLoader, type, codegen, "ArrayShapeStruct");
   }

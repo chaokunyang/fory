@@ -309,16 +309,13 @@ public class TypeAnnotationUtils {
     if (TypeUtils.isPrimitiveListClass(rawType)) {
       return false;
     }
+    if (rawType.isArray() && rawType.getComponentType().isPrimitive()) {
+      return false;
+    }
+    // Fieldless descriptors can be TypeDef-reified schema views. Validate real source annotations
+    // through the Field overload; schema-only non-list descriptors are not boxed-list arrays.
     if (!List.class.isAssignableFrom(rawType)) {
-      if (Collection.class.isAssignableFrom(rawType)) {
-        throw new IllegalArgumentException(
-            "@ArrayType can only be applied to Fory primitive-list carriers or ordered "
-                + "java.util.List<T> fields, but got "
-                + rawType.getName());
-      }
-      throw new IllegalArgumentException(
-          "@ArrayType can only be applied to Fory primitive-list carriers or ordered "
-              + "java.util.List<T> fields; primitive arrays already use array<T> schema");
+      return false;
     }
     return true;
   }

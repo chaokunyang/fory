@@ -635,8 +635,13 @@ def _list_array_element_type_matches(list_field_type: FieldType, array_field_typ
     array_element_type_id = _ARRAY_ELEMENT_TYPE_IDS.get(array_field_type.type_id)
     if array_element_type_id is None:
         return False
-    return list_field_type.type_id == TypeId.LIST and _list_element_type_matches_array_element(
+    return (
+        list_field_type.type_id == TypeId.LIST
+        and not list_field_type.element_type.is_nullable
+        and not list_field_type.element_type.is_tracking_ref
+        and _list_element_type_matches_array_element(
         list_field_type.element_type.type_id, array_element_type_id
+    )
     )
 
 

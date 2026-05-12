@@ -529,6 +529,12 @@ fn read_primitive_array_data_bulk<T: 'static>(
 }
 
 fn list_element_type_matches_array(list: &FieldType, array: &FieldType) -> bool {
+    list_element_type_matches_array_shape(list, array)
+        && !list.generics[0].nullable
+        && !list.generics[0].track_ref
+}
+
+fn list_element_type_matches_array_shape(list: &FieldType, array: &FieldType) -> bool {
     primitive_array_element_type_id(array.type_id).is_some_and(|element_type_id| {
         list.type_id == type_id::LIST
             && list.generics.len() == 1
@@ -829,8 +835,13 @@ where
 {
     if remote_field_type.type_id == type_id::LIST
         && !remote_field_type.generics.is_empty()
-        && list_element_type_matches_array(remote_field_type, local_field_type)
+        && list_element_type_matches_array_shape(remote_field_type, local_field_type)
     {
+        if remote_field_type.generics[0].nullable || remote_field_type.generics[0].track_ref {
+            return Err(Error::type_error(
+                "compatible list to array field requires non-null elements",
+            ));
+        }
         if field_ref_mode(remote_field_type) != RefMode::None {
             let ref_flag = context.reader.read_i8()?;
             if ref_flag == RefFlag::Null as i8 {

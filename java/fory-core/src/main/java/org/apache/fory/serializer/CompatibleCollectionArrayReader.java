@@ -88,18 +88,21 @@ final class CompatibleCollectionArrayReader {
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, field);
     int peerListElementTypeId = listElementTypeId(descriptor);
     if (peerListElementTypeId != Types.UNKNOWN) {
+      int nonNullablePeerListElementTypeId = nonNullableListElementTypeId(descriptor);
       int localArrayTypeId = arrayTypeId(localFieldType);
       if (localArrayTypeId != Types.UNKNOWN
-          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
+          && localArrayTypeId == denseArrayTypeId(nonNullablePeerListElementTypeId)) {
         return new ReadAction(
-            READ_LIST_TO_ARRAY, localArrayTypeId, peerListElementTypeId, field.getType());
+            READ_LIST_TO_ARRAY,
+            localArrayTypeId,
+            nonNullablePeerListElementTypeId,
+            field.getType());
       }
       int localListElementTypeId = nonNullableListElementTypeId(localFieldType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      // The list-to-list fast path materializes through a dense primitive array, so it cannot
-      // preserve nullable or ref-tracked peer elements. List-to-array still accepts nullable
-      // schemas above and rejects only actual null/ref payload flags while reading.
-      if (nonNullableListElementTypeId(descriptor) != Types.UNKNOWN
+      // List-to-array and list-to-list materialize through a dense primitive array, so they cannot
+      // preserve nullable or ref-tracked peer elements.
+      if (nonNullablePeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
@@ -129,21 +132,21 @@ final class CompatibleCollectionArrayReader {
     TypeRef<?> localType = localDescriptor.getTypeRef();
     int peerListElementTypeId = listElementTypeId(remoteFieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
-      int localArrayTypeId = arrayTypeId(localType);
+      int nonNullablePeerListElementTypeId = nonNullableListElementTypeId(remoteFieldType);
+      int localArrayTypeId = arrayTypeId(localDescriptor);
       if (localArrayTypeId != Types.UNKNOWN
-          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
+          && localArrayTypeId == denseArrayTypeId(nonNullablePeerListElementTypeId)) {
         return new ReadAction(
             READ_LIST_TO_ARRAY,
             localArrayTypeId,
-            peerListElementTypeId,
+            nonNullablePeerListElementTypeId,
             localDescriptor.getRawType());
       }
       int localListElementTypeId = nonNullableListElementTypeId(localType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      // The list-to-list fast path materializes through a dense primitive array, so it cannot
-      // preserve nullable or ref-tracked peer elements. List-to-array still accepts nullable
-      // schemas above and rejects only actual null/ref payload flags while reading.
-      if (nonNullableListElementTypeId(remoteFieldType) != Types.UNKNOWN
+      // List-to-array and list-to-list materialize through a dense primitive array, so they cannot
+      // preserve nullable or ref-tracked peer elements.
+      if (nonNullablePeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {

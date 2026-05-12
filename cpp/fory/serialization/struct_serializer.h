@@ -3292,6 +3292,12 @@ void read_single_field_by_index_compatible(T &obj, ReadContext &ctx,
           return;
         }
         const auto &remote_element_type = remote_field_type.generics[0];
+        if (FORY_PREDICT_FALSE(remote_element_type.nullable ||
+                               remote_element_type.track_ref)) {
+          ctx.set_error(Error::invalid_data(
+              "compatible list to array field requires non-null elements"));
+          return;
+        }
         constexpr int8_t child = configured_node_child<T, Index, 0, 0>();
         FieldType result = read_configured_list_data_as_array_field<
             FieldType, T, Index, 0, child>(ctx, remote_element_type.type_id);

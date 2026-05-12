@@ -1306,8 +1306,8 @@ public class XtypeResolver extends TypeResolver {
     if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {
       return (byte) extMeta.typeId();
     }
-    if (TypeAnnotationUtils.isBoxedListArrayType(descriptor.getField())) {
-      return (byte) TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField());
+    if (TypeAnnotationUtils.isBoxedListArrayType(descriptor)) {
+      return (byte) TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor);
     }
     if (cls.isArray() && cls.getComponentType().isPrimitive()) {
       return (byte) Types.getDescriptorTypeId(this, descriptor);

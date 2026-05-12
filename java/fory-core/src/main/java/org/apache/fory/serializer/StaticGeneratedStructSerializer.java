@@ -151,6 +151,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final void writeBuildInFieldValue(
       WriteContext writeContext, SerializationFieldInfo fieldInfo, Object fieldValue) {
+    // Some schema-built-in fields still use container-shaped Java accessors, such as
+    // @ArrayType List<T>. The override owns the accessor-to-payload conversion.
+    if (fieldInfo.containerSerializerOverride != null) {
+      writeContainerFieldValue(writeContext, fieldInfo, fieldValue);
+      return;
+    }
     AbstractObjectSerializer.writeBuildInFieldValue(
         writeContext,
         typeResolver,
@@ -185,6 +191,10 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final Object readBuildInFieldValue(
       ReadContext readContext, SerializationFieldInfo fieldInfo) {
+    // See writeBuildInFieldValue: built-in schema groups can still need container conversion.
+    if (fieldInfo.containerSerializerOverride != null) {
+      return readContainerFieldValue(readContext, fieldInfo);
+    }
     return AbstractObjectSerializer.readBuildInFieldValue(
         readContext, typeResolver, readContext.getRefReader(), fieldInfo, readContext.getBuffer());
   }

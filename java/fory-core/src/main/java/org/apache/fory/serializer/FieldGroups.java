@@ -261,12 +261,12 @@ public class FieldGroups {
                 resolver, type);
       } else if (primitiveListCollection) {
         containerSerializerOverride = new CollectionSerializer(resolver, (Class) type);
-      } else if (TypeAnnotationUtils.isBoxedListArrayType(descriptor.getField())) {
+      } else if (TypeAnnotationUtils.isBoxedListArrayType(descriptor)) {
         containerSerializerOverride =
             new org.apache.fory.serializer.collection.PrimitiveListSerializers
                 .BoxedArrayAsListSerializer(
                 resolver,
-                TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField()),
+                TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor),
                 qualifiedFieldName);
       } else {
         containerSerializerOverride = null;

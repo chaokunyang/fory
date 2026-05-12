@@ -633,7 +633,7 @@ def test_java_evolving_false_generation_uses_struct_evolution_enum():
     java_output = render_files(generate_files(schema, JavaGenerator))
     assert "import org.apache.fory.annotation.ForyStruct;" in java_output
     assert "import org.apache.fory.annotation.ForyStruct.Evolution;" in java_output
-    assert java_output.count("@ForyStruct(evolving = Evolution.DISABLED)") == 2
+    assert java_output.count("@ForyStruct(evolution = Evolution.DISABLED)") == 2
     assert java_output.count("@ForyStruct") == 3
     assert "@ForyStruct(evolving = false)" not in java_output
 

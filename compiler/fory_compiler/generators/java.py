@@ -410,7 +410,7 @@ class JavaGenerator(BaseGenerator):
         """Return the ForyStruct annotation for a generated message."""
         if self.get_effective_evolving(message):
             return "@ForyStruct"
-        return "@ForyStruct(evolving = Evolution.DISABLED)"
+        return "@ForyStruct(evolution = Evolution.DISABLED)"
 
     # Generates a Java class file from a message schema definition.
     def generate_message_file(self, message: Message) -> GeneratedFile:

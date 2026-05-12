@@ -566,13 +566,13 @@ public final class ForyStructProcessor extends AbstractProcessor {
     if (kind == TypeKind.ARRAY) {
       componentType =
           buildTypeNode(
-              ((ArrayType) type).getComponentType(), treeInfo.arrayComponentTree(), "true");
+              ((ArrayType) type).getComponentType(), treeInfo.arrayComponentTree(), "false");
     } else if (type instanceof DeclaredType) {
       List<?> argumentTrees = treeInfo.typeArgumentTrees();
       int index = 0;
       for (TypeMirror argument : ((DeclaredType) type).getTypeArguments()) {
         Object argumentTree = index < argumentTrees.size() ? argumentTrees.get(index) : null;
-        arguments.add(buildTypeNode(argument, argumentTree, "true"));
+        arguments.add(buildTypeNode(argument, argumentTree, "false"));
         index++;
       }
     }

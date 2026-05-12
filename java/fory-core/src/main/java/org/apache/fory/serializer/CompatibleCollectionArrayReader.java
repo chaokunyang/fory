@@ -119,7 +119,10 @@ final class CompatibleCollectionArrayReader {
       if (localArrayTypeId != Types.UNKNOWN
           && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
         return new ReadAction(
-            READ_LIST_TO_ARRAY, localArrayTypeId, peerListElementTypeId, localDescriptor.getType());
+            READ_LIST_TO_ARRAY,
+            localArrayTypeId,
+            peerListElementTypeId,
+            localDescriptor.getRawType());
       }
       return null;
     }
@@ -129,7 +132,10 @@ final class CompatibleCollectionArrayReader {
       if (localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
         return new ReadAction(
-            READ_ARRAY_TO_LIST, peerArrayTypeId, localListElementTypeId, localDescriptor.getType());
+            READ_ARRAY_TO_LIST,
+            peerArrayTypeId,
+            localListElementTypeId,
+            localDescriptor.getRawType());
       }
     }
     return null;

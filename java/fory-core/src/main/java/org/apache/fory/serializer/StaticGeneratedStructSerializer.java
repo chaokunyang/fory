@@ -60,10 +60,11 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   protected StaticGeneratedStructSerializer(
       TypeResolver typeResolver, Class<?> type, TypeDef typeDef, List<Descriptor> descriptors) {
     super(typeResolver, (Class<T>) type);
+    List<Descriptor> runtimeDescriptors = runtimeDescriptors(descriptors);
     this.typeDef = typeDef;
     this.remoteFields =
-        typeDef == null ? Collections.emptyList() : buildRemoteFields(typeDef, descriptors);
-    this.localFieldsById = buildLocalFieldsById(descriptors);
+        typeDef == null ? Collections.emptyList() : buildRemoteFields(typeDef, runtimeDescriptors);
+    this.localFieldsById = buildLocalFieldsById(runtimeDescriptors);
   }
 
   @Override
@@ -80,10 +81,15 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   public abstract T readCompatible(ReadContext readContext);
 
   protected final FieldGroups buildFieldGroups(List<Descriptor> descriptors) {
+    descriptors = runtimeDescriptors(descriptors);
     DescriptorGrouper grouper =
         FieldGroups.buildDescriptorGrouper(
             typeResolver, descriptors, false, descriptor -> descriptor);
     return FieldGroups.buildFieldInfos(typeResolver, grouper);
+  }
+
+  protected final List<Descriptor> runtimeDescriptors(List<Descriptor> descriptors) {
+    return typeResolver.normalizeFieldDescriptors(type, true, descriptors);
   }
 
   protected final int[] localFieldIds(
@@ -233,6 +239,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   protected final int computeClassVersionHash(List<Descriptor> descriptors) {
+    descriptors = runtimeDescriptors(descriptors);
     return ObjectSerializer.computeStructHash(
         typeResolver,
         FieldGroups.buildDescriptorGrouper(
@@ -260,6 +267,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     List<FieldInfo> remoteFieldInfos = remoteTypeDef.getFieldsInfo();
     List<Descriptor> remoteDescriptors =
         remoteTypeDef.getDescriptors(typeResolver, type, localDescriptors);
+    Map<String, FieldInfo> remoteFieldInfosByKey = new HashMap<>();
+    for (int i = 0; i < remoteFieldInfos.size(); i++) {
+      FieldInfo fieldInfo = remoteFieldInfos.get(i);
+      Descriptor descriptor = remoteDescriptors.get(i);
+      putRemoteFieldInfo(remoteFieldInfosByKey, fieldInfo, descriptor);
+    }
     Map<Short, Integer> fieldIds = new HashMap<>();
     Map<String, Integer> fields = new HashMap<>();
     for (int i = 0; i < localDescriptors.size(); i++) {
@@ -269,13 +282,38 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       }
       fields.put(fieldKey(descriptor), i);
     }
+    FieldGroups remoteFieldGroups =
+        FieldGroups.buildFieldInfos(
+            typeResolver,
+            FieldGroups.buildDescriptorGrouper(
+                typeResolver, remoteDescriptors, false, descriptor -> descriptor));
     List<RemoteFieldInfo> remoteFields = new ArrayList<>(remoteFieldInfos.size());
-    for (int i = 0; i < remoteFieldInfos.size(); i++) {
-      FieldInfo fieldInfo = remoteFieldInfos.get(i);
-      Descriptor descriptor = remoteDescriptors.get(i);
+    appendRemoteFields(
+        remoteFields, remoteFieldGroups.buildInFields, remoteFieldInfosByKey, fieldIds, fields,
+        localDescriptors);
+    appendRemoteFields(
+        remoteFields, remoteFieldGroups.containerFields, remoteFieldInfosByKey, fieldIds, fields,
+        localDescriptors);
+    appendRemoteFields(
+        remoteFields, remoteFieldGroups.userTypeFields, remoteFieldInfosByKey, fieldIds, fields,
+        localDescriptors);
+    return Collections.unmodifiableList(remoteFields);
+  }
+
+  private void appendRemoteFields(
+      List<RemoteFieldInfo> remoteFields,
+      SerializationFieldInfo[] serializationFieldInfos,
+      Map<String, FieldInfo> remoteFieldInfosByKey,
+      Map<Short, Integer> fieldIds,
+      Map<String, Integer> fields,
+      List<Descriptor> localDescriptors) {
+    for (SerializationFieldInfo serializationFieldInfo : serializationFieldInfos) {
+      Descriptor descriptor = serializationFieldInfo.descriptor;
+      FieldInfo fieldInfo = remoteFieldInfosByKey.get(remoteFieldKey(descriptor));
+      if (fieldInfo == null) {
+        throw new IllegalStateException("Missing remote field metadata for " + descriptor);
+      }
       int matchedId = matchField(fieldInfo, fieldIds, fields);
-      SerializationFieldInfo serializationFieldInfo =
-          FieldGroups.buildFieldInfo(typeResolver, descriptor);
       Descriptor localDescriptor =
           matchedId == UNKNOWN_FIELD ? null : localDescriptors.get(matchedId);
       remoteFields.add(
@@ -287,7 +325,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
               serializationFieldInfo,
               localDescriptor));
     }
-    return Collections.unmodifiableList(remoteFields);
   }
 
   private SerializationFieldInfo[] buildLocalFieldsById(List<Descriptor> descriptors) {
@@ -322,6 +359,26 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   private static String fieldKey(Descriptor descriptor) {
     return descriptor.getDeclaringClass() + "." + descriptor.getName();
+  }
+
+  private static void putRemoteFieldInfo(
+      Map<String, FieldInfo> remoteFieldInfosByKey, FieldInfo fieldInfo, Descriptor descriptor) {
+    remoteFieldInfosByKey.put(remoteFieldKey(descriptor), fieldInfo);
+    if (fieldInfo.hasFieldId()) {
+      remoteFieldInfosByKey.put(remoteFieldKey(fieldInfo), fieldInfo);
+    }
+  }
+
+  private static String remoteFieldKey(FieldInfo fieldInfo) {
+    return fieldInfo.hasFieldId()
+        ? "id:" + fieldInfo.getFieldId()
+        : fieldInfo.getDefinedClass() + "." + fieldInfo.getFieldName();
+  }
+
+  private static String remoteFieldKey(Descriptor descriptor) {
+    return descriptor.hasForyFieldId()
+        ? "id:" + descriptor.getForyFieldId()
+        : fieldKey(descriptor);
   }
 
   /** Remote field metadata consumed by generated compatible read methods. */

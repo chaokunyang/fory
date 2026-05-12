@@ -18,11 +18,14 @@
 import argparse
 import logging
 import os
+import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 
-from tasks import cpp, java, javascript, kotlin, rust, python, go, format
+from tasks import common, cpp, java, javascript, kotlin, rust, python, go, format
 from tasks.common import is_windows
 
 # Configure logging
@@ -102,6 +105,119 @@ def run_shell_script(command, *args):
         cmd.extend(args)
         logging.info(f"Falling back to shell script: {' '.join(cmd)}")
         sys.exit(subprocess.call(cmd))
+
+
+def _pom_tag(namespace, name):
+    return f"{{{namespace}}}{name}" if namespace else name
+
+
+def _pom_namespace(root):
+    if root.tag.startswith("{"):
+        return root.tag[1:].split("}", 1)[0]
+    return ""
+
+
+def _find_child(element, namespace, name):
+    return element.find(_pom_tag(namespace, name))
+
+
+def _find_or_add_child(element, namespace, name):
+    child = _find_child(element, namespace, name)
+    if child is None:
+        child = ET.SubElement(element, _pom_tag(namespace, name))
+    return child
+
+
+def _child_text(element, namespace, name):
+    child = _find_child(element, namespace, name)
+    return "" if child is None or child.text is None else child.text.strip()
+
+
+def _find_or_add_compiler_plugin(root, namespace):
+    build = _find_or_add_child(root, namespace, "build")
+    plugins = _find_or_add_child(build, namespace, "plugins")
+    for plugin in plugins.findall(_pom_tag(namespace, "plugin")):
+        if _child_text(plugin, namespace, "artifactId") == "maven-compiler-plugin":
+            return plugin
+    plugin = ET.SubElement(plugins, _pom_tag(namespace, "plugin"))
+    group_id = ET.SubElement(plugin, _pom_tag(namespace, "groupId"))
+    group_id.text = "org.apache.maven.plugins"
+    artifact_id = ET.SubElement(plugin, _pom_tag(namespace, "artifactId"))
+    artifact_id.text = "maven-compiler-plugin"
+    return plugin
+
+
+def _has_processor_path(annotation_processor_paths, namespace, artifact_id):
+    for path in annotation_processor_paths.findall(_pom_tag(namespace, "path")):
+        if _child_text(path, namespace, "artifactId") == artifact_id:
+            return True
+    return False
+
+
+def _add_annotation_processor_path(pom_path):
+    ET.register_namespace("", "http://maven.apache.org/POM/4.0.0")
+    ET.register_namespace("xsi", "http://www.w3.org/2001/XMLSchema-instance")
+    tree = ET.parse(pom_path)
+    root = tree.getroot()
+    namespace = _pom_namespace(root)
+    compiler_plugin = _find_or_add_compiler_plugin(root, namespace)
+    configuration = _find_or_add_child(compiler_plugin, namespace, "configuration")
+    annotation_processor_paths = _find_or_add_child(
+        configuration, namespace, "annotationProcessorPaths"
+    )
+    annotation_processor_paths.set("combine.children", "append")
+    if not _has_processor_path(
+        annotation_processor_paths, namespace, "fory-annotation-processor"
+    ):
+        path = ET.SubElement(annotation_processor_paths, _pom_tag(namespace, "path"))
+        group_id = ET.SubElement(path, _pom_tag(namespace, "groupId"))
+        group_id.text = "org.apache.fory"
+        artifact_id = ET.SubElement(path, _pom_tag(namespace, "artifactId"))
+        artifact_id.text = "fory-annotation-processor"
+        version = ET.SubElement(path, _pom_tag(namespace, "version"))
+        version.text = "${project.version}"
+    tree.write(pom_path, encoding="UTF-8", xml_declaration=True)
+
+
+def _exec_cmd(cmd, cwd):
+    logging.info(f"running command in {cwd}: {cmd}")
+    subprocess.check_call(cmd, shell=True, cwd=cwd)
+
+
+def run_android_go_xlang_static_processor():
+    """Run Android-mode Go xlang tests with javac static serializer generation enabled."""
+    root = common.PROJECT_ROOT_DIR
+    java_dir = os.path.join(root, "java")
+    core_dir = os.path.join(java_dir, "fory-core")
+    core_pom = os.path.join(core_dir, "pom.xml")
+    fd, temp_pom = tempfile.mkstemp(
+        prefix="pom-static-processor-", suffix=".xml", dir=core_dir
+    )
+    os.close(fd)
+    try:
+        shutil.copyfile(core_pom, temp_pom)
+        _add_annotation_processor_path(temp_pom)
+        os.environ.setdefault("FORY_ANDROID_ENABLED", "1")
+        os.environ.setdefault("FORY_GO_JAVA_CI", "1")
+        os.environ.setdefault("FORY_STATIC_PROCESSOR_CI", "1")
+        os.environ.setdefault("ENABLE_FORY_DEBUG_OUTPUT", "1")
+        _exec_cmd(
+            "mvn -T16 --no-transfer-progress install -DskipTests "
+            "-Dmaven.javadoc.skip=true -Dmaven.source.skip=true "
+            "-pl fory-annotation-processor -am",
+            java_dir,
+        )
+        _exec_cmd(
+            "mvn -T16 --no-transfer-progress "
+            f"-f {shlex.quote(temp_pom)} "
+            "clean test -Dtest=org.apache.fory.xlang.GoXlangTest",
+            core_dir,
+        )
+    finally:
+        try:
+            os.remove(temp_pom)
+        except FileNotFoundError:
+            pass
 
 
 def parse_args():
@@ -224,6 +340,14 @@ def parse_args():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     go_parser.set_defaults(func=go.run)
+
+    android_go_static_parser = subparsers.add_parser(
+        "android-go-xlang-static-processor",
+        description="Run Android-mode Go xlang tests with @ForyStruct annotation processing enabled",
+        help="Run Android Go xlang tests with static generated serializers",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    android_go_static_parser.set_defaults(func=run_android_go_xlang_static_processor)
 
     # Format subparser
     format_parser = subparsers.add_parser(

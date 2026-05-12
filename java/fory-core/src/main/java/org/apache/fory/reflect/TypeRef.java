@@ -187,9 +187,9 @@ public class TypeRef<T> {
       Ref ref = annotatedType.getAnnotation(Ref.class);
       if (typeAnnotation != null) {
         int typeId = TypeAnnotationUtils.getTypeId(typeAnnotation, TypeUtils.getRawType(type));
-        meta = TypeExtMeta.of(typeId, true, ref != null && ref.enable());
+        meta = TypeExtMeta.of(typeId, false, ref != null && ref.enable());
       } else if (ref != null) {
-        meta = TypeExtMeta.of(Types.UNKNOWN, true, ref.enable());
+        meta = TypeExtMeta.of(Types.UNKNOWN, false, ref.enable());
       }
     }
     return new TypeRef<>(type, meta, typeArguments, componentType);

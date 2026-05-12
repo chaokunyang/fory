@@ -41,6 +41,7 @@ import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.StringUtils;
 
 public class FieldGroups {
@@ -87,16 +88,7 @@ public class FieldGroups {
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator) {
-    return DescriptorGrouper.createDescriptorGrouper(
-            typeResolver::usesPrimitiveFieldOrdering,
-            typeResolver::isBuildIn,
-            typeResolver::isCollectionDescriptor,
-            descriptors,
-            descriptorsGroupedOrdered,
-            descriptorUpdator,
-            typeResolver.getPrimitiveComparator(),
-            typeResolver.getDescriptorComparator())
-        .sort();
+    return typeResolver.groupDescriptors(descriptors, descriptorsGroupedOrdered, descriptorUpdator);
   }
 
   public static FieldGroups buildFieldInfos(TypeResolver typeResolver, DescriptorGrouper grouper) {
@@ -235,9 +227,7 @@ public class FieldGroups {
 
       GenericType t;
       if (primitiveListCollection) {
-        TypeRef<?> elementTypeRef =
-            TypeAnnotationUtils.getPrimitiveListElementTypeRef(
-                d.getTypeAnnotation(), typeRef.getRawType());
+        TypeRef<?> elementTypeRef = primitiveListElementTypeRef(d);
         t = new GenericType(typeRef, true, resolver.buildGenericType(elementTypeRef));
       } else {
         t = resolver.buildGenericType(typeRef);
@@ -319,5 +309,26 @@ public class FieldGroups {
           + nullable
           + '}';
     }
+  }
+
+  private static TypeRef<?> primitiveListElementTypeRef(Descriptor descriptor) {
+    TypeRef<?> typeRef = descriptor.getTypeRef();
+    TypeExtMeta inlineMeta = typeRef.getTypeExtMeta();
+    if (inlineMeta != null && Types.isPrimitiveType(inlineMeta.typeId())) {
+      Class<?> elementClass = TypeAnnotationUtils.getPrimitiveListElementClass(typeRef.getRawType());
+      if (elementClass != null) {
+        return TypeRef.of(
+            elementClass, TypeExtMeta.of(inlineMeta.typeId(), true, inlineMeta.trackingRef()));
+      }
+    }
+    if (typeRef.hasExplicitTypeArguments()) {
+      TypeRef<?> elementTypeRef = TypeUtils.getElementType(typeRef);
+      TypeExtMeta elementMeta = elementTypeRef.getTypeExtMeta();
+      if (elementMeta != null && Types.isPrimitiveType(elementMeta.typeId())) {
+        return elementTypeRef;
+      }
+    }
+    return TypeAnnotationUtils.getPrimitiveListElementTypeRef(
+        descriptor.getTypeAnnotation(), typeRef.getRawType());
   }
 }

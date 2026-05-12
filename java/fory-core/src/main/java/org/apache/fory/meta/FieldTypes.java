@@ -117,11 +117,19 @@ public class FieldTypes {
             && descriptor != null
             && !primitiveList
             && TypeAnnotationUtils.isBoxedListArrayType(descriptor);
+    TypeExtMeta typeExtMeta = genericType.getTypeRef().getTypeExtMeta();
+    TypeExtMeta primitiveListArgumentMeta =
+        primitiveList ? primitiveListArgumentMeta(genericType.getTypeRef()) : null;
+    TypeExtMeta primitiveListInlineMeta =
+        primitiveList ? primitiveListInlineMeta(genericType.getTypeRef()) : null;
+    TypeExtMeta primitiveListElementMeta =
+        primitiveListArgumentMeta != null ? primitiveListArgumentMeta : primitiveListInlineMeta;
     int primitiveListElementTypeId =
         primitiveList
-            ? TypeAnnotationUtils.getPrimitiveListElementTypeId(typeAnnotation, rawType, isXlang)
+            ? primitiveListElementMeta != null
+                ? primitiveListElementMeta.typeId()
+                : TypeAnnotationUtils.getPrimitiveListElementTypeId(typeAnnotation, rawType, isXlang)
             : Types.UNKNOWN;
-    TypeExtMeta typeExtMeta = genericType.getTypeRef().getTypeExtMeta();
     if (typeExtMeta != null && typeExtMeta.typeId() != Types.UNKNOWN) {
       typeId = typeExtMeta.typeId();
     } else if (isXlang && primitiveList) {
@@ -186,8 +194,11 @@ public class FieldTypes {
     }
     // For xlang: ref tracking is false by default (no shared ownership like Rust's Rc/Arc)
     // For native: use the type's default tracking behavior
+    boolean descriptorCarriesFieldOptions = descriptor != null && field == null;
     boolean trackingRef =
-        isXlang
+        descriptorCarriesFieldOptions
+            ? descriptor.isTrackingRef()
+            : isXlang
             ? typeExtMeta != null && typeExtMeta.trackingRef()
             : genericType.trackingRef(resolver);
     // For xlang: nullable is false by default for top-level fields.
@@ -196,9 +207,15 @@ public class FieldTypes {
     // Optional types are nullable (like Rust's Option<T>).
     // For native: non-primitive types are nullable by default.
     boolean nullable;
-    if (isXlang) {
-      boolean nestedType = field == null;
-      nullable = nestedType || isOptionalType(rawType);
+    if (descriptorCarriesFieldOptions) {
+      nullable = descriptor.isNullable();
+    } else if (isXlang) {
+      if (typeExtMeta != null) {
+        nullable = typeExtMeta.nullable();
+      } else {
+        boolean nestedType = descriptor == null;
+        nullable = nestedType || isOptionalType(rawType);
+      }
     } else {
       // Primitives are never nullable, non-primitives are nullable by default
       // This applies to both top-level fields and nested types (in arrays, collections, maps)
@@ -221,11 +238,18 @@ public class FieldTypes {
     }
 
     if (isXlang && primitiveList && !primitiveListArray) {
+      boolean elementNullable = true;
+      boolean elementTrackingRef = false;
+      if (primitiveListArgumentMeta != null) {
+        elementNullable = primitiveListArgumentMeta.nullable();
+        elementTrackingRef = primitiveListArgumentMeta.trackingRef();
+      }
       return new CollectionFieldType(
           Types.LIST,
           nullable,
           trackingRef,
-          new RegisteredFieldType(true, false, primitiveListElementTypeId, -1));
+          new RegisteredFieldType(
+              elementNullable, elementTrackingRef, primitiveListElementTypeId, -1));
     }
 
     if (COLLECTION_TYPE.isSupertypeOf(genericType.getTypeRef())) {
@@ -311,6 +335,20 @@ public class FieldTypes {
       return Tuple2.of(TypeRef.of(Object.class), TypeRef.of(Object.class));
     }
     return TypeUtils.getMapKeyValueType(genericType.getTypeRef());
+  }
+
+  private static TypeExtMeta primitiveListInlineMeta(TypeRef<?> typeRef) {
+    TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
+    return typeExtMeta != null && Types.isPrimitiveType(typeExtMeta.typeId()) ? typeExtMeta : null;
+  }
+
+  private static TypeExtMeta primitiveListArgumentMeta(TypeRef<?> typeRef) {
+    if (!typeRef.hasExplicitTypeArguments()) {
+      return null;
+    }
+    TypeRef<?> elementType = TypeUtils.getElementType(typeRef);
+    TypeExtMeta elementMeta = elementType.getTypeExtMeta();
+    return elementMeta != null && Types.isPrimitiveType(elementMeta.typeId()) ? elementMeta : null;
   }
 
   public abstract static class FieldType implements Serializable {

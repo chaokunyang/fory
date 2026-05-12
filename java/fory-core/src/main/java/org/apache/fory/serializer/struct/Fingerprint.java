@@ -94,10 +94,7 @@ public class Fingerprint {
     List<FingerprintField> fieldInfos = new ArrayList<>(descriptors.size());
     for (Descriptor descriptor : descriptors) {
       Class<?> rawType = descriptor.getTypeRef().getRawType();
-      FieldTypes.FieldType fieldType =
-          descriptor.getField() == null
-              ? null
-              : FieldTypes.buildFieldType(resolver, descriptor.getField());
+      FieldTypes.FieldType fieldType = FieldTypes.buildFieldType(resolver, descriptor);
       int typeId =
           fieldType != null ? fingerprintTypeId(fieldType) : getTypeId(resolver, descriptor);
 

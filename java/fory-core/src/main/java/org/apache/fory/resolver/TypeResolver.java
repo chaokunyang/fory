@@ -1473,10 +1473,18 @@ public abstract class TypeResolver {
         .sort();
   }
 
+  @Internal
+  public final DescriptorGrouper groupDescriptors(
+      Collection<Descriptor> descriptors,
+      boolean descriptorsGroupedOrdered,
+      Function<Descriptor, Descriptor> descriptorUpdator) {
+    return buildDescriptorGrouper(descriptors, descriptorsGroupedOrdered, descriptorUpdator);
+  }
+
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
     List<Descriptor> staticDescriptors = getStaticGeneratedStructDescriptors(clz);
     if (staticDescriptors != null) {
-      return buildFieldDescriptors(clz, searchParent, staticDescriptors);
+      return normalizeFieldDescriptors(clz, searchParent, staticDescriptors);
     }
     SortedMap<Member, Descriptor> allDescriptors = getAllDescriptorsMap(clz, searchParent);
     List<Descriptor> result = new ArrayList<>(allDescriptors.size());
@@ -1488,6 +1496,12 @@ public abstract class TypeResolver {
         descriptors.add(entry.getValue());
       }
     }
+    return buildFieldDescriptors(clz, searchParent, descriptors);
+  }
+
+  @Internal
+  public final List<Descriptor> normalizeFieldDescriptors(
+      Class<?> clz, boolean searchParent, List<Descriptor> descriptors) {
     return buildFieldDescriptors(clz, searchParent, descriptors);
   }
 

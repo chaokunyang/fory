@@ -1550,12 +1550,6 @@ public abstract class TypeResolver {
     return buildFieldDescriptors(clz, searchParent, descriptors);
   }
 
-  @Internal
-  public final List<Descriptor> normalizeFieldDescriptors(
-      Class<?> clz, boolean searchParent, List<Descriptor> descriptors) {
-    return buildFieldDescriptors(clz, searchParent, descriptors);
-  }
-
   private List<Descriptor> buildFieldDescriptors(
       Class<?> clz, boolean searchParent, List<Descriptor> descriptors) {
     List<Descriptor> result = new ArrayList<>(descriptors.size());
@@ -1599,6 +1593,12 @@ public abstract class TypeResolver {
       }
     }
     return result;
+  }
+
+  @Internal
+  public final List<Descriptor> normalizeFieldDescriptors(
+      Class<?> clz, boolean searchParent, List<Descriptor> descriptors) {
+    return buildFieldDescriptors(clz, searchParent, descriptors);
   }
 
   protected final Class<? extends Serializer> getStaticGeneratedStructSerializerClass(

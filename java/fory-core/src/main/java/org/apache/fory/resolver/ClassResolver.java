@@ -1794,7 +1794,7 @@ public class ClassResolver extends TypeResolver {
               typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
       getGraalvmClassRegistry()
           .putCompatibleDeserializerClass(
-              cls, CodecUtils.loadOrGenCompatibleMetaSharedCodecClass(this, cls, typeDef));
+              cls, CodecUtils.loadOrGenStaticCompatibleCodecClass(this, cls, typeDef));
     }
     typeInfoCache = NIL_TYPE_INFO;
     if (RecordUtils.isRecord(cls)) {

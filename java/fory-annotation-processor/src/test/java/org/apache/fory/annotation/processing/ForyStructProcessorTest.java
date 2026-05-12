@@ -434,12 +434,12 @@ public class ForyStructProcessorTest {
       Assert.assertNotEquals(
           remoteTypeDef.getId(),
           TypeDef.buildTypeDef(reader.getTypeResolver(), readerType).getId());
-      Class<? extends Serializer<Object>> serializerClass =
-          CodecUtils.loadOrGenCompatibleMetaSharedCodecClass(
+      Class<? extends Serializer> serializerClass =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
               reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
       Assert.assertTrue(
           GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(serializerClass));
-      Constructor<? extends Serializer<Object>> constructor =
+      Constructor<? extends Serializer> constructor =
           serializerClass.getConstructor(
               org.apache.fory.resolver.TypeResolver.class, Class.class, TypeDef.class);
       Serializer<Object> serializer =
@@ -716,8 +716,8 @@ public class ForyStructProcessorTest {
       Fory writer, Fory reader, Class<?> writerType, Class<?> readerType, Object writerValue)
       throws Exception {
     TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
-    Class<? extends Serializer<Object>> serializerClass =
-        CodecUtils.loadOrGenCompatibleMetaSharedCodecClass(
+    Class<? extends Serializer> serializerClass =
+        CodecUtils.loadOrGenStaticCompatibleCodecClass(
             reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
     Assert.assertTrue(
         GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(serializerClass));

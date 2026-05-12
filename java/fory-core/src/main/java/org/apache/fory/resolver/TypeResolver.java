@@ -1082,7 +1082,7 @@ public abstract class TypeResolver {
     if (typeDef.getId() == TypeDef.buildTypeDef(this, cls).getId()) {
       return CodecUtils.loadOrGenMetaSharedCodecClass(this, cls, typeDef);
     }
-    return CodecUtils.loadOrGenCompatibleMetaSharedCodecClass(this, cls, typeDef);
+    return CodecUtils.loadOrGenStaticCompatibleCodecClass(this, cls, typeDef);
   }
 
   protected int buildUnregisteredTypeId(Class<?> cls, Serializer<?> serializer) {

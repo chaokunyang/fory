@@ -68,6 +68,23 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     this.localFieldsById = buildLocalFieldsById(runtimeDescriptors);
   }
 
+  @SuppressWarnings("unchecked")
+  protected StaticGeneratedStructSerializer(
+      TypeResolver typeResolver,
+      Class<?> type,
+      TypeDef typeDef,
+      List<Descriptor> localDescriptors,
+      List<Descriptor> remoteDescriptors) {
+    super(typeResolver, (Class<T>) type);
+    List<Descriptor> runtimeDescriptors = runtimeDescriptors(localDescriptors);
+    this.typeDef = typeDef;
+    this.remoteFields =
+        typeDef == null
+            ? Collections.emptyList()
+            : buildRemoteFields(typeDef, runtimeDescriptors, remoteDescriptors);
+    this.localFieldsById = buildLocalFieldsById(runtimeDescriptors);
+  }
+
   @Override
   public abstract void write(WriteContext writeContext, T value);
 
@@ -206,30 +223,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
     try {
-      int startIndex = buffer.readerIndex();
-      System.err.println(
-          "STATIC_SKIP_START name="
-              + fieldInfo.descriptor.getName()
-              + " index="
-              + startIndex
-              + " next="
-              + (buffer.getByte(startIndex) & 0xFF)
-              + " ref="
-              + fieldInfo.refMode
-              + " typeRef="
-              + fieldInfo.typeRef
-              + " schemaMeta="
-              + fieldInfo.typeRef.getTypeExtMeta()
-              + " override="
-              + fieldInfo.containerSerializerOverride);
       FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-      System.err.println(
-          "STATIC_SKIP_END name="
-              + fieldInfo.descriptor.getName()
-              + " start="
-              + startIndex
-              + " end="
-              + buffer.readerIndex());
     } catch (RuntimeException e) {
       throw new DeserializationException(
           "Failed to skip remote field " + fieldInfo.descriptor.getName(), e);
@@ -310,15 +304,32 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   private List<RemoteFieldInfo> buildRemoteFields(
       TypeDef remoteTypeDef, List<Descriptor> localDescriptors) {
+    return buildRemoteFields(remoteTypeDef, localDescriptors, null);
+  }
+
+  private List<RemoteFieldInfo> buildRemoteFields(
+      TypeDef remoteTypeDef,
+      List<Descriptor> localDescriptors,
+      List<Descriptor> generatedRemoteDescriptors) {
     Class<?> remoteDescriptorClass = remoteDescriptorClass(remoteTypeDef);
     List<FieldInfo> remoteFieldInfos = remoteTypeDef.getFieldsInfo();
-    List<Descriptor> remoteDescriptors =
-        remoteTypeDef.getDescriptors(typeResolver, remoteDescriptorClass);
+    List<Descriptor> remoteDescriptors;
+    if (generatedRemoteDescriptors == null) {
+      remoteDescriptors = remoteTypeDef.getDescriptors(typeResolver, remoteDescriptorClass);
+    } else {
+      remoteDescriptors = generatedRemoteDescriptors;
+    }
     Map<String, FieldInfo> remoteFieldInfosByKey = new HashMap<>();
-    for (int i = 0; i < remoteFieldInfos.size(); i++) {
-      FieldInfo fieldInfo = remoteFieldInfos.get(i);
-      Descriptor descriptor = remoteDescriptors.get(i);
-      putRemoteFieldInfo(remoteFieldInfosByKey, fieldInfo, descriptor);
+    if (generatedRemoteDescriptors == null) {
+      for (int i = 0; i < remoteFieldInfos.size(); i++) {
+        FieldInfo fieldInfo = remoteFieldInfos.get(i);
+        Descriptor descriptor = remoteDescriptors.get(i);
+        putRemoteFieldInfo(remoteFieldInfosByKey, fieldInfo, descriptor);
+      }
+    } else {
+      for (FieldInfo fieldInfo : remoteFieldInfos) {
+        putRemoteFieldInfo(remoteFieldInfosByKey, fieldInfo);
+      }
     }
     Map<Short, Integer> fieldIds = new HashMap<>();
     Map<String, Integer> fields = new HashMap<>();
@@ -332,10 +343,18 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     // Keep compatible-read descriptor ordering owned by TypeResolver, matching the sorted
     // DescriptorGrouper order used by ObjectCodecBuilder and MetaSharedCodecBuilder. FieldGroups
     // may regroup descriptors for helper ownership, so it must not drive remote payload order.
-    List<Descriptor> remoteDescriptorsInWireOrder =
-        typeResolver
-            .createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass)
-            .getSortedDescriptors();
+    List<Descriptor> remoteDescriptorsInWireOrder;
+    if (generatedRemoteDescriptors == null) {
+      remoteDescriptorsInWireOrder =
+          typeResolver
+              .createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass)
+              .getSortedDescriptors();
+    } else {
+      remoteDescriptorsInWireOrder =
+          typeResolver
+              .groupDescriptors(generatedRemoteDescriptors, false, descriptor -> descriptor)
+              .getSortedDescriptors();
+    }
     List<RemoteFieldInfo> remoteFields = new ArrayList<>(remoteFieldInfos.size());
     appendRemoteFields(
         remoteFields,
@@ -432,6 +451,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     if (fieldInfo.hasFieldId()) {
       remoteFieldInfosByKey.put(remoteFieldKey(fieldInfo), fieldInfo);
     }
+  }
+
+  private static void putRemoteFieldInfo(
+      Map<String, FieldInfo> remoteFieldInfosByKey, FieldInfo fieldInfo) {
+    remoteFieldInfosByKey.put(remoteFieldKey(fieldInfo), fieldInfo);
+    remoteFieldInfosByKey.put("name:" + fieldInfo.getFieldName(), fieldInfo);
   }
 
   private static String remoteFieldKey(FieldInfo fieldInfo) {

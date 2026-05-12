@@ -41,7 +41,6 @@ import org.apache.fory.type.DispatchId;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
-import org.apache.fory.type.Types;
 import org.apache.fory.util.StringUtils;
 
 public class FieldGroups {
@@ -217,7 +216,6 @@ public class FieldGroups {
       // nullability/ref mode. Treating it as field metadata writes an extra null marker that
       // remote TypeDef payload readers then consume as list length.
       TypeExtMeta extMeta = typeRef.getTypeExtMeta();
-      int schemaTypeId = extMeta == null ? Types.UNKNOWN : extMeta.typeId();
       if (extMeta != null && !primitiveListArray && !primitiveListCollection) {
         nullable = extMeta.nullable();
         trackingRef = extMeta.trackingRef();
@@ -266,10 +264,6 @@ public class FieldGroups {
                 resolver,
                 TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField()),
                 qualifiedFieldName);
-      } else if (!resolver.isCrossLanguage() && schemaTypeId == Types.LIST) {
-        containerSerializerOverride =
-            new org.apache.fory.serializer.collection.CollectionSerializers.ArrayListSerializer(
-                resolver);
       } else {
         containerSerializerOverride = null;
       }

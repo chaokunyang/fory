@@ -1029,17 +1029,6 @@ public class ClassResolver extends TypeResolver {
     return isMonomorphic(descriptor);
   }
 
-  @Override
-  public boolean isCollectionDescriptor(Descriptor descriptor) {
-    Class<?> rawType = descriptor.getRawType();
-    if (TypeUtils.isPrimitiveListClass(rawType)) {
-      return !org.apache.fory.type.TypeAnnotationUtils.isArrayType(descriptor)
-          && org.apache.fory.type.TypeAnnotationUtils.usesCollectionProtocolForPrimitiveList(
-              descriptor.getTypeAnnotation(), rawType);
-    }
-    return super.isCollectionDescriptor(descriptor);
-  }
-
   public boolean isInternalRegistered(int classId) {
     if (Types.isUserDefinedType((byte) classId)) {
       return false;

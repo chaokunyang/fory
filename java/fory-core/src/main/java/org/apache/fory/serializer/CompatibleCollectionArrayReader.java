@@ -257,9 +257,19 @@ final class CompatibleCollectionArrayReader {
       return elementExtMeta == null ? Types.UNKNOWN : elementExtMeta.typeId();
     }
     if (TypeUtils.isPrimitiveListClass(typeRef.getRawType())) {
-      return extMeta != null && Types.isPrimitiveType(extMeta.typeId())
-          ? extMeta.typeId()
-          : TypeAnnotationUtils.getDefaultPrimitiveListElementTypeId(typeRef.getRawType());
+      if (extMeta != null) {
+        int typeId = extMeta.typeId();
+        if (Types.isPrimitiveArray(typeId)) {
+          // A compatible descriptor can keep the local primitive-list raw carrier while the remote
+          // TypeDef says the peer wrote a dense array payload. Treat the TypeExtMeta as the remote
+          // wire shape here; otherwise array->list reads are misclassified as list->list reads.
+          return Types.UNKNOWN;
+        }
+        if (Types.isPrimitiveType(typeId)) {
+          return typeId;
+        }
+      }
+      return TypeAnnotationUtils.getDefaultPrimitiveListElementTypeId(typeRef.getRawType());
     }
     return Types.UNKNOWN;
   }

@@ -83,25 +83,25 @@ public class DescriptorGrouperTest extends ForyTestBase {
     List<Class<?>> expected =
         Arrays.asList(
             boolean.class,
-            byte.class,
-            char.class,
-            double.class,
-            float.class,
-            int.class,
             Boolean.class,
+            byte.class,
             Byte.class,
-            Character.class,
-            Double.class,
-            Float.class,
-            Integer.class,
-            Long.class,
-            Object.class,
             Short.class,
+            short.class,
+            Integer.class,
+            int.class,
+            Long.class,
+            long.class,
+            float.class,
+            Float.class,
+            double.class,
+            Double.class,
             String.class,
             Void.class,
-            long.class,
-            short.class,
-            void.class);
+            Character.class,
+            void.class,
+            char.class,
+            Object.class);
     assertEquals(classes, expected);
   }
 
@@ -118,16 +118,15 @@ public class DescriptorGrouperTest extends ForyTestBase {
     List<? extends Class<?>> classes =
         descriptors.stream().map(Descriptor::getRawType).collect(Collectors.toList());
     // With compression enabled (default): int/long are compressed and go to the end
-    // Non-compressed sorted by size (desc), then typeId (desc): char(25) > short(3), byte(2) >
-    // boolean(1)
+    // Non-compressed sorted by size (desc), then typeId (asc), matching xlang field order.
     List<Class<?>> expected =
         Arrays.asList(
             double.class,
             float.class,
-            char.class,
             short.class,
-            byte.class,
+            char.class,
             boolean.class,
+            byte.class,
             void.class,
             long.class,
             int.class);
@@ -147,16 +146,15 @@ public class DescriptorGrouperTest extends ForyTestBase {
     List<? extends Class<?>> classes =
         descriptors.stream().map(Descriptor::getRawType).collect(Collectors.toList());
     // With compression enabled (default): int/long are compressed and go to the end
-    // Non-compressed sorted by size (desc), then typeId (desc): char(25) > short(3), byte(2) >
-    // boolean(1)
+    // Non-compressed sorted by size (desc), then typeId (asc), matching xlang field order.
     List<Class<?>> expected =
         Arrays.asList(
             double.class,
             float.class,
-            char.class,
             short.class,
-            byte.class,
+            char.class,
             boolean.class,
+            byte.class,
             void.class,
             long.class,
             int.class);
@@ -219,15 +217,15 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getPrimitiveDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
-      // With compression enabled: int/long go to end, sorted by size then typeId (desc)
+      // With compression enabled: int/long go to end, sorted by size then typeId (asc)
       List<Class<?>> expected =
           Arrays.asList(
               double.class,
               float.class,
-              char.class,
               short.class,
-              byte.class,
+              char.class,
               boolean.class,
+              byte.class,
               void.class,
               long.class,
               int.class);
@@ -238,15 +236,15 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getBoxedDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
-      // With compression enabled: Integer/Long go to end, sorted by size then typeId (desc)
+      // With compression enabled: Integer/Long go to end, sorted by size then typeId (asc)
       List<Class<?>> expected =
           Arrays.asList(
               Double.class,
               Float.class,
-              Character.class,
               Short.class,
-              Byte.class,
+              Character.class,
               Boolean.class,
+              Byte.class,
               Void.class,
               Long.class,
               Integer.class);
@@ -284,7 +282,7 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getOtherDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
-      assertEquals(classes, Arrays.asList(Object.class, Object.class, Date.class));
+      assertEquals(classes, Arrays.asList(Date.class, Object.class, Object.class));
     }
   }
 
@@ -305,16 +303,15 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getPrimitiveDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
-      // With compression enabled: int/long go to end, sorted by size then typeId (desc)
-      // char has higher typeId (25) than short (3)
+      // With compression enabled: int/long go to end, sorted by size then typeId (asc)
       List<Class<?>> expected =
           Arrays.asList(
               double.class,
               float.class,
-              char.class,
               short.class,
-              byte.class,
+              char.class,
               boolean.class,
+              byte.class,
               void.class,
               long.class,
               int.class);
@@ -325,16 +322,15 @@ public class DescriptorGrouperTest extends ForyTestBase {
           grouper.getBoxedDescriptors().stream()
               .map(Descriptor::getRawType)
               .collect(Collectors.toList());
-      // With compression enabled: Integer/Long go to end, sorted by size then typeId (desc)
-      // Character has higher typeId than Short
+      // With compression enabled: Integer/Long go to end, sorted by size then typeId (asc)
       List<Class<?>> expected =
           Arrays.asList(
               Double.class,
               Float.class,
-              Character.class,
               Short.class,
-              Byte.class,
+              Character.class,
               Boolean.class,
+              Byte.class,
               Void.class,
               Long.class,
               Integer.class);

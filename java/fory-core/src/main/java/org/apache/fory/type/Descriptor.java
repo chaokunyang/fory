@@ -219,7 +219,9 @@ public class Descriptor {
     } else {
       this.nullable = nullable;
     }
-    this.trackingRef = hasForyField && trackingRef;
+    // Synthetic descriptors created from remote TypeDef fields must preserve schema-owned wrapper
+    // ref tracking even when the field has no tag id/@ForyField metadata.
+    this.trackingRef = trackingRef;
   }
 
   private Descriptor(Field field, Method readMethod) {

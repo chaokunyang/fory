@@ -86,7 +86,7 @@ final class CompatibleCollectionArrayReader {
       return null;
     }
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, field);
-    int peerListElementTypeId = listElementTypeId(descriptor.getTypeRef());
+    int peerListElementTypeId = listElementTypeId(descriptor);
     if (peerListElementTypeId != Types.UNKNOWN) {
       int localArrayTypeId = arrayTypeId(localFieldType);
       if (localArrayTypeId != Types.UNKNOWN
@@ -104,7 +104,7 @@ final class CompatibleCollectionArrayReader {
       }
       return null;
     }
-    int peerArrayTypeId = arrayTypeId(descriptor.getTypeRef());
+    int peerArrayTypeId = arrayTypeId(descriptor);
     if (peerArrayTypeId != Types.UNKNOWN) {
       int localListElementTypeId = listElementTypeId(localFieldType);
       if (localListElementTypeId != Types.UNKNOWN
@@ -250,6 +250,42 @@ final class CompatibleCollectionArrayReader {
     return Types.UNKNOWN;
   }
 
+  private static int listElementTypeId(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getRawType();
+    if (TypeUtils.isPrimitiveListClass(rawType) && TypeAnnotationUtils.isArrayType(descriptor)) {
+      return Types.UNKNOWN;
+    }
+    TypeRef<?> typeRef = descriptor.getTypeRef();
+    TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+    if (TypeUtils.isPrimitiveListClass(rawType)) {
+      if (extMeta != null) {
+        int typeId = extMeta.typeId();
+        if (Types.isPrimitiveArray(typeId)) {
+          // A compatible descriptor can keep the local primitive-list carrier while the remote
+          // TypeDef says the peer wrote a dense array payload. Treat the TypeExtMeta as the remote
+          // wire shape here; otherwise array->list reads are misclassified as list->list reads.
+          return Types.UNKNOWN;
+        }
+        if (Types.isPrimitiveType(typeId)) {
+          return typeId;
+        }
+      }
+      TypeRef<?> elementTypeRef = TypeAnnotationUtils.getPrimitiveListElementTypeRef(descriptor);
+      if (elementTypeRef != null) {
+        TypeExtMeta elementExtMeta = elementTypeRef.getTypeExtMeta();
+        if (elementExtMeta != null && Types.isPrimitiveType(elementExtMeta.typeId())) {
+          return elementExtMeta.typeId();
+        }
+      }
+      return Types.UNKNOWN;
+    }
+    if (extMeta != null && extMeta.typeId() == Types.LIST) {
+      TypeExtMeta elementExtMeta = TypeUtils.getElementType(typeRef).getTypeExtMeta();
+      return elementExtMeta == null ? Types.UNKNOWN : elementExtMeta.typeId();
+    }
+    return Types.UNKNOWN;
+  }
+
   private static int listElementTypeId(TypeRef<?> typeRef) {
     TypeExtMeta extMeta = typeRef.getTypeExtMeta();
     if (extMeta != null && extMeta.typeId() == Types.LIST) {
@@ -272,6 +308,17 @@ final class CompatibleCollectionArrayReader {
       return TypeAnnotationUtils.getDefaultPrimitiveListElementTypeId(typeRef.getRawType());
     }
     return Types.UNKNOWN;
+  }
+
+  private static int arrayTypeId(Descriptor descriptor) {
+    Class<?> rawType = descriptor.getRawType();
+    if (TypeUtils.isPrimitiveListClass(rawType) && TypeAnnotationUtils.isArrayType(descriptor)) {
+      return TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType);
+    }
+    if (TypeAnnotationUtils.isBoxedListArrayType(descriptor)) {
+      return TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor);
+    }
+    return arrayTypeId(descriptor.getTypeRef());
   }
 
   private static int arrayTypeId(FieldTypes.FieldType fieldType) {

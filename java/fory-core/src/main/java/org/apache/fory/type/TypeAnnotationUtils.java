@@ -544,7 +544,7 @@ public class TypeAnnotationUtils {
     if (elementTypeId == Types.UNKNOWN || elementClass == null) {
       return null;
     }
-    return TypeRef.of(elementClass, TypeExtMeta.of(elementTypeId, true, false));
+    return TypeRef.of(elementClass, TypeExtMeta.of(elementTypeId, false, false));
   }
 
   public static TypeRef<?> getPrimitiveListElementTypeRef(Descriptor descriptor) {
@@ -554,7 +554,8 @@ public class TypeAnnotationUtils {
       Class<?> elementClass = getPrimitiveListElementClass(typeRef.getRawType());
       if (elementClass != null) {
         return TypeRef.of(
-            elementClass, TypeExtMeta.of(inlineMeta.typeId(), true, inlineMeta.trackingRef()));
+            elementClass,
+            TypeExtMeta.of(inlineMeta.typeId(), inlineMeta.nullable(), inlineMeta.trackingRef()));
       }
     }
     if (typeRef.hasExplicitTypeArguments()) {

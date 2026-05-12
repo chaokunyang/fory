@@ -1819,9 +1819,10 @@ public abstract class TypeResolver {
    *   <li>Otherwise: return true only for Optional types, false for all other non-primitives
    * </ul>
    *
-   * <p>For native mode: reflected value fields are nullable by default. Descriptors without a
-   * backing field already carry schema-owned nullability, for example TypeDef descriptors and
-   * annotation-processor generated native descriptors.
+   * <p>For native mode: reflected value fields are nullable by default unless @ForyField gives an
+   * explicit field-wrapper nullability. Descriptors without a backing field already carry
+   * schema-owned nullability, for example TypeDef descriptors and annotation-processor generated
+   * native descriptors.
    *
    * <p>Important: this must match the TypeDef metadata for the same descriptor source. Xlang local
    * descriptors use xlang defaults, native reflected descriptors use native nullable-by-default
@@ -1841,6 +1842,9 @@ public abstract class TypeResolver {
       }
       // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);
+    }
+    if (descriptor.hasForyField()) {
+      return descriptor.isNullable();
     }
     if (descriptor.getField() == null) {
       return descriptor.isNullable();

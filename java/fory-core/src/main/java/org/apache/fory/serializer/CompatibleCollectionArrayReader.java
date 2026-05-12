@@ -94,9 +94,13 @@ final class CompatibleCollectionArrayReader {
         return new ReadAction(
             READ_LIST_TO_ARRAY, localArrayTypeId, peerListElementTypeId, field.getType());
       }
-      int localListElementTypeId = listElementTypeId(localFieldType);
+      int localListElementTypeId = nonNullableListElementTypeId(localFieldType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      if (localListElementTypeId != Types.UNKNOWN
+      // The list-to-list fast path materializes through a dense primitive array, so it cannot
+      // preserve nullable or ref-tracked peer elements. List-to-array still accepts nullable
+      // schemas above and rejects only actual null/ref payload flags while reading.
+      if (nonNullableListElementTypeId(descriptor) != Types.UNKNOWN
+          && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
         return new ReadAction(
@@ -134,9 +138,13 @@ final class CompatibleCollectionArrayReader {
             peerListElementTypeId,
             localDescriptor.getRawType());
       }
-      int localListElementTypeId = listElementTypeId(localType);
+      int localListElementTypeId = nonNullableListElementTypeId(localType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
-      if (localListElementTypeId != Types.UNKNOWN
+      // The list-to-list fast path materializes through a dense primitive array, so it cannot
+      // preserve nullable or ref-tracked peer elements. List-to-array still accepts nullable
+      // schemas above and rejects only actual null/ref payload flags while reading.
+      if (nonNullableListElementTypeId(remoteFieldType) != Types.UNKNOWN
+          && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
         return new ReadAction(
@@ -238,6 +246,10 @@ final class CompatibleCollectionArrayReader {
   }
 
   private static int listElementTypeId(FieldTypes.FieldType fieldType) {
+    return listElementTypeId(fieldType, false);
+  }
+
+  private static int listElementTypeId(FieldTypes.FieldType fieldType, boolean requireNonNullable) {
     if (!(fieldType instanceof FieldTypes.CollectionFieldType)
         || fieldType.getTypeId() != Types.LIST) {
       return Types.UNKNOWN;
@@ -245,12 +257,19 @@ final class CompatibleCollectionArrayReader {
     FieldTypes.FieldType elementType =
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
+      if (requireNonNullable && (elementType.nullable() || elementType.trackingRef())) {
+        return Types.UNKNOWN;
+      }
       return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
     }
     return Types.UNKNOWN;
   }
 
   private static int listElementTypeId(Descriptor descriptor) {
+    return listElementTypeId(descriptor, false);
+  }
+
+  private static int listElementTypeId(Descriptor descriptor, boolean requireNonNullable) {
     Class<?> rawType = descriptor.getRawType();
     if (TypeUtils.isPrimitiveListClass(rawType) && TypeAnnotationUtils.isArrayType(descriptor)) {
       return Types.UNKNOWN;
@@ -266,14 +285,15 @@ final class CompatibleCollectionArrayReader {
           // wire shape here; otherwise array->list reads are misclassified as list->list reads.
           return Types.UNKNOWN;
         }
-        if (Types.isPrimitiveType(typeId)) {
+        if (Types.isPrimitiveType(typeId)
+            && (!requireNonNullable || (!extMeta.nullable() && !extMeta.trackingRef()))) {
           return typeId;
         }
       }
       TypeRef<?> elementTypeRef = TypeAnnotationUtils.getPrimitiveListElementTypeRef(descriptor);
       if (elementTypeRef != null) {
         TypeExtMeta elementExtMeta = elementTypeRef.getTypeExtMeta();
-        if (elementExtMeta != null && Types.isPrimitiveType(elementExtMeta.typeId())) {
+        if (isPrimitiveElement(elementExtMeta, requireNonNullable)) {
           return elementExtMeta.typeId();
         }
       }
@@ -281,16 +301,24 @@ final class CompatibleCollectionArrayReader {
     }
     if (extMeta != null && extMeta.typeId() == Types.LIST) {
       TypeExtMeta elementExtMeta = TypeUtils.getElementType(typeRef).getTypeExtMeta();
-      return elementExtMeta == null ? Types.UNKNOWN : elementExtMeta.typeId();
+      return isPrimitiveElement(elementExtMeta, requireNonNullable)
+          ? elementExtMeta.typeId()
+          : Types.UNKNOWN;
     }
     return Types.UNKNOWN;
   }
 
   private static int listElementTypeId(TypeRef<?> typeRef) {
+    return listElementTypeId(typeRef, false);
+  }
+
+  private static int listElementTypeId(TypeRef<?> typeRef, boolean requireNonNullable) {
     TypeExtMeta extMeta = typeRef.getTypeExtMeta();
     if (extMeta != null && extMeta.typeId() == Types.LIST) {
       TypeExtMeta elementExtMeta = TypeUtils.getElementType(typeRef).getTypeExtMeta();
-      return elementExtMeta == null ? Types.UNKNOWN : elementExtMeta.typeId();
+      return isPrimitiveElement(elementExtMeta, requireNonNullable)
+          ? elementExtMeta.typeId()
+          : Types.UNKNOWN;
     }
     if (TypeUtils.isPrimitiveListClass(typeRef.getRawType())) {
       if (extMeta != null) {
@@ -301,13 +329,33 @@ final class CompatibleCollectionArrayReader {
           // wire shape here; otherwise array->list reads are misclassified as list->list reads.
           return Types.UNKNOWN;
         }
-        if (Types.isPrimitiveType(typeId)) {
+        if (Types.isPrimitiveType(typeId)
+            && (!requireNonNullable || (!extMeta.nullable() && !extMeta.trackingRef()))) {
           return typeId;
         }
       }
       return TypeAnnotationUtils.getDefaultPrimitiveListElementTypeId(typeRef.getRawType());
     }
     return Types.UNKNOWN;
+  }
+
+  private static int nonNullableListElementTypeId(FieldTypes.FieldType fieldType) {
+    return listElementTypeId(fieldType, true);
+  }
+
+  private static int nonNullableListElementTypeId(Descriptor descriptor) {
+    return listElementTypeId(descriptor, true);
+  }
+
+  private static int nonNullableListElementTypeId(TypeRef<?> typeRef) {
+    return listElementTypeId(typeRef, true);
+  }
+
+  private static boolean isPrimitiveElement(
+      TypeExtMeta elementExtMeta, boolean requireNonNullable) {
+    return elementExtMeta != null
+        && Types.isPrimitiveType(elementExtMeta.typeId())
+        && (!requireNonNullable || (!elementExtMeta.nullable() && !elementExtMeta.trackingRef()));
   }
 
   private static int arrayTypeId(Descriptor descriptor) {

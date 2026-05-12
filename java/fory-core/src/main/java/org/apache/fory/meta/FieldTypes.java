@@ -224,13 +224,12 @@ public class FieldTypes {
       nullable = !genericType.getCls().isPrimitive();
     }
 
-    // Apply @ForyField annotation where the protocol uses it as field-wrapper metadata. Native
-    // reflected value fields stay nullable by default; generated/remote descriptors without a
-    // backing Field already carry the schema-owned value.
+    // Native unannotated value fields are nullable by default, but explicit @ForyField options are
+    // still field-wrapper metadata in both native and xlang TypeDef. Compatible serializers are
+    // built from TypeDef descriptors, so dropping this bit makes the writer emit a different field
+    // payload shape from the schema it advertised.
     if (descriptor != null && descriptor.hasForyField()) {
-      if (isXlang || descriptorCarriesFieldOptions) {
-        nullable = descriptor.isNullable();
-      }
+      nullable = descriptor.isNullable();
       trackingRef = descriptor.isTrackingRef();
     }
 
@@ -244,7 +243,7 @@ public class FieldTypes {
     }
 
     if (primitiveList && !primitiveListArray) {
-      boolean elementNullable = true;
+      boolean elementNullable = false;
       boolean elementTrackingRef = false;
       if (primitiveListArgumentMeta != null) {
         elementNullable = primitiveListArgumentMeta.nullable();

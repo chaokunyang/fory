@@ -452,13 +452,17 @@ describe("typemeta", () => {
     const nonNullBytes = serializer.serialize({
       values: [1, 2, 3],
     });
-    const result = readerFory.register(readerType).deserialize(nonNullBytes);
-    expect(Array.from(result.values as Int32Array)).toEqual([1, 2, 3]);
+    const reader = readerFory.register(readerType);
+    expect(() => reader.deserialize(nonNullBytes)).toThrow(
+      "unsupported compatible list/array schema mismatch",
+    );
 
     const nullableBytes = serializer.serialize({
       values: [1, null, 3],
     });
-    expect(() => readerFory.register(readerType).deserialize(nullableBytes)).toThrow();
+    expect(() => reader.deserialize(nullableBytes)).toThrow(
+      "unsupported compatible list/array schema mismatch",
+    );
   });
 
   test("rejects incompatible immediate list and dense array element fields", () => {

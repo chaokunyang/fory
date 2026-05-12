@@ -105,7 +105,8 @@ final class CompatibleCollectionArrayReader {
       if (nonNullablePeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
-          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)
+          && canMaterializeListTarget(field.getType(), peerArrayTypeId)) {
         return new ReadAction(
             READ_LIST_TO_LIST, peerArrayTypeId, peerListElementTypeId, field.getType());
       }
@@ -115,7 +116,8 @@ final class CompatibleCollectionArrayReader {
     if (peerArrayTypeId != Types.UNKNOWN) {
       int localListElementTypeId = listElementTypeId(localFieldType);
       if (localListElementTypeId != Types.UNKNOWN
-          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)
+          && canMaterializeListTarget(field.getType(), peerArrayTypeId)) {
         return new ReadAction(
             READ_ARRAY_TO_LIST, peerArrayTypeId, localListElementTypeId, field.getType());
       }
@@ -149,7 +151,8 @@ final class CompatibleCollectionArrayReader {
       if (nonNullablePeerListElementTypeId != Types.UNKNOWN
           && localListElementTypeId != Types.UNKNOWN
           && peerArrayTypeId != Types.UNKNOWN
-          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)
+          && canMaterializeListTarget(localDescriptor.getRawType(), peerArrayTypeId)) {
         return new ReadAction(
             READ_LIST_TO_LIST,
             peerArrayTypeId,
@@ -162,7 +165,8 @@ final class CompatibleCollectionArrayReader {
     if (peerArrayTypeId != Types.UNKNOWN) {
       int localListElementTypeId = listElementTypeId(localType);
       if (localListElementTypeId != Types.UNKNOWN
-          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)
+          && canMaterializeListTarget(localDescriptor.getRawType(), peerArrayTypeId)) {
         return new ReadAction(
             READ_ARRAY_TO_LIST,
             peerArrayTypeId,
@@ -806,6 +810,44 @@ final class CompatibleCollectionArrayReader {
         return targetType == Float32List.class ? new Float32List((float[]) array) : null;
       case Types.FLOAT64_ARRAY:
         return targetType == Float64List.class ? new Float64List((double[]) array) : null;
+      default:
+        throw new IllegalArgumentException("Unsupported dense array type id " + arrayTypeId);
+    }
+  }
+
+  private static boolean canMaterializeListTarget(Class<?> targetType, int arrayTypeId) {
+    return canMaterializePrimitiveListTarget(targetType, arrayTypeId)
+        || targetType.isAssignableFrom(ArrayList.class);
+  }
+
+  private static boolean canMaterializePrimitiveListTarget(Class<?> targetType, int arrayTypeId) {
+    switch (arrayTypeId) {
+      case Types.BOOL_ARRAY:
+        return targetType == BoolList.class;
+      case Types.INT8_ARRAY:
+        return targetType == Int8List.class;
+      case Types.UINT8_ARRAY:
+        return targetType == UInt8List.class;
+      case Types.INT16_ARRAY:
+        return targetType == Int16List.class;
+      case Types.UINT16_ARRAY:
+        return targetType == UInt16List.class;
+      case Types.INT32_ARRAY:
+        return targetType == Int32List.class;
+      case Types.UINT32_ARRAY:
+        return targetType == UInt32List.class;
+      case Types.INT64_ARRAY:
+        return targetType == Int64List.class;
+      case Types.UINT64_ARRAY:
+        return targetType == UInt64List.class;
+      case Types.FLOAT16_ARRAY:
+        return targetType == Float16List.class;
+      case Types.BFLOAT16_ARRAY:
+        return targetType == BFloat16List.class;
+      case Types.FLOAT32_ARRAY:
+        return targetType == Float32List.class;
+      case Types.FLOAT64_ARRAY:
+        return targetType == Float64List.class;
       default:
         throw new IllegalArgumentException("Unsupported dense array type id " + arrayTypeId);
     }

@@ -1822,9 +1822,7 @@ public class ClassResolver extends TypeResolver {
               typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
       getGraalvmClassRegistry()
           .putCompatibleDeserializerClass(
-              cls,
-              typeDef.getId(),
-              CodecUtils.loadOrGenStaticCompatibleCodecClass(this, cls, typeDef));
+              cls, CodecUtils.loadOrGenStaticCompatibleCodecClass(this, cls, typeDef));
     }
     typeInfoCache = NIL_TYPE_INFO;
     if (RecordUtils.isRecord(cls)) {
@@ -2149,7 +2147,7 @@ public class ClassResolver extends TypeResolver {
       return Types.UNKNOWN;
     }
     if (isCollectionDescriptor(descriptor)) {
-      return Types.LIST;
+      return isSet(rawType) ? Types.SET : Types.LIST;
     }
     if (rawType.isArray() && !rawType.getComponentType().isPrimitive()) {
       return Types.LIST;
@@ -2244,44 +2242,18 @@ public class ClassResolver extends TypeResolver {
   }
 
   /**
-   * Normalize type name for deterministic fallback ordering between serialization and
-   * deserialization.
-   */
-  private String getNormalizedTypeName(Descriptor d) {
-    if (isCollectionDescriptor(d)) {
-      return "java.util.Collection";
-    }
-    Class<?> rawType = d.getRawType();
-    if (rawType != null && isMap(rawType)) {
-      return "java.util.Map";
-    }
-    return d.getTypeName();
-  }
-
-  /**
-   * Creates a comparator for sorting descriptors by internal type id and field name/id. TypeDef
-   * descriptors preserve native internal ids as decimal type names; compare them numerically so ids
-   * such as 101 do not sort before 17.
+   * Creates a comparator for sorting descriptors by logical internal type id and field name/id.
+   * Native compatible mode intentionally follows the xlang/spec field order, so equal type-id
+   * groups must not reintroduce Java raw-type ordering.
    */
   public Comparator<Descriptor> createTypeAndNameComparator() {
     return (d1, d2) -> {
-      // sort by type so that we can hit class info cache more possibly.
-      // sort by field id/name to fix order if type is same.
       int c = Integer.compare(getDescriptorSortTypeId(d1), getDescriptorSortTypeId(d2));
-      if (c == 0) {
-        // Use normalized type name so that Collection/Map subtypes have consistent order
-        // between processes even if the field doesn't exist in peer (e.g., List vs Collection).
-        c = getNormalizedTypeName(d1).compareTo(getNormalizedTypeName(d2));
-      }
-      // noinspection Duplicates
       if (c == 0) {
         c = compareFieldSortKey(d1, d2);
         if (c == 0) {
-          // Field name duplicate in super/child classes.
           c = d1.getDeclaringClass().compareTo(d2.getDeclaringClass());
           if (c == 0) {
-            // Final tie-breaker: use actual field name to distinguish fields with same tag ID.
-            // This ensures TreeSet never treats different fields as duplicates.
             c = d1.getName().compareTo(d2.getName());
           }
         }

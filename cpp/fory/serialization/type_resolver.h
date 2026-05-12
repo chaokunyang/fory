@@ -1323,14 +1323,6 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     field_type.nullable = is_nullable;
     field_type.track_ref = track_ref;
     field_type.ref_mode = make_ref_mode(is_nullable, track_ref);
-#ifdef FORY_DEBUG
-    // DEBUG: Print field info for debugging fingerprint mismatch
-    std::cerr << "[xlang][debug] FieldInfoBuilder T=" << typeid(T).name()
-              << " Index=" << Index << " field=" << field_name
-              << " type_id=" << field_type.type_id
-              << " is_nullable=" << is_nullable << " track_ref=" << track_ref
-              << std::endl;
-#endif
     FieldInfo info(std::move(field_name), std::move(field_type));
     info.field_id = field_id;
     return info;
@@ -1371,14 +1363,6 @@ template <typename T, size_t Index> struct FieldInfoBuilder {
     field_type.nullable = is_nullable;
     field_type.track_ref = track_ref;
     field_type.ref_mode = make_ref_mode(is_nullable, track_ref);
-#ifdef FORY_DEBUG
-    // DEBUG: Print field info for debugging fingerprint mismatch
-    std::cerr << "[xlang][debug] FieldInfoBuilder T=" << typeid(T).name()
-              << " Index=" << Index << " field=" << field_name
-              << " type_id=" << field_type.type_id
-              << " is_nullable=" << is_nullable << " track_ref=" << track_ref
-              << std::endl;
-#endif
     FieldInfo info(std::move(field_name), std::move(field_type));
     info.field_id = field_id;
     return info;

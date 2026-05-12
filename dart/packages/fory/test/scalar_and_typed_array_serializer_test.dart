@@ -640,8 +640,10 @@ void main() {
       final nonNullBytes = writer.serialize(
         CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
       );
-      final decoded = reader.deserialize<CompatibleArrayEnvelope>(nonNullBytes);
-      expect(decoded.values, orderedEquals(<int>[1, 2, 3]));
+      expect(
+        () => reader.deserialize<CompatibleArrayEnvelope>(nonNullBytes),
+        throwsStateError,
+      );
 
       final nullableBytes = writer.serialize(
         CompatibleNullableListEnvelope()..values = <int?>[1, null, 3],

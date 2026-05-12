@@ -872,6 +872,9 @@ export class ReadContext {
       if (compatibleArrayElementTypeId(remoteElement.typeId) !== localElement) {
         return undefined;
       }
+      if (remoteElement.nullable === true || remoteElement.trackingRef === true) {
+        return undefined;
+      }
       return compatibleListToArrayTypeInfo(remoteElement, localElement);
     }
     const remoteArrayElement = denseArrayElementTypeId(remote.typeId);

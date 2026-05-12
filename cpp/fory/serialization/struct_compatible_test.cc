@@ -506,8 +506,10 @@ TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
   auto decoded =
       reader.deserialize<CompatibleArrayField>(payload.data(), payload.size());
 
-  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
-  EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{1, 2}));
+  ASSERT_FALSE(decoded.ok());
+  EXPECT_NE(decoded.error().to_string().find("non-null elements"),
+            std::string::npos)
+      << decoded.error().to_string();
 
   bytes = writer.serialize(CompatibleNullableListField{{1, std::nullopt}});
   ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();

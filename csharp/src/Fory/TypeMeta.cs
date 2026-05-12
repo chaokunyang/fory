@@ -782,16 +782,40 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                 }
             }
 
-            if (localIndex >= 0 &&
-                localMatch is not null &&
-                IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true))
+            if (localIndex >= 0 && localMatch is not null)
             {
-                remoteField.AssignedFieldId = localIndex;
+                ThrowIfUnsupportedListArrayMismatch(remoteField.FieldType, localMatch.FieldType, topLevel: true);
+                remoteField.AssignedFieldId =
+                    IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true)
+                        ? localIndex
+                        : -1;
             }
             else
             {
                 remoteField.AssignedFieldId = -1;
             }
+        }
+    }
+
+    private static void ThrowIfUnsupportedListArrayMismatch(
+        TypeMetaFieldType remote,
+        TypeMetaFieldType local,
+        bool topLevel)
+    {
+        if (topLevel && IsListArrayShapePair(remote, local))
+        {
+            if (IsCompatibleListArrayFieldPair(remote, local))
+            {
+                return;
+            }
+            if (remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
+                TryPackedArrayElementTypeId(local.TypeId).HasValue &&
+                remote.Generics.Count == 1 &&
+                (remote.Generics[0].Nullable || remote.Generics[0].TrackRef))
+            {
+                throw new InvalidDataException("compatible list to array field requires non-null elements");
+            }
+            throw new InvalidDataException("unsupported compatible list/array schema mismatch");
         }
     }
 
@@ -830,6 +854,8 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         bool remoteListLocalArray = remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
                                     localArrayElementTypeId.HasValue &&
                                     remote.Generics.Count == 1 &&
+                                    !remote.Generics[0].Nullable &&
+                                    !remote.Generics[0].TrackRef &&
                                     CompatibleScalarTypeId(localArrayElementTypeId.Value) ==
                                     CompatibleScalarTypeId(remote.Generics[0].TypeId);
         if (remoteListLocalArray)
@@ -842,6 +868,14 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                local.Generics.Count == 1 &&
                CompatibleScalarTypeId(remoteArrayElementTypeId.Value) ==
                CompatibleScalarTypeId(local.Generics[0].TypeId);
+    }
+
+    private static bool IsListArrayShapePair(TypeMetaFieldType remote, TypeMetaFieldType local)
+    {
+        return remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
+               TryPackedArrayElementTypeId(local.TypeId).HasValue ||
+               local.TypeId == (uint)global::Apache.Fory.TypeId.List &&
+               TryPackedArrayElementTypeId(remote.TypeId).HasValue;
     }
 
     private static uint? TryPackedArrayElementTypeId(uint typeId)

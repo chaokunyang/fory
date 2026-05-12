@@ -381,8 +381,7 @@ public class GraalvmSupport {
     private final Map<Class<?>, Class<? extends Serializer>> serializerClassMap;
     private final Map<Class<?>, Class<? extends Serializer>> objectSerializerClassMap;
     private final Map<Long, Class<? extends Serializer>> deserializerClassMap;
-    private final Map<CompatibleDeserializerKey, Class<? extends Serializer>>
-        compatibleDeserializerClassMap;
+    private final Map<Class<?>, Class<? extends Serializer>> compatibleDeserializerClassMap;
     private final Map<Long, Class<? extends Serializer>> layerSerializerClassMap;
 
     private GraalvmClassRegistry() {
@@ -448,15 +447,13 @@ public class GraalvmSupport {
       return Collections.unmodifiableMap(deserializerClassMap);
     }
 
-    public Class<? extends Serializer> getCompatibleDeserializerClass(
-        Class<?> cls, long typeDefId) {
-      return compatibleDeserializerClassMap.get(new CompatibleDeserializerKey(cls, typeDefId));
+    public Class<? extends Serializer> getCompatibleDeserializerClass(Class<?> cls) {
+      return getRegisteredClassValue(compatibleDeserializerClassMap, cls);
     }
 
     public void putCompatibleDeserializerClass(
-        Class<?> cls, long typeDefId, Class<? extends Serializer> serializerClass) {
-      compatibleDeserializerClassMap.put(
-          new CompatibleDeserializerKey(cls, typeDefId), serializerClass);
+        Class<?> cls, Class<? extends Serializer> serializerClass) {
+      compatibleDeserializerClassMap.put(cls, serializerClass);
     }
 
     public Class<? extends Serializer> getLayerSerializerClass(long typeDefId) {
@@ -498,33 +495,6 @@ public class GraalvmSupport {
         }
       }
       return null;
-    }
-
-    private static final class CompatibleDeserializerKey {
-      private final Class<?> cls;
-      private final long typeDefId;
-
-      private CompatibleDeserializerKey(Class<?> cls, long typeDefId) {
-        this.cls = cls;
-        this.typeDefId = typeDefId;
-      }
-
-      @Override
-      public boolean equals(Object o) {
-        if (this == o) {
-          return true;
-        }
-        if (!(o instanceof CompatibleDeserializerKey)) {
-          return false;
-        }
-        CompatibleDeserializerKey that = (CompatibleDeserializerKey) o;
-        return typeDefId == that.typeDefId && cls == that.cls;
-      }
-
-      @Override
-      public int hashCode() {
-        return 31 * System.identityHashCode(cls) + Long.hashCode(typeDefId);
-      }
     }
   }
 }

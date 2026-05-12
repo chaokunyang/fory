@@ -23,6 +23,7 @@ import static org.testng.Assert.*;
 
 import com.google.common.primitives.Primitives;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -76,33 +77,17 @@ public class DescriptorGrouperTest extends ForyTestBase {
   @Test
   public void testComparatorByTypeAndName() {
     Fory fory = Fory.builder().build();
-    List<Descriptor> descriptors = createDescriptors();
+    List<Descriptor> descriptors = new ArrayList<>();
+    descriptors.add(
+        createDescriptor(TypeRef.of(Date.class), "z_timestamp", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(TypeRef.of(Instant.class), "a_timestamp", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(TypeRef.of(LocalDateTime.class), "m_timestamp", -1, "TestClass", false));
     descriptors.sort(((ClassResolver) fory.getTypeResolver()).createTypeAndNameComparator());
-    List<? extends Class<?>> classes =
-        descriptors.stream().map(Descriptor::getRawType).collect(Collectors.toList());
-    List<Class<?>> expected =
-        Arrays.asList(
-            boolean.class,
-            Boolean.class,
-            byte.class,
-            Byte.class,
-            Short.class,
-            short.class,
-            Integer.class,
-            int.class,
-            Long.class,
-            long.class,
-            float.class,
-            Float.class,
-            double.class,
-            Double.class,
-            String.class,
-            Void.class,
-            Character.class,
-            void.class,
-            char.class,
-            Object.class);
-    assertEquals(classes, expected);
+    assertEquals(
+        descriptors.stream().map(Descriptor::getName).collect(Collectors.toList()),
+        Arrays.asList("a_timestamp", "m_timestamp", "z_timestamp"));
   }
 
   @Test
@@ -338,11 +323,7 @@ public class DescriptorGrouperTest extends ForyTestBase {
     }
   }
 
-  /**
-   * Test that ClassResolver's comparator normalizes Collection/Map subtypes for consistent
-   * ordering. This ensures List/ArrayList/HashSet are all treated as Collection, and
-   * HashMap/TreeMap are all treated as Map.
-   */
+  /** Test that collection-like descriptors use xlang/spec type-id groups before field names. */
   @Test
   public void testNormalizedTypeNameComparator() {
     Fory fory = builder().build();
@@ -381,53 +362,21 @@ public class DescriptorGrouperTest extends ForyTestBase {
     List<String> fieldNames =
         descriptors.stream().map(Descriptor::getName).collect(Collectors.toList());
 
-    // All Collection types should be grouped together (sorted by field name within the group)
-    // All Map types should be grouped together (sorted by field name within the group)
-    // Collection types come before Map types alphabetically ("java.util.Collection" <
-    // "java.util.Map")
+    // LIST-like fields are ordered by field name, then SET, then MAP.
     List<String> expected =
         Arrays.asList(
-            "arrayListField",
-            "collField",
-            "listField",
-            "setField", // Collection types
-            "hashMapField",
-            "mapField" // Map types
-            );
+            "arrayListField", "collField", "listField", "setField", "hashMapField", "mapField");
     assertEquals(fieldNames, expected);
   }
 
-  /**
-   * Test that the DescriptorGrouper's static COMPARATOR_BY_TYPE_AND_NAME does NOT normalize
-   * Collection/Map types (it uses the raw type name).
-   */
   @Test
-  public void testStaticComparatorDoesNotNormalize() {
-    // Create descriptors with different Collection/Map subtypes
-    List<Descriptor> descriptors = new ArrayList<>();
-    descriptors.add(
-        createDescriptor(new TypeRef<List<String>>() {}, "listField", -1, "TestClass", false));
-    descriptors.add(
-        createDescriptor(
-            new TypeRef<Collection<String>>() {}, "collField", -1, "TestClass", false));
-    descriptors.add(
-        createDescriptor(
-            new TypeRef<ArrayList<String>>() {}, "arrayListField", -1, "TestClass", false));
+  public void testComparatorUsesFieldIdentifierBeforeRawTypeName() {
     Fory fory = Fory.builder().build();
-    // Sort with the static comparator
-    descriptors.sort(((ClassResolver) fory.getTypeResolver()).createTypeAndNameComparator());
-
-    // Get type names after sorting
-    List<String> typeNames =
-        descriptors.stream().map(Descriptor::getTypeName).collect(Collectors.toList());
-
-    // The static comparator should sort by actual type name, not normalized
-    // ArrayList < Collection < List (alphabetically)
-    assertEquals(
-        typeNames,
-        Arrays.asList(
-            "java.util.ArrayList<java.lang.String>",
-            "java.util.Collection<java.lang.String>",
-            "java.util.List<java.lang.String>"));
+    Comparator<Descriptor> comparator =
+        ((ClassResolver) fory.getTypeResolver()).createTypeAndNameComparator();
+    Descriptor date = createDescriptor(TypeRef.of(Date.class), "z_date", -1, "TestClass", false);
+    Descriptor instant =
+        createDescriptor(TypeRef.of(Instant.class), "a_instant", -1, "TestClass", false);
+    assertTrue(comparator.compare(date, instant) > 0);
   }
 }

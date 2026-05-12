@@ -450,8 +450,9 @@ func compatibleReadRejectsNullableListElementsForArrayField() throws {
     reader.register(CompatibleArrayFieldV2.self, id: 9923)
 
     let bytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, 2, 3], extra: 9))
-    let decoded: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
-    #expect(decoded.values == [1, 2, 3])
+    #expect(throws: ForyError.invalidData("compatible list-to-array field cannot read nullable elements")) {
+        let _: CompatibleArrayFieldV2 = try reader.deserialize(bytes)
+    }
 
     let nullableBytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, nil, 3], extra: 9))
     #expect(throws: ForyError.invalidData("compatible list-to-array field cannot read nullable elements")) {

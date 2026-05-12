@@ -276,7 +276,7 @@ public class StaticCompatibleCodecBuilderTest {
   }
 
   @Test
-  public void testStaticCompatibleSerializerClassKeyIncludesRemoteTypeDef() throws Exception {
+  public void testGraalCompatibleSerializerRegistryUsesLocalReaderClass() throws Exception {
     CompilationResult writerAResult =
         compile(
             "test.WriterPayloadA",
@@ -329,12 +329,8 @@ public class StaticCompatibleCodecBuilderTest {
       Assert.assertNotEquals(serializerA, serializerB);
 
       GraalvmSupport.GraalvmClassRegistry registry = GraalvmSupport.getClassRegistry(0);
-      registry.putCompatibleDeserializerClass(readerType, typeDefA.getId(), serializerA);
-      registry.putCompatibleDeserializerClass(readerType, typeDefB.getId(), serializerB);
-      Assert.assertSame(
-          registry.getCompatibleDeserializerClass(readerType, typeDefA.getId()), serializerA);
-      Assert.assertSame(
-          registry.getCompatibleDeserializerClass(readerType, typeDefB.getId()), serializerB);
+      registry.putCompatibleDeserializerClass(readerType, serializerA);
+      Assert.assertSame(registry.getCompatibleDeserializerClass(readerType), serializerA);
     }
   }
 

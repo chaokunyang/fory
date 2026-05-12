@@ -590,9 +590,8 @@ def test_compatible_nullable_int32_list_payload_rejects_array_read():
     _register_int32_payload(writer, NullableInt32ListPayload)
     _register_int32_payload(reader, Int32ArrayPayload)
 
-    decoded = reader.deserialize(writer.serialize(NullableInt32ListPayload(payload=[1, 2, 3])))
-    assert isinstance(decoded, Int32ArrayPayload)
-    assert list(decoded.payload) == [1, 2, 3]
+    with pytest.raises(TypeNotCompatibleError):
+        reader.deserialize(writer.serialize(NullableInt32ListPayload(payload=[1, 2, 3])))
 
     with pytest.raises(TypeNotCompatibleError):
         reader.deserialize(writer.serialize(NullableInt32ListPayload(payload=[1, None, 3])))

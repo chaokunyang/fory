@@ -622,16 +622,28 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
 
       var localMatch: (Int, FieldInfo)?
       if let fieldID = field.fieldID, fieldID >= 0 {
-        if let candidate = fieldIndexByID[fieldID],
-          Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) {
-          localMatch = candidate
+        if let candidate = fieldIndexByID[fieldID] {
+          try Self.throwIfUnsupportedListArrayMismatch(
+            remoteType: field.fieldType,
+            localType: candidate.1.fieldType,
+            topLevel: true
+          )
+          if Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) {
+            localMatch = candidate
+          }
         }
       }
 
       if localMatch == nil {
-        if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)],
-          Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) {
-          localMatch = candidate
+        if let candidate = fieldIndexByName[toSnakeCase(field.fieldName)] {
+          try Self.throwIfUnsupportedListArrayMismatch(
+            remoteType: field.fieldType,
+            localType: candidate.1.fieldType,
+            topLevel: true
+          )
+          if Self.isCompatibleFieldType(field.fieldType, candidate.1.fieldType) {
+            localMatch = candidate
+          }
         }
       }
 
@@ -700,26 +712,64 @@ public final class TypeMeta: Equatable, @unchecked Sendable {
     return true
   }
 
+  private static func throwIfUnsupportedListArrayMismatch(
+    remoteType: FieldType,
+    localType: FieldType,
+    topLevel: Bool
+  ) throws {
+    if topLevel, isListArrayShapePair(remoteType, localType) {
+      if isCompatibleTopLevelListArrayFieldType(remoteType, localType) {
+        return
+      }
+      if remoteType.typeID == TypeId.list.rawValue,
+        TypeId(rawValue: localType.typeID)?.denseArrayElementTypeID != nil,
+        let elementType = remoteType.generics.first,
+        elementType.nullable || elementType.trackRef {
+        throw ForyError.invalidData("compatible list-to-array field cannot read nullable elements")
+      }
+      throw ForyError.invalidData("unsupported compatible list/array schema mismatch")
+    }
+  }
+
+  private static func isListArrayShapePair(_ remoteType: FieldType, _ localType: FieldType) -> Bool {
+    (remoteType.typeID == TypeId.list.rawValue
+      && TypeId(rawValue: localType.typeID)?.denseArrayElementTypeID != nil)
+      || (localType.typeID == TypeId.list.rawValue
+        && TypeId(rawValue: remoteType.typeID)?.denseArrayElementTypeID != nil)
+  }
+
   private static func isCompatibleTopLevelListArrayFieldType(
     _ remoteType: FieldType,
     _ localType: FieldType
   ) -> Bool {
     if remoteType.typeID == TypeId.list.rawValue {
-      return listFieldType(remoteType, matchesDenseArrayTypeID: localType.typeID)
+      return listFieldType(
+        remoteType,
+        matchesDenseArrayTypeID: localType.typeID,
+        requireNonNullableElement: true
+      )
     }
     if localType.typeID == TypeId.list.rawValue {
-      return listFieldType(localType, matchesDenseArrayTypeID: remoteType.typeID)
+      return listFieldType(
+        localType,
+        matchesDenseArrayTypeID: remoteType.typeID,
+        requireNonNullableElement: false
+      )
     }
     return false
   }
 
   private static func listFieldType(
     _ listType: FieldType,
-    matchesDenseArrayTypeID arrayTypeID: UInt32
+    matchesDenseArrayTypeID arrayTypeID: UInt32,
+    requireNonNullableElement: Bool
   ) -> Bool {
     guard listType.typeID == TypeId.list.rawValue,
       let elementType = listType.generics.first
     else {
+      return false
+    }
+    if requireNonNullableElement, (elementType.nullable || elementType.trackRef) {
       return false
     }
     return TypeId.listElementTypeID(elementType.typeID, matchesDenseArrayTypeID: arrayTypeID)

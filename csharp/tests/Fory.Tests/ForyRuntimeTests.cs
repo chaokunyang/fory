@@ -1080,8 +1080,9 @@ public sealed class ForyRuntimeTests
         reader.Register<CompatibleArraySchema>(308);
 
         byte[] nonNullPayload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, 2] });
-        CompatibleArraySchema decoded = reader.Deserialize<CompatibleArraySchema>(nonNullPayload);
-        Assert.Equal([1, 2], decoded.Values);
+        InvalidDataException nonNullException =
+            Assert.Throws<InvalidDataException>(() => reader.Deserialize<CompatibleArraySchema>(nonNullPayload));
+        Assert.Contains("compatible list to array field requires non-null elements", nonNullException.Message);
 
         byte[] payload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, null] });
         InvalidDataException exception =

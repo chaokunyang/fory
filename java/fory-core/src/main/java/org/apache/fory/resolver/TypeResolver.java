@@ -1062,7 +1062,7 @@ public abstract class TypeResolver {
     }
     if (GraalvmSupport.isGraalBuildTime()
         && GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(sc)) {
-      getGraalvmClassRegistry().putCompatibleDeserializerClass(cls, typeDef.getId(), sc);
+      getGraalvmClassRegistry().putCompatibleDeserializerClass(cls, sc);
       typeInfo.setSerializer(this, new MetaSharedSerializer(this, cls, typeDef));
       return typeInfo;
     }
@@ -2057,7 +2057,7 @@ public abstract class TypeResolver {
     if (deserializerClass != null) {
       return deserializerClass;
     }
-    deserializerClass = registry.getCompatibleDeserializerClass(cls, typeDef.getId());
+    deserializerClass = registry.getCompatibleDeserializerClass(cls);
     if (deserializerClass != null
         && (!GraalvmSupport.isGraalBuildTime()
             || typeDef.getId() != TypeDef.buildTypeDef(this, cls).getId())) {

@@ -294,6 +294,7 @@ export default class TypeResolver {
     return this.registerSerializer(typeInfo, {
       getTypeInfo: serializer.getTypeInfo,
       getHash: serializer.getHash,
+      getTypeInfo: serializer.getTypeInfo,
       read: serializer.read,
       readNoRef: serializer.readNoRef,
       readRef: serializer.readRef,

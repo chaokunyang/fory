@@ -56,10 +56,8 @@ This compatible mode involves serializing class metadata into the serialized out
 - `Evolution.ENABLED`: require schema evolution metadata for this class. Registration or type resolution fails if the Fory instance cannot emit that metadata.
 - `Evolution.DISABLED`: force fixed-schema `STRUCT/NAMED_STRUCT` encoding even when compatible metadata is otherwise enabled.
 
-Use `@ForyStruct(evolving = Evolution.DISABLED)` for fixed-schema structs. Older development
-snapshots used a boolean form such as `@ForyStruct(evolving = false)`; the enum form is the
-supported API because it distinguishes inherited behavior from explicitly required compatible
-metadata.
+Use `@ForyStruct(evolution = Evolution.DISABLED)` for fixed-schema structs. The legacy boolean
+form `@ForyStruct(evolving = false)` is still supported as a fixed-schema opt-out.
 
 If a class schema is stable and will not change, opt out of schema evolution on that class to avoid compatible metadata overhead:
 
@@ -67,7 +65,7 @@ If a class schema is stable and will not change, opt out of schema evolution on 
 import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.annotation.ForyStruct.Evolution;
 
-@ForyStruct(evolving = Evolution.DISABLED)
+@ForyStruct(evolution = Evolution.DISABLED)
 public class StableMessage {
   public int id;
   public String name;

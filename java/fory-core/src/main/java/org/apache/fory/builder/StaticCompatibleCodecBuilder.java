@@ -61,6 +61,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
 
   private final List<Descriptor> localDescriptors;
   private final Class<?> remoteDescriptorClass;
+  private final String remoteTypeDefSuffix;
   private final boolean debug;
 
   public StaticCompatibleCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
@@ -70,13 +71,14 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         "Class version check should be disabled when compatible mode is enabled.");
     localDescriptors = Collections.unmodifiableList(Descriptor.getDescriptors(beanClass));
     remoteDescriptorClass = resolveRemoteDescriptorClass(typeDef);
+    remoteTypeDefSuffix = remoteTypeDefSuffix(typeDef);
     ForyStruct foryStruct = beanClass.getAnnotation(ForyStruct.class);
     debug = foryStruct != null && foryStruct.debug();
   }
 
   @Override
   protected String codecSuffix() {
-    return "CompatibleMetaShared";
+    return "CompatibleMetaShared_" + remoteTypeDefSuffix;
   }
 
   @Override
@@ -145,6 +147,12 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         return null;
       }
     }
+  }
+
+  static String remoteTypeDefSuffix(TypeDef typeDef) {
+    return Long.toUnsignedString(typeDef.getId(), 16)
+        + "_"
+        + Integer.toHexString(typeDef.getClassName().hashCode());
   }
 
   private String remoteDescriptorClassLiteral() {

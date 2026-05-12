@@ -190,7 +190,7 @@ public record ExampleRecordMessage(
     @ForyField(id = 253) Map<String, java.time.Instant> timestampValuesByName,
     @ForyField(id = 254) Map<String, java.time.Duration> durationValuesByName,
     @ForyField(id = 255) Map<String, State> enumValuesByName) {
-  @ForyStruct(evolving = Evolution.DISABLED)
+  @ForyStruct(evolution = Evolution.DISABLED)
   public record Leaf(@ForyField(id = 1) String label, @ForyField(id = 2) int count) {}
 
   public enum State {

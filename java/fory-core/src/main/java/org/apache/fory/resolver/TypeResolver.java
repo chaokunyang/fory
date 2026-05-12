@@ -25,6 +25,7 @@ import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
+import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1107,7 +1108,7 @@ public abstract class TypeResolver {
     if (evolution == Evolution.ENABLED) {
       throw new IllegalStateException(
           String.format(
-              "Class %s is annotated with @ForyStruct(evolving = ENABLED), but this Fory "
+              "Class %s is annotated with @ForyStruct(evolution = ENABLED), but this Fory "
                   + "instance is not configured to write schema evolution metadata",
               cls.getName()));
     }
@@ -1119,7 +1120,13 @@ public abstract class TypeResolver {
       return Evolution.INHERIT;
     }
     ForyStruct annotation = cls.getAnnotation(ForyStruct.class);
-    return annotation == null ? Evolution.INHERIT : annotation.evolving();
+    if (annotation == null) {
+      return Evolution.INHERIT;
+    }
+    if (annotation.evolution() != Evolution.INHERIT) {
+      return annotation.evolution();
+    }
+    return annotation.evolving() ? Evolution.INHERIT : Evolution.DISABLED;
   }
 
   protected static boolean isStructSerializer(Serializer<?> serializer) {
@@ -1683,9 +1690,22 @@ public abstract class TypeResolver {
     if (serializerClass == null) {
       return null;
     }
-    StaticGeneratedStructSerializer<?> serializer =
-        (StaticGeneratedStructSerializer<?>) Serializers.newSerializer(this, cls, serializerClass);
-    return serializer.getDescriptors();
+    try {
+      Method descriptorsMethod = serializerClass.getDeclaredMethod("getGeneratedDescriptors");
+      descriptorsMethod.setAccessible(true);
+      return (List<Descriptor>) descriptorsMethod.invoke(null);
+    } catch (NoSuchMethodException e) {
+      // Descriptor discovery must be side-effect free; instantiating the generated serializer here
+      // can install it before normal serializer selection gets to choose the JIT path.
+      throw new ForyException(
+          "Generated static serializer "
+              + serializerClass.getName()
+              + " must define static getGeneratedDescriptors()",
+          e);
+    } catch (ReflectiveOperationException e) {
+      throw new ForyException(
+          "Failed to read generated static descriptors from " + serializerClass.getName(), e);
+    }
   }
 
   /**

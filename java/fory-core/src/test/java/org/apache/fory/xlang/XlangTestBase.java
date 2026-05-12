@@ -193,13 +193,13 @@ public abstract class XlangTestBase extends ForyTestBase {
   protected static final String FIXED_OVERRIDE_STRUCT_TYPE_NAME = "evolving_off";
 
   @Data
-  @ForyStruct(evolving = Evolution.ENABLED)
+  @ForyStruct(evolution = Evolution.ENABLED)
   protected static class EvolvingOverrideStruct {
     String f1;
   }
 
   @Data
-  @ForyStruct(evolving = Evolution.DISABLED)
+  @ForyStruct(evolution = Evolution.DISABLED)
   protected static class FixedOverrideStruct {
     String f1;
   }

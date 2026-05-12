@@ -42,14 +42,22 @@ public @interface ForyStruct {
   }
 
   /**
+   * Legacy per-struct schema evolution switch.
+   *
+   * <p>Set this to {@code false} to force fixed-schema struct encoding. New code that needs to
+   * require schema evolution metadata should use {@link #evolution()}.
+   */
+  boolean evolving() default true;
+
+  /**
    * Per-struct schema evolution policy.
    *
-   * <p>{@link Evolution#INHERIT} follows the Fory instance's compatible/meta-share configuration.
-   * {@link Evolution#ENABLED} requires that configuration to emit schema evolution metadata for
-   * this struct. {@link Evolution#DISABLED} uses fixed-schema struct encoding even when compatible
-   * metadata is otherwise enabled.
+   * <p>{@link Evolution#INHERIT} follows {@link #evolving()} and then the Fory instance's
+   * compatible/meta-share configuration. {@link Evolution#ENABLED} requires that configuration to
+   * emit schema evolution metadata for this struct. {@link Evolution#DISABLED} uses fixed-schema
+   * struct encoding even when compatible metadata is otherwise enabled.
    */
-  Evolution evolving() default Evolution.INHERIT;
+  Evolution evolution() default Evolution.INHERIT;
 
   /**
    * Emit generated serializer field-level debug tracing.

@@ -662,13 +662,22 @@ public final class ForyStructProcessor extends AbstractProcessor {
     }
     Map<? extends ExecutableElement, ? extends AnnotationValue> values =
         elements.getElementValuesWithDefaults(mirror);
+    boolean evolving = true;
+    String evolution = "INHERIT";
     for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
         values.entrySet()) {
-      if (entry.getKey().getSimpleName().contentEquals("evolving")) {
-        return !"DISABLED".equals(enumConstant(String.valueOf(entry.getValue().getValue())));
+      String name = entry.getKey().getSimpleName().toString();
+      Object value = entry.getValue().getValue();
+      if (name.equals("evolving")) {
+        evolving = (Boolean) value;
+      } else if (name.equals("evolution")) {
+        evolution = enumConstant(String.valueOf(value));
       }
     }
-    return true;
+    if ("DISABLED".equals(evolution)) {
+      return false;
+    }
+    return evolving || "ENABLED".equals(evolution);
   }
 
   private String typeExtMetaExpression(

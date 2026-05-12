@@ -186,6 +186,149 @@ public class StaticCompatibleCodecBuilderTest {
     }
   }
 
+  @Test
+  public void testStaticCompatibleSkipsUnknownBackReferenceField() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.StaticCompatibleRefPayload",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "public class StaticCompatibleRefPayload {\n"
+                + "  @ForyField(nullable = true, ref = true) public String name;\n"
+                + "  @ForyField(nullable = true, ref = true) public String nameAlias;\n"
+                + "  public List<String> after;\n"
+                + "  public StaticCompatibleRefPayload() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.StaticCompatibleRefPayload",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "public class StaticCompatibleRefPayload {\n"
+                + "  @ForyField(nullable = true, ref = true) public String name;\n"
+                + "  public List<String> after;\n"
+                + "  public StaticCompatibleRefPayload() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleRefPayload");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleRefPayload");
+      Fory writer = compatibleFory(writerLoader, writerType, false, "ref-writer");
+      Fory reader = compatibleFory(readerLoader, readerType, false, "ref-reader");
+      Object writerValue = writerType.getConstructor().newInstance();
+      String shared = new String("shared");
+      setField(writerType, writerValue, "name", shared);
+      setField(writerType, writerValue, "nameAlias", shared);
+      setField(writerType, writerValue, "after", Arrays.asList("after"));
+
+      Object result =
+          roundTripThroughStaticCompatibleSerializer(
+              writer, reader, writerType, readerType, writerValue);
+      Assert.assertSame(result.getClass(), readerType);
+      Assert.assertEquals(getField(readerType, result, "name"), "shared");
+      Assert.assertEquals(getField(readerType, result, "after"), Arrays.asList("after"));
+    }
+  }
+
+  @Test
+  public void testStaticCompatibleArrayPayloadReadsOrdinaryAnnotatedList() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.StaticCompatibleAnnotatedListPayload",
+            "package test;\n"
+                + "public class StaticCompatibleAnnotatedListPayload {\n"
+                + "  public int[] values;\n"
+                + "  public StaticCompatibleAnnotatedListPayload() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.StaticCompatibleAnnotatedListPayload",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
+                + "public class StaticCompatibleAnnotatedListPayload {\n"
+                + "  public List<@Int32Type(encoding = Int32Encoding.FIXED) Integer> values;\n"
+                + "  public StaticCompatibleAnnotatedListPayload() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleAnnotatedListPayload");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleAnnotatedListPayload");
+      Fory writer = compatibleFory(writerLoader, writerType, true, "annotated-list-writer");
+      Fory reader = compatibleFory(readerLoader, readerType, true, "annotated-list-reader");
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "values", new int[] {7, 8, 9});
+
+      Object result =
+          roundTripThroughStaticCompatibleSerializer(
+              writer, reader, writerType, readerType, writerValue);
+      Assert.assertSame(result.getClass(), readerType);
+      Assert.assertEquals(getField(readerType, result, "values"), Arrays.asList(7, 8, 9));
+    }
+  }
+
+  @Test
+  public void testStaticCompatibleSerializerClassKeyIncludesRemoteTypeDef() throws Exception {
+    CompilationResult writerAResult =
+        compile(
+            "test.WriterPayloadA",
+            "package test;\n"
+                + "public class WriterPayloadA {\n"
+                + "  public int id;\n"
+                + "  public String oldName;\n"
+                + "  public WriterPayloadA() {}\n"
+                + "}\n");
+    CompilationResult writerBResult =
+        compile(
+            "test.WriterPayloadB",
+            "package test;\n"
+                + "public class WriterPayloadB {\n"
+                + "  public int id;\n"
+                + "  public long oldCount;\n"
+                + "  public WriterPayloadB() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.ReaderPayload",
+            "package test;\n"
+                + "public class ReaderPayload {\n"
+                + "  public int id;\n"
+                + "  public ReaderPayload() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerAResult.success, writerAResult.diagnostics());
+    Assert.assertTrue(writerBResult.success, writerBResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerALoader = writerAResult.classLoader();
+        URLClassLoader writerBLoader = writerBResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerAType = writerALoader.loadClass("test.WriterPayloadA");
+      Class<?> writerBType = writerBLoader.loadClass("test.WriterPayloadB");
+      Class<?> readerType = readerLoader.loadClass("test.ReaderPayload");
+      Fory writerA = compatibleFory(writerALoader, writerAType, false, "writer-a");
+      Fory writerB = compatibleFory(writerBLoader, writerBType, false, "writer-b");
+      Fory reader = compatibleFory(readerLoader, readerType, false, "reader");
+      TypeDef typeDefA = TypeDef.buildTypeDef(writerA.getTypeResolver(), writerAType);
+      TypeDef typeDefB = TypeDef.buildTypeDef(writerB.getTypeResolver(), writerBType);
+      Assert.assertNotEquals(typeDefA.getId(), typeDefB.getId());
+
+      Class<Object> readerClass = cast(readerType);
+      Class<? extends Serializer> serializerA =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
+              reader.getTypeResolver(), readerClass, typeDefA);
+      Class<? extends Serializer> serializerB =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
+              reader.getTypeResolver(), readerClass, typeDefB);
+      Assert.assertNotEquals(serializerA, serializerB);
+    }
+  }
+
   private static Object roundTripThroughStaticCompatibleSerializer(
       Fory writer, Fory reader, Class<?> writerType, Class<?> readerType, Object writerValue)
       throws Exception {

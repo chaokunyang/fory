@@ -241,6 +241,29 @@ describe("typemeta", () => {
     expect(reader.deserialize(localBytes)).toEqual({ value: 123 });
   });
 
+  test("keeps type info on regenerated compatible named serializers", () => {
+    const stringWriterFory = new Fory({ compatible: true });
+    const numberWriterFory = new Fory({ compatible: true });
+    const readerFory = new Fory({ compatible: true });
+
+    const stringWriterType = Type.struct("example.dynamicNamed", {
+      value: Type.string().setId(1),
+    });
+    const numberWriterType = Type.struct("example.dynamicNamed", {
+      value: Type.int32().setId(1),
+    });
+
+    const stringBytes = stringWriterFory
+      .register(stringWriterType)
+      .serialize({ value: "hello" });
+    const numberBytes = numberWriterFory
+      .register(numberWriterType)
+      .serialize({ value: 123 });
+
+    expect(readerFory.deserialize(stringBytes)).toEqual({ $tag1: "hello" });
+    expect(readerFory.deserialize(numberBytes)).toEqual({ $tag1: 123 });
+  });
+
   test("caches regenerated compatible readers for alternating nested schemas", () => {
     const stringWriterFory = new Fory({ compatible: true });
     const boolWriterFory = new Fory({ compatible: true });

@@ -34,13 +34,18 @@ public class TypeInfoTest {
     public int id;
   }
 
-  @ForyStruct(evolving = Evolution.ENABLED)
+  @ForyStruct(evolution = Evolution.ENABLED)
   public static class ExplicitEvolvingStruct {
     public int id;
   }
 
-  @ForyStruct(evolving = Evolution.DISABLED)
+  @ForyStruct(evolution = Evolution.DISABLED)
   public static class FixedStruct {
+    public int id;
+  }
+
+  @ForyStruct(evolving = false)
+  public static class LegacyFixedStruct {
     public int id;
   }
 
@@ -58,17 +63,21 @@ public class TypeInfoTest {
     fory.register(EvolvingStruct.class, "test", "EvolvingStruct");
     fory.register(ExplicitEvolvingStruct.class, "test", "ExplicitEvolvingStruct");
     fory.register(FixedStruct.class, "test", "FixedStruct");
+    fory.register(LegacyFixedStruct.class, "test", "LegacyFixedStruct");
 
     TypeInfo evolvingInfo = fory.getTypeResolver().getTypeInfo(EvolvingStruct.class, false);
     TypeInfo explicitEvolvingInfo =
         fory.getTypeResolver().getTypeInfo(ExplicitEvolvingStruct.class, false);
     TypeInfo fixedInfo = fory.getTypeResolver().getTypeInfo(FixedStruct.class, false);
+    TypeInfo legacyFixedInfo = fory.getTypeResolver().getTypeInfo(LegacyFixedStruct.class, false);
     assertNotNull(evolvingInfo);
     assertNotNull(explicitEvolvingInfo);
     assertNotNull(fixedInfo);
+    assertNotNull(legacyFixedInfo);
     assertEquals(evolvingInfo.getTypeId(), Types.NAMED_COMPATIBLE_STRUCT);
     assertEquals(explicitEvolvingInfo.getTypeId(), Types.NAMED_COMPATIBLE_STRUCT);
     assertEquals(fixedInfo.getTypeId(), Types.NAMED_STRUCT);
+    assertEquals(legacyFixedInfo.getTypeId(), Types.NAMED_STRUCT);
 
     EvolvingStruct evolving = new EvolvingStruct();
     evolving.id = 123;
@@ -89,6 +98,7 @@ public class TypeInfoTest {
     fory.register(EvolvingStruct.class, 100);
     fory.register(ExplicitEvolvingStruct.class, 101);
     fory.register(FixedStruct.class, 102);
+    fory.register(LegacyFixedStruct.class, 103);
 
     assertEquals(
         fory.getTypeResolver().getTypeInfo(EvolvingStruct.class, false).getTypeId(),
@@ -98,6 +108,9 @@ public class TypeInfoTest {
         Types.COMPATIBLE_STRUCT);
     assertEquals(
         fory.getTypeResolver().getTypeInfo(FixedStruct.class, false).getTypeId(), Types.STRUCT);
+    assertEquals(
+        fory.getTypeResolver().getTypeInfo(LegacyFixedStruct.class, false).getTypeId(),
+        Types.STRUCT);
   }
 
   @Test(

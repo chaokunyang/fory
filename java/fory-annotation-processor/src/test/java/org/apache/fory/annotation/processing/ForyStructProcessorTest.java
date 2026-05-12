@@ -88,6 +88,24 @@ public class ForyStructProcessorTest {
   }
 
   @Test
+  public void testLegacyBooleanEvolvingAnnotationCompiles() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.LegacyFixedStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct(evolving = false) public class LegacyFixedStruct {\n"
+                + "  public int id;\n"
+                + "  public LegacyFixedStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      loader.loadClass("test.LegacyFixedStruct__ForySerializer__");
+      loader.loadClass("test.LegacyFixedStruct__ForyNativeSerializer__");
+    }
+  }
+
+  @Test
   public void testPrivateFieldUsesAccessibleAccessors() throws Exception {
     CompilationResult result =
         compile(
@@ -419,6 +437,37 @@ public class ForyStructProcessorTest {
       Object roundTrip = fory.deserialize(fory.serialize(value));
       Assert.assertEquals(getField(type, roundTrip, "id"), 12);
       Assert.assertSame(getField(type, roundTrip, "next"), roundTrip);
+    }
+  }
+
+  @Test
+  public void testGeneratedDescriptorDiscoveryDoesNotSelectStaticSerializerWhenCodegenEnabled()
+      throws Exception {
+    CompilationResult result =
+        compile(
+            "test.DescriptorStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class DescriptorStruct {\n"
+                + "  public int id;\n"
+                + "  public String name;\n"
+                + "  public DescriptorStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.DescriptorStruct");
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withCodegen(true)
+              .requireClassRegistration(false)
+              .build();
+      List<Descriptor> descriptors = fory.getTypeResolver().getFieldDescriptors(type, true);
+      Assert.assertEquals(descriptors.size(), 2);
+
+      Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
+      Assert.assertFalse(
+          serializer instanceof StaticGeneratedStructSerializer, serializer.getClass().getName());
     }
   }
 

@@ -428,7 +428,7 @@ public class ExampleMessage {
 
   public ExampleMessage() {}
 
-  @ForyStruct(evolving = Evolution.DISABLED)
+  @ForyStruct(evolution = Evolution.DISABLED)
   public static class Leaf {
     @ForyField(id = 1)
     public String label;

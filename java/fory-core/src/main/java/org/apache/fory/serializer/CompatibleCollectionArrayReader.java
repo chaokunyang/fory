@@ -336,6 +336,12 @@ final class CompatibleCollectionArrayReader {
       }
       return TypeAnnotationUtils.getDefaultPrimitiveListElementTypeId(typeRef.getRawType());
     }
+    if (TypeUtils.isCollection(typeRef.getRawType())) {
+      TypeExtMeta elementExtMeta = TypeUtils.getElementType(typeRef).getTypeExtMeta();
+      return isPrimitiveElement(elementExtMeta, requireNonNullable)
+          ? elementExtMeta.typeId()
+          : Types.UNKNOWN;
+    }
     return Types.UNKNOWN;
   }
 

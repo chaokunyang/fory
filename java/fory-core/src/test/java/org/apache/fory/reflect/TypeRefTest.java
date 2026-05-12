@@ -21,6 +21,7 @@ package org.apache.fory.reflect;
 
 import static org.testng.Assert.*;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.lang.reflect.WildcardType;
@@ -32,7 +33,12 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.annotation.Int32Type;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.config.Int32Encoding;
+import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.type.Types;
 import org.apache.fory.type.TypeUtils;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -87,6 +93,28 @@ public class TypeRefTest extends ForyTestBase {
     // see issue https://github.com/apache/fory/issues/1633
     Fory fory = builder().withCodegen(enableCodegen).build();
     serDeCheck(fory, new MyClass());
+  }
+
+  static class TypeUseMetadataStruct {
+    List<@Ref(enable = false) String> names;
+    List<@Int32Type(encoding = Int32Encoding.FIXED) Integer> codes;
+  }
+
+  @Test
+  public void testNestedTypeUseMetadataKeepsNestedNullableDefault() throws Exception {
+    Field namesField = TypeUseMetadataStruct.class.getDeclaredField("names");
+    TypeRef<?> namesType = TypeRef.of(namesField.getAnnotatedType());
+    TypeExtMeta namesElementMeta = namesType.getTypeArguments().get(0).getTypeExtMeta();
+    Assert.assertEquals(namesElementMeta.typeId(), Types.UNKNOWN);
+    Assert.assertTrue(namesElementMeta.nullable());
+    Assert.assertFalse(namesElementMeta.trackingRef());
+
+    Field codesField = TypeUseMetadataStruct.class.getDeclaredField("codes");
+    TypeRef<?> codesType = TypeRef.of(codesField.getAnnotatedType());
+    TypeExtMeta codesElementMeta = codesType.getTypeArguments().get(0).getTypeExtMeta();
+    Assert.assertEquals(codesElementMeta.typeId(), Types.INT32);
+    Assert.assertTrue(codesElementMeta.nullable());
+    Assert.assertFalse(codesElementMeta.trackingRef());
   }
 
   @Test

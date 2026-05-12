@@ -47,6 +47,7 @@ import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
+import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionFlags;
 import org.apache.fory.type.BFloat16;
@@ -61,6 +62,7 @@ import org.apache.fory.type.Types;
 final class CompatibleCollectionArrayReader {
   static final int READ_LIST_TO_ARRAY = 1;
   static final int READ_ARRAY_TO_LIST = 2;
+  static final int READ_LIST_TO_LIST = 3;
 
   static final class ReadAction {
     final int mode;
@@ -92,6 +94,14 @@ final class CompatibleCollectionArrayReader {
         return new ReadAction(
             READ_LIST_TO_ARRAY, localArrayTypeId, peerListElementTypeId, field.getType());
       }
+      int localListElementTypeId = listElementTypeId(localFieldType);
+      int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
+      if (localListElementTypeId != Types.UNKNOWN
+          && peerArrayTypeId != Types.UNKNOWN
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+        return new ReadAction(
+            READ_LIST_TO_LIST, peerArrayTypeId, peerListElementTypeId, field.getType());
+      }
       return null;
     }
     int peerArrayTypeId = arrayTypeId(descriptor.getTypeRef());
@@ -121,6 +131,17 @@ final class CompatibleCollectionArrayReader {
         return new ReadAction(
             READ_LIST_TO_ARRAY,
             localArrayTypeId,
+            peerListElementTypeId,
+            localDescriptor.getRawType());
+      }
+      int localListElementTypeId = listElementTypeId(localType);
+      int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
+      if (localListElementTypeId != Types.UNKNOWN
+          && peerArrayTypeId != Types.UNKNOWN
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+        return new ReadAction(
+            READ_LIST_TO_LIST,
+            peerArrayTypeId,
             peerListElementTypeId,
             localDescriptor.getRawType());
       }
@@ -196,6 +217,13 @@ final class CompatibleCollectionArrayReader {
       int elementTypeId,
       Class<?> targetType) {
     if (readMode == READ_LIST_TO_ARRAY) {
+      Object array = readListPayloadAsPrimitiveArray(readContext, arrayTypeId, elementTypeId);
+      if (array == null) {
+        return null;
+      }
+      return materializeTarget(array, arrayTypeId, targetType);
+    }
+    if (readMode == READ_LIST_TO_LIST) {
       Object array = readListPayloadAsPrimitiveArray(readContext, arrayTypeId, elementTypeId);
       if (array == null) {
         return null;
@@ -339,9 +367,19 @@ final class CompatibleCollectionArrayReader {
         throw new DeserializationException(
             "Cannot read nullable or ref-tracked peer list<T> payload into local array<T> field");
       }
-      if (!sameType || !declared) {
+      if (!sameType) {
         throw new DeserializationException(
             "Cannot read peer list<T> payload into local array<T> field");
+      }
+      if (!declared) {
+        TypeInfo payloadElementTypeInfo = readContext.getTypeResolver().readTypeInfo(readContext);
+        if (payloadElementTypeInfo.getTypeId() != elementTypeId) {
+          throw new DeserializationException(
+              "Cannot read peer list<T> element type id "
+                  + payloadElementTypeInfo.getTypeId()
+                  + " as local element type id "
+                  + elementTypeId);
+        }
       }
     }
     return readListPrimitiveElements(buffer, numElements, arrayTypeId, elementTypeId);

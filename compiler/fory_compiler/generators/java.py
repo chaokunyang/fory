@@ -406,6 +406,12 @@ class JavaGenerator(BaseGenerator):
 
         return GeneratedFile(path=path, content="\n".join(lines))
 
+    def get_struct_annotation(self, message: Message) -> str:
+        """Return the ForyStruct annotation for a generated message."""
+        if self.get_effective_evolving(message):
+            return "@ForyStruct"
+        return "@ForyStruct(evolving = Evolution.DISABLED)"
+
     # Generates a Java class file from a message schema definition.
     def generate_message_file(self, message: Message) -> GeneratedFile:
         """Generate a Java class file for a message."""
@@ -435,8 +441,7 @@ class JavaGenerator(BaseGenerator):
         comment = self.format_type_id_comment(message, "//")
         if comment:
             lines.append(comment)
-        if not self.get_effective_evolving(message):
-            lines.append("@ForyStruct(evolving = Evolution.DISABLED)")
+        lines.append(self.get_struct_annotation(message))
         lines.append(f"public class {message.name} {{")
 
         # Generate nested enums as static inner classes
@@ -588,8 +593,8 @@ class JavaGenerator(BaseGenerator):
         for field in message.fields:
             self.collect_field_imports(field, imports)
 
+        imports.add("org.apache.fory.annotation.ForyStruct")
         if not self.get_effective_evolving(message):
-            imports.add("org.apache.fory.annotation.ForyStruct")
             imports.add("org.apache.fory.annotation.ForyStruct.Evolution")
 
         # Add imports for equals/hashCode
@@ -1042,8 +1047,7 @@ class JavaGenerator(BaseGenerator):
         comment = self.format_type_id_comment(message, "    " * indent + "//")
         if comment:
             lines.append(comment)
-        if not self.get_effective_evolving(message):
-            lines.append("@ForyStruct(evolving = Evolution.DISABLED)")
+        lines.append(self.get_struct_annotation(message))
         lines.append(f"public static class {message.name} {{")
 
         # Generate nested enums

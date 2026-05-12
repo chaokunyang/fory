@@ -1292,13 +1292,6 @@ public class XtypeResolver extends TypeResolver {
   }
 
   private byte getInternalTypeId(Descriptor descriptor) {
-    TypeExtMeta extMeta = descriptor.getTypeRef().getTypeExtMeta();
-    if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {
-      return (byte) extMeta.typeId();
-    }
-    if (TypeAnnotationUtils.isBoxedListArrayType(descriptor.getField())) {
-      return (byte) TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField());
-    }
     Class<?> cls = descriptor.getRawType();
     if (TypeUtils.isPrimitiveListClass(cls) && TypeAnnotationUtils.isArrayType(descriptor)) {
       return (byte) TypeAnnotationUtils.getPrimitiveListArrayTypeId(cls);
@@ -1308,6 +1301,13 @@ public class XtypeResolver extends TypeResolver {
         && TypeAnnotationUtils.usesCollectionProtocolForPrimitiveList(
             descriptor.getTypeAnnotation(), cls)) {
       return Types.LIST;
+    }
+    TypeExtMeta extMeta = descriptor.getTypeRef().getTypeExtMeta();
+    if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {
+      return (byte) extMeta.typeId();
+    }
+    if (TypeAnnotationUtils.isBoxedListArrayType(descriptor.getField())) {
+      return (byte) TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField());
     }
     if (cls.isArray() && cls.getComponentType().isPrimitive()) {
       return (byte) Types.getDescriptorTypeId(this, descriptor);

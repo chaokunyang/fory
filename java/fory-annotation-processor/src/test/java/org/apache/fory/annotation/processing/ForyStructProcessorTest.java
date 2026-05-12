@@ -226,9 +226,12 @@ public class ForyStructProcessorTest {
                 + "import java.util.List;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "import org.apache.fory.annotation.Ref;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
                 + "import org.apache.fory.annotation.UInt16Type;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
                 + "@ForyStruct public class MetadataStruct {\n"
                 + "  public List<@Ref String> names;\n"
+                + "  public List<@Int32Type(encoding = Int32Encoding.FIXED) Integer> codes;\n"
                 + "  public @UInt16Type int code;\n"
                 + "  public MetadataStruct() {}\n"
                 + "}\n");
@@ -252,6 +255,11 @@ public class ForyStructProcessorTest {
       Assert.assertTrue(names.getTypeRef().getTypeArguments().get(0).hasTypeExtMeta());
       Assert.assertTrue(
           names.getTypeRef().getTypeArguments().get(0).getTypeExtMeta().trackingRef());
+      Assert.assertTrue(names.getTypeRef().getTypeArguments().get(0).getTypeExtMeta().nullable());
+      Descriptor codes = descriptor(serializer.getDescriptors(), "codes");
+      Assert.assertEquals(
+          codes.getTypeRef().getTypeArguments().get(0).getTypeExtMeta().typeId(), Types.INT32);
+      Assert.assertTrue(codes.getTypeRef().getTypeArguments().get(0).getTypeExtMeta().nullable());
       Descriptor code = descriptor(serializer.getDescriptors(), "code");
       Assert.assertTrue(code.getTypeRef().hasTypeExtMeta());
       Assert.assertEquals(code.getTypeRef().getTypeExtMeta().typeId(), Types.UINT16);

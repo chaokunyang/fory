@@ -616,6 +616,10 @@ def test_java_evolving_false_generation_uses_struct_evolution_enum():
             """
             package gen;
 
+            message DefaultEvolving {
+                string value = 1;
+            }
+
             message Stable [evolving=false] {
                 string name = 1;
 
@@ -630,6 +634,7 @@ def test_java_evolving_false_generation_uses_struct_evolution_enum():
     assert "import org.apache.fory.annotation.ForyStruct;" in java_output
     assert "import org.apache.fory.annotation.ForyStruct.Evolution;" in java_output
     assert java_output.count("@ForyStruct(evolving = Evolution.DISABLED)") == 2
+    assert java_output.count("@ForyStruct") == 3
     assert "@ForyStruct(evolving = false)" not in java_output
 
 

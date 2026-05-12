@@ -179,6 +179,25 @@ def _add_annotation_processor_path(pom_path):
     tree.write(pom_path, encoding="UTF-8", xml_declaration=True)
 
 
+def _copy_pom_with_annotation_processor(pom_path):
+    pom_dir = os.path.dirname(pom_path)
+    fd, temp_pom = tempfile.mkstemp(
+        prefix="pom-static-processor-", suffix=".xml", dir=pom_dir
+    )
+    os.close(fd)
+    shutil.copyfile(pom_path, temp_pom)
+    _add_annotation_processor_path(temp_pom)
+    return temp_pom
+
+
+def _remove_file(path):
+    if path:
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            pass
+
+
 def _exec_cmd(cmd, cwd):
     logging.info(f"running command in {cwd}: {cmd}")
     subprocess.check_call(cmd, shell=True, cwd=cwd)
@@ -190,34 +209,40 @@ def run_android_go_xlang_static_processor():
     java_dir = os.path.join(root, "java")
     core_dir = os.path.join(java_dir, "fory-core")
     core_pom = os.path.join(core_dir, "pom.xml")
-    fd, temp_pom = tempfile.mkstemp(
-        prefix="pom-static-processor-", suffix=".xml", dir=core_dir
-    )
-    os.close(fd)
+    idl_java_dir = os.path.join(root, "integration_tests", "idl_tests", "java")
+    idl_java_pom = os.path.join(idl_java_dir, "pom.xml")
+    temp_core_pom = None
+    temp_idl_java_pom = None
     try:
-        shutil.copyfile(core_pom, temp_pom)
-        _add_annotation_processor_path(temp_pom)
+        temp_core_pom = _copy_pom_with_annotation_processor(core_pom)
+        temp_idl_java_pom = _copy_pom_with_annotation_processor(idl_java_pom)
         os.environ.setdefault("FORY_ANDROID_ENABLED", "1")
         os.environ.setdefault("FORY_GO_JAVA_CI", "1")
         os.environ.setdefault("FORY_STATIC_PROCESSOR_CI", "1")
         os.environ.setdefault("ENABLE_FORY_DEBUG_OUTPUT", "1")
         _exec_cmd(
-            "mvn -T16 --no-transfer-progress install -DskipTests "
+            "mvn -T16 --no-transfer-progress clean install -DskipTests "
             "-Dmaven.javadoc.skip=true -Dmaven.source.skip=true "
-            "-pl fory-annotation-processor -am",
+            "-pl fory-core,fory-annotation-processor -am",
             java_dir,
         )
         _exec_cmd(
             "mvn -T16 --no-transfer-progress "
-            f"-f {shlex.quote(temp_pom)} "
+            f"-f {shlex.quote(temp_core_pom)} "
             "clean test -Dtest=org.apache.fory.xlang.GoXlangTest",
             core_dir,
         )
+        env = os.environ.copy()
+        env["IDL_JAVA_POM"] = temp_idl_java_pom
+        logging.info(
+            f"running command in {root}: ./integration_tests/idl_tests/run_go_tests.sh"
+        )
+        subprocess.check_call(
+            ["./integration_tests/idl_tests/run_go_tests.sh"], cwd=root, env=env
+        )
     finally:
-        try:
-            os.remove(temp_pom)
-        except FileNotFoundError:
-            pass
+        _remove_file(temp_core_pom)
+        _remove_file(temp_idl_java_pom)
 
 
 def parse_args():

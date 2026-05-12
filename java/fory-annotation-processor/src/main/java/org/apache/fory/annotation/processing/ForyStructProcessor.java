@@ -564,15 +564,15 @@ public final class ForyStructProcessor extends AbstractProcessor {
     List<SourceTypeNode> arguments = new ArrayList<>();
     SourceTypeNode componentType = null;
     if (kind == TypeKind.ARRAY) {
+      TypeMirror componentMirror = ((ArrayType) type).getComponentType();
       componentType =
-          buildTypeNode(
-              ((ArrayType) type).getComponentType(), treeInfo.arrayComponentTree(), "false");
+          buildTypeNode(componentMirror, treeInfo.arrayComponentTree(), nestedNullable(componentMirror));
     } else if (type instanceof DeclaredType) {
       List<?> argumentTrees = treeInfo.typeArgumentTrees();
       int index = 0;
       for (TypeMirror argument : ((DeclaredType) type).getTypeArguments()) {
         Object argumentTree = index < argumentTrees.size() ? argumentTrees.get(index) : null;
-        arguments.add(buildTypeNode(argument, argumentTree, "false"));
+        arguments.add(buildTypeNode(argument, argumentTree, nestedNullable(argument)));
         index++;
       }
     }
@@ -614,6 +614,10 @@ public final class ForyStructProcessor extends AbstractProcessor {
         + ", "
         + (ref != null && booleanValue(ref, "enable", true))
         + ")";
+  }
+
+  private String nestedNullable(TypeMirror type) {
+    return Boolean.toString(!type.getKind().isPrimitive());
   }
 
   private String scalarTypeId(TypeMirror type, String rawType, List<?> treeAnnotations) {

@@ -1260,7 +1260,7 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-      - name: Run Android Go Xlang Tests
+      - name: Run Android Go Xlang And IDL Tests
         env:
           FORY_ANDROID_ENABLED: "1"
           FORY_GO_JAVA_CI: "1"
@@ -1270,7 +1270,9 @@ jobs:
           mvn -T16 --no-transfer-progress clean install -DskipTests -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
           cd fory-core
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.GoXlangTest
-      - name: Run Android Go Xlang Tests With Static Generated Serializers
+          cd ../..
+          ./integration_tests/idl_tests/run_go_tests.sh
+      - name: Run Android Go Xlang And IDL Tests With Static Generated Serializers
         env:
           FORY_ANDROID_ENABLED: "1"
           FORY_GO_JAVA_CI: "1"

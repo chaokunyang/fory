@@ -578,7 +578,7 @@ public class TypeUtils {
 
   /** Returns key/value type of map. */
   public static Tuple2<TypeRef<?>, TypeRef<?>> getMapKeyValueType(TypeRef<?> typeRef) {
-    if (typeRef.hasTypeExtMeta() && typeRef.hasExplicitTypeArguments()) {
+    if (typeRef.hasExplicitTypeArguments()) {
       List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
       if (typeArguments.size() == 2) {
         Class<?> rawType = getRawType(typeRef);

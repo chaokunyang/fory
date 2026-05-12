@@ -235,6 +235,11 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final Object copyFieldValue(
       CopyContext copyContext, Object fieldValue, SerializationFieldInfo fieldInfo) {
+    if (fieldInfo.containerSerializerOverride != null) {
+      @SuppressWarnings("unchecked")
+      Serializer<Object> serializer = (Serializer<Object>) fieldInfo.containerSerializerOverride;
+      return copyContext.copyObject(fieldValue, serializer);
+    }
     return copyContext.copyObject(fieldValue, fieldInfo.dispatchId);
   }
 

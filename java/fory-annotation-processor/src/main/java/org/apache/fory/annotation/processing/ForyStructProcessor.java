@@ -566,7 +566,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
     if (kind == TypeKind.ARRAY) {
       TypeMirror componentMirror = ((ArrayType) type).getComponentType();
       componentType =
-          buildTypeNode(componentMirror, treeInfo.arrayComponentTree(), nestedNullable(componentMirror));
+          buildTypeNode(
+              componentMirror, treeInfo.arrayComponentTree(), nestedNullable(componentMirror));
     } else if (type instanceof DeclaredType) {
       List<?> argumentTrees = treeInfo.typeArgumentTrees();
       int index = 0;
@@ -579,7 +580,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
     String rawType = canonicalName(types.erasure(type));
     String extMeta = typeExtMetaExpression(type, rawType, treeInfo.annotations, typeExtNullable);
     boolean primitive = kind.isPrimitive();
-    boolean nestedStruct = isForyStructType(type);
+    boolean nestedStruct = isCompatibleForyStructType(type);
     return new SourceTypeNode(
         rawType, typeName(type), extMeta, arguments, componentType, primitive, nestedStruct);
   }
@@ -594,10 +595,25 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return new TypeTreeInfo(annotations, current);
   }
 
-  private boolean isForyStructType(TypeMirror type) {
+  private boolean isCompatibleForyStructType(TypeMirror type) {
     TypeMirror erased = types.erasure(type);
     Element element = types.asElement(erased);
-    return element instanceof TypeElement && hasAnnotation(element, FORY_STRUCT);
+    if (!(element instanceof TypeElement)) {
+      return false;
+    }
+    AnnotationMirror mirror = annotationMirror(element, FORY_STRUCT);
+    if (mirror == null) {
+      return false;
+    }
+    Map<? extends ExecutableElement, ? extends AnnotationValue> values =
+        elements.getElementValuesWithDefaults(mirror);
+    for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
+        values.entrySet()) {
+      if (entry.getKey().getSimpleName().contentEquals("evolving")) {
+        return !"DISABLED".equals(enumConstant(String.valueOf(entry.getValue().getValue())));
+      }
+    }
+    return true;
   }
 
   private String typeExtMetaExpression(

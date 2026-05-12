@@ -1725,7 +1725,7 @@ public class ClassResolver extends TypeResolver {
     }
 
     Class<? extends Serializer> serializerClass = getSerializerClass(cls);
-    Serializer serializer = Serializers.newSerializer(this, cls, serializerClass);
+    Serializer serializer = newSerializer(cls, serializerClass);
     if (ForyCopyable.class.isAssignableFrom(cls)) {
       serializer = new ForyCopyableSerializer<>(config, cls, serializer);
     }
@@ -2093,19 +2093,17 @@ public class ClassResolver extends TypeResolver {
 
   /**
    * Normalize type name for consistent ordering between serialization and deserialization.
-   * Collection subtypes (List, Set, etc.) are normalized to "java.util.Collection". Map subtypes
-   * are normalized to "java.util.Map". This ensures fields have the same order regardless of
-   * whether the peer has the field locally.
+   * Collection descriptors are normalized to "java.util.Collection". Map subtypes are normalized to
+   * "java.util.Map". This ensures fields have the same order regardless of whether the peer has the
+   * field locally.
    */
   private String getNormalizedTypeName(Descriptor d) {
+    if (isCollectionDescriptor(d)) {
+      return "java.util.Collection";
+    }
     Class<?> rawType = d.getRawType();
-    if (rawType != null) {
-      if (isCollection(rawType)) {
-        return "java.util.Collection";
-      }
-      if (isMap(rawType)) {
-        return "java.util.Map";
-      }
+    if (rawType != null && isMap(rawType)) {
+      return "java.util.Map";
     }
     return d.getTypeName();
   }

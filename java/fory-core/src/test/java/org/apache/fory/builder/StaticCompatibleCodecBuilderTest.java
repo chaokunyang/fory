@@ -269,10 +269,7 @@ public class StaticCompatibleCodecBuilderTest {
           fileManager.getJavaFileObjectsFromFiles(Collections.singletonList(sourceFile.toFile()));
       List<String> options =
           Arrays.asList(
-              "-classpath",
-              System.getProperty("java.class.path"),
-              "-d",
-              classRoot.toString());
+              "-classpath", System.getProperty("java.class.path"), "-d", classRoot.toString());
       JavaCompiler.CompilationTask task =
           compiler.getTask(null, fileManager, diagnostics, options, null, units);
       return new CompilationResult(classRoot, task.call(), diagnostics.getDiagnostics());

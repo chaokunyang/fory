@@ -316,7 +316,8 @@ public class FieldGroups {
     TypeRef<?> typeRef = descriptor.getTypeRef();
     TypeExtMeta inlineMeta = typeRef.getTypeExtMeta();
     if (inlineMeta != null && Types.isPrimitiveType(inlineMeta.typeId())) {
-      Class<?> elementClass = TypeAnnotationUtils.getPrimitiveListElementClass(typeRef.getRawType());
+      Class<?> elementClass =
+          TypeAnnotationUtils.getPrimitiveListElementClass(typeRef.getRawType());
       if (elementClass != null) {
         return TypeRef.of(
             elementClass, TypeExtMeta.of(inlineMeta.typeId(), true, inlineMeta.trackingRef()));

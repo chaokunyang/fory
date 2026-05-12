@@ -38,8 +38,8 @@ import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.meta.TypeExtMeta;
-import org.apache.fory.type.Types;
 import org.apache.fory.type.TypeUtils;
+import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 

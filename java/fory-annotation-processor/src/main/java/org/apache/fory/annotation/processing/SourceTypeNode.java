@@ -30,7 +30,7 @@ final class SourceTypeNode {
   final List<SourceTypeNode> typeArguments;
   final SourceTypeNode componentType;
   final boolean primitive;
-  final boolean nestedStruct;
+  final boolean nestedCompatibleStruct;
 
   SourceTypeNode(
       String rawType,
@@ -39,7 +39,7 @@ final class SourceTypeNode {
       List<SourceTypeNode> typeArguments,
       SourceTypeNode componentType,
       boolean primitive,
-      boolean nestedStruct) {
+      boolean nestedCompatibleStruct) {
     this.rawType = rawType;
     this.typeName = typeName;
     this.typeExtMeta = typeExtMeta;
@@ -49,7 +49,7 @@ final class SourceTypeNode {
             : Collections.unmodifiableList(new ArrayList<>(typeArguments));
     this.componentType = componentType;
     this.primitive = primitive;
-    this.nestedStruct = nestedStruct;
+    this.nestedCompatibleStruct = nestedCompatibleStruct;
   }
 
   String typeRefExpression() {
@@ -82,15 +82,15 @@ final class SourceTypeNode {
     return builder.toString();
   }
 
-  boolean hasNestedStruct() {
-    if (nestedStruct) {
+  boolean hasNestedCompatibleStruct() {
+    if (nestedCompatibleStruct) {
       return true;
     }
-    if (componentType != null && componentType.hasNestedStruct()) {
+    if (componentType != null && componentType.hasNestedCompatibleStruct()) {
       return true;
     }
     for (SourceTypeNode typeArgument : typeArguments) {
-      if (typeArgument.hasNestedStruct()) {
+      if (typeArgument.hasNestedCompatibleStruct()) {
         return true;
       }
     }

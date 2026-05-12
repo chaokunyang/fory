@@ -452,7 +452,8 @@ public class TypeDef implements Serializable {
             .map(
                 fieldInfo -> {
                   if (fieldInfo.definedClass.equals(classSpec.entireClassName)) {
-                    return new FieldInfo(name, fieldInfo.fieldName, fieldInfo.fieldType);
+                    return new FieldInfo(
+                        name, fieldInfo.fieldName, fieldInfo.fieldType, fieldInfo.fieldId);
                   } else {
                     return fieldInfo;
                   }

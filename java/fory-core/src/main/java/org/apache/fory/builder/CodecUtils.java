@@ -44,8 +44,7 @@ public class CodecUtils {
   // TODO(chaokunyang) how to uninstall org.apache.fory.codegen/builder classes for graalvm build
   // time
   //  maybe use a temporal URLClassLoader
-  public static <T> Class<? extends Serializer> loadOrGenObjectCodecClass(
-      Class<T> cls, Fory fory) {
+  public static <T> Class<? extends Serializer> loadOrGenObjectCodecClass(Class<T> cls, Fory fory) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
         "loadOrGenObjectCodecClass",

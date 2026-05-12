@@ -49,8 +49,8 @@ import org.apache.fory.util.record.RecordUtils;
  *
  * <p>The generated class is keyed by the local Java class, not by a fixed remote schema. Its
  * constructor receives the runtime remote {@link TypeDef}; {@link
- * org.apache.fory.serializer.StaticGeneratedStructSerializer} derives the remote field list from
- * that definition and the generated local descriptors.
+ * org.apache.fory.serializer.StaticGeneratedStructSerializer} rebuilds remote read order through
+ * the same descriptor-grouper owner used by {@link MetaSharedSerializer}.
  *
  * @see ForyBuilder#withMetaShare
  * @see MetaSharedSerializer

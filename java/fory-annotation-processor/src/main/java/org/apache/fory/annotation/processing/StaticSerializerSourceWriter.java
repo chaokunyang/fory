@@ -139,7 +139,7 @@ final class StaticSerializerSourceWriter {
         .append(struct.serializerName)
         .append("(TypeResolver typeResolver, Class<?> type) {\n");
     builder.append("    super(typeResolver, type);\n");
-    writeConstructorBody("false");
+    writeConstructorBody("buildFieldGroups(DESCRIPTORS)", "false");
     builder.append("  }\n\n");
     builder
         .append("  public ")
@@ -147,12 +147,13 @@ final class StaticSerializerSourceWriter {
         .append("(TypeResolver typeResolver, Class<?> type, TypeDef typeDef) {\n");
     builder.append("    super(typeResolver, type, typeDef, DESCRIPTORS);\n");
     writeConstructorBody(
+        "buildLocalFieldGroups(DESCRIPTORS)",
         "typeDef != null && !HAS_NESTED_COMPATIBLE_STRUCT_FIELDS && typeDef.getId() == TypeDef.buildTypeDef(typeResolver, type).getId()");
     builder.append("  }\n\n");
   }
 
-  private void writeConstructorBody(String sameSchemaExpression) {
-    builder.append("    FieldGroups fieldGroups = buildFieldGroups(DESCRIPTORS);\n");
+  private void writeConstructorBody(String fieldGroupsExpression, String sameSchemaExpression) {
+    builder.append("    FieldGroups fieldGroups = ").append(fieldGroupsExpression).append(";\n");
     builder.append("    this.buildInFields = fieldGroups.buildInFields;\n");
     builder.append("    this.buildInFieldIds = localFieldIds(buildInFields, DESCRIPTORS);\n");
     builder.append("    this.containerFields = fieldGroups.containerFields;\n");

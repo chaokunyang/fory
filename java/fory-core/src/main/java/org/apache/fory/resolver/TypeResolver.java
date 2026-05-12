@@ -97,7 +97,6 @@ import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.GenericType;
 import org.apache.fory.type.ScalaTypes;
-import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
@@ -426,9 +425,7 @@ public abstract class TypeResolver {
   }
 
   public boolean isCollectionDescriptor(Descriptor descriptor) {
-    return isCollection(descriptor.getRawType())
-        || TypeAnnotationUtils.usesCollectionProtocolForPrimitiveList(
-            descriptor.getTypeAnnotation(), descriptor.getRawType());
+    return isCollection(descriptor.getRawType());
   }
 
   public abstract boolean isMonomorphic(Descriptor descriptor);
@@ -1616,6 +1613,14 @@ public abstract class TypeResolver {
               + cls.getName(),
           e);
     }
+  }
+
+  protected final Serializer<?> newSerializer(
+      Class<?> cls, Class<? extends Serializer> serializerClass) {
+    if (isShareMeta() && StaticGeneratedStructSerializer.class.isAssignableFrom(serializerClass)) {
+      return newStaticGeneratedStructSerializer(serializerClass, cls, getTypeDef(cls, true));
+    }
+    return Serializers.newSerializer(this, cls, serializerClass);
   }
 
   private List<Descriptor> getStaticGeneratedStructDescriptors(Class<?> cls) {

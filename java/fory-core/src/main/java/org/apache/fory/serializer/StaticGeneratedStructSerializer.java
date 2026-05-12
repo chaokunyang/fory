@@ -29,6 +29,7 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.TypeDef;
@@ -85,6 +86,18 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     DescriptorGrouper grouper =
         FieldGroups.buildDescriptorGrouper(
             typeResolver, descriptors, false, descriptor -> descriptor);
+    return FieldGroups.buildFieldInfos(typeResolver, grouper);
+  }
+
+  protected final FieldGroups buildLocalFieldGroups(List<Descriptor> descriptors) {
+    if (!typeResolver.isShareMeta()) {
+      return buildFieldGroups(descriptors);
+    }
+    // Meta-share writers use the local TypeDef-reified descriptor grouping, matching
+    // ObjectSerializer. The constructor TypeDef may be a remote schema for compatible reads, so it
+    // must not own local field access ordering.
+    DescriptorGrouper grouper =
+        typeResolver.createDescriptorGrouper(typeResolver.getTypeDef(type, true), type);
     return FieldGroups.buildFieldInfos(typeResolver, grouper);
   }
 
@@ -192,7 +205,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       RefReader refReader,
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
-    FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+    try {
+      FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+    } catch (RuntimeException e) {
+      throw new DeserializationException(
+          "Failed to skip remote field " + fieldInfo.descriptor.getName(), e);
+    }
   }
 
   protected final int matchedId(RemoteFieldInfo remoteField) {
@@ -269,9 +287,10 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   private List<RemoteFieldInfo> buildRemoteFields(
       TypeDef remoteTypeDef, List<Descriptor> localDescriptors) {
+    Class<?> remoteDescriptorClass = remoteDescriptorClass(remoteTypeDef);
     List<FieldInfo> remoteFieldInfos = remoteTypeDef.getFieldsInfo();
     List<Descriptor> remoteDescriptors =
-        remoteTypeDef.getDescriptors(typeResolver, type, localDescriptors);
+        remoteTypeDef.getDescriptors(typeResolver, remoteDescriptorClass);
     Map<String, FieldInfo> remoteFieldInfosByKey = new HashMap<>();
     for (int i = 0; i < remoteFieldInfos.size(); i++) {
       FieldInfo fieldInfo = remoteFieldInfos.get(i);
@@ -287,22 +306,52 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       }
       fields.put(fieldKey(descriptor), i);
     }
+    // Keep compatible-read descriptor ordering owned by TypeResolver, matching MetaSharedSerializer
+    // and MetaSharedCodecBuilder. TypeDef itself is metadata; it is not the read-order owner.
     FieldGroups remoteFieldGroups =
         FieldGroups.buildFieldInfos(
             typeResolver,
-            FieldGroups.buildDescriptorGrouper(
-                typeResolver, remoteDescriptors, false, descriptor -> descriptor));
+            typeResolver.createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass));
     List<RemoteFieldInfo> remoteFields = new ArrayList<>(remoteFieldInfos.size());
     appendRemoteFields(
-        remoteFields, remoteFieldGroups.buildInFields, remoteFieldInfosByKey, fieldIds, fields,
+        remoteFields,
+        remoteFieldGroups.buildInFields,
+        remoteFieldInfosByKey,
+        fieldIds,
+        fields,
         localDescriptors);
     appendRemoteFields(
-        remoteFields, remoteFieldGroups.containerFields, remoteFieldInfosByKey, fieldIds, fields,
+        remoteFields,
+        remoteFieldGroups.containerFields,
+        remoteFieldInfosByKey,
+        fieldIds,
+        fields,
         localDescriptors);
     appendRemoteFields(
-        remoteFields, remoteFieldGroups.userTypeFields, remoteFieldInfosByKey, fieldIds, fields,
+        remoteFields,
+        remoteFieldGroups.userTypeFields,
+        remoteFieldInfosByKey,
+        fieldIds,
+        fields,
         localDescriptors);
     return Collections.unmodifiableList(remoteFields);
+  }
+
+  private Class<?> remoteDescriptorClass(TypeDef remoteTypeDef) {
+    String className = remoteTypeDef.getClassName();
+    if (className.equals(type.getName())) {
+      return type;
+    }
+    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
+    try {
+      return Class.forName(className, false, contextClassLoader);
+    } catch (ClassNotFoundException | LinkageError e) {
+      try {
+        return Class.forName(className, false, type.getClassLoader());
+      } catch (ClassNotFoundException | LinkageError ignored) {
+        return type;
+      }
+    }
   }
 
   private void appendRemoteFields(
@@ -381,9 +430,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   private static String remoteFieldKey(Descriptor descriptor) {
-    return descriptor.hasForyFieldId()
-        ? "id:" + descriptor.getForyFieldId()
-        : fieldKey(descriptor);
+    return descriptor.hasForyFieldId() ? "id:" + descriptor.getForyFieldId() : fieldKey(descriptor);
   }
 
   /** Remote field metadata consumed by generated compatible read methods. */

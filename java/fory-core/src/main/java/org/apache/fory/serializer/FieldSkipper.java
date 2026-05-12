@@ -53,6 +53,13 @@ public class FieldSkipper {
     int dispatchId = fieldInfo.dispatchId;
     RefMode refMode = fieldInfo.refMode;
 
+    if (typeResolver.isCollectionDescriptor(fieldInfo.descriptor)
+        || typeResolver.isMap(fieldInfo.type)) {
+      AbstractObjectSerializer.readContainerFieldValue(
+          readContext, typeResolver, refReader, readContext.getGenerics(), fieldInfo, buffer);
+      return;
+    }
+
     // For non-basic types, fall back to binding.readField
     if (!DispatchId.isBasicType(dispatchId)) {
       AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);

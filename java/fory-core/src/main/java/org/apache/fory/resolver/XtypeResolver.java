@@ -322,8 +322,8 @@ public class XtypeResolver extends TypeResolver {
                             type,
                             shareMeta,
                             config.isCodeGenEnabled(),
-                            sc -> ref.set(Serializers.newSerializer(this, type, sc)));
-                    ref.set(Serializers.newSerializer(this, type, c));
+                            sc -> ref.set(newSerializer(type, sc)));
+                    ref.set(newSerializer(type, c));
                     if (!config.isAsyncCompilationEnabled()) {
                       updated.set(true);
                     }
@@ -452,7 +452,7 @@ public class XtypeResolver extends TypeResolver {
 
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
     checkRegisterAllowed();
-    registerSerializer(type, Serializers.newSerializer(this, type, serializerClass));
+    registerSerializer(type, newSerializer(type, serializerClass));
   }
 
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {

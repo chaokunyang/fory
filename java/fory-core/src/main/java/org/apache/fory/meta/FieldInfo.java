@@ -23,6 +23,7 @@ import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.Objects;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.converter.FieldConverter;
@@ -186,7 +187,9 @@ public final class FieldInfo implements Serializable {
       }
       return builder.build();
     }
-    // This field doesn't exist in peer class, so any legal modifier will be OK.
+    // This field doesn't exist in peer class, so any legal modifier will be OK. Preserve the
+    // remote tag id in the synthetic descriptor because descriptor grouping uses it as the sort key
+    // for compatible payload order.
     // Use constant instead of reflection to avoid GraalVM native image issues.
     int stubModifiers = Modifier.PRIVATE | Modifier.FINAL;
     return new Descriptor(
@@ -195,8 +198,11 @@ public final class FieldInfo implements Serializable {
         fieldName,
         stubModifiers,
         definedClass,
+        hasFieldId(),
+        fieldId,
+        remoteNullable,
         remoteTrackingRef,
-        remoteNullable);
+        ForyField.Dynamic.AUTO);
   }
 
   private boolean isTopLevelListArrayCompatibleReadPair(

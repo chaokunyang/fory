@@ -128,7 +128,8 @@ public class FieldTypes {
         primitiveList
             ? primitiveListElementMeta != null
                 ? primitiveListElementMeta.typeId()
-                : TypeAnnotationUtils.getPrimitiveListElementTypeId(typeAnnotation, rawType, isXlang)
+                : TypeAnnotationUtils.getPrimitiveListElementTypeId(
+                    typeAnnotation, rawType, isXlang)
             : Types.UNKNOWN;
     if (typeExtMeta != null && typeExtMeta.typeId() != Types.UNKNOWN) {
       typeId = typeExtMeta.typeId();
@@ -199,8 +200,8 @@ public class FieldTypes {
         descriptorCarriesFieldOptions
             ? descriptor.isTrackingRef()
             : isXlang
-            ? typeExtMeta != null && typeExtMeta.trackingRef()
-            : genericType.trackingRef(resolver);
+                ? typeExtMeta != null && typeExtMeta.trackingRef()
+                : genericType.trackingRef(resolver);
     // For xlang: nullable is false by default for top-level fields.
     // Nested element types are nullable by default to align with cross-language collection
     // semantics.

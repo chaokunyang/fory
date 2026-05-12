@@ -48,7 +48,7 @@ final class SourceStruct {
         Collections.unmodifiableList(new ArrayList<>(recordConstructorFields));
     boolean hasNestedStruct = false;
     for (SourceField field : fields) {
-      hasNestedStruct |= field.typeNode.hasNestedStruct();
+      hasNestedStruct |= field.typeNode.hasNestedCompatibleStruct();
     }
     this.hasNestedCompatibleStructFields = hasNestedStruct;
   }

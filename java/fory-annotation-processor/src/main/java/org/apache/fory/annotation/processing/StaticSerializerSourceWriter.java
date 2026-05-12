@@ -444,11 +444,21 @@ final class StaticSerializerSourceWriter {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
       builder
-          .append("        ")
+          .append("        if (canReadRemoteField(remoteField, fieldsById[")
+          .append(field.id)
+          .append("])) {\n");
+      builder
           .append(
-              field.writeStatement(
-                  "value", field.castExpression("readRemoteField(readContext, remoteField)")))
+              "          Object fieldValue = readCompatibleFieldValue(readContext, remoteField, fieldsById[")
+          .append(field.id)
+          .append("]);\n");
+      builder
+          .append("          ")
+          .append(field.writeStatement("value", field.castExpression("fieldValue")))
           .append("\n");
+      builder.append("        } else {\n");
+      builder.append("          skipField(readContext, remoteField);\n");
+      builder.append("        }\n");
       builder.append("        return;\n");
     }
     builder.append("      default:\n");
@@ -468,9 +478,18 @@ final class StaticSerializerSourceWriter {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
       builder
-          .append("        values[")
+          .append("        if (canReadRemoteField(remoteField, fieldsById[")
           .append(field.id)
-          .append("] = readRemoteField(readContext, remoteField);\n");
+          .append("])) {\n");
+      builder
+          .append("          values[")
+          .append(field.id)
+          .append("] = readCompatibleFieldValue(readContext, remoteField, fieldsById[")
+          .append(field.id)
+          .append("]);\n");
+      builder.append("        } else {\n");
+      builder.append("          skipField(readContext, remoteField);\n");
+      builder.append("        }\n");
       builder.append("        return;\n");
     }
     builder.append("      default:\n");

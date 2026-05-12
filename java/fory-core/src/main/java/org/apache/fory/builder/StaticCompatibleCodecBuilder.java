@@ -35,6 +35,7 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.Preconditions;
@@ -79,7 +80,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     ctx.setClassName(className);
     ctx.extendsClasses(ctx.type(parentSerializerClass));
     ctx.reserveName(POJO_CLASS_TYPE_NAME);
-    ctx.addImports(List.class, TypeDef.class, Descriptor.class);
+    ctx.addImports(List.class, TypeDef.class, Descriptor.class, SerializationFieldInfo.class);
     String constructorCode =
         StringUtils.format(
             ""
@@ -316,12 +317,22 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       code.append("  case ")
           .append(i)
           .append(": {\n")
-          .append("    Object _f_fieldValue = readRemoteField(")
+          .append("    if (hasFieldConverter(_f_remoteField)) {\n")
+          .append("      Object _f_fieldValue = readRemoteField(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
-          .append("    if (hasFieldConverter(_f_remoteField)) {\n")
           .append("      setConvertedField(_f_value, _f_fieldValue, _f_remoteField);\n")
           .append("    } else {\n")
+          .append("      SerializationFieldInfo _f_localField = localFieldInfo(_f_matchedId);\n")
+          .append("      if (!canReadRemoteField(_f_remoteField, _f_localField)) {\n")
+          .append("        skipField(")
+          .append(READ_CONTEXT_NAME)
+          .append(", _f_remoteField);\n")
+          .append("        return;\n")
+          .append("      }\n")
+          .append("      Object _f_fieldValue = readCompatibleFieldValue(")
+          .append(READ_CONTEXT_NAME)
+          .append(", _f_remoteField, _f_localField);\n")
           .append(indent(genSetFieldCode(descriptor, valueTypeRef), 6))
           .append('\n')
           .append("    }\n")
@@ -353,10 +364,15 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append("      readRemoteField(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
-          .append("    } else {\n")
+          .append(
+              "    } else if (canReadRemoteField(_f_remoteField, localFieldInfo(_f_matchedId))) {\n")
           .append("      _f_recordValues[")
           .append(componentIndex)
-          .append("] = readRemoteField(")
+          .append("] = readCompatibleFieldValue(")
+          .append(READ_CONTEXT_NAME)
+          .append(", _f_remoteField, localFieldInfo(_f_matchedId));\n")
+          .append("    } else {\n")
+          .append("      skipField(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
           .append("    }\n")

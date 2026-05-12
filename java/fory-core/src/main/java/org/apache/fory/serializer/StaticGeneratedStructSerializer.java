@@ -34,6 +34,7 @@ import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
+import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.StringUtils;
@@ -45,12 +46,14 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final TypeDef typeDef;
   protected final List<RemoteFieldInfo> remoteFields;
+  private final SerializationFieldInfo[] localFieldsById;
 
   @SuppressWarnings("unchecked")
   public StaticGeneratedStructSerializer(TypeResolver typeResolver, Class<?> type) {
     super(typeResolver, (Class<T>) type);
     this.typeDef = null;
     this.remoteFields = Collections.emptyList();
+    this.localFieldsById = new SerializationFieldInfo[0];
   }
 
   @SuppressWarnings("unchecked")
@@ -60,6 +63,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     this.typeDef = typeDef;
     this.remoteFields =
         typeDef == null ? Collections.emptyList() : buildRemoteFields(typeDef, descriptors);
+    this.localFieldsById = buildLocalFieldsById(descriptors);
   }
 
   @Override
@@ -189,6 +193,25 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     return remoteField.matchedId;
   }
 
+  protected final SerializationFieldInfo localFieldInfo(int matchedId) {
+    return localFieldsById[matchedId];
+  }
+
+  protected final boolean canReadRemoteField(
+      RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
+    Class<?> remoteType = remoteField.serializationFieldInfo.typeRef.getRawType();
+    Class<?> localType = localFieldInfo.typeRef.getRawType();
+    return FieldConverters.canConvert(remoteType, localType);
+  }
+
+  protected final Object readCompatibleFieldValue(
+      ReadContext readContext, RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
+    Object fieldValue = readRemoteField(readContext, remoteField);
+    Class<?> remoteType = remoteField.serializationFieldInfo.typeRef.getRawType();
+    Class<?> localType = localFieldInfo.typeRef.getRawType();
+    return FieldConverters.convertValue(remoteType, localType, fieldValue);
+  }
+
   protected final boolean hasFieldConverter(RemoteFieldInfo remoteField) {
     return remoteField.serializationFieldInfo.fieldConverter != null;
   }
@@ -252,6 +275,17 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
               typeResolver, matchedId, fieldInfo, descriptor, serializationFieldInfo));
     }
     return Collections.unmodifiableList(remoteFields);
+  }
+
+  private SerializationFieldInfo[] buildLocalFieldsById(List<Descriptor> descriptors) {
+    FieldGroups fieldGroups = buildFieldGroups(descriptors);
+    SerializationFieldInfo[] allFields = fieldGroups.allFields;
+    int[] ids = localFieldIds(allFields, descriptors);
+    SerializationFieldInfo[] fieldsById = new SerializationFieldInfo[descriptors.size()];
+    for (int i = 0; i < allFields.length; i++) {
+      fieldsById[ids[i]] = allFields[i];
+    }
+    return fieldsById;
   }
 
   private int matchField(

@@ -22,6 +22,7 @@ package org.apache.fory.config;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.Fory;
@@ -54,6 +55,7 @@ public final class ForyBuilder {
   private static final Logger LOG = LoggerFactory.getLogger(ForyBuilder.class);
   private static final int DEFAULT_THREAD_SAFE_POOL_SIZE =
       Math.max(1, Runtime.getRuntime().availableProcessors() * 4);
+  private static final AtomicInteger THREAD_SAFE_NAME_COUNTER = new AtomicInteger();
 
   private static final boolean ENABLE_CLASS_REGISTRATION_FORCIBLY;
 
@@ -104,6 +106,7 @@ public final class ForyBuilder {
   TypeChecker typeChecker;
   private List<Consumer<ForyBuilder>> actions = new ArrayList<>();
   private boolean replayingActions = false;
+  private boolean nameExplicitlySet = false;
 
   public ForyBuilder() {}
 
@@ -533,6 +536,7 @@ public final class ForyBuilder {
   /** Set name for Fory serialization. */
   public ForyBuilder withName(String name) {
     this.name = name;
+    nameExplicitlySet = true;
     recordAction(b -> b.withName(name));
     return this;
   }
@@ -694,6 +698,7 @@ public final class ForyBuilder {
    * channel APIs keep a pooled {@link Fory} instance occupied for the whole blocking call.
    */
   public ThreadSafeFory buildThreadSafeFory() {
+    assignGeneratedThreadSafeName();
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
@@ -702,6 +707,7 @@ public final class ForyBuilder {
 
   /** Build thread safe fory backed by {@link ThreadLocalFory}. */
   public ThreadLocalFory buildThreadLocalFory() {
+    assignGeneratedThreadSafeName();
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
@@ -724,10 +730,19 @@ public final class ForyBuilder {
           String.format(
               "thread safe fory pool's size error, please check it, size:[%s]", poolSize));
     }
+    assignGeneratedThreadSafeName();
     finish();
     ClassLoader loader = this.classLoader;
     this.classLoader = null;
     return new ThreadPoolFory(factory(loader), poolSize);
+  }
+
+  private void assignGeneratedThreadSafeName() {
+    if (!nameExplicitlySet) {
+      String generatedName = "fory-thread-safe-" + THREAD_SAFE_NAME_COUNTER.incrementAndGet();
+      name = generatedName;
+      recordAction(b -> b.withName(generatedName));
+    }
   }
 
   private Function<ForyBuilder, Fory> factory(ClassLoader loader) {

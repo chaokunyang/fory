@@ -176,9 +176,12 @@ public final class FieldInfo implements Serializable {
             builder.field(null);
           }
         }
-        FieldConverter<?> converter = FieldConverters.getConverter(rawType, descriptor.getField());
-        if (converter != null) {
-          builder.fieldConverter(converter);
+        if (descriptor.getField() != null) {
+          FieldConverter<?> converter =
+              FieldConverters.getConverter(rawType, descriptor.getField());
+          if (converter != null) {
+            builder.fieldConverter(converter);
+          }
         }
       }
       return builder.build();

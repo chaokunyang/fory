@@ -126,6 +126,82 @@ public class FieldConverters {
     return null; // No compatible converter found
   }
 
+  /** Returns whether a value of {@code from} can be assigned or converted to {@code to}. */
+  public static boolean canConvert(Class<?> from, Class<?> to) {
+    if (isDirectlyAssignable(from, to)) {
+      return true;
+    }
+    Class<?> wrappedFrom = TypeUtils.wrap(from);
+    if (to == int.class || to == Integer.class) {
+      return IntConverter.compatibleTypes.contains(wrappedFrom);
+    } else if (to == boolean.class || to == Boolean.class) {
+      return BooleanConverter.compatibleTypes.contains(wrappedFrom);
+    } else if (to == byte.class || to == Byte.class) {
+      return ByteConverter.compatibleTypes.contains(wrappedFrom);
+    } else if (to == short.class || to == Short.class) {
+      return ShortConverter.compatibleTypes.contains(wrappedFrom);
+    } else if (to == long.class || to == Long.class) {
+      return LongConverter.compatibleTypes.contains(wrappedFrom);
+    } else if (to == float.class || to == Float.class) {
+      return FloatConverter.compatibleTypes.contains(wrappedFrom);
+    } else if (to == double.class || to == Double.class) {
+      return DoubleConverter.compatibleTypes.contains(wrappedFrom);
+    } else if (to == String.class) {
+      return StringConverter.compatibleTypes.contains(wrappedFrom);
+    }
+    return false;
+  }
+
+  /**
+   * Converts {@code value} from {@code from} to {@code to}, or returns it for direct assignment.
+   */
+  public static Object convertValue(Class<?> from, Class<?> to, Object value) {
+    if (isDirectlyAssignable(from, to)) {
+      return value;
+    } else if (to == int.class) {
+      return IntConverter.convertFrom(value);
+    } else if (to == Integer.class) {
+      return BoxedIntConverter.convertFrom(value);
+    } else if (to == boolean.class) {
+      return BooleanConverter.convertFrom(value);
+    } else if (to == Boolean.class) {
+      return BoxedBooleanConverter.convertFrom(value);
+    } else if (to == byte.class) {
+      return ByteConverter.convertFrom(value);
+    } else if (to == Byte.class) {
+      return BoxedByteConverter.convertFrom(value);
+    } else if (to == short.class) {
+      return ShortConverter.convertFrom(value);
+    } else if (to == Short.class) {
+      return BoxedShortConverter.convertFrom(value);
+    } else if (to == long.class) {
+      return LongConverter.convertFrom(value);
+    } else if (to == Long.class) {
+      return BoxedLongConverter.convertFrom(value);
+    } else if (to == float.class) {
+      return FloatConverter.convertFrom(value);
+    } else if (to == Float.class) {
+      return BoxedFloatConverter.convertFrom(value);
+    } else if (to == double.class) {
+      return DoubleConverter.convertFrom(value);
+    } else if (to == Double.class) {
+      return BoxedDoubleConverter.convertFrom(value);
+    } else if (to == String.class) {
+      return StringConverter.convertFrom(value);
+    }
+    throw new UnsupportedOperationException("Incompatible type: " + from + " -> " + to);
+  }
+
+  private static boolean isDirectlyAssignable(Class<?> from, Class<?> to) {
+    if (to.isAssignableFrom(from)) {
+      return true;
+    }
+    if (from.isPrimitive() && !to.isPrimitive()) {
+      return to.isAssignableFrom(TypeUtils.wrap(from));
+    }
+    return false;
+  }
+
   /**
    * Converter for primitive boolean fields. Converts compatible types to boolean values. Returns
    * false for null values and incompatible types.

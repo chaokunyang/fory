@@ -604,7 +604,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return "meta("
         + (typeId == null ? "Types.UNKNOWN" : typeId)
         + ", true, "
-        + booleanValue(ref, "enable", true)
+        + (ref != null && booleanValue(ref, "enable", true))
         + ")";
   }
 

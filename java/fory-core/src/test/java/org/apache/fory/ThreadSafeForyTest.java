@@ -57,6 +57,33 @@ public class ThreadSafeForyTest extends ForyTestBase {
   }
 
   @Test
+  public void testThreadSafeBuildersAssignGeneratedNames() {
+    ThreadSafeFory threadSafe =
+        Fory.builder().requireClassRegistration(false).buildThreadSafeFory();
+    ThreadSafeFory threadLocal =
+        Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
+    ThreadSafeFory threadPool =
+        Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(1);
+
+    String threadSafeName = threadSafe.execute(fory -> fory.getConfig().getName());
+    String threadLocalName = threadLocal.execute(fory -> fory.getConfig().getName());
+    String threadPoolName = threadPool.execute(fory -> fory.getConfig().getName());
+    assertNotNull(threadSafeName);
+    assertNotNull(threadLocalName);
+    assertNotNull(threadPoolName);
+    Assert.assertNotEquals(threadSafeName, threadLocalName);
+    Assert.assertNotEquals(threadSafeName, threadPoolName);
+    Assert.assertNotEquals(threadLocalName, threadPoolName);
+
+    ThreadSafeFory named =
+        Fory.builder()
+            .withName("explicit-thread-safe-name")
+            .requireClassRegistration(false)
+            .buildThreadSafeForyPool(1);
+    assertEquals(named.execute(fory -> fory.getConfig().getName()), "explicit-thread-safe-name");
+  }
+
+  @Test
   public void testFunctionFactoryConstructorsUseBuilderProvidedClassLoader() {
     ClassLoader custom = new ClassLoader(ClassLoader.getSystemClassLoader()) {};
     ThreadLocalFory threadLocal =

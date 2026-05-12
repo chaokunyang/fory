@@ -38,6 +38,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.apache.fory.Fory;
+import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
 import org.apache.fory.context.MetaReadContext;
@@ -254,6 +255,7 @@ public class ForyStructProcessorTest {
       Descriptor code = descriptor(serializer.getDescriptors(), "code");
       Assert.assertTrue(code.getTypeRef().hasTypeExtMeta());
       Assert.assertEquals(code.getTypeRef().getTypeExtMeta().typeId(), Types.UINT16);
+      Assert.assertFalse(code.getTypeRef().getTypeExtMeta().trackingRef());
     }
   }
 
@@ -305,7 +307,7 @@ public class ForyStructProcessorTest {
                 + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "@ForyStruct public class EvolvingStruct {\n"
-                + "  @ForyField(id = 1) public int id;\n"
+                + "  @ForyField(id = 1, nullable = true) public String id;\n"
                 + "  @ForyField(id = 2, nullable = true) public String name;\n"
                 + "  public EvolvingStruct() {}\n"
                 + "}\n");
@@ -334,7 +336,7 @@ public class ForyStructProcessorTest {
         URLClassLoader readerLoader = readerResult.classLoader()) {
       Class<?> writerType = writerLoader.loadClass("test.EvolvingStruct");
       Object value = writerType.getConstructor().newInstance();
-      setField(writerType, value, "id", 42);
+      setField(writerType, value, "id", "42");
       setField(writerType, value, "name", "old");
       Fory writer =
           Fory.builder()
@@ -367,6 +369,17 @@ public class ForyStructProcessorTest {
       Object serializer = reader.getTypeResolver().getTypeInfo(readerType).getSerializer();
       Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
     }
+  }
+
+  @Test
+  public void testStaticSerializerRoundTripsWithRuntimeSerializerSchemaConsistent()
+      throws Exception {
+    assertStaticRuntimeRoundTrip(false);
+  }
+
+  @Test
+  public void testStaticSerializerRoundTripsWithRuntimeSerializerCompatible() throws Exception {
+    assertStaticRuntimeRoundTrip(true);
   }
 
   @Test
@@ -461,6 +474,78 @@ public class ForyStructProcessorTest {
               serializer.write(
                   reader.getWriteContext(), readerType.getConstructor().newInstance()));
     }
+  }
+
+  private static void assertStaticRuntimeRoundTrip(boolean compatible) throws Exception {
+    CompilationResult staticResult =
+        compile(
+            "test.RoundTripStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class RoundTripStruct {\n"
+                + "  public int id;\n"
+                + "  public String name;\n"
+                + "  public RoundTripStruct() {}\n"
+                + "}\n");
+    CompilationResult runtimeResult =
+        compile(
+            "test.RoundTripStruct",
+            "package test;\n"
+                + "public class RoundTripStruct {\n"
+                + "  public int id;\n"
+                + "  public String name;\n"
+                + "  public RoundTripStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(staticResult.success, staticResult.diagnostics());
+    Assert.assertTrue(runtimeResult.success, runtimeResult.diagnostics());
+    try (URLClassLoader staticLoader = staticResult.classLoader();
+        URLClassLoader runtimeLoader = runtimeResult.classLoader()) {
+      Class<?> staticType = staticLoader.loadClass("test.RoundTripStruct");
+      Class<?> runtimeType = runtimeLoader.loadClass("test.RoundTripStruct");
+      ThreadSafeFory staticFory = threadSafeFory(staticLoader, false, compatible);
+      ThreadSafeFory runtimeFory = threadSafeFory(runtimeLoader, true, compatible);
+      staticFory.register(staticType, 9101);
+      runtimeFory.register(runtimeType, 9101);
+
+      Object staticSerializer =
+          staticFory.execute(
+              fory -> fory.getTypeResolver().getTypeInfo(staticType).getSerializer());
+      Object runtimeSerializer =
+          runtimeFory.execute(
+              fory -> fory.getTypeResolver().getTypeInfo(runtimeType).getSerializer());
+      Assert.assertTrue(staticSerializer instanceof StaticGeneratedStructSerializer);
+      Assert.assertFalse(runtimeSerializer instanceof StaticGeneratedStructSerializer);
+
+      Object staticValue = staticType.getConstructor().newInstance();
+      setField(staticType, staticValue, "id", 101);
+      setField(staticType, staticValue, "name", compatible ? "compatible-static" : "static");
+      Object runtimeRoundTrip = runtimeFory.deserialize(staticFory.serialize(staticValue));
+      Assert.assertSame(runtimeRoundTrip.getClass(), runtimeType);
+      Assert.assertEquals(getField(runtimeType, runtimeRoundTrip, "id"), 101);
+      Assert.assertEquals(
+          getField(runtimeType, runtimeRoundTrip, "name"),
+          compatible ? "compatible-static" : "static");
+
+      Object runtimeValue = runtimeType.getConstructor().newInstance();
+      setField(runtimeType, runtimeValue, "id", 202);
+      setField(runtimeType, runtimeValue, "name", compatible ? "compatible-runtime" : "runtime");
+      Object staticRoundTrip = staticFory.deserialize(runtimeFory.serialize(runtimeValue));
+      Assert.assertSame(staticRoundTrip.getClass(), staticType);
+      Assert.assertEquals(getField(staticType, staticRoundTrip, "id"), 202);
+      Assert.assertEquals(
+          getField(staticType, staticRoundTrip, "name"),
+          compatible ? "compatible-runtime" : "runtime");
+    }
+  }
+
+  private static ThreadSafeFory threadSafeFory(
+      ClassLoader classLoader, boolean codegen, boolean compatible) {
+    return Fory.builder()
+        .withClassLoader(classLoader)
+        .withCodegen(codegen)
+        .withCompatible(compatible)
+        .requireClassRegistration(true)
+        .buildThreadSafeForyPool(1);
   }
 
   private static CompilationResult compile(String typeName, String source) throws IOException {

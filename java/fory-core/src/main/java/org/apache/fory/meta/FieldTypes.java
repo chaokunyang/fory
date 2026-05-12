@@ -129,20 +129,19 @@ public class FieldTypes {
         primitiveList
             ? primitiveListElementMeta != null
                 ? primitiveListElementMeta.typeId()
-                : TypeAnnotationUtils.getPrimitiveListElementTypeId(
-                    typeAnnotation, rawType, true)
+                : TypeAnnotationUtils.getPrimitiveListElementTypeId(typeAnnotation, rawType, true)
             : Types.UNKNOWN;
     // Primitive-list TypeExtMeta describes the list element wire type. Only @ArrayType changes the
     // top-level schema to a dense primitive array.
-    if (isXlang && primitiveListArray) {
+    if (primitiveListArray) {
       typeId = TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType);
-    } else if (isXlang && primitiveList) {
+    } else if (primitiveList) {
       typeId = Types.LIST;
     } else if (!primitiveList && typeExtMeta != null && typeExtMeta.typeId() != Types.UNKNOWN) {
       typeId = typeExtMeta.typeId();
     } else if (boxedListArray) {
       typeId = TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor);
-    } else if (isXlang && primitiveListElementTypeId != Types.UNKNOWN) {
+    } else if (primitiveListElementTypeId != Types.UNKNOWN) {
       typeId = TypeAnnotationUtils.getPrimitiveListTypeId(typeAnnotation, rawType);
     } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
       if (field != null) {
@@ -225,9 +224,13 @@ public class FieldTypes {
       nullable = !genericType.getCls().isPrimitive();
     }
 
-    // Apply @ForyField annotation if present
+    // Apply @ForyField annotation where the protocol uses it as field-wrapper metadata. Native
+    // reflected value fields stay nullable by default; generated/remote descriptors without a
+    // backing Field already carry the schema-owned value.
     if (descriptor != null && descriptor.hasForyField()) {
-      nullable = descriptor.isNullable();
+      if (isXlang || descriptorCarriesFieldOptions) {
+        nullable = descriptor.isNullable();
+      }
       trackingRef = descriptor.isTrackingRef();
     }
 
@@ -240,7 +243,7 @@ public class FieldTypes {
       return new RegisteredFieldType(nullable, trackingRef, typeId, -1);
     }
 
-    if (isXlang && primitiveList && !primitiveListArray) {
+    if (primitiveList && !primitiveListArray) {
       boolean elementNullable = true;
       boolean elementTrackingRef = false;
       if (primitiveListArgumentMeta != null) {

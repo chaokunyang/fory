@@ -130,6 +130,15 @@ public interface Generated {
       super(typeResolver, cls, typeDef, descriptors);
     }
 
+    public GeneratedCompatibleMetaSharedSerializer(
+        TypeResolver typeResolver,
+        Class<?> cls,
+        TypeDef typeDef,
+        List<Descriptor> descriptors,
+        Class<?> remoteDescriptorClass) {
+      super(typeResolver, cls, typeDef, descriptors, remoteDescriptorClass);
+    }
+
     @Override
     public final Object read(ReadContext readContext) {
       return readCompatible(readContext);

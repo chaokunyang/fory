@@ -185,6 +185,22 @@ public class PrimitiveSerializers {
     }
   }
 
+  public static final class VarInt32Serializer extends Serializer<Integer> implements Shareable {
+    public VarInt32Serializer(Config config) {
+      super(config, Integer.class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Integer value) {
+      writeContext.getBuffer().writeVarInt32(value);
+    }
+
+    @Override
+    public Integer read(ReadContext readContext) {
+      return readContext.getBuffer().readVarInt32();
+    }
+  }
+
   public static final class FixedUInt32Serializer extends ImmutableSerializer<Long>
       implements Shareable {
     public FixedUInt32Serializer(Config config) {
@@ -305,6 +321,22 @@ public class PrimitiveSerializers {
     @Override
     public Long read(ReadContext readContext) {
       return readContext.getBuffer().readInt64();
+    }
+  }
+
+  public static final class VarInt64Serializer extends Serializer<Long> implements Shareable {
+    public VarInt64Serializer(Config config) {
+      super(config, Long.class);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Long value) {
+      writeContext.getBuffer().writeVarInt64(value);
+    }
+
+    @Override
+    public Long read(ReadContext readContext) {
+      return readContext.getBuffer().readVarInt64();
     }
   }
 

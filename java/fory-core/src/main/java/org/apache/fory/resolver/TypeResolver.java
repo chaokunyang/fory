@@ -84,6 +84,7 @@ import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
+import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
@@ -1191,20 +1192,73 @@ public abstract class TypeResolver {
   public abstract <T> Serializer<T> getSerializer(Class<T> cls);
 
   public final Serializer<?> getSerializer(TypeRef<?> typeRef) {
-    if (!isCrossLanguage()) {
-      return getSerializer(typeRef.getRawType());
-    }
+    Class<?> rawType = typeRef.getRawType();
     TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
     if (typeExtMeta != null
         && typeExtMeta.typeId() != Types.UNKNOWN
-        && !Types.isUserDefinedType((byte) typeExtMeta.typeId())) {
-      TypeInfo typeInfo = getInternalTypeInfoByTypeId(typeExtMeta.typeId());
-      if (typeInfo != null && typeInfo.getSerializer() != null) {
-        return typeInfo.getSerializer();
+        && !Types.isUserDefinedType(typeExtMeta.typeId())) {
+      if (isCrossLanguage()) {
+        TypeInfo typeInfo = getInternalTypeInfoByTypeId(typeExtMeta.typeId());
+        if (typeInfo != null && typeInfo.getSerializer() != null) {
+          return typeInfo.getSerializer();
+        }
+      } else {
+        Serializer<?> serializer = getNativeTypedValueSerializer(typeExtMeta.typeId(), rawType);
+        if (serializer != null) {
+          return serializer;
+        }
       }
     }
-    Class<?> rawType = typeRef.getRawType();
     return getSerializer(rawType);
+  }
+
+  private Serializer<?> getNativeTypedValueSerializer(int typeId, Class<?> rawType) {
+    // Native TypeExtMeta on a field wrapper is schema metadata, but on primitive-list elements it
+    // is the element wire type. These type ids are shared by native and xlang modes; wider built-in
+    // ids such as DECIMAL/BINARY are intentionally left to the native declared/raw type serializer.
+    switch (typeId) {
+      case Types.BOOL:
+      case Types.STRING:
+        return getSerializer(rawType);
+      case Types.INT8:
+        return new PrimitiveSerializers.ByteSerializer(config, rawType);
+      case Types.UINT8:
+        return new PrimitiveSerializers.UInt8Serializer(config);
+      case Types.INT16:
+        return new PrimitiveSerializers.ShortSerializer(config, rawType);
+      case Types.UINT16:
+        return new PrimitiveSerializers.UInt16Serializer(config);
+      case Types.INT32:
+        return new PrimitiveSerializers.FixedInt32Serializer(config);
+      case Types.VARINT32:
+        return new PrimitiveSerializers.VarInt32Serializer(config);
+      case Types.UINT32:
+        return new PrimitiveSerializers.FixedUInt32Serializer(config);
+      case Types.VAR_UINT32:
+        return new PrimitiveSerializers.VarUInt32Serializer(config);
+      case Types.INT64:
+        return new PrimitiveSerializers.FixedInt64Serializer(config);
+      case Types.VARINT64:
+        return new PrimitiveSerializers.VarInt64Serializer(config);
+      case Types.TAGGED_INT64:
+        return new PrimitiveSerializers.TaggedInt64Serializer(config);
+      case Types.UINT64:
+        return new PrimitiveSerializers.FixedUInt64Serializer(config);
+      case Types.VAR_UINT64:
+        return new PrimitiveSerializers.VarUInt64Serializer(config);
+      case Types.TAGGED_UINT64:
+        return new PrimitiveSerializers.TaggedUInt64Serializer(config);
+      case Types.FLOAT16:
+        return new PrimitiveSerializers.Float16Serializer(config, rawType);
+      case Types.BFLOAT16:
+        return new PrimitiveSerializers.BFloat16Serializer(config, rawType);
+      case Types.FLOAT32:
+        return new PrimitiveSerializers.FloatSerializer(config, rawType);
+      case Types.FLOAT64:
+        return new PrimitiveSerializers.DoubleSerializer(config, rawType);
+      default:
+        return null;
+    }
   }
 
   public abstract Serializer<?> getRawSerializer(Class<?> cls);
@@ -1555,7 +1609,8 @@ public abstract class TypeResolver {
     if (!cls.isAnnotationPresent(ForyStruct.class)) {
       return null;
     }
-    String generatedName = cls.getName() + "__ForyStaticSerializer__";
+    String generatedName =
+        cls.getName() + (isCrossLanguage() ? "__ForySerializer__" : "__ForyNativeSerializer__");
     Class<?> serializerClass = loadStaticGeneratedStructSerializerClass(cls, generatedName);
     if (serializerClass == null) {
       return null;
@@ -1716,7 +1771,7 @@ public abstract class TypeResolver {
       if ((t1Compress && t2Compress) || (!t1Compress && !t2Compress)) {
         int c = getPrimitiveFieldSize(d2) - getPrimitiveFieldSize(d1);
         if (c == 0) {
-          c = isCrossLanguage() ? typeId1 - typeId2 : typeId2 - typeId1;
+          c = typeId1 - typeId2;
           // noinspection Duplicates
           if (c == 0) {
             c = compareFieldSortKey(d1, d2);
@@ -1764,11 +1819,13 @@ public abstract class TypeResolver {
    *   <li>Otherwise: return true only for Optional types, false for all other non-primitives
    * </ul>
    *
-   * <p>For native mode: use descriptor's nullable which defaults to true for non-primitives.
+   * <p>For native mode: reflected value fields are nullable by default. Descriptors without a
+   * backing field already carry schema-owned nullability, for example TypeDef descriptors and
+   * annotation-processor generated native descriptors.
    *
-   * <p>Important: This ensures the serialization format matches what the TypeDef metadata says. The
-   * TypeDef uses xlang defaults (nullable=false except for Optional types), so the actual
-   * serialization must use the same defaults to ensure consistency across languages.
+   * <p>Important: this must match the TypeDef metadata for the same descriptor source. Xlang local
+   * descriptors use xlang defaults, native reflected descriptors use native nullable-by-default
+   * semantics, and descriptors rebuilt from TypeDef preserve the remote schema bit.
    */
   private boolean isFieldNullable(Descriptor descriptor) {
     Class<?> rawType = descriptor.getTypeRef().getRawType();
@@ -1785,8 +1842,10 @@ public abstract class TypeResolver {
       // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);
     }
-    // For native mode: use descriptor's nullable (true for non-primitives by default)
-    return descriptor.isNullable();
+    if (descriptor.getField() == null) {
+      return descriptor.isNullable();
+    }
+    return true;
   }
 
   // thread safe

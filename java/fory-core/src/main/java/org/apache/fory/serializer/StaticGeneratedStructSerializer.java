@@ -60,12 +60,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   @SuppressWarnings("unchecked")
   protected StaticGeneratedStructSerializer(
       TypeResolver typeResolver, Class<?> type, TypeDef typeDef, List<Descriptor> descriptors) {
-    super(typeResolver, (Class<T>) type);
-    List<Descriptor> runtimeDescriptors = runtimeDescriptors(descriptors);
-    this.typeDef = typeDef;
-    this.remoteFields =
-        typeDef == null ? Collections.emptyList() : buildRemoteFields(typeDef, runtimeDescriptors);
-    this.localFieldsById = buildLocalFieldsById(runtimeDescriptors);
+    this(typeResolver, type, typeDef, descriptors, null);
   }
 
   @SuppressWarnings("unchecked")
@@ -73,15 +68,15 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       TypeResolver typeResolver,
       Class<?> type,
       TypeDef typeDef,
-      List<Descriptor> localDescriptors,
-      List<Descriptor> remoteDescriptors) {
+      List<Descriptor> descriptors,
+      Class<?> remoteDescriptorClass) {
     super(typeResolver, (Class<T>) type);
-    List<Descriptor> runtimeDescriptors = runtimeDescriptors(localDescriptors);
+    List<Descriptor> runtimeDescriptors = runtimeDescriptors(descriptors);
     this.typeDef = typeDef;
     this.remoteFields =
         typeDef == null
             ? Collections.emptyList()
-            : buildRemoteFields(typeDef, runtimeDescriptors, remoteDescriptors);
+            : buildRemoteFields(typeDef, runtimeDescriptors, remoteDescriptorClass);
     this.localFieldsById = buildLocalFieldsById(runtimeDescriptors);
   }
 
@@ -268,6 +263,75 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     remoteField.serializationFieldInfo.fieldConverter.set(targetObject, fieldValue);
   }
 
+  protected final void debugWriteField(
+      String stage, SerializationFieldInfo fieldInfo, WriteContext writeContext) {
+    if (!org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
+      return;
+    }
+    MemoryBuffer buffer = writeContext.getBuffer();
+    System.out.println(
+        "[ForyStruct] "
+            + stage
+            + " write "
+            + type.getName()
+            + "."
+            + fieldInfo.descriptor.getName()
+            + " localId="
+            + localFieldId(fieldInfo.descriptor)
+            + " type="
+            + fieldInfo.typeRef
+            + " writerIndex="
+            + buffer.writerIndex());
+  }
+
+  protected final void debugReadField(
+      String stage, SerializationFieldInfo fieldInfo, ReadContext readContext) {
+    if (!org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
+      return;
+    }
+    MemoryBuffer buffer = readContext.getBuffer();
+    System.out.println(
+        "[ForyStruct] "
+            + stage
+            + " read "
+            + type.getName()
+            + "."
+            + fieldInfo.descriptor.getName()
+            + " localId="
+            + localFieldId(fieldInfo.descriptor)
+            + " type="
+            + fieldInfo.typeRef
+            + " readerIndex="
+            + buffer.readerIndex());
+  }
+
+  protected final void debugRemoteReadField(
+      String stage, RemoteFieldInfo remoteField, ReadContext readContext) {
+    if (!org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) {
+      return;
+    }
+    MemoryBuffer buffer = readContext.getBuffer();
+    System.out.println(
+        "[ForyStruct] "
+            + stage
+            + " compatible read "
+            + type.getName()
+            + " remote="
+            + remoteField.fieldInfo.getDefinedClass()
+            + "."
+            + remoteField.fieldInfo.getFieldName()
+            + " remoteFieldId="
+            + remoteField.fieldInfo.getFieldId()
+            + " matchedId="
+            + remoteField.matchedId
+            + " descriptor="
+            + remoteField.descriptor.getName()
+            + " type="
+            + remoteField.serializationFieldInfo.typeRef
+            + " readerIndex="
+            + buffer.readerIndex());
+  }
+
   protected final Object copyFieldValue(
       CopyContext copyContext, Object fieldValue, SerializationFieldInfo fieldInfo) {
     if (fieldInfo.containerSerializerOverride != null) {
@@ -303,33 +367,16 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   private List<RemoteFieldInfo> buildRemoteFields(
-      TypeDef remoteTypeDef, List<Descriptor> localDescriptors) {
-    return buildRemoteFields(remoteTypeDef, localDescriptors, null);
-  }
-
-  private List<RemoteFieldInfo> buildRemoteFields(
-      TypeDef remoteTypeDef,
-      List<Descriptor> localDescriptors,
-      List<Descriptor> generatedRemoteDescriptors) {
-    Class<?> remoteDescriptorClass = remoteDescriptorClass(remoteTypeDef);
+      TypeDef remoteTypeDef, List<Descriptor> localDescriptors, Class<?> generatedRemoteClass) {
+    Class<?> remoteDescriptorClass = remoteDescriptorClass(remoteTypeDef, generatedRemoteClass);
     List<FieldInfo> remoteFieldInfos = remoteTypeDef.getFieldsInfo();
-    List<Descriptor> remoteDescriptors;
-    if (generatedRemoteDescriptors == null) {
-      remoteDescriptors = remoteTypeDef.getDescriptors(typeResolver, remoteDescriptorClass);
-    } else {
-      remoteDescriptors = generatedRemoteDescriptors;
-    }
+    List<Descriptor> remoteDescriptors =
+        remoteTypeDef.getDescriptors(typeResolver, remoteDescriptorClass);
     Map<String, FieldInfo> remoteFieldInfosByKey = new HashMap<>();
-    if (generatedRemoteDescriptors == null) {
-      for (int i = 0; i < remoteFieldInfos.size(); i++) {
-        FieldInfo fieldInfo = remoteFieldInfos.get(i);
-        Descriptor descriptor = remoteDescriptors.get(i);
-        putRemoteFieldInfo(remoteFieldInfosByKey, fieldInfo, descriptor);
-      }
-    } else {
-      for (FieldInfo fieldInfo : remoteFieldInfos) {
-        putRemoteFieldInfo(remoteFieldInfosByKey, fieldInfo);
-      }
+    for (int i = 0; i < remoteFieldInfos.size(); i++) {
+      FieldInfo fieldInfo = remoteFieldInfos.get(i);
+      Descriptor descriptor = remoteDescriptors.get(i);
+      putRemoteFieldInfo(remoteFieldInfosByKey, fieldInfo, descriptor);
     }
     Map<Short, Integer> fieldIds = new HashMap<>();
     Map<String, Integer> fields = new HashMap<>();
@@ -343,18 +390,10 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     // Keep compatible-read descriptor ordering owned by TypeResolver, matching the sorted
     // DescriptorGrouper order used by ObjectCodecBuilder and MetaSharedCodecBuilder. FieldGroups
     // may regroup descriptors for helper ownership, so it must not drive remote payload order.
-    List<Descriptor> remoteDescriptorsInWireOrder;
-    if (generatedRemoteDescriptors == null) {
-      remoteDescriptorsInWireOrder =
-          typeResolver
-              .createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass)
-              .getSortedDescriptors();
-    } else {
-      remoteDescriptorsInWireOrder =
-          typeResolver
-              .groupDescriptors(generatedRemoteDescriptors, false, descriptor -> descriptor)
-              .getSortedDescriptors();
-    }
+    List<Descriptor> remoteDescriptorsInWireOrder =
+        typeResolver
+            .createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass)
+            .getSortedDescriptors();
     List<RemoteFieldInfo> remoteFields = new ArrayList<>(remoteFieldInfos.size());
     appendRemoteFields(
         remoteFields,
@@ -366,7 +405,15 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     return Collections.unmodifiableList(remoteFields);
   }
 
-  private Class<?> remoteDescriptorClass(TypeDef remoteTypeDef) {
+  private Class<?> remoteDescriptorClass(TypeDef remoteTypeDef, Class<?> generatedRemoteClass) {
+    if (generatedRemoteClass != null) {
+      // Native TypeDefs for registered classes carry the registered id, so a reader that binds the
+      // same id to an evolved class decodes the TypeDef as the local class. Static-compatible
+      // codegen may still know the writer-side class; use it to preserve descriptor-only details
+      // such as primitive-list carrier raw types while keeping wire order in
+      // createDescriptorGrouper.
+      return generatedRemoteClass;
+    }
     String className = remoteTypeDef.getClassName();
     if (className.equals(type.getName())) {
       return type;
@@ -391,12 +438,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       Map<String, Integer> fields,
       List<Descriptor> localDescriptors) {
     for (Descriptor descriptor : remoteDescriptorsInWireOrder) {
-      SerializationFieldInfo serializationFieldInfo =
-          FieldGroups.buildFieldInfo(typeResolver, descriptor);
       FieldInfo fieldInfo = remoteFieldInfosByKey.get(remoteFieldKey(descriptor));
       if (fieldInfo == null) {
         throw new IllegalStateException("Missing remote field metadata for " + descriptor);
       }
+      SerializationFieldInfo serializationFieldInfo =
+          FieldGroups.buildFieldInfo(typeResolver, descriptor);
       int matchedId = matchField(fieldInfo, fieldIds, fields);
       Descriptor localDescriptor =
           matchedId == UNKNOWN_FIELD ? null : localDescriptors.get(matchedId);
@@ -445,18 +492,16 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     return descriptor.getDeclaringClass() + "." + descriptor.getName();
   }
 
+  private static int localFieldId(Descriptor descriptor) {
+    return descriptor.hasForyFieldId() ? descriptor.getForyFieldId() : -1;
+  }
+
   private static void putRemoteFieldInfo(
       Map<String, FieldInfo> remoteFieldInfosByKey, FieldInfo fieldInfo, Descriptor descriptor) {
     remoteFieldInfosByKey.put(remoteFieldKey(descriptor), fieldInfo);
     if (fieldInfo.hasFieldId()) {
       remoteFieldInfosByKey.put(remoteFieldKey(fieldInfo), fieldInfo);
     }
-  }
-
-  private static void putRemoteFieldInfo(
-      Map<String, FieldInfo> remoteFieldInfosByKey, FieldInfo fieldInfo) {
-    remoteFieldInfosByKey.put(remoteFieldKey(fieldInfo), fieldInfo);
-    remoteFieldInfosByKey.put("name:" + fieldInfo.getFieldName(), fieldInfo);
   }
 
   private static String remoteFieldKey(FieldInfo fieldInfo) {

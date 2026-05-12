@@ -212,11 +212,15 @@ public class FieldGroups {
       // This determines how to write the value to the object (UnsafeOps.putInt vs putObject).
       isPrimitiveField = typeRef.getRawType().isPrimitive();
       fieldConverter = d.getFieldConverter();
-      // Primitive-list carrier TypeExtMeta describes the element wire type, not the field
-      // nullability/ref mode. Treating it as field metadata writes an extra null marker that
-      // remote TypeDef payload readers then consume as list length.
+      // TypeExtMeta is xlang field-wrapper metadata. Native local descriptors keep native
+      // nullable-by-default field semantics on the descriptor, while remote TypeDef descriptors
+      // already carry their schema nullability there. Primitive-list carrier TypeExtMeta is also
+      // element wire metadata, not field-wrapper metadata.
       TypeExtMeta extMeta = typeRef.getTypeExtMeta();
-      if (extMeta != null && !primitiveListArray && !primitiveListCollection) {
+      if (resolver.isCrossLanguage()
+          && extMeta != null
+          && !primitiveListArray
+          && !primitiveListCollection) {
         nullable = extMeta.nullable();
         trackingRef = extMeta.trackingRef();
       } else {

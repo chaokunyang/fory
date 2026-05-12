@@ -81,6 +81,9 @@ final class StaticSerializerSourceWriter {
         .append("  private static final boolean HAS_NESTED_COMPATIBLE_STRUCT_FIELDS = ")
         .append(struct.hasNestedCompatibleStructFields)
         .append(";\n");
+    if (struct.debug) {
+      builder.append("  private static final boolean FORY_STRUCT_DEBUG = true;\n");
+    }
     builder.append("  private static final List<Descriptor> DESCRIPTORS = buildDescriptors();\n\n");
     builder.append("  private final SerializationFieldInfo[] buildInFields;\n");
     builder.append("  private final int[] buildInFieldIds;\n");
@@ -264,12 +267,14 @@ final class StaticSerializerSourceWriter {
     builder.append("      switch (").append(idsName).append("[i]) {\n");
     for (SourceField field : struct.fields) {
       builder.append("        case ").append(field.id).append(":\n");
+      appendDebugWrite("before", "fieldInfo", 10);
       builder
           .append("          ")
           .append(helperName)
           .append("(writeContext, fieldInfo, ")
           .append(field.readExpression("value"))
           .append(");\n");
+      appendDebugWrite("after", "fieldInfo", 10);
       builder.append("          break;\n");
     }
     builder.append("        default:\n");
@@ -306,10 +311,12 @@ final class StaticSerializerSourceWriter {
         .append(" value) {\n");
     builder.append("    for (int i = 0; i < ").append(fieldsName).append(".length; i++) {\n");
     builder.append("      SerializationFieldInfo fieldInfo = ").append(fieldsName).append("[i];\n");
+    appendDebugRead("before", "fieldInfo", 6);
     builder
         .append("      Object fieldValue = ")
         .append(helperName)
         .append("(readContext, fieldInfo);\n");
+    appendDebugRead("after", "fieldInfo", 6);
     builder.append("      switch (").append(idsName).append("[i]) {\n");
     for (SourceField field : struct.fields) {
       builder.append("        case ").append(field.id).append(":\n");
@@ -337,12 +344,14 @@ final class StaticSerializerSourceWriter {
         .append("RecordFields(ReadContext readContext, Object[] values) {\n");
     builder.append("    for (int i = 0; i < ").append(fieldsName).append(".length; i++) {\n");
     builder.append("      SerializationFieldInfo fieldInfo = ").append(fieldsName).append("[i];\n");
+    appendDebugRead("before", "fieldInfo", 6);
     builder
         .append("      values[")
         .append(idsName)
         .append("[i]] = ")
         .append(helperName)
         .append("(readContext, fieldInfo);\n");
+    appendDebugRead("after", "fieldInfo", 6);
     builder.append("    }\n");
     builder.append("  }\n\n");
   }
@@ -430,7 +439,9 @@ final class StaticSerializerSourceWriter {
       builder.append("      return;\n");
       builder.append("    }\n");
     }
+    appendDebugRemoteRead("before skip", "remoteField", 4);
     builder.append("    skipField(readContext, remoteField);\n");
+    appendDebugRemoteRead("after skip", "remoteField", 4);
     builder.append("  }\n\n");
   }
 
@@ -444,6 +455,7 @@ final class StaticSerializerSourceWriter {
     for (int i = start; i < end; i++) {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
+      appendDebugRemoteRead("before read", "remoteField", 8);
       builder
           .append("        if (canReadRemoteField(remoteField, fieldsById[")
           .append(field.id)
@@ -453,17 +465,22 @@ final class StaticSerializerSourceWriter {
               "          Object fieldValue = readCompatibleFieldValue(readContext, remoteField, fieldsById[")
           .append(field.id)
           .append("]);\n");
+      appendDebugRemoteRead("after read", "remoteField", 10);
       builder
           .append("          ")
           .append(field.writeStatement("value", field.castExpression("fieldValue")))
           .append("\n");
       builder.append("        } else {\n");
+      appendDebugRemoteRead("before skip", "remoteField", 10);
       builder.append("          skipField(readContext, remoteField);\n");
+      appendDebugRemoteRead("after skip", "remoteField", 10);
       builder.append("        }\n");
       builder.append("        return;\n");
     }
     builder.append("      default:\n");
+    appendDebugRemoteRead("before skip", "remoteField", 8);
     builder.append("        skipField(readContext, remoteField);\n");
+    appendDebugRemoteRead("after skip", "remoteField", 8);
     builder.append("    }\n");
     builder.append("  }\n\n");
   }
@@ -478,6 +495,7 @@ final class StaticSerializerSourceWriter {
     for (int i = start; i < end; i++) {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
+      appendDebugRemoteRead("before read", "remoteField", 8);
       builder
           .append("        if (canReadRemoteField(remoteField, fieldsById[")
           .append(field.id)
@@ -488,13 +506,18 @@ final class StaticSerializerSourceWriter {
           .append("] = readCompatibleFieldValue(readContext, remoteField, fieldsById[")
           .append(field.id)
           .append("]);\n");
+      appendDebugRemoteRead("after read", "remoteField", 10);
       builder.append("        } else {\n");
+      appendDebugRemoteRead("before skip", "remoteField", 10);
       builder.append("          skipField(readContext, remoteField);\n");
+      appendDebugRemoteRead("after skip", "remoteField", 10);
       builder.append("        }\n");
       builder.append("        return;\n");
     }
     builder.append("      default:\n");
+    appendDebugRemoteRead("before skip", "remoteField", 8);
     builder.append("        skipField(readContext, remoteField);\n");
+    appendDebugRemoteRead("after skip", "remoteField", 8);
     builder.append("    }\n");
     builder.append("  }\n\n");
   }
@@ -517,6 +540,51 @@ final class StaticSerializerSourceWriter {
       builder.append("value, ");
     }
     builder.append("remoteField, matchedId");
+  }
+
+  private void appendDebugWrite(String stage, String fieldInfoName, int indent) {
+    if (!struct.debug) {
+      return;
+    }
+    appendIndent(indent);
+    builder
+        .append("if (FORY_STRUCT_DEBUG) { debugWriteField(\"")
+        .append(stage)
+        .append("\", ")
+        .append(fieldInfoName)
+        .append(", writeContext); }\n");
+  }
+
+  private void appendDebugRead(String stage, String fieldInfoName, int indent) {
+    if (!struct.debug) {
+      return;
+    }
+    appendIndent(indent);
+    builder
+        .append("if (FORY_STRUCT_DEBUG) { debugReadField(\"")
+        .append(stage)
+        .append("\", ")
+        .append(fieldInfoName)
+        .append(", readContext); }\n");
+  }
+
+  private void appendDebugRemoteRead(String stage, String remoteFieldName, int indent) {
+    if (!struct.debug) {
+      return;
+    }
+    appendIndent(indent);
+    builder
+        .append("if (FORY_STRUCT_DEBUG) { debugRemoteReadField(\"")
+        .append(stage)
+        .append("\", ")
+        .append(remoteFieldName)
+        .append(", readContext); }\n");
+  }
+
+  private void appendIndent(int spaces) {
+    for (int i = 0; i < spaces; i++) {
+      builder.append(' ');
+    }
   }
 
   private void writeCopy() {

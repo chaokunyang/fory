@@ -415,7 +415,7 @@ public class Types {
     }
     TypeRef<?> typeRef = d.getTypeRef();
     Class<?> rawType = typeRef.getRawType();
-    if (resolver.isCrossLanguage() && TypeUtils.isPrimitiveListClass(rawType)) {
+    if (TypeUtils.isPrimitiveListClass(rawType)) {
       if (TypeAnnotationUtils.isArrayType(d)) {
         return TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType);
       }

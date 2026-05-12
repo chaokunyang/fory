@@ -24,6 +24,7 @@ import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import java.util.Collections;
 import java.util.List;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodeGenerator;
@@ -59,6 +60,8 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   private static final int DISPATCH_GROUP_SIZE = 8;
 
   private final List<Descriptor> localDescriptors;
+  private final Class<?> remoteDescriptorClass;
+  private final boolean debug;
 
   public StaticCompatibleCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
     super(beanType, fory, GeneratedCompatibleMetaSharedSerializer.class);
@@ -66,6 +69,9 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
     localDescriptors = Collections.unmodifiableList(Descriptor.getDescriptors(beanClass));
+    remoteDescriptorClass = resolveRemoteDescriptorClass(typeDef);
+    ForyStruct foryStruct = beanClass.getAnnotation(ForyStruct.class);
+    debug = foryStruct != null && foryStruct.debug();
   }
 
   @Override
@@ -84,7 +90,8 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     String constructorCode =
         StringUtils.format(
             ""
-                + "super(${typeResolver}, ${cls}, ${typeDef}, Descriptor.getDescriptors(${cls}));\n"
+                + "super(${typeResolver}, ${cls}, ${typeDef}, Descriptor.getDescriptors(${cls}),"
+                + " ${remoteDescriptorClass});\n"
                 + "this.${generatedTypeResolver} = (${generatedTypeResolverType}) ${typeResolver};\n",
             "typeResolver",
             CONSTRUCTOR_TYPE_RESOLVER_NAME,
@@ -92,6 +99,8 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
             POJO_CLASS_TYPE_NAME,
             "typeDef",
             "_f_typeDef",
+            "remoteDescriptorClass",
+            remoteDescriptorClassLiteral(),
             "generatedTypeResolver",
             TYPE_RESOLVER_NAME,
             "generatedTypeResolverType",
@@ -119,6 +128,39 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedCompatibleMetaSharedSerializer.class);
+  }
+
+  private Class<?> resolveRemoteDescriptorClass(TypeDef typeDef) {
+    String className = typeDef.getClassName();
+    if (className.equals(beanClass.getName())) {
+      return null;
+    }
+    ClassLoader beanClassLoader = beanClass.getClassLoader();
+    try {
+      return Class.forName(className, false, beanClassLoader);
+    } catch (ClassNotFoundException | LinkageError e) {
+      try {
+        return Class.forName(className, false, StaticCompatibleCodecBuilder.class.getClassLoader());
+      } catch (ClassNotFoundException | LinkageError ignored) {
+        return null;
+      }
+    }
+  }
+
+  private String remoteDescriptorClassLiteral() {
+    if (remoteDescriptorClass == null || !canReferenceRemoteDescriptorClass()) {
+      return "null";
+    }
+    return ctx.type(remoteDescriptorClass) + ".class";
+  }
+
+  private boolean canReferenceRemoteDescriptorClass() {
+    if (!ctx.sourcePkgLevelAccessible(remoteDescriptorClass)) {
+      return false;
+    }
+    return ctx.sourcePublicAccessible(remoteDescriptorClass)
+        || CodeGenerator.getPackage(beanClass)
+            .equals(CodeGenerator.getPackage(remoteDescriptorClass));
   }
 
   @Override
@@ -304,7 +346,9 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       code.append(isRecord ? "_f_recordValues" : "_f_value");
       code.append(", _f_remoteField, _f_matchedId);\n").append("  return;\n").append("}\n");
     }
-    code.append("skipField(").append(READ_CONTEXT_NAME).append(", _f_remoteField);");
+    appendDebugRemoteRead(code, "before skip", "_f_remoteField", 0);
+    code.append("skipField(").append(READ_CONTEXT_NAME).append(", _f_remoteField);\n");
+    appendDebugRemoteRead(code, "after skip", "_f_remoteField", 0);
     return code.toString();
   }
 
@@ -317,22 +361,27 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       code.append("  case ")
           .append(i)
           .append(": {\n")
+          .append(debugRemoteReadCode("before read", "_f_remoteField", 4))
           .append("    if (hasFieldConverter(_f_remoteField)) {\n")
           .append("      Object _f_fieldValue = readRemoteField(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
+          .append(debugRemoteReadCode("after read", "_f_remoteField", 6))
           .append("      setConvertedField(_f_value, _f_fieldValue, _f_remoteField);\n")
           .append("    } else {\n")
           .append("      SerializationFieldInfo _f_localField = localFieldInfo(_f_matchedId);\n")
           .append("      if (!canReadRemoteField(_f_remoteField, _f_localField)) {\n")
+          .append(debugRemoteReadCode("before skip", "_f_remoteField", 8))
           .append("        skipField(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
+          .append(debugRemoteReadCode("after skip", "_f_remoteField", 8))
           .append("        return;\n")
           .append("      }\n")
           .append("      Object _f_fieldValue = readCompatibleFieldValue(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField, _f_localField);\n")
+          .append(debugRemoteReadCode("after read", "_f_remoteField", 6))
           .append(indent(genSetFieldCode(descriptor, valueTypeRef), 6))
           .append('\n')
           .append("    }\n")
@@ -340,9 +389,11 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append("  }\n");
     }
     code.append("  default:\n")
+        .append(debugRemoteReadCode("before skip", "_f_remoteField", 4))
         .append("    skipField(")
         .append(READ_CONTEXT_NAME)
         .append(", _f_remoteField);\n")
+        .append(debugRemoteReadCode("after skip", "_f_remoteField", 4))
         .append("}\n");
     return code.toString();
   }
@@ -360,6 +411,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       code.append("  case ")
           .append(i)
           .append(": {\n")
+          .append(debugRemoteReadCode("before read", "_f_remoteField", 4))
           .append("    SerializationFieldInfo _f_localField = localFieldInfo(_f_matchedId);\n")
           .append("    if (canReadRemoteField(_f_remoteField, _f_localField)) {\n")
           .append("      _f_recordValues[")
@@ -367,19 +419,50 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append("] = readCompatibleFieldValue(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField, _f_localField);\n")
+          .append(debugRemoteReadCode("after read", "_f_remoteField", 6))
           .append("    } else {\n")
+          .append(debugRemoteReadCode("before skip", "_f_remoteField", 6))
           .append("      skipField(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
+          .append(debugRemoteReadCode("after skip", "_f_remoteField", 6))
           .append("    }\n")
           .append("    return;\n")
           .append("  }\n");
     }
     code.append("  default:\n")
+        .append(debugRemoteReadCode("before skip", "_f_remoteField", 4))
         .append("    skipField(")
         .append(READ_CONTEXT_NAME)
         .append(", _f_remoteField);\n")
+        .append(debugRemoteReadCode("after skip", "_f_remoteField", 4))
         .append("}\n");
+    return code.toString();
+  }
+
+  private void appendDebugRemoteRead(
+      StringBuilder code, String stage, String remoteField, int indent) {
+    if (!debug) {
+      return;
+    }
+    code.append(debugRemoteReadCode(stage, remoteField, indent));
+  }
+
+  private String debugRemoteReadCode(String stage, String remoteField, int indent) {
+    if (!debug) {
+      return "";
+    }
+    StringBuilder code = new StringBuilder();
+    for (int i = 0; i < indent; i++) {
+      code.append(' ');
+    }
+    code.append("if (org.apache.fory.util.Utils.DEBUG_OUTPUT_ENABLED) { debugRemoteReadField(\"")
+        .append(stage)
+        .append("\", ")
+        .append(remoteField)
+        .append(", ")
+        .append(READ_CONTEXT_NAME)
+        .append("); }\n");
     return code.toString();
   }
 

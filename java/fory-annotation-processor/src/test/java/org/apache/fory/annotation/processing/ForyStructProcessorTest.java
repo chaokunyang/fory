@@ -63,7 +63,7 @@ public class ForyStructProcessorTest {
     Assert.assertTrue(result.success, result.diagnostics());
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.SimpleStruct");
-      Class<?> serializerType = loader.loadClass("test.SimpleStruct__ForyStaticSerializer__");
+      Class<?> serializerType = loader.loadClass("test.SimpleStruct__ForyNativeSerializer__");
       Assert.assertTrue(StaticGeneratedStructSerializer.class.isAssignableFrom(serializerType));
 
       Object value = type.getConstructor().newInstance();
@@ -186,8 +186,10 @@ public class ForyStructProcessorTest {
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
     try (URLClassLoader loader = result.classLoader()) {
-      Class<?> serializer = loader.loadClass("test.Outer$Inner__ForyStaticSerializer__");
-      Assert.assertTrue(StaticGeneratedStructSerializer.class.isAssignableFrom(serializer));
+      Class<?> xlangSerializer = loader.loadClass("test.Outer$Inner__ForySerializer__");
+      Class<?> nativeSerializer = loader.loadClass("test.Outer$Inner__ForyNativeSerializer__");
+      Assert.assertTrue(StaticGeneratedStructSerializer.class.isAssignableFrom(xlangSerializer));
+      Assert.assertTrue(StaticGeneratedStructSerializer.class.isAssignableFrom(nativeSerializer));
     }
   }
 
@@ -204,7 +206,7 @@ public class ForyStructProcessorTest {
                 + "    public Inner() {}\n"
                 + "  }\n"
                 + "}\n"
-                + "class Outer$Inner__ForyStaticSerializer__ {}\n");
+                + "class Outer$Inner__ForySerializer__ {}\n");
     Assert.assertFalse(result.success);
     Assert.assertTrue(result.diagnostics().contains("collides"), result.diagnostics());
   }
@@ -230,7 +232,7 @@ public class ForyStructProcessorTest {
     Assert.assertTrue(result.success, result.diagnostics());
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.MetadataStruct");
-      Class<?> serializerType = loader.loadClass("test.MetadataStruct__ForyStaticSerializer__");
+      Class<?> serializerType = loader.loadClass("test.MetadataStruct__ForySerializer__");
       Fory fory =
           Fory.builder()
               .withClassLoader(loader)
@@ -274,7 +276,7 @@ public class ForyStructProcessorTest {
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
     String generatedSource =
-        result.generatedSource("test/RecordStruct__ForyStaticSerializer__.java");
+        result.generatedSource("test/RecordStruct__ForyNativeSerializer__.java");
     Assert.assertTrue(generatedSource.contains("private void readCompatibleRecordField0("));
     Assert.assertTrue(generatedSource.contains("switch (matchedId)"));
     try (URLClassLoader loader = result.classLoader()) {
@@ -327,7 +329,7 @@ public class ForyStructProcessorTest {
     Assert.assertTrue(writerResult.success, writerResult.diagnostics());
     Assert.assertTrue(readerResult.success, readerResult.diagnostics());
     String generatedSource =
-        readerResult.generatedSource("test/EvolvingStruct__ForyStaticSerializer__.java");
+        readerResult.generatedSource("test/EvolvingStruct__ForyNativeSerializer__.java");
     Assert.assertTrue(
         generatedSource.contains(
             "readCompatibleField(readContext, value, remoteField, matchedId(remoteField))"));

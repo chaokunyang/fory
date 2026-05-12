@@ -45,7 +45,9 @@ import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
 import org.apache.fory.serializer.MetaSharedSerializer;
+import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -407,6 +409,11 @@ public class TypeDef implements Serializable {
     }
     List<Descriptor> descriptors = new ArrayList<>(fieldsInfo.size());
     boolean isXlang = resolver.isCrossLanguage();
+    Collection<Descriptor> remoteDescriptors = null;
+    Map<String, Descriptor> remoteDescriptorsMap = null;
+    Map<Short, Descriptor> remoteFieldIdToDescriptorMap = null;
+    Map<String, Map<String, Descriptor>> remoteDefinedClassDescriptors = new HashMap<>();
+    Map<String, Map<Short, Descriptor>> remoteDefinedClassFieldIds = new HashMap<>();
     for (FieldInfo fieldInfo : fieldsInfo) {
       Descriptor descriptor;
       if (fieldInfo.hasFieldId()) {
@@ -421,9 +428,120 @@ public class TypeDef implements Serializable {
                   definedClass + "." + StringUtils.lowerCamelToLowerUnderscore(fieldName));
         }
       }
-      descriptors.add(fieldInfo.toDescriptor(resolver, descriptor));
+      boolean remoteOnly = false;
+      if (descriptor == null) {
+        if (remoteDescriptors == null) {
+          remoteDescriptors = tryLoadRemoteDescriptors(resolver, cls);
+          if (remoteDescriptors != null) {
+            remoteDescriptorsMap = new HashMap<>();
+            remoteFieldIdToDescriptorMap = new HashMap<>();
+            populateDescriptorMaps(
+                remoteDescriptors, remoteDescriptorsMap, remoteFieldIdToDescriptorMap);
+          }
+        }
+        if (remoteDescriptors != null) {
+          if (fieldInfo.hasFieldId()) {
+            descriptor = remoteFieldIdToDescriptorMap.get(fieldInfo.getFieldId());
+          } else {
+            descriptor =
+                remoteDescriptorsMap.get(
+                    fieldInfo.getDefinedClass() + "." + fieldInfo.getFieldName());
+          }
+          remoteOnly = descriptor != null;
+        }
+        if (descriptor == null) {
+          String definedClass = fieldInfo.getDefinedClass();
+          Map<String, Descriptor> definedClassDescriptors =
+              remoteDefinedClassDescriptors.get(definedClass);
+          Map<Short, Descriptor> definedClassFieldIds =
+              remoteDefinedClassFieldIds.get(definedClass);
+          if (definedClassDescriptors == null) {
+            Collection<Descriptor> descriptorsForDefinedClass =
+                tryLoadDescriptorsForClassName(resolver, definedClass, cls);
+            if (descriptorsForDefinedClass != null) {
+              definedClassDescriptors = new HashMap<>();
+              definedClassFieldIds = new HashMap<>();
+              populateDescriptorMaps(
+                  descriptorsForDefinedClass, definedClassDescriptors, definedClassFieldIds);
+              remoteDefinedClassDescriptors.put(definedClass, definedClassDescriptors);
+              remoteDefinedClassFieldIds.put(definedClass, definedClassFieldIds);
+            }
+          }
+          if (definedClassDescriptors != null) {
+            if (fieldInfo.hasFieldId()) {
+              descriptor = definedClassFieldIds.get(fieldInfo.getFieldId());
+            } else {
+              descriptor =
+                  definedClassDescriptors.get(
+                      fieldInfo.getDefinedClass() + "." + fieldInfo.getFieldName());
+            }
+            remoteOnly = descriptor != null;
+          }
+        }
+      }
+      Descriptor resolved = fieldInfo.toDescriptor(resolver, descriptor);
+      if (remoteOnly) {
+        resolved =
+            new DescriptorBuilder(resolved)
+                .field(null)
+                .readMethod(null)
+                .writeMethod(null)
+                .fieldConverter(null)
+                .build();
+      }
+      descriptors.add(resolved);
     }
     return descriptors;
+  }
+
+  private static void populateDescriptorMaps(
+      Collection<Descriptor> descriptors,
+      Map<String, Descriptor> descriptorsMap,
+      Map<Short, Descriptor> fieldIdToDescriptorMap) {
+    for (Descriptor descriptor : descriptors) {
+      descriptorsMap.put(descriptor.getDeclaringClass() + "." + descriptor.getName(), descriptor);
+      if (descriptor.hasForyFieldId()) {
+        fieldIdToDescriptorMap.put((short) descriptor.getForyFieldId(), descriptor);
+      }
+    }
+  }
+
+  private Collection<Descriptor> tryLoadRemoteDescriptors(
+      TypeResolver resolver, Class<?> localCls) {
+    if (resolver.isCrossLanguage() || !(resolver instanceof ClassResolver)) {
+      return null;
+    }
+    try {
+      Class<?> remoteCls =
+          ((ClassResolver) resolver)
+              .loadClassForMeta(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
+      if (remoteCls == localCls || UnknownClass.class.isAssignableFrom(remoteCls)) {
+        return null;
+      }
+      // Native TypeDef collection/map metadata intentionally does not carry Java implementation
+      // classes. When the writer class is locally loadable, use its descriptors only to recover
+      // descriptor-owned payload details such as primitive-list carriers; accessors are cleared
+      // before the descriptor is returned so compatible readers still skip remote-only fields.
+      return resolver.getFieldDescriptors(remoteCls, true);
+    } catch (RuntimeException e) {
+      return null;
+    }
+  }
+
+  private Collection<Descriptor> tryLoadDescriptorsForClassName(
+      TypeResolver resolver, String className, Class<?> localCls) {
+    if (resolver.isCrossLanguage() || !(resolver instanceof ClassResolver)) {
+      return null;
+    }
+    try {
+      Class<?> remoteCls = ((ClassResolver) resolver).loadClassForMeta(className, false, -1);
+      if (remoteCls == localCls || UnknownClass.class.isAssignableFrom(remoteCls)) {
+        return null;
+      }
+      return resolver.getFieldDescriptors(remoteCls, true);
+    } catch (RuntimeException e) {
+      return null;
+    }
   }
 
   public static TypeDef buildTypeDef(TypeResolver resolver, Class<?> cls) {

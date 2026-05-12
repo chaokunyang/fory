@@ -86,6 +86,17 @@ public final class ForyStructProcessor extends AbstractProcessor {
   // javac's public tree API reflectively while keeping this processor targetable to Java 8.
   private Object trees;
 
+  private enum SerializerMode {
+    XLANG("__ForySerializer__"),
+    NATIVE("__ForyNativeSerializer__");
+
+    final String serializerSuffix;
+
+    SerializerMode(String serializerSuffix) {
+      this.serializerSuffix = serializerSuffix;
+    }
+  }
+
   @Override
   public synchronized void init(ProcessingEnvironment processingEnv) {
     super.init(processingEnv);
@@ -128,8 +139,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
         continue;
       }
       try {
-        SourceStruct struct = buildStruct(type);
-        if (struct != null) {
+        for (SourceStruct struct : buildStructs(type)) {
           emit(struct, type);
         }
       } catch (InvalidStructException e) {
@@ -144,7 +154,14 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return true;
   }
 
-  private SourceStruct buildStruct(TypeElement type) {
+  private List<SourceStruct> buildStructs(TypeElement type) {
+    List<SourceStruct> structs = new ArrayList<>(2);
+    structs.add(buildStruct(type, SerializerMode.XLANG));
+    structs.add(buildStruct(type, SerializerMode.NATIVE));
+    return structs;
+  }
+
+  private SourceStruct buildStruct(TypeElement type, SerializerMode mode) {
     if (type.getModifiers().contains(Modifier.PRIVATE)) {
       throw new InvalidStructException("@ForyStruct classes must not be private", type);
     }
@@ -163,7 +180,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
     String binaryName = elements.getBinaryName(type).toString();
     String serializerName =
         binaryName.substring(packageName.isEmpty() ? 0 : packageName.length() + 1)
-            + "__ForyStaticSerializer__";
+            + mode.serializerSuffix;
     String qualifiedSerializerName =
         packageName.isEmpty() ? serializerName : packageName + "." + serializerName;
     TypeElement existing = elements.getTypeElement(qualifiedSerializerName);
@@ -193,7 +210,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
       for (VariableElement field : fields) {
         boolean serialized = isSerializableRecordField(field, type);
         int id = serialized ? serializedId++ : -1;
-        SourceField sourceField = buildField(id, type, packageName, field, true, serialized);
+        SourceField sourceField = buildField(id, type, packageName, field, true, serialized, mode);
         recordConstructorFields.add(sourceField);
         if (serialized) {
           validateForyFieldId(binaryName, fieldIds, field);
@@ -204,7 +221,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
       for (int i = 0; i < fields.size(); i++) {
         VariableElement field = fields.get(i);
         validateForyFieldId(binaryName, fieldIds, field);
-        SourceField sourceField = buildField(i, type, packageName, field, false, true);
+        SourceField sourceField = buildField(i, type, packageName, field, false, true, mode);
         sourceFields.add(sourceField);
         recordConstructorFields.add(sourceField);
       }
@@ -214,8 +231,25 @@ public final class ForyStructProcessor extends AbstractProcessor {
         canonicalName(type.asType()),
         serializerName,
         record,
+        foryStructDebug(type),
         sourceFields,
         recordConstructorFields);
+  }
+
+  private boolean foryStructDebug(TypeElement type) {
+    AnnotationMirror mirror = annotationMirror(type, FORY_STRUCT);
+    if (mirror == null) {
+      return false;
+    }
+    Map<? extends ExecutableElement, ? extends AnnotationValue> values =
+        elements.getElementValuesWithDefaults(mirror);
+    for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
+        values.entrySet()) {
+      if (entry.getKey().getSimpleName().contentEquals("debug")) {
+        return Boolean.TRUE.equals(entry.getValue().getValue());
+      }
+    }
+    return false;
   }
 
   private void validateForyFieldId(
@@ -249,7 +283,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
       String generatedPackage,
       VariableElement field,
       boolean record,
-      boolean serialized) {
+      boolean serialized,
+      SerializerMode mode) {
     Set<Modifier> modifiers = field.getModifiers();
     if (!record && modifiers.contains(Modifier.FINAL)) {
       throw new InvalidStructException(
@@ -259,8 +294,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
           field);
     }
     ForyFieldMeta foryField = foryField(field);
-    boolean nullable =
-        foryField.hasForyField ? foryField.nullable : !field.asType().getKind().isPrimitive();
+    boolean nullable = fieldNullable(field.asType(), foryField, mode);
     SourceTypeNode typeNode = buildFieldTypeNode(field, nullable);
     String erasedType = canonicalName(types.erasure(field.asType()));
     String declaringClass =
@@ -314,6 +348,27 @@ public final class ForyStructProcessor extends AbstractProcessor {
         nullable,
         foryField.hasForyField && foryField.ref,
         foryField.dynamic);
+  }
+
+  private boolean fieldNullable(TypeMirror type, ForyFieldMeta foryField, SerializerMode mode) {
+    if (type.getKind().isPrimitive()) {
+      return false;
+    }
+    if (mode == SerializerMode.NATIVE) {
+      return true;
+    }
+    if (foryField.hasForyField) {
+      return foryField.nullable;
+    }
+    return isOptionalType(type);
+  }
+
+  private boolean isOptionalType(TypeMirror type) {
+    String erasedType = canonicalName(types.erasure(type));
+    return erasedType.equals("java.util.Optional")
+        || erasedType.equals("java.util.OptionalInt")
+        || erasedType.equals("java.util.OptionalLong")
+        || erasedType.equals("java.util.OptionalDouble");
   }
 
   private List<VariableElement> serializableFields(TypeElement type) {

@@ -28,6 +28,7 @@ final class SourceStruct {
   final String typeName;
   final String serializerName;
   final boolean record;
+  final boolean debug;
   final boolean hasNestedCompatibleStructFields;
   final List<SourceField> fields;
   final List<SourceField> recordConstructorFields;
@@ -37,12 +38,14 @@ final class SourceStruct {
       String typeName,
       String serializerName,
       boolean record,
+      boolean debug,
       List<SourceField> fields,
       List<SourceField> recordConstructorFields) {
     this.packageName = packageName;
     this.typeName = typeName;
     this.serializerName = serializerName;
     this.record = record;
+    this.debug = debug;
     this.fields = Collections.unmodifiableList(new ArrayList<>(fields));
     this.recordConstructorFields =
         Collections.unmodifiableList(new ArrayList<>(recordConstructorFields));

@@ -88,6 +88,20 @@ public class ExampleStaticGeneratedSerializerTest {
     return new Object[][] {{false}, {true}};
   }
 
+  @DataProvider
+  public static Object[][] runtimeModes() {
+    return new Object[][] {
+      {false, false, false},
+      {true, false, false},
+      {false, false, true},
+      {true, false, true},
+      {false, true, false},
+      {true, true, false},
+      {false, true, true},
+      {true, true, true}
+    };
+  }
+
   @Test(dataProvider = "modes")
   public void testStaticClass(boolean xlang, boolean compatible) throws Exception {
     ExampleMessage value = newStruct(ExampleMessage.class);
@@ -123,6 +137,22 @@ public class ExampleStaticGeneratedSerializerTest {
     Assert.assertEquals(result.fixedI32Value, value.fixedI32Value);
     Assert.assertEquals(result.stringValue, value.stringValue);
     Assert.assertEquals(result.added, "default");
+  }
+
+  @Test(dataProvider = "runtimeModes")
+  public void testRuntimeCompatibleEmptyReaderSkipsExampleMessage(
+      boolean xlang, boolean writerCodegen, boolean readerCodegen) throws Exception {
+    RuntimeExampleMessage value = newStruct(RuntimeExampleMessage.class);
+    Fory writer = fory(RuntimeExampleMessage.class, xlang, true, writerCodegen);
+    Fory emptyReader = fory(RuntimeEmptyMessage.class, xlang, true, readerCodegen);
+
+    writer.setMetaWriteContext(new MetaWriteContext());
+    byte[] bytes = writer.serialize(value);
+    assertNotStaticSerializer(writer, RuntimeExampleMessage.class);
+
+    emptyReader.setMetaReadContext(new MetaReadContext());
+    Assert.assertNotNull(emptyReader.deserialize(bytes, RuntimeEmptyMessage.class));
+    assertNotStaticSerializer(emptyReader, RuntimeEmptyMessage.class);
   }
 
   @Test(dataProvider = "xlangModes")
@@ -187,6 +217,14 @@ public class ExampleStaticGeneratedSerializerTest {
   @ForyStruct
   public static class EmptyMessage {
     public EmptyMessage() {}
+  }
+
+  public static class RuntimeEmptyMessage {
+    public RuntimeEmptyMessage() {}
+  }
+
+  public static class RuntimeExampleMessage extends ExampleMessage {
+    public RuntimeExampleMessage() {}
   }
 
   @ForyStruct
@@ -272,6 +310,15 @@ public class ExampleStaticGeneratedSerializerTest {
       serializer = ((DeferedLazySerializer) serializer).resolveSerializer();
     }
     Assert.assertTrue(
+        serializer instanceof StaticGeneratedStructSerializer, serializer.getClass().getName());
+  }
+
+  private static void assertNotStaticSerializer(Fory fory, Class<?> type) {
+    Serializer<?> serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
+    if (serializer instanceof DeferedLazySerializer) {
+      serializer = ((DeferedLazySerializer) serializer).resolveSerializer();
+    }
+    Assert.assertFalse(
         serializer instanceof StaticGeneratedStructSerializer, serializer.getClass().getName());
   }
 

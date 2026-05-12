@@ -42,6 +42,7 @@ import org.apache.fory.context.RefReader;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
+import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
@@ -53,6 +54,7 @@ import org.apache.fory.type.BFloat16Array;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Float16Array;
+import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 
@@ -99,6 +101,35 @@ final class CompatibleCollectionArrayReader {
           && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
         return new ReadAction(
             READ_ARRAY_TO_LIST, peerArrayTypeId, localListElementTypeId, field.getType());
+      }
+    }
+    return null;
+  }
+
+  static ReadAction readAction(
+      TypeResolver resolver, FieldInfo remoteFieldInfo, Descriptor localDescriptor) {
+    if (localDescriptor == null || !resolver.isCrossLanguage()) {
+      return null;
+    }
+    FieldTypes.FieldType remoteFieldType = remoteFieldInfo.getFieldType();
+    TypeRef<?> localType = localDescriptor.getTypeRef();
+    int peerListElementTypeId = listElementTypeId(remoteFieldType);
+    if (peerListElementTypeId != Types.UNKNOWN) {
+      int localArrayTypeId = arrayTypeId(localType);
+      if (localArrayTypeId != Types.UNKNOWN
+          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
+        return new ReadAction(
+            READ_LIST_TO_ARRAY, localArrayTypeId, peerListElementTypeId, localDescriptor.getType());
+      }
+      return null;
+    }
+    int peerArrayTypeId = arrayTypeId(remoteFieldType);
+    if (peerArrayTypeId != Types.UNKNOWN) {
+      int localListElementTypeId = listElementTypeId(localType);
+      if (localListElementTypeId != Types.UNKNOWN
+          && peerArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+        return new ReadAction(
+            READ_ARRAY_TO_LIST, peerArrayTypeId, localListElementTypeId, localDescriptor.getType());
       }
     }
     return null;
@@ -187,11 +218,16 @@ final class CompatibleCollectionArrayReader {
 
   private static int listElementTypeId(TypeRef<?> typeRef) {
     TypeExtMeta extMeta = typeRef.getTypeExtMeta();
-    if (extMeta == null || extMeta.typeId() != Types.LIST) {
-      return Types.UNKNOWN;
+    if (extMeta != null && extMeta.typeId() == Types.LIST) {
+      TypeExtMeta elementExtMeta = TypeUtils.getElementType(typeRef).getTypeExtMeta();
+      return elementExtMeta == null ? Types.UNKNOWN : elementExtMeta.typeId();
     }
-    TypeExtMeta elementExtMeta = TypeUtils.getElementType(typeRef).getTypeExtMeta();
-    return elementExtMeta == null ? Types.UNKNOWN : elementExtMeta.typeId();
+    if (TypeUtils.isPrimitiveListClass(typeRef.getRawType())) {
+      return extMeta != null && Types.isPrimitiveType(extMeta.typeId())
+          ? extMeta.typeId()
+          : TypeAnnotationUtils.getDefaultPrimitiveListElementTypeId(typeRef.getRawType());
+    }
+    return Types.UNKNOWN;
   }
 
   private static int arrayTypeId(FieldTypes.FieldType fieldType) {
@@ -208,6 +244,35 @@ final class CompatibleCollectionArrayReader {
     TypeExtMeta extMeta = typeRef.getTypeExtMeta();
     if (extMeta != null && Types.isPrimitiveArray(extMeta.typeId())) {
       return extMeta.typeId();
+    }
+    Class<?> rawType = typeRef.getRawType();
+    if (rawType.isArray() && rawType.getComponentType().isPrimitive()) {
+      return primitiveArrayTypeId(rawType.getComponentType());
+    }
+    return Types.UNKNOWN;
+  }
+
+  private static int primitiveArrayTypeId(Class<?> componentType) {
+    if (componentType == boolean.class) {
+      return Types.BOOL_ARRAY;
+    }
+    if (componentType == byte.class) {
+      return Types.INT8_ARRAY;
+    }
+    if (componentType == short.class) {
+      return Types.INT16_ARRAY;
+    }
+    if (componentType == int.class) {
+      return Types.INT32_ARRAY;
+    }
+    if (componentType == long.class) {
+      return Types.INT64_ARRAY;
+    }
+    if (componentType == float.class) {
+      return Types.FLOAT32_ARRAY;
+    }
+    if (componentType == double.class) {
+      return Types.FLOAT64_ARRAY;
     }
     return Types.UNKNOWN;
   }

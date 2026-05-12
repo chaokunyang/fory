@@ -199,6 +199,9 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final boolean canReadRemoteField(
       RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
+    if (remoteField.compatibleCollectionArrayReadAction != null) {
+      return true;
+    }
     Class<?> remoteType = remoteField.serializationFieldInfo.typeRef.getRawType();
     Class<?> localType = localFieldInfo.typeRef.getRawType();
     return FieldConverters.canConvert(remoteType, localType);
@@ -207,6 +210,9 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   protected final Object readCompatibleFieldValue(
       ReadContext readContext, RemoteFieldInfo remoteField, SerializationFieldInfo localFieldInfo) {
     Object fieldValue = readRemoteField(readContext, remoteField);
+    if (remoteField.compatibleCollectionArrayReadAction != null) {
+      return fieldValue;
+    }
     Class<?> remoteType = remoteField.serializationFieldInfo.typeRef.getRawType();
     Class<?> localType = localFieldInfo.typeRef.getRawType();
     return FieldConverters.convertValue(remoteType, localType, fieldValue);
@@ -270,9 +276,16 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       int matchedId = matchField(fieldInfo, fieldIds, fields);
       SerializationFieldInfo serializationFieldInfo =
           FieldGroups.buildFieldInfo(typeResolver, descriptor);
+      Descriptor localDescriptor =
+          matchedId == UNKNOWN_FIELD ? null : localDescriptors.get(matchedId);
       remoteFields.add(
           new RemoteFieldInfo(
-              typeResolver, matchedId, fieldInfo, descriptor, serializationFieldInfo));
+              typeResolver,
+              matchedId,
+              fieldInfo,
+              descriptor,
+              serializationFieldInfo,
+              localDescriptor));
     }
     return Collections.unmodifiableList(remoteFields);
   }
@@ -325,13 +338,14 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
         int matchedId,
         FieldInfo fieldInfo,
         Descriptor descriptor,
-        SerializationFieldInfo serializationFieldInfo) {
+        SerializationFieldInfo serializationFieldInfo,
+        Descriptor localDescriptor) {
       this.matchedId = matchedId;
       this.fieldInfo = fieldInfo;
       this.descriptor = descriptor;
       this.serializationFieldInfo = serializationFieldInfo;
       this.compatibleCollectionArrayReadAction =
-          CompatibleCollectionArrayReader.readAction(typeResolver, descriptor);
+          CompatibleCollectionArrayReader.readAction(typeResolver, fieldInfo, localDescriptor);
     }
   }
 }

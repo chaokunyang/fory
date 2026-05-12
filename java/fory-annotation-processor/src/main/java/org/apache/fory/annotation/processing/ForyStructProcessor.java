@@ -258,11 +258,13 @@ public final class ForyStructProcessor extends AbstractProcessor {
               + "; use a record component or mark the field @Ignore/transient",
           field);
     }
-    SourceTypeNode typeNode = buildFieldTypeNode(field);
+    ForyFieldMeta foryField = foryField(field);
+    boolean nullable =
+        foryField.hasForyField ? foryField.nullable : !field.asType().getKind().isPrimitive();
+    SourceTypeNode typeNode = buildFieldTypeNode(field, nullable);
     String erasedType = canonicalName(types.erasure(field.asType()));
     String declaringClass =
         elements.getBinaryName((TypeElement) field.getEnclosingElement()).toString();
-    ForyFieldMeta foryField = foryField(field);
 
     SourceField.AccessKind readKind;
     SourceField.AccessKind writeKind;
@@ -309,7 +311,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
         writeAccess,
         foryField.hasForyField,
         foryField.id,
-        foryField.hasForyField ? foryField.nullable : !typeNode.primitive,
+        nullable,
         foryField.hasForyField && foryField.ref,
         foryField.dynamic);
   }
@@ -521,8 +523,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return value;
   }
 
-  private SourceTypeNode buildFieldTypeNode(VariableElement field) {
-    return buildTypeNode(field.asType(), typeTree(field));
+  private SourceTypeNode buildFieldTypeNode(VariableElement field, boolean nullable) {
+    return buildTypeNode(field.asType(), typeTree(field), Boolean.toString(nullable));
   }
 
   private Object typeTree(VariableElement field) {
@@ -541,38 +543,41 @@ public final class ForyStructProcessor extends AbstractProcessor {
   }
 
   private SourceTypeNode buildTypeNode(TypeMirror type) {
-    return buildTypeNode(type, null);
+    return buildTypeNode(type, null, "true");
   }
 
-  private SourceTypeNode buildTypeNode(TypeMirror type, Object tree) {
+  private SourceTypeNode buildTypeNode(TypeMirror type, Object tree, String typeExtNullable) {
     TypeKind kind = type.getKind();
     TypeTreeInfo treeInfo = typeTreeInfo(tree);
     if (kind == TypeKind.TYPEVAR) {
       TypeVariable typeVariable = (TypeVariable) type;
-      return buildTypeNode(typeVariable.getUpperBound());
+      return buildTypeNode(typeVariable.getUpperBound(), null, typeExtNullable);
     }
     if (kind == TypeKind.WILDCARD) {
       WildcardType wildcard = (WildcardType) type;
       TypeMirror bound = wildcard.getExtendsBound();
       return buildTypeNode(
-          bound == null ? elements.getTypeElement("java.lang.Object").asType() : bound);
+          bound == null ? elements.getTypeElement("java.lang.Object").asType() : bound,
+          null,
+          typeExtNullable);
     }
     List<SourceTypeNode> arguments = new ArrayList<>();
     SourceTypeNode componentType = null;
     if (kind == TypeKind.ARRAY) {
       componentType =
-          buildTypeNode(((ArrayType) type).getComponentType(), treeInfo.arrayComponentTree());
+          buildTypeNode(
+              ((ArrayType) type).getComponentType(), treeInfo.arrayComponentTree(), "true");
     } else if (type instanceof DeclaredType) {
       List<?> argumentTrees = treeInfo.typeArgumentTrees();
       int index = 0;
       for (TypeMirror argument : ((DeclaredType) type).getTypeArguments()) {
         Object argumentTree = index < argumentTrees.size() ? argumentTrees.get(index) : null;
-        arguments.add(buildTypeNode(argument, argumentTree));
+        arguments.add(buildTypeNode(argument, argumentTree, "true"));
         index++;
       }
     }
     String rawType = canonicalName(types.erasure(type));
-    String extMeta = typeExtMetaExpression(type, rawType, treeInfo.annotations);
+    String extMeta = typeExtMetaExpression(type, rawType, treeInfo.annotations, typeExtNullable);
     boolean primitive = kind.isPrimitive();
     boolean nestedStruct = isForyStructType(type);
     return new SourceTypeNode(
@@ -595,7 +600,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return element instanceof TypeElement && hasAnnotation(element, FORY_STRUCT);
   }
 
-  private String typeExtMetaExpression(TypeMirror type, String rawType, List<?> treeAnnotations) {
+  private String typeExtMetaExpression(
+      TypeMirror type, String rawType, List<?> treeAnnotations, String nullable) {
     String typeId = scalarTypeId(type, rawType, treeAnnotations);
     TypeUseAnnotation ref = typeUseAnnotation(type, treeAnnotations, REF);
     if (typeId == null && ref == null) {
@@ -603,7 +609,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
     }
     return "meta("
         + (typeId == null ? "Types.UNKNOWN" : typeId)
-        + ", true, "
+        + ", "
+        + nullable
+        + ", "
         + (ref != null && booleanValue(ref, "enable", true))
         + ")";
   }

@@ -255,6 +255,7 @@ public class ForyStructProcessorTest {
       Descriptor code = descriptor(serializer.getDescriptors(), "code");
       Assert.assertTrue(code.getTypeRef().hasTypeExtMeta());
       Assert.assertEquals(code.getTypeRef().getTypeExtMeta().typeId(), Types.UINT16);
+      Assert.assertFalse(code.getTypeRef().getTypeExtMeta().nullable());
       Assert.assertFalse(code.getTypeRef().getTypeExtMeta().trackingRef());
     }
   }
@@ -476,14 +477,97 @@ public class ForyStructProcessorTest {
     }
   }
 
+  @Test
+  public void testGraalvmStaticCompatibleRecordSerializerConvertsRemoteField() throws Exception {
+    assumeRecordSupport();
+    if (AndroidSupport.IS_ANDROID) {
+      return;
+    }
+    CompilationResult writerResult =
+        compile(
+            "test.NativeRecordStruct",
+            "package test;\n"
+                + "public class NativeRecordStruct {\n"
+                + "  public String id;\n"
+                + "  public NativeRecordStruct() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.NativeRecordStruct",
+            "package test;\n" + "public record NativeRecordStruct(int id) {}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.NativeRecordStruct");
+      Class<?> readerType = readerLoader.loadClass("test.NativeRecordStruct");
+      Fory writer = compatibleFory(writerLoader, false);
+      Fory reader = compatibleFory(readerLoader, true);
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(writerType, writerValue, "id", "73");
+
+      Object result = generatedCompatibleRead(writer, reader, writerType, readerType, writerValue);
+      Assert.assertSame(result.getClass(), readerType);
+      Assert.assertEquals(invoke(readerType, result, "id"), 73);
+    }
+  }
+
+  @Test
+  public void testGraalvmStaticCompatibleSerializerUsesListArrayAction() throws Exception {
+    if (AndroidSupport.IS_ANDROID) {
+      return;
+    }
+    CompilationResult writerResult =
+        compile(
+            "test.NativeArrayShapeStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
+                + "import org.apache.fory.collection.Int32List;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
+                + "public class NativeArrayShapeStruct {\n"
+                + "  @Int32Type(encoding = Int32Encoding.FIXED) public Int32List values;\n"
+                + "  public NativeArrayShapeStruct() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.NativeArrayShapeStruct",
+            "package test;\n"
+                + "public class NativeArrayShapeStruct {\n"
+                + "  public int[] values;\n"
+                + "  public NativeArrayShapeStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.NativeArrayShapeStruct");
+      Class<?> readerType = readerLoader.loadClass("test.NativeArrayShapeStruct");
+      Fory writer = xlangCompatibleFory(writerLoader, writerType, true, "NativeArrayShapeStruct");
+      Fory reader = xlangCompatibleFory(readerLoader, readerType, true, "NativeArrayShapeStruct");
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(
+          writerType,
+          writerValue,
+          "values",
+          new org.apache.fory.collection.Int32List(new int[] {4, 5, 6}));
+
+      Object result = generatedCompatibleRead(writer, reader, writerType, readerType, writerValue);
+      Assert.assertSame(result.getClass(), readerType);
+      Assert.assertTrue(
+          Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {4, 5, 6}));
+    }
+  }
+
   private static void assertStaticRuntimeRoundTrip(boolean compatible) throws Exception {
     CompilationResult staticResult =
         compile(
             "test.RoundTripStruct",
             "package test;\n"
+                + "import org.apache.fory.annotation.UInt16Type;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "@ForyStruct public class RoundTripStruct {\n"
                 + "  public int id;\n"
+                + "  public @UInt16Type int code;\n"
                 + "  public String name;\n"
                 + "  public RoundTripStruct() {}\n"
                 + "}\n");
@@ -491,8 +575,10 @@ public class ForyStructProcessorTest {
         compile(
             "test.RoundTripStruct",
             "package test;\n"
+                + "import org.apache.fory.annotation.UInt16Type;\n"
                 + "public class RoundTripStruct {\n"
                 + "  public int id;\n"
+                + "  public @UInt16Type int code;\n"
                 + "  public String name;\n"
                 + "  public RoundTripStruct() {}\n"
                 + "}\n");
@@ -518,20 +604,24 @@ public class ForyStructProcessorTest {
 
       Object staticValue = staticType.getConstructor().newInstance();
       setField(staticType, staticValue, "id", 101);
+      setField(staticType, staticValue, "code", 513);
       setField(staticType, staticValue, "name", compatible ? "compatible-static" : "static");
       Object runtimeRoundTrip = runtimeFory.deserialize(staticFory.serialize(staticValue));
       Assert.assertSame(runtimeRoundTrip.getClass(), runtimeType);
       Assert.assertEquals(getField(runtimeType, runtimeRoundTrip, "id"), 101);
+      Assert.assertEquals(getField(runtimeType, runtimeRoundTrip, "code"), 513);
       Assert.assertEquals(
           getField(runtimeType, runtimeRoundTrip, "name"),
           compatible ? "compatible-static" : "static");
 
       Object runtimeValue = runtimeType.getConstructor().newInstance();
       setField(runtimeType, runtimeValue, "id", 202);
+      setField(runtimeType, runtimeValue, "code", 1024);
       setField(runtimeType, runtimeValue, "name", compatible ? "compatible-runtime" : "runtime");
       Object staticRoundTrip = staticFory.deserialize(runtimeFory.serialize(runtimeValue));
       Assert.assertSame(staticRoundTrip.getClass(), staticType);
       Assert.assertEquals(getField(staticType, staticRoundTrip, "id"), 202);
+      Assert.assertEquals(getField(staticType, staticRoundTrip, "code"), 1024);
       Assert.assertEquals(
           getField(staticType, staticRoundTrip, "name"),
           compatible ? "compatible-runtime" : "runtime");
@@ -546,6 +636,114 @@ public class ForyStructProcessorTest {
         .withCompatible(compatible)
         .requireClassRegistration(true)
         .buildThreadSafeForyPool(1);
+  }
+
+  @Test
+  public void testStaticCompatibleReadUsesListArrayAction() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.ArrayShapeStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.Int32Type;\n"
+                + "import org.apache.fory.collection.Int32List;\n"
+                + "import org.apache.fory.config.Int32Encoding;\n"
+                + "@ForyStruct public class ArrayShapeStruct {\n"
+                + "  @Int32Type(encoding = Int32Encoding.FIXED) public Int32List values;\n"
+                + "  public ArrayShapeStruct() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.ArrayShapeStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class ArrayShapeStruct {\n"
+                + "  public int[] values;\n"
+                + "  public ArrayShapeStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.ArrayShapeStruct");
+      Class<?> readerType = readerLoader.loadClass("test.ArrayShapeStruct");
+      Fory writer = xlangCompatibleFory(writerLoader, writerType, false);
+      Fory reader = xlangCompatibleFory(readerLoader, readerType, false);
+      Object writerValue = writerType.getConstructor().newInstance();
+      setField(
+          writerType,
+          writerValue,
+          "values",
+          new org.apache.fory.collection.Int32List(new int[] {1, 2, 3}));
+
+      Object result = reader.deserialize(writer.serialize(writerValue));
+      Assert.assertSame(result.getClass(), readerType);
+      Assert.assertTrue(
+          Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {1, 2, 3}));
+    }
+  }
+
+  private static Fory xlangCompatibleFory(ClassLoader classLoader, Class<?> type, boolean codegen) {
+    return xlangCompatibleFory(classLoader, type, codegen, "ArrayShapeStruct");
+  }
+
+  private static Fory xlangCompatibleFory(
+      ClassLoader classLoader, Class<?> type, boolean codegen, String typeName) {
+    Fory fory =
+        Fory.builder()
+            .withClassLoader(classLoader)
+            .withXlang(true)
+            .withCompatible(true)
+            .withCodegen(codegen)
+            .requireClassRegistration(false)
+            .build();
+    fory.register(type, "test", typeName);
+    return fory;
+  }
+
+  private static Fory compatibleFory(ClassLoader classLoader, boolean codegen) {
+    return Fory.builder()
+        .withClassLoader(classLoader)
+        .withCodegen(codegen)
+        .withMetaShare(true)
+        .withScopedMetaShare(false)
+        .withCompatible(true)
+        .requireClassRegistration(false)
+        .build();
+  }
+
+  private static Object generatedCompatibleRead(
+      Fory writer, Fory reader, Class<?> writerType, Class<?> readerType, Object writerValue)
+      throws Exception {
+    TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
+    Class<? extends Serializer<Object>> serializerClass =
+        CodecUtils.loadOrGenCompatibleMetaSharedCodecClass(
+            reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
+    Assert.assertTrue(
+        GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(serializerClass));
+    Serializer<Object> serializer =
+        serializerClass
+            .getConstructor(org.apache.fory.resolver.TypeResolver.class, Class.class, TypeDef.class)
+            .newInstance(reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
+    Serializer<Object> writerSerializer =
+        writer.getConfig().isXlang()
+            ? writer.getTypeResolver().getTypeInfo(writerType).getSerializer()
+            : new MetaSharedSerializer<>(
+                writer.getTypeResolver(), (Class<Object>) writerType, remoteTypeDef);
+    writer.getWriteContext().prepare(buffer, null);
+    try {
+      writerSerializer.write(writer.getWriteContext(), writerValue);
+    } finally {
+      writer.getWriteContext().reset();
+    }
+    buffer.readerIndex(0);
+    reader.getReadContext().prepare(buffer, null, false);
+    try {
+      return serializer.read(reader.getReadContext());
+    } finally {
+      reader.getReadContext().reset();
+    }
   }
 
   private static CompilationResult compile(String typeName, String source) throws IOException {

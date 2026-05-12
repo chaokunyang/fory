@@ -385,6 +385,43 @@ public class ForyStructProcessorTest {
     assertStaticRuntimeRoundTrip(true);
   }
 
+  @Test
+  public void testStaticSerializerHandlesMonomorphicRecursiveField() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.RecursiveStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.ForyField.Dynamic;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class RecursiveStruct {\n"
+                + "  public int id;\n"
+                + "  @ForyField(nullable = true, ref = true, dynamic = Dynamic.FALSE)\n"
+                + "  public RecursiveStruct next;\n"
+                + "  public RecursiveStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.RecursiveStruct");
+      Object value = type.getConstructor().newInstance();
+      setField(type, value, "id", 12);
+      setField(type, value, "next", value);
+
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withCodegen(false)
+              .withRefTracking(true)
+              .requireClassRegistration(false)
+              .build();
+      Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
+      Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
+      Object roundTrip = fory.deserialize(fory.serialize(value));
+      Assert.assertEquals(getField(type, roundTrip, "id"), 12);
+      Assert.assertSame(getField(type, roundTrip, "next"), roundTrip);
+    }
+  }
+
   private static void assertStaticRuntimeRoundTrip(boolean compatible) throws Exception {
     CompilationResult staticResult =
         compile(

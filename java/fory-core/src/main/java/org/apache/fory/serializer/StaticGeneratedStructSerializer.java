@@ -52,6 +52,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   @SuppressWarnings("unchecked")
   public StaticGeneratedStructSerializer(TypeResolver typeResolver, Class<?> type) {
     super(typeResolver, (Class<T>) type);
+    setSerializerIfAbsent(typeResolver, (Class<T>) type);
     this.typeDef = null;
     this.remoteFields = Collections.emptyList();
     this.localFieldsById = new SerializationFieldInfo[0];
@@ -71,6 +72,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       List<Descriptor> descriptors,
       Class<?> remoteDescriptorClass) {
     super(typeResolver, (Class<T>) type);
+    setSerializerIfAbsent(typeResolver, (Class<T>) type);
     List<Descriptor> runtimeDescriptors = runtimeDescriptors(descriptors);
     this.typeDef = typeDef;
     this.remoteFields =
@@ -78,6 +80,16 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
             ? Collections.emptyList()
             : buildRemoteFields(typeDef, runtimeDescriptors, remoteDescriptorClass);
     this.localFieldsById = buildLocalFieldsById(runtimeDescriptors);
+  }
+
+  private void setSerializerIfAbsent(TypeResolver typeResolver, Class<T> type) {
+    if (!typeResolver.isCrossLanguage() || typeResolver.getTypeInfo(type, false) != null) {
+      // Field-group construction resolves monomorphic field serializers. A generated serializer can
+      // therefore encounter its own type before the subclass constructor has finished, just like
+      // ObjectSerializer. Install this instance early so recursive fields reuse it instead of
+      // constructing another serializer for the same type.
+      typeResolver.setSerializerIfAbsent(type, this);
+    }
   }
 
   @Override

@@ -53,10 +53,11 @@ public class Order {
 }
 ```
 
-The processor emits a public top-level serializer in the same package. For `Order`, the generated
-class is `Order__ForyStaticSerializer__`. For a static member type `Outer.Inner`, the generated
-top-level class is `Outer$Inner__ForyStaticSerializer__`; the processor does not modify the
-enclosing class and does not generate inner serializer classes.
+The processor emits public top-level serializers in the same package. For `Order`, the generated
+cross-language serializer is `Order__ForySerializer__` and the generated Java native serializer is
+`Order__ForyNativeSerializer__`. For a static member type `Outer.Inner`, the generated top-level
+classes are `Outer$Inner__ForySerializer__` and `Outer$Inner__ForyNativeSerializer__`; the processor
+does not modify the enclosing class and does not generate inner serializer classes.
 
 ## Runtime Selection
 

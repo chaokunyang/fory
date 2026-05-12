@@ -76,6 +76,7 @@
     <fory.java.rootdir>${basedir}</fory.java.rootdir>
     <maven-spotless-plugin.version>3.3.0</maven-spotless-plugin.version>
     <lombok.version>1.18.38</lombok.version>
+    <mockito.version>4.11.0</mockito.version>
   </properties>
 
   <profiles>
@@ -156,6 +157,11 @@
         <groupId>org.projectlombok</groupId>
         <artifactId>lombok</artifactId>
         <version>${lombok.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.mockito</groupId>
+        <artifactId>mockito-core</artifactId>
+        <version>${mockito.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>

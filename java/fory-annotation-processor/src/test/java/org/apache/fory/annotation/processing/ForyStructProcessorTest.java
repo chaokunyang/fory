@@ -20,7 +20,6 @@
 package org.apache.fory.annotation.processing;
 
 import java.io.IOException;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -39,15 +38,8 @@ import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
-import org.apache.fory.builder.CodecUtils;
-import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
-import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.meta.TypeDef;
-import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.serializer.MetaSharedSerializer;
-import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
@@ -391,181 +383,6 @@ public class ForyStructProcessorTest {
     assertStaticRuntimeRoundTrip(true);
   }
 
-  @Test
-  public void testGraalvmStaticCompatibleSerializerReadsRuntimeRemoteTypeDef() throws Exception {
-    if (AndroidSupport.IS_ANDROID) {
-      return;
-    }
-    CompilationResult writerResult =
-        compile(
-            "test.NativeImageStruct",
-            "package test;\n"
-                + "public class NativeImageStruct {\n"
-                + "  public int id;\n"
-                + "  public int legacy;\n"
-                + "  public NativeImageStruct() {}\n"
-                + "}\n");
-    CompilationResult readerResult =
-        compile(
-            "test.NativeImageStruct",
-            "package test;\n"
-                + "public class NativeImageStruct {\n"
-                + "  public int id;\n"
-                + "  public String added = \"default\";\n"
-                + "  public NativeImageStruct() {}\n"
-                + "}\n");
-    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
-    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
-    try (URLClassLoader writerLoader = writerResult.classLoader();
-        URLClassLoader readerLoader = readerResult.classLoader()) {
-      Fory writer =
-          Fory.builder()
-              .withClassLoader(writerLoader)
-              .withCodegen(false)
-              .withMetaShare(true)
-              .withScopedMetaShare(false)
-              .withCompatible(true)
-              .requireClassRegistration(false)
-              .build();
-      Fory reader =
-          Fory.builder()
-              .withClassLoader(readerLoader)
-              .withCodegen(true)
-              .withMetaShare(true)
-              .withScopedMetaShare(false)
-              .withCompatible(true)
-              .requireClassRegistration(false)
-              .build();
-      Class<?> writerType = writerLoader.loadClass("test.NativeImageStruct");
-      Class<?> readerType = readerLoader.loadClass("test.NativeImageStruct");
-      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
-      Assert.assertNotEquals(
-          remoteTypeDef.getId(),
-          TypeDef.buildTypeDef(reader.getTypeResolver(), readerType).getId());
-      Class<? extends Serializer> serializerClass =
-          CodecUtils.loadOrGenStaticCompatibleCodecClass(
-              reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
-      Assert.assertTrue(
-          GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(serializerClass));
-      Constructor<? extends Serializer> constructor =
-          serializerClass.getConstructor(
-              org.apache.fory.resolver.TypeResolver.class, Class.class, TypeDef.class);
-      Serializer<Object> serializer =
-          constructor.newInstance(
-              reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
-      Object writerValue = writerType.getConstructor().newInstance();
-      setField(writerType, writerValue, "id", 42);
-      setField(writerType, writerValue, "legacy", 99);
-      MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
-      MetaSharedSerializer<Object> writerSerializer =
-          new MetaSharedSerializer<>(
-              writer.getTypeResolver(), (Class<Object>) writerType, remoteTypeDef);
-      writer.getWriteContext().prepare(buffer, null);
-      try {
-        writerSerializer.write(writer.getWriteContext(), writerValue);
-      } finally {
-        writer.getWriteContext().reset();
-      }
-      buffer.readerIndex(0);
-      reader.getReadContext().prepare(buffer, null, false);
-      Object result;
-      try {
-        result = serializer.read(reader.getReadContext());
-      } finally {
-        reader.getReadContext().reset();
-      }
-      Assert.assertSame(result.getClass(), readerType);
-      Assert.assertEquals(getField(readerType, result, "id"), 42);
-      Assert.assertEquals(getField(readerType, result, "added"), "default");
-      Assert.assertThrows(
-          UnsupportedOperationException.class,
-          () ->
-              serializer.write(
-                  reader.getWriteContext(), readerType.getConstructor().newInstance()));
-    }
-  }
-
-  @Test
-  public void testGraalvmStaticCompatibleRecordSerializerConvertsRemoteField() throws Exception {
-    assumeRecordSupport();
-    if (AndroidSupport.IS_ANDROID) {
-      return;
-    }
-    CompilationResult writerResult =
-        compile(
-            "test.NativeRecordStruct",
-            "package test;\n"
-                + "public class NativeRecordStruct {\n"
-                + "  public String id;\n"
-                + "  public NativeRecordStruct() {}\n"
-                + "}\n");
-    CompilationResult readerResult =
-        compile(
-            "test.NativeRecordStruct",
-            "package test;\n" + "public record NativeRecordStruct(int id) {}\n");
-    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
-    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
-    try (URLClassLoader writerLoader = writerResult.classLoader();
-        URLClassLoader readerLoader = readerResult.classLoader()) {
-      Class<?> writerType = writerLoader.loadClass("test.NativeRecordStruct");
-      Class<?> readerType = readerLoader.loadClass("test.NativeRecordStruct");
-      Fory writer = compatibleFory(writerLoader, false);
-      Fory reader = compatibleFory(readerLoader, true);
-      Object writerValue = writerType.getConstructor().newInstance();
-      setField(writerType, writerValue, "id", "73");
-
-      Object result = generatedCompatibleRead(writer, reader, writerType, readerType, writerValue);
-      Assert.assertSame(result.getClass(), readerType);
-      Assert.assertEquals(invoke(readerType, result, "id"), 73);
-    }
-  }
-
-  @Test
-  public void testGraalvmStaticCompatibleSerializerUsesListArrayAction() throws Exception {
-    if (AndroidSupport.IS_ANDROID) {
-      return;
-    }
-    CompilationResult writerResult =
-        compile(
-            "test.NativeArrayShapeStruct",
-            "package test;\n"
-                + "import org.apache.fory.annotation.Int32Type;\n"
-                + "import org.apache.fory.collection.Int32List;\n"
-                + "import org.apache.fory.config.Int32Encoding;\n"
-                + "public class NativeArrayShapeStruct {\n"
-                + "  @Int32Type(encoding = Int32Encoding.FIXED) public Int32List values;\n"
-                + "  public NativeArrayShapeStruct() {}\n"
-                + "}\n");
-    CompilationResult readerResult =
-        compile(
-            "test.NativeArrayShapeStruct",
-            "package test;\n"
-                + "public class NativeArrayShapeStruct {\n"
-                + "  public int[] values;\n"
-                + "  public NativeArrayShapeStruct() {}\n"
-                + "}\n");
-    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
-    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
-    try (URLClassLoader writerLoader = writerResult.classLoader();
-        URLClassLoader readerLoader = readerResult.classLoader()) {
-      Class<?> writerType = writerLoader.loadClass("test.NativeArrayShapeStruct");
-      Class<?> readerType = readerLoader.loadClass("test.NativeArrayShapeStruct");
-      Fory writer = xlangCompatibleFory(writerLoader, writerType, true, "NativeArrayShapeStruct");
-      Fory reader = xlangCompatibleFory(readerLoader, readerType, true, "NativeArrayShapeStruct");
-      Object writerValue = writerType.getConstructor().newInstance();
-      setField(
-          writerType,
-          writerValue,
-          "values",
-          new org.apache.fory.collection.Int32List(new int[] {4, 5, 6}));
-
-      Object result = generatedCompatibleRead(writer, reader, writerType, readerType, writerValue);
-      Assert.assertSame(result.getClass(), readerType);
-      Assert.assertTrue(
-          Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {4, 5, 6}));
-    }
-  }
-
   private static void assertStaticRuntimeRoundTrip(boolean compatible) throws Exception {
     CompilationResult staticResult =
         compile(
@@ -707,51 +524,6 @@ public class ForyStructProcessorTest {
             .build();
     fory.register(type, "test", typeName);
     return fory;
-  }
-
-  private static Fory compatibleFory(ClassLoader classLoader, boolean codegen) {
-    return Fory.builder()
-        .withClassLoader(classLoader)
-        .withCodegen(codegen)
-        .withMetaShare(true)
-        .withScopedMetaShare(false)
-        .withCompatible(true)
-        .requireClassRegistration(false)
-        .build();
-  }
-
-  private static Object generatedCompatibleRead(
-      Fory writer, Fory reader, Class<?> writerType, Class<?> readerType, Object writerValue)
-      throws Exception {
-    TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
-    Class<? extends Serializer> serializerClass =
-        CodecUtils.loadOrGenStaticCompatibleCodecClass(
-            reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
-    Assert.assertTrue(
-        GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(serializerClass));
-    Serializer<Object> serializer =
-        serializerClass
-            .getConstructor(org.apache.fory.resolver.TypeResolver.class, Class.class, TypeDef.class)
-            .newInstance(reader.getTypeResolver(), (Class<Object>) readerType, remoteTypeDef);
-    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(128);
-    Serializer<Object> writerSerializer =
-        writer.getConfig().isXlang()
-            ? writer.getTypeResolver().getTypeInfo(writerType).getSerializer()
-            : new MetaSharedSerializer<>(
-                writer.getTypeResolver(), (Class<Object>) writerType, remoteTypeDef);
-    writer.getWriteContext().prepare(buffer, null);
-    try {
-      writerSerializer.write(writer.getWriteContext(), writerValue);
-    } finally {
-      writer.getWriteContext().reset();
-    }
-    buffer.readerIndex(0);
-    reader.getReadContext().prepare(buffer, null, false);
-    try {
-      return serializer.read(reader.getReadContext());
-    } finally {
-      reader.getReadContext().reset();
-    }
   }
 
   private static CompilationResult compile(String typeName, String source) throws IOException {

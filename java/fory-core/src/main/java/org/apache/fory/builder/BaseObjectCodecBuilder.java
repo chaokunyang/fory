@@ -515,9 +515,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         TypeRef<?> elementType = null;
         if (usesPrimitiveListCollectionProtocol(descriptor)) {
           serializer = getPrimitiveListCollectionSerializer(clz);
-          elementType =
-              TypeAnnotationUtils.getPrimitiveListElementTypeRef(
-                  descriptor.getTypeAnnotation(), clz);
+          elementType = TypeAnnotationUtils.getPrimitiveListElementTypeRef(descriptor);
         }
         action =
             serializeForCollection(buffer, inputObject, typeRef, serializer, false, elementType);
@@ -2268,9 +2266,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         TypeRef<?> elementType = null;
         if (usesPrimitiveListCollectionProtocol(descriptor)) {
           serializer = getPrimitiveListCollectionSerializer(cls);
-          elementType =
-              TypeAnnotationUtils.getPrimitiveListElementTypeRef(
-                  descriptor.getTypeAnnotation(), cls);
+          elementType = TypeAnnotationUtils.getPrimitiveListElementTypeRef(descriptor);
         }
         obj = deserializeForCollection(buffer, typeRef, serializer, null, elementType);
       } else if (useMapSerialization(typeRef)) {

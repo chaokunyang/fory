@@ -547,6 +547,26 @@ public class TypeAnnotationUtils {
     return TypeRef.of(elementClass, TypeExtMeta.of(elementTypeId, true, false));
   }
 
+  public static TypeRef<?> getPrimitiveListElementTypeRef(Descriptor descriptor) {
+    TypeRef<?> typeRef = descriptor.getTypeRef();
+    TypeExtMeta inlineMeta = typeRef.getTypeExtMeta();
+    if (inlineMeta != null && Types.isPrimitiveType(inlineMeta.typeId())) {
+      Class<?> elementClass = getPrimitiveListElementClass(typeRef.getRawType());
+      if (elementClass != null) {
+        return TypeRef.of(
+            elementClass, TypeExtMeta.of(inlineMeta.typeId(), true, inlineMeta.trackingRef()));
+      }
+    }
+    if (typeRef.hasExplicitTypeArguments()) {
+      TypeRef<?> elementTypeRef = TypeUtils.getElementType(typeRef);
+      TypeExtMeta elementMeta = elementTypeRef.getTypeExtMeta();
+      if (elementMeta != null && Types.isPrimitiveType(elementMeta.typeId())) {
+        return elementTypeRef;
+      }
+    }
+    return getPrimitiveListElementTypeRef(descriptor.getTypeAnnotation(), typeRef.getRawType());
+  }
+
   public static boolean isArrayType(Descriptor descriptor) {
     if (descriptor.isArrayType()) {
       return true;

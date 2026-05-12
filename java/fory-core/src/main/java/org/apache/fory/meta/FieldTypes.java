@@ -129,18 +129,19 @@ public class FieldTypes {
             ? primitiveListElementMeta != null
                 ? primitiveListElementMeta.typeId()
                 : TypeAnnotationUtils.getPrimitiveListElementTypeId(
-                    typeAnnotation, rawType, isXlang)
+                    typeAnnotation, rawType, true)
             : Types.UNKNOWN;
-    if (typeExtMeta != null && typeExtMeta.typeId() != Types.UNKNOWN) {
+    // Primitive-list TypeExtMeta describes the list element wire type. Only @ArrayType changes the
+    // top-level schema to a dense primitive array.
+    if (primitiveListArray) {
+      typeId = TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType);
+    } else if (primitiveList) {
+      typeId = Types.LIST;
+    } else if (!primitiveList && typeExtMeta != null && typeExtMeta.typeId() != Types.UNKNOWN) {
       typeId = typeExtMeta.typeId();
-    } else if (isXlang && primitiveList) {
-      typeId =
-          primitiveListArray
-              ? TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType)
-              : Types.LIST;
     } else if (boxedListArray) {
       typeId = TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor);
-    } else if (primitiveListElementTypeId != Types.UNKNOWN) {
+    } else if (isXlang && primitiveListElementTypeId != Types.UNKNOWN) {
       typeId = TypeAnnotationUtils.getPrimitiveListTypeId(typeAnnotation, rawType);
     } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
       if (field != null) {
@@ -238,7 +239,7 @@ public class FieldTypes {
       return new RegisteredFieldType(nullable, trackingRef, typeId, -1);
     }
 
-    if (isXlang && primitiveList && !primitiveListArray) {
+    if (primitiveList && !primitiveListArray) {
       boolean elementNullable = true;
       boolean elementTrackingRef = false;
       if (primitiveListArgumentMeta != null) {
@@ -451,13 +452,16 @@ public class FieldTypes {
         buffer.writeVarUInt32Small7(arrayFieldType.getDimensions());
         (arrayFieldType).getComponentType().write(buffer);
       } else if (this instanceof CollectionFieldType) {
+        CollectionFieldType collectionFieldType = (CollectionFieldType) this;
         buffer.writeUInt8(kindHeader);
+        buffer.writeVarUInt32Small7(collectionFieldType.typeId);
         // TODO remove it when new collection deserialization jit finished.
-        ((CollectionFieldType) this).getElementType().write(buffer);
+        collectionFieldType.getElementType().write(buffer);
       } else if (this instanceof MapFieldType) {
         buffer.writeUInt8(kindHeader);
         // TODO remove it when new map deserialization jit finished.
         MapFieldType mapFieldType = (MapFieldType) this;
+        buffer.writeVarUInt32Small7(mapFieldType.typeId);
         mapFieldType.getKeyType().write(buffer);
         mapFieldType.getValueType().write(buffer);
       } else {
@@ -492,10 +496,12 @@ public class FieldTypes {
       if (kind == 0) {
         return new ObjectFieldType(Types.UNKNOWN, nullable, trackingRef);
       } else if (kind == 1) {
+        int typeId = buffer.readVarUInt32Small7();
         return new MapFieldType(
-            -1, nullable, trackingRef, read(buffer, resolver), read(buffer, resolver));
+            typeId, nullable, trackingRef, read(buffer, resolver), read(buffer, resolver));
       } else if (kind == 2) {
-        return new CollectionFieldType(-1, nullable, trackingRef, read(buffer, resolver));
+        int typeId = buffer.readVarUInt32Small7();
+        return new CollectionFieldType(typeId, nullable, trackingRef, read(buffer, resolver));
       } else if (kind == 3) {
         int dims = buffer.readVarUInt32Small7();
         return new ArrayFieldType(-1, nullable, trackingRef, read(buffer, resolver), dims);

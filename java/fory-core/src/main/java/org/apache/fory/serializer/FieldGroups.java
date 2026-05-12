@@ -217,6 +217,7 @@ public class FieldGroups {
       // nullability/ref mode. Treating it as field metadata writes an extra null marker that
       // remote TypeDef payload readers then consume as list length.
       TypeExtMeta extMeta = typeRef.getTypeExtMeta();
+      int schemaTypeId = extMeta == null ? Types.UNKNOWN : extMeta.typeId();
       if (extMeta != null && !primitiveListArray && !primitiveListCollection) {
         nullable = extMeta.nullable();
         trackingRef = extMeta.trackingRef();
@@ -265,6 +266,10 @@ public class FieldGroups {
                 resolver,
                 TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor.getField()),
                 qualifiedFieldName);
+      } else if (!resolver.isCrossLanguage() && schemaTypeId == Types.LIST) {
+        containerSerializerOverride =
+            new org.apache.fory.serializer.collection.CollectionSerializers.ArrayListSerializer(
+                resolver);
       } else {
         containerSerializerOverride = null;
       }
@@ -313,24 +318,6 @@ public class FieldGroups {
   }
 
   private static TypeRef<?> primitiveListElementTypeRef(Descriptor descriptor) {
-    TypeRef<?> typeRef = descriptor.getTypeRef();
-    TypeExtMeta inlineMeta = typeRef.getTypeExtMeta();
-    if (inlineMeta != null && Types.isPrimitiveType(inlineMeta.typeId())) {
-      Class<?> elementClass =
-          TypeAnnotationUtils.getPrimitiveListElementClass(typeRef.getRawType());
-      if (elementClass != null) {
-        return TypeRef.of(
-            elementClass, TypeExtMeta.of(inlineMeta.typeId(), true, inlineMeta.trackingRef()));
-      }
-    }
-    if (typeRef.hasExplicitTypeArguments()) {
-      TypeRef<?> elementTypeRef = TypeUtils.getElementType(typeRef);
-      TypeExtMeta elementMeta = elementTypeRef.getTypeExtMeta();
-      if (elementMeta != null && Types.isPrimitiveType(elementMeta.typeId())) {
-        return elementTypeRef;
-      }
-    }
-    return TypeAnnotationUtils.getPrimitiveListElementTypeRef(
-        descriptor.getTypeAnnotation(), typeRef.getRawType());
+    return TypeAnnotationUtils.getPrimitiveListElementTypeRef(descriptor);
   }
 }

@@ -206,7 +206,30 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
     try {
+      int startIndex = buffer.readerIndex();
+      System.err.println(
+          "STATIC_SKIP_START name="
+              + fieldInfo.descriptor.getName()
+              + " index="
+              + startIndex
+              + " next="
+              + (buffer.getByte(startIndex) & 0xFF)
+              + " ref="
+              + fieldInfo.refMode
+              + " typeRef="
+              + fieldInfo.typeRef
+              + " schemaMeta="
+              + fieldInfo.typeRef.getTypeExtMeta()
+              + " override="
+              + fieldInfo.containerSerializerOverride);
       FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+      System.err.println(
+          "STATIC_SKIP_END name="
+              + fieldInfo.descriptor.getName()
+              + " start="
+              + startIndex
+              + " end="
+              + buffer.readerIndex());
     } catch (RuntimeException e) {
       throw new DeserializationException(
           "Failed to skip remote field " + fieldInfo.descriptor.getName(), e);
@@ -306,30 +329,17 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       }
       fields.put(fieldKey(descriptor), i);
     }
-    // Keep compatible-read descriptor ordering owned by TypeResolver, matching MetaSharedSerializer
-    // and MetaSharedCodecBuilder. TypeDef itself is metadata; it is not the read-order owner.
-    FieldGroups remoteFieldGroups =
-        FieldGroups.buildFieldInfos(
-            typeResolver,
-            typeResolver.createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass));
+    // Keep compatible-read descriptor ordering owned by TypeResolver, matching the sorted
+    // DescriptorGrouper order used by ObjectCodecBuilder and MetaSharedCodecBuilder. FieldGroups
+    // may regroup descriptors for helper ownership, so it must not drive remote payload order.
+    List<Descriptor> remoteDescriptorsInWireOrder =
+        typeResolver
+            .createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass)
+            .getSortedDescriptors();
     List<RemoteFieldInfo> remoteFields = new ArrayList<>(remoteFieldInfos.size());
     appendRemoteFields(
         remoteFields,
-        remoteFieldGroups.buildInFields,
-        remoteFieldInfosByKey,
-        fieldIds,
-        fields,
-        localDescriptors);
-    appendRemoteFields(
-        remoteFields,
-        remoteFieldGroups.containerFields,
-        remoteFieldInfosByKey,
-        fieldIds,
-        fields,
-        localDescriptors);
-    appendRemoteFields(
-        remoteFields,
-        remoteFieldGroups.userTypeFields,
+        remoteDescriptorsInWireOrder,
         remoteFieldInfosByKey,
         fieldIds,
         fields,
@@ -356,13 +366,14 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   private void appendRemoteFields(
       List<RemoteFieldInfo> remoteFields,
-      SerializationFieldInfo[] serializationFieldInfos,
+      List<Descriptor> remoteDescriptorsInWireOrder,
       Map<String, FieldInfo> remoteFieldInfosByKey,
       Map<Short, Integer> fieldIds,
       Map<String, Integer> fields,
       List<Descriptor> localDescriptors) {
-    for (SerializationFieldInfo serializationFieldInfo : serializationFieldInfos) {
-      Descriptor descriptor = serializationFieldInfo.descriptor;
+    for (Descriptor descriptor : remoteDescriptorsInWireOrder) {
+      SerializationFieldInfo serializationFieldInfo =
+          FieldGroups.buildFieldInfo(typeResolver, descriptor);
       FieldInfo fieldInfo = remoteFieldInfosByKey.get(remoteFieldKey(descriptor));
       if (fieldInfo == null) {
         throw new IllegalStateException("Missing remote field metadata for " + descriptor);

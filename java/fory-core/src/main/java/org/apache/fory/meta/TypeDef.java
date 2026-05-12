@@ -459,11 +459,9 @@ public class TypeDef implements Serializable {
                   }
                 })
             .collect(Collectors.toList());
-    if (resolver.isCrossLanguage()) {
-      return TypeDefEncoder.buildTypeDefWithFieldInfos(
-          (XtypeResolver) resolver, targetCls, fieldInfos);
-    }
-    return NativeTypeDefEncoder.buildTypeDefWithFieldInfos(
-        (ClassResolver) resolver, targetCls, fieldInfos);
+    // Keep the remote class spec/id/encoded metadata. Compatible readers still need the remote
+    // schema identity to rebuild descriptor order; only root field ownership is rewritten so local
+    // field matching by declaring class keeps the existing target-class semantics.
+    return new TypeDef(classSpec, fieldInfos, id, encoded);
   }
 }

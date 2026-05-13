@@ -26,6 +26,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -174,6 +175,7 @@ public class ExceptionSerializersTest extends ForyTestBase {
     writeContext.writeStringRef(value.getMessage());
     payload.writeVarUInt32(0);
     payload.writeVarUInt32(0);
+    payload.writeVarUInt32Small7(2);
 
     payload.readerIndex(0);
     ReadContext readContext = fory.getReadContext();
@@ -231,6 +233,29 @@ public class ExceptionSerializersTest extends ForyTestBase {
     Assert.assertEquals(copy.retryable, value.retryable);
     Assert.assertEquals(copy.getSuppressed().length, 1);
     Assert.assertEquals(copy.getSuppressed()[0].getMessage(), "suppressed-custom");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testThrowableRejectsMismatchedClassLayerCount() {
+    Fory fory = builder().withRefTracking(false).withCodegen(false).withCompatible(true).build();
+    MemoryBuffer payload = MemoryUtils.buffer(128);
+    WriteContext writeContext = fory.getWriteContext();
+    writeContext.prepare(payload, null);
+    writeContext.writeRef(null);
+    writeContext.writeRef(null);
+    writeContext.writeStringRef("layer-count");
+    payload.writeVarUInt32(0);
+    payload.writeVarUInt32(0);
+    payload.writeVarUInt32Small7(0);
+
+    payload.readerIndex(0);
+    ReadContext readContext = fory.getReadContext();
+    readContext.prepare(payload, null, false);
+    Serializer<CustomException> serializer =
+        (Serializer<CustomException>) fory.getTypeResolver().getSerializer(CustomException.class);
+
+    Assert.assertThrows(ForyException.class, () -> serializer.read(readContext));
   }
 
   private static RuntimeException buildTryWithResourcesException() {

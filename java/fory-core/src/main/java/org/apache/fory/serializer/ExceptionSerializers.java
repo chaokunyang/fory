@@ -100,6 +100,7 @@ public final class ExceptionSerializers {
         writeContext.writeRef(suppressedException);
       }
       buffer.writeVarUInt32(0);
+      writeNumClassLayers(buffer, slotsSerializers);
       for (Serializer slotsSerializer : slotsSerializers) {
         slotsSerializer.write(writeContext, value);
       }
@@ -213,6 +214,10 @@ public final class ExceptionSerializers {
         readContext.readString();
         readContext.readRef();
       }
+    }
+
+    private void writeNumClassLayers(MemoryBuffer buffer, Serializer[] slotsSerializers) {
+      buffer.writeVarUInt32Small7(slotsSerializers.length);
     }
   }
 
@@ -425,6 +430,7 @@ public final class ExceptionSerializers {
 
   private static void readAndSetFields(
       ReadContext readContext, Object target, Serializer[] slotsSerializers, Config config) {
+    readAndCheckNumClassLayers(readContext, target.getClass(), slotsSerializers.length);
     for (Serializer slotsSerializer : slotsSerializers) {
       if (slotsSerializer instanceof CompatibleLayerSerializer) {
         CompatibleLayerSerializer compatibleSerializer =
@@ -436,6 +442,23 @@ public final class ExceptionSerializers {
       } else {
         ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, target);
       }
+    }
+  }
+
+  private static void readAndCheckNumClassLayers(
+      ReadContext readContext, Class<?> type, int expectedNumClassLayers) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int numClassLayers = buffer.readVarUInt32Small7();
+    if (numClassLayers != expectedNumClassLayers) {
+      // Layer payloads do not carry per-layer class identity here, so mismatches cannot be skipped
+      // safely. Fail before consuming field payloads.
+      throw new ForyException(
+          "Class layer count mismatch for Throwable type "
+              + type.getName()
+              + ": expected "
+              + expectedNumClassLayers
+              + ", got "
+              + numClassLayers);
     }
   }
 

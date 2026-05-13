@@ -430,6 +430,23 @@ per-element null flags (if HAS_NULL).
 If `IS_SAME_TYPE` is not set, each element is written with its own class info and data (and
 optionally ref flags).
 
+#### Child collection subclasses
+
+Optimized serializers for subclasses of supported JDK collection implementations write subclass
+field layers before element payloads:
+
+```
+| varuint32_small7: length | [comparator_ref] | varuint32_small7: num_class_layers |
+| class_layer_fields... | [elements_header | elem_class_info | elements...] |
+```
+
+- `comparator_ref` is present only for sorted-set and priority-queue subclasses.
+- `num_class_layers` is the exact number of subclass-owned field layers written after the collection
+  header and before the element payload.
+- Readers must reject a payload whose `num_class_layers` does not match the local serializer's layer
+  count. These serializers do not carry per-layer class identity in the value payload, so mismatched
+  layers cannot be skipped safely.
+
 ### Maps
 
 Maps encode entry count and then a sequence of chunks. Each chunk groups entries that share key
@@ -470,6 +487,23 @@ These chunks always represent exactly one entry.
 - `0`: normal payload, then `varuint32_small7` size, key enum class info, and the map chunks above.
 - `1`: Java-serialized empty `EnumMap` payload. Android uses this mode when an empty map has no
   public key from which to derive the enum class. Readers on Android and JVM must accept both modes.
+
+#### Child map subclasses
+
+Optimized serializers for subclasses of supported JDK map implementations write subclass field
+layers before map entry chunks:
+
+```
+| varuint32_small7: size | [comparator_ref] | varuint32_small7: num_class_layers |
+| class_layer_fields... | [chunk_1 | chunk_2 | ...] |
+```
+
+- `comparator_ref` is present only for sorted-map subclasses.
+- `num_class_layers` is the exact number of subclass-owned field layers written after the map header
+  and before the entry chunks.
+- Readers must reject a payload whose `num_class_layers` does not match the local serializer's layer
+  count. These serializers do not carry per-layer class identity in the value payload, so mismatched
+  layers cannot be skipped safely.
 
 ### JDK collection/map wrappers and views
 
@@ -513,6 +547,26 @@ serialization:
   unknown fields.
 - For each field, the serializer uses field metadata (nullable, trackingRef, polymorphic) to decide
   whether to write ref flags and/or type meta before the field value.
+
+### Throwable values
+
+`Throwable` subclasses use a specialized payload that preserves stack trace, cause, message,
+suppressed exceptions, and subclass-owned fields:
+
+```
+| stack_trace_ref | cause_ref | message_string_ref |
+| varuint32: suppressed_count | suppressed_ref... |
+| varuint32: extra_field_count | extra_field_name/value... |
+| varuint32_small7: num_class_layers | class_layer_fields... |
+```
+
+- `extra_field_count` is reserved for serializer-owned extension fields and is currently written as
+  zero.
+- `num_class_layers` is the exact number of `Throwable` subclass field layers written after the
+  built-in Throwable state.
+- Readers must reject a payload whose `num_class_layers` does not match the local serializer's layer
+  count. The Throwable value payload does not carry per-layer class identity, so mismatched layers
+  cannot be skipped safely.
 
 ### Extensions (EXT)
 

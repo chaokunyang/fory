@@ -176,9 +176,7 @@ public class ChildContainerSerializers {
     public Collection onCollectionWrite(WriteContext writeContext, T value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
-      for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(writeContext, value);
-      }
+      writeChildFields(writeContext, value, slotsSerializers);
       return value;
     }
 
@@ -245,9 +243,7 @@ public class ChildContainerSerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
       writeContext.writeRef(value.comparator());
-      for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(writeContext, value);
-      }
+      writeChildFields(writeContext, value, slotsSerializers);
       return value;
     }
 
@@ -293,9 +289,7 @@ public class ChildContainerSerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
       writeContext.writeRef(value.comparator());
-      for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(writeContext, value);
-      }
+      writeChildFields(writeContext, value, slotsSerializers);
       return value;
     }
 
@@ -352,9 +346,7 @@ public class ChildContainerSerializers {
     public Map onMapWrite(WriteContext writeContext, T value) {
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
-      for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(writeContext, value);
-      }
+      writeChildFields(writeContext, value, slotsSerializers);
       return value;
     }
 
@@ -405,9 +397,7 @@ public class ChildContainerSerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
       writeContext.writeRef(value.comparator());
-      for (Serializer slotsSerializer : slotsSerializers) {
-        slotsSerializer.write(writeContext, value);
-      }
+      writeChildFields(writeContext, value, slotsSerializers);
       return value;
     }
 
@@ -651,6 +641,7 @@ public class ChildContainerSerializers {
       TypeResolver typeResolver,
       Object collection,
       Serializer[] slotsSerializers) {
+    readAndCheckNumClassLayers(readContext, collection.getClass(), slotsSerializers.length);
     for (Serializer slotsSerializer : slotsSerializers) {
       if (slotsSerializer instanceof CompatibleLayerSerializer) {
         CompatibleLayerSerializer compatibleSerializer =
@@ -664,6 +655,32 @@ public class ChildContainerSerializers {
       } else {
         ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, collection);
       }
+    }
+  }
+
+  private static void writeChildFields(
+      WriteContext writeContext, Object collection, Serializer[] slotsSerializers) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+    buffer.writeVarUInt32Small7(slotsSerializers.length);
+    for (Serializer slotsSerializer : slotsSerializers) {
+      slotsSerializer.write(writeContext, collection);
+    }
+  }
+
+  private static void readAndCheckNumClassLayers(
+      ReadContext readContext, Class<?> type, int expectedNumClassLayers) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    int numClassLayers = buffer.readVarUInt32Small7();
+    if (numClassLayers != expectedNumClassLayers) {
+      // Layer payloads do not carry per-layer class identity here, so mismatches cannot be skipped
+      // safely. Fail before consuming field payloads.
+      throw new ForyException(
+          "Class layer count mismatch for child container type "
+              + type.getName()
+              + ": expected "
+              + expectedNumClassLayers
+              + ", got "
+              + numClassLayers);
     }
   }
 

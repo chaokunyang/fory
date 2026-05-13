@@ -48,6 +48,11 @@ import lombok.EqualsAndHashCode;
 import lombok.NoArgsConstructor;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.exception.ForyException;
+import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.test.bean.Cyclic;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -126,6 +131,23 @@ public class ChildContainerSerializersTest extends ForyTestBase {
       list.addAll(data);
       serDeCheck(fory, list);
     }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testChildCollectionRejectsMismatchedClassLayerCount() {
+    Fory fory = builder().withRefTracking(false).withCodegen(false).withCompatible(true).build();
+    MemoryBuffer payload = MemoryUtils.buffer(32);
+    payload.writeVarUInt32Small7(0);
+    payload.writeVarUInt32Small7(0);
+
+    payload.readerIndex(0);
+    ReadContext readContext = fory.getReadContext();
+    readContext.prepare(payload, null, false);
+    Serializer<ChildArrayList> serializer =
+        (Serializer<ChildArrayList>) fory.getTypeResolver().getSerializer(ChildArrayList.class);
+
+    Assert.assertThrows(ForyException.class, () -> serializer.read(readContext));
   }
 
   @Test(dataProvider = "foryCopyConfig")

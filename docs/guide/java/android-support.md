@@ -53,13 +53,23 @@ Add `fory-annotation-processor` to the annotation processor path of the module t
 Android model classes:
 
 ```xml
-<annotationProcessorPaths>
-  <path>
-    <groupId>org.apache.fory</groupId>
-    <artifactId>fory-annotation-processor</artifactId>
-    <version>${fory.version}</version>
-  </path>
-</annotationProcessorPaths>
+<build>
+  <plugins>
+    <plugin>
+      <groupId>org.apache.maven.plugins</groupId>
+      <artifactId>maven-compiler-plugin</artifactId>
+      <configuration>
+        <annotationProcessorPaths>
+          <path>
+            <groupId>org.apache.fory</groupId>
+            <artifactId>fory-annotation-processor</artifactId>
+            <version>${fory.version}</version>
+          </path>
+        </annotationProcessorPaths>
+      </configuration>
+    </plugin>
+  </plugins>
+</build>
 ```
 
 Then annotate Android model classes with `@ForyStruct`.

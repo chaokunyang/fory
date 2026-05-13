@@ -882,7 +882,7 @@ struct NestedAnnotatedContainerCompatible {
 #[derive(ForyStruct, Debug, PartialEq)]
 struct EmptyStructEvolution {}
 
-// Java f1 has @ForyField(nullable = true), so it's nullable
+// Java f1 has @Nullable, so it's nullable
 #[derive(ForyStruct, Debug, PartialEq)]
 struct OneStringFieldStruct {
     #[fory(nullable = true)]
@@ -1153,7 +1153,7 @@ use std::any::Any;
 #[derive(ForyStruct, Debug, PartialEq, Clone)]
 struct Dog {
     age: i32,
-    // Match Java's @ForyField(nullable = true) annotation
+    // Match Java's @Nullable annotation
     name: Option<String>,
 }
 
@@ -1616,7 +1616,7 @@ struct NullableComprehensiveSchemaConsistent {
 /// Cross-language schema evolution test struct for COMPATIBLE mode.
 /// This struct has INVERTED nullability compared to Java:
 /// - Group 1: Nullable in Rust (Option), Non-nullable in Java
-/// - Group 2: Non-nullable in Rust, Nullable in Java (@ForyField(nullable=true))
+/// - Group 2: Non-nullable in Rust, Nullable in Java (@Nullable)
 ///
 /// This tests that compatible mode properly handles schema differences across languages.
 #[derive(ForyStruct, Debug, PartialEq)]
@@ -1661,7 +1661,7 @@ struct NullableComprehensiveCompatible {
     #[fory(nullable = true)]
     map_field: Option<HashMap<String, String>>,
 
-    // Group 2: Non-nullable in Rust, Nullable in Java (@ForyField(nullable=true))
+    // Group 2: Non-nullable in Rust, Nullable in Java (@Nullable)
     // Boxed types
     nullable_int1: i32,
     nullable_long1: i64,

@@ -115,17 +115,19 @@ public class Fingerprint {
 
       // Get nullable flag:
       // - Primitives are always non-nullable
-      // - For xlang: default is false (except Optional types, boxed types), can be
-      //   overridden by @ForyField
+      // - For xlang: default is false (except Optional types, boxed types), and @Nullable
+      //   marks the field wrapper nullable
       // - For native: use descriptor.isNullable() which defaults to true for non-primitives
       char nullable;
       if (rawType.isPrimitive()) {
         nullable = '0';
       } else if (resolver.isCrossLanguage()) {
         // For xlang: nullable defaults to false, except for Optional types, boxed types
-        // If @ForyField annotation is present, use its nullable value
+        // If @ForyField annotation is present, descriptor.isNullable() still carries @Nullable.
         if (descriptor.hasForyField()) {
           nullable = descriptor.isNullable() ? '1' : '0';
+        } else if (descriptor.isNullable()) {
+          nullable = '1';
         } else {
           // Default: Optional types, boxed primitives are nullable
           nullable = (TypeUtils.isOptionalType(rawType) || TypeUtils.isBoxed(rawType)) ? '1' : '0';

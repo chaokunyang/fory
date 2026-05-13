@@ -54,6 +54,7 @@ import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Int8Type;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
 import org.apache.fory.annotation.UInt64Type;
@@ -63,6 +64,7 @@ import org.apache.fory.collection.CacheBuilder;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.util.ExceptionUtils;
@@ -114,6 +116,15 @@ public class Descriptor {
   private FieldConverter<?> fieldConverter;
 
   public Descriptor(Field field, TypeRef<?> typeRef, Method readMethod, Method writeMethod) {
+    this(field, typeRef, readMethod, writeMethod, null);
+  }
+
+  public Descriptor(
+      Field field,
+      TypeRef<?> typeRef,
+      Method readMethod,
+      Method writeMethod,
+      AnnotatedType componentAnnotatedType) {
     this.field = field;
     // Use typeRef.getType().getTypeName() to include generic type info (e.g., Collection<Object>)
     // This ensures consistent typeName between serialization and deserialization.
@@ -131,9 +142,13 @@ public class Descriptor {
     this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
-    if (!typeRef.isPrimitive()) {
-      this.nullable = !hasForyField || foryField.nullable();
-    }
+    this.nullable =
+        resolveNullable(
+            typeRef,
+            true,
+            field.getAnnotatedType(),
+            componentAnnotatedType,
+            readMethod == null ? null : readMethod.getAnnotatedReturnType());
     this.trackingRef = hasForyField && foryField.ref();
   }
 
@@ -229,9 +244,16 @@ public class Descriptor {
   }
 
   private Descriptor(Field field, Method readMethod) {
+    this(field, readMethod, null);
+  }
+
+  private Descriptor(Field field, Method readMethod, AnnotatedType componentAnnotatedType) {
     this.field = field;
     // Compute typeRef from field's generic type to include generic info
-    this.typeRef = TypeUtils.getFieldTypeRef(field);
+    this.typeRef =
+        componentAnnotatedType == null
+            ? TypeUtils.getFieldTypeRef(field)
+            : TypeRef.of(componentAnnotatedType);
     // Use typeRef.getType().getTypeName() to include generic type info (e.g., Collection<Object>)
     // This ensures consistent typeName between serialization and deserialization.
     this.typeName = typeRef.getType().getTypeName();
@@ -246,9 +268,13 @@ public class Descriptor {
     this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
-    if (!field.getType().isPrimitive()) {
-      this.nullable = !hasForyField || foryField.nullable();
-    }
+    this.nullable =
+        resolveNullable(
+            typeRef,
+            true,
+            field.getAnnotatedType(),
+            componentAnnotatedType,
+            readMethod == null ? null : readMethod.getAnnotatedReturnType());
     this.trackingRef = hasForyField && foryField.ref();
   }
 
@@ -270,9 +296,7 @@ public class Descriptor {
     typeAnnotation =
         getTypeUseAnnotation(readMethod.getAnnotatedReturnType(), readMethod.getName());
     arrayType = readMethod.isAnnotationPresent(ArrayType.class);
-    if (!readMethod.getReturnType().isPrimitive()) {
-      this.nullable = !hasForyField || foryField.nullable();
-    }
+    this.nullable = resolveNullable(typeRef, true, readMethod.getAnnotatedReturnType());
     this.trackingRef = hasForyField && foryField.ref();
   }
 
@@ -330,6 +354,26 @@ public class Descriptor {
           "@ForyField id must be -1 (no tag ID) or a non-negative tag ID for field " + fieldName);
     }
     return id;
+  }
+
+  private static boolean resolveNullable(TypeRef<?> typeRef, boolean defaultNullable) {
+    return resolveNullable(typeRef, defaultNullable, (AnnotatedType) null);
+  }
+
+  private static boolean resolveNullable(
+      TypeRef<?> typeRef, boolean defaultNullable, AnnotatedType... annotatedTypes) {
+    if (typeRef.isPrimitive()) {
+      return false;
+    }
+    if (annotatedTypes != null) {
+      for (AnnotatedType annotatedType : annotatedTypes) {
+        if (annotatedType != null && annotatedType.isAnnotationPresent(Nullable.class)) {
+          return true;
+        }
+      }
+    }
+    TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
+    return typeExtMeta == null ? defaultNullable : typeExtMeta.nullable();
   }
 
   public Descriptor copy(Method readMethod, Method writeMethod) {
@@ -619,7 +663,8 @@ public class Descriptor {
       try {
         for (RecordComponent component : components) {
           Field field = clz.getDeclaredField(component.getName());
-          descriptorMap.put(field, new Descriptor(field, component.getAccessor()));
+          descriptorMap.put(
+              field, new Descriptor(field, component.getAccessor(), component.getAnnotatedType()));
         }
       } catch (NoSuchFieldException e) {
         // impossible

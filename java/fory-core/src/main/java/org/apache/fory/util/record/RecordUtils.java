@@ -22,6 +22,7 @@ package org.apache.fory.util.record;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -46,6 +47,7 @@ public class RecordUtils {
   private static final Method GET_NAME;
   private static final Method GET_TYPE;
   private static final Method GET_GENERIC_TYPE;
+  private static final Method GET_ANNOTATED_TYPE;
   private static final Method GET_ACCESSOR;
 
   static {
@@ -55,6 +57,7 @@ public class RecordUtils {
     Method getName;
     Method getType;
     Method getGenericType;
+    Method getAnnotatedType;
     Method getAccessor;
 
     try {
@@ -66,6 +69,7 @@ public class RecordUtils {
       getType = componentClass.getMethod("getType");
       getDeclaringRecord = componentClass.getMethod("getDeclaringRecord");
       getGenericType = componentClass.getMethod("getGenericType");
+      getAnnotatedType = componentClass.getMethod("getAnnotatedType");
       getAccessor = componentClass.getMethod("getAccessor");
     } catch (ClassNotFoundException | NoSuchMethodException e) {
       isRecord = null;
@@ -74,6 +78,7 @@ public class RecordUtils {
       getName = null;
       getType = null;
       getGenericType = null;
+      getAnnotatedType = null;
       getAccessor = null;
     }
     // all public methods, no need to setAccessible.
@@ -83,6 +88,7 @@ public class RecordUtils {
     GET_NAME = getName;
     GET_TYPE = getType;
     GET_GENERIC_TYPE = getGenericType;
+    GET_ANNOTATED_TYPE = getAnnotatedType;
     GET_ACCESSOR = getAccessor;
   }
 
@@ -172,6 +178,7 @@ public class RecordUtils {
                 (String) GET_NAME.invoke(component),
                 fieldType,
                 (Type) GET_GENERIC_TYPE.invoke(component),
+                (AnnotatedType) GET_ANNOTATED_TYPE.invoke(component),
                 accessor,
                 getter);
       }

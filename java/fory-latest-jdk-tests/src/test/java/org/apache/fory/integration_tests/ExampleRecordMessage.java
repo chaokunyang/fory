@@ -27,6 +27,7 @@ import org.apache.fory.annotation.ForyStruct.Evolution;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Int8Type;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
@@ -80,7 +81,7 @@ public record ExampleRecordMessage(
     @ForyField(id = 24) java.time.Duration durationValue,
     @ForyField(id = 25) java.math.BigDecimal decimalValue,
     @ForyField(id = 26) State enumValue,
-    @ForyField(id = 27, nullable = true) Leaf messageValue,
+    @Nullable @ForyField(id = 27) Leaf messageValue,
     @ForyField(id = 101) BoolList boolList,
     @ForyField(id = 102) Int8List int8List,
     @ForyField(id = 103) Int16List int16List,

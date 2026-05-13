@@ -454,9 +454,10 @@ public class ForyStructProcessorTest {
             "package test;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.Nullable;\n"
                 + "@ForyStruct public class EvolvingStruct {\n"
-                + "  @ForyField(id = 1, nullable = true) public String id;\n"
-                + "  @ForyField(id = 2, nullable = true) public String name;\n"
+                + "  @Nullable @ForyField(id = 1) public String id;\n"
+                + "  @Nullable @ForyField(id = 2) public String name;\n"
                 + "  public EvolvingStruct() {}\n"
                 + "}\n");
     CompilationResult readerResult =
@@ -465,10 +466,11 @@ public class ForyStructProcessorTest {
             "package test;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.Nullable;\n"
                 + "@ForyStruct public class EvolvingStruct {\n"
                 + "  @ForyField(id = 1) public int id;\n"
-                + "  @ForyField(id = 2, nullable = true) public String name;\n"
-                + "  @ForyField(id = 3, nullable = true) public String added = \"default\";\n"
+                + "  @Nullable @ForyField(id = 2) public String name;\n"
+                + "  @Nullable @ForyField(id = 3) public String added = \"default\";\n"
                 + "  public EvolvingStruct() {}\n"
                 + "}\n");
     Assert.assertTrue(writerResult.success, writerResult.diagnostics());
@@ -538,9 +540,10 @@ public class ForyStructProcessorTest {
                 + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.ForyField.Dynamic;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.Nullable;\n"
                 + "@ForyStruct public class RecursiveStruct {\n"
                 + "  public int id;\n"
-                + "  @ForyField(nullable = true, ref = true, dynamic = Dynamic.FALSE)\n"
+                + "  @Nullable @ForyField(ref = true, dynamic = Dynamic.FALSE)\n"
                 + "  public RecursiveStruct next;\n"
                 + "  public RecursiveStruct() {}\n"
                 + "}\n");
@@ -603,13 +606,14 @@ public class ForyStructProcessorTest {
             "test.RoundTripStruct",
             "package test;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.Nullable;\n"
                 + "import org.apache.fory.annotation.UInt16Type;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "@ForyStruct public class RoundTripStruct {\n"
                 + "  public int id;\n"
                 + "  public @UInt16Type int code;\n"
                 + "  public String name;\n"
-                + "  @ForyField(id = 4) public String strictName;\n"
+                + "  @Nullable @ForyField(id = 4) public String strictName;\n"
                 + "  public RoundTripStruct() {}\n"
                 + "}\n");
     CompilationResult runtimeResult =
@@ -617,12 +621,13 @@ public class ForyStructProcessorTest {
             "test.RoundTripStruct",
             "package test;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.Nullable;\n"
                 + "import org.apache.fory.annotation.UInt16Type;\n"
                 + "public class RoundTripStruct {\n"
                 + "  public int id;\n"
                 + "  public @UInt16Type int code;\n"
                 + "  public String name;\n"
-                + "  @ForyField(id = 4) public String strictName;\n"
+                + "  @Nullable @ForyField(id = 4) public String strictName;\n"
                 + "  public RoundTripStruct() {}\n"
                 + "}\n");
     Assert.assertTrue(staticResult.success, staticResult.diagnostics());

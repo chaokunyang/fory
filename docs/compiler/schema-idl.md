@@ -877,15 +877,15 @@ message User {
 
 **Generated Code:**
 
-| Language   | Non-optional       | Optional                                        |
-| ---------- | ------------------ | ----------------------------------------------- |
-| Java       | `String name`      | `String email` with `@ForyField(nullable=true)` |
-| Python     | `name: str`        | `name: Optional[str]`                           |
-| Go         | `Name string`      | `Name *string`                                  |
-| Rust       | `name: String`     | `name: Option<String>`                          |
-| C++        | `std::string name` | `std::optional<std::string> name`               |
-| JavaScript | `name: string`     | `name?: string \| null`                         |
-| Dart       | `String name`      | `String? email`                                 |
+| Language   | Non-optional       | Optional                          |
+| ---------- | ------------------ | --------------------------------- |
+| Java       | `String name`      | `@Nullable String email`          |
+| Python     | `name: str`        | `name: Optional[str]`             |
+| Go         | `Name string`      | `Name *string`                    |
+| Rust       | `name: String`     | `name: Option<String>`            |
+| C++        | `std::string name` | `std::optional<std::string> name` |
+| JavaScript | `name: string`     | `name?: string \| null`           |
+| Dart       | `String name`      | `String? email`                   |
 
 **Default Values:**
 
@@ -970,12 +970,12 @@ apply to elements. `repeated` is accepted as an alias for `list`.
 
 **List modifier mapping:**
 
-| Fory IDL                | Java                                           | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                          |
-| ----------------------- | ---------------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------- |
-| `optional list<string>` | `List<String>` + `@ForyField(nullable = true)` | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                               |
-| `list<optional string>` | `List<String>` (nullable elements)             | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                               |
-| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)`        | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`                        |
-| `list<ref User>`        | `List<User>`                                   | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` |
+| Fory IDL                | Java                                    | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                          |
+| ----------------------- | --------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------- |
+| `optional list<string>` | `@Nullable List<String>`                | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                               |
+| `list<optional string>` | `List<String>` (nullable elements)      | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                               |
+| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)` | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`                        |
+| `list<ref User>`        | `List<User>`                            | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` |
 
 Use `ref(thread_safe=false)` in Fory IDL (or `[(fory).thread_safe_pointer = false]` in protobuf)
 to generate `Rc` instead of `Arc` in Rust.

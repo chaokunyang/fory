@@ -246,7 +246,9 @@ public class FieldGroups {
           && !primitiveListArray
           && !primitiveListCollection) {
         nullable = extMeta.nullable();
-        trackingRef = extMeta.trackingRef();
+        // A top-level @Nullable TypeExtMeta owns only nullability; @ForyField remains the owner of
+        // field-wrapper reference tracking.
+        trackingRef = d.hasForyField() ? d.isTrackingRef() : extMeta.trackingRef();
       } else {
         nullable = d.isNullable();
         trackingRef = d.isTrackingRef();

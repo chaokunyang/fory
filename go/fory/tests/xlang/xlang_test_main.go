@@ -251,7 +251,7 @@ type OneFieldStruct struct {
 // String field structs for schema evolution tests
 type EmptyStruct struct{}
 
-// F1 has @ForyField(nullable = true) in Java
+// F1 has @Nullable in Java
 type OneStringFieldStruct struct {
 	F1 *string `fory:"nullable"`
 }
@@ -371,7 +371,7 @@ type MyStruct struct {
 
 type VersionCheckStruct struct {
 	F1 int32
-	// Match Java's @ForyField(nullable = true) annotation
+	// Match Java's @Nullable annotation
 	F2 *string `fory:"nullable=true"`
 	F3 float64
 }
@@ -382,7 +382,7 @@ type Animal interface {
 }
 
 type Dog struct {
-	// Match Java's @ForyField(nullable = true) annotation
+	// Match Java's @Nullable annotation
 	Name *string `fory:"nullable=true"`
 	Age  int32
 }
@@ -455,7 +455,7 @@ type NullableComprehensiveSchemaConsistent struct {
 // NullableComprehensiveCompatible - Cross-language schema evolution test struct.
 // This struct has INVERTED nullability compared to Java:
 // - Group 1: Nullable (pointer) in Go, Non-nullable in Java
-// - Group 2: Non-nullable in Go, Nullable in Java (@ForyField(nullable=true))
+// - Group 2: Non-nullable in Go, Nullable in Java (@Nullable)
 // Type id 402
 type NullableComprehensiveCompatible struct {
 	// Group 1: Nullable in Go (pointer), Non-nullable in Java
@@ -481,7 +481,7 @@ type NullableComprehensiveCompatible struct {
 	SetField    fory.Set[string]  `fory:"nullable"`
 	MapField    map[string]string `fory:"nullable"`
 
-	// Group 2: Non-nullable in Go, Nullable in Java (@ForyField(nullable=true))
+	// Group 2: Non-nullable in Go, Nullable in Java (@Nullable)
 	// Boxed types
 	NullableInt1    int32
 	NullableLong1   int64

@@ -1130,8 +1130,6 @@ class JavaGenerator(BaseGenerator):
         nullable = field.optional or is_any
         if field.tag_id is not None:
             annotations.append(f"id = {field.tag_id}")
-        if nullable:
-            annotations.append("nullable = true")
         if field.ref:
             annotations.append("ref = true")
 
@@ -1160,6 +1158,8 @@ class JavaGenerator(BaseGenerator):
             field,
             type_use=use_type_annotation,
         )
+        if nullable:
+            java_type = f"@Nullable {java_type}"
 
         lines.append(f"private {java_type} {self.to_camel_case(field.name)};")
         lines.append("")
@@ -1364,6 +1364,7 @@ class JavaGenerator(BaseGenerator):
             isinstance(field.field_type, PrimitiveType)
             and field.field_type.kind == PrimitiveKind.ANY
         )
+        nullable = field.optional or is_any
         self.collect_type_imports(
             field.field_type,
             imports,
@@ -1373,7 +1374,9 @@ class JavaGenerator(BaseGenerator):
         )
         self.collect_integer_imports(field.field_type, imports)
         self.collect_array_imports(field, imports)
-        if field.optional or field.ref or field.tag_id is not None or is_any:
+        if nullable:
+            imports.add("org.apache.fory.annotation.Nullable")
+        if field.ref or field.tag_id is not None:
             imports.add("org.apache.fory.annotation.ForyField")
 
     def is_ref_target_type(self, field_type: FieldType) -> bool:

@@ -74,6 +74,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
   private static final String INT32_TYPE = "org.apache.fory.annotation.Int32Type";
   private static final String INT64_TYPE = "org.apache.fory.annotation.Int64Type";
   private static final String INT8_TYPE = "org.apache.fory.annotation.Int8Type";
+  private static final String NULLABLE = "org.apache.fory.annotation.Nullable";
   private static final String REF = "org.apache.fory.annotation.Ref";
   private static final String UINT16_TYPE = "org.apache.fory.annotation.UInt16Type";
   private static final String UINT32_TYPE = "org.apache.fory.annotation.UInt32Type";
@@ -286,8 +287,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
           field);
     }
     ForyFieldMeta foryField = foryField(field);
-    boolean nullable = fieldNullable(field.asType(), foryField, mode);
-    SourceTypeNode typeNode = buildFieldTypeNode(field, nullable);
+    Object fieldTypeTree = typeTree(field);
+    boolean nullable = fieldNullable(field.asType(), fieldTypeTree, mode);
+    SourceTypeNode typeNode = buildFieldTypeNode(field.asType(), fieldTypeTree, nullable, field);
     String erasedType = canonicalName(types.erasure(field.asType()));
     String declaringClass =
         elements.getBinaryName((TypeElement) field.getEnclosingElement()).toString();
@@ -342,12 +344,12 @@ public final class ForyStructProcessor extends AbstractProcessor {
         foryField.dynamic);
   }
 
-  private boolean fieldNullable(TypeMirror type, ForyFieldMeta foryField, SerializerMode mode) {
+  private boolean fieldNullable(TypeMirror type, Object tree, SerializerMode mode) {
     if (type.getKind().isPrimitive()) {
       return false;
     }
-    if (foryField.hasForyField) {
-      return foryField.nullable;
+    if (typeUseAnnotation(type, typeTreeInfo(tree).annotations, NULLABLE) != null) {
+      return true;
     }
     if (mode == SerializerMode.NATIVE) {
       return true;
@@ -570,8 +572,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
     return value;
   }
 
-  private SourceTypeNode buildFieldTypeNode(VariableElement field, boolean nullable) {
-    return buildTypeNode(field.asType(), typeTree(field), Boolean.toString(nullable), field, false);
+  private SourceTypeNode buildFieldTypeNode(
+      TypeMirror type, Object tree, boolean nullable, Element errorElement) {
+    return buildTypeNode(type, tree, Boolean.toString(nullable), errorElement, false);
   }
 
   private Object typeTree(VariableElement field) {
@@ -695,14 +698,15 @@ public final class ForyStructProcessor extends AbstractProcessor {
       Element errorElement,
       boolean arrayComponent) {
     String typeId = scalarTypeId(type, rawType, treeAnnotations, errorElement, arrayComponent);
+    TypeUseAnnotation nullableAnnotation = typeUseAnnotation(type, treeAnnotations, NULLABLE);
     TypeUseAnnotation ref = typeUseAnnotation(type, treeAnnotations, REF);
-    if (typeId == null && ref == null) {
+    if (typeId == null && nullableAnnotation == null && ref == null) {
       return null;
     }
     return "meta("
         + (typeId == null ? "Types.UNKNOWN" : typeId)
         + ", "
-        + nullable
+        + (nullableAnnotation == null ? nullable : "true")
         + ", "
         + (ref != null && booleanValue(ref, "enable", true))
         + ")";
@@ -1068,7 +1072,6 @@ public final class ForyStructProcessor extends AbstractProcessor {
     Map<? extends ExecutableElement, ? extends AnnotationValue> values =
         elements.getElementValuesWithDefaults(mirror);
     int id = -1;
-    boolean nullable = !field.asType().getKind().isPrimitive();
     boolean ref = false;
     String dynamic = "AUTO";
     for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
@@ -1077,8 +1080,6 @@ public final class ForyStructProcessor extends AbstractProcessor {
       Object value = entry.getValue().getValue();
       if ("id".equals(name)) {
         id = ((Number) value).intValue();
-      } else if ("nullable".equals(name)) {
-        nullable = (Boolean) value;
       } else if ("ref".equals(name)) {
         ref = (Boolean) value;
       } else if ("dynamic".equals(name)) {
@@ -1089,7 +1090,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
       throw new InvalidStructException(
           "@ForyField id must be -1 (no tag ID) or a non-negative tag ID", field);
     }
-    return new ForyFieldMeta(true, id, nullable, ref, dynamic);
+    return new ForyFieldMeta(true, id, ref, dynamic);
   }
 
   private String canonicalName(TypeMirror type) {
@@ -1180,18 +1181,16 @@ public final class ForyStructProcessor extends AbstractProcessor {
   }
 
   private static final class ForyFieldMeta {
-    static final ForyFieldMeta NONE = new ForyFieldMeta(false, -1, false, false, "AUTO");
+    static final ForyFieldMeta NONE = new ForyFieldMeta(false, -1, false, "AUTO");
 
     final boolean hasForyField;
     final int id;
-    final boolean nullable;
     final boolean ref;
     final String dynamic;
 
-    ForyFieldMeta(boolean hasForyField, int id, boolean nullable, boolean ref, String dynamic) {
+    ForyFieldMeta(boolean hasForyField, int id, boolean ref, String dynamic) {
       this.hasForyField = hasForyField;
       this.id = id;
-      this.nullable = nullable;
       this.ref = ref;
       this.dynamic = dynamic;
     }

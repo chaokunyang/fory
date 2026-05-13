@@ -296,9 +296,10 @@ public class StaticCompatibleCodecBuilderTest {
             "package test;\n"
                 + "import java.util.List;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.Nullable;\n"
                 + "public class StaticCompatibleRefPayload {\n"
-                + "  @ForyField(nullable = true, ref = true) public String name;\n"
-                + "  @ForyField(nullable = true, ref = true) public String nameAlias;\n"
+                + "  @Nullable @ForyField(ref = true) public String name;\n"
+                + "  @Nullable @ForyField(ref = true) public String nameAlias;\n"
                 + "  public List<String> after;\n"
                 + "  public StaticCompatibleRefPayload() {}\n"
                 + "}\n");
@@ -308,8 +309,9 @@ public class StaticCompatibleCodecBuilderTest {
             "package test;\n"
                 + "import java.util.List;\n"
                 + "import org.apache.fory.annotation.ForyField;\n"
+                + "import org.apache.fory.annotation.Nullable;\n"
                 + "public class StaticCompatibleRefPayload {\n"
-                + "  @ForyField(nullable = true, ref = true) public String name;\n"
+                + "  @Nullable @ForyField(ref = true) public String name;\n"
                 + "  public List<String> after;\n"
                 + "  public StaticCompatibleRefPayload() {}\n"
                 + "}\n");

@@ -44,6 +44,7 @@ import org.apache.fory.annotation.ForyStruct.Evolution;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Int8Type;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
@@ -843,7 +844,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     int f2 = 2;
     Integer f3 = 3;
     Integer f4 = 4;
-    // Use 0 instead of null for xlang mode with nullable=false default
+    // Use 0 instead of null for xlang mode with non-nullable default
     // Go uses int (not *int), so null is not allowed
     Integer f5 = 0;
     Integer f6 = 0;
@@ -871,7 +872,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     Assert.assertEquals(newItem1.f2, 2);
     Assert.assertEquals(newItem1.f3, 3);
     Assert.assertEquals(newItem1.f4, 4);
-    // With nullable=false (xlang default), 0 should round-trip correctly
+    // With non-nullable (xlang default), 0 should round-trip correctly
     Assert.assertEquals(newItem1.f5, (Integer) 0);
     Assert.assertEquals(newItem1.f6, (Integer) 0);
     Assert.assertEquals(fory.deserialize(buffer2), 1);
@@ -912,7 +913,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     Item item2 = new Item();
     item2.name = "test_item_2";
     Item item3 = new Item();
-    // Use empty string instead of null - xlang mode uses nullable=false by default
+    // Use empty string instead of null - xlang mode uses non-nullable by default
     // Go strings are always non-nil (empty string for "no value")
     item3.name = "";
 
@@ -934,7 +935,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     Item readItem2 = (Item) fory.deserialize(buffer2);
     Assert.assertEquals(readItem2.name, "test_item_2");
     Item readItem3 = (Item) fory.deserialize(buffer2);
-    // With nullable=false (xlang default), empty string should round-trip correctly
+    // With non-nullable (xlang default), empty string should round-trip correctly
     Assert.assertEquals(readItem3.name, "");
   }
 
@@ -1444,8 +1445,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   static class VersionCheckStruct {
     int f1;
 
-    @ForyField(nullable = true)
-    String f2;
+    @Nullable String f2;
 
     double f3;
   }
@@ -1494,8 +1494,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   public static class Dog implements Animal {
     int age;
 
-    @ForyField(nullable = true)
-    String name;
+    @Nullable String name;
 
     @Override
     public int getAge() {
@@ -1708,8 +1707,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   @ForyStruct
   static class OneStringFieldStruct {
-    @ForyField(nullable = true)
-    String f1;
+    @Nullable String f1;
   }
 
   @Data
@@ -2224,9 +2222,9 @@ public abstract class XlangTestBase extends ForyTestBase {
     byte[] goBytes = buffer3.getBytes(0, buffer3.size());
     TwoEnumFieldStruct result2 = (TwoEnumFieldStruct) fory2.deserialize(buffer3);
     Assert.assertEquals(result2.f1, TestEnum.VALUE_C);
-    // With nullable=false (xlang default), peer writes zero value for nil pointers.
+    // With non-nullable (xlang default), peer writes zero value for nil pointers.
     // So f2 should be VALUE_A (ordinal 0), not null.
-    // Go is an exception: it writes null for nil pointers (nullable=true by default).
+    // Go is an exception: it writes null for nil pointers (@Nullable by default).
     Assert.assertEquals(result2.f2, TestEnum.VALUE_A);
   }
 
@@ -2265,33 +2263,24 @@ public abstract class XlangTestBase extends ForyTestBase {
     Map<String, String> mapField;
 
     // Nullable fields - first half using boxed types
-    @ForyField(nullable = true)
-    Integer nullableInt;
+    @Nullable Integer nullableInt;
 
-    @ForyField(nullable = true)
-    Long nullableLong;
+    @Nullable Long nullableLong;
 
-    @ForyField(nullable = true)
-    Float nullableFloat;
+    @Nullable Float nullableFloat;
 
     // Nullable fields - second half using @ForyField annotation
-    @ForyField(nullable = true)
-    Double nullableDouble;
+    @Nullable Double nullableDouble;
 
-    @ForyField(nullable = true)
-    Boolean nullableBool;
+    @Nullable Boolean nullableBool;
 
-    @ForyField(nullable = true)
-    String nullableString;
+    @Nullable String nullableString;
 
-    @ForyField(nullable = true)
-    List<String> nullableList;
+    @Nullable List<String> nullableList;
 
-    @ForyField(nullable = true)
-    Set<String> nullableSet;
+    @Nullable Set<String> nullableSet;
 
-    @ForyField(nullable = true)
-    Map<String, String> nullableMap;
+    @Nullable Map<String, String> nullableMap;
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
@@ -2442,34 +2431,25 @@ public abstract class XlangTestBase extends ForyTestBase {
     Set<String> setField;
     Map<String, String> mapField;
 
-    // Nullable group 1 - boxed types with @ForyField(nullable=true)
-    @ForyField(nullable = true)
-    Integer nullableInt1;
+    // Nullable group 1 - boxed types with @Nullable
+    @Nullable Integer nullableInt1;
 
-    @ForyField(nullable = true)
-    Long nullableLong1;
+    @Nullable Long nullableLong1;
 
-    @ForyField(nullable = true)
-    Float nullableFloat1;
+    @Nullable Float nullableFloat1;
 
-    @ForyField(nullable = true)
-    Double nullableDouble1;
+    @Nullable Double nullableDouble1;
 
-    @ForyField(nullable = true)
-    Boolean nullableBool1;
+    @Nullable Boolean nullableBool1;
 
-    // Nullable group 2 - reference types with @ForyField(nullable=true)
-    @ForyField(nullable = true)
-    String nullableString2;
+    // Nullable group 2 - reference types with @Nullable
+    @Nullable String nullableString2;
 
-    @ForyField(nullable = true)
-    List<String> nullableList2;
+    @Nullable List<String> nullableList2;
 
-    @ForyField(nullable = true)
-    Set<String> nullableSet2;
+    @Nullable Set<String> nullableSet2;
 
-    @ForyField(nullable = true)
-    Map<String, String> nullableMap2;
+    @Nullable Map<String, String> nullableMap2;
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")
@@ -2726,10 +2706,12 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   @ForyStruct
   static class RefOuterSchemaConsistent {
-    @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
+    @Nullable
+    @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE)
     RefInnerSchemaConsistent inner1;
 
-    @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
+    @Nullable
+    @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE)
     RefInnerSchemaConsistent inner2;
   }
 
@@ -2805,10 +2787,12 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   @ForyStruct
   static class RefOuterCompatible {
-    @ForyField(ref = true, nullable = true)
+    @Nullable
+    @ForyField(ref = true)
     RefInnerCompatible inner1;
 
-    @ForyField(ref = true, nullable = true)
+    @Nullable
+    @ForyField(ref = true)
     RefInnerCompatible inner2;
   }
 
@@ -3033,7 +3017,8 @@ public abstract class XlangTestBase extends ForyTestBase {
   static class CircularRefStruct {
     String name;
 
-    @ForyField(ref = true, nullable = true)
+    @Nullable
+    @ForyField(ref = true)
     CircularRefStruct selfRef;
   }
 
@@ -3191,31 +3176,25 @@ public abstract class XlangTestBase extends ForyTestBase {
     long u64TaggedField;
 
     // Boxed nullable unsigned fields
-    @ForyField(nullable = true)
-    @UInt8Type
-    Integer u8NullableField;
+    @Nullable @UInt8Type Integer u8NullableField;
 
-    @ForyField(nullable = true)
-    @UInt16Type
-    Integer u16NullableField;
+    @Nullable @UInt16Type Integer u16NullableField;
 
-    @ForyField(nullable = true)
-    @UInt32Type
-    Long u32VarNullableField;
+    @Nullable @UInt32Type Long u32VarNullableField;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt32Type(encoding = Int32Encoding.FIXED)
     Long u32FixedNullableField;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.VARINT)
     Long u64VarNullableField;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.FIXED)
     Long u64FixedNullableField;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     Long u64TaggedNullableField;
   }
@@ -3226,7 +3205,7 @@ public abstract class XlangTestBase extends ForyTestBase {
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     long u64Tagged;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     Long u64TaggedNullable;
   }
@@ -3337,31 +3316,25 @@ public abstract class XlangTestBase extends ForyTestBase {
     long u64TaggedField1;
 
     // Group 2: Nullable boxed fields (nullable in Java, non-Optional in other languages)
-    @ForyField(nullable = true)
-    @UInt8Type
-    Integer u8Field2;
+    @Nullable @UInt8Type Integer u8Field2;
 
-    @ForyField(nullable = true)
-    @UInt16Type
-    Integer u16Field2;
+    @Nullable @UInt16Type Integer u16Field2;
 
-    @ForyField(nullable = true)
-    @UInt32Type
-    Long u32VarField2;
+    @Nullable @UInt32Type Long u32VarField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt32Type(encoding = Int32Encoding.FIXED)
     Long u32FixedField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.VARINT)
     Long u64VarField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.FIXED)
     Long u64FixedField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     Long u64TaggedField2;
   }

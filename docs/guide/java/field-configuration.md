@@ -25,7 +25,8 @@ This page explains how to configure field-level metadata for serialization in Ja
 
 Apache Fory™ provides field-level configuration through annotations:
 
-- **`@ForyField`**: Configure field metadata (id, nullable, ref, dynamic)
+- **`@ForyField`**: Configure field metadata (id, ref, dynamic)
+- **`@Nullable`**: Mark a field type or nested type position as nullable
 - **`@Ignore`**: Exclude fields from serialization
 - **Integer type annotations**: Control integer encoding (varint, fixed, tagged, unsigned)
 
@@ -44,6 +45,7 @@ Use annotations on fields:
 
 ```java
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Nullable;
 
 public class Person {
     @ForyField(id = 0)
@@ -52,7 +54,8 @@ public class Person {
     @ForyField(id = 1)
     private int age;
 
-    @ForyField(id = 2, nullable = true)
+    @Nullable
+    @ForyField(id = 2)
     private String nickname;
 }
 ```
@@ -69,7 +72,8 @@ public class User {
     @ForyField(id = 1)
     private String name;
 
-    @ForyField(id = 2, nullable = true)
+    @Nullable
+    @ForyField(id = 2)
     private String email;
 
     @ForyField(id = 3, ref = true)
@@ -130,18 +134,20 @@ public class User {
 }
 ```
 
-## Nullable Fields (`nullable`)
+## Nullable Fields (`@Nullable`)
 
-Use `nullable = true` for fields that can be `null`:
+Use `@Nullable` for fields that can be `null`:
 
 ```java
 public class Record {
     // Nullable string field
-    @ForyField(id = 0, nullable = true)
+    @Nullable
+    @ForyField(id = 0)
     private String optionalName;
 
     // Nullable Integer field (boxed type)
-    @ForyField(id = 1, nullable = true)
+    @Nullable
+    @ForyField(id = 1)
     private Integer optionalCount;
 
     // Non-nullable field (default)
@@ -152,9 +158,9 @@ public class Record {
 
 **Notes**:
 
-- Default is `nullable = false` (non-nullable)
-- When `nullable = false`, Fory skips writing the null flag (saves 1 byte)
-- Boxed types (`Integer`, `Long`, etc.) that can be null should use `nullable = true`
+- Xlang fields are non-nullable by default.
+- When a field is non-nullable, Fory skips writing the null flag.
+- Boxed types (`Integer`, `Long`, etc.) that can be null should use `@Nullable`.
 
 ## Reference Tracking (`ref`)
 
@@ -163,10 +169,12 @@ Enable reference tracking for fields that may be shared or circular:
 ```java
 public class RefOuter {
     // Both fields may point to the same inner object
-    @ForyField(id = 0, ref = true, nullable = true)
+    @Nullable
+    @ForyField(id = 0, ref = true)
     private RefInner inner1;
 
-    @ForyField(id = 1, ref = true, nullable = true)
+    @Nullable
+    @ForyField(id = 1, ref = true)
     private RefInner inner2;
 }
 
@@ -175,7 +183,8 @@ public class CircularRef {
     private String name;
 
     // Self-referencing field for circular references
-    @ForyField(id = 1, ref = true, nullable = true)
+    @Nullable
+    @ForyField(id = 1, ref = true)
     private CircularRef selfRef;
 }
 ```
@@ -397,6 +406,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Ignore;
 import org.apache.fory.annotation.Int64Type;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.UInt64Type;
 import org.apache.fory.config.Int64Encoding;
 
@@ -413,7 +423,8 @@ public class Document {
     private int version;
 
     // Nullable field
-    @ForyField(id = 2, nullable = true)
+    @Nullable
+    @ForyField(id = 2)
     private String description;
 
     // Collection fields
@@ -437,7 +448,8 @@ public class Document {
     private @UInt64Type(encoding = Int64Encoding.TAGGED) long checksum;   // tagged encoding
 
     // Reference-tracked field for shared/circular references
-    @ForyField(id = 9, ref = true, nullable = true)
+    @Nullable
+    @ForyField(id = 9, ref = true)
     private Document parent;
 
     // Ignored field (not serialized)
@@ -487,7 +499,8 @@ public class CrossLangData {
     @ForyField(id = 2)
     private @UInt64Type(encoding = Int64Encoding.TAGGED) long longTagged;
 
-    @ForyField(id = 3, nullable = true)
+    @Nullable
+    @ForyField(id = 3)
     private String optionalValue;
 }
 ```
@@ -514,7 +527,8 @@ public class DataV2 {
     @ForyField(id = 1)
     private String name;
 
-    @ForyField(id = 2, nullable = true)
+    @Nullable
+    @ForyField(id = 2)
     private String email;  // New field
 }
 ```
@@ -561,13 +575,13 @@ public class User {
 
 Xlang mode has **stricter default values** due to type system differences between languages:
 
-- **Nullable**: Fields are non-nullable by default (`nullable = false`)
+- **Nullable**: Fields are non-nullable by default
 - **Ref tracking**: Disabled by default (`ref = false`)
 - **Polymorphism**: Concrete types are non-polymorphic by default
 
 In xlang mode, you **need to configure fields** when:
 
-- A field can be null (use `nullable = true`)
+- A field can be null (use `@Nullable`)
 - A field needs reference tracking for shared/circular objects (use `ref = true`)
 - Integer types need specific encoding for cross-language compatibility
 - You want to reduce metadata size (use field IDs)
@@ -581,10 +595,12 @@ public class User {
     @ForyField(id = 1)
     private String name;
 
-    @ForyField(id = 2, nullable = true)  // Must declare nullable
+    @Nullable
+    @ForyField(id = 2) // Must declare @Nullable
     private String email;
 
-    @ForyField(id = 3, ref = true, nullable = true)  // Must declare ref for shared objects
+    @Nullable
+    @ForyField(id = 3, ref = true) // Must declare ref for shared objects
     private User friend;
 }
 ```
@@ -600,7 +616,7 @@ public class User {
 ## Best Practices
 
 1. **Configure field IDs**: Recommended for compatible mode to reduce serialization cost
-2. **Use `nullable = true` for nullable fields**: Required for fields that can be null
+2. **Use `@Nullable` for nullable fields**: Required for fields that can be null
 3. **Enable ref tracking for shared objects**: Use `ref = true` when objects are shared or circular
 4. **Use `@Ignore` or `transient` for sensitive data**: Passwords, tokens, internal state
 5. **Choose appropriate encoding**: `varint` for small values, `fixed` for full-range values
@@ -612,7 +628,7 @@ public class User {
 | Annotation                    | Description                            |
 | ----------------------------- | -------------------------------------- |
 | `@ForyField(id = N)`          | Field tag ID to reduce metadata size   |
-| `@ForyField(nullable = true)` | Mark field as nullable                 |
+| `@Nullable`                   | Mark field or nested type as nullable  |
 | `@ForyField(ref = true)`      | Enable reference tracking              |
 | `@ForyField(dynamic = ...)`   | Control polymorphism for struct fields |
 | `@Ignore`                     | Exclude field from serialization       |

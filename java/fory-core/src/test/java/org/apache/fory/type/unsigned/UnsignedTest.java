@@ -27,7 +27,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.fory.Fory;
-import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
 import org.apache.fory.annotation.UInt64Type;
@@ -168,16 +167,13 @@ public class UnsignedTest {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class UIntPojo {
-    @ForyField(nullable = false)
+
     private UInt8 uInt8Field;
 
-    @ForyField(nullable = false)
     private UInt16 uInt16Field;
 
-    @ForyField(nullable = false)
     private UInt32 uInt32Field;
 
-    @ForyField(nullable = false)
     private UInt64 uInt64Field;
   }
 
@@ -200,16 +196,13 @@ public class UnsignedTest {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class BoxedUIntPojo {
-    @ForyField(nullable = false)
+
     private @UInt8Type Integer uInt8Field;
 
-    @ForyField(nullable = false)
     private @UInt16Type Integer uInt16Field;
 
-    @ForyField(nullable = false)
     private @UInt32Type Long uInt32Field;
 
-    @ForyField(nullable = false)
     private @UInt64Type Long uInt64Field;
   }
 

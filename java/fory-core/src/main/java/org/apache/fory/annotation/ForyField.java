@@ -63,18 +63,10 @@ public @interface ForyField {
   int id() default -1;
 
   /**
-   * Whether this field can be null. When set to false (default), Fory skips writing the null flag
-   * (saves 1 byte). When set to true, Fory writes null flag for nullable fields. Default: false
-   * (field is non-nullable, aligned with xlang protocol defaults)
-   */
-  boolean nullable() default false;
-
-  /**
    * Whether to track references for this field. When set to false (default): - Avoids adding the
    * object to IdentityMap (saves hash map overhead) - Skips writing ref tracking flag (saves 1 byte
-   * when combined with nullable=false) When set to true, enables reference tracking for
-   * shared/circular references. Default: false (no reference tracking, aligned with xlang protocol
-   * defaults)
+   * for non-nullable fields) When set to true, enables reference tracking for shared/circular
+   * references. Default: false (no reference tracking, aligned with xlang protocol defaults)
    */
   boolean ref() default false;
 

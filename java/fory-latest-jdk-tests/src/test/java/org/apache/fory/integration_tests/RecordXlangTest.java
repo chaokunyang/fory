@@ -29,6 +29,7 @@ import java.util.Set;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.testng.Assert;
@@ -65,7 +66,7 @@ public class RecordXlangTest {
    *
    * <ul>
    *   <li>Base non-nullable fields: primitives and reference types
-   *   <li>Nullable fields: boxed types and reference types with @ForyField(nullable=true)
+   *   <li>Nullable fields: boxed types and reference types with @Nullable
    * </ul>
    */
   public record NullableRecordSchemaConsistent(
@@ -83,16 +84,16 @@ public class RecordXlangTest {
       Set<String> setField,
       Map<String, String> mapField,
       // Nullable fields - boxed types
-      @ForyField(nullable = true) Integer nullableInt,
-      @ForyField(nullable = true) Long nullableLong,
-      @ForyField(nullable = true) Float nullableFloat,
+      @Nullable Integer nullableInt,
+      @Nullable Long nullableLong,
+      @Nullable Float nullableFloat,
       // Nullable fields - reference types
-      @ForyField(nullable = true) Double nullableDouble,
-      @ForyField(nullable = true) Boolean nullableBool,
-      @ForyField(nullable = true) String nullableString,
-      @ForyField(nullable = true) List<String> nullableList,
-      @ForyField(nullable = true) Set<String> nullableSet,
-      @ForyField(nullable = true) Map<String, String> nullableMap) {}
+      @Nullable Double nullableDouble,
+      @Nullable Boolean nullableBool,
+      @Nullable String nullableString,
+      @Nullable List<String> nullableList,
+      @Nullable Set<String> nullableSet,
+      @Nullable Map<String, String> nullableMap) {}
 
   /**
    * POJO for SCHEMA_CONSISTENT mode xlang type. Same structure as the Record - both Java and other
@@ -116,33 +117,24 @@ public class RecordXlangTest {
     Map<String, String> mapField;
 
     // Nullable fields - boxed types
-    @ForyField(nullable = true)
-    Integer nullableInt;
+    @Nullable Integer nullableInt;
 
-    @ForyField(nullable = true)
-    Long nullableLong;
+    @Nullable Long nullableLong;
 
-    @ForyField(nullable = true)
-    Float nullableFloat;
+    @Nullable Float nullableFloat;
 
     // Nullable fields - reference types
-    @ForyField(nullable = true)
-    Double nullableDouble;
+    @Nullable Double nullableDouble;
 
-    @ForyField(nullable = true)
-    Boolean nullableBool;
+    @Nullable Boolean nullableBool;
 
-    @ForyField(nullable = true)
-    String nullableString;
+    @Nullable String nullableString;
 
-    @ForyField(nullable = true)
-    List<String> nullableList;
+    @Nullable List<String> nullableList;
 
-    @ForyField(nullable = true)
-    Set<String> nullableSet;
+    @Nullable Set<String> nullableSet;
 
-    @ForyField(nullable = true)
-    Map<String, String> nullableMap;
+    @Nullable Map<String, String> nullableMap;
   }
 
   // ==================== COMPATIBLE Mode Records and POJOs ====================
@@ -154,8 +146,7 @@ public class RecordXlangTest {
    *
    * <ul>
    *   <li>Group 1 (non-nullable in Java): primitives, boxed types, and reference types
-   *   <li>Group 2 (nullable in Java): boxed types and reference types
-   *       with @ForyField(nullable=true)
+   *   <li>Group 2 (nullable in Java): boxed types and reference types with @Nullable
    * </ul>
    *
    * <p>In Go, Group 1 fields are nullable (*int8, *int16, etc.) and Group 2 fields are non-nullable
@@ -183,17 +174,17 @@ public class RecordXlangTest {
       Set<String> setField,
       Map<String, String> mapField,
       // Group 2: Nullable in Java (non-nullable in Go with value types)
-      // Boxed types with @ForyField(nullable=true)
-      @ForyField(nullable = true) Integer nullableInt1,
-      @ForyField(nullable = true) Long nullableLong1,
-      @ForyField(nullable = true) Float nullableFloat1,
-      @ForyField(nullable = true) Double nullableDouble1,
-      @ForyField(nullable = true) Boolean nullableBool1,
-      // Reference types with @ForyField(nullable=true)
-      @ForyField(nullable = true) String nullableString2,
-      @ForyField(nullable = true) List<String> nullableList2,
-      @ForyField(nullable = true) Set<String> nullableSet2,
-      @ForyField(nullable = true) Map<String, String> nullableMap2) {}
+      // Boxed types with @Nullable
+      @Nullable Integer nullableInt1,
+      @Nullable Long nullableLong1,
+      @Nullable Float nullableFloat1,
+      @Nullable Double nullableDouble1,
+      @Nullable Boolean nullableBool1,
+      // Reference types with @Nullable
+      @Nullable String nullableString2,
+      @Nullable List<String> nullableList2,
+      @Nullable Set<String> nullableSet2,
+      @Nullable Map<String, String> nullableMap2) {}
 
   /**
    * POJO for COMPATIBLE mode xlang type with INVERTED nullability.
@@ -209,53 +200,37 @@ public class RecordXlangTest {
   public static class NullablePojoCompatibleXlang {
     // Group 1: NULLABLE in xlang (non-nullable in Java Record)
     // These match Go's pointer types (*int8, *int16, etc.)
-    @ForyField(nullable = true)
-    Byte byteField;
+    @Nullable Byte byteField;
 
-    @ForyField(nullable = true)
-    Short shortField;
+    @Nullable Short shortField;
 
-    @ForyField(nullable = true)
-    Integer intField;
+    @Nullable Integer intField;
 
-    @ForyField(nullable = true)
-    Long longField;
+    @Nullable Long longField;
 
-    @ForyField(nullable = true)
-    Float floatField;
+    @Nullable Float floatField;
 
-    @ForyField(nullable = true)
-    Double doubleField;
+    @Nullable Double doubleField;
 
-    @ForyField(nullable = true)
-    Boolean boolField;
+    @Nullable Boolean boolField;
 
-    @ForyField(nullable = true)
-    Integer boxedInt;
+    @Nullable Integer boxedInt;
 
-    @ForyField(nullable = true)
-    Long boxedLong;
+    @Nullable Long boxedLong;
 
-    @ForyField(nullable = true)
-    Float boxedFloat;
+    @Nullable Float boxedFloat;
 
-    @ForyField(nullable = true)
-    Double boxedDouble;
+    @Nullable Double boxedDouble;
 
-    @ForyField(nullable = true)
-    Boolean boxedBool;
+    @Nullable Boolean boxedBool;
 
-    @ForyField(nullable = true)
-    String stringField;
+    @Nullable String stringField;
 
-    @ForyField(nullable = true)
-    List<String> listField;
+    @Nullable List<String> listField;
 
-    @ForyField(nullable = true)
-    Set<String> setField;
+    @Nullable Set<String> setField;
 
-    @ForyField(nullable = true)
-    Map<String, String> mapField;
+    @Nullable Map<String, String> mapField;
 
     // Group 2: NON-NULLABLE in xlang (nullable in Java Record)
     // These match Go's value types (int32, int64, etc.)
@@ -676,10 +651,8 @@ public class RecordXlangTest {
    * same RefInnerRecord instance.
    */
   public record RefOuterRecord(
-      @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
-          RefInnerRecord inner1,
-      @ForyField(ref = true, nullable = true, dynamic = ForyField.Dynamic.FALSE)
-          RefInnerRecord inner2) {}
+      @Nullable @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE) RefInnerRecord inner1,
+      @Nullable @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE) RefInnerRecord inner2) {}
 
   /**
    * Test reference tracking with Record in SCHEMA_CONSISTENT mode. Creates an outer struct with two

@@ -19,6 +19,7 @@
 
 package org.apache.fory.util.record;
 
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
 
@@ -34,6 +35,7 @@ public final class RecordComponent {
   private final String name;
   private final Class<?> type;
   private final Type genericType;
+  private final AnnotatedType annotatedType;
   private final Method accessor;
   private final Object getter;
 
@@ -42,12 +44,14 @@ public final class RecordComponent {
       String name,
       Class<?> type,
       Type genericType,
+      AnnotatedType annotatedType,
       Method accessor,
       Object getter) {
     this.declaringRecord = declaringRecord;
     this.name = name;
     this.type = type;
     this.genericType = genericType;
+    this.annotatedType = annotatedType;
     this.accessor = accessor;
     this.getter = getter;
   }
@@ -88,6 +92,16 @@ public final class RecordComponent {
    */
   public Type getGenericType() {
     return genericType;
+  }
+
+  /**
+   * Returns the annotated declared type for this record component.
+   *
+   * <p>Type-use annotations on record components may not be visible from the synthetic backing
+   * field on every JDK. Callers that build schema metadata must use this value for record fields.
+   */
+  public AnnotatedType getAnnotatedType() {
+    return annotatedType;
   }
 
   /**

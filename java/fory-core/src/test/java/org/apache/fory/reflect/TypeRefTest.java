@@ -34,6 +34,7 @@ import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.annotation.Int32Type;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.config.Int32Encoding;
@@ -96,12 +97,28 @@ public class TypeRefTest extends ForyTestBase {
   }
 
   static class TypeUseMetadataStruct {
+    @Nullable String nickname;
+
+    @Int32Type(encoding = Int32Encoding.FIXED)
+    Integer code;
+
     List<@Ref(enable = false) String> names;
     List<@Int32Type(encoding = Int32Encoding.FIXED) Integer> codes;
   }
 
   @Test
-  public void testNestedTypeUseMetadataKeepsNestedNullableDefault() throws Exception {
+  public void testTypeUseMetadataKeepsNullableOwnership() throws Exception {
+    Field nicknameField = TypeUseMetadataStruct.class.getDeclaredField("nickname");
+    TypeRef<?> nicknameType = TypeRef.of(nicknameField.getAnnotatedType());
+    TypeExtMeta nicknameMeta = nicknameType.getTypeExtMeta();
+    Assert.assertEquals(nicknameMeta.typeId(), Types.UNKNOWN);
+    Assert.assertTrue(nicknameMeta.nullable());
+    Assert.assertFalse(nicknameMeta.trackingRef());
+
+    Field codeField = TypeUseMetadataStruct.class.getDeclaredField("code");
+    TypeRef<?> codeType = TypeRef.of(codeField.getAnnotatedType());
+    Assert.assertFalse(codeType.hasTypeExtMeta());
+
     Field namesField = TypeUseMetadataStruct.class.getDeclaredField("names");
     TypeRef<?> namesType = TypeRef.of(namesField.getAnnotatedType());
     TypeExtMeta namesElementMeta = namesType.getTypeArguments().get(0).getTypeExtMeta();

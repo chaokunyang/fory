@@ -39,13 +39,13 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class PersonWithTagId {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public String veryLongFieldNameForFirstName;
 
-    @ForyField(id = 1, nullable = false)
+    @ForyField(id = 1)
     public String anotherVeryLongFieldNameForLastName;
 
-    @ForyField(id = 2, nullable = false)
+    @ForyField(id = 2)
     public int age;
   }
 
@@ -62,13 +62,11 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class PersonWithOptOutTagId {
-    @ForyField(nullable = false)
+
     public String veryLongFieldNameForFirstName;
 
-    @ForyField(nullable = false)
     public String anotherVeryLongFieldNameForLastName;
 
-    @ForyField(nullable = false)
     public int age;
   }
 
@@ -76,11 +74,11 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class PersonMixedTagId {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public String firstName;
 
     // This field uses field name metadata.
-    @ForyField(nullable = false)
+
     public String veryLongFieldNameForLastName;
 
     public int age; // No annotation, uses field name
@@ -91,10 +89,10 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class VeryLongNestedObjectClassName {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public String value;
 
-    @ForyField(id = 1, nullable = false)
+    @ForyField(id = 1)
     public int count;
   }
 
@@ -102,7 +100,7 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AnotherVeryLongNestedObjectClassName {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public String description;
   }
 
@@ -111,13 +109,13 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class ContainerWithTagIds {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public VeryLongNestedObjectClassName veryLongFieldNameForNestedObject;
 
-    @ForyField(id = 1, nullable = false)
+    @ForyField(id = 1)
     public AnotherVeryLongNestedObjectClassName anotherVeryLongFieldNameForAnotherNestedObject;
 
-    @ForyField(id = 2, nullable = false)
+    @ForyField(id = 2)
     public String simpleField;
   }
 
@@ -336,16 +334,18 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class TestNullableRef {
-    @ForyField(id = 0, nullable = false, ref = false)
+    @ForyField(id = 0, ref = false)
     String nonNullableNoRef;
 
-    @ForyField(id = 1, nullable = true, ref = false)
+    @Nullable
+    @ForyField(id = 1, ref = false)
     String nullableNoRef;
 
-    @ForyField(id = 2, nullable = false, ref = true)
+    @ForyField(id = 2, ref = true)
     String nonNullableWithRef;
 
-    @ForyField(id = 3, nullable = true, ref = true)
+    @Nullable
+    @ForyField(id = 3, ref = true)
     String nullableWithRef;
   }
 
@@ -379,63 +379,69 @@ public class ForyFieldSerializationTest extends ForyTestBase {
         xlang, compatible, codegen, bytes.length);
   }
 
-  /** Test class with all fields nullable=false, ref=false for size comparison */
+  /** Test class with all fields non-nullable, ref=false for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNonNullableNoRef {
-    @ForyField(id = 0, nullable = false, ref = false)
+    @ForyField(id = 0, ref = false)
     String field1;
 
-    @ForyField(id = 1, nullable = false, ref = false)
+    @ForyField(id = 1, ref = false)
     String field2;
 
-    @ForyField(id = 2, nullable = false, ref = false)
+    @ForyField(id = 2, ref = false)
     String field3;
   }
 
-  /** Test class with all fields nullable=true, ref=false for size comparison */
+  /** Test class with all fields @Nullable, ref=false for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNullableNoRef {
-    @ForyField(id = 0, nullable = true, ref = false)
+    @Nullable
+    @ForyField(id = 0, ref = false)
     String field1;
 
-    @ForyField(id = 1, nullable = true, ref = false)
+    @Nullable
+    @ForyField(id = 1, ref = false)
     String field2;
 
-    @ForyField(id = 2, nullable = true, ref = false)
+    @Nullable
+    @ForyField(id = 2, ref = false)
     String field3;
   }
 
-  /** Test class with all fields nullable=false, ref=true for size comparison */
+  /** Test class with all fields non-nullable, ref=true for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNonNullableWithRef {
-    @ForyField(id = 0, nullable = false, ref = true)
+    @ForyField(id = 0, ref = true)
     String field1;
 
-    @ForyField(id = 1, nullable = false, ref = true)
+    @ForyField(id = 1, ref = true)
     String field2;
 
-    @ForyField(id = 2, nullable = false, ref = true)
+    @ForyField(id = 2, ref = true)
     String field3;
   }
 
-  /** Test class with all fields nullable=true, ref=true for size comparison */
+  /** Test class with all fields @Nullable, ref=true for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNullableWithRef {
-    @ForyField(id = 0, nullable = true, ref = true)
+    @Nullable
+    @ForyField(id = 0, ref = true)
     String field1;
 
-    @ForyField(id = 1, nullable = true, ref = true)
+    @Nullable
+    @ForyField(id = 1, ref = true)
     String field2;
 
-    @ForyField(id = 2, nullable = true, ref = true)
+    @Nullable
+    @ForyField(id = 2, ref = true)
     String field3;
   }
 
@@ -478,8 +484,8 @@ public class ForyFieldSerializationTest extends ForyTestBase {
         "Nullable flag test - %s/%s/codegen=%s/registered=%s - NonNullable: %d bytes, Nullable: %d bytes%n",
         xlang, compatible, codegen, registered, bytesNonNullable.length, bytesNullable.length);
 
-    // nullable=false should produce smaller or equal payload
-    // Each nullable=true field adds 1 byte for null flag
+    // non-nullable should produce smaller or equal payload
+    // Each @Nullable field adds 1 byte for null flag
     assertTrue(
         bytesNonNullable.length <= bytesNullable.length,
         String.format(
@@ -552,9 +558,9 @@ public class ForyFieldSerializationTest extends ForyTestBase {
     }
 
     // Create objects with same data
-    // Most optimized: nullable=false, ref=false
+    // Most optimized: non-nullable, ref=false
     AllNonNullableNoRef optimized = new AllNonNullableNoRef("value1", "value2", "value3");
-    // Least optimized: nullable=true, ref=true
+    // Least optimized: @Nullable, ref=true
     AllNullableWithRef unoptimized = new AllNullableWithRef("value1", "value2", "value3");
 
     byte[] bytesOptimized = fory.serialize(optimized);
@@ -584,12 +590,12 @@ public class ForyFieldSerializationTest extends ForyTestBase {
         bytesUnoptimized.length - bytesOptimized.length,
         100.0 * (bytesUnoptimized.length - bytesOptimized.length) / bytesUnoptimized.length);
 
-    // Optimized (nullable=false, ref=false) should be smaller than unoptimized (nullable=true,
+    // Optimized (non-nullable, ref=false) should be smaller than unoptimized (@Nullable,
     // ref=true)
     assertTrue(
         bytesOptimized.length < bytesUnoptimized.length,
         String.format(
-            "Expected optimized (nullable=false,ref=false) %d bytes to be < unoptimized (nullable=true,ref=true) %d bytes in mode %s/%s/codegen=%s/registered=%s",
+            "Expected optimized (non-nullable,ref=false) %d bytes to be < unoptimized (@Nullable,ref=true) %d bytes in mode %s/%s/codegen=%s/registered=%s",
             bytesOptimized.length,
             bytesUnoptimized.length,
             xlang,
@@ -603,10 +609,10 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class PersonV1 {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     String name;
 
-    @ForyField(id = 1, nullable = false)
+    @ForyField(id = 1)
     int age;
   }
 
@@ -615,13 +621,14 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class PersonV2 {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     String name;
 
-    @ForyField(id = 1, nullable = false)
+    @ForyField(id = 1)
     int age;
 
-    @ForyField(id = 2, nullable = true) // New optional field
+    @Nullable
+    @ForyField(id = 2) // New optional field
     String email;
   }
 

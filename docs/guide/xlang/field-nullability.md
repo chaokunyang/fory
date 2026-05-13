@@ -99,7 +99,7 @@ public class Person {
     List<String> tags;    // Must not be null
 
     // Explicitly nullable
-    @ForyField(nullable = true)
+    @Nullable
     String nickname;      // Can be null
 
     // Optional wrapper - nullable by default
@@ -188,14 +188,13 @@ FORY_STRUCT(Person, name, age, tags, nickname, bio);
 
 ## Customizing Nullability
 
-### Java: @ForyField Annotation
+### Java: @Nullable Annotation
 
 ```java
 public class Config {
-    @ForyField(nullable = true)
+    @Nullable
     String optionalSetting;  // Explicitly nullable
 
-    @ForyField(nullable = false)
     String requiredSetting;  // Explicitly non-nullable (default)
 }
 ```

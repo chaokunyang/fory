@@ -377,7 +377,7 @@ class NullableComprehensiveCompatible:
     Cross-language schema evolution test struct for COMPATIBLE mode.
     All fields are Optional in Python to properly handle both null and non-null values from Java:
     - Group 1: Non-nullable in Java (always has values)
-    - Group 2: Nullable in Java (@ForyField(nullable=true)) - can be null
+    - Group 2: Nullable in Java (@Nullable) - can be null
 
     Python uses Optional for all fields so it can correctly receive and re-serialize
     values from Java, whether they are null or non-null.

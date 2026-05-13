@@ -32,7 +32,7 @@ import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.TestUtils;
-import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.config.ForyBuilder;
@@ -398,11 +398,9 @@ public class UnknownClassSerializersTest extends ForyTestBase {
     String stringField;
 
     // Nullable fields
-    @ForyField(nullable = true)
-    Integer nullableInt;
+    @Nullable Integer nullableInt;
 
-    @ForyField(nullable = true)
-    String nullableString;
+    @Nullable String nullableString;
   }
 
   /** Create a populated test object with all fields set. */

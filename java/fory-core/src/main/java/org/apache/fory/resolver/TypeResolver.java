@@ -1838,17 +1838,16 @@ public abstract class TypeResolver {
   /**
    * Get the nullable flag for a field, respecting xlang mode.
    *
-   * <p>For xlang mode (SERIALIZATION): use xlang defaults unless @ForyField annotation overrides:
+   * <p>For xlang mode (SERIALIZATION): use xlang defaults unless type-use metadata overrides:
    *
    * <ul>
-   *   <li>If @ForyField annotation is present: use its nullable() value
+   *   <li>If @Nullable is present on the field type: return true
    *   <li>Otherwise: return true only for Optional types, false for all other non-primitives
    * </ul>
    *
-   * <p>For native mode: reflected value fields are nullable by default unless @ForyField gives an
-   * explicit field-wrapper nullability. Descriptors without a backing field already carry
-   * schema-owned nullability, for example TypeDef descriptors and annotation-processor generated
-   * native descriptors.
+   * <p>For native mode: reflected value fields are nullable by default. Descriptors without a
+   * backing field already carry schema-owned nullability, for example TypeDef descriptors and
+   * annotation-processor generated native descriptors.
    *
    * <p>Important: this must match the TypeDef metadata for the same descriptor source. Xlang local
    * descriptors use xlang defaults, native reflected descriptors use native nullable-by-default
@@ -1859,18 +1858,15 @@ public abstract class TypeResolver {
     if (rawType.isPrimitive()) {
       return false;
     }
+    TypeExtMeta typeExtMeta = descriptor.getTypeRef().getTypeExtMeta();
+    if (typeExtMeta != null) {
+      return typeExtMeta.nullable();
+    }
     if (isCrossLanguage()) {
       // For xlang mode: apply xlang defaults
       // This must match what TypeDefEncoder.buildFieldType uses for TypeDef metadata
-      if (descriptor.hasForyField()) {
-        // Use explicit annotation value
-        return descriptor.isNullable();
-      }
       // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);
-    }
-    if (descriptor.hasForyField()) {
-      return descriptor.isNullable();
     }
     if (descriptor.getField() == null) {
       return descriptor.isNullable();

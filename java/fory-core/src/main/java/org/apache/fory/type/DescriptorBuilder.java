@@ -129,7 +129,6 @@ public class DescriptorBuilder {
         throw new IllegalArgumentException(
             "@ForyField id must be -1 (no tag ID) or a non-negative tag ID");
       }
-      this.nullable = foryField.nullable();
       this.trackingRef = foryField.ref();
       this.dynamic = foryField.dynamic();
     } else {

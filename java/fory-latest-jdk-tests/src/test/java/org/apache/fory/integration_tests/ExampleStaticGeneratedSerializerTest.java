@@ -43,6 +43,7 @@ import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.annotation.Int32Type;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.builder.Generated.GeneratedStaticCompatibleSerializer;
 import org.apache.fory.collection.BFloat16List;
@@ -235,7 +236,8 @@ public class ExampleStaticGeneratedSerializerTest {
     @ForyField(id = 20)
     public String stringValue;
 
-    @ForyField(id = 900, nullable = true)
+    @Nullable
+    @ForyField(id = 900)
     public String added = "default";
 
     public InconsistentMessage() {}
@@ -248,7 +250,7 @@ public class ExampleStaticGeneratedSerializerTest {
   public record InconsistentRecordMessage(
       @ForyField(id = 4) @Int32Type(encoding = Int32Encoding.FIXED) int fixedI32Value,
       @ForyField(id = 20) String stringValue,
-      @ForyField(id = 900, nullable = true) String added) {}
+      @Nullable @ForyField(id = 900) String added) {}
 
   private static ThreadSafeFory threadSafeFory(
       Class<?> type, boolean xlang, boolean compatible, boolean codegen) {

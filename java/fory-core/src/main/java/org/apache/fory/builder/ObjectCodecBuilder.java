@@ -698,15 +698,10 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     ListExpression groupExpressions = new ListExpression();
     // use Reference to cut-off expr dependency.
     for (Descriptor d : group) {
-      boolean nullable = d.isNullable();
-      boolean compatibleCollectionArrayRead = hasCompatibleCollectionArrayRead(d);
-      Expression v =
-          compatibleCollectionArrayRead
-              ? deserializeCompatibleListArrayField(d)
-              : deserializeForNullableField(buffer, d, expr -> expr, nullable);
       TypeRef<?> castTypeRef =
-          compatibleCollectionArrayRead ? compatibleReadTargetTypeRef(d) : d.getTypeRef();
-      Expression action = setFieldValue(bean, d, tryInlineCast(v, castTypeRef));
+          hasCompatibleCollectionArrayRead(d) ? compatibleReadTargetTypeRef(d) : d.getTypeRef();
+      Expression value = deserializeField(buffer, d, expr -> expr);
+      Expression action = setFieldValue(bean, d, tryInlineCast(value, castTypeRef));
       groupExpressions.add(action);
     }
     return groupExpressions;

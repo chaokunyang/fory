@@ -36,6 +36,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.type.TypeAnnotationUtils;
@@ -143,11 +144,15 @@ public class TypeRef<T> {
 
   public static <T> TypeRef<T> of(AnnotatedType annotatedType) {
     @SuppressWarnings("unchecked")
-    TypeRef<T> ref = (TypeRef<T>) ofAnnotatedType(annotatedType, false);
+    TypeRef<T> ref = (TypeRef<T>) ofAnnotatedType(annotatedType, true, false, false);
     return ref;
   }
 
-  private static TypeRef<?> ofAnnotatedType(AnnotatedType annotatedType, boolean includeRefMeta) {
+  private static TypeRef<?> ofAnnotatedType(
+      AnnotatedType annotatedType,
+      boolean includeRefMeta,
+      boolean defaultNullable,
+      boolean includeTypeAnnotation) {
     if (annotatedType == null) {
       return null;
     }
@@ -162,8 +167,14 @@ public class TypeRef<T> {
       boolean hasChildMeta = false;
       for (int i = 0; i < args.length; i++) {
         AnnotatedType annotatedArg = i < annotatedArgs.length ? annotatedArgs[i] : null;
+        Class<?> argumentRawType =
+            annotatedArg == null
+                ? TypeUtils.getRawType(args[i])
+                : TypeUtils.getRawType(annotatedArg.getType());
         TypeRef<?> argRef =
-            annotatedArg != null ? ofAnnotatedType(annotatedArg, true) : TypeRef.of(args[i]);
+            annotatedArg != null
+                ? ofAnnotatedType(annotatedArg, true, !argumentRawType.isPrimitive(), true)
+                : TypeRef.of(args[i]);
         if (argRef != null && argRef.hasTypeExtMeta()) {
           hasChildMeta = true;
         }
@@ -176,20 +187,27 @@ public class TypeRef<T> {
       AnnotatedType annotatedComponent =
           ((AnnotatedArrayType) annotatedType).getAnnotatedGenericComponentType();
       Class<?> componentRawType = TypeUtils.getRawType(annotatedComponent.getType());
-      TypeRef<?> component = ofAnnotatedType(annotatedComponent, !componentRawType.isPrimitive());
+      TypeRef<?> component =
+          ofAnnotatedType(
+              annotatedComponent,
+              !componentRawType.isPrimitive(),
+              !componentRawType.isPrimitive(),
+              true);
       if (component != null && component.hasTypeExtMeta()) {
         componentType = component;
       }
     }
     TypeExtMeta meta = null;
     if (includeRefMeta) {
-      Annotation typeAnnotation = getTypeAnnotation(annotatedType);
+      Annotation typeAnnotation = includeTypeAnnotation ? getTypeAnnotation(annotatedType) : null;
+      boolean nullable = annotatedType.isAnnotationPresent(Nullable.class);
       Ref ref = annotatedType.getAnnotation(Ref.class);
       if (typeAnnotation != null) {
         int typeId = TypeAnnotationUtils.getTypeId(typeAnnotation, TypeUtils.getRawType(type));
-        meta = TypeExtMeta.of(typeId, true, ref != null && ref.enable());
-      } else if (ref != null) {
-        meta = TypeExtMeta.of(Types.UNKNOWN, true, ref.enable());
+        meta = TypeExtMeta.of(typeId, nullable || defaultNullable, ref != null && ref.enable());
+      } else if (ref != null || nullable) {
+        meta =
+            TypeExtMeta.of(Types.UNKNOWN, nullable || defaultNullable, ref != null && ref.enable());
       }
     }
     return new TypeRef<>(type, meta, typeArguments, componentType);

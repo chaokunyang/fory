@@ -422,7 +422,7 @@ public class Types {
       return TypeAnnotationUtils.getPrimitiveListTypeId(d.getTypeAnnotation(), rawType);
     }
     TypeExtMeta extMeta = typeRef.getTypeExtMeta();
-    if (extMeta != null) {
+    if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {
       return extMeta.typeId();
     } else {
       TypeRef<?> componentType = typeRef.getComponentType();

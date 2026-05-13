@@ -23,7 +23,7 @@ import java.util.Objects;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
 import org.apache.fory.annotation.UInt64Type;
@@ -81,31 +81,25 @@ public class UnsignedTest extends ForyTestBase {
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     long u64Tagged;
 
-    @ForyField(nullable = true)
-    @UInt8Type
-    Integer u8Nullable;
+    @Nullable @UInt8Type Integer u8Nullable;
 
-    @ForyField(nullable = true)
-    @UInt16Type
-    Integer u16Nullable;
+    @Nullable @UInt16Type Integer u16Nullable;
 
-    @ForyField(nullable = true)
-    @UInt32Type
-    Long u32VarNullable;
+    @Nullable @UInt32Type Long u32VarNullable;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt32Type(encoding = Int32Encoding.FIXED)
     Long u32FixedNullable;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.VARINT)
     Long u64VarNullable;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.FIXED)
     Long u64FixedNullable;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     Long u64TaggedNullable;
   }
@@ -129,31 +123,25 @@ public class UnsignedTest extends ForyTestBase {
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     long u64Tagged;
 
-    @ForyField(nullable = true)
-    @UInt8Type
-    Integer u8Field2;
+    @Nullable @UInt8Type Integer u8Field2;
 
-    @ForyField(nullable = true)
-    @UInt16Type
-    Integer u16Field2;
+    @Nullable @UInt16Type Integer u16Field2;
 
-    @ForyField(nullable = true)
-    @UInt32Type
-    Long u32VarField2;
+    @Nullable @UInt32Type Long u32VarField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt32Type(encoding = Int32Encoding.FIXED)
     Long u32FixedField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.VARINT)
     Long u64VarField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.FIXED)
     Long u64FixedField2;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     Long u64TaggedField2;
 
@@ -487,9 +475,7 @@ public class UnsignedTest extends ForyTestBase {
   public static class UInt8OnlyStruct {
     @UInt8Type int value;
 
-    @ForyField(nullable = true)
-    @UInt8Type
-    Integer nullableValue;
+    @Nullable @UInt8Type Integer nullableValue;
 
     @Override
     public boolean equals(Object o) {
@@ -544,9 +530,7 @@ public class UnsignedTest extends ForyTestBase {
   public static class UInt16OnlyStruct {
     @UInt16Type int value;
 
-    @ForyField(nullable = true)
-    @UInt16Type
-    Integer nullableValue;
+    @Nullable @UInt16Type Integer nullableValue;
 
     @Override
     public boolean equals(Object o) {
@@ -604,11 +588,9 @@ public class UnsignedTest extends ForyTestBase {
     @UInt32Type(encoding = Int32Encoding.FIXED)
     long fixedValue;
 
-    @ForyField(nullable = true)
-    @UInt32Type
-    Long varNullableValue;
+    @Nullable @UInt32Type Long varNullableValue;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt32Type(encoding = Int32Encoding.FIXED)
     Long fixedNullableValue;
 
@@ -687,15 +669,15 @@ public class UnsignedTest extends ForyTestBase {
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     long taggedValue;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.VARINT)
     Long varNullableValue;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.FIXED)
     Long fixedNullableValue;
 
-    @ForyField(nullable = true)
+    @Nullable
     @UInt64Type(encoding = Int64Encoding.TAGGED)
     Long taggedNullableValue;
 

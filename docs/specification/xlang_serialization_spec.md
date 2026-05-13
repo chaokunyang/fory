@@ -214,7 +214,8 @@ class Foo {
   int[] intArray;
   @ForyField(polymorphic = true)
   Object object;
-  @ForyField(tagId = 1, nullable = true)
+  @Nullable
+  @ForyField(tagId = 1)
   List<Object> objectList;
 }
 ```
@@ -442,10 +443,10 @@ In xlang mode, for cross-language compatibility:
 ```java
 // Java: use @ForyField annotation
 public class MyClass {
-    @ForyField(nullable = true, ref = true)
+    @Nullable
+    @ForyField(ref = true)
     private Object refField;
 
-    @ForyField(nullable = false)
     private String requiredField;
 }
 ```
@@ -1489,8 +1490,8 @@ Field identifiers compare as follows:
 
 Assign each field to exactly one group in the following order:
 
-1. **Primitive (non-nullable)**: primitive or boxed numeric/boolean types with `nullable=false`.
-2. **Primitive (nullable)**: primitive or boxed numeric/boolean types with `nullable=true`.
+1. **Primitive (non-nullable)**: primitive or boxed numeric/boolean types without nullable metadata.
+2. **Primitive (nullable)**: primitive or boxed numeric/boolean types with nullable metadata.
 3. **Non-primitive**: every other field, including strings, time/date/duration/decimal/binary
    values, unions, primitive arrays, collections, maps, enums, structs, ext/user-defined types,
    UNKNOWN fields, object arrays, and all other non-primitive schemas.

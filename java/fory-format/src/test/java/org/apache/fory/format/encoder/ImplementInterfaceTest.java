@@ -56,7 +56,7 @@ public class ImplementInterfaceTest {
   }
 
   public interface NestedType {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     String getF3();
   }
 

@@ -2218,7 +2218,11 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression deserializeCompatibleListArrayField(Descriptor descriptor) {
     TypeExtMeta extMeta = descriptor.getTypeRef().getTypeExtMeta();
     boolean nullable = extMeta == null ? descriptor.isNullable() : extMeta.nullable();
-    boolean trackingRef = extMeta == null ? descriptor.isTrackingRef() : extMeta.trackingRef();
+    // A top-level @Nullable TypeExtMeta must not erase @ForyField(ref = true).
+    boolean trackingRef =
+        extMeta == null || descriptor.hasForyField()
+            ? descriptor.isTrackingRef()
+            : extMeta.trackingRef();
     Class<?> targetType =
         descriptor.getField() == null ? descriptor.getRawType() : descriptor.getField().getType();
     return new StaticInvoke(

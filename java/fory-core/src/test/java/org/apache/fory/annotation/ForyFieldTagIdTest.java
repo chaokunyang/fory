@@ -38,14 +38,13 @@ public class ForyFieldTagIdTest extends ForyTestBase {
 
   @Data
   public static class TestClass {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public String fieldWithTag0;
 
-    @ForyField(id = 5, nullable = false)
+    @ForyField(id = 5)
     public String fieldWithTag5;
 
-    @ForyField(nullable = false)
-    public String fieldOptingOutOfTag;
+    @ForyField public String fieldOptingOutOfTag;
 
     public String fieldWithoutAnnotation;
   }

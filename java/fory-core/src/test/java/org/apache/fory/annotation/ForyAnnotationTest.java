@@ -33,10 +33,10 @@ public class ForyAnnotationTest extends ForyTestBase {
 
   @Data
   public static class BeanM {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public Long f1;
 
-    @ForyField(id = 1, nullable = false)
+    @ForyField(id = 1)
     private Long f2;
 
     String s = "str";
@@ -71,52 +71,61 @@ public class ForyAnnotationTest extends ForyTestBase {
     @ForyField(id = 4)
     String s1 = "str";
 
-    @ForyField(id = 5, nullable = false)
+    @ForyField(id = 5)
     Short shortValue1 = Short.valueOf((short) 2);
 
-    @ForyField(id = 6, nullable = false)
+    @ForyField(id = 6)
     Byte byteValue1 = Byte.valueOf((byte) 3);
 
-    @ForyField(id = 7, nullable = false)
+    @ForyField(id = 7)
     Long longValue1 = Long.valueOf(4L);
 
-    @ForyField(id = 8, nullable = false)
+    @ForyField(id = 8)
     Boolean booleanValue1 = Boolean.TRUE;
 
-    @ForyField(id = 9, nullable = false)
+    @ForyField(id = 9)
     Float floatValue1 = Float.valueOf(5.0f);
 
-    @ForyField(id = 10, nullable = false)
+    @ForyField(id = 10)
     Double doubleValue1 = Double.valueOf(6.0);
 
-    @ForyField(id = 11, nullable = false)
+    @ForyField(id = 11)
     Character character1 = Character.valueOf('c');
 
-    @ForyField(id = 12, nullable = true)
+    @Nullable
+    @ForyField(id = 12)
     List<Integer> integerList1 = Lists.newArrayList(1);
 
-    @ForyField(id = 13, nullable = true)
+    @Nullable
+    @ForyField(id = 13)
     String s2 = "str";
 
-    @ForyField(id = 14, nullable = true)
+    @Nullable
+    @ForyField(id = 14)
     Short shortValue2 = Short.valueOf((short) 2);
 
-    @ForyField(id = 15, nullable = true)
+    @Nullable
+    @ForyField(id = 15)
     Byte byteValue2 = Byte.valueOf((byte) 3);
 
-    @ForyField(id = 16, nullable = true)
+    @Nullable
+    @ForyField(id = 16)
     Long longValue2 = Long.valueOf(4L);
 
-    @ForyField(id = 17, nullable = true)
+    @Nullable
+    @ForyField(id = 17)
     Boolean booleanValue2 = Boolean.TRUE;
 
-    @ForyField(id = 18, nullable = true)
+    @Nullable
+    @ForyField(id = 18)
     Float floatValue2 = Float.valueOf(5.0f);
 
-    @ForyField(id = 19, nullable = true)
+    @Nullable
+    @ForyField(id = 19)
     Double doubleValue2 = Double.valueOf(6.0);
 
-    @ForyField(id = 20, nullable = true)
+    @Nullable
+    @ForyField(id = 20)
     Character character2 = Character.valueOf('c');
 
     public BeanM() {

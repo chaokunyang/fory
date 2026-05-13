@@ -39,10 +39,10 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class Point {
-    @ForyField(id = 0, nullable = false, ref = false)
+    @ForyField(id = 0, ref = false)
     public double x;
 
-    @ForyField(id = 1, nullable = false, ref = false)
+    @ForyField(id = 1, ref = false)
     public double y;
   }
 
@@ -61,19 +61,21 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class User {
-    @ForyField(id = 0, nullable = false, ref = false)
+    @ForyField(id = 0, ref = false)
     public long userId;
 
-    @ForyField(id = 1, nullable = false, ref = false)
+    @ForyField(id = 1, ref = false)
     public String username;
 
-    @ForyField(id = 2, nullable = true, ref = false)
+    @Nullable
+    @ForyField(id = 2, ref = false)
     public String email; // Can be null during account creation
 
-    @ForyField(id = 3, nullable = true, ref = false)
+    @Nullable
+    @ForyField(id = 3, ref = false)
     public String phoneNumber; // Optional contact method
 
-    @ForyField(id = 4, nullable = false, ref = false)
+    @ForyField(id = 4, ref = false)
     public long createdAt;
   }
 
@@ -106,10 +108,10 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class Customer {
-    @ForyField(id = 0, nullable = false, ref = false)
+    @ForyField(id = 0, ref = false)
     public long customerId;
 
-    @ForyField(id = 1, nullable = false, ref = false)
+    @ForyField(id = 1, ref = false)
     public String name;
   }
 
@@ -117,13 +119,14 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class Order {
-    @ForyField(id = 0, nullable = false, ref = false)
+    @ForyField(id = 0, ref = false)
     public long orderId;
 
-    @ForyField(id = 1, nullable = false, ref = true)
+    @ForyField(id = 1, ref = true)
     public Customer customer; // Same Customer might appear in many orders
 
-    @ForyField(id = 2, nullable = true, ref = false)
+    @Nullable
+    @ForyField(id = 2, ref = false)
     public String notes; // Unique per order
   }
 
@@ -157,15 +160,16 @@ public class ForyFieldTest extends ForyTestBase {
     // (though this is more about serialization efficiency than behavior)
   }
 
-  /** Test nullable defaults */
+  /** Test nullable override */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class DefaultNullableTest {
-    @ForyField(id = 0) // nullable defaults to false
+    @ForyField(id = 0)
     public String field1;
 
-    @ForyField(id = 1, nullable = true)
+    @Nullable
+    @ForyField(id = 1)
     public String field2;
   }
 
@@ -211,12 +215,13 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class MixedFieldsTest {
-    @ForyField(id = 0, nullable = false)
+    @ForyField(id = 0)
     public String annotatedField;
 
     public String regularField; // No annotation
 
-    @ForyField(id = 1, nullable = true)
+    @Nullable
+    @ForyField(id = 1)
     public String anotherAnnotatedField;
   }
 
@@ -245,7 +250,7 @@ public class ForyFieldTest extends ForyTestBase {
     @ForyField(id = 2)
     public boolean booleanField;
 
-    @ForyField(id = 3, nullable = false) // Boxed type marked as non-nullable
+    @ForyField(id = 3)
     public Integer boxedInt;
   }
 

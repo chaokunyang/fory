@@ -27,6 +27,7 @@ import org.apache.fory.annotation.ForyStruct.Evolution;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Int8Type;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
@@ -132,7 +133,8 @@ public class ExampleMessage {
   @ForyField(id = 26)
   public State enumValue;
 
-  @ForyField(id = 27, nullable = true)
+  @Nullable
+  @ForyField(id = 27)
   public Leaf messageValue;
 
   @ForyField(id = 101)

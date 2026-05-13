@@ -222,12 +222,10 @@ public class FieldTypes {
       nullable = !genericType.getCls().isPrimitive();
     }
 
-    // Native unannotated value fields are nullable by default, but explicit @ForyField options are
-    // still field-wrapper metadata in both native and xlang TypeDef. Compatible serializers are
-    // built from TypeDef descriptors, so dropping this bit makes the writer emit a different field
-    // payload shape from the schema it advertised.
+    // @ForyField still owns wrapper ref tracking, but nullability is type-use metadata owned by
+    // @Nullable or generated/schema descriptors. Treating tag-id-only @ForyField as nullable
+    // metadata would make xlang fields nullable just because they use stable ids.
     if (descriptor != null && descriptor.hasForyField()) {
-      nullable = descriptor.isNullable();
       trackingRef = descriptor.isTrackingRef();
     }
 

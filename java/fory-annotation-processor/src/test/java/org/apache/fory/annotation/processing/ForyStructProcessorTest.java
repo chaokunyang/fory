@@ -750,7 +750,7 @@ public class ForyStructProcessorTest {
   }
 
   @Test
-  public void testStaticIncompatibleListArrayCompatibleReadFails() throws Exception {
+  public void testStaticListArrayCompatibleReadPayloadValidation() throws Exception {
     CompilationResult nullableListWriter =
         compile(
             "test.ListArrayMismatchStruct",
@@ -780,8 +780,15 @@ public class ForyStructProcessorTest {
       Fory reader = xlangCompatibleFory(readerLoader, readerType, false, "ListArrayMismatchStruct");
       Object writerValue = writerType.getConstructor().newInstance();
       setField(writerType, writerValue, "values", Arrays.asList(1, 2, 3));
-      byte[] payload = writer.serialize(writerValue);
-      Assert.expectThrows(DeserializationException.class, () -> reader.deserialize(payload));
+      Object result = reader.deserialize(writer.serialize(writerValue));
+      Assert.assertTrue(
+          Arrays.equals((int[]) getField(readerType, result, "values"), new int[] {1, 2, 3}));
+
+      Object nullElementWriterValue = writerType.getConstructor().newInstance();
+      setField(writerType, nullElementWriterValue, "values", Arrays.asList(1, null, 3));
+      byte[] nullElementPayload = writer.serialize(nullElementWriterValue);
+      Assert.expectThrows(
+          DeserializationException.class, () -> reader.deserialize(nullElementPayload));
     }
 
     CompilationResult nestedListWriter =

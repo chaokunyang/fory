@@ -23,7 +23,7 @@ This page covers field-level serializer configuration for C# generated serialize
 
 ## `[ForyObject]` and `[ForyField]`
 
-Use `[ForyObject]` to enable source-generated serializers. Use `[ForyField]` to assign an optional stable field id or to override the Fory schema type used for a field.
+Use `[ForyObject]` to enable source-generated serializers. Use `[ForyField]` to assign an optional stable non-negative field id or to override the Fory schema type used for a field.
 
 ```csharp
 using Apache.Fory;

@@ -55,6 +55,14 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidFieldId = new(
+        id: "FORY004",
+        title: "Invalid Fory field id",
+        messageFormat: "Member '{0}' uses an invalid [ForyField] id; field ids must be non-negative and no greater than short.MaxValue",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         IncrementalValuesProvider<TypeModel?> typeModels = context.SyntaxProvider
@@ -81,6 +89,16 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         {
             if (maybeModel is null)
             {
+                continue;
+            }
+
+            if (!maybeModel.Diagnostics.IsDefaultOrEmpty)
+            {
+                foreach (Diagnostic diagnostic in maybeModel.Diagnostics)
+                {
+                    context.ReportDiagnostic(diagnostic);
+                }
+
                 continue;
             }
 
@@ -2116,7 +2134,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                 serializerName,
                 DeclKind.Enum,
                 ImmutableArray<MemberModel>.Empty,
-                ImmutableArray<MemberModel>.Empty);
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<Diagnostic>.Empty);
         }
 
         DeclKind kind = typeSymbol.TypeKind switch
@@ -2136,6 +2155,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             return null;
         }
 
+        List<Diagnostic> diagnostics = [];
         List<MemberModel> members = [];
         foreach (ISymbol member in typeSymbol.GetMembers())
         {
@@ -2151,7 +2171,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                MemberModel? parsedField = BuildMemberModel(field.Name, field.Type, field, MemberDeclKind.Field);
+                MemberModel? parsedField = BuildMemberModel(field.Name, field.Type, field, MemberDeclKind.Field, diagnostics);
                 if (parsedField is not null)
                 {
                     members.Add(parsedField);
@@ -2182,7 +2202,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
                     property.Name,
                     property.Type,
                     property,
-                    MemberDeclKind.Property);
+                    MemberDeclKind.Property,
+                    diagnostics);
                 if (parsedProperty is not null)
                 {
                     members.Add(parsedProperty);
@@ -2195,14 +2216,15 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             .ToImmutableArray();
         ImmutableArray<MemberModel> sorted = SortMembers(ordered);
 
-        return new TypeModel(typeName, serializerName, kind, ordered, sorted);
+        return new TypeModel(typeName, serializerName, kind, ordered, sorted, diagnostics.ToImmutableArray());
     }
 
     private static MemberModel? BuildMemberModel(
         string name,
         ITypeSymbol memberType,
         ISymbol memberSymbol,
-        MemberDeclKind memberDeclKind)
+        MemberDeclKind memberDeclKind,
+        List<Diagnostic> diagnostics)
     {
         (bool isOptional, ITypeSymbol unwrappedType) = UnwrapNullable(memberType);
         short? fieldId = null;
@@ -2216,7 +2238,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             }
 
             if (attribute.ConstructorArguments.Length == 1 &&
-                TryGetNonNegativeShort(attribute.ConstructorArguments[0], out short ctorFieldId))
+                TryGetFieldId(attribute.ConstructorArguments[0], memberSymbol, diagnostics, out short ctorFieldId))
             {
                 fieldId = ctorFieldId;
             }
@@ -2225,7 +2247,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             {
                 if (string.Equals(namedArg.Key, "Id", StringComparison.Ordinal))
                 {
-                    if (TryGetNonNegativeShort(namedArg.Value, out short parsedFieldId))
+                    if (TryGetFieldId(namedArg.Value, memberSymbol, diagnostics, out short parsedFieldId))
                     {
                         fieldId = parsedFieldId;
                     }
@@ -2635,7 +2657,11 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         };
     }
 
-    private static bool TryGetNonNegativeShort(TypedConstant value, out short fieldId)
+    private static bool TryGetFieldId(
+        TypedConstant value,
+        ISymbol memberSymbol,
+        List<Diagnostic> diagnostics,
+        out short fieldId)
     {
         fieldId = default;
         object? raw = value.Value;
@@ -2671,6 +2697,10 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             case ulong v:
                 if (v > (ulong)short.MaxValue)
                 {
+                    diagnostics.Add(Diagnostic.Create(
+                        InvalidFieldId,
+                        memberSymbol.Locations.FirstOrDefault(),
+                        memberSymbol.Name));
                     return false;
                 }
 
@@ -2682,6 +2712,10 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         if (numeric < 0 || numeric > short.MaxValue)
         {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidFieldId,
+                memberSymbol.Locations.FirstOrDefault(),
+                memberSymbol.Name));
             return false;
         }
 
@@ -3500,13 +3534,15 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             string serializerName,
             DeclKind kind,
             ImmutableArray<MemberModel> members,
-            ImmutableArray<MemberModel> sortedMembers)
+            ImmutableArray<MemberModel> sortedMembers,
+            ImmutableArray<Diagnostic> diagnostics)
         {
             TypeName = typeName;
             SerializerName = serializerName;
             Kind = kind;
             Members = members;
             SortedMembers = sortedMembers;
+            Diagnostics = diagnostics;
         }
 
         public string TypeName { get; }
@@ -3514,6 +3550,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         public DeclKind Kind { get; }
         public ImmutableArray<MemberModel> Members { get; }
         public ImmutableArray<MemberModel> SortedMembers { get; }
+        public ImmutableArray<Diagnostic> Diagnostics { get; }
     }
 
     private sealed class MemberModel

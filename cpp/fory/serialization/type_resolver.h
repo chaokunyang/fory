@@ -1204,7 +1204,8 @@ constexpr int16_t compute_field_id() {
   if constexpr (::fory::detail::has_field_config_v<T>) {
     constexpr int16_t config_id =
         ::fory::detail::GetFieldConfigEntry<T, Index>::id;
-    if constexpr (config_id >= 0) {
+    if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
+      static_assert(config_id >= 0, "Fory field id must be non-negative");
       return config_id;
     }
   }

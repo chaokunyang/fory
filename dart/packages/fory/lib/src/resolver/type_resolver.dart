@@ -214,6 +214,33 @@ bool _fieldTypeUsesNestedTypeDefinitions(FieldType fieldType) {
   return false;
 }
 
+void _validateFieldInfo(FieldInfo field) {
+  final id = field.id;
+  if (id != null && id < 0) {
+    throw ArgumentError('Field id for ${field.name} must be non-negative.');
+  }
+}
+
+List<FieldInfo> _validateFieldInfos(Iterable<FieldInfo> fields) {
+  final validated = <FieldInfo>[];
+  final usedIds = <int, String>{};
+  for (final field in fields) {
+    _validateFieldInfo(field);
+    final id = field.id;
+    if (id != null) {
+      final existing = usedIds[id];
+      if (existing != null && existing != field.name) {
+        throw ArgumentError(
+          'Duplicate field id $id for fields $existing and ${field.name}.',
+        );
+      }
+      usedIds[id] = field.name;
+    }
+    validated.add(field);
+  }
+  return List<FieldInfo>.unmodifiable(validated);
+}
+
 final class TypeResolver {
   final Config config;
   final WireTypeMetaEncoder _wireTypeMetaEncoder = const WireTypeMetaEncoder();
@@ -311,9 +338,7 @@ final class TypeResolver {
     final encodedTypeName =
         typeName == null ? null : typeNameMetaString(typeName);
     final normalizedFields = registrationKind == RegistrationKind.struct
-        ? List<FieldInfo>.unmodifiable(
-            List<FieldInfo>.from(fields),
-          )
+        ? _validateFieldInfos(fields)
         : const <FieldInfo>[];
     final typeDef = _buildTypeDef(
       kind: registrationKind,

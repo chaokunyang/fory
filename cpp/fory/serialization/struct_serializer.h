@@ -1250,33 +1250,6 @@ template <typename T> struct CompileTimeFieldHelpers {
   static inline constexpr auto ptrs = FieldDescriptor::ptrs();
   using FieldPtrs = decltype(ptrs);
 
-  template <size_t... Indices>
-  static constexpr bool any_field_has_id(std::index_sequence<Indices...>) {
-    if constexpr (sizeof...(Indices) == 0) {
-      return false;
-    } else {
-      return ((::fory::detail::GetFieldConfigEntry<T, Indices>::has_id) || ...);
-    }
-  }
-
-  template <size_t... Indices>
-  static constexpr bool all_fields_have_id(std::index_sequence<Indices...>) {
-    if constexpr (sizeof...(Indices) == 0) {
-      return true;
-    } else {
-      return ((::fory::detail::GetFieldConfigEntry<T, Indices>::has_id) && ...);
-    }
-  }
-
-  static constexpr bool any_id_mode_field =
-      any_field_has_id(std::make_index_sequence<FieldCount>{});
-  static constexpr bool all_id_mode_fields =
-      all_fields_have_id(std::make_index_sequence<FieldCount>{});
-
-  static_assert(!any_id_mode_field || all_id_mode_fields,
-                "FORY_STRUCT must use exactly one identity mode: either all "
-                "fields use fory::F(id), or no fields use ids.");
-
   template <size_t Index> static constexpr uint32_t field_type_id() {
     if constexpr (FieldCount == 0) {
       return 0;
@@ -1353,11 +1326,14 @@ template <typename T> struct CompileTimeFieldHelpers {
       if constexpr (::fory::detail::has_field_config_v<T>) {
         constexpr int16_t config_id =
             ::fory::detail::GetFieldConfigEntry<T, Index>::id;
-        if constexpr (config_id >= 0) {
+        if constexpr (::fory::detail::GetFieldConfigEntry<T, Index>::has_id) {
+          static_assert(config_id >= 0, "Fory field id must be non-negative");
           return config_id;
         }
       }
       if constexpr (is_fory_field_v<RawFieldType>) {
+        static_assert(RawFieldType::tag_id >= 0,
+                      "Fory field id must be non-negative");
         return RawFieldType::tag_id;
       }
       // No tag ID defined

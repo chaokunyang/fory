@@ -20,7 +20,10 @@ package codegen
 import (
 	"fmt"
 	"go/types"
+	"reflect"
 	"sort"
+	"strconv"
+	"strings"
 	"unicode"
 
 	"github.com/apache/fory/go/fory"
@@ -37,6 +40,8 @@ type FieldInfo struct {
 	IsOptional    bool       // Whether it's a fory optional.Optional[T]
 	Nullable      bool       // Whether the field can be null (pointer types)
 	TypeID        string     // Fory TypeID for sorting
+	TagID         int        // Explicit non-negative fory tag ID when HasTagID is true
+	HasTagID      bool       // Whether TagID is an explicit wire field identifier
 	PrimitiveSize int        // Size for primitive type sorting
 	OptionalElem  types.Type // Element type for optional.Optional[T]
 }
@@ -401,22 +406,21 @@ func sortFields(fields []*FieldInfo) {
 				return getTypeIDValue(f1.TypeID) < getTypeIDValue(f2.TypeID)
 			}
 
-			// Finally by name
-			return f1.SnakeName < f2.SnakeName
+			// Finally by field identifier
+			return lessFieldInfoIdentifier(f1, f2)
 
 		case groupNonPrimitive:
-			return f1.SnakeName < f2.SnakeName
+			return lessFieldInfoIdentifier(f1, f2)
 
 		default:
-			// Fallback: sort by name
-			return f1.SnakeName < f2.SnakeName
+			return lessFieldInfoIdentifier(f1, f2)
 		}
 	})
 }
 
 // Field group constants for sorting.
 // This matches reflection's field ordering in field_info.go:
-// primitives → built-in non-container → list/set → map → other
+// non-nullable primitives → nullable primitives → non-primitives
 const (
 	groupPrimitive         = 0 // non-nullable primitive fields
 	groupNullablePrimitive = 1 // nullable primitive fields
@@ -434,6 +438,24 @@ func getFieldGroup(field *FieldInfo) int {
 	return groupNonPrimitive
 }
 
+func lessFieldInfoIdentifier(f1, f2 *FieldInfo) bool {
+	f1HasTag := f1.HasTagID
+	f2HasTag := f2.HasTagID
+	if f1HasTag && f2HasTag {
+		if f1.TagID != f2.TagID {
+			return f1.TagID < f2.TagID
+		}
+	} else if f1HasTag {
+		return true
+	} else if f2HasTag {
+		return false
+	}
+	if f1.SnakeName != f2.SnakeName {
+		return f1.SnakeName < f2.SnakeName
+	}
+	return f1.GoName < f2.GoName
+}
+
 // getStructNames extracts struct names from StructInfo slice
 func getStructNames(structs []*StructInfo) []string {
 	names := make([]string, len(structs))
@@ -444,7 +466,7 @@ func getStructNames(structs []*StructInfo) []string {
 }
 
 // analyzeField analyzes a struct field and creates FieldInfo
-func analyzeField(field *types.Var, index int) (*FieldInfo, error) {
+func analyzeField(field *types.Var, structTag string, index int) (*FieldInfo, error) {
 	fieldType := field.Type()
 	goName := field.Name()
 	snakeName := toSnakeCase(goName)
@@ -474,6 +496,10 @@ func analyzeField(field *types.Var, index int) (*FieldInfo, error) {
 	isPointer := false
 	typeID := getTypeID(fieldType)
 	primitiveSize := getPrimitiveSize(fieldType)
+	tagID, hasTagID, err := parseGeneratedFieldTagID(structTag)
+	if err != nil {
+		return nil, err
+	}
 
 	// Handle pointer types
 	if ptr, ok := fieldType.(*types.Pointer); ok {
@@ -494,7 +520,44 @@ func analyzeField(field *types.Var, index int) (*FieldInfo, error) {
 		IsOptional:    isOptional,
 		Nullable:      isPointer || isOptional, // Pointer and optional types are nullable in xlang mode
 		TypeID:        typeID,
+		TagID:         tagID,
+		HasTagID:      hasTagID,
 		PrimitiveSize: primitiveSize,
 		OptionalElem:  optionalElem,
 	}, nil
+}
+
+func parseGeneratedFieldTagID(structTag string) (int, bool, error) {
+	if structTag == "" {
+		return 0, false, nil
+	}
+	foryTag, ok := reflect.StructTag(structTag).Lookup("fory")
+	if !ok || foryTag == "-" {
+		return 0, false, nil
+	}
+	tagID := 0
+	seenID := false
+	for _, part := range strings.Split(foryTag, ",") {
+		part = strings.TrimSpace(part)
+		if part == "id" {
+			return 0, false, fmt.Errorf("field id requires a value")
+		}
+		idText, ok := strings.CutPrefix(part, "id=")
+		if !ok {
+			continue
+		}
+		if seenID {
+			return 0, false, fmt.Errorf("duplicate field id tag")
+		}
+		seenID = true
+		parsedTagID, err := strconv.Atoi(idText)
+		if err != nil {
+			return 0, false, fmt.Errorf("invalid field id %q", idText)
+		}
+		if parsedTagID < 0 {
+			return 0, false, fmt.Errorf("field id must be non-negative")
+		}
+		tagID = parsedTagID
+	}
+	return tagID, seenID, nil
 }

@@ -79,6 +79,9 @@ export class TypeInfo<T = unknown> extends ExtensibleFunction {
   }
   id?: number;
   setId(v: number | undefined) {
+    if (typeof v === "number" && v < 0) {
+      throw new Error("field id must be non-negative");
+    }
     this.id = v;
     return this;
   }

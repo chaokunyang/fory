@@ -83,7 +83,7 @@ struct User {
 **Notes**:
 
 - IDs must be unique within a struct
-- IDs must be >= 0 (use -1 to explicitly opt-out of tag ID encoding)
+- IDs must be non-negative
 - If not specified, field name is used in metadata (larger overhead)
 
 ### Skipping Fields (`skip`)
@@ -317,7 +317,7 @@ struct Bad {
 // Error: invalid id value
 #[derive(ForyStruct)]
 struct Bad2 {
-    #[fory(id = -2)]  // Compile error: id must be >= -1
+    #[fory(id = -1)]  // Compile error: id must be non-negative
     field: String,
 }
 

@@ -41,6 +41,7 @@ from typing import Any, Callable, Dict, Mapping, Optional
 # Key used to store Fory metadata in field.metadata
 FORY_FIELD_METADATA_KEY = "__fory__"
 FORY_OBJECT_METADATA_KEY = "__fory_object__"
+_FIELD_ID_UNSET = object()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -49,7 +50,7 @@ class ForyFieldMeta:
     Fory field metadata extracted from field.metadata.
 
     Attributes:
-        id: Field tag ID. -1 means use field name encoding, >=0 means use tag ID.
+        id: Field tag ID. -1 is the internal sentinel for no configured ID; >=0 means use tag ID.
         nullable: Whether null flag is written. Default False.
         ref: Whether reference tracking is enabled for this field. Default False.
         ignore: Whether to ignore this field during serialization. Default False.
@@ -103,7 +104,7 @@ def dataclass(_cls=None, *, evolving: bool = True, slots: bool = False, **kwargs
 
 
 def field(
-    id: int = -1,
+    id: int = _FIELD_ID_UNSET,
     *,
     nullable: bool = False,
     ref: bool = False,
@@ -125,10 +126,10 @@ def field(
     This wraps dataclasses.field() and stores Fory configuration in field.metadata.
 
     Args:
-        id: Field tag ID (optional, default -1).
-            - -1 (default): Use field name with meta string encoding
+        id: Field tag ID (optional).
+            - omitted: Use field name with meta string encoding
             - >=0: Use numeric tag ID (more compact, stable across renames)
-            Must be unique within the class (except -1).
+            Must be unique within the class. Negative configured IDs are invalid.
 
         nullable: Whether to write null flag for this field.
             - False (default): Skip null flag, field cannot be None
@@ -173,10 +174,12 @@ def field(
             shape: Shape = pyfory.field(3, dynamic=True)                   # Force type info
     """
     # Validate id
-    if not isinstance(id, int):
+    if id is _FIELD_ID_UNSET:
+        id = -1
+    elif not isinstance(id, int):
         raise TypeError(f"id must be an int, got {type(id).__name__}")
-    if id < -1:
-        raise ValueError(f"id must be >= -1, got {id}")
+    elif id < 0:
+        raise ValueError(f"id must be non-negative, got {id}")
 
     # Build Fory metadata
     fory_meta = ForyFieldMeta(

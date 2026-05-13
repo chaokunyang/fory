@@ -83,6 +83,7 @@ func hasGenerateComment(commentGroup *ast.CommentGroup) bool {
 // extractStructInfo extracts metadata from a struct type
 func extractStructInfo(name string, structType *types.Struct) (*StructInfo, error) {
 	var fields []*FieldInfo
+	usedTagIDs := make(map[int]string)
 
 	for i := 0; i < structType.NumFields(); i++ {
 		field := structType.Field(i)
@@ -90,13 +91,19 @@ func extractStructInfo(name string, structType *types.Struct) (*StructInfo, erro
 			continue // Skip unexported fields
 		}
 
-		fieldInfo, err := analyzeField(field, i)
+		fieldInfo, err := analyzeField(field, structType.Tag(i), i)
 		if err != nil {
 			return nil, fmt.Errorf("analyzing field %s: %w", field.Name(), err)
 		}
 
 		if fieldInfo == nil {
 			continue // Skip unsupported fields
+		}
+		if fieldInfo.HasTagID {
+			if existing, ok := usedTagIDs[fieldInfo.TagID]; ok {
+				return nil, fmt.Errorf("duplicate field id %d for fields %s and %s", fieldInfo.TagID, existing, fieldInfo.GoName)
+			}
+			usedTagIDs[fieldInfo.TagID] = fieldInfo.GoName
 		}
 
 		fields = append(fields, fieldInfo)

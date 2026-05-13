@@ -44,10 +44,16 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     @ForyField(id = 5, nullable = false)
     public String fieldWithTag5;
 
-    @ForyField(id = -1, nullable = false)
+    @ForyField(nullable = false)
     public String fieldOptingOutOfTag;
 
     public String fieldWithoutAnnotation;
+  }
+
+  @Data
+  public static class NegativeTagIdClass {
+    @ForyField(id = -1)
+    public String invalidField;
   }
 
   @Test(dataProvider = "languageAndCodegen")
@@ -89,14 +95,14 @@ public class ForyFieldTagIdTest extends ForyTestBase {
         (short) 5,
         "Field with id=5 should have tag value 5 in xlang=" + xlang);
 
-    // Verify field with id=-1 does NOT have tag (opts out)
+    // Verify field with annotation but no ID does NOT have tag
     assertFalse(
         fieldOptOut.hasFieldId(),
-        "Field with id=-1 should NOT have tag (opt-out) in xlang=" + xlang);
+        "Field without configured ID should NOT have tag in xlang=" + xlang);
     assertEquals(
         fieldOptOut.getFieldName(),
         "fieldOptingOutOfTag",
-        "Field with id=-1 should use field name in xlang=" + xlang);
+        "Field without configured ID should use field name in xlang=" + xlang);
 
     // Verify field without annotation does NOT have tag
     assertFalse(
@@ -136,14 +142,14 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     // Verify annotation values
     assertEquals(annotation0.id(), 0, "Field 0 should have id=0");
     assertEquals(annotation5.id(), 5, "Field 5 should have id=5");
-    assertEquals(annotationOptOut.id(), -1, "Opt-out field should have id=-1");
+    assertEquals(annotationOptOut.id(), Integer.MIN_VALUE, "Field without ID should use sentinel");
     assertNull(
         annotationNoAnnotation, "Field without annotation should have no ForyField annotation");
   }
 
   @Test
-  public void testIdMinusOneOptOutBehavior() {
-    // Test that id=-1 explicitly opts out of tag ID usage
+  public void testMissingIdUsesFieldNameBehavior() {
+    // Test that omitting id uses field-name metadata.
     Fory fory =
         Fory.builder()
             .withXlang(true)
@@ -167,6 +173,19 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     assertEquals(deserialized.getFieldWithTag5(), "value5");
     assertEquals(deserialized.getFieldOptingOutOfTag(), "optOutValue");
     assertEquals(deserialized.getFieldWithoutAnnotation(), "noAnnotationValue");
+  }
+
+  @Test
+  public void testNegativeTagIdRejected() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withCompatible(false)
+            .requireClassRegistration(false)
+            .build();
+    org.testng.Assert.assertThrows(
+        IllegalArgumentException.class,
+        () -> TypeDef.buildTypeDef(fory.getTypeResolver(), NegativeTagIdClass.class));
   }
 
   /** Helper method to find a FieldInfo by field name */

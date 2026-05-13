@@ -13,6 +13,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
@@ -24,5 +25,6 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Fory\Fory.csproj" />
     <ProjectReference Include="..\..\src\Fory.Generator\Fory.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\..\src\Fory.Generator\Fory.Generator.csproj" ReferenceOutputAssembly="true" />
   </ItemGroup>
 </Project>

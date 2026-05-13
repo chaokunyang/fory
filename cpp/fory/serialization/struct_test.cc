@@ -117,6 +117,22 @@ struct TaggedGroupedOrderStruct {
               (int_value, fory::F(10).varint()));
 };
 
+struct MixedFieldIdentityStruct {
+  std::string beta_value;
+  std::string tagged_value;
+  std::string alpha_value;
+  int32_t count;
+
+  bool operator==(const MixedFieldIdentityStruct &other) const {
+    return beta_value == other.beta_value &&
+           tagged_value == other.tagged_value &&
+           alpha_value == other.alpha_value && count == other.count;
+  }
+
+  FORY_STRUCT(MixedFieldIdentityStruct, beta_value, (tagged_value, fory::F(3)),
+              alpha_value, (count, fory::F(2).varint()));
+};
+
 class PrivateFieldsStruct {
 public:
   PrivateFieldsStruct() = default;
@@ -522,6 +538,7 @@ inline void register_all_test_types(Fory &fory) {
   fory.register_struct<PartialMapAnnotatedStruct>(type_id++);
   fory.register_struct<OptionalNestedAnnotatedStruct>(type_id++);
   fory.register_struct<ListArrayAnnotatedStruct>(type_id++);
+  fory.register_struct<MixedFieldIdentityStruct>(type_id++);
   fory.register_struct<OptionalFieldsStruct>(type_id++);
   fory.register_struct<EnumStruct>(type_id++);
   fory.register_struct<UserProfile>(type_id++);
@@ -912,6 +929,26 @@ TEST(StructComprehensiveTest, TaggedFieldsKeepGroupedPayloadOrder) {
   ASSERT_EQ(fields.size(), 2);
   EXPECT_EQ(fields[0].field_id, 10);
   EXPECT_EQ(fields[1].field_id, 1);
+}
+
+TEST(StructComprehensiveTest, MixedFieldIdentifiersUseProtocolOrder) {
+  MixedFieldIdentityStruct obj{"beta", "tagged", "alpha", 7};
+  test_roundtrip(obj);
+
+  auto fory =
+      Fory::builder().xlang(true).compatible(true).track_ref(false).build();
+  ASSERT_TRUE(fory.register_struct<MixedFieldIdentityStruct>(607).ok());
+  ASSERT_TRUE(fory.serialize(obj).ok());
+  TypeMeta meta =
+      fory.type_resolver().clone_struct_meta<MixedFieldIdentityStruct>();
+  const auto &fields = meta.get_field_infos();
+  ASSERT_EQ(fields.size(), 4);
+  EXPECT_EQ(fields[0].field_id, 2);
+  EXPECT_EQ(fields[1].field_id, 3);
+  EXPECT_EQ(fields[2].field_name, "alpha_value");
+  EXPECT_EQ(fields[2].field_id, -1);
+  EXPECT_EQ(fields[3].field_name, "beta_value");
+  EXPECT_EQ(fields[3].field_id, -1);
 }
 
 TEST(StructComprehensiveTest, NonPrimitiveFieldsSortByFieldIdentifier) {

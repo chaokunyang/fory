@@ -127,7 +127,7 @@ public class Descriptor {
     this.typeRef = typeRef;
     this.foryField = this.field.getAnnotation(ForyField.class);
     this.hasForyField = foryField != null;
-    this.foryFieldId = hasForyField ? foryField.id() : -1;
+    this.foryFieldId = resolveForyFieldId(foryField, name);
     this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
@@ -155,7 +155,7 @@ public class Descriptor {
     this.writeMethod = null;
     this.foryField = null;
     this.hasForyField = false;
-    this.foryFieldId = -1;
+    this.foryFieldId = Integer.MIN_VALUE;
     this.dynamic = ForyField.Dynamic.AUTO;
     typeAnnotation = null;
     arrayType = false;
@@ -210,7 +210,10 @@ public class Descriptor {
     this.writeMethod = null;
     this.foryField = null;
     this.hasForyField = hasForyField;
-    this.foryFieldId = hasForyField ? foryFieldId : -1;
+    if (hasForyField && foryFieldId < 0 && foryFieldId != Integer.MIN_VALUE) {
+      throw new IllegalArgumentException("@ForyField id must be non-negative for field " + name);
+    }
+    this.foryFieldId = hasForyField ? foryFieldId : Integer.MIN_VALUE;
     this.dynamic = hasForyField ? Objects.requireNonNull(dynamic) : ForyField.Dynamic.AUTO;
     typeAnnotation = null;
     this.arrayType = arrayType;
@@ -238,7 +241,7 @@ public class Descriptor {
     this.writeMethod = null;
     this.foryField = this.field.getAnnotation(ForyField.class);
     this.hasForyField = foryField != null;
-    this.foryFieldId = hasForyField ? foryField.id() : -1;
+    this.foryFieldId = resolveForyFieldId(foryField, name);
     this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
@@ -261,7 +264,7 @@ public class Descriptor {
     this.writeMethod = null;
     this.foryField = readMethod.getAnnotation(ForyField.class);
     this.hasForyField = foryField != null;
-    this.foryFieldId = hasForyField ? foryField.id() : -1;
+    this.foryFieldId = resolveForyFieldId(foryField, name);
     this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     typeAnnotation =
         getTypeUseAnnotation(readMethod.getAnnotatedReturnType(), readMethod.getName());
@@ -287,12 +290,15 @@ public class Descriptor {
             ? builder.foryField
             : (this.field == null ? null : this.field.getAnnotation(ForyField.class));
     if (builder.hasForyField) {
+      if (builder.foryFieldId < 0 && builder.foryFieldId != Integer.MIN_VALUE) {
+        throw new IllegalArgumentException("@ForyField id must be non-negative for field " + name);
+      }
       this.hasForyField = true;
       this.foryFieldId = builder.foryFieldId;
       this.dynamic = Objects.requireNonNull(builder.dynamic);
     } else {
       this.hasForyField = foryField != null;
-      this.foryFieldId = hasForyField ? foryField.id() : -1;
+      this.foryFieldId = resolveForyFieldId(foryField, name);
       this.dynamic = hasForyField ? foryField.dynamic() : ForyField.Dynamic.AUTO;
     }
     typeAnnotation = field == null ? null : getAnnotation(field);
@@ -310,6 +316,18 @@ public class Descriptor {
 
   public DescriptorBuilder copyBuilder() {
     return new DescriptorBuilder(this);
+  }
+
+  private static int resolveForyFieldId(ForyField foryField, String fieldName) {
+    if (foryField == null) {
+      return Integer.MIN_VALUE;
+    }
+    int id = foryField.id();
+    if (id < 0 && id != Integer.MIN_VALUE) {
+      throw new IllegalArgumentException(
+          "@ForyField id must be non-negative for field " + fieldName);
+    }
+    return id;
   }
 
   public Descriptor copy(Method readMethod, Method writeMethod) {

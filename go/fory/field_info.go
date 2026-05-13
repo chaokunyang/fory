@@ -565,7 +565,8 @@ type FieldFingerprintInfo struct {
 //
 //	Each field contributes:
 //	"<field_id_or_name>,<type_id>,<ref>,<nullable>[<nested_type_fingerprint>];"
-//	Fields are sorted by numeric tag ID when tags are present, otherwise by field name.
+//	Fields with tag IDs sort first by numeric tag ID, followed by name-based fields sorted by
+//	snake_case name.
 //
 // Field Components:
 //   - field_id_or_name: Tag ID as string if configured (e.g., "0", "1"), otherwise snake_case field name
@@ -608,6 +609,12 @@ func ComputeStructFingerprint(fields []FieldFingerprintInfo) string {
 	sort.Slice(fieldsWithKeys, func(i, j int) bool {
 		if fieldsWithKeys[i].hasFieldID && fieldsWithKeys[j].hasFieldID {
 			return fieldsWithKeys[i].fieldID < fieldsWithKeys[j].fieldID
+		}
+		if fieldsWithKeys[i].hasFieldID {
+			return true
+		}
+		if fieldsWithKeys[j].hasFieldID {
+			return false
 		}
 		return fieldsWithKeys[i].sortKey < fieldsWithKeys[j].sortKey
 	})

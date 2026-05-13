@@ -82,7 +82,6 @@ public class TypeDefEncoderTest {
 
     private String noAnnotation;
 
-    @ForyField(id = -1) // -1 means use field name
     private String optOutField;
 
     @ForyField(id = 60)
@@ -97,11 +96,17 @@ public class TypeDefEncoderTest {
 
     private String noAnnotation;
 
-    @ForyField(id = -1) // -1 means use field name
     private String optOutField;
 
     @ForyField(id = 50) // Duplicate with annotatedField1
     private int annotatedField2;
+  }
+
+  // Test data: Class with invalid negative tag ID
+  @Data
+  public static class ClassWithNegativeTagId {
+    @ForyField(id = -1)
+    private String field;
   }
 
   // Test data: Class with single field
@@ -120,6 +125,15 @@ public class TypeDefEncoderTest {
   }
 
   public static class EmptyStruct {}
+
+  public static class ParentNameOrderedNonPrimitives {
+    private String zString;
+  }
+
+  public static class ChildNameOrderedNonPrimitives extends ParentNameOrderedNonPrimitives {
+    private Map<String, Integer> aMap;
+    private int count;
+  }
 
   @Data
   public static class ClassWithNameOrderedNonPrimitives {
@@ -178,16 +192,13 @@ public class TypeDefEncoderTest {
     int f31;
   }
 
-  // Test data: Class with all fields using field names (tagId = -1)
+  // Test data: Class with all fields using field names
   @Data
   public static class ClassWithAllFieldNames {
-    @ForyField(id = -1)
     private String field1;
 
-    @ForyField(id = -1)
     private int field2;
 
-    @ForyField(id = -1)
     private double field3;
   }
 
@@ -292,7 +303,7 @@ public class TypeDefEncoderTest {
     Assert.assertFalse(fieldInfos.get(1).hasFieldId());
     Assert.assertEquals(fieldInfos.get(1).getFieldName(), "noAnnotation");
 
-    // optOutField with id=-1 should not have a tag (uses field name)
+    // optOutField should not have a tag (uses field name)
     Assert.assertFalse(fieldInfos.get(2).hasFieldId());
     Assert.assertEquals(fieldInfos.get(2).getFieldName(), "optOutField");
 
@@ -319,6 +330,16 @@ public class TypeDefEncoderTest {
         IllegalArgumentException.class,
         () ->
             TypeDefEncoder.buildFieldsInfo(resolver, ClassWithMixedDuplicateTagIds.class, fields));
+  }
+
+  @Test
+  public void testBuildFieldsInfoRejectsNegativeTagId() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    TypeResolver resolver = fory.getTypeResolver();
+    List<Field> fields = Collections.singletonList(getField(ClassWithNegativeTagId.class, "field"));
+    Assert.assertThrows(
+        IllegalArgumentException.class,
+        () -> TypeDefEncoder.buildFieldsInfo(resolver, ClassWithNegativeTagId.class, fields));
   }
 
   @Test
@@ -378,7 +399,7 @@ public class TypeDefEncoderTest {
 
     Assert.assertEquals(fieldInfos.size(), 3);
 
-    // All fields with id=-1 should not have tags (use field names)
+    // All fields without configured IDs should not have tags (use field names)
     for (FieldInfo fieldInfo : fieldInfos) {
       Assert.assertFalse(fieldInfo.hasFieldId());
     }
@@ -439,6 +460,17 @@ public class TypeDefEncoderTest {
         TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNameOrderedNonPrimitives.class);
 
     Assert.assertEquals(fieldNames(typeDef), Arrays.asList("count", "aMap", "mList", "zString"));
+  }
+
+  @Test
+  public void testTypeDefOrdersInheritedNonPrimitivesByProtocolOrder() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    fory.register(ChildNameOrderedNonPrimitives.class);
+
+    TypeDef typeDef =
+        TypeDef.buildTypeDef(fory.getTypeResolver(), ChildNameOrderedNonPrimitives.class);
+
+    Assert.assertEquals(fieldNames(typeDef), Arrays.asList("count", "aMap", "zString"));
   }
 
   @Test

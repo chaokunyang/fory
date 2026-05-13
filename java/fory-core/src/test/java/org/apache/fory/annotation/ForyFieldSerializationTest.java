@@ -62,13 +62,13 @@ public class ForyFieldSerializationTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class PersonWithOptOutTagId {
-    @ForyField(id = -1, nullable = false)
+    @ForyField(nullable = false)
     public String veryLongFieldNameForFirstName;
 
-    @ForyField(id = -1, nullable = false)
+    @ForyField(nullable = false)
     public String anotherVeryLongFieldNameForLastName;
 
-    @ForyField(id = -1, nullable = false)
+    @ForyField(nullable = false)
     public int age;
   }
 
@@ -79,8 +79,8 @@ public class ForyFieldSerializationTest extends ForyTestBase {
     @ForyField(id = 0, nullable = false)
     public String firstName;
 
-    // This field uses field name (id = -1)
-    @ForyField(id = -1, nullable = false)
+    // This field uses field name metadata.
+    @ForyField(nullable = false)
     public String veryLongFieldNameForLastName;
 
     public int age; // No annotation, uses field name
@@ -197,7 +197,7 @@ public class ForyFieldSerializationTest extends ForyTestBase {
     assertEquals(deserializedWithOptOut.age, 30);
 
     System.out.printf(
-        "Mode: %s/%s/codegen=%s - With tag: %d bytes, Without tag: %d bytes, Opt-out (id=-1): %d bytes%n",
+        "Mode: %s/%s/codegen=%s - With tag: %d bytes, Without tag: %d bytes, Annotated without IDs: %d bytes%n",
         xlang,
         compatible,
         codegen,
@@ -213,20 +213,20 @@ public class ForyFieldSerializationTest extends ForyTestBase {
             "Expected tag ID version (%d bytes) to be <= field name version (%d bytes) in mode %s/%s/codegen=%s",
             bytesWithTag.length, bytesWithoutTag.length, xlang, compatible, codegen));
 
-    // Tag ID version should also be smaller than or equal to opt-out version (id=-1)
+    // Tag ID version should also be smaller than or equal to annotated-without-ID version.
     assertTrue(
         bytesWithTag.length <= bytesWithOptOut.length,
         String.format(
-            "Expected tag ID version (%d bytes) to be <= opt-out id=-1 version (%d bytes) in mode %s/%s/codegen=%s",
+            "Expected tag ID version (%d bytes) to be <= annotated-without-ID version (%d bytes) in mode %s/%s/codegen=%s",
             bytesWithTag.length, bytesWithOptOut.length, xlang, compatible, codegen));
 
-    // Opt-out (id=-1) should have similar size to no annotation (both use field names)
+    // Annotated fields without IDs should have similar size to no annotation.
     // They should be equal or very close in size
     int sizeDifference = Math.abs(bytesWithOptOut.length - bytesWithoutTag.length);
     assertTrue(
         sizeDifference <= 5,
         String.format(
-            "Expected opt-out id=-1 (%d bytes) to have similar size to no annotation (%d bytes), but difference is %d bytes",
+            "Expected annotated-without-ID (%d bytes) to have similar size to no annotation (%d bytes), but difference is %d bytes",
             bytesWithOptOut.length, bytesWithoutTag.length, sizeDifference));
   }
 

@@ -27,16 +27,13 @@ import static org.apache.fory.meta.NativeTypeDefEncoder.writeTypeName;
 import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.FieldTypes.FieldType;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
@@ -104,7 +101,8 @@ class TypeDefEncoder {
                   return new FieldInfo(
                       type.getName(), descriptor.getName(), fieldType, (short) tagId);
                 }
-                // tagId == -1 means use field name, fall through to create regular FieldInfo
+                // Negative is the annotation default sentinel for no configured tag ID; fall
+                // through to create regular FieldInfo. User-facing tag IDs must be non-negative.
               }
               return new FieldInfo(type.getName(), descriptor.getName(), fieldType);
             })
@@ -113,7 +111,7 @@ class TypeDefEncoder {
 
   static TypeDef buildTypeDefWithFieldInfos(
       XtypeResolver resolver, Class<?> type, List<FieldInfo> fieldInfos) {
-    fieldInfos = new ArrayList<>(getClassFields(type, fieldInfos).values());
+    fieldInfos = new ArrayList<>(fieldInfos);
     TypeInfo typeInfo = resolver.getTypeInfo(type);
     MemoryBuffer encodeTypeDef = encodeTypeDef(resolver, type, fieldInfos);
     byte[] typeDefBytes = encodeTypeDef.getBytes(0, encodeTypeDef.writerIndex());
@@ -206,20 +204,6 @@ class TypeDefEncoder {
       default:
         throw new IllegalArgumentException("Unsupported TypeDef kind " + typeId);
     }
-  }
-
-  static Map<String, FieldInfo> getClassFields(Class<?> type, List<FieldInfo> fieldsInfo) {
-    Map<String, FieldInfo> sortedClassFields = new LinkedHashMap<>();
-    Map<String, List<FieldInfo>> classFields = NativeTypeDefEncoder.groupClassFields(fieldsInfo);
-    for (Class<?> clz : ReflectionUtils.getAllClasses(type, true)) {
-      List<FieldInfo> fieldInfos = classFields.get(clz.getName());
-      if (fieldInfos != null) {
-        for (FieldInfo fieldInfo : fieldInfos) {
-          sortedClassFields.put(fieldInfo.getFieldName(), fieldInfo);
-        }
-      }
-    }
-    return sortedClassFields;
   }
 
   /** Write field type and name info. Every field info format: `header + type info + field name` */

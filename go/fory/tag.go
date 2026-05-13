@@ -60,15 +60,13 @@ func validateForyTags(t reflect.Type) error {
 			continue
 		}
 		if parsed.idSet {
-			if parsed.tagID < TagIDUseFieldName {
-				return InvalidTagErrorf("invalid fory tag id=%d on field %s: id must be >= -1", parsed.tagID, field.Name)
+			if parsed.tagID < 0 {
+				return InvalidTagErrorf("invalid fory tag id=%d on field %s: id must be non-negative", parsed.tagID, field.Name)
 			}
-			if parsed.tagID >= 0 {
-				if existing, ok := tagIDs[parsed.tagID]; ok {
-					return InvalidTagErrorf("duplicate fory tag id=%d on fields %s and %s", parsed.tagID, existing, field.Name)
-				}
-				tagIDs[parsed.tagID] = field.Name
+			if existing, ok := tagIDs[parsed.tagID]; ok {
+				return InvalidTagErrorf("duplicate fory tag id=%d on fields %s and %s", parsed.tagID, existing, field.Name)
 			}
+			tagIDs[parsed.tagID] = field.Name
 		}
 	}
 	return nil

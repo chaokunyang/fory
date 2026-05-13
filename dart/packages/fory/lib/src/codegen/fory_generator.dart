@@ -166,7 +166,15 @@ final class ForyGenerator extends Generator {
     final idValue = reader?.peek('id');
     final nullableValue = reader?.peek('nullable');
     final dynamicValue = reader?.peek('dynamic');
-    final fieldId = idValue == null || idValue.isNull ? null : idValue.intValue;
+    final rawFieldId =
+        idValue == null || idValue.isNull ? null : idValue.intValue;
+    if (rawFieldId != null && rawFieldId < 0) {
+      throw InvalidGenerationSourceError(
+        'Fory field id must be non-negative.',
+        element: field,
+      );
+    }
+    final fieldId = rawFieldId;
     final nullable = nullableValue == null || nullableValue.isNull
         ? _isNullable(field.type)
         : nullableValue.boolValue;
@@ -180,9 +188,8 @@ final class ForyGenerator extends Generator {
       name: field.displayName,
       type: field.type,
       displayType: _typeCodeString(field.type),
-      identifier: fieldId != null && fieldId >= 0
-          ? '$fieldId'
-          : _toSnakeCase(field.displayName),
+      identifier:
+          fieldId != null ? '$fieldId' : _toSnakeCase(field.displayName),
       id: fieldId,
       nullable: nullable,
       ref: ref,

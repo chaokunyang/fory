@@ -73,11 +73,11 @@ class TestFieldFunction:
         assert obj.data == {}
 
     def test_field_name_encoding(self):
-        """Test field with id=-1 uses field name encoding."""
+        """Test field without an ID uses field name encoding."""
 
         @dataclass
         class TestClass:
-            name: str = pyfory.field(-1)
+            name: str = pyfory.field()
 
         meta = extract_field_meta(fields(TestClass)[0])
         assert meta.id == -1
@@ -122,7 +122,7 @@ class TestFieldFunction:
         @dataclass
         class TestClass:
             name: str = pyfory.field(0)
-            _cache: dict = pyfory.field(-1, ignore=True, default_factory=dict)
+            _cache: dict = pyfory.field(ignore=True, default_factory=dict)
 
         cache_field = [f for f in fields(TestClass) if f.name == "_cache"][0]
         meta = extract_field_meta(cache_field)
@@ -181,10 +181,10 @@ class TestValidation:
         with pytest.raises(ValueError, match="Optional"):
             fory.serialize(obj)
 
-    def test_negative_id_below_minus_one(self):
-        """Test that id < -1 raises ValueError."""
-        with pytest.raises(ValueError, match="id must be >= -1"):
-            pyfory.field(-2)
+    def test_negative_id(self):
+        """Test that negative configured IDs raise ValueError."""
+        with pytest.raises(ValueError, match="id must be non-negative"):
+            pyfory.field(-1)
 
     def test_non_int_id(self):
         """Test that non-integer id raises TypeError."""
@@ -242,7 +242,7 @@ class TestSerialization:
         @dataclass
         class CachedData:
             value: Int32 = pyfory.field(0)
-            _cache: dict = pyfory.field(-1, ignore=True, default_factory=dict)
+            _cache: dict = pyfory.field(ignore=True, default_factory=dict)
 
         fory = Fory(xlang=True, compatible=False, ref=True)
         fory.register_type(CachedData, typename="test.CachedData")
@@ -288,7 +288,7 @@ class TestSerialization:
             # Explicit tag ID
             id: Int32 = pyfory.field(0)
             # Field name encoding
-            description: str = pyfory.field(-1)
+            description: str = pyfory.field()
             # No pyfory.field() - uses defaults
             count: int = 0
 

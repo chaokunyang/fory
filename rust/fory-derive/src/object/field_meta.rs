@@ -188,8 +188,8 @@ fn parse_meta_item(
         }
         let lit: syn::LitInt = nested.value()?.parse()?;
         let id: i32 = lit.base10_parse()?;
-        if id < -1 {
-            return Err(syn::Error::new(lit.span(), "id must be >= -1"));
+        if id < 0 {
+            return Err(syn::Error::new(lit.span(), "id must be non-negative"));
         }
         if meta.id.is_some() {
             return Err(syn::Error::new(nested.path.span(), "duplicate id config"));
@@ -544,6 +544,16 @@ mod tests {
         assert_eq!(meta.nullable, None);
         assert_eq!(meta.r#ref, None);
         assert!(!meta.skip);
+    }
+
+    #[test]
+    fn test_parse_rejects_negative_id() {
+        let field: Field = parse_quote! {
+            #[fory(id = -1)]
+            name: String
+        };
+        let err = parse_field_meta(&field).unwrap_err();
+        assert!(err.to_string().contains("id must be non-negative"));
     }
 
     #[test]

@@ -501,6 +501,9 @@ func parseFieldTag(field reflect.StructField) (parsedFieldTag, error) {
 			if err != nil {
 				return parsedFieldTag{}, InvalidTagErrorf("invalid fory tag id=%q on field %s", value, field.Name)
 			}
+			if id < 0 {
+				return parsedFieldTag{}, InvalidTagErrorf("invalid fory tag id=%d on field %s: id must be non-negative", id, field.Name)
+			}
 			parsed.idSet = true
 			parsed.tagID = id
 		case "nullable":

@@ -251,7 +251,7 @@ type OneFieldStruct struct {
 // String field structs for schema evolution tests
 type EmptyStruct struct{}
 
-// F1 has @ForyField(id = -1, nullable = true) in Java
+// F1 has @ForyField(nullable = true) in Java
 type OneStringFieldStruct struct {
 	F1 *string `fory:"nullable"`
 }

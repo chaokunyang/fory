@@ -1067,7 +1067,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
     }
     Map<? extends ExecutableElement, ? extends AnnotationValue> values =
         elements.getElementValuesWithDefaults(mirror);
-    int id = -1;
+    int id = Integer.MIN_VALUE;
     boolean nullable = !field.asType().getKind().isPrimitive();
     boolean ref = false;
     String dynamic = "AUTO";
@@ -1084,6 +1084,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
       } else if ("dynamic".equals(name)) {
         dynamic = String.valueOf(value);
       }
+    }
+    if (id < 0 && id != Integer.MIN_VALUE) {
+      throw new InvalidStructException("@ForyField id must be non-negative", field);
     }
     return new ForyFieldMeta(true, id, nullable, ref, dynamic);
   }
@@ -1176,7 +1179,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
   }
 
   private static final class ForyFieldMeta {
-    static final ForyFieldMeta NONE = new ForyFieldMeta(false, -1, false, false, "AUTO");
+    static final ForyFieldMeta NONE =
+        new ForyFieldMeta(false, Integer.MIN_VALUE, false, false, "AUTO");
 
     final boolean hasForyField;
     final int id;

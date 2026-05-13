@@ -882,7 +882,7 @@ struct NestedAnnotatedContainerCompatible {
 #[derive(ForyStruct, Debug, PartialEq)]
 struct EmptyStructEvolution {}
 
-// Java f1 has @ForyField(id = -1, nullable = true), so it's nullable
+// Java f1 has @ForyField(nullable = true), so it's nullable
 #[derive(ForyStruct, Debug, PartialEq)]
 struct OneStringFieldStruct {
     #[fory(nullable = true)]

@@ -1713,12 +1713,12 @@ public abstract class TypeResolver {
   /**
    * Gets the sort key for a field descriptor.
    *
-   * <p>If the field has a {@link ForyField} annotation with id &gt;= 0, returns the id as a string.
-   * Otherwise, returns the snake_case field name. This ensures fields are sorted by tag ID when
-   * configured, matching the fingerprint computation order.
+   * <p>If the field has a {@link ForyField} annotation with id &gt;= 0, returns the id as text.
+   * Otherwise, returns the snake_case field name. {@link #compareFieldSortKey} performs the
+   * protocol comparison so tagged fields sort numerically before name-based fields.
    *
    * @param descriptor the field descriptor
-   * @return the sort key (tag ID as string or snake_case name)
+   * @return the sort key text (tag ID as text or snake_case name)
    */
   protected static String getFieldSortKey(Descriptor descriptor) {
     if (descriptor.hasForyFieldId()) {

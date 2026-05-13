@@ -53,12 +53,12 @@ public @interface ForyField {
    *
    * <ul>
    *   <li>When {@code >= 0}: Uses this numeric ID instead of field name string for compact encoding
-   *   <li>When {@code -1} (default): Uses field name with meta string encoding
+   *   <li>When omitted: Uses field name with meta string encoding
    * </ul>
    *
-   * <p>Must be unique within the class (except -1) and stable across versions.
+   * <p>Configured IDs must be non-negative, unique within the class, and stable across versions.
    */
-  int id() default -1;
+  int id() default Integer.MIN_VALUE;
 
   /**
    * Whether this field can be null. When set to false (default), Fory skips writing the null flag

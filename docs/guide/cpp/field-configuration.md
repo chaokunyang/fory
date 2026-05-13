@@ -46,16 +46,17 @@ or add virtual dispatch on the serialization path.
 FORY_STRUCT(DataV2, id, (timestamp, fory::F().tagged()), version);
 ```
 
-`fory::F(id)` uses id-mode field identity:
+`fory::F(id)` uses explicit id-based field identity. IDs must be
+non-negative:
 
 ```cpp
 FORY_STRUCT(DataV2, (id, fory::F(0)), (timestamp, fory::F(1).tagged()),
             (version, fory::F(2)));
 ```
 
-A struct must use exactly one identity mode. If any field uses `fory::F(id)`,
-every field in that `FORY_STRUCT` must use `fory::F(id)`. Mixed name/id mode is a
-compile-time error.
+Fields without explicit IDs still use their snake_case field names. Explicit
+IDs sort before name-based fields within the same protocol field group, so a
+single `FORY_STRUCT` may mix `fory::F(id)`, `fory::F()`, and bare fields.
 
 ## Scalar Encoding
 

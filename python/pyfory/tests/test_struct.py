@@ -328,6 +328,17 @@ def test_tagged_non_primitive_fields_sort_by_identifier():
     ]
 
 
+def test_name_based_fields_sort_by_snake_case_identifier():
+    @dataclass
+    class CamelCaseClass:
+        alphaString: str = ""
+        alpha_list: List[str] = dataclasses.field(default_factory=list)
+
+    fory = Fory(xlang=True, compatible=False, ref=True)
+    serializer = DataClassSerializer(fory.type_resolver, CamelCaseClass)
+    assert serializer._field_names == ["alpha_list", "alphaString"]
+
+
 def test_duration_and_decimal_fields_use_declared_serializers():
     @dataclass
     class TemporalNumberClass:

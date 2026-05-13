@@ -133,7 +133,7 @@ class FieldInfo:
     type_hint: type  # Type annotation
 
     # Fory metadata (from pyfory.field()) - used for hash computation
-    tag_id: int  # -1 = use field name, >=0 = use tag ID
+    tag_id: int  # -1 is the internal no-ID sentinel, >=0 = use tag ID
     nullable: bool  # Effective nullable flag (considers Optional[T])
     ref: bool  # Field-level ref setting (for hash computation)
     dynamic: bool  # Whether type info is written for this field
@@ -922,6 +922,29 @@ class StructFieldSerializerVisitor(TypeVisitor):
 _UNKNOWN_TYPE_ID = -1
 
 
+def _to_snake_case(name: str) -> str:
+    result = []
+    previous = ""
+    for index, char in enumerate(name):
+        if char == "_":
+            result.append(char)
+            previous = char
+            continue
+        if char.isupper():
+            next_is_lower = index + 1 < len(name) and name[index + 1].islower()
+            previous_lower_or_digit = previous.islower() or previous.isdigit()
+            previous_upper = previous.isupper()
+            if result and result[-1] != "_" and (
+                previous_lower_or_digit or (previous_upper and next_is_lower)
+            ):
+                result.append("_")
+            result.append(char.lower())
+        else:
+            result.append(char)
+        previous = char
+    return "".join(result).rstrip("_")
+
+
 def _sort_fields(type_resolver, field_names, serializers, nullable_map=None, field_infos_list=None):
     (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types) = group_fields(
         type_resolver, field_names, serializers, nullable_map, field_infos_list
@@ -949,7 +972,7 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
         if tag_id >= 0:
             sort_key = (0, tag_id, "")
         else:
-            sort_key = (1, field_name, "")
+            sort_key = (1, _to_snake_case(field_name), field_name)
         if serializer is None:
             non_primitive_types.append((_UNKNOWN_TYPE_ID, serializer, field_name, sort_key))
         else:
@@ -999,10 +1022,10 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
 
     Fingerprint Format:
         Each field contributes: <field_id_or_name>,<type_id>,<ref>,<nullable>[<child...>];
-        Fields are sorted by tag ID (if >=0) or field name (if id=-1).
+        Fields are sorted by tag ID (if >=0) or snake_case field name when no ID is configured.
 
     Field Components:
-        - field_id_or_name: Tag ID as string if id >= 0, otherwise field name
+        - field_id_or_name: Tag ID as string if id >= 0, otherwise snake_case field name
         - type_id: Fory TypeId as decimal string (e.g., "4" for INT32)
         - ref: "1" if field has ref=True in pyfory.field(), "0" otherwise
               (based on field annotation, NOT runtime config)
@@ -1047,9 +1070,9 @@ def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable
             field_id_or_name = str(tag_id)
             sort_key = (0, tag_id, "")  # 0 = tag ID fields come first
         else:
-            field_id_or_name = field_name
-            # Sort by field name (lexicographic) for name-based fields
-            sort_key = (1, field_name, "")  # 1 = name fields come after
+            field_id_or_name = _to_snake_case(field_name)
+            # Sort by snake_case field name for name-based fields.
+            sort_key = (1, field_id_or_name, field_name)  # 1 = name fields come after
 
         fp_fields.append((sort_key, field_id_or_name, type_fingerprint))
 

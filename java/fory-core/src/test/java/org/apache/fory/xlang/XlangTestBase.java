@@ -1444,7 +1444,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   static class VersionCheckStruct {
     int f1;
 
-    @ForyField(id = -1, nullable = true)
+    @ForyField(nullable = true)
     String f2;
 
     double f3;
@@ -1494,7 +1494,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   public static class Dog implements Animal {
     int age;
 
-    @ForyField(id = -1, nullable = true)
+    @ForyField(nullable = true)
     String name;
 
     @Override

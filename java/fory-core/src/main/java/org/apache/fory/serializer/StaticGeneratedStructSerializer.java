@@ -412,16 +412,18 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       fields.put(fieldKey(descriptor), i);
     }
     // Keep compatible-read descriptor ordering owned by TypeResolver, matching the sorted
-    // DescriptorGrouper order used by ObjectCodecBuilder and CompatibleCodecBuilder. FieldGroups
-    // may regroup descriptors for helper ownership, so it must not drive remote payload order.
-    List<Descriptor> remoteDescriptorsInWireOrder =
-        typeResolver
-            .createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass)
-            .getSortedDescriptors();
+    // DescriptorGrouper order used by ObjectCodecBuilder and CompatibleCodecBuilder.
+    DescriptorGrouper remoteGrouper =
+        typeResolver.createDescriptorGrouper(remoteTypeDef, remoteDescriptorClass);
+    // Remote compatible reads must dispatch through the remote field's codec category. FieldGroups
+    // uses the grouper's sorted allFields order while retaining specialized
+    // build-in/container/other read paths.
+    SerializationFieldInfo[] remoteFieldInfosInWireOrder =
+        FieldGroups.buildFieldInfos(typeResolver, remoteGrouper).allFields;
     List<RemoteFieldInfo> remoteFields = new ArrayList<>(remoteFieldInfos.size());
     appendRemoteFields(
         remoteFields,
-        remoteDescriptorsInWireOrder,
+        remoteFieldInfosInWireOrder,
         remoteFieldInfosByKey,
         fieldIds,
         fields,
@@ -448,18 +450,17 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   private void appendRemoteFields(
       List<RemoteFieldInfo> remoteFields,
-      List<Descriptor> remoteDescriptorsInWireOrder,
+      SerializationFieldInfo[] remoteFieldInfosInWireOrder,
       Map<String, FieldInfo> remoteFieldInfosByKey,
       Map<Short, Integer> fieldIds,
       Map<String, Integer> fields,
       List<Descriptor> localDescriptors) {
-    for (Descriptor descriptor : remoteDescriptorsInWireOrder) {
+    for (SerializationFieldInfo serializationFieldInfo : remoteFieldInfosInWireOrder) {
+      Descriptor descriptor = serializationFieldInfo.descriptor;
       FieldInfo fieldInfo = remoteFieldInfosByKey.get(remoteFieldKey(descriptor));
       if (fieldInfo == null) {
         throw new IllegalStateException("Missing remote field metadata for " + descriptor);
       }
-      SerializationFieldInfo serializationFieldInfo =
-          new SerializationFieldInfo(typeResolver, descriptor);
       int matchedId = matchField(fieldInfo, fieldIds, fields);
       Descriptor localDescriptor =
           matchedId == UNKNOWN_FIELD ? null : localDescriptors.get(matchedId);

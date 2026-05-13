@@ -1472,7 +1472,9 @@ For every field, compute a stable identifier used for ordering:
 - If a non-negative tag ID is configured (e.g., `@ForyField(id=...)`), use the tag ID.
 - Otherwise, use the field name converted to `snake_case`.
 
-Tag IDs must be unique within a type; duplicate tag IDs are invalid.
+Configured tag IDs must be non-negative. A negative configured tag ID is invalid; languages may
+use a negative value only as an internal sentinel for "no tag ID configured", which falls back to
+the `snake_case` field name. Tag IDs must be unique within a type; duplicate tag IDs are invalid.
 
 Field identifiers compare as follows:
 

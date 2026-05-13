@@ -327,7 +327,7 @@ class FieldInfo:
         self.name = name
         self.field_type = field_type
         self.defined_class = defined_class
-        self.tag_id = tag_id  # -1 = use field name encoding, >=0 = use tag ID encoding
+        self.tag_id = tag_id  # -1 is the internal no-ID sentinel, >=0 = use tag ID encoding
 
     def uses_tag_id(self) -> bool:
         """Returns True if this field uses TAG_ID encoding."""

@@ -225,6 +225,15 @@ func TestSortFieldsOrdersNonPrimitivesByFieldIdentifier(t *testing.T) {
 	require.Equal(t, []string{"int_value", "map_value", "string_value", "custom_value", "list_value"}, sortedNames)
 }
 
+func TestComputeStructFingerprintOrdersTagIdsBeforeNames(t *testing.T) {
+	fingerprint := ComputeStructFingerprint([]FieldFingerprintInfo{
+		{FieldID: TagIDUseFieldName, FieldName: "a_name", TypeID: STRING},
+		{FieldID: 2, FieldName: "tagged", TypeID: MAP},
+	})
+
+	require.Equal(t, "2,24,0,0;a_name,21,0,0;", fingerprint)
+}
+
 func TestParseFieldSpecRejectsInvalidTags(t *testing.T) {
 	type DuplicateKeys struct {
 		Value int32 `fory:"id=0,id=1"`
@@ -291,13 +300,15 @@ func TestValidateForyTagsStrict(t *testing.T) {
 		Field2 string `fory:"id=0,ignore"`
 	}
 	type InvalidID struct {
-		Field1 string `fory:"id=-2"`
+		Field1 string `fory:"id=-1"`
 	}
 
 	require.NoError(t, validateForyTags(reflect.TypeOf(Valid{})))
 	require.NoError(t, validateForyTags(reflect.TypeOf(IgnoredDuplicate{})))
 	require.Error(t, validateForyTags(reflect.TypeOf(DuplicateIDs{})))
-	require.Error(t, validateForyTags(reflect.TypeOf(InvalidID{})))
+	err := validateForyTags(reflect.TypeOf(InvalidID{}))
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "id must be non-negative")
 }
 
 func TestShouldIncludeField(t *testing.T) {

@@ -72,7 +72,7 @@ class User:
 
 | Parameter         | Type     | Default   | Description                          |
 | ----------------- | -------- | --------- | ------------------------------------ |
-| `id`              | `int`    | `-1`      | Field tag ID (-1 = use field name)   |
+| `id`              | `int`    | omitted   | Non-negative field tag ID            |
 | `nullable`        | `bool`   | `False`   | Whether the field can be null        |
 | `ref`             | `bool`   | `False`   | Enable reference tracking            |
 | `ignore`          | `bool`   | `False`   | Exclude field from serialization     |
@@ -103,7 +103,7 @@ class User:
 **Notes**:
 
 - IDs must be unique within a class
-- IDs must be >= 0 (use -1 to use field name encoding, which is the default)
+- IDs must be >= 0
 - If not specified, field name is used in metadata (larger overhead)
 
 **Without field IDs** (field names used in metadata):

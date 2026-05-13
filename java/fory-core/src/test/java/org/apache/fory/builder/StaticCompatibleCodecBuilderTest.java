@@ -34,7 +34,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticCollector;
 import javax.tools.JavaCompiler;
@@ -49,7 +51,10 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.FieldGroups.FieldCodecCategory;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer.RemoteFieldInfo;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.testng.Assert;
@@ -147,6 +152,60 @@ public class StaticCompatibleCodecBuilderTest {
       Assert.assertEquals(getField(readerType, result, "id"), 42);
       Assert.assertEquals(getField(readerType, result, "added"), "default");
       Assert.assertEquals(getField(readerType, result, "name"), xlang ? "xlang" : "native");
+    }
+  }
+
+  @Test
+  public void testStaticCompatibleSerializerPreservesRemoteCodecCategories() throws Exception {
+    CompilationResult writerResult =
+        compile(
+            "test.StaticCompatibleCategoryPayload",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import java.util.Map;\n"
+                + "public class StaticCompatibleCategoryPayload {\n"
+                + "  public int id;\n"
+                + "  public String name;\n"
+                + "  public List<String> labels;\n"
+                + "  public Map<String, Integer> scores;\n"
+                + "  public StaticCompatibleCategoryPayload() {}\n"
+                + "}\n");
+    CompilationResult readerResult =
+        compile(
+            "test.StaticCompatibleCategoryPayload",
+            "package test;\n"
+                + "import java.util.List;\n"
+                + "import java.util.Map;\n"
+                + "public class StaticCompatibleCategoryPayload {\n"
+                + "  public int id;\n"
+                + "  public String name;\n"
+                + "  public List<String> labels;\n"
+                + "  public Map<String, Integer> scores;\n"
+                + "  public StaticCompatibleCategoryPayload() {}\n"
+                + "}\n");
+    Assert.assertTrue(writerResult.success, writerResult.diagnostics());
+    Assert.assertTrue(readerResult.success, readerResult.diagnostics());
+    try (URLClassLoader writerLoader = writerResult.classLoader();
+        URLClassLoader readerLoader = readerResult.classLoader()) {
+      Class<?> writerType = writerLoader.loadClass("test.StaticCompatibleCategoryPayload");
+      Class<?> readerType = readerLoader.loadClass("test.StaticCompatibleCategoryPayload");
+      Fory writer = compatibleFory(writerLoader, writerType, false, "category-writer");
+      Fory reader = compatibleFory(readerLoader, readerType, false, "category-reader");
+      TypeDef remoteTypeDef = TypeDef.buildTypeDef(writer.getTypeResolver(), writerType);
+      Class<Object> readerClass = cast(readerType);
+      Class<? extends Serializer> compatibleSerializerClass =
+          CodecUtils.loadOrGenStaticCompatibleCodecClass(
+              reader.getTypeResolver(), readerClass, remoteTypeDef);
+      Serializer<Object> compatibleSerializer =
+          compatibleSerializerClass
+              .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
+              .newInstance(reader.getTypeResolver(), readerClass, remoteTypeDef);
+
+      Map<String, FieldCodecCategory> categories = remoteCodecCategories(compatibleSerializer);
+      Assert.assertEquals(categories.get("id"), FieldCodecCategory.BUILD_IN);
+      Assert.assertEquals(categories.get("name"), FieldCodecCategory.BUILD_IN);
+      Assert.assertEquals(categories.get("labels"), FieldCodecCategory.CONTAINER);
+      Assert.assertEquals(categories.get("scores"), FieldCodecCategory.CONTAINER);
     }
   }
 
@@ -415,6 +474,21 @@ public class StaticCompatibleCodecBuilderTest {
           atLeastOnce());
       return result;
     }
+  }
+
+  private static Map<String, FieldCodecCategory> remoteCodecCategories(
+      Serializer<Object> compatibleSerializer) throws Exception {
+    Field remoteFieldsField =
+        StaticGeneratedStructSerializer.class.getDeclaredField("remoteFields");
+    remoteFieldsField.setAccessible(true);
+    List<?> remoteFields = (List<?>) remoteFieldsField.get(compatibleSerializer);
+    Map<String, FieldCodecCategory> categories = new HashMap<>();
+    for (Object field : remoteFields) {
+      RemoteFieldInfo remoteField = (RemoteFieldInfo) field;
+      categories.put(
+          remoteField.descriptor.getName(), remoteField.serializationFieldInfo.codecCategory);
+    }
+    return categories;
   }
 
   private static Fory compatibleFory(

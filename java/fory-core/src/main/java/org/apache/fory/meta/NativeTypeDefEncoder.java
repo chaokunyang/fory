@@ -116,7 +116,7 @@ public class NativeTypeDefEncoder {
               new FieldInfo(
                   descriptor.getDeclaringClass(), descriptor.getName(), fieldType, (short) tagId);
         } else {
-          // tagId == -1 means opt-out, use field name
+          // Negative is the annotation default sentinel for no configured tag ID; use field name.
           fieldInfo =
               new FieldInfo(descriptor.getDeclaringClass(), descriptor.getName(), fieldType);
         }

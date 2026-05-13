@@ -203,16 +203,21 @@ String schemaFingerprint(TypeDef typeDef) {
     ..sort((left, right) {
       final leftId = left.id;
       final rightId = right.id;
-      if (leftId != null && rightId != null) {
+      if ((leftId != null && leftId < 0) || (rightId != null && rightId < 0)) {
+        throw ArgumentError('Field id must be non-negative.');
+      }
+      final leftHasId = leftId != null;
+      final rightHasId = rightId != null;
+      if (leftHasId && rightHasId) {
         final result = leftId.compareTo(rightId);
         return result == 0
             ? left.identifier.compareTo(right.identifier)
             : result;
       }
-      if (leftId != null) {
+      if (leftHasId) {
         return -1;
       }
-      if (rightId != null) {
+      if (rightHasId) {
         return 1;
       }
       return left.identifier.compareTo(right.identifier);

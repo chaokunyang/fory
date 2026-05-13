@@ -128,6 +128,17 @@ class SchemaVersionV2 {
   int count = 0;
 }
 
+@ForyStruct()
+class DuplicateFieldIdOrder {
+  DuplicateFieldIdOrder();
+
+  @ForyField(id: 1)
+  String first = '';
+
+  @ForyField(id: 1)
+  String second = '';
+}
+
 void _registerValidationTypes(Fory fory) {
   RuntimeValidationTestFory.register(
     fory,
@@ -201,6 +212,26 @@ Object _nestedList(int depth) {
 
 void main() {
   group('field options', () {
+    test('duplicate generated field ids are rejected during registration', () {
+      final fory = Fory();
+
+      expect(
+        () => RuntimeValidationTestFory.register(
+          fory,
+          DuplicateFieldIdOrder,
+          namespace: 'validation',
+          typeName: 'DuplicateFieldIdOrder',
+        ),
+        throwsA(
+          isA<ArgumentError>().having(
+            (error) => error.toString(),
+            'message',
+            contains('Duplicate field id 1'),
+          ),
+        ),
+      );
+    });
+
     test('skip fields stay local only after round trip', () {
       final fory = Fory();
       _registerValidationTypes(fory);

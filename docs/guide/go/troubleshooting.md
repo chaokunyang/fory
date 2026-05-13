@@ -211,10 +211,10 @@ f2 := fory.New(fory.WithTrackRef(true))  // Must match!
 
 **Common causes**:
 
-1. **Invalid tag ID**: ID must be >= -1
+1. **Invalid tag ID**: ID must be non-negative
 
 ```go
-// Wrong: negative ID (other than -1)
+// Wrong: negative ID
 type Bad struct {
     Field int `fory:"id=-5"`
 }

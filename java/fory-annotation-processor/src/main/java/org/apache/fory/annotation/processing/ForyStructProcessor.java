@@ -58,12 +58,16 @@ import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
 
-@SupportedAnnotationTypes("org.apache.fory.annotation.ForyStruct")
+@SupportedAnnotationTypes({
+  "org.apache.fory.annotation.ForyStruct",
+  "org.apache.fory.annotation.ForyDebug"
+})
 public final class ForyStructProcessor extends AbstractProcessor {
   private static final String ARRAY_TYPE = "org.apache.fory.annotation.ArrayType";
   private static final String BFLOAT16_TYPE = "org.apache.fory.annotation.BFloat16Type";
   private static final String EXPOSE = "org.apache.fory.annotation.Expose";
   private static final String FLOAT16_TYPE = "org.apache.fory.annotation.Float16Type";
+  private static final String FORY_DEBUG = "org.apache.fory.annotation.ForyDebug";
   private static final String FORY_FIELD = "org.apache.fory.annotation.ForyField";
   private static final String FORY_STRUCT = "org.apache.fory.annotation.ForyStruct";
   private static final String IGNORE = "org.apache.fory.annotation.Ignore";
@@ -231,25 +235,13 @@ public final class ForyStructProcessor extends AbstractProcessor {
         canonicalName(type.asType()),
         serializerName,
         record,
-        foryStructDebug(type),
+        isForyDebugEnabled(type),
         sourceFields,
         recordConstructorFields);
   }
 
-  private boolean foryStructDebug(TypeElement type) {
-    AnnotationMirror mirror = annotationMirror(type, FORY_STRUCT);
-    if (mirror == null) {
-      return false;
-    }
-    Map<? extends ExecutableElement, ? extends AnnotationValue> values =
-        elements.getElementValuesWithDefaults(mirror);
-    for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
-        values.entrySet()) {
-      if (entry.getKey().getSimpleName().contentEquals("debug")) {
-        return Boolean.TRUE.equals(entry.getValue().getValue());
-      }
-    }
-    return false;
+  private boolean isForyDebugEnabled(TypeElement type) {
+    return annotationMirror(type, FORY_DEBUG) != null;
   }
 
   private void validateForyFieldId(

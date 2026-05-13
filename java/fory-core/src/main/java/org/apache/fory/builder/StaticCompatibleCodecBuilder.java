@@ -24,6 +24,7 @@ import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import java.util.Collections;
 import java.util.List;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyDebug;
 import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.builder.Generated.GeneratedStaticCompatibleSerializer;
 import org.apache.fory.codegen.Code;
@@ -68,8 +69,9 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
     localDescriptors = Collections.unmodifiableList(Descriptor.getDescriptors(beanClass));
-    ForyStruct foryStruct = beanClass.getAnnotation(ForyStruct.class);
-    debug = foryStruct != null && foryStruct.debug();
+    debug =
+        beanClass.isAnnotationPresent(ForyStruct.class)
+            && beanClass.isAnnotationPresent(ForyDebug.class);
   }
 
   @Override

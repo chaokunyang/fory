@@ -58,12 +58,4 @@ public @interface ForyStruct {
    * struct encoding even when compatible metadata is otherwise enabled.
    */
   Evolution evolution() default Evolution.INHERIT;
-
-  /**
-   * Emit generated serializer field-level debug tracing.
-   *
-   * <p>The generated code still prints only when {@code ENABLE_FORY_DEBUG_OUTPUT=1}; this option
-   * controls whether field tracing code is emitted for this struct.
-   */
-  boolean debug() default false;
 }

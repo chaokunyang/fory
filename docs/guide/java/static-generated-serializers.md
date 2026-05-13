@@ -84,6 +84,26 @@ The processor generates serializer classes in the same Java package as the annot
 For a static nested type such as `Outer.Inner`, the generated top-level classes are
 `Outer$Inner__ForySerializer__` and `Outer$Inner__ForyNativeSerializer__`.
 
+## Field Debug Tracing
+
+Add `@ForyDebug` next to `@ForyStruct` when you need generated serializers to include field-level
+debug tracing hooks. The generated code prints those traces only when
+`ENABLE_FORY_DEBUG_OUTPUT=1`.
+
+```java
+import org.apache.fory.annotation.ForyDebug;
+import org.apache.fory.annotation.ForyStruct;
+
+@ForyStruct
+@ForyDebug
+public class DebugOrder {
+  public long id;
+  public String note;
+
+  public DebugOrder() {}
+}
+```
+
 ## Runtime Use
 
 Fory uses static generated serializers when they are available on:

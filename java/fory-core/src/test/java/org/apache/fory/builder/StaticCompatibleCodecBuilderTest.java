@@ -47,6 +47,7 @@ import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.mockito.MockedStatic;
@@ -60,6 +61,47 @@ public class StaticCompatibleCodecBuilderTest {
   @DataProvider
   public static Object[][] xlangModes() {
     return new Object[][] {{false}, {true}};
+  }
+
+  @Test
+  public void testForyDebugAnnotationEnablesStaticCompatibleTracing() throws Exception {
+    CompilationResult debugResult =
+        compile(
+            "test.StaticCompatibleDebugPayload",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyDebug;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct\n"
+                + "@ForyDebug\n"
+                + "public class StaticCompatibleDebugPayload {\n"
+                + "  public int id;\n"
+                + "  public StaticCompatibleDebugPayload() {}\n"
+                + "}\n");
+    CompilationResult plainResult =
+        compile(
+            "test.StaticCompatiblePlainPayload",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct\n"
+                + "public class StaticCompatiblePlainPayload {\n"
+                + "  public int id;\n"
+                + "  public StaticCompatiblePlainPayload() {}\n"
+                + "}\n");
+    Assert.assertTrue(debugResult.success, debugResult.diagnostics());
+    Assert.assertTrue(plainResult.success, plainResult.diagnostics());
+    try (URLClassLoader debugLoader = debugResult.classLoader();
+        URLClassLoader plainLoader = plainResult.classLoader()) {
+      assertStaticCompatibleDebugTracing(
+          debugLoader,
+          debugLoader.loadClass("test.StaticCompatibleDebugPayload"),
+          true,
+          "debug-reader");
+      assertStaticCompatibleDebugTracing(
+          plainLoader,
+          plainLoader.loadClass("test.StaticCompatiblePlainPayload"),
+          false,
+          "plain-reader");
+    }
   }
 
   @Test(dataProvider = "xlangModes")
@@ -392,6 +434,15 @@ public class StaticCompatibleCodecBuilderTest {
       fory.register(type, "test", type.getSimpleName());
     }
     return fory;
+  }
+
+  private static void assertStaticCompatibleDebugTracing(
+      ClassLoader classLoader, Class<?> type, boolean expectedDebug, String role) {
+    Fory fory = compatibleFory(classLoader, type, false, role);
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), type);
+    String generatedSource =
+        new StaticCompatibleCodecBuilder(TypeRef.of(type), fory, typeDef).genCode();
+    Assert.assertEquals(generatedSource.contains("debugRemoteReadField(\""), expectedDebug);
   }
 
   @SuppressWarnings("unchecked")

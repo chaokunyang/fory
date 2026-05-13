@@ -108,6 +108,46 @@ public class ForyStructProcessorTest {
   }
 
   @Test
+  public void testForyDebugAnnotationEmitsGeneratedFieldTracing() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.DebugStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyDebug;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct\n"
+                + "@ForyDebug\n"
+                + "public class DebugStruct {\n"
+                + "  public int id;\n"
+                + "  public String name;\n"
+                + "  public DebugStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    String generatedSource =
+        result.generatedSource("test/DebugStruct__ForyNativeSerializer__.java");
+    Assert.assertTrue(
+        generatedSource.contains("private static final boolean FORY_STRUCT_DEBUG = true;"));
+    Assert.assertTrue(generatedSource.contains("debugWriteField(\""));
+    Assert.assertTrue(generatedSource.contains("debugReadField(\""));
+    Assert.assertTrue(generatedSource.contains("debugRemoteReadField(\""));
+  }
+
+  @Test
+  public void testForyStructDebugParameterIsRejected() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.LegacyDebugStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct(debug = true) public class LegacyDebugStruct {\n"
+                + "  public int id;\n"
+                + "  public LegacyDebugStruct() {}\n"
+                + "}\n");
+    Assert.assertFalse(result.success);
+    Assert.assertTrue(result.diagnostics().contains("debug"), result.diagnostics());
+  }
+
+  @Test
   public void testPrivateFieldUsesAccessibleAccessors() throws Exception {
     CompilationResult result =
         compile(

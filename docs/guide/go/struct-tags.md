@@ -336,7 +336,7 @@ type User struct {
 | ---------- | ------- | ------------------------ |
 | `nullable` | `false` | Use pointer types (`*T`) |
 | `ref`      | `false` | Add `fory:"ref"` tag     |
-| `id`       | `-1`    | Add `fory:"id=N"` tag    |
+| `id`       | omitted | Add `fory:"id=N"` tag    |
 
 ## Best Practices
 

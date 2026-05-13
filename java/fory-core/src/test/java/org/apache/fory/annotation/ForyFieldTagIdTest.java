@@ -52,7 +52,7 @@ public class ForyFieldTagIdTest extends ForyTestBase {
 
   @Data
   public static class NegativeTagIdClass {
-    @ForyField(id = -1)
+    @ForyField(id = -2)
     public String invalidField;
   }
 
@@ -142,7 +142,7 @@ public class ForyFieldTagIdTest extends ForyTestBase {
     // Verify annotation values
     assertEquals(annotation0.id(), 0, "Field 0 should have id=0");
     assertEquals(annotation5.id(), 5, "Field 5 should have id=5");
-    assertEquals(annotationOptOut.id(), Integer.MIN_VALUE, "Field without ID should use sentinel");
+    assertEquals(annotationOptOut.id(), -1, "Field without ID should use sentinel");
     assertNull(
         annotationNoAnnotation, "Field without annotation should have no ForyField annotation");
   }

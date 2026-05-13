@@ -155,7 +155,7 @@ public class Descriptor {
     this.writeMethod = null;
     this.foryField = null;
     this.hasForyField = false;
-    this.foryFieldId = Integer.MIN_VALUE;
+    this.foryFieldId = -1;
     this.dynamic = ForyField.Dynamic.AUTO;
     typeAnnotation = null;
     arrayType = false;
@@ -210,10 +210,11 @@ public class Descriptor {
     this.writeMethod = null;
     this.foryField = null;
     this.hasForyField = hasForyField;
-    if (hasForyField && foryFieldId < 0 && foryFieldId != Integer.MIN_VALUE) {
-      throw new IllegalArgumentException("@ForyField id must be non-negative for field " + name);
+    if (hasForyField && foryFieldId < -1) {
+      throw new IllegalArgumentException(
+          "@ForyField id must be -1 (no tag ID) or a non-negative tag ID for field " + name);
     }
-    this.foryFieldId = hasForyField ? foryFieldId : Integer.MIN_VALUE;
+    this.foryFieldId = hasForyField ? foryFieldId : -1;
     this.dynamic = hasForyField ? Objects.requireNonNull(dynamic) : ForyField.Dynamic.AUTO;
     typeAnnotation = null;
     this.arrayType = arrayType;
@@ -290,8 +291,9 @@ public class Descriptor {
             ? builder.foryField
             : (this.field == null ? null : this.field.getAnnotation(ForyField.class));
     if (builder.hasForyField) {
-      if (builder.foryFieldId < 0 && builder.foryFieldId != Integer.MIN_VALUE) {
-        throw new IllegalArgumentException("@ForyField id must be non-negative for field " + name);
+      if (builder.foryFieldId < -1) {
+        throw new IllegalArgumentException(
+            "@ForyField id must be -1 (no tag ID) or a non-negative tag ID for field " + name);
       }
       this.hasForyField = true;
       this.foryFieldId = builder.foryFieldId;
@@ -320,12 +322,12 @@ public class Descriptor {
 
   private static int resolveForyFieldId(ForyField foryField, String fieldName) {
     if (foryField == null) {
-      return Integer.MIN_VALUE;
+      return -1;
     }
     int id = foryField.id();
-    if (id < 0 && id != Integer.MIN_VALUE) {
+    if (id < -1) {
       throw new IllegalArgumentException(
-          "@ForyField id must be non-negative for field " + fieldName);
+          "@ForyField id must be -1 (no tag ID) or a non-negative tag ID for field " + fieldName);
     }
     return id;
   }

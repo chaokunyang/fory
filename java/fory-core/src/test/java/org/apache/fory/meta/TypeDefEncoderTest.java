@@ -105,7 +105,7 @@ public class TypeDefEncoderTest {
   // Test data: Class with invalid negative tag ID
   @Data
   public static class ClassWithNegativeTagId {
-    @ForyField(id = -1)
+    @ForyField(id = -2)
     private String field;
   }
 

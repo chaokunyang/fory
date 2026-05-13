@@ -1032,6 +1032,25 @@ TEST(StructComprehensiveTest,
                            {make_test_field_type(TypeId::UINT32)}))};
   TypeMeta::assign_field_ids(&local_type, name_remote);
   EXPECT_EQ(name_remote[0].field_id, -1);
+
+  TypeMeta mixed_local;
+  mixed_local.field_infos = {
+      make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
+      make_test_field_info("alpha", -1, make_test_field_type(TypeId::BINARY)),
+      make_test_field_info("beta", -1, make_test_field_type(TypeId::VARINT32))};
+  std::vector<FieldInfo> mixed_remote = {
+      make_test_field_info("alpha", -1, make_test_field_type(TypeId::BINARY)),
+      make_test_field_info("tagged", 3, make_test_field_type(TypeId::STRING)),
+      make_test_field_info("beta", -1, make_test_field_type(TypeId::VARINT32))};
+  TypeMeta::assign_field_ids(&mixed_local, mixed_remote);
+  EXPECT_EQ(mixed_remote[0].field_id, 1);
+  EXPECT_EQ(mixed_remote[1].field_id, 0);
+  EXPECT_EQ(mixed_remote[2].field_id, 2);
+
+  std::vector<FieldInfo> untagged_remote_for_tagged_local = {
+      make_test_field_info("tagged", -1, make_test_field_type(TypeId::STRING))};
+  TypeMeta::assign_field_ids(&mixed_local, untagged_remote_for_tagged_local);
+  EXPECT_EQ(untagged_remote_for_tagged_local[0].field_id, -1);
 }
 
 TEST(StructComprehensiveTest, OptionalFieldsAllEmpty) {

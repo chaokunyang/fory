@@ -38,7 +38,7 @@ public class DescriptorBuilder {
   Method writeMethod;
   ForyField foryField;
   boolean hasForyField;
-  int foryFieldId = Integer.MIN_VALUE;
+  int foryFieldId = -1;
   ForyField.Dynamic dynamic = ForyField.Dynamic.AUTO;
   boolean arrayType;
   boolean nullable;
@@ -125,14 +125,15 @@ public class DescriptorBuilder {
     this.hasForyField = foryField != null;
     if (hasForyField) {
       this.foryFieldId = foryField.id();
-      if (foryFieldId < 0 && foryFieldId != Integer.MIN_VALUE) {
-        throw new IllegalArgumentException("@ForyField id must be non-negative");
+      if (foryFieldId < -1) {
+        throw new IllegalArgumentException(
+            "@ForyField id must be -1 (no tag ID) or a non-negative tag ID");
       }
       this.nullable = foryField.nullable();
       this.trackingRef = foryField.ref();
       this.dynamic = foryField.dynamic();
     } else {
-      this.foryFieldId = Integer.MIN_VALUE;
+      this.foryFieldId = -1;
       this.dynamic = ForyField.Dynamic.AUTO;
     }
     return this;

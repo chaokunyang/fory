@@ -1055,34 +1055,6 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
       local_field_id_map.emplace(local_fields[i].field_id, i);
     }
   }
-  const bool local_uses_field_ids = !local_field_id_map.empty();
-  bool remote_uses_field_ids = false;
-  for (const auto &remote_field : remote_fields) {
-    if (remote_field.field_id >= 0) {
-      remote_uses_field_ids = true;
-      break;
-    }
-  }
-
-  if (local_uses_field_ids || remote_uses_field_ids) {
-    for (auto &remote_field : remote_fields) {
-      size_t local_index = static_cast<size_t>(-1);
-      if (local_uses_field_ids && remote_field.field_id >= 0) {
-        auto id_it = local_field_id_map.find(remote_field.field_id);
-        if (id_it != local_field_id_map.end() &&
-            field_types_compatible_top_level(
-                local_fields[id_it->second].field_type,
-                remote_field.field_type)) {
-          local_index = id_it->second;
-        }
-      }
-      remote_field.field_id = local_index == static_cast<size_t>(-1)
-                                  ? -1
-                                  : static_cast<int16_t>(local_index);
-    }
-    return;
-  }
-
   // Track which local fields have already been matched so that each
   // local field is bound to at most one remote field when we fall
   // back to type-based matching.
@@ -1092,31 +1064,45 @@ void TypeMeta::assign_field_ids(const TypeMeta *local_type,
   for (auto &remote_field : remote_fields) {
     size_t local_index = static_cast<size_t>(-1);
 
-    // 1) Try exact name + type match first (fast path for same-language
-    //    schemas and most C++-only cases).
-    if (local_index == static_cast<size_t>(-1)) {
+    if (remote_field.field_id >= 0) {
+      auto id_it = local_field_id_map.find(remote_field.field_id);
+      if (id_it != local_field_id_map.end() && !used[id_it->second] &&
+          field_types_compatible_top_level(
+              local_fields[id_it->second].field_type,
+              remote_field.field_type)) {
+        local_index = id_it->second;
+      }
+    } else {
+      // 1) Try exact name + type match first (fast path for same-language
+      //    schemas and most C++-only cases). A local tag-ID field's identifier
+      //    is the tag ID, not the field name, so it must not match an untagged
+      //    remote field by name in a mixed schema.
       auto it = local_field_index_map.find(remote_field.field_name);
       if (it != local_field_index_map.end()) {
         size_t idx = it->second;
         const FieldInfo &local_field = local_fields[idx];
-        if (field_types_compatible_top_level(local_field.field_type,
+        if (local_field.field_id < 0 &&
+            field_types_compatible_top_level(local_field.field_type,
                                              remote_field.field_type)) {
           local_index = idx;
         }
       }
-    }
 
-    // 2) Fallback: match by type signature and position when field names
-    //    are not available or differ across languages.
-    if (local_index == static_cast<size_t>(-1)) {
-      for (size_t i = 0; i < local_fields.size(); ++i) {
-        if (used[i]) {
-          continue;
-        }
-        if (field_types_compatible_top_level(local_fields[i].field_type,
-                                             remote_field.field_type)) {
-          local_index = i;
-          break;
+      // 2) Fallback: match by type signature and position when field names
+      //    are not available or differ across languages. Keep this fallback
+      //    within name-based fields so a mixed schema does not switch into a
+      //    global tag-ID mode or bind an untagged field to a tagged local
+      //    field.
+      if (local_index == static_cast<size_t>(-1)) {
+        for (size_t i = 0; i < local_fields.size(); ++i) {
+          if (used[i] || local_fields[i].field_id >= 0) {
+            continue;
+          }
+          if (field_types_compatible_top_level(local_fields[i].field_type,
+                                               remote_field.field_type)) {
+            local_index = i;
+            break;
+          }
         }
       }
     }

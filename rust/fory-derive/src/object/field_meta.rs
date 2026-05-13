@@ -18,7 +18,7 @@
 //! Field-level metadata parsing for `#[fory(...)]` attributes.
 //!
 //! This module provides support for field-level optimization attributes:
-//! - `id = N`: Field tag ID for compact encoding (>=0) or field name encoding (-1)
+//! - `id = N`: Non-negative field tag ID for compact encoding
 //! - `nullable`: Whether the field can be null (default: false, except Option/RcWeak/ArcWeak)
 //! - `ref`: Whether to enable reference tracking (default: false, except Rc/Arc/RcWeak/ArcWeak)
 //! - `skip`: Skip this field during serialization
@@ -36,7 +36,7 @@ use syn::{Field, GenericArgument, PathArguments, Type};
 /// Represents parsed `#[fory(...)]` field attributes
 #[derive(Debug, Clone, Default)]
 pub struct ForyFieldMeta {
-    /// Field tag ID: None = use field name, Some(-1) = explicit opt-out, Some(>=0) = use tag ID
+    /// Field tag ID: None = use field name, Some(>=0) = use tag ID
     pub id: Option<i32>,
     /// Whether the field can be null (None = use type-based default)
     pub nullable: Option<bool>,

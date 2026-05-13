@@ -1473,8 +1473,9 @@ For every field, compute a stable identifier used for ordering:
 - Otherwise, use the field name converted to `snake_case`.
 
 Configured tag IDs must be non-negative. A negative configured tag ID is invalid; languages may
-use a negative value only as an internal sentinel for "no tag ID configured", which falls back to
-the `snake_case` field name. Tag IDs must be unique within a type; duplicate tag IDs are invalid.
+use a negative value only as a default or internal sentinel for "no tag ID configured", which falls
+back to the `snake_case` field name and is not a tag ID. Tag IDs must be unique within a type;
+duplicate tag IDs are invalid.
 
 Field identifiers compare as follows:
 

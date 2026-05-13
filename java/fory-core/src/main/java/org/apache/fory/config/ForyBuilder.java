@@ -568,6 +568,8 @@ public final class ForyBuilder {
       }
     }
     if (xlang) {
+      // Xlang scalar integer encodings are protocol-defined. Java native-mode compression
+      // options must not make xlang int/long payloads use fixed or tagged encodings.
       stringRefIgnored = true;
       longEncoding = Int64Encoding.VARINT;
       compressInt = true;

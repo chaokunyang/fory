@@ -112,6 +112,36 @@ public class ForyBuilderTest {
   }
 
   @Test
+  public void testXlangForcesProtocolIntegerEncodings() {
+    Fory xlangAfterNativeCompressionOptions =
+        new ForyBuilder()
+            .withXlang(true)
+            .withIntCompressed(false)
+            .withLongCompressed(Int64Encoding.FIXED)
+            .build();
+    Fory xlangBeforeNativeCompressionOptions =
+        new ForyBuilder()
+            .withIntCompressed(false)
+            .withLongCompressed(Int64Encoding.TAGGED)
+            .withXlang(true)
+            .build();
+    Fory xlangLanguage =
+        new ForyBuilder()
+            .withNumberCompressed(false)
+            .withLanguage(Language.XLANG)
+            .build();
+
+    assertTrue(xlangAfterNativeCompressionOptions.getConfig().compressInt());
+    assertEquals(
+        xlangAfterNativeCompressionOptions.getConfig().longEncoding(), Int64Encoding.VARINT);
+    assertTrue(xlangBeforeNativeCompressionOptions.getConfig().compressInt());
+    assertEquals(
+        xlangBeforeNativeCompressionOptions.getConfig().longEncoding(), Int64Encoding.VARINT);
+    assertTrue(xlangLanguage.getConfig().compressInt());
+    assertEquals(xlangLanguage.getConfig().longEncoding(), Int64Encoding.VARINT);
+  }
+
+  @Test
   public void testCodegenDefaultsOnOrdinaryJvm() {
     Fory defaultFory = new ForyBuilder().build();
     Fory explicitCodegen = new ForyBuilder().withCodegen(true).build();

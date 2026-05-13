@@ -2348,10 +2348,7 @@ void run_test_list_array_compatible_nullable_list_to_array_error(
   Buffer buffer = make_buffer(bytes);
   auto result = fory.deserialize<CompatibleInt32ArrayField>(buffer);
   if (result.ok()) {
-    std::vector<uint8_t> out;
-    append_serialized(fory, result.value(), out);
-    write_file(data_file, out);
-    return;
+    fail("Expected nullable list payload to fail compatible array read");
   }
   write_file(data_file, bytes);
 }

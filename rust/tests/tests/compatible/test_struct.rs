@@ -125,20 +125,8 @@ fn compatible_list_array_field_pairs() {
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();
-    writer.register::<ArrayPayload>(993).unwrap();
-    reader.register::<NullableListPayload>(993).unwrap();
-    let bytes = writer
-        .serialize(&ArrayPayload {
-            payload: vec![1, 2, 3],
-        })
-        .unwrap();
-    let decoded: NullableListPayload = reader.deserialize(&bytes).unwrap();
-    assert_eq!(decoded.payload, vec![Some(1), Some(2), Some(3)]);
-
-    let mut writer = Fory::builder().compatible(true).build();
-    let mut reader = Fory::builder().compatible(true).build();
-    writer.register::<NullableListPayload>(994).unwrap();
-    reader.register::<ArrayPayload>(994).unwrap();
+    writer.register::<NullableListPayload>(993).unwrap();
+    reader.register::<ArrayPayload>(993).unwrap();
     let bytes = writer
         .serialize(&NullableListPayload {
             payload: vec![Some(1), Some(2), Some(3)],
@@ -163,8 +151,8 @@ fn compatible_list_array_field_pairs() {
 
     let mut writer = Fory::builder().compatible(true).build();
     let mut reader = Fory::builder().compatible(true).build();
-    writer.register::<NestedListPayload>(995).unwrap();
-    reader.register::<NestedArrayPayload>(995).unwrap();
+    writer.register::<NestedListPayload>(994).unwrap();
+    reader.register::<NestedArrayPayload>(994).unwrap();
     let bytes = writer
         .serialize(&NestedListPayload {
             payload: vec![vec![1, 2], vec![3]],

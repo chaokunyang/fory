@@ -442,7 +442,7 @@ func compatibleReadAdaptsArrayFieldToDefaultVarintListField() throws {
 }
 
 @Test
-func compatibleReadAllowsNullableListSchemaWithoutNullElementsForArrayField() throws {
+func compatibleReadRejectsNullableListElementsForArrayField() throws {
     let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     writer.register(CompatibleNullableListFieldV1.self, id: 9923)
 

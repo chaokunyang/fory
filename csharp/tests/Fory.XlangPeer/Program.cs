@@ -844,13 +844,13 @@ internal static class Program
         ReadOnlySequence<byte> sequence = new(input);
         try
         {
-            CompatibleInt32ArrayField value = fory.Deserialize<CompatibleInt32ArrayField>(ref sequence);
-            return fory.Serialize(value);
+            _ = fory.Deserialize<CompatibleInt32ArrayField>(ref sequence);
         }
         catch (Apache.Fory.InvalidDataException)
         {
             return input;
         }
+        throw new InvalidOperationException("Expected nullable list payload to fail compatible array read");
     }
 
     private static byte[] CaseOneEnumFieldSchema(byte[] input)

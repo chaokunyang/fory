@@ -414,11 +414,8 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
           throw new Error(`${typeInfo.typeId} generator not exists`);
         }
         const innerGenerator = new InnerGeneratorClass(typeInfo, this.builder, this.scope);
-        const assign = typeInfo.options?.skipRead
-          ? (expr: string) => `void (${expr})`
-          : (expr: string) => `${result}${CodecBuilder.safePropAccessor(key)} = ${expr}`;
         return `
-          ${this.readField(typeInfo, assign, innerGenerator.readEmbed())}
+          ${this.readField(typeInfo, expr => `${result}${CodecBuilder.safePropAccessor(key)} = ${expr}`, innerGenerator.readEmbed())}
         `;
       }).join(";\n")}
       ${accessor(result)}
@@ -438,9 +435,6 @@ class StructSerializerGenerator extends BaseSerializerGenerator {
     }
     const fields: Array<{ key: string; expr: string }> = [];
     for (const { key, typeInfo } of this.sortedProps) {
-      if (typeInfo.options?.skipRead) {
-        return null;
-      }
       const expr = directNumericFieldReadExpr(typeInfo, this.builder);
       if (expr === null) {
         return null;

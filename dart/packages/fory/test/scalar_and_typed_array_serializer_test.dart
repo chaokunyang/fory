@@ -640,10 +640,8 @@ void main() {
       final nonNullBytes = writer.serialize(
         CompatibleNullableListEnvelope()..values = <int?>[1, 2, 3],
       );
-      expect(
-        () => reader.deserialize<CompatibleArrayEnvelope>(nonNullBytes),
-        throwsStateError,
-      );
+      final decoded = reader.deserialize<CompatibleArrayEnvelope>(nonNullBytes);
+      expect(decoded.values, orderedEquals(<int>[1, 2, 3]));
 
       final nullableBytes = writer.serialize(
         CompatibleNullableListEnvelope()..values = <int?>[1, null, 3],
@@ -681,7 +679,7 @@ void main() {
       );
     });
 
-    test('skips nested compatible list and dense array field positions', () {
+    test('rejects nested compatible list and dense array field positions', () {
       final writer = Fory();
       final reader = Fory();
       ScalarAndTypedArraySerializerTestFory.register(
@@ -704,8 +702,10 @@ void main() {
           ],
       );
 
-      final decoded = reader.deserialize<CompatibleNestedListEnvelope>(bytes);
-      expect(decoded.values, isEmpty);
+      expect(
+        () => reader.deserialize<CompatibleNestedListEnvelope>(bytes),
+        throwsStateError,
+      );
     });
 
     test('enforces maxBinarySize on write and read', () {

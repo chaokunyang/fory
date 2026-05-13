@@ -782,33 +782,16 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                 }
             }
 
-            if (localIndex >= 0 && localMatch is not null)
+            if (localIndex >= 0 &&
+                localMatch is not null &&
+                IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true))
             {
-                ThrowIfUnsupportedListArrayMismatch(remoteField.FieldType, localMatch.FieldType, topLevel: true);
-                remoteField.AssignedFieldId =
-                    IsCompatibleFieldType(remoteField.FieldType, localMatch.FieldType, topLevel: true)
-                        ? localIndex
-                        : -1;
+                remoteField.AssignedFieldId = localIndex;
             }
             else
             {
                 remoteField.AssignedFieldId = -1;
             }
-        }
-    }
-
-    private static void ThrowIfUnsupportedListArrayMismatch(
-        TypeMetaFieldType remote,
-        TypeMetaFieldType local,
-        bool topLevel)
-    {
-        if (topLevel && IsListArrayShapePair(remote, local))
-        {
-            if (IsCompatibleListArrayFieldPair(remote, local))
-            {
-                return;
-            }
-            throw new InvalidDataException("unsupported compatible list/array schema mismatch");
         }
     }
 
@@ -859,14 +842,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
                local.Generics.Count == 1 &&
                CompatibleScalarTypeId(remoteArrayElementTypeId.Value) ==
                CompatibleScalarTypeId(local.Generics[0].TypeId);
-    }
-
-    private static bool IsListArrayShapePair(TypeMetaFieldType remote, TypeMetaFieldType local)
-    {
-        return remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
-               TryPackedArrayElementTypeId(local.TypeId).HasValue ||
-               local.TypeId == (uint)global::Apache.Fory.TypeId.List &&
-               TryPackedArrayElementTypeId(remote.TypeId).HasValue;
     }
 
     private static uint? TryPackedArrayElementTypeId(uint typeId)

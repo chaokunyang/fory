@@ -1427,12 +1427,8 @@ describe("bool", () => {
       }),
     );
 
-    try {
-      const value = serializer.deserialize(content);
-      writeToFile(serializer.serialize(value) as Buffer);
-    } catch {
-      writeToFile(content);
-    }
+    expect(() => serializer.deserialize(content)).toThrow();
+    writeToFile(content);
   });
 
   test("test_one_enum_field_schema", () => {

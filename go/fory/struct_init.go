@@ -533,7 +533,7 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 			) {
 				shouldRead = true
 				fieldType = localType
-			} else if defTypeId == LIST && localFieldSpec != nil && compatibleListFieldHasPrimitiveArrayShape(def.typeSpec, localFieldSpec.Type, localType) {
+			} else if defTypeId == LIST && localFieldSpec != nil && compatibleListFieldCanReadLocalArray(def.typeSpec, localFieldSpec.Type, localType) {
 				shouldRead = true
 				usesCompatibleCollectionArrayReader = true
 				fieldType = localType
@@ -810,7 +810,7 @@ func listFieldCanReadLocalArray(remoteSpec *TypeSpec, remoteNullable bool, remot
 	return fieldSpecEqualForDiff(remoteSpec, remoteNullable, remoteTrackRef, localSpec, localNullable, localTrackRef)
 }
 
-func compatibleListFieldHasPrimitiveArrayShape(remoteSpec *TypeSpec, localSpec *TypeSpec, localType reflect.Type) bool {
+func compatibleListFieldCanReadLocalArray(remoteSpec *TypeSpec, localSpec *TypeSpec, localType reflect.Type) bool {
 	if remoteSpec == nil || localSpec == nil || localType == nil {
 		return false
 	}

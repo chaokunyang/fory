@@ -956,11 +956,12 @@ def test_list_array_compatible_nullable_list_to_array_error():
     fory = pyfory.Fory(xlang=True, compatible=True)
     fory.register_type(CompatibleInt32ArrayField, type_id=901)
     try:
-        value = fory.deserialize(data_bytes)
+        fory.deserialize(data_bytes)
     except TypeNotCompatibleError:
-        new_bytes = data_bytes
+        pass
     else:
-        new_bytes = fory.serialize(value)
+        raise AssertionError("Expected nullable list payload to fail compatible array read")
+    new_bytes = data_bytes
     with open(data_file, "wb") as f:
         f.write(new_bytes)
 

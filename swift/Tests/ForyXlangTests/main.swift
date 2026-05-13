@@ -1116,11 +1116,13 @@ private func handleListArrayCompatibleNullableListToArrayError(_ bytes: [UInt8])
     let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
     fory.register(CompatibleInt32ArrayField.self, id: 901)
     do {
-        let value: CompatibleInt32ArrayField = try fory.deserialize(Data(bytes))
-        return try Array(fory.serialize(value))
+        let _: CompatibleInt32ArrayField = try fory.deserialize(Data(bytes))
     } catch {
         return bytes
     }
+    throw PeerError.invalidFieldValue(
+        "Expected nullable list payload to fail compatible array read"
+    )
 }
 
 private func rewritePayload(caseName: String, bytes: [UInt8]) throws -> [UInt8] {

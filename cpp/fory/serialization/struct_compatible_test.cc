@@ -491,8 +491,7 @@ TEST(SchemaEvolutionTest, ImmediateArrayFieldCanReadIntoListCarrier) {
   EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{4, 5, 6}));
 }
 
-TEST(SchemaEvolutionTest,
-     NullableListSchemaWithoutNullElementsCanReadIntoArrayCarrier) {
+TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
   auto writer = Fory::builder().compatible(true).xlang(true).build();
   auto reader = Fory::builder().compatible(true).xlang(true).build();
 

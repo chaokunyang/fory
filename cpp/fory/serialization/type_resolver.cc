@@ -1361,6 +1361,12 @@ int32_t TypeMeta::compute_struct_version(const TypeMeta &meta) {
   // Use the low 64 bits and then keep low 32 bits as i32.
   uint64_t low = static_cast<uint64_t>(hash_out[0]);
   uint32_t version = static_cast<uint32_t>(low & 0xFFFF'FFFFu);
+#if defined(FORY_DEBUG) || defined(ENABLE_FORY_DEBUG_OUTPUT)
+  // DEBUG: Print fingerprint for debugging version mismatch
+  std::cerr << "[xlang][debug] struct_version type_name=" << meta.type_name
+            << ", fingerprint=\"" << fingerprint
+            << "\" version=" << static_cast<int32_t>(version) << std::endl;
+#endif
   return static_cast<int32_t>(version);
 }
 

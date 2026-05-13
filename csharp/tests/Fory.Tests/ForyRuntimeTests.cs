@@ -1072,7 +1072,7 @@ public sealed class ForyRuntimeTests
     }
 
     [Fact]
-    public void CompatibleReadAllowsNullableListSchemaWithoutNullElementsIntoArrayCarrier()
+    public void CompatibleReadRejectsNullableListElementsIntoArrayCarrier()
     {
         ForyRuntime writer = ForyRuntime.Builder().Compatible(true).Build();
         writer.Register<CompatibleNullableListSchema>(308);
@@ -1080,8 +1080,8 @@ public sealed class ForyRuntimeTests
         reader.Register<CompatibleArraySchema>(308);
 
         byte[] nonNullPayload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, 2] });
-        CompatibleArraySchema nonNullDecoded = reader.Deserialize<CompatibleArraySchema>(nonNullPayload);
-        Assert.Equal([1, 2], nonNullDecoded.Values);
+        CompatibleArraySchema decoded = reader.Deserialize<CompatibleArraySchema>(nonNullPayload);
+        Assert.Equal([1, 2], decoded.Values);
 
         byte[] payload = writer.Serialize(new CompatibleNullableListSchema { Values = [1, null] });
         InvalidDataException exception =

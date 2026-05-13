@@ -1884,14 +1884,6 @@ public abstract class XlangTestBase extends ForyTestBase {
         (XlangCompatibleInt32ArrayField)
             arrayFory.deserialize(MemoryUtils.wrap(nullableListWithoutNullsPayload));
     Assert.assertEquals(nullableListWithoutNullsArray.values, new int[] {1, 2, 3});
-    ctx =
-        prepareExecution(
-            "test_list_array_compatible_nullable_list_to_array_error",
-            nullableListWithoutNullsPayload);
-    runPeer(ctx);
-    nullableListWithoutNullsArray =
-        (XlangCompatibleInt32ArrayField) arrayFory.deserialize(readBuffer(ctx.dataFile()));
-    Assert.assertEquals(nullableListWithoutNullsArray.values, new int[] {1, 2, 3});
 
     XlangCompatibleNullableInt32ListField nullableListValue =
         newCompatibleNullableInt32ListField(1, null, 3);

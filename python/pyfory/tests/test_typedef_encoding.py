@@ -559,18 +559,6 @@ def test_compatible_int32_array_assigns_to_list():
     assert decoded.payload == [1, 2, 3]
 
 
-def test_compatible_int32_array_assigns_to_nullable_list():
-    writer = Fory(xlang=True, compatible=True)
-    reader = Fory(xlang=True, compatible=True)
-    _register_int32_payload(writer, Int32ArrayPayload)
-    _register_int32_payload(reader, NullableInt32ListPayload)
-
-    decoded = reader.deserialize(writer.serialize(Int32ArrayPayload(payload=pyfory.Int32Array([1, 2, 3]))))
-
-    assert isinstance(decoded, NullableInt32ListPayload)
-    assert decoded.payload == [1, 2, 3]
-
-
 @pytest.mark.skipif(np is None, reason="Requires numpy")
 def test_compatible_int32_ndarray_assigns_to_list():
     writer = Fory(xlang=True, compatible=True)

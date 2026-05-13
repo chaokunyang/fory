@@ -1657,12 +1657,7 @@ func testListArrayCompatibleNullableListToArrayError() {
 
 	var result CompatibleInt32ArrayField
 	if err := f.Deserialize(data, &result); err == nil {
-		serialized, err := f.Serialize(&result)
-		if err != nil {
-			panic(fmt.Sprintf("Failed to serialize compatible array field: %v", err))
-		}
-		writeFile(dataFile, serialized)
-		return
+		panic("Expected nullable list payload to fail compatible array read")
 	}
 
 	writeFile(dataFile, data)

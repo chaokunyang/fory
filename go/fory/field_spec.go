@@ -145,10 +145,7 @@ func (t *TypeSpec) Clone() *TypeSpec {
 }
 
 func (t *TypeSpec) declaredNullable() bool {
-	if t == nil {
-		return false
-	}
-	if t.hasDeclNull {
+	if t != nil && t.hasDeclNull {
 		return t.declNullable
 	}
 	return true
@@ -159,41 +156,6 @@ func (t *TypeSpec) declaredTrackRef() bool {
 		return t.declRef
 	}
 	return false
-}
-
-func isNonNullableScalarElementType(typeID TypeId) bool {
-	switch typeID {
-	case BOOL,
-		INT8,
-		INT16,
-		INT32,
-		VARINT32,
-		INT64,
-		VARINT64,
-		TAGGED_INT64,
-		UINT8,
-		UINT16,
-		UINT32,
-		VAR_UINT32,
-		UINT64,
-		VAR_UINT64,
-		TAGGED_UINT64,
-		FLOAT8,
-		FLOAT16,
-		BFLOAT16,
-		FLOAT32,
-		FLOAT64:
-		return true
-	default:
-		return false
-	}
-}
-
-// Primitive list carriers use LIST payloads but still declare scalar elements
-// as non-null. Map key/value primitive schemas come from boxed Java types and
-// keep the default nullable nested TypeSpec unless a tag overrides it.
-func projectsAsNonNullableListElement(t *TypeSpec) bool {
-	return t != nil && !t.hasDeclNull && !t.Nullable && isNonNullableScalarElementType(t.TypeID)
 }
 
 func (t *TypeSpec) typeDefProjection(preserveRootFlags bool) *TypeSpec {
@@ -225,9 +187,6 @@ func (t *TypeSpec) typeDefProjectionWithMode(isRoot bool, preserveRootFlags bool
 	}
 	if t.Element != nil {
 		projected.Element = t.Element.typeDefProjectionWithMode(false, preserveRootFlags)
-		if t.TypeID == LIST && projectsAsNonNullableListElement(t.Element) {
-			projected.Element.Nullable = false
-		}
 		projected.elementType = projected.Element
 	}
 	if t.Key != nil {

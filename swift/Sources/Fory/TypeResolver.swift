@@ -559,10 +559,9 @@ final class TypeResolver {
       return localTypeInfo
     }
     let canonicalTypeMeta: TypeMeta
-    if let localTypeMeta = localTypeInfo.typeMeta {
-      // Field remapping validates compatible schema shape. Propagate those errors so an unsupported
-      // matched field cannot degrade into an unknown-field skip.
-      canonicalTypeMeta = try typeMeta.assigningFieldIDs(from: localTypeMeta)
+    if let localTypeMeta = localTypeInfo.typeMeta,
+      let remapped = try? typeMeta.assigningFieldIDs(from: localTypeMeta) {
+      canonicalTypeMeta = remapped
     } else {
       canonicalTypeMeta = typeMeta
     }

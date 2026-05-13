@@ -346,10 +346,6 @@ public final class FieldInfo implements Serializable {
   }
 
   private static int listElementTypeId(FieldTypes.FieldType fieldType) {
-    return listElementTypeId(fieldType, false);
-  }
-
-  private static int listElementTypeId(FieldTypes.FieldType fieldType, boolean requireNonNullable) {
     if (!(fieldType instanceof FieldTypes.CollectionFieldType)
         || fieldType.getTypeId() != Types.LIST) {
       return Types.UNKNOWN;
@@ -357,16 +353,9 @@ public final class FieldInfo implements Serializable {
     FieldTypes.FieldType elementType =
         ((FieldTypes.CollectionFieldType) fieldType).getElementType();
     if (elementType instanceof FieldTypes.RegisteredFieldType) {
-      if (requireNonNullable && (elementType.nullable() || elementType.trackingRef())) {
-        return Types.UNKNOWN;
-      }
       return ((FieldTypes.RegisteredFieldType) elementType).getTypeId();
     }
     return Types.UNKNOWN;
-  }
-
-  private static int nonNullableListElementTypeId(FieldTypes.FieldType fieldType) {
-    return listElementTypeId(fieldType, true);
   }
 
   private static int arrayTypeId(FieldTypes.FieldType fieldType) {

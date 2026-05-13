@@ -819,7 +819,7 @@ final class CompatibleCollectionArrayReader {
     if (primitiveList != null) {
       return primitiveList;
     }
-    if (List.class.isAssignableFrom(targetType)) {
+    if (targetType.isAssignableFrom(ArrayList.class)) {
       return materializeBoxedList(array, arrayTypeId);
     }
     throw new DeserializationException("Unsupported compatible list/array target " + targetType);

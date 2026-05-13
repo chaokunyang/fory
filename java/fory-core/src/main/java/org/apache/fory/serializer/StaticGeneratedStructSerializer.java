@@ -27,7 +27,6 @@ import java.util.Map;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
-import org.apache.fory.context.RefReader;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
@@ -215,28 +214,18 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   protected final void skipField(ReadContext readContext, RemoteFieldInfo remoteField) {
-    skipField(
-        readContext,
-        readContext.getRefReader(),
-        remoteField.serializationFieldInfo,
-        readContext.getBuffer());
-  }
-
-  protected final void skipField(
-      ReadContext readContext,
-      RefReader refReader,
-      SerializationFieldInfo fieldInfo,
-      MemoryBuffer buffer) {
     try {
-      FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+      FieldSkipper.skipField(
+          readContext,
+          typeResolver,
+          readContext.getRefReader(),
+          remoteField.serializationFieldInfo,
+          readContext.getBuffer());
     } catch (RuntimeException e) {
       throw new DeserializationException(
-          "Failed to skip remote field " + fieldInfo.descriptor.getName(), e);
+          "Failed to skip remote field " + remoteField.serializationFieldInfo.descriptor.getName(),
+          e);
     }
-  }
-
-  protected final int matchedId(RemoteFieldInfo remoteField) {
-    return remoteField.matchedId;
   }
 
   protected final SerializationFieldInfo localFieldInfo(int matchedId) {
@@ -274,15 +263,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     Class<?> remoteType = remoteField.serializationFieldInfo.typeRef.getRawType();
     Class<?> localType = localFieldInfo.typeRef.getRawType();
     return FieldConverters.convertValue(remoteType, localType, fieldValue);
-  }
-
-  protected final boolean hasFieldConverter(RemoteFieldInfo remoteField) {
-    return remoteField.serializationFieldInfo.fieldConverter != null;
-  }
-
-  protected final void setConvertedField(
-      Object targetObject, Object fieldValue, RemoteFieldInfo remoteField) {
-    remoteField.serializationFieldInfo.fieldConverter.set(targetObject, fieldValue);
   }
 
   protected final void debugWriteField(
@@ -457,7 +437,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
         throw new IllegalStateException("Missing remote field metadata for " + descriptor);
       }
       SerializationFieldInfo serializationFieldInfo =
-          FieldGroups.buildFieldInfo(typeResolver, descriptor);
+          new SerializationFieldInfo(typeResolver, descriptor);
       int matchedId = matchField(fieldInfo, fieldIds, fields);
       Descriptor localDescriptor =
           matchedId == UNKNOWN_FIELD ? null : localDescriptors.get(matchedId);
@@ -530,14 +510,14 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   /** Remote field metadata consumed by generated compatible read methods. */
   @Internal
-  protected static final class RemoteFieldInfo {
-    private final int matchedId;
-    private final FieldInfo fieldInfo;
-    private final Descriptor descriptor;
-    private final SerializationFieldInfo serializationFieldInfo;
-    private final CompatibleCollectionArrayReader.ReadAction compatibleCollectionArrayReadAction;
-    private final boolean incompatibleCollectionArrayMatch;
-    private final boolean nestedCollectionArrayMatch;
+  public static final class RemoteFieldInfo {
+    public final int matchedId;
+    public final FieldInfo fieldInfo;
+    public final Descriptor descriptor;
+    public final SerializationFieldInfo serializationFieldInfo;
+    public final CompatibleCollectionArrayReader.ReadAction compatibleCollectionArrayReadAction;
+    public final boolean incompatibleCollectionArrayMatch;
+    public final boolean nestedCollectionArrayMatch;
 
     private RemoteFieldInfo(
         TypeResolver typeResolver,

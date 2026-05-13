@@ -141,8 +141,6 @@ public class FieldTypes {
       typeId = typeExtMeta.typeId();
     } else if (boxedListArray) {
       typeId = TypeAnnotationUtils.getBoxedListArrayTypeId(descriptor);
-    } else if (primitiveListElementTypeId != Types.UNKNOWN) {
-      typeId = TypeAnnotationUtils.getPrimitiveListTypeId(typeAnnotation, rawType);
     } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
       if (field != null) {
         typeId =

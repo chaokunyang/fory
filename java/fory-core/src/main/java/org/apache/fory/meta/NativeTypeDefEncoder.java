@@ -99,7 +99,7 @@ public class NativeTypeDefEncoder {
     return buildFieldsInfoFromDescriptors(resolver, descriptors);
   }
 
-  public static List<FieldInfo> buildFieldsInfoFromDescriptors(
+  static List<FieldInfo> buildFieldsInfoFromDescriptors(
       TypeResolver resolver, List<Descriptor> descriptors) {
     List<FieldInfo> fieldInfos = new ArrayList<>();
     Set<Integer> usedTagIds = new HashSet<>();

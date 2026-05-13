@@ -21,6 +21,7 @@ package org.apache.fory.serializer.converter;
 
 import java.lang.reflect.Field;
 import java.util.Set;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.type.TypeUtils;
@@ -44,152 +45,199 @@ public class FieldConverters {
    *     converter exists
    */
   public static FieldConverter<?> getConverter(Class<?> from, Field field) {
-    Class<?> to = field.getType();
-    from = TypeUtils.wrap(from);
-    // Handle primitive int conversions
-    if (to == int.class) {
-      if (IntConverter.compatibleTypes.contains(from)) {
-        return new IntConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == Integer.class) {
-      // Handle boxed Integer conversions
-      if (IntConverter.compatibleTypes.contains(from)) {
-        return new BoxedIntConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == boolean.class) {
-      // Handle primitive boolean conversions
-      if (BooleanConverter.compatibleTypes.contains(from)) {
-        return new BooleanConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == Boolean.class) {
-      // Handle boxed Boolean conversions
-      if (BooleanConverter.compatibleTypes.contains(from)) {
-        return new BoxedBooleanConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == byte.class) {
-      // Handle primitive byte conversions
-      if (ByteConverter.compatibleTypes.contains(from)) {
-        return new ByteConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == Byte.class) {
-      // Handle boxed Byte conversions
-      if (ByteConverter.compatibleTypes.contains(from)) {
-        return new BoxedByteConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == short.class) {
-      // Handle primitive short conversions
-      if (ShortConverter.compatibleTypes.contains(from)) {
-        return new ShortConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == Short.class) {
-      // Handle boxed Short conversions
-      if (ShortConverter.compatibleTypes.contains(from)) {
-        return new BoxedShortConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == long.class) {
-      // Handle primitive long conversions
-      if (LongConverter.compatibleTypes.contains(from)) {
-        return new LongConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == Long.class) {
-      // Handle boxed Long conversions
-      if (LongConverter.compatibleTypes.contains(from)) {
-        return new BoxedLongConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == float.class) {
-      // Handle primitive float conversions
-      if (FloatConverter.compatibleTypes.contains(from)) {
-        return new FloatConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == Float.class) {
-      // Handle boxed Float conversions
-      if (FloatConverter.compatibleTypes.contains(from)) {
-        return new BoxedFloatConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == double.class) {
-      // Handle primitive double conversions
-      if (DoubleConverter.compatibleTypes.contains(from)) {
-        return new DoubleConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == Double.class) {
-      // Handle boxed Double conversions
-      if (DoubleConverter.compatibleTypes.contains(from)) {
-        return new BoxedDoubleConverter(FieldAccessor.createAccessor(field));
-      }
-    } else if (to == String.class) {
-      // Handle String conversions
-      if (StringConverter.compatibleTypes.contains(from)) {
-        return new StringConverter(FieldAccessor.createAccessor(field));
-      }
+    FieldConversion conversion = fieldConversion(TypeUtils.wrap(from), field.getType());
+    if (conversion == null) {
+      return null;
     }
-
-    return null; // No compatible converter found
+    FieldAccessor accessor = FieldAccessor.createAccessor(field);
+    switch (conversion) {
+      case INT:
+        return new IntConverter(accessor);
+      case BOXED_INT:
+        return new BoxedIntConverter(accessor);
+      case BOOLEAN:
+        return new BooleanConverter(accessor);
+      case BOXED_BOOLEAN:
+        return new BoxedBooleanConverter(accessor);
+      case BYTE:
+        return new ByteConverter(accessor);
+      case BOXED_BYTE:
+        return new BoxedByteConverter(accessor);
+      case SHORT:
+        return new ShortConverter(accessor);
+      case BOXED_SHORT:
+        return new BoxedShortConverter(accessor);
+      case LONG:
+        return new LongConverter(accessor);
+      case BOXED_LONG:
+        return new BoxedLongConverter(accessor);
+      case FLOAT:
+        return new FloatConverter(accessor);
+      case BOXED_FLOAT:
+        return new BoxedFloatConverter(accessor);
+      case DOUBLE:
+        return new DoubleConverter(accessor);
+      case BOXED_DOUBLE:
+        return new BoxedDoubleConverter(accessor);
+      case STRING:
+        return new StringConverter(accessor);
+      default:
+        throw new IllegalStateException("Unknown field conversion " + conversion);
+    }
   }
 
   /** Returns whether a value of {@code from} can be assigned or converted to {@code to}. */
+  @Internal
   public static boolean canConvert(Class<?> from, Class<?> to) {
     if (isDirectlyAssignable(from, to)) {
       return true;
     }
-    Class<?> wrappedFrom = TypeUtils.wrap(from);
-    if (to == int.class || to == Integer.class) {
-      return IntConverter.compatibleTypes.contains(wrappedFrom);
-    } else if (to == boolean.class || to == Boolean.class) {
-      return BooleanConverter.compatibleTypes.contains(wrappedFrom);
-    } else if (to == byte.class || to == Byte.class) {
-      return ByteConverter.compatibleTypes.contains(wrappedFrom);
-    } else if (to == short.class || to == Short.class) {
-      return ShortConverter.compatibleTypes.contains(wrappedFrom);
-    } else if (to == long.class || to == Long.class) {
-      return LongConverter.compatibleTypes.contains(wrappedFrom);
-    } else if (to == float.class || to == Float.class) {
-      return FloatConverter.compatibleTypes.contains(wrappedFrom);
-    } else if (to == double.class || to == Double.class) {
-      return DoubleConverter.compatibleTypes.contains(wrappedFrom);
-    } else if (to == String.class) {
-      return StringConverter.compatibleTypes.contains(wrappedFrom);
-    }
-    return false;
+    return fieldConversion(TypeUtils.wrap(from), to) != null;
   }
 
   /**
    * Converts {@code value} from {@code from} to {@code to}, or returns it for direct assignment.
    */
+  @Internal
   public static Object convertValue(Class<?> from, Class<?> to, Object value) {
     if (isDirectlyAssignable(from, to)) {
       return value;
-    } else if (to == int.class) {
-      return IntConverter.convertFrom(value);
-    } else if (to == Integer.class) {
-      return BoxedIntConverter.convertFrom(value);
-    } else if (to == boolean.class) {
-      return BooleanConverter.convertFrom(value);
-    } else if (to == Boolean.class) {
-      return BoxedBooleanConverter.convertFrom(value);
-    } else if (to == byte.class) {
-      return ByteConverter.convertFrom(value);
-    } else if (to == Byte.class) {
-      return BoxedByteConverter.convertFrom(value);
-    } else if (to == short.class) {
-      return ShortConverter.convertFrom(value);
-    } else if (to == Short.class) {
-      return BoxedShortConverter.convertFrom(value);
-    } else if (to == long.class) {
-      return LongConverter.convertFrom(value);
-    } else if (to == Long.class) {
-      return BoxedLongConverter.convertFrom(value);
-    } else if (to == float.class) {
-      return FloatConverter.convertFrom(value);
-    } else if (to == Float.class) {
-      return BoxedFloatConverter.convertFrom(value);
-    } else if (to == double.class) {
-      return DoubleConverter.convertFrom(value);
-    } else if (to == Double.class) {
-      return BoxedDoubleConverter.convertFrom(value);
-    } else if (to == String.class) {
-      return StringConverter.convertFrom(value);
+    }
+    FieldConversion conversion = fieldConversion(TypeUtils.wrap(from), to);
+    if (conversion != null) {
+      return conversion.convert(value);
     }
     throw new UnsupportedOperationException("Incompatible type: " + from + " -> " + to);
+  }
+
+  private static FieldConversion fieldConversion(Class<?> wrappedFrom, Class<?> to) {
+    if (to == int.class && IntConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.INT;
+    } else if (to == Integer.class && IntConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOXED_INT;
+    } else if (to == boolean.class && BooleanConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOOLEAN;
+    } else if (to == Boolean.class && BooleanConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOXED_BOOLEAN;
+    } else if (to == byte.class && ByteConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BYTE;
+    } else if (to == Byte.class && ByteConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOXED_BYTE;
+    } else if (to == short.class && ShortConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.SHORT;
+    } else if (to == Short.class && ShortConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOXED_SHORT;
+    } else if (to == long.class && LongConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.LONG;
+    } else if (to == Long.class && LongConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOXED_LONG;
+    } else if (to == float.class && FloatConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.FLOAT;
+    } else if (to == Float.class && FloatConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOXED_FLOAT;
+    } else if (to == double.class && DoubleConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.DOUBLE;
+    } else if (to == Double.class && DoubleConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.BOXED_DOUBLE;
+    } else if (to == String.class && StringConverter.compatibleTypes.contains(wrappedFrom)) {
+      return FieldConversion.STRING;
+    }
+    return null;
+  }
+
+  private enum FieldConversion {
+    INT {
+      @Override
+      Object convert(Object value) {
+        return IntConverter.convertFrom(value);
+      }
+    },
+    BOXED_INT {
+      @Override
+      Object convert(Object value) {
+        return BoxedIntConverter.convertFrom(value);
+      }
+    },
+    BOOLEAN {
+      @Override
+      Object convert(Object value) {
+        return BooleanConverter.convertFrom(value);
+      }
+    },
+    BOXED_BOOLEAN {
+      @Override
+      Object convert(Object value) {
+        return BoxedBooleanConverter.convertFrom(value);
+      }
+    },
+    BYTE {
+      @Override
+      Object convert(Object value) {
+        return ByteConverter.convertFrom(value);
+      }
+    },
+    BOXED_BYTE {
+      @Override
+      Object convert(Object value) {
+        return BoxedByteConverter.convertFrom(value);
+      }
+    },
+    SHORT {
+      @Override
+      Object convert(Object value) {
+        return ShortConverter.convertFrom(value);
+      }
+    },
+    BOXED_SHORT {
+      @Override
+      Object convert(Object value) {
+        return BoxedShortConverter.convertFrom(value);
+      }
+    },
+    LONG {
+      @Override
+      Object convert(Object value) {
+        return LongConverter.convertFrom(value);
+      }
+    },
+    BOXED_LONG {
+      @Override
+      Object convert(Object value) {
+        return BoxedLongConverter.convertFrom(value);
+      }
+    },
+    FLOAT {
+      @Override
+      Object convert(Object value) {
+        return FloatConverter.convertFrom(value);
+      }
+    },
+    BOXED_FLOAT {
+      @Override
+      Object convert(Object value) {
+        return BoxedFloatConverter.convertFrom(value);
+      }
+    },
+    DOUBLE {
+      @Override
+      Object convert(Object value) {
+        return DoubleConverter.convertFrom(value);
+      }
+    },
+    BOXED_DOUBLE {
+      @Override
+      Object convert(Object value) {
+        return BoxedDoubleConverter.convertFrom(value);
+      }
+    },
+    STRING {
+      @Override
+      Object convert(Object value) {
+        return StringConverter.convertFrom(value);
+      }
+    };
+
+    abstract Object convert(Object value);
   }
 
   private static boolean isDirectlyAssignable(Class<?> from, Class<?> to) {

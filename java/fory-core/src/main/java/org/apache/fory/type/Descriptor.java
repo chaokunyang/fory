@@ -383,10 +383,6 @@ public class Descriptor {
     return hasForyField;
   }
 
-  public ForyField.Dynamic getForyFieldDynamic() {
-    return dynamic;
-  }
-
   public boolean hasForyFieldId() {
     return hasForyField && foryFieldId >= 0;
   }

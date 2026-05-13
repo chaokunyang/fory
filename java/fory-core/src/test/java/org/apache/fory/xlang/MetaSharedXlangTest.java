@@ -25,6 +25,7 @@ import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -95,6 +96,11 @@ public class MetaSharedXlangTest extends ForyTestBase {
   }
 
   @Data
+  static class DirectCollectionField {
+    Collection<@Int32Type(encoding = Int32Encoding.FIXED) Integer> values;
+  }
+
+  @Data
   static class NestedListField {
     List<List<Integer>> values;
   }
@@ -154,6 +160,20 @@ public class MetaSharedXlangTest extends ForyTestBase {
     DirectAnnotatedArrayField annotatedArrayStruct =
         (DirectAnnotatedArrayField) annotatedArrayFory.deserialize(listFory.serialize(listStruct));
     assertEquals(annotatedArrayStruct.values, Arrays.asList(7, 8));
+  }
+
+  @Test
+  public void testTopLevelArrayCompatibleReadToCollection() {
+    for (boolean codegen : new boolean[] {false, true}) {
+      Fory arrayFory = compatibleFory(DirectArrayField.class, codegen);
+      DirectArrayField peerArrayStruct = new DirectArrayField();
+      peerArrayStruct.values = new int[] {9, 10};
+
+      Fory collectionFory = compatibleFory(DirectCollectionField.class, codegen);
+      DirectCollectionField collectionStruct =
+          (DirectCollectionField) collectionFory.deserialize(arrayFory.serialize(peerArrayStruct));
+      assertEquals(collectionStruct.values, Arrays.asList(9, 10));
+    }
   }
 
   @Test

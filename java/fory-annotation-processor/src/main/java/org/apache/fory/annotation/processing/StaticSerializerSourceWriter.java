@@ -599,13 +599,25 @@ final class StaticSerializerSourceWriter {
       case "VARINT32":
         return "buffer.writeVarInt32(" + valueExpression + ");";
       case "UINT8":
-        return "buffer.writeByte(" + valueExpression + ");";
+        return unsignedRangeCheck(valueExpression, "255")
+            + " buffer.writeByte("
+            + valueExpression
+            + ");";
       case "UINT16":
-        return "buffer.writeInt16((short) " + valueExpression + ");";
+        return unsignedRangeCheck(valueExpression, "65535")
+            + " buffer.writeInt16((short) "
+            + valueExpression
+            + ");";
       case "UINT32":
-        return "buffer.writeInt32((int) " + valueExpression + ");";
+        return unsignedInt32RangeCheck(valueExpression)
+            + " buffer.writeInt32((int) "
+            + valueExpression
+            + ");";
       case "VAR_UINT32":
-        return "buffer.writeVarUInt32((int) " + valueExpression + ");";
+        return unsignedInt32RangeCheck(valueExpression)
+            + " buffer.writeVarUInt32((int) "
+            + valueExpression
+            + ");";
       case "INT64":
       case "UINT64":
         return "buffer.writeInt64(" + valueExpression + ");";
@@ -624,6 +636,22 @@ final class StaticSerializerSourceWriter {
       default:
         return null;
     }
+  }
+
+  private String unsignedRangeCheck(String valueExpression, String maxValue) {
+    return "if (("
+        + valueExpression
+        + ") < 0 || ("
+        + valueExpression
+        + ") > "
+        + maxValue
+        + ") { throw new IllegalArgumentException(\"Unsigned value out of range\"); }";
+  }
+
+  private String unsignedInt32RangeCheck(String valueExpression) {
+    return "if ((("
+        + valueExpression
+        + ") & 0xffffffff00000000L) != 0) { throw new IllegalArgumentException(\"Unsigned value out of range\"); }";
   }
 
   private String exactPrimitiveReadExpression(SourceField field) {
@@ -732,8 +760,7 @@ final class StaticSerializerSourceWriter {
       }
       builder.append("    for (int i = 0; i < remoteFields.size(); i++) {\n");
       builder.append("      RemoteFieldInfo remoteField = remoteFields.get(i);\n");
-      builder.append(
-          "      readCompatibleRecordField(readContext, values, remoteField, matchedId(remoteField));\n");
+      builder.append("      readCompatibleRecordField(readContext, values, remoteField);\n");
       builder.append("    }\n");
       for (SourceField field : struct.fields) {
         builder
@@ -753,8 +780,7 @@ final class StaticSerializerSourceWriter {
       builder.append("    readContext.reference(value);\n");
       builder.append("    for (int i = 0; i < remoteFields.size(); i++) {\n");
       builder.append("      RemoteFieldInfo remoteField = remoteFields.get(i);\n");
-      builder.append(
-          "      readCompatibleField(readContext, value, remoteField, matchedId(remoteField));\n");
+      builder.append("      readCompatibleField(readContext, value, remoteField);\n");
       builder.append("    }\n");
       builder.append("    return value;\n");
     }
@@ -784,9 +810,12 @@ final class StaticSerializerSourceWriter {
     for (int group = 0; group < groupCount; group++) {
       int upperBound = Math.min(struct.fields.size(), (group + 1) * DISPATCH_GROUP_SIZE);
       if (group == 0) {
-        builder.append("    if (matchedId >= 0 && matchedId < ").append(upperBound).append(") {\n");
+        builder
+            .append("    if (remoteField.matchedId >= 0 && remoteField.matchedId < ")
+            .append(upperBound)
+            .append(") {\n");
       } else {
-        builder.append("    if (matchedId < ").append(upperBound).append(") {\n");
+        builder.append("    if (remoteField.matchedId < ").append(upperBound).append(") {\n");
       }
       builder.append("      ").append(methodName).append(group).append("(");
       appendCompatibleDispatchArguments(record);
@@ -806,7 +835,7 @@ final class StaticSerializerSourceWriter {
     builder.append("  private void readCompatibleField").append(group).append("(");
     appendCompatibleDispatchParameters(false);
     builder.append(") {\n");
-    builder.append("    switch (matchedId) {\n");
+    builder.append("    switch (remoteField.matchedId) {\n");
     for (int i = start; i < end; i++) {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
@@ -846,7 +875,7 @@ final class StaticSerializerSourceWriter {
     builder.append("  private void readCompatibleRecordField").append(group).append("(");
     appendCompatibleDispatchParameters(true);
     builder.append(") {\n");
-    builder.append("    switch (matchedId) {\n");
+    builder.append("    switch (remoteField.matchedId) {\n");
     for (int i = start; i < end; i++) {
       SourceField field = struct.fields.get(i);
       builder.append("      case ").append(field.id).append(":\n");
@@ -884,7 +913,7 @@ final class StaticSerializerSourceWriter {
     } else {
       builder.append(struct.typeName).append(" value, ");
     }
-    builder.append("RemoteFieldInfo remoteField, int matchedId");
+    builder.append("RemoteFieldInfo remoteField");
   }
 
   private void appendCompatibleDispatchArguments(boolean record) {
@@ -894,7 +923,7 @@ final class StaticSerializerSourceWriter {
     } else {
       builder.append("value, ");
     }
-    builder.append("remoteField, matchedId");
+    builder.append("remoteField");
   }
 
   private void appendDebugWrite(String stage, String fieldInfoName, int indent) {

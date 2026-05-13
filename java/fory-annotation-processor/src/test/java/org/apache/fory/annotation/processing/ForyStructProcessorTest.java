@@ -41,6 +41,7 @@ import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.exception.SerializationException;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
@@ -302,6 +303,51 @@ public class ForyStructProcessorTest {
   }
 
   @Test
+  public void testGeneratedUnsignedScalarWritesValidateRange() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.UnsignedStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.UInt8Type;\n"
+                + "import org.apache.fory.annotation.UInt16Type;\n"
+                + "import org.apache.fory.annotation.UInt32Type;\n"
+                + "@ForyStruct public class UnsignedStruct {\n"
+                + "  public @UInt8Type int u8;\n"
+                + "  public @UInt16Type int u16;\n"
+                + "  public @UInt32Type long u32;\n"
+                + "  public UnsignedStruct() {}\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.UnsignedStruct");
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withCodegen(false)
+              .requireClassRegistration(false)
+              .build();
+      Object value = type.getConstructor().newInstance();
+      setField(type, value, "u8", 255);
+      setField(type, value, "u16", 65535);
+      setField(type, value, "u32", 4294967295L);
+      Object roundTrip = fory.deserialize(fory.serialize(value));
+      Assert.assertEquals(getField(type, roundTrip, "u8"), 255);
+      Assert.assertEquals(getField(type, roundTrip, "u16"), 65535);
+      Assert.assertEquals(getField(type, roundTrip, "u32"), 4294967295L);
+
+      setField(type, value, "u8", 256);
+      Assert.assertThrows(SerializationException.class, () -> fory.serialize(value));
+      setField(type, value, "u8", 255);
+      setField(type, value, "u16", 65536);
+      Assert.assertThrows(SerializationException.class, () -> fory.serialize(value));
+      setField(type, value, "u16", 65535);
+      setField(type, value, "u32", 4294967296L);
+      Assert.assertThrows(SerializationException.class, () -> fory.serialize(value));
+    }
+  }
+
+  @Test
   public void testRecordReadAndCopyUseCanonicalConstructor() throws Exception {
     assumeRecordSupport();
     CompilationResult result =
@@ -317,7 +363,7 @@ public class ForyStructProcessorTest {
     String generatedSource =
         result.generatedSource("test/RecordStruct__ForyNativeSerializer__.java");
     Assert.assertTrue(generatedSource.contains("private void readCompatibleRecordField0("));
-    Assert.assertTrue(generatedSource.contains("switch (matchedId)"));
+    Assert.assertTrue(generatedSource.contains("switch (remoteField.matchedId)"));
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.RecordStruct");
       Object value =
@@ -370,10 +416,9 @@ public class ForyStructProcessorTest {
     String generatedSource =
         readerResult.generatedSource("test/EvolvingStruct__ForyNativeSerializer__.java");
     Assert.assertTrue(
-        generatedSource.contains(
-            "readCompatibleField(readContext, value, remoteField, matchedId(remoteField))"));
+        generatedSource.contains("readCompatibleField(readContext, value, remoteField)"));
     Assert.assertTrue(generatedSource.contains("private void readCompatibleField0("));
-    Assert.assertTrue(generatedSource.contains("switch (matchedId)"));
+    Assert.assertTrue(generatedSource.contains("switch (remoteField.matchedId)"));
     try (URLClassLoader writerLoader = writerResult.classLoader();
         URLClassLoader readerLoader = readerResult.classLoader()) {
       Class<?> writerType = writerLoader.loadClass("test.EvolvingStruct");

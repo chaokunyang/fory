@@ -158,7 +158,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         .append(READ_CONTEXT_NAME)
         .append(", ")
         .append(bean)
-        .append(", _f_remoteField, matchedId(_f_remoteField));\n")
+        .append(", _f_remoteField);\n")
         .append("}\n")
         .append("return ")
         .append(bean)
@@ -202,7 +202,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         .append(READ_CONTEXT_NAME)
         .append(", ")
         .append(recordValues)
-        .append(", _f_remoteField, matchedId(_f_remoteField));\n")
+        .append(", _f_remoteField);\n")
         .append("}\n");
     if (recordCtrAccessible) {
       code.append("return new ")
@@ -240,9 +240,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           Object[].class,
           "_f_recordValues",
           "RemoteFieldInfo",
-          "_f_remoteField",
-          int.class,
-          "_f_matchedId");
+          "_f_remoteField");
       for (int group = 0; group < groupCount; group++) {
         ctx.addMethod(
             "private",
@@ -254,9 +252,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
             Object[].class,
             "_f_recordValues",
             "RemoteFieldInfo",
-            "_f_remoteField",
-            int.class,
-            "_f_matchedId");
+            "_f_remoteField");
       }
       return;
     }
@@ -270,9 +266,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         valueType,
         "_f_value",
         "RemoteFieldInfo",
-        "_f_remoteField",
-        int.class,
-        "_f_matchedId");
+        "_f_remoteField");
     for (int group = 0; group < groupCount; group++) {
       ctx.addMethod(
           "private",
@@ -284,9 +278,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           valueType,
           "_f_value",
           "RemoteFieldInfo",
-          "_f_remoteField",
-          int.class,
-          "_f_matchedId");
+          "_f_remoteField");
     }
   }
 
@@ -295,9 +287,11 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     for (int group = 0; group < groupCount; group++) {
       int upperBound = Math.min(localDescriptors.size(), (group + 1) * DISPATCH_GROUP_SIZE);
       if (group == 0) {
-        code.append("if (_f_matchedId >= 0 && _f_matchedId < ").append(upperBound).append(") {\n");
+        code.append("if (_f_remoteField.matchedId >= 0 && _f_remoteField.matchedId < ")
+            .append(upperBound)
+            .append(") {\n");
       } else {
-        code.append("if (_f_matchedId < ").append(upperBound).append(") {\n");
+        code.append("if (_f_remoteField.matchedId < ").append(upperBound).append(") {\n");
       }
       code.append("  ")
           .append(methodPrefix)
@@ -306,7 +300,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append(READ_CONTEXT_NAME)
           .append(", ");
       code.append(isRecord ? "_f_recordValues" : "_f_value");
-      code.append(", _f_remoteField, _f_matchedId);\n").append("  return;\n").append("}\n");
+      code.append(", _f_remoteField);\n").append("  return;\n").append("}\n");
     }
     appendDebugRemoteRead(code, "before skip", "_f_remoteField", 0);
     code.append("skipField(").append(READ_CONTEXT_NAME).append(", _f_remoteField);\n");
@@ -317,21 +311,23 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   private String genObjectDispatchGroup(int group, TypeRef<?> valueTypeRef) {
     int start = group * DISPATCH_GROUP_SIZE;
     int end = Math.min(localDescriptors.size(), start + DISPATCH_GROUP_SIZE);
-    StringBuilder code = new StringBuilder("switch (_f_matchedId) {\n");
+    StringBuilder code = new StringBuilder("switch (_f_remoteField.matchedId) {\n");
     for (int i = start; i < end; i++) {
       Descriptor descriptor = localDescriptors.get(i);
       code.append("  case ")
           .append(i)
           .append(": {\n")
           .append(debugRemoteReadCode("before read", "_f_remoteField", 4))
-          .append("    if (hasFieldConverter(_f_remoteField)) {\n")
+          .append("    if (_f_remoteField.serializationFieldInfo.fieldConverter != null) {\n")
           .append("      Object _f_fieldValue = readRemoteField(")
           .append(READ_CONTEXT_NAME)
           .append(", _f_remoteField);\n")
           .append(debugRemoteReadCode("after read", "_f_remoteField", 6))
-          .append("      setConvertedField(_f_value, _f_fieldValue, _f_remoteField);\n")
+          .append(
+              "      _f_remoteField.serializationFieldInfo.fieldConverter.set(_f_value, _f_fieldValue);\n")
           .append("    } else {\n")
-          .append("      SerializationFieldInfo _f_localField = localFieldInfo(_f_matchedId);\n")
+          .append(
+              "      SerializationFieldInfo _f_localField = localFieldInfo(_f_remoteField.matchedId);\n")
           .append("      if (!canReadRemoteField(_f_remoteField, _f_localField)) {\n")
           .append(debugRemoteReadCode("before skip", "_f_remoteField", 8))
           .append("        skipField(")
@@ -363,7 +359,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   private String genRecordDispatchGroup(int group) {
     int start = group * DISPATCH_GROUP_SIZE;
     int end = Math.min(localDescriptors.size(), start + DISPATCH_GROUP_SIZE);
-    StringBuilder code = new StringBuilder("switch (_f_matchedId) {\n");
+    StringBuilder code = new StringBuilder("switch (_f_remoteField.matchedId) {\n");
     for (int i = start; i < end; i++) {
       Descriptor descriptor = localDescriptors.get(i);
       Integer componentIndex = recordReversedMapping.get(descriptor.getName());
@@ -374,7 +370,8 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
           .append(i)
           .append(": {\n")
           .append(debugRemoteReadCode("before read", "_f_remoteField", 4))
-          .append("    SerializationFieldInfo _f_localField = localFieldInfo(_f_matchedId);\n")
+          .append(
+              "    SerializationFieldInfo _f_localField = localFieldInfo(_f_remoteField.matchedId);\n")
           .append("    if (canReadRemoteField(_f_remoteField, _f_localField)) {\n")
           .append("      _f_recordValues[")
           .append(componentIndex)

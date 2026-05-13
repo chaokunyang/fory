@@ -58,7 +58,7 @@ public class DescriptorBuilder {
     this.foryField = descriptor.getForyField();
     this.hasForyField = descriptor.hasForyField();
     this.foryFieldId = descriptor.getForyFieldId();
-    this.dynamic = descriptor.getForyFieldDynamic();
+    this.dynamic = descriptor.getMorphic();
     this.arrayType = descriptor.isArrayType();
     this.nullable = descriptor.isNullable();
     this.trackingRef = descriptor.isTrackingRef();
@@ -132,11 +132,6 @@ public class DescriptorBuilder {
       this.foryFieldId = -1;
       this.dynamic = ForyField.Dynamic.AUTO;
     }
-    return this;
-  }
-
-  public DescriptorBuilder arrayType(boolean arrayType) {
-    this.arrayType = arrayType;
     return this;
   }
 

@@ -373,11 +373,6 @@ public class TypeDef implements Serializable {
         this, cls, () -> buildDescriptors(resolver, cls));
   }
 
-  public List<Descriptor> getDescriptors(
-      TypeResolver resolver, Class<?> cls, Collection<Descriptor> localDescriptors) {
-    return buildDescriptors(resolver, cls, localDescriptors);
-  }
-
   private List<Descriptor> buildDescriptors(TypeResolver resolver, Class<?> cls) {
     Collection<Descriptor> fieldDescriptors = resolver.getFieldDescriptors(cls, true);
     return buildDescriptors(resolver, cls, fieldDescriptors);

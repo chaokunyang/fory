@@ -1545,8 +1545,6 @@ public abstract class TypeResolver {
       return normalizeFieldDescriptors(clz, searchParent, staticDescriptors);
     }
     SortedMap<Member, Descriptor> allDescriptors = getAllDescriptorsMap(clz, searchParent);
-    List<Descriptor> result = new ArrayList<>(allDescriptors.size());
-
     List<Descriptor> descriptors = new ArrayList<>(allDescriptors.size());
     for (Map.Entry<Member, Descriptor> entry : allDescriptors.entrySet()) {
       Member member = entry.getKey();

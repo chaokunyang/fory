@@ -773,7 +773,8 @@ public class ForyStructProcessorTest {
       Object writerValue = writerType.getConstructor().newInstance();
       setField(writerType, writerValue, "values", Arrays.asList(Arrays.asList(1, 2, 3)));
       byte[] payload = writer.serialize(writerValue);
-      Assert.expectThrows(DeserializationException.class, () -> reader.deserialize(payload));
+      Object result = reader.deserialize(payload);
+      Assert.assertNull(getField(readerType, result, "values"));
     }
   }
 

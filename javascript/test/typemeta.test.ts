@@ -483,7 +483,7 @@ describe("typemeta", () => {
     expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow(/list\/array/);
   });
 
-  test("rejects nested compatible list and dense array positions", () => {
+  test("skips nested compatible list and dense array positions", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -498,7 +498,8 @@ describe("typemeta", () => {
       values: [new Int32Array([1, 2])],
     });
 
-    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow(/list\/array/);
+    const result = readerFory.register(readerType).deserialize(bytes);
+    expect(result.values).toBeNull();
   });
 
   test("keeps compatible named schema evolution working when field count differs", () => {

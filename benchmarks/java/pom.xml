@@ -252,6 +252,11 @@
               <artifactId>jmh-generator-annprocess</artifactId>
               <version>${jmh.version}</version>
             </path>
+            <path>
+              <groupId>org.apache.fory</groupId>
+              <artifactId>fory-annotation-processor</artifactId>
+              <version>${project.version}</version>
+            </path>
           </annotationProcessorPaths>
         </configuration>
       </plugin>

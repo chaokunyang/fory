@@ -40,6 +40,8 @@ import org.apache.fory.benchmark.xlang.generated.FBSSample;
 import org.apache.fory.benchmark.xlang.generated.FBSSampleList;
 import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.integration_tests.state.generated.ProtoMessage;
+import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.CompilerControl;
@@ -48,6 +50,7 @@ import org.openjdk.jmh.annotations.Level;
 import org.openjdk.jmh.annotations.Measurement;
 import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.OutputTimeUnit;
+import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
@@ -64,6 +67,9 @@ public class XlangBenchmark {
 
   @State(Scope.Thread)
   public static class XlangState {
+    @Param({"true", "false"})
+    public boolean codegen;
+
     public Fory fory;
 
     public NumericStruct numericStruct;
@@ -107,6 +113,7 @@ public class XlangBenchmark {
           Fory.builder()
               .withXlang(true)
               .withCompatible(true)
+              .withCodegen(codegen)
               .withRefTracking(false)
               .withClassVersionCheck(false)
               .requireClassRegistration(true)
@@ -152,9 +159,26 @@ public class XlangBenchmark {
     }
 
     private void verifySetup() {
+      verifyForySerializerMode(NumericStruct.class);
+      verifyForySerializerMode(Sample.class);
+      verifyForySerializerMode(MediaContent.class);
       fory.deserialize(foryNumericStructBytes);
       fromProtoStruct(protobufNumericStructBytes);
       fromFlatBufferNumericStruct(flatbufferNumericStructBuffer);
+    }
+
+    private void verifyForySerializerMode(Class<?> type) {
+      Serializer<?> serializer = fory.getTypeResolver().getSerializer(type);
+      boolean staticSerializer = serializer instanceof StaticGeneratedStructSerializer;
+      if (staticSerializer == codegen) {
+        throw new IllegalStateException(
+            "Unexpected serializer for "
+                + type.getName()
+                + " with codegen="
+                + codegen
+                + ": "
+                + serializer.getClass().getName());
+      }
     }
   }
 

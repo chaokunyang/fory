@@ -66,6 +66,7 @@ final class StaticSerializerSourceWriter {
     builder.append("import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;\n");
     builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer;\n");
     builder.append("import org.apache.fory.type.Descriptor;\n");
+    builder.append("import org.apache.fory.type.DispatchId;\n");
     builder.append("import org.apache.fory.type.Types;\n\n");
   }
 
@@ -265,18 +266,25 @@ final class StaticSerializerSourceWriter {
         .append("Fields(WriteContext writeContext, ")
         .append(struct.typeName)
         .append(" value) {\n");
+    if (groupName.equals("BuildIn") && hasDirectWriteField()) {
+      builder.append("    MemoryBuffer buffer = writeContext.getBuffer();\n");
+    }
     builder.append("    for (int i = 0; i < ").append(fieldsName).append(".length; i++) {\n");
     builder.append("      SerializationFieldInfo fieldInfo = ").append(fieldsName).append("[i];\n");
     builder.append("      switch (").append(idsName).append("[i]) {\n");
     for (SourceField field : struct.fields) {
       builder.append("        case ").append(field.id).append(":\n");
       appendDebugWrite("before", "fieldInfo", 10);
-      builder
-          .append("          ")
-          .append(helperName)
-          .append("(writeContext, fieldInfo, ")
-          .append(field.readExpression("value"))
-          .append(");\n");
+      if (groupName.equals("BuildIn") && canEmitDirectWriteField(field)) {
+        appendDirectWrite(field);
+      } else {
+        builder
+            .append("          ")
+            .append(helperName)
+            .append("(writeContext, fieldInfo, ")
+            .append(field.readExpression("value"))
+            .append(");\n");
+      }
       appendDebugWrite("after", "fieldInfo", 10);
       builder.append("          break;\n");
     }
@@ -312,21 +320,41 @@ final class StaticSerializerSourceWriter {
         .append("Fields(ReadContext readContext, ")
         .append(struct.typeName)
         .append(" value) {\n");
+    if (groupName.equals("BuildIn") && hasDirectReadField()) {
+      builder.append("    MemoryBuffer buffer = readContext.getBuffer();\n");
+    }
     builder.append("    for (int i = 0; i < ").append(fieldsName).append(".length; i++) {\n");
     builder.append("      SerializationFieldInfo fieldInfo = ").append(fieldsName).append("[i];\n");
     appendDebugRead("before", "fieldInfo", 6);
-    builder
-        .append("      Object fieldValue = ")
-        .append(helperName)
-        .append("(readContext, fieldInfo);\n");
+    if (!(groupName.equals("BuildIn") && hasDirectReadField())) {
+      builder
+          .append("      Object fieldValue = ")
+          .append(helperName)
+          .append("(readContext, fieldInfo);\n");
+    }
     appendDebugRead("after", "fieldInfo", 6);
     builder.append("      switch (").append(idsName).append("[i]) {\n");
     for (SourceField field : struct.fields) {
       builder.append("        case ").append(field.id).append(":\n");
-      builder
-          .append("          ")
-          .append(field.writeStatement("value", field.castExpression("fieldValue")))
-          .append("\n");
+      if (groupName.equals("BuildIn") && canEmitDirectReadField(field)) {
+        appendDirectRead(field);
+      } else {
+        String fieldValueName = "fieldValue" + field.id;
+        if (groupName.equals("BuildIn") && hasDirectReadField()) {
+          builder
+              .append("          Object ")
+              .append(fieldValueName)
+              .append(" = ")
+              .append(helperName)
+              .append("(readContext, fieldInfo);\n");
+        } else {
+          fieldValueName = "fieldValue";
+        }
+        builder
+            .append("          ")
+            .append(field.writeStatement("value", field.castExpression(fieldValueName)))
+            .append("\n");
+      }
       builder.append("          break;\n");
     }
     builder.append("        default:\n");
@@ -337,6 +365,330 @@ final class StaticSerializerSourceWriter {
     builder.append("      }\n");
     builder.append("    }\n");
     builder.append("  }\n\n");
+  }
+
+  private boolean hasDirectWriteField() {
+    for (SourceField field : struct.fields) {
+      if (canEmitDirectWriteField(field)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean hasDirectReadField() {
+    for (SourceField field : struct.fields) {
+      if (canEmitDirectReadField(field)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private boolean canEmitDirectWriteField(SourceField field) {
+    if (canEmitDirectStringField(field)) {
+      return true;
+    }
+    if (canEmitDirectArrayField(field)) {
+      return true;
+    }
+    return field.typeNode.primitive && primitiveWriteCases(field) != null;
+  }
+
+  private boolean canEmitDirectReadField(SourceField field) {
+    if (canEmitDirectStringField(field)) {
+      return true;
+    }
+    if (canEmitDirectArrayField(field)) {
+      return true;
+    }
+    return field.typeNode.primitive
+        && (exactPrimitiveReadExpression(field) != null || primitiveReadCases(field) != null);
+  }
+
+  private boolean canEmitDirectStringField(SourceField field) {
+    return field.erasedType.equals("java.lang.String") && !field.nullable && !field.trackingRef;
+  }
+
+  private boolean canEmitDirectArrayField(SourceField field) {
+    SourceTypeNode componentType = field.typeNode.componentType;
+    return field.arrayType
+        && componentType != null
+        && componentType.primitive
+        && !field.nullable
+        && !field.trackingRef;
+  }
+
+  private void appendDirectWrite(SourceField field) {
+    if (canEmitDirectStringField(field)) {
+      builder
+          .append("          writeContext.writeString(")
+          .append(field.readExpression("value"))
+          .append(");\n");
+      return;
+    }
+    if (canEmitDirectArrayField(field)) {
+      builder
+          .append("          fieldInfo.serializer.write(writeContext, ")
+          .append(field.readExpression("value"))
+          .append(");\n");
+      return;
+    }
+    String exactWrite = exactPrimitiveWriteStatement(field, field.readExpression("value"));
+    if (exactWrite != null) {
+      builder.append("          ").append(exactWrite).append("\n");
+      return;
+    }
+    builder.append("          switch (fieldInfo.dispatchId) {\n");
+    String[][] cases = primitiveWriteCases(field);
+    for (String[] writeCase : cases) {
+      builder.append("            case DispatchId.").append(writeCase[0]).append(":\n");
+      builder
+          .append("              buffer.")
+          .append(writeCase[1])
+          .append("(")
+          .append(writeCase[2].replace("$value", field.readExpression("value")))
+          .append(");\n");
+      builder.append("              break;\n");
+    }
+    builder.append("            default:\n");
+    builder
+        .append("              writeBuildInFieldValue(writeContext, fieldInfo, ")
+        .append(field.readExpression("value"))
+        .append(");\n");
+    builder.append("          }\n");
+  }
+
+  private void appendDirectRead(SourceField field) {
+    if (canEmitDirectStringField(field)) {
+      builder
+          .append("          ")
+          .append(field.writeStatement("value", "readContext.readString()"))
+          .append("\n");
+      return;
+    }
+    if (canEmitDirectArrayField(field)) {
+      builder.append("          readContext.preserveRefId(-1);\n");
+      builder
+          .append("          ")
+          .append(
+              field.writeStatement(
+                  "value", "(" + field.erasedType + ") readContext.readNonRef(fieldInfo.typeInfo)"))
+          .append("\n");
+      return;
+    }
+    String exactRead = exactPrimitiveReadExpression(field);
+    if (exactRead == null) {
+      appendPrimitiveReadSwitch(field);
+      return;
+    }
+    builder.append("          ").append(field.writeStatement("value", exactRead)).append("\n");
+  }
+
+  private void appendPrimitiveReadSwitch(SourceField field) {
+    builder.append("          switch (fieldInfo.dispatchId) {\n");
+    String[][] cases = primitiveReadCases(field);
+    for (String[] readCase : cases) {
+      builder.append("            case DispatchId.").append(readCase[0]).append(":\n");
+      builder
+          .append("              ")
+          .append(field.writeStatement("value", readCase[1]))
+          .append("\n");
+      builder.append("              break;\n");
+    }
+    builder.append("            default:\n");
+    builder
+        .append("              Object fieldValue")
+        .append(field.id)
+        .append(" = readBuildInFieldValue(readContext, fieldInfo);\n");
+    builder
+        .append("              ")
+        .append(field.writeStatement("value", field.castExpression("fieldValue" + field.id)))
+        .append("\n");
+    builder.append("          }\n");
+  }
+
+  private String[][] primitiveWriteCases(SourceField field) {
+    switch (field.erasedType) {
+      case "boolean":
+        return new String[][] {{"BOOL", "writeBoolean", "$value"}};
+      case "byte":
+        return new String[][] {{"INT8", "writeByte", "$value"}};
+      case "char":
+        return new String[][] {{"CHAR", "writeChar", "$value"}};
+      case "short":
+        return new String[][] {{"INT16", "writeInt16", "$value"}};
+      case "int":
+        return new String[][] {
+          {"INT32", "writeInt32", "$value"},
+          {"VARINT32", "writeVarInt32", "$value"},
+          {"UINT8", "writeByte", "$value"},
+          {"UINT16", "writeInt16", "(short) $value"},
+          {"UINT32", "writeInt32", "$value"},
+          {"VAR_UINT32", "writeVarUInt32", "$value"}
+        };
+      case "long":
+        return new String[][] {
+          {"INT64", "writeInt64", "$value"},
+          {"UINT64", "writeInt64", "$value"},
+          {"VARINT64", "writeVarInt64", "$value"},
+          {"TAGGED_INT64", "writeTaggedInt64", "$value"},
+          {"VAR_UINT64", "writeVarUInt64", "$value"},
+          {"TAGGED_UINT64", "writeTaggedUInt64", "$value"}
+        };
+      case "float":
+        return new String[][] {{"FLOAT32", "writeFloat32", "$value"}};
+      case "double":
+        return new String[][] {{"FLOAT64", "writeFloat64", "$value"}};
+      default:
+        return null;
+    }
+  }
+
+  private String[][] primitiveReadCases(SourceField field) {
+    switch (field.erasedType) {
+      case "boolean":
+        return new String[][] {{"BOOL", "buffer.readBoolean()"}};
+      case "byte":
+        return new String[][] {{"INT8", "buffer.readByte()"}};
+      case "char":
+        return new String[][] {{"CHAR", "buffer.readChar()"}};
+      case "short":
+        return new String[][] {{"INT16", "buffer.readInt16()"}};
+      case "int":
+        return new String[][] {
+          {"INT32", "buffer.readInt32()"},
+          {"VARINT32", "buffer.readVarInt32()"},
+          {"UINT8", "buffer.readByte() & 0xFF"},
+          {"UINT16", "buffer.readInt16() & 0xFFFF"},
+          {"UINT32", "buffer.readInt32()"},
+          {"VAR_UINT32", "buffer.readVarUInt32()"}
+        };
+      case "long":
+        return new String[][] {
+          {"INT64", "buffer.readInt64()"},
+          {"UINT64", "buffer.readInt64()"},
+          {"VARINT64", "buffer.readVarInt64()"},
+          {"TAGGED_INT64", "buffer.readTaggedInt64()"},
+          {"VAR_UINT64", "buffer.readVarUInt64()"},
+          {"TAGGED_UINT64", "buffer.readTaggedUInt64()"}
+        };
+      case "float":
+        return new String[][] {{"FLOAT32", "buffer.readFloat32()"}};
+      case "double":
+        return new String[][] {{"FLOAT64", "buffer.readFloat64()"}};
+      default:
+        return null;
+    }
+  }
+
+  private String exactPrimitiveWriteStatement(SourceField field, String valueExpression) {
+    String typeId = exactPrimitiveTypeId(field);
+    if (typeId == null) {
+      return null;
+    }
+    switch (typeId) {
+      case "BOOL":
+        return "buffer.writeBoolean(" + valueExpression + ");";
+      case "INT8":
+        return "buffer.writeByte(" + valueExpression + ");";
+      case "INT16":
+        return "buffer.writeInt16(" + valueExpression + ");";
+      case "INT32":
+        return "buffer.writeInt32(" + valueExpression + ");";
+      case "VARINT32":
+        return "buffer.writeVarInt32(" + valueExpression + ");";
+      case "UINT8":
+        return "buffer.writeByte(" + valueExpression + ");";
+      case "UINT16":
+        return "buffer.writeInt16((short) " + valueExpression + ");";
+      case "UINT32":
+        return "buffer.writeInt32((int) " + valueExpression + ");";
+      case "VAR_UINT32":
+        return "buffer.writeVarUInt32((int) " + valueExpression + ");";
+      case "INT64":
+      case "UINT64":
+        return "buffer.writeInt64(" + valueExpression + ");";
+      case "VARINT64":
+        return "buffer.writeVarInt64(" + valueExpression + ");";
+      case "TAGGED_INT64":
+        return "buffer.writeTaggedInt64(" + valueExpression + ");";
+      case "VAR_UINT64":
+        return "buffer.writeVarUInt64(" + valueExpression + ");";
+      case "TAGGED_UINT64":
+        return "buffer.writeTaggedUInt64(" + valueExpression + ");";
+      case "FLOAT32":
+        return "buffer.writeFloat32(" + valueExpression + ");";
+      case "FLOAT64":
+        return "buffer.writeFloat64(" + valueExpression + ");";
+      default:
+        return null;
+    }
+  }
+
+  private String exactPrimitiveReadExpression(SourceField field) {
+    String typeId = exactPrimitiveTypeId(field);
+    if (typeId == null) {
+      return null;
+    }
+    switch (typeId) {
+      case "BOOL":
+        return "buffer.readBoolean()";
+      case "INT8":
+        return "buffer.readByte()";
+      case "INT16":
+        return "buffer.readInt16()";
+      case "INT32":
+        return "buffer.readInt32()";
+      case "VARINT32":
+        return "buffer.readVarInt32()";
+      case "UINT8":
+        return "buffer.readByte() & 0xFF";
+      case "UINT16":
+        return "buffer.readInt16() & 0xFFFF";
+      case "UINT32":
+        return field.erasedType.equals("long")
+            ? "Integer.toUnsignedLong(buffer.readInt32())"
+            : "buffer.readInt32()";
+      case "VAR_UINT32":
+        return field.erasedType.equals("long")
+            ? "Integer.toUnsignedLong(buffer.readVarUInt32())"
+            : "buffer.readVarUInt32()";
+      case "INT64":
+      case "UINT64":
+        return "buffer.readInt64()";
+      case "VARINT64":
+        return "buffer.readVarInt64()";
+      case "TAGGED_INT64":
+        return "buffer.readTaggedInt64()";
+      case "VAR_UINT64":
+        return "buffer.readVarUInt64()";
+      case "TAGGED_UINT64":
+        return "buffer.readTaggedUInt64()";
+      case "FLOAT32":
+        return "buffer.readFloat32()";
+      case "FLOAT64":
+        return "buffer.readFloat64()";
+      default:
+        return null;
+    }
+  }
+
+  private String exactPrimitiveTypeId(SourceField field) {
+    String meta = field.typeNode.typeExtMeta;
+    if (meta == null) {
+      return null;
+    }
+    String prefix = "meta(Types.";
+    int start = meta.indexOf(prefix);
+    if (start < 0) {
+      return null;
+    }
+    int end = meta.indexOf(',', start + prefix.length());
+    if (end < 0) {
+      return null;
+    }
+    return meta.substring(start + prefix.length(), end);
   }
 
   private void writeReadRecordGroup(

@@ -76,15 +76,7 @@ public class NativeTypeDefEncoder {
       TypeResolver typeResolver, Class<?> cls, boolean resolveParent) {
     DescriptorGrouper descriptorGrouper =
         typeResolver.getFieldDescriptorGrouper(cls, resolveParent, false, IDENTITY_DESCRIPTOR);
-    List<Descriptor> descriptors = new ArrayList<>();
-    descriptorGrouper.getPrimitiveDescriptors().forEach(descriptors::add);
-    descriptorGrouper.getBoxedDescriptors().forEach(descriptors::add);
-    descriptorGrouper.getBuildInDescriptors().forEach(descriptors::add);
-    // Order must match ObjectSerializer serialization order: buildIn, container, other
-    descriptorGrouper.getCollectionDescriptors().forEach(descriptors::add);
-    descriptorGrouper.getMapDescriptors().forEach(descriptors::add);
-    descriptorGrouper.getOtherDescriptors().forEach(descriptors::add);
-    return descriptors;
+    return new ArrayList<>(descriptorGrouper.getSortedDescriptors());
   }
 
   public static List<FieldInfo> buildFieldsInfo(ClassResolver resolver, Class<?> cls) {

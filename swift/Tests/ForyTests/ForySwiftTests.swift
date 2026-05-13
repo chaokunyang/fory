@@ -55,6 +55,19 @@ struct TaggedFieldOrder: Equatable {
 }
 
 @ForyStruct
+struct NonPrimitiveFieldOrder: Equatable {
+  @ForyField(id: 20)
+  var stringValue: String
+
+  @ForyField(id: 10)
+  var mapValue: [String: Int32]
+
+  var binaryValue: Data
+  var addressValue: Address
+  var intValue: Int32
+}
+
+@ForyStruct
 struct EncodedNumberFields: Equatable {
   @ForyField(encoding: .fixed)
   var u32Fixed: UInt32
@@ -910,6 +923,14 @@ func macroTaggedFieldsKeepGroupedPayloadOrder() throws {
   #expect(try buffer.readVarInt32() == value.intValue)
   let tailContext = ReadContext(buffer: buffer, typeResolver: fory.typeResolver, trackRef: false)
   #expect(try String.foryReadData(tailContext) == value.textTail)
+}
+
+@Test
+func macroNonPrimitiveFieldsSortByFieldIdentifier() throws {
+  let fields = NonPrimitiveFieldOrder.foryFieldsInfo(trackRef: false)
+
+  #expect(fields.map(\.fieldName) == ["intValue", "mapValue", "stringValue", "addressValue", "binaryValue"])
+  #expect(fields.map(\.fieldID) == [nil, 10, 20, nil, nil])
 }
 
 @Test

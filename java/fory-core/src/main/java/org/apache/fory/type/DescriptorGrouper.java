@@ -31,7 +31,7 @@ import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordUtils;
 
 /**
- * A utility class to group class fields into groups.
+ * A utility class to group class fields into codec-owned groups.
  *
  * <ul>
  *   <li>primitive fields
@@ -49,9 +49,10 @@ import org.apache.fory.util.record.RecordUtils;
  * peer must independently sort fields using the same algorithm to ensure consistent
  * serialization/deserialization.
  *
- * <p>The sorting groups fields by type category (primitives, boxed, collections, maps, etc.) and
- * then sorts by field name within each category. Both reader and writer must apply this sorting to
- * produce identical field ordering.
+ * <p>The protocol field order is primitive non-nullable fields, primitive nullable fields, then all
+ * non-primitive fields sorted by field identifier. The codec-owned groups below are retained so
+ * serializers can keep specialized primitive, built-in, collection, map, and user-type operations;
+ * those implementation groups must not affect protocol order.
  */
 public class DescriptorGrouper {
 
@@ -72,6 +73,7 @@ public class DescriptorGrouper {
   private final Collection<Descriptor> mapDescriptors;
   private final Collection<Descriptor> buildInDescriptors;
   private Collection<Descriptor> otherDescriptors;
+  private Comparator<Descriptor> nonPrimitiveComparator;
 
   /**
    * Create a descriptor grouper.
@@ -109,12 +111,20 @@ public class DescriptorGrouper {
         descriptorsGroupedOrdered ? new ArrayList<>() : new TreeSet<>(comparator);
     this.otherDescriptors =
         descriptorsGroupedOrdered ? new ArrayList<>() : new TreeSet<>(comparator);
+    this.nonPrimitiveComparator = comparator;
   }
 
   public DescriptorGrouper setOtherDescriptorComparator(Comparator<Descriptor> comparator) {
     Preconditions.checkArgument(!sorted);
     this.otherDescriptors =
         descriptorsGroupedOrdered ? new ArrayList<>() : new TreeSet<>(comparator);
+    this.nonPrimitiveComparator = comparator;
+    return this;
+  }
+
+  public DescriptorGrouper setNonPrimitiveDescriptorComparator(Comparator<Descriptor> comparator) {
+    Preconditions.checkArgument(!sorted);
+    this.nonPrimitiveComparator = comparator;
     return this;
   }
 
@@ -173,10 +183,25 @@ public class DescriptorGrouper {
     List<Descriptor> descriptors = new ArrayList<>(getNumDescriptors());
     descriptors.addAll(getPrimitiveDescriptors());
     descriptors.addAll(getBoxedDescriptors());
+    descriptors.addAll(getNonPrimitiveDescriptors());
+    return descriptors;
+  }
+
+  public List<Descriptor> getNonPrimitiveDescriptors() {
+    Preconditions.checkArgument(sorted);
+    List<Descriptor> descriptors =
+        new ArrayList<>(
+            getBuildInDescriptors().size()
+                + getCollectionDescriptors().size()
+                + getMapDescriptors().size()
+                + getOtherDescriptors().size());
     descriptors.addAll(getBuildInDescriptors());
     descriptors.addAll(getCollectionDescriptors());
     descriptors.addAll(getMapDescriptors());
     descriptors.addAll(getOtherDescriptors());
+    if (!descriptorsGroupedOrdered) {
+      descriptors.sort(nonPrimitiveComparator);
+    }
     return descriptors;
   }
 

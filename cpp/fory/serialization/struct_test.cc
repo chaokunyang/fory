@@ -914,6 +914,24 @@ TEST(StructComprehensiveTest, TaggedFieldsKeepGroupedPayloadOrder) {
   EXPECT_EQ(fields[1].field_id, 1);
 }
 
+TEST(StructComprehensiveTest, NonPrimitiveFieldsSortByFieldIdentifier) {
+  auto fields = TypeMeta::sort_field_infos({
+      make_test_field_info("string_value", 20,
+                           make_test_field_type(TypeId::STRING)),
+      make_test_field_info("map_value", 10, make_test_field_type(TypeId::MAP)),
+      make_test_field_info("custom_value", -1,
+                           make_test_field_type(TypeId::NAMED_STRUCT)),
+      make_test_field_info("binary_value", -1,
+                           make_test_field_type(TypeId::BINARY)),
+  });
+
+  ASSERT_EQ(fields.size(), 4);
+  EXPECT_EQ(fields[0].field_name, "map_value");
+  EXPECT_EQ(fields[1].field_name, "string_value");
+  EXPECT_EQ(fields[2].field_name, "binary_value");
+  EXPECT_EQ(fields[3].field_name, "custom_value");
+}
+
 TEST(StructComprehensiveTest,
      FieldTypeCompatibleFingerprintNormalizesEncoding) {
   FieldType fixed_i32 = make_test_field_type(TypeId::INT32);

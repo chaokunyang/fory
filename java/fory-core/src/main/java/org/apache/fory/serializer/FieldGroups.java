@@ -24,7 +24,9 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.Function;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.FieldAccessor;
@@ -52,21 +54,12 @@ public class FieldGroups {
   public FieldGroups(
       SerializationFieldInfo[] buildInFields,
       SerializationFieldInfo[] containerFields,
-      SerializationFieldInfo[] userTypeFields) {
+      SerializationFieldInfo[] userTypeFields,
+      SerializationFieldInfo[] allFields) {
     this.buildInFields = buildInFields;
     this.userTypeFields = userTypeFields;
     this.containerFields = containerFields;
-    int len = buildInFields.length + userTypeFields.length + containerFields.length;
-    SerializationFieldInfo[] fields = new SerializationFieldInfo[len];
-    System.arraycopy(buildInFields, 0, fields, 0, buildInFields.length);
-    System.arraycopy(containerFields, 0, fields, buildInFields.length, containerFields.length);
-    System.arraycopy(
-        userTypeFields,
-        0,
-        fields,
-        buildInFields.length + containerFields.length,
-        userTypeFields.length);
-    allFields = fields;
+    this.allFields = allFields;
   }
 
   public static FieldGroups buildFieldsInfo(TypeResolver typeResolver, List<Field> fields) {
@@ -109,24 +102,25 @@ public class FieldGroups {
         regularBuildIn.add(d);
       }
     }
+    Map<Descriptor, SerializationFieldInfo> fieldInfos = new IdentityHashMap<>();
     SerializationFieldInfo[] allBuildIn =
         new SerializationFieldInfo[primitives.size() + boxed.size() + regularBuildIn.size()];
     int cnt = 0;
     for (Descriptor d : primitives) {
-      allBuildIn[cnt++] = new SerializationFieldInfo(typeResolver, d);
+      allBuildIn[cnt++] = buildFieldInfo(typeResolver, d, FieldCodecCategory.BUILD_IN, fieldInfos);
     }
     for (Descriptor d : boxed) {
-      allBuildIn[cnt++] = new SerializationFieldInfo(typeResolver, d);
+      allBuildIn[cnt++] = buildFieldInfo(typeResolver, d, FieldCodecCategory.BUILD_IN, fieldInfos);
     }
     for (Descriptor d : regularBuildIn) {
-      allBuildIn[cnt++] = new SerializationFieldInfo(typeResolver, d);
+      allBuildIn[cnt++] = buildFieldInfo(typeResolver, d, FieldCodecCategory.BUILD_IN, fieldInfos);
     }
     cnt = 0;
     SerializationFieldInfo[] otherFields =
         new SerializationFieldInfo[grouper.getOtherDescriptors().size()];
     for (Descriptor descriptor : grouper.getOtherDescriptors()) {
       SerializationFieldInfo genericTypeField =
-          new SerializationFieldInfo(typeResolver, descriptor);
+          buildFieldInfo(typeResolver, descriptor, FieldCodecCategory.OTHER, fieldInfos);
       otherFields[cnt++] = genericTypeField;
     }
     cnt = 0;
@@ -135,12 +129,40 @@ public class FieldGroups {
     SerializationFieldInfo[] containerFields =
         new SerializationFieldInfo[collections.size() + maps.size()];
     for (Descriptor d : collections) {
-      containerFields[cnt++] = new SerializationFieldInfo(typeResolver, d);
+      containerFields[cnt++] =
+          buildFieldInfo(typeResolver, d, FieldCodecCategory.CONTAINER, fieldInfos);
     }
     for (Descriptor d : maps) {
-      containerFields[cnt++] = new SerializationFieldInfo(typeResolver, d);
+      containerFields[cnt++] =
+          buildFieldInfo(typeResolver, d, FieldCodecCategory.CONTAINER, fieldInfos);
     }
-    return new FieldGroups(allBuildIn, containerFields, otherFields);
+    SerializationFieldInfo[] allFields = new SerializationFieldInfo[grouper.getNumDescriptors()];
+    cnt = 0;
+    for (Descriptor descriptor : grouper.getSortedDescriptors()) {
+      SerializationFieldInfo fieldInfo = fieldInfos.get(descriptor);
+      if (fieldInfo == null) {
+        throw new IllegalStateException("Missing serialization field info for " + descriptor);
+      }
+      allFields[cnt++] = fieldInfo;
+    }
+    return new FieldGroups(allBuildIn, containerFields, otherFields, allFields);
+  }
+
+  private static SerializationFieldInfo buildFieldInfo(
+      TypeResolver typeResolver,
+      Descriptor descriptor,
+      FieldCodecCategory codecCategory,
+      Map<Descriptor, SerializationFieldInfo> fieldInfos) {
+    SerializationFieldInfo fieldInfo =
+        new SerializationFieldInfo(typeResolver, descriptor, codecCategory);
+    fieldInfos.put(descriptor, fieldInfo);
+    return fieldInfo;
+  }
+
+  public enum FieldCodecCategory {
+    BUILD_IN,
+    CONTAINER,
+    OTHER
   }
 
   public static final class SerializationFieldInfo {
@@ -165,9 +187,15 @@ public class FieldGroups {
     public final TypeInfoHolder classInfoHolder;
     public final TypeInfo containerTypeInfo;
     public final Serializer<?> containerSerializerOverride;
+    public final FieldCodecCategory codecCategory;
 
-    SerializationFieldInfo(TypeResolver resolver, Descriptor d) {
+    public SerializationFieldInfo(TypeResolver resolver, Descriptor d) {
+      this(resolver, d, FieldCodecCategory.OTHER);
+    }
+
+    SerializationFieldInfo(TypeResolver resolver, Descriptor d, FieldCodecCategory codecCategory) {
       this.descriptor = d;
+      this.codecCategory = codecCategory;
       this.type = descriptor.getRawType();
       this.typeRef = d.getTypeRef();
       this.dispatchId = DispatchId.getDispatchId(resolver, d);

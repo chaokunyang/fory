@@ -43,9 +43,7 @@ import org.apache.fory.util.Preconditions;
 public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
   protected TypeDef layerTypeDef;
   protected Class<?> layerMarkerClass;
-  protected SerializationFieldInfo[] buildInFields = new SerializationFieldInfo[0];
-  protected SerializationFieldInfo[] otherFields = new SerializationFieldInfo[0];
-  protected SerializationFieldInfo[] containerFields = new SerializationFieldInfo[0];
+  protected SerializationFieldInfo[] allFields = new SerializationFieldInfo[0];
 
   public CompatibleLayerSerializerBase(TypeResolver typeResolver, Class<T> type) {
     super(typeResolver, type);
@@ -64,9 +62,7 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
     this.layerMarkerClass = layerMarkerClass;
     DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(layerTypeDef, type);
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(typeResolver, descriptorGrouper);
-    buildInFields = fieldGroups.buildInFields;
-    otherFields = fieldGroups.userTypeFields;
-    containerFields = fieldGroups.containerFields;
+    allFields = fieldGroups.allFields;
   }
 
   protected final void checkLayerSerializerMeta() {
@@ -101,9 +97,12 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
 
   public void writeFieldsOnly(WriteContext writeContext, T value) {
     checkLayerSerializerMeta();
-    writeBuildInFields(writeContext, value);
-    writeContainerFields(writeContext, value);
-    writeOtherFields(writeContext, value);
+    MemoryBuffer buffer = writeContext.getBuffer();
+    RefWriter refWriter = writeContext.getRefWriter();
+    Generics generics = writeContext.getGenerics();
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      writeField(writeContext, value, buffer, refWriter, generics, fieldInfo);
+    }
   }
 
   public void writeFieldValues(WriteContext writeContext, Object[] vals) {
@@ -111,18 +110,9 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
     MemoryBuffer buffer = writeContext.getBuffer();
     RefWriter refWriter = writeContext.getRefWriter();
     int index = 0;
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      AbstractObjectSerializer.writeBuildInFieldValue(
-          writeContext, typeResolver, refWriter, fieldInfo, buffer, vals[index++]);
-    }
     Generics generics = writeContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      AbstractObjectSerializer.writeContainerFieldValue(
-          writeContext, typeResolver, refWriter, generics, fieldInfo, buffer, vals[index++]);
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      AbstractObjectSerializer.writeField(
-          writeContext, typeResolver, refWriter, fieldInfo, buffer, vals[index++]);
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      writeFieldValue(writeContext, buffer, refWriter, generics, fieldInfo, vals[index++]);
     }
   }
 
@@ -132,21 +122,9 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
     RefReader refReader = readContext.getRefReader();
     Object[] vals = new Object[getNumFields()];
     int index = 0;
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      vals[index++] =
-          AbstractObjectSerializer.readBuildInFieldValue(
-              readContext, typeResolver, refReader, fieldInfo, buffer);
-    }
     Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      vals[index++] =
-          AbstractObjectSerializer.readContainerFieldValue(
-              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      vals[index++] =
-          AbstractObjectSerializer.readField(
-              readContext, typeResolver, refReader, fieldInfo, buffer);
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      vals[index++] = readFieldValue(readContext, buffer, refReader, generics, fieldInfo);
     }
     return vals;
   }
@@ -161,27 +139,24 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
 
   public T readAndSetFields(ReadContext readContext, T obj) {
     checkLayerSerializerMeta();
-    readBuildInFields(readContext, obj);
-    readContainerFields(readContext, obj);
-    readOtherFields(readContext, obj);
+    MemoryBuffer buffer = readContext.getBuffer();
+    RefReader refReader = readContext.getRefReader();
+    Generics generics = readContext.getGenerics();
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      readAndSetField(readContext, obj, buffer, refReader, generics, fieldInfo);
+    }
     return obj;
   }
 
   public int getNumFields() {
-    return buildInFields.length + containerFields.length + otherFields.length;
+    return allFields.length;
   }
 
   @SuppressWarnings("rawtypes")
   public void populateFieldInfo(ObjectIntMap fieldIndexMap, Class<?>[] fieldTypes) {
     checkLayerSerializerMeta();
     int index = 0;
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
-    }
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
+    for (SerializationFieldInfo fieldInfo : allFields) {
       populateSingleFieldInfo(fieldInfo, fieldIndexMap, fieldTypes, index++);
     }
   }
@@ -189,9 +164,7 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
   @SuppressWarnings("rawtypes")
   public void setFieldValuesFromPutFields(Object obj, ObjectIntMap fieldIndexMap, Object[] vals) {
     checkLayerSerializerMeta();
-    applyPutFieldValues(obj, fieldIndexMap, vals, buildInFields);
-    applyPutFieldValues(obj, fieldIndexMap, vals, containerFields);
-    applyPutFieldValues(obj, fieldIndexMap, vals, otherFields);
+    applyPutFieldValues(obj, fieldIndexMap, vals, allFields);
   }
 
   @SuppressWarnings("rawtypes")
@@ -199,91 +172,125 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
       Object obj, ObjectIntMap fieldIndexMap, int arraySize) {
     checkLayerSerializerMeta();
     Object[] vals = new Object[arraySize];
-    collectPutFieldValues(obj, fieldIndexMap, vals, buildInFields);
-    collectPutFieldValues(obj, fieldIndexMap, vals, containerFields);
-    collectPutFieldValues(obj, fieldIndexMap, vals, otherFields);
+    collectPutFieldValues(obj, fieldIndexMap, vals, allFields);
     return vals;
   }
 
   public void skipFields(ReadContext readContext) {
     checkLayerSerializerMeta();
-    skipBuildInFields(readContext);
-    skipContainerFields(readContext);
-    skipOtherFields(readContext);
-  }
-
-  private void writeBuildInFields(WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    RefWriter refWriter = writeContext.getRefWriter();
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      AbstractObjectSerializer.writeBuildInField(
-          writeContext, typeResolver, refWriter, fieldInfo, buffer, value);
-    }
-  }
-
-  private void writeContainerFields(WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    RefWriter refWriter = writeContext.getRefWriter();
-    Generics generics = writeContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      Object fieldValue = fieldAccessor.getObject(value);
-      AbstractObjectSerializer.writeContainerFieldValue(
-          writeContext, typeResolver, refWriter, generics, fieldInfo, buffer, fieldValue);
-    }
-  }
-
-  private void writeOtherFields(WriteContext writeContext, T value) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    RefWriter refWriter = writeContext.getRefWriter();
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      Object fieldValue = fieldAccessor.getObject(value);
-      AbstractObjectSerializer.writeField(
-          writeContext, typeResolver, refWriter, fieldInfo, buffer, fieldValue);
-    }
-  }
-
-  private void readBuildInFields(ReadContext readContext, T targetObject) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        AbstractObjectSerializer.readBuildInFieldValue(
-            readContext, typeResolver, refReader, fieldInfo, buffer, targetObject);
-      } else {
-        FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-      }
-    }
-  }
-
-  private void readContainerFields(ReadContext readContext, T obj) {
     MemoryBuffer buffer = readContext.getBuffer();
     RefReader refReader = readContext.getRefReader();
     Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      Object fieldValue =
-          AbstractObjectSerializer.readContainerFieldValue(
-              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        fieldAccessor.putObject(obj, fieldValue);
-      }
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      skipField(readContext, buffer, refReader, generics, fieldInfo);
     }
   }
 
-  private void readOtherFields(ReadContext readContext, T obj) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      Object fieldValue =
-          AbstractObjectSerializer.readField(
-              readContext, typeResolver, refReader, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+  private void writeField(
+      WriteContext writeContext,
+      T value,
+      MemoryBuffer buffer,
+      RefWriter refWriter,
+      Generics generics,
+      SerializationFieldInfo fieldInfo) {
+    if (fieldInfo.codecCategory == FieldGroups.FieldCodecCategory.BUILD_IN) {
+      AbstractObjectSerializer.writeBuildInField(
+          writeContext, typeResolver, refWriter, fieldInfo, buffer, value);
+      return;
+    }
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+    Object fieldValue = fieldAccessor.getObject(value);
+    writeFieldValue(writeContext, buffer, refWriter, generics, fieldInfo, fieldValue);
+  }
+
+  private void writeFieldValue(
+      WriteContext writeContext,
+      MemoryBuffer buffer,
+      RefWriter refWriter,
+      Generics generics,
+      SerializationFieldInfo fieldInfo,
+      Object fieldValue) {
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        AbstractObjectSerializer.writeBuildInFieldValue(
+            writeContext, typeResolver, refWriter, fieldInfo, buffer, fieldValue);
+        return;
+      case CONTAINER:
+        AbstractObjectSerializer.writeContainerFieldValue(
+            writeContext, typeResolver, refWriter, generics, fieldInfo, buffer, fieldValue);
+        return;
+      case OTHER:
+        AbstractObjectSerializer.writeField(
+            writeContext, typeResolver, refWriter, fieldInfo, buffer, fieldValue);
+        return;
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
+    }
+  }
+
+  private Object readFieldValue(
+      ReadContext readContext,
+      MemoryBuffer buffer,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo) {
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        return AbstractObjectSerializer.readBuildInFieldValue(
+            readContext, typeResolver, refReader, fieldInfo, buffer);
+      case CONTAINER:
+        return AbstractObjectSerializer.readContainerFieldValue(
+            readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+      case OTHER:
+        return AbstractObjectSerializer.readField(
+            readContext, typeResolver, refReader, fieldInfo, buffer);
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
+    }
+  }
+
+  private void readAndSetField(
+      ReadContext readContext,
+      T obj,
+      MemoryBuffer buffer,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo) {
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+    if (fieldInfo.codecCategory == FieldGroups.FieldCodecCategory.BUILD_IN) {
       if (fieldAccessor != null) {
-        fieldAccessor.putObject(obj, fieldValue);
+        AbstractObjectSerializer.readBuildInFieldValue(
+            readContext, typeResolver, refReader, fieldInfo, buffer, obj);
+      } else {
+        FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
       }
+      return;
+    }
+    Object fieldValue = readFieldValue(readContext, buffer, refReader, generics, fieldInfo);
+    if (fieldAccessor != null) {
+      fieldAccessor.putObject(obj, fieldValue);
+    }
+  }
+
+  private void skipField(
+      ReadContext readContext,
+      MemoryBuffer buffer,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo) {
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+        return;
+      case CONTAINER:
+        AbstractObjectSerializer.readContainerFieldValue(
+            readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+        return;
+      case OTHER:
+        AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+        return;
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
     }
   }
 
@@ -329,32 +336,6 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
           vals[index] = fieldAccessor.get(obj);
         }
       }
-    }
-  }
-
-  private void skipBuildInFields(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    for (SerializationFieldInfo fieldInfo : buildInFields) {
-      FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-    }
-  }
-
-  private void skipContainerFields(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      AbstractObjectSerializer.readContainerFieldValue(
-          readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-    }
-  }
-
-  private void skipOtherFields(ReadContext readContext) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      AbstractObjectSerializer.readField(readContext, typeResolver, refReader, fieldInfo, buffer);
     }
   }
 }

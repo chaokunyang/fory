@@ -33,7 +33,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.struct.Fingerprint;
@@ -63,9 +62,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(ObjectSerializer.class);
 
   private final RecordInfo recordInfo;
-  private final SerializationFieldInfo[] buildInFields;
-  private final SerializationFieldInfo[] otherFields;
-  private final SerializationFieldInfo[] containerFields;
+  private final SerializationFieldInfo[] allFields;
   private final int classVersionHash;
 
   public ObjectSerializer(TypeResolver typeResolver, Class<T> cls) {
@@ -128,9 +125,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       classVersionHash = 0;
     }
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(typeResolver, grouper);
-    buildInFields = fieldGroups.buildInFields;
-    otherFields = fieldGroups.userTypeFields;
-    containerFields = fieldGroups.containerFields;
+    allFields = fieldGroups.allFields;
   }
 
   @Override
@@ -139,11 +134,12 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     if (typeResolver.checkClassVersion()) {
       buffer.writeInt32(classVersionHash);
     }
-    // write order: primitive,boxed,final,other,collection,map
+    // Protocol order: primitive, nullable primitive, then all non-primitives by field identifier.
     RefWriter refWriter = writeContext.getRefWriter();
-    writeBuildInFields(writeContext, value, refWriter);
-    writeContainerFields(writeContext, value, refWriter);
-    writeOtherFields(writeContext, value);
+    Generics generics = writeContext.getGenerics();
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      writeFieldByCodecCategory(writeContext, value, refWriter, generics, fieldInfo);
+    }
   }
 
   private void printWriteFieldDebugInfo(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {
@@ -162,42 +158,37 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
         buffer.readerIndex());
   }
 
-  private void writeOtherFields(WriteContext writeContext, T value) {
+  private void writeFieldByCodecCategory(
+      WriteContext writeContext,
+      T value,
+      RefWriter refWriter,
+      Generics generics,
+      SerializationFieldInfo fieldInfo) {
     MemoryBuffer buffer = writeContext.getBuffer();
-    RefWriter refWriter = writeContext.getRefWriter();
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printWriteFieldDebugInfo(fieldInfo, buffer);
-      }
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      Object fieldValue = fieldAccessor.getObject(value);
-      AbstractObjectSerializer.writeField(
-          writeContext, typeResolver, refWriter, fieldInfo, buffer, fieldValue);
+    if (Utils.DEBUG_OUTPUT_VERBOSE) {
+      printWriteFieldDebugInfo(fieldInfo, buffer);
     }
-  }
-
-  private void writeBuildInFields(WriteContext writeContext, T value, RefWriter refWriter) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printWriteFieldDebugInfo(fieldInfo, buffer);
-      }
-      AbstractObjectSerializer.writeBuildInField(
-          writeContext, typeResolver, refWriter, fieldInfo, buffer, value);
-    }
-  }
-
-  private void writeContainerFields(WriteContext writeContext, T value, RefWriter refWriter) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    Generics generics = writeContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printWriteFieldDebugInfo(fieldInfo, buffer);
-      }
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      Object fieldValue = fieldAccessor.getObject(value);
-      writeContainerFieldValue(
-          writeContext, typeResolver, refWriter, generics, fieldInfo, buffer, fieldValue);
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        AbstractObjectSerializer.writeBuildInField(
+            writeContext, typeResolver, refWriter, fieldInfo, buffer, value);
+        return;
+      case CONTAINER:
+        {
+          Object fieldValue = fieldInfo.fieldAccessor.getObject(value);
+          writeContainerFieldValue(
+              writeContext, typeResolver, refWriter, generics, fieldInfo, buffer, fieldValue);
+          return;
+        }
+      case OTHER:
+        {
+          Object fieldValue = fieldInfo.fieldAccessor.getObject(value);
+          AbstractObjectSerializer.writeField(
+              writeContext, typeResolver, refWriter, fieldInfo, buffer, fieldValue);
+          return;
+        }
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
     }
   }
 
@@ -223,33 +214,12 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
     }
-    Object[] fieldValues =
-        new Object[buildInFields.length + otherFields.length + containerFields.length];
+    Object[] fieldValues = new Object[allFields.length];
     int counter = 0;
-    // read order: primitive,boxed,final,other,collection,map
-    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printReadFieldDebugInfo(fieldInfo, buffer);
-      }
-      fieldValues[counter++] =
-          readBuildInFieldValue(readContext, typeResolver, refReader, fieldInfo, buffer);
-    }
     Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printReadFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          readContainerFieldValue(
-              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-      fieldValues[counter++] = fieldValue;
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printReadFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue = readField(readContext, typeResolver, refReader, fieldInfo, buffer);
-      fieldValues[counter++] = fieldValue;
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      fieldValues[counter++] =
+          readFieldByCodecCategory(readContext, refReader, generics, fieldInfo, buffer);
     }
     return fieldValues;
   }
@@ -261,38 +231,71 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       int hash = buffer.readInt32();
       checkClassVersion(type, hash, classVersionHash);
     }
-    // read order: primitive,boxed,final,other,collection,map
-    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printReadFieldDebugInfo(fieldInfo, buffer);
-      }
-      // a numeric type can have only three kinds: primitive, not_null_boxed, nullable_boxed
-      readBuildInFieldValue(readContext, typeResolver, refReader, fieldInfo, buffer, obj);
-    }
     Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printReadFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          readContainerFieldValue(
-              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      fieldAccessor.putObject(obj, fieldValue);
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printReadFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue = readField(readContext, typeResolver, refReader, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      fieldAccessor.putObject(obj, fieldValue);
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      readAndSetFieldByCodecCategory(readContext, refReader, generics, fieldInfo, buffer, obj);
     }
     return obj;
   }
 
+  private Object readFieldByCodecCategory(
+      ReadContext readContext,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo,
+      MemoryBuffer buffer) {
+    if (Utils.DEBUG_OUTPUT_VERBOSE) {
+      printReadFieldDebugInfo(fieldInfo, buffer);
+    }
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        return readBuildInFieldValue(readContext, typeResolver, refReader, fieldInfo, buffer);
+      case CONTAINER:
+        return readContainerFieldValue(
+            readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+      case OTHER:
+        return readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
+    }
+  }
+
+  private void readAndSetFieldByCodecCategory(
+      ReadContext readContext,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo,
+      MemoryBuffer buffer,
+      T obj) {
+    if (Utils.DEBUG_OUTPUT_VERBOSE) {
+      printReadFieldDebugInfo(fieldInfo, buffer);
+    }
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        // a numeric type can have only three kinds: primitive, not_null_boxed, nullable_boxed
+        readBuildInFieldValue(readContext, typeResolver, refReader, fieldInfo, buffer, obj);
+        return;
+      case CONTAINER:
+        {
+          Object fieldValue =
+              readContainerFieldValue(
+                  readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+          fieldInfo.fieldAccessor.putObject(obj, fieldValue);
+          return;
+        }
+      case OTHER:
+        {
+          Object fieldValue = readField(readContext, typeResolver, refReader, fieldInfo, buffer);
+          fieldInfo.fieldAccessor.putObject(obj, fieldValue);
+          return;
+        }
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
+    }
+  }
+
   int getNumFields() {
-    return buildInFields.length + containerFields.length + otherFields.length;
+    return allFields.length;
   }
 
   public static int computeStructHash(TypeResolver typeResolver, DescriptorGrouper grouper) {

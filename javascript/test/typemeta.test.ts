@@ -59,19 +59,19 @@ describe("typemeta", () => {
     expect((bytes[8] & 0x80) !== 0).toBe(true);
   });
 
-  test("keeps tagged direct payload order grouped instead of field-id ordered", () => {
+  test("orders tagged non-primitive fields directly by field id", () => {
     const typeMeta = TypeMeta.fromTypeInfo(
       Type.struct(7005, {
-        stringValue: Type.string().setId(1),
-        mapValue: Type.map(Type.string(), Type.int32()).setId(2),
+        stringValue: Type.string().setId(2),
+        mapValue: Type.map(Type.string(), Type.int32()).setId(1),
         intValue: Type.int32().setId(10),
       }),
     );
 
     expect(typeMeta.getFieldInfo().map((field) => field.fieldName)).toEqual([
       "intValue",
-      "stringValue",
       "mapValue",
+      "stringValue",
     ]);
   });
 

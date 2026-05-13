@@ -734,14 +734,8 @@ private func parseFields(_ declaration: some DeclGroupSyntax) throws -> ParsedDe
             let group: Int
             if classification.isPrimitive {
                 group = isOptional ? 2 : 1
-            } else if classification.isMap {
-                group = 5
-            } else if classification.isCollection {
-                group = 4
-            } else if classification.isBuiltIn {
-                group = 3
             } else {
-                group = 6
+                group = 3
             }
 
             fields.append(
@@ -1986,6 +1980,12 @@ private func compareFieldIdentifier(_ lhs: ParsedField, _ rhs: ParsedField) -> B
     if let lhsID = lhs.fieldID, let rhsID = rhs.fieldID, lhsID != rhsID {
         return lhsID < rhsID
     }
+    if lhs.fieldID != nil && rhs.fieldID == nil {
+        return true
+    }
+    if lhs.fieldID == nil && rhs.fieldID != nil {
+        return false
+    }
     if lhs.fieldIdentifier != rhs.fieldIdentifier {
         return lhs.fieldIdentifier < rhs.fieldIdentifier
     }
@@ -2027,13 +2027,6 @@ private func sortFields(_ fields: [ParsedField]) -> [ParsedField] {
             if lhs.primitiveSize != rhs.primitiveSize {
                 return lhs.primitiveSize > rhs.primitiveSize
             }
-            if lhs.typeID != rhs.typeID {
-                return lhs.typeID < rhs.typeID
-            }
-            if let identifierOrder = compareFieldIdentifier(lhs, rhs) {
-                return identifierOrder
-            }
-        case 3, 4, 5:
             if lhs.typeID != rhs.typeID {
                 return lhs.typeID < rhs.typeID
             }

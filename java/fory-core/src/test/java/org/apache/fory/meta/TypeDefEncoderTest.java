@@ -23,6 +23,8 @@ import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
@@ -118,6 +120,28 @@ public class TypeDefEncoderTest {
   }
 
   public static class EmptyStruct {}
+
+  @Data
+  public static class ClassWithNameOrderedNonPrimitives {
+    private String zString;
+    private Map<String, Integer> aMap;
+    private List<String> mList;
+    private int count;
+  }
+
+  @Data
+  public static class ClassWithTaggedNonPrimitives {
+    @ForyField(id = 3)
+    private String stringField;
+
+    @ForyField(id = 1)
+    private Map<String, Integer> mapField;
+
+    @ForyField(id = 2)
+    private List<String> listField;
+
+    private int count;
+  }
 
   public static class ManyFields {
     int f00;
@@ -407,6 +431,29 @@ public class TypeDefEncoderTest {
   }
 
   @Test
+  public void testTypeDefOrdersNonPrimitivesByNameIdentifier() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    fory.register(ClassWithNameOrderedNonPrimitives.class);
+
+    TypeDef typeDef =
+        TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithNameOrderedNonPrimitives.class);
+
+    Assert.assertEquals(fieldNames(typeDef), Arrays.asList("count", "aMap", "mList", "zString"));
+  }
+
+  @Test
+  public void testTypeDefOrdersNonPrimitivesByNumericTagIdentifier() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    fory.register(ClassWithTaggedNonPrimitives.class);
+
+    TypeDef typeDef =
+        TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithTaggedNonPrimitives.class);
+
+    Assert.assertEquals(
+        fieldNames(typeDef), Arrays.asList("count", "mapField", "listField", "stringField"));
+  }
+
+  @Test
   public void testExtendedFieldCountHeaderDoesNotSetRegisterByName() {
     Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
     fory.register(ManyFields.class, 6002);
@@ -548,6 +595,12 @@ public class TypeDefEncoderTest {
     Assert.assertTrue(index >= Long.BYTES);
     malformed[index + needleBytes.length - 1] ^= 1;
     return malformed;
+  }
+
+  private static List<String> fieldNames(TypeDef typeDef) {
+    return typeDef.getFieldsInfo().stream()
+        .map(FieldInfo::getFieldName)
+        .collect(Collectors.toList());
   }
 
   private static byte[] rewriteHeaderWithBodyOnlyHash(TypeDef typeDef) {

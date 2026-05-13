@@ -646,8 +646,8 @@ Field names:
 
 Field order:
 
-Field order is implementation-defined. Decoders must match fields by name or tag ID rather than
-position. Fory uses a stable grouping and sorting order to produce deterministic TypeDefs.
+TypeDef field lists use the same ordering defined in [Field order](#field-order). Compatible
+decoders must still match fields by name or tag ID rather than relying only on position.
 
 ## Meta String
 
@@ -1469,10 +1469,18 @@ language-specific helper classes.
 
 For every field, compute a stable identifier used for ordering:
 
-- If a tag ID is configured (e.g., `@ForyField(id=...)`), use the tag ID as a decimal string.
+- If a non-negative tag ID is configured (e.g., `@ForyField(id=...)`), use the tag ID.
 - Otherwise, use the field name converted to `snake_case`.
 
 Tag IDs must be unique within a type; duplicate tag IDs are invalid.
+
+Field identifiers compare as follows:
+
+1. If both fields have tag IDs, compare the IDs numerically.
+2. If only one field has a tag ID, the tagged field sorts first.
+3. If neither field has a tag ID, compare the `snake_case` names lexicographically.
+4. If fields still compare equal, use deterministic language-local tie-breakers such as declaring
+   class name, original field name, or original field index.
 
 ##### Step 2: Group assignment
 
@@ -1480,13 +1488,9 @@ Assign each field to exactly one group in the following order:
 
 1. **Primitive (non-nullable)**: primitive or boxed numeric/boolean types with `nullable=false`.
 2. **Primitive (nullable)**: primitive or boxed numeric/boolean types with `nullable=true`.
-3. **Built-in (non-container)**: internal type IDs that are not user-defined and not UNKNOWN,
-   excluding collections and maps (for example: STRING, TIME types, UNION/TYPED_UNION/NAMED_UNION,
-   primitive arrays).
-4. **Collection**: list/set/object-array fields. Non-primitive arrays are treated as LIST for
-   ordering purposes.
-5. **Map**: map fields.
-6. **Other**: user-defined enum/struct/ext and UNKNOWN types.
+3. **Non-primitive**: every other field, including strings, time/date/duration/decimal/binary
+   values, unions, primitive arrays, collections, maps, enums, structs, ext/user-defined types,
+   UNKNOWN fields, object arrays, and all other non-primitive schemas.
 
 ##### Step 3: Intra-group ordering
 
@@ -1498,16 +1502,11 @@ Within each group, apply the following sort keys in order until a difference is 
    types (`VARINT32`, `VAR_UINT32`, `VARINT64`, `VAR_UINT64`, `TAGGED_INT64`, `TAGGED_UINT64`).
 2. **Primitive size** (descending): 8-byte > 4-byte > 2-byte > 1-byte.
 3. **Internal type ID** (ascending) as a tie-breaker for equal sizes.
-4. **Field identifier** (lexicographic ascending).
+4. **Field identifier** using the comparator from Step 1.
 
-**Built-in / Collection / Map groups (3-5):**
+**Non-primitive group (3):**
 
-1. **Internal type ID** (ascending).
-2. **Field identifier** (lexicographic ascending).
-
-**Other group (6):**
-
-1. **Field identifier** (lexicographic ascending).
+1. **Field identifier** using the comparator from Step 1.
 
 If two fields still compare equal after the rules above, preserve a deterministic order by
 comparing declaring class name and then the original field name. This tie-breaker should be
@@ -1517,8 +1516,9 @@ reachable only in invalid schemas (e.g., duplicate tag IDs).
 
 - The ordering above is used for serialization order and TypeDef field lists. Schema hashes use
   the field identifier ordering described in the schema hash section.
-- Collection/map normalization is required so peers with different concrete types (e.g.,
-  `List` vs `Collection`) still agree on ordering.
+- Non-primitive type IDs and codec categories must not affect field order. Implementations may keep
+  internal categories to preserve optimized serializers and generated code paths, but the categories
+  are not ordering keys.
 - The compressed numeric rule is critical for cross-language consistency: compressed integer
   fields are always placed after all fixed-width integer fields.
 
@@ -1535,7 +1535,7 @@ MurmurHash3 x64_128 of the struct fingerprint string:
 
 - For each field, build `<field_id_or_name>,<field_type_fingerprint>;`.
 - Field identifier is the tag ID if present, otherwise the snake_case field name.
-- Sort by field identifier lexicographically before concatenation.
+- Sort by the field identifier comparator from [Field order](#field-order) before concatenation.
 - `field_type_fingerprint` is recursive:
   - Leaf: `<type_id>,<ref>,<nullable>`
   - `LIST` / `SET`: `<type_id>,<ref>,<nullable>[<element_fingerprint>]`

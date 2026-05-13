@@ -1740,6 +1740,10 @@ public abstract class TypeResolver {
     int c;
     if (id1 != null && id2 != null) {
       c = Integer.compare(id1, id2);
+    } else if (id1 != null) {
+      c = -1;
+    } else if (id2 != null) {
+      c = 1;
     } else {
       c = getFieldSortKey(d1).compareTo(getFieldSortKey(d2));
     }

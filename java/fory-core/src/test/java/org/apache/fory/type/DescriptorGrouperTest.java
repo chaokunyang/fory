@@ -379,4 +379,28 @@ public class DescriptorGrouperTest extends ForyTestBase {
         createDescriptor(TypeRef.of(Instant.class), "a_instant", -1, "TestClass", false);
     assertTrue(comparator.compare(date, instant) > 0);
   }
+
+  @Test
+  public void testXlangSortedDescriptorsCollapseNonPrimitiveGroups() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).build();
+    List<Descriptor> descriptors = new ArrayList<>();
+    descriptors.add(createDescriptor(TypeRef.of(int.class), "m_int", -1, "TestClass", false));
+    descriptors.add(createDescriptor(TypeRef.of(Integer.class), "n_int", -1, "TestClass", false));
+    descriptors.add(createDescriptor(TypeRef.of(String.class), "z_string", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(new TypeRef<Map<String, Integer>>() {}, "a_map", -1, "TestClass", false));
+    descriptors.add(
+        createDescriptor(new TypeRef<List<String>>() {}, "b_list", -1, "TestClass", false));
+    descriptors.add(createDescriptor(TypeRef.of(Object.class), "c_object", -1, "TestClass", false));
+
+    DescriptorGrouper grouper =
+        fory.getTypeResolver().groupDescriptors(descriptors, false, descriptor -> descriptor);
+
+    List<String> sortedNames =
+        grouper.getSortedDescriptors().stream()
+            .map(Descriptor::getName)
+            .collect(Collectors.toList());
+    assertEquals(
+        sortedNames, Arrays.asList("m_int", "n_int", "a_map", "b_list", "c_object", "z_string"));
+  }
 }

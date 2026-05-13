@@ -37,7 +37,6 @@ import static org.apache.fory.type.TypeUtils.getRawType;
 
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -178,16 +177,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     addGroupExpressions(
         objectCodecOptimizer.boxedWriteGroups, numGroups, expressions, bean, buffer);
     addGroupExpressions(
-        objectCodecOptimizer.buildInWriteGroups, numGroups, expressions, bean, buffer);
-    for (Descriptor descriptor :
-        objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
-      expressions.add(serializeGroup(Collections.singletonList(descriptor), bean, buffer, false));
-    }
-    for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getMapDescriptors()) {
-      expressions.add(serializeGroup(Collections.singletonList(d), bean, buffer, false));
-    }
-    addGroupExpressions(
-        objectCodecOptimizer.otherWriteGroups, numGroups, expressions, bean, buffer);
+        objectCodecOptimizer.nonPrimitiveWriteGroups, numGroups, expressions, bean, buffer);
     return expressions;
   }
 
@@ -208,10 +198,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   protected int getNumGroups(ObjectCodecOptimizer objectCodecOptimizer) {
     return objectCodecOptimizer.boxedWriteGroups.size()
-        + objectCodecOptimizer.buildInWriteGroups.size()
-        + objectCodecOptimizer.otherWriteGroups.size()
-        + objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors().size()
-        + objectCodecOptimizer.descriptorGrouper.getMapDescriptors().size();
+        + objectCodecOptimizer.nonPrimitiveWriteGroups.size();
   }
 
   private Expression serializeGroup(
@@ -575,15 +562,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     deserializeReadGroup(
         objectCodecOptimizer.boxedReadGroups, numGroups, expressions, bean, buffer);
     deserializeReadGroup(
-        objectCodecOptimizer.buildInReadGroups, numGroups, expressions, bean, buffer);
-    for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
-      expressions.add(deserializeGroup(Collections.singletonList(d), bean, buffer, false));
-    }
-    for (Descriptor d : objectCodecOptimizer.descriptorGrouper.getMapDescriptors()) {
-      expressions.add(deserializeGroup(Collections.singletonList(d), bean, buffer, false));
-    }
-    deserializeReadGroup(
-        objectCodecOptimizer.otherReadGroups, numGroups, expressions, bean, buffer);
+        objectCodecOptimizer.nonPrimitiveReadGroups, numGroups, expressions, bean, buffer);
     if (isRecord) {
       if (recordCtrAccessible) {
         assert bean instanceof FieldsCollector;

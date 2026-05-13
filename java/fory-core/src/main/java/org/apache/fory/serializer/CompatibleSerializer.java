@@ -66,12 +66,8 @@ import org.apache.fory.util.record.RecordUtils;
 public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(CompatibleSerializer.class);
 
-  private final SerializationFieldInfo[] buildInFields;
-  private final SerializationFieldInfo[] containerFields;
-  private final SerializationFieldInfo[] otherFields;
-  private final CompatibleCollectionArrayReader.ReadAction[] buildInCompatibleReadActions;
-  private final CompatibleCollectionArrayReader.ReadAction[] containerCompatibleReadActions;
-  private final CompatibleCollectionArrayReader.ReadAction[] otherCompatibleReadActions;
+  private final SerializationFieldInfo[] allFields;
+  private final CompatibleCollectionArrayReader.ReadAction[] allCompatibleReadActions;
   private final boolean hasCompatibleCollectionArrayRead;
   private final RecordInfo recordInfo;
   private Serializer<T> serializer;
@@ -107,19 +103,9 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     }
     // d.getField() may be null if not exists in this class when meta share enabled.
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(typeResolver, descriptorGrouper);
-    buildInFields = fieldGroups.buildInFields;
-    containerFields = fieldGroups.containerFields;
-    otherFields = fieldGroups.userTypeFields;
-    buildInCompatibleReadActions =
-        buildCompatibleCollectionArrayReadActions(typeResolver, buildInFields);
-    containerCompatibleReadActions =
-        buildCompatibleCollectionArrayReadActions(typeResolver, containerFields);
-    otherCompatibleReadActions =
-        buildCompatibleCollectionArrayReadActions(typeResolver, otherFields);
-    hasCompatibleCollectionArrayRead =
-        buildInCompatibleReadActions != null
-            || containerCompatibleReadActions != null
-            || otherCompatibleReadActions != null;
+    allFields = fieldGroups.allFields;
+    allCompatibleReadActions = buildCompatibleCollectionArrayReadActions(typeResolver, allFields);
+    hasCompatibleCollectionArrayRead = allCompatibleReadActions != null;
     if (isRecord) {
       List<String> fieldNames =
           descriptorGrouper.getSortedDescriptors().stream()
@@ -256,8 +242,7 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   @Override
   public T read(ReadContext readContext) {
     if (isRecord) {
-      Object[] fieldValues =
-          new Object[buildInFields.length + otherFields.length + containerFields.length];
+      Object[] fieldValues = new Object[allFields.length];
       if (hasCompatibleCollectionArrayRead) {
         readFieldsWithCompatibleCollectionArray(readContext, fieldValues);
       } else {
@@ -283,48 +268,9 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   private void readFields(ReadContext readContext, T targetObject) {
     MemoryBuffer buffer = readContext.getBuffer();
     RefReader refReader = readContext.getRefReader();
-    // read order: primitive,boxed,final,other,collection,map
-    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        AbstractObjectSerializer.readBuildInFieldValue(
-            readContext, typeResolver, refReader, fieldInfo, buffer, targetObject);
-      } else {
-        if (fieldInfo.fieldConverter == null) {
-          // Skip the field value from buffer since it doesn't exist in current class
-          FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-        } else {
-          compatibleRead(readContext, fieldInfo, targetObject);
-        }
-      }
-    }
     Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          AbstractObjectSerializer.readContainerFieldValue(
-              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        fieldAccessor.putObject(targetObject, fieldValue);
-      }
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          AbstractObjectSerializer.readField(
-              readContext, typeResolver, refReader, fieldInfo, buffer);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        fieldAccessor.putObject(targetObject, fieldValue);
-      }
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      readField(readContext, targetObject, refReader, generics, fieldInfo, buffer, null);
     }
   }
 
@@ -332,42 +278,9 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     MemoryBuffer buffer = readContext.getBuffer();
     int counter = 0;
     RefReader refReader = readContext.getRefReader();
-    // read order: primitive,boxed,final,other,collection,map
-    for (SerializationFieldInfo fieldInfo : this.buildInFields) {
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      if (fieldInfo.fieldAccessor != null) {
-        fields[counter++] =
-            AbstractObjectSerializer.readBuildInFieldValue(
-                readContext, typeResolver, refReader, fieldInfo, buffer);
-      } else {
-        // Skip the field value from buffer since it doesn't exist in current class.
-        // For records, fieldConverter can't be used since records are immutable and
-        // constructed all at once. We just read to advance buffer position.
-        FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-        // remapping will handle those extra fields from peers.
-        fields[counter++] = null;
-      }
-    }
     Generics generics = readContext.getGenerics();
-    for (SerializationFieldInfo fieldInfo : containerFields) {
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          AbstractObjectSerializer.readContainerFieldValue(
-              readContext, typeResolver, refReader, generics, fieldInfo, buffer);
-      fields[counter++] = fieldValue;
-    }
-    for (SerializationFieldInfo fieldInfo : otherFields) {
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          AbstractObjectSerializer.readField(
-              readContext, typeResolver, refReader, fieldInfo, buffer);
-      fields[counter++] = fieldValue;
+    for (SerializationFieldInfo fieldInfo : allFields) {
+      fields[counter++] = readField(readContext, refReader, generics, fieldInfo, buffer, null);
     }
   }
 
@@ -383,66 +296,15 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   private void readFieldsWithCompatibleCollectionArray(ReadContext readContext, T targetObject) {
     MemoryBuffer buffer = readContext.getBuffer();
     RefReader refReader = readContext.getRefReader();
-    for (int i = 0; i < buildInFields.length; i++) {
-      SerializationFieldInfo fieldInfo = buildInFields[i];
-      CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(buildInCompatibleReadActions, i);
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        if (action != null) {
-          fieldAccessor.putObject(
-              targetObject,
-              CompatibleCollectionArrayReader.read(readContext, fieldInfo.refMode, action));
-        } else {
-          AbstractObjectSerializer.readBuildInFieldValue(
-              readContext, typeResolver, refReader, fieldInfo, buffer, targetObject);
-        }
-      } else {
-        if (fieldInfo.fieldConverter == null) {
-          // Skip the field value from buffer since it doesn't exist in current class
-          FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-        } else {
-          compatibleRead(readContext, fieldInfo, targetObject);
-        }
-      }
-    }
     Generics generics = readContext.getGenerics();
-    for (int i = 0; i < containerFields.length; i++) {
-      SerializationFieldInfo fieldInfo = containerFields[i];
+    for (int i = 0; i < allFields.length; i++) {
+      SerializationFieldInfo fieldInfo = allFields[i];
       CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(containerCompatibleReadActions, i);
+          compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
       if (Utils.DEBUG_OUTPUT_VERBOSE) {
         printFieldDebugInfo(fieldInfo, buffer);
       }
-      Object fieldValue =
-          action == null
-              ? AbstractObjectSerializer.readContainerFieldValue(
-                  readContext, typeResolver, refReader, generics, fieldInfo, buffer)
-              : CompatibleCollectionArrayReader.read(readContext, fieldInfo.refMode, action);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        fieldAccessor.putObject(targetObject, fieldValue);
-      }
-    }
-    for (int i = 0; i < otherFields.length; i++) {
-      SerializationFieldInfo fieldInfo = otherFields[i];
-      CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(otherCompatibleReadActions, i);
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      Object fieldValue =
-          action == null
-              ? AbstractObjectSerializer.readField(
-                  readContext, typeResolver, refReader, fieldInfo, buffer)
-              : CompatibleCollectionArrayReader.read(readContext, fieldInfo.refMode, action);
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldAccessor != null) {
-        fieldAccessor.putObject(targetObject, fieldValue);
-      }
+      readField(readContext, targetObject, refReader, generics, fieldInfo, buffer, action);
     }
   }
 
@@ -450,56 +312,74 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     MemoryBuffer buffer = readContext.getBuffer();
     int counter = 0;
     RefReader refReader = readContext.getRefReader();
-    for (int i = 0; i < buildInFields.length; i++) {
-      SerializationFieldInfo fieldInfo = buildInFields[i];
-      CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(buildInCompatibleReadActions, i);
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      if (fieldInfo.fieldAccessor != null) {
-        fields[counter++] =
-            action == null
-                ? AbstractObjectSerializer.readBuildInFieldValue(
-                    readContext, typeResolver, refReader, fieldInfo, buffer)
-                : CompatibleCollectionArrayReader.read(readContext, fieldInfo.refMode, action);
-      } else {
-        // Skip the field value from buffer since it doesn't exist in current class.
-        // For records, fieldConverter can't be used since records are immutable and
-        // constructed all at once. We just read to advance buffer position.
-        FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
-        // remapping will handle those extra fields from peers.
-        fields[counter++] = null;
-      }
-    }
     Generics generics = readContext.getGenerics();
-    for (int i = 0; i < containerFields.length; i++) {
-      SerializationFieldInfo fieldInfo = containerFields[i];
+    for (int i = 0; i < allFields.length; i++) {
+      SerializationFieldInfo fieldInfo = allFields[i];
       CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(containerCompatibleReadActions, i);
+          compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
       if (Utils.DEBUG_OUTPUT_ENABLED) {
         printFieldDebugInfo(fieldInfo, buffer);
       }
-      Object fieldValue =
-          action == null
-              ? AbstractObjectSerializer.readContainerFieldValue(
-                  readContext, typeResolver, refReader, generics, fieldInfo, buffer)
-              : CompatibleCollectionArrayReader.read(readContext, fieldInfo.refMode, action);
-      fields[counter++] = fieldValue;
+      fields[counter++] = readField(readContext, refReader, generics, fieldInfo, buffer, action);
     }
-    for (int i = 0; i < otherFields.length; i++) {
-      SerializationFieldInfo fieldInfo = otherFields[i];
-      CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(otherCompatibleReadActions, i);
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
+  }
+
+  private void readField(
+      ReadContext readContext,
+      T targetObject,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo,
+      MemoryBuffer buffer,
+      CompatibleCollectionArrayReader.ReadAction action) {
+    FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+    if (fieldAccessor == null) {
+      if (fieldInfo.codecCategory == FieldGroups.FieldCodecCategory.BUILD_IN) {
+        if (fieldInfo.fieldConverter == null) {
+          FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+        } else {
+          compatibleRead(readContext, fieldInfo, targetObject);
+        }
+      } else {
+        readField(readContext, refReader, generics, fieldInfo, buffer, action);
       }
-      Object fieldValue =
-          action == null
-              ? AbstractObjectSerializer.readField(
-                  readContext, typeResolver, refReader, fieldInfo, buffer)
-              : CompatibleCollectionArrayReader.read(readContext, fieldInfo.refMode, action);
-      fields[counter++] = fieldValue;
+      return;
+    }
+    if (fieldInfo.codecCategory == FieldGroups.FieldCodecCategory.BUILD_IN && action == null) {
+      AbstractObjectSerializer.readBuildInFieldValue(
+          readContext, typeResolver, refReader, fieldInfo, buffer, targetObject);
+      return;
+    }
+    fieldAccessor.putObject(
+        targetObject, readField(readContext, refReader, generics, fieldInfo, buffer, action));
+  }
+
+  private Object readField(
+      ReadContext readContext,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo,
+      MemoryBuffer buffer,
+      CompatibleCollectionArrayReader.ReadAction action) {
+    if (action != null) {
+      return CompatibleCollectionArrayReader.read(readContext, fieldInfo.refMode, action);
+    }
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        if (fieldInfo.fieldAccessor == null) {
+          FieldSkipper.skipField(readContext, typeResolver, refReader, fieldInfo, buffer);
+          return null;
+        }
+        return AbstractObjectSerializer.readBuildInFieldValue(
+            readContext, typeResolver, refReader, fieldInfo, buffer);
+      case CONTAINER:
+        return AbstractObjectSerializer.readContainerFieldValue(
+            readContext, typeResolver, refReader, generics, fieldInfo, buffer);
+      case OTHER:
+        return AbstractObjectSerializer.readField(
+            readContext, typeResolver, refReader, fieldInfo, buffer);
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
     }
   }
 

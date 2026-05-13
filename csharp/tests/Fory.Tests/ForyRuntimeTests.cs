@@ -71,6 +71,20 @@ public sealed class FieldOrder
 }
 
 [ForyObject]
+public sealed class NonPrimitiveFieldOrder
+{
+    [ForyField(20)]
+    public string StringValue { get; set; } = string.Empty;
+
+    [ForyField(10)]
+    public Dictionary<string, int> MapValue { get; set; } = [];
+
+    public byte[] BinaryValue { get; set; } = [];
+    public Address CustomValue { get; set; } = new();
+    public int IntValue { get; set; }
+}
+
+[ForyObject]
 public sealed class SchemaNumbers
 {
     [ForyField(Type = typeof(S.Fixed<S.UInt32>))]
@@ -919,6 +933,20 @@ public sealed class ForyRuntimeTests
         Assert.Equal(value.A, second);
         Assert.Equal(value.C, third);
         Assert.Equal(value.Z, fourth);
+    }
+
+    [Fact]
+    public void TypeMetaFieldsOrderNonPrimitivesByFieldIdentifier()
+    {
+        TypeResolver resolver = new();
+        List<string> fieldNames = resolver.GetTypeInfo<NonPrimitiveFieldOrder>()
+            .TypeMetaFields(false)
+            .Select(field => field.FieldName)
+            .ToList();
+
+        Assert.Equal(
+            ["int_value", "map_value", "string_value", "binary_value", "custom_value"],
+            fieldNames);
     }
 
     [Fact]

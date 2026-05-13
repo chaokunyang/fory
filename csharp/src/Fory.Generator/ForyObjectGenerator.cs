@@ -2255,13 +2255,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         TypeClassification classification = resolution.Classification;
         int group = classification.IsPrimitive
             ? (isOptional ? 2 : 1)
-            : classification.IsMap
-                ? 5
-                : classification.IsCollection
-                    ? 4
-                    : classification.IsBuiltIn
-                        ? 3
-                        : 6;
+            : 3;
 
         int index = int.MaxValue;
         Location? sourceLocation = memberSymbol.Locations.FirstOrDefault(loc => loc.IsInSource);
@@ -2712,11 +2706,6 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             .ThenBy(m =>
             {
                 if (m.Group is 1 or 2)
-                {
-                    return (int)m.Classification.TypeId;
-                }
-
-                if (m.Group is 3 or 5)
                 {
                     return (int)m.Classification.TypeId;
                 }

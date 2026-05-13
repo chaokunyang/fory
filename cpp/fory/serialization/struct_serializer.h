@@ -1874,41 +1874,16 @@ template <typename T> struct CompileTimeFieldHelpers {
            tid == static_cast<uint32_t>(TypeId::TAGGED_UINT64);
   }
 
-  /// Check if a type ID is an internal (built-in, final) type for group 2.
-  /// Internal types are STRING, DURATION, TIMESTAMP, DATE, DECIMAL,
-  /// BINARY, ARRAY, and primitive arrays. Java xlang DescriptorGrouper excludes
-  /// enums from finals (line 897 in XtypeResolver). Excludes: ENUM (13-14),
-  /// STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP (23)
-  static constexpr bool is_internal_type_id(uint32_t tid) {
-    return tid == static_cast<uint32_t>(TypeId::STRING) ||
-           (tid >= static_cast<uint32_t>(TypeId::DURATION) &&
-            tid <= static_cast<uint32_t>(TypeId::BINARY)) ||
-           tid == static_cast<uint32_t>(TypeId::ARRAY) ||
-           (tid >= static_cast<uint32_t>(TypeId::BOOL_ARRAY) &&
-            tid <= static_cast<uint32_t>(TypeId::FLOAT64_ARRAY));
-  }
-
   static constexpr int group_rank(size_t index) {
     if constexpr (FieldCount == 0) {
-      return 6;
+      return 3;
     } else {
       uint32_t tid = type_ids[index];
       bool nullable = nullable_flags[index];
       if (is_primitive_type_id(tid)) {
         return nullable ? 1 : 0;
       }
-      // Check LIST/SET/MAP BEFORE is_internal_type_id since they fall
-      // within the internal type range (STRING=12 to DECIMAL=27) but
-      // need their own groups for proper field ordering.
-      if (tid == static_cast<uint32_t>(TypeId::LIST))
-        return 3;
-      if (tid == static_cast<uint32_t>(TypeId::SET))
-        return 4;
-      if (tid == static_cast<uint32_t>(TypeId::MAP))
-        return 5;
-      if (is_internal_type_id(tid))
-        return 2;
-      return 6;
+      return 2;
     }
   }
 
@@ -1916,6 +1891,12 @@ template <typename T> struct CompileTimeFieldHelpers {
     if (field_ids[lhs] >= 0 && field_ids[rhs] >= 0 &&
         field_ids[lhs] != field_ids[rhs]) {
       return field_ids[lhs] < field_ids[rhs] ? -1 : 1;
+    }
+    if (field_ids[lhs] >= 0 && field_ids[rhs] < 0) {
+      return -1;
+    }
+    if (field_ids[lhs] < 0 && field_ids[rhs] >= 0) {
+      return 1;
     }
     size_t lhs_len = identifier_lengths[lhs];
     size_t rhs_len = identifier_lengths[rhs];
@@ -1963,17 +1944,6 @@ template <typename T> struct CompileTimeFieldHelpers {
           return sa > sb;
         if (a_tid != b_tid)
           return a_tid < b_tid; // type_id ascending
-        int cmp = compare_identifier(a, b);
-        if (cmp != 0) {
-          return cmp < 0;
-        }
-        return Names[a] < Names[b];
-      }
-
-      if (ga == 2) {
-        // Internal types (STRING, etc.): sort by type_id ascending, then name
-        if (a_tid != b_tid)
-          return a_tid < b_tid;
         int cmp = compare_identifier(a, b);
         if (cmp != 0) {
           return cmp < 0;

@@ -290,20 +290,32 @@ def test_sort_fields():
     #    Float64(8), Float32(4), bool(1), Int8(1) => f13, f5, f7, f11
     # 2. Compressed primitives (compress=1) by -size, then name:
     #    Int64(8), Int32(4) => f12, f1
-    # 3. Internal types by type_id, then name: str, datetime, bytes => f4, f15, f6
-    # 4. Collection types by type_id, then name: list => f10, f2
-    # 5. Set types by type_id, then name: set => f14
-    # 6. Map types by type_id, then name: dict => f3, f9
-    # 7. Other types (polymorphic/any) by name: any => f8
-    assert serializer._field_names == ["f13", "f5", "f7", "f11", "f12", "f1", "f4", "f15", "f6", "f10", "f2", "f14", "f3", "f9", "f8"]
+    # 3. All non-primitives directly by field identifier.
+    assert serializer._field_names == [
+        "f13",
+        "f5",
+        "f7",
+        "f11",
+        "f12",
+        "f1",
+        "f10",
+        "f14",
+        "f15",
+        "f2",
+        "f3",
+        "f4",
+        "f6",
+        "f8",
+        "f9",
+    ]
 
 
-def test_tagged_fields_keep_grouped_payload_order():
+def test_tagged_non_primitive_fields_sort_by_identifier():
     @dataclass
     class TaggedClass:
         later_int: pyfory.Int32 = pyfory.field(id=20, default=0)
         early_string: str = pyfory.field(id=10, default="")
-        middle_map: Dict[str, pyfory.Int64] = pyfory.field(id=15, default_factory=dict)
+        middle_map: Dict[str, pyfory.Int64] = pyfory.field(id=5, default_factory=dict)
         first_bool: bool = pyfory.field(id=1, default=False)
 
     fory = Fory(xlang=True, compatible=False, ref=True)
@@ -311,8 +323,8 @@ def test_tagged_fields_keep_grouped_payload_order():
     assert serializer._field_names == [
         "first_bool",
         "later_int",
-        "early_string",
         "middle_map",
+        "early_string",
     ]
 
 

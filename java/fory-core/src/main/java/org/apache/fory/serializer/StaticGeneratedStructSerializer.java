@@ -176,6 +176,23 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
         fieldValue);
   }
 
+  protected final void writeFieldValue(
+      WriteContext writeContext, SerializationFieldInfo fieldInfo, Object fieldValue) {
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        writeBuildInFieldValue(writeContext, fieldInfo, fieldValue);
+        return;
+      case CONTAINER:
+        writeContainerFieldValue(writeContext, fieldInfo, fieldValue);
+        return;
+      case OTHER:
+        writeOtherFieldValue(writeContext, fieldInfo, fieldValue);
+        return;
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
+    }
+  }
+
   protected final Object readBuildInFieldValue(
       ReadContext readContext, SerializationFieldInfo fieldInfo) {
     // See writeBuildInFieldValue: built-in schema groups can still need container conversion.
@@ -201,6 +218,19 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       ReadContext readContext, SerializationFieldInfo fieldInfo) {
     return AbstractObjectSerializer.readField(
         readContext, typeResolver, readContext.getRefReader(), fieldInfo, readContext.getBuffer());
+  }
+
+  protected final Object readFieldValue(ReadContext readContext, SerializationFieldInfo fieldInfo) {
+    switch (fieldInfo.codecCategory) {
+      case BUILD_IN:
+        return readBuildInFieldValue(readContext, fieldInfo);
+      case CONTAINER:
+        return readContainerFieldValue(readContext, fieldInfo);
+      case OTHER:
+        return readOtherFieldValue(readContext, fieldInfo);
+      default:
+        throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
+    }
   }
 
   protected final Object readRemoteField(ReadContext readContext, RemoteFieldInfo remoteField) {
@@ -357,15 +387,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   private Object readField(ReadContext readContext, SerializationFieldInfo fieldInfo) {
-    if (typeResolver.isCollectionDescriptor(fieldInfo.descriptor)
-        || typeResolver.isMap(fieldInfo.type)) {
-      return readContainerFieldValue(readContext, fieldInfo);
-    }
-    if (typeResolver.isBuildIn(fieldInfo.descriptor)
-        || typeResolver.usesPrimitiveFieldOrdering(fieldInfo.descriptor)) {
-      return readBuildInFieldValue(readContext, fieldInfo);
-    }
-    return readOtherFieldValue(readContext, fieldInfo);
+    return readFieldValue(readContext, fieldInfo);
   }
 
   private List<RemoteFieldInfo> buildRemoteFields(

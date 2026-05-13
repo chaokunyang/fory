@@ -937,10 +937,10 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
         field_info_map = {fi.name: fi for fi in field_infos_list}
     boxed_types = []
     nullable_boxed_types = []
+    non_primitive_types = []
     collection_types = []
     set_types = []
     map_types = []
-    internal_types = []
     other_types = []
     type_ids = []
     for field_name, serializer in zip(field_names, serializers):
@@ -951,7 +951,7 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
         else:
             sort_key = (1, field_name, "")
         if serializer is None:
-            other_types.append((_UNKNOWN_TYPE_ID, serializer, field_name, sort_key))
+            non_primitive_types.append((_UNKNOWN_TYPE_ID, serializer, field_name, sort_key))
         else:
             type_ids.append(
                 (
@@ -967,24 +967,9 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
         is_nullable = nullable_map.get(field_name, False)
         if is_primitive_type(type_id):
             container = nullable_boxed_types if is_nullable else boxed_types
-        elif type_id == TypeId.SET:
-            container = set_types
-        elif type_id == TypeId.LIST or is_list_type(serializer.type_):
-            container = collection_types
-        elif is_map_type(serializer.type_):
-            container = map_types
-        elif is_polymorphic_type(type_id) or type_id in {TypeId.ENUM, TypeId.NAMED_ENUM} or is_union_type(type_id):
-            container = other_types
-        elif type_id >= TypeId.BOUND:
-            # Native mode user-registered types have type_id >= BOUND
-            container = other_types
         else:
-            assert TypeId.UNKNOWN < type_id < TypeId.BOUND, (type_id,)
-            container = internal_types
+            container = non_primitive_types
         container.append((type_id, serializer, field_name, sort_key))
-
-    def sorter(item):
-        return item[0], item[3]
 
     def numeric_sorter(item):
         id_ = item[0]
@@ -1003,12 +988,9 @@ def group_fields(type_resolver, field_names, serializers, nullable_map=None, fie
 
     boxed_types = sorted(boxed_types, key=numeric_sorter)
     nullable_boxed_types = sorted(nullable_boxed_types, key=numeric_sorter)
-    collection_types = sorted(collection_types, key=lambda item: item[3])
-    set_types = sorted(set_types, key=lambda item: item[3])
-    internal_types = sorted(internal_types, key=sorter)
-    map_types = sorted(map_types, key=lambda item: item[3])
+    non_primitive_types = sorted(non_primitive_types, key=lambda item: item[3])
     other_types = sorted(other_types, key=lambda item: item[3])
-    return (boxed_types, nullable_boxed_types, internal_types, collection_types, set_types, map_types, other_types)
+    return (boxed_types, nullable_boxed_types, non_primitive_types, collection_types, set_types, map_types, other_types)
 
 
 def compute_struct_fingerprint(type_resolver, field_names, serializers, nullable_map=None, field_infos_list=None):

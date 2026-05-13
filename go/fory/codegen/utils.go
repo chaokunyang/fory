@@ -372,7 +372,7 @@ func sortFields(fields []*FieldInfo) {
 
 		// Within same group, apply group-specific sorting
 		switch group1 {
-		case groupPrimitive:
+		case groupPrimitive, groupNullablePrimitive:
 			// Primitive fields: larger size first, smaller later, variable size last
 			// When same size, sort by type id
 			// When same size and type id, sort by snake case field name
@@ -404,16 +404,7 @@ func sortFields(fields []*FieldInfo) {
 			// Finally by name
 			return f1.SnakeName < f2.SnakeName
 
-		case groupInternalBuiltin, groupListSet, groupMap:
-			// Built-in or collection types: sort by type id then name only.
-			// Java does NOT sort by nullable flag for these types.
-			if f1.TypeID != f2.TypeID {
-				return getTypeIDValue(f1.TypeID) < getTypeIDValue(f2.TypeID)
-			}
-			return f1.SnakeName < f2.SnakeName
-
-		case groupOther:
-			// Other fields: sort by snake case field name only
+		case groupNonPrimitive:
 			return f1.SnakeName < f2.SnakeName
 
 		default:
@@ -427,42 +418,20 @@ func sortFields(fields []*FieldInfo) {
 // This matches reflection's field ordering in field_info.go:
 // primitives → built-in non-container → list/set → map → other
 const (
-	groupPrimitive       = 0 // primitive and nullable primitive fields
-	groupInternalBuiltin = 1 // built-in non-container types sorted by typeId then name
-	groupListSet         = 2 // LIST/SET sorted by typeId then name
-	groupMap             = 3 // MAP sorted by typeId then name
-	groupOther           = 4 // structs, enums, and unknown types - sorted by name
+	groupPrimitive         = 0 // non-nullable primitive fields
+	groupNullablePrimitive = 1 // nullable primitive fields
+	groupNonPrimitive      = 2 // every non-primitive field sorted by identifier
 )
 
 // getFieldGroup categorizes a field into its sorting group
 func getFieldGroup(field *FieldInfo) int {
-	// Primitive fields, including nullable primitives.
 	if field.IsPrimitive {
+		if field.Nullable {
+			return groupNullablePrimitive
+		}
 		return groupPrimitive
 	}
-	typeID := field.TypeID
-	if typeID == "LIST" || typeID == "SET" {
-		return groupListSet
-	}
-	if typeID == "MAP" {
-		return groupMap
-	}
-	// Unknown or user-defined types go to "other"
-	switch typeID {
-	case "UNKNOWN",
-		"NAMED_STRUCT",
-		"NAMED_COMPATIBLE_STRUCT",
-		"STRUCT",
-		"COMPATIBLE_STRUCT",
-		"EXT",
-		"NAMED_EXT",
-		"ENUM",
-		"NAMED_ENUM",
-		"INTERFACE":
-		return groupOther
-	}
-	// Everything else is a built-in type (STRING/BINARY/arrays/TIMESTAMP/etc.)
-	return groupInternalBuiltin
+	return groupNonPrimitive
 }
 
 // getStructNames extracts struct names from StructInfo slice

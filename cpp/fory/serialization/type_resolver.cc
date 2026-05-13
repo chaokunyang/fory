@@ -939,6 +939,12 @@ int compare_field_sort_key(const FieldInfo &a, const FieldInfo &b) {
   if (a.field_id >= 0 && b.field_id >= 0 && a.field_id != b.field_id) {
     return a.field_id < b.field_id ? -1 : 1;
   }
+  if (a.field_id >= 0 && b.field_id < 0) {
+    return -1;
+  }
+  if (a.field_id < 0 && b.field_id >= 0) {
+    return 1;
+  }
   std::string a_key = field_sort_key_text(a);
   std::string b_key = field_sort_key_text(b);
   if (a_key != b_key) {
@@ -974,51 +980,21 @@ bool numeric_sorter(const FieldInfo &a, const FieldInfo &b) {
   return compare_field_sort_key(a, b) < 0;
 }
 
-// Type then identity sorter (for internal type fields like STRING).
-// Sorts by: type_id (ascending), then numeric field ID or field name.
-bool type_then_name_sorter(const FieldInfo &a, const FieldInfo &b) {
-  if (a.field_type.type_id != b.field_type.type_id) {
-    return a.field_type.type_id < b.field_type.type_id;
-  }
-  return compare_field_sort_key(a, b) < 0;
-}
-
-// Identity sorter (for list/set/map/other fields).
+// Identity sorter (for non-primitive fields).
 // Sorts by numeric field ID when present, otherwise field name.
 bool name_sorter(const FieldInfo &a, const FieldInfo &b) {
   return compare_field_sort_key(a, b) < 0;
-}
-
-// Check if a type ID is a "final" type for field group 2 in field ordering.
-// Final types are STRING, DURATION, TIMESTAMP, DATE, DECIMAL, BINARY,
-// ARRAY, and primitive arrays.
-// These are types with fixed serializers that don't need type info written.
-// Excludes: ENUM (13-14), STRUCT (15-18), EXT (19-20), LIST (21), SET (22), MAP
-// (23) Note: LIST/SET/MAP are checked separately before this function is
-// called.
-bool is_final_type_for_grouping(uint32_t type_id) {
-  return type_id == static_cast<uint32_t>(TypeId::STRING) ||
-         (type_id >= static_cast<uint32_t>(TypeId::DURATION) &&
-          type_id <= static_cast<uint32_t>(TypeId::BINARY)) ||
-         type_id == static_cast<uint32_t>(TypeId::ARRAY) ||
-         (type_id >= static_cast<uint32_t>(TypeId::BOOL_ARRAY) &&
-          type_id <= static_cast<uint32_t>(TypeId::FLOAT64_ARRAY));
 }
 
 } // anonymous namespace
 
 std::vector<FieldInfo>
 TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
-  // Group fields according to xlang spec. Field IDs are identity metadata for
-  // fingerprints and compatible matching; they do not replace the physical
-  // grouped payload order.
+  // Group fields according to xlang spec. Non-primitives intentionally share
+  // one identifier-sorted tail group regardless of type ID.
   std::vector<FieldInfo> primitive_fields;
   std::vector<FieldInfo> nullable_primitive_fields;
-  std::vector<FieldInfo> internal_type_fields;
-  std::vector<FieldInfo> list_fields;
-  std::vector<FieldInfo> set_fields;
-  std::vector<FieldInfo> map_fields;
-  std::vector<FieldInfo> other_fields;
+  std::vector<FieldInfo> non_primitive_fields;
 
   for (auto &field : fields) {
     uint32_t type_id = field.field_type.type_id;
@@ -1030,16 +1006,8 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
       } else {
         primitive_fields.push_back(std::move(field));
       }
-    } else if (type_id == static_cast<uint32_t>(TypeId::LIST)) {
-      list_fields.push_back(std::move(field));
-    } else if (type_id == static_cast<uint32_t>(TypeId::SET)) {
-      set_fields.push_back(std::move(field));
-    } else if (type_id == static_cast<uint32_t>(TypeId::MAP)) {
-      map_fields.push_back(std::move(field));
-    } else if (is_final_type_for_grouping(type_id)) {
-      internal_type_fields.push_back(std::move(field));
     } else {
-      other_fields.push_back(std::move(field));
+      non_primitive_fields.push_back(std::move(field));
     }
   }
 
@@ -1047,12 +1015,8 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
   std::sort(primitive_fields.begin(), primitive_fields.end(), numeric_sorter);
   std::sort(nullable_primitive_fields.begin(), nullable_primitive_fields.end(),
             numeric_sorter);
-  std::sort(internal_type_fields.begin(), internal_type_fields.end(),
-            type_then_name_sorter);
-  std::sort(list_fields.begin(), list_fields.end(), name_sorter);
-  std::sort(set_fields.begin(), set_fields.end(), name_sorter);
-  std::sort(map_fields.begin(), map_fields.end(), name_sorter);
-  std::sort(other_fields.begin(), other_fields.end(), name_sorter);
+  std::sort(non_primitive_fields.begin(), non_primitive_fields.end(),
+            name_sorter);
 
   // Combine sorted groups
   std::vector<FieldInfo> sorted;
@@ -1063,16 +1027,8 @@ TypeMeta::sort_field_infos(std::vector<FieldInfo> fields) {
                 std::make_move_iterator(nullable_primitive_fields.begin()),
                 std::make_move_iterator(nullable_primitive_fields.end()));
   sorted.insert(sorted.end(),
-                std::make_move_iterator(internal_type_fields.begin()),
-                std::make_move_iterator(internal_type_fields.end()));
-  sorted.insert(sorted.end(), std::make_move_iterator(list_fields.begin()),
-                std::make_move_iterator(list_fields.end()));
-  sorted.insert(sorted.end(), std::make_move_iterator(set_fields.begin()),
-                std::make_move_iterator(set_fields.end()));
-  sorted.insert(sorted.end(), std::make_move_iterator(map_fields.begin()),
-                std::make_move_iterator(map_fields.end()));
-  sorted.insert(sorted.end(), std::make_move_iterator(other_fields.begin()),
-                std::make_move_iterator(other_fields.end()));
+                std::make_move_iterator(non_primitive_fields.begin()),
+                std::make_move_iterator(non_primitive_fields.end()));
 
   return sorted;
 }

@@ -86,12 +86,8 @@ final class StaticSerializerSourceWriter {
       builder.append("  private static final boolean FORY_STRUCT_DEBUG = true;\n");
     }
     builder.append("  private static final List<Descriptor> DESCRIPTORS = buildDescriptors();\n\n");
-    builder.append("  private final SerializationFieldInfo[] buildInFields;\n");
-    builder.append("  private final int[] buildInFieldIds;\n");
-    builder.append("  private final SerializationFieldInfo[] containerFields;\n");
-    builder.append("  private final int[] containerFieldIds;\n");
-    builder.append("  private final SerializationFieldInfo[] otherFields;\n");
-    builder.append("  private final int[] otherFieldIds;\n");
+    builder.append("  private final SerializationFieldInfo[] allFields;\n");
+    builder.append("  private final int[] allFieldIds;\n");
     builder.append("  private final SerializationFieldInfo[] fieldsById;\n");
     builder.append("  private final int classVersionHash;\n");
     builder.append("  private final boolean sameSchemaCompatible;\n\n");
@@ -161,12 +157,8 @@ final class StaticSerializerSourceWriter {
 
   private void writeConstructorBody(String fieldGroupsExpression, String sameSchemaExpression) {
     builder.append("    FieldGroups fieldGroups = ").append(fieldGroupsExpression).append(";\n");
-    builder.append("    this.buildInFields = fieldGroups.buildInFields;\n");
-    builder.append("    this.buildInFieldIds = localFieldIds(buildInFields, DESCRIPTORS);\n");
-    builder.append("    this.containerFields = fieldGroups.containerFields;\n");
-    builder.append("    this.containerFieldIds = localFieldIds(containerFields, DESCRIPTORS);\n");
-    builder.append("    this.otherFields = fieldGroups.userTypeFields;\n");
-    builder.append("    this.otherFieldIds = localFieldIds(otherFields, DESCRIPTORS);\n");
+    builder.append("    this.allFields = fieldGroups.allFields;\n");
+    builder.append("    this.allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
     builder.append("    this.fieldsById = new SerializationFieldInfo[DESCRIPTORS.size()];\n");
     builder.append("    SerializationFieldInfo[] allFields = fieldGroups.allFields;\n");
     builder.append("    int[] allFieldIds = localFieldIds(allFields, DESCRIPTORS);\n");
@@ -188,9 +180,7 @@ final class StaticSerializerSourceWriter {
     builder.append("    if (typeResolver.checkClassVersion()) {\n");
     builder.append("      buffer.writeInt32(classVersionHash);\n");
     builder.append("    }\n");
-    builder.append("    writeBuildInFields(writeContext, value);\n");
-    builder.append("    writeContainerFields(writeContext, value);\n");
-    builder.append("    writeOtherFields(writeContext, value);\n");
+    builder.append("    writeFields(writeContext, value);\n");
     builder.append("  }\n\n");
     builder.append("  @Override\n");
     builder
@@ -226,9 +216,7 @@ final class StaticSerializerSourceWriter {
             .append(";\n");
       }
       builder.append("    Object[] values = new Object[DESCRIPTORS.size()];\n");
-      builder.append("    readBuildInRecordFields(readContext, values);\n");
-      builder.append("    readContainerRecordFields(readContext, values);\n");
-      builder.append("    readOtherRecordFields(readContext, values);\n");
+      builder.append("    readRecordFields(readContext, values);\n");
       for (SourceField field : struct.fields) {
         builder
             .append("    field")
@@ -243,19 +231,14 @@ final class StaticSerializerSourceWriter {
     } else {
       builder.append("    ").append(struct.typeName).append(" value = newBean();\n");
       builder.append("    readContext.reference(value);\n");
-      builder.append("    readBuildInFields(readContext, value);\n");
-      builder.append("    readContainerFields(readContext, value);\n");
-      builder.append("    readOtherFields(readContext, value);\n");
+      builder.append("    readFields(readContext, value);\n");
       builder.append("    return value;\n");
     }
     builder.append("  }\n\n");
   }
 
   private void writeWriteGroups() {
-    writeWriteGroup("BuildIn", "buildInFields", "buildInFieldIds", "writeBuildInFieldValue");
-    writeWriteGroup(
-        "Container", "containerFields", "containerFieldIds", "writeContainerFieldValue");
-    writeWriteGroup("Other", "otherFields", "otherFieldIds", "writeOtherFieldValue");
+    writeWriteGroup("", "allFields", "allFieldIds", "writeFieldValue");
   }
 
   private void writeWriteGroup(
@@ -266,7 +249,7 @@ final class StaticSerializerSourceWriter {
         .append("Fields(WriteContext writeContext, ")
         .append(struct.typeName)
         .append(" value) {\n");
-    if (groupName.equals("BuildIn") && hasDirectWriteField()) {
+    if (hasDirectWriteField()) {
       builder.append("    MemoryBuffer buffer = writeContext.getBuffer();\n");
     }
     builder.append("    for (int i = 0; i < ").append(fieldsName).append(".length; i++) {\n");
@@ -275,7 +258,7 @@ final class StaticSerializerSourceWriter {
     for (SourceField field : struct.fields) {
       builder.append("        case ").append(field.id).append(":\n");
       appendDebugWrite("before", "fieldInfo", 10);
-      if (groupName.equals("BuildIn") && canEmitDirectWriteField(field)) {
+      if (canEmitDirectWriteField(field)) {
         appendDirectWrite(field);
       } else {
         builder
@@ -300,15 +283,9 @@ final class StaticSerializerSourceWriter {
 
   private void writeReadGroups() {
     if (struct.record) {
-      writeReadRecordGroup("BuildIn", "buildInFields", "buildInFieldIds", "readBuildInFieldValue");
-      writeReadRecordGroup(
-          "Container", "containerFields", "containerFieldIds", "readContainerFieldValue");
-      writeReadRecordGroup("Other", "otherFields", "otherFieldIds", "readOtherFieldValue");
+      writeReadRecordGroup("", "allFields", "allFieldIds", "readFieldValue");
     } else {
-      writeReadBeanGroup("BuildIn", "buildInFields", "buildInFieldIds", "readBuildInFieldValue");
-      writeReadBeanGroup(
-          "Container", "containerFields", "containerFieldIds", "readContainerFieldValue");
-      writeReadBeanGroup("Other", "otherFields", "otherFieldIds", "readOtherFieldValue");
+      writeReadBeanGroup("", "allFields", "allFieldIds", "readFieldValue");
     }
   }
 
@@ -320,13 +297,13 @@ final class StaticSerializerSourceWriter {
         .append("Fields(ReadContext readContext, ")
         .append(struct.typeName)
         .append(" value) {\n");
-    if (groupName.equals("BuildIn") && hasDirectReadField()) {
+    if (hasDirectReadField()) {
       builder.append("    MemoryBuffer buffer = readContext.getBuffer();\n");
     }
     builder.append("    for (int i = 0; i < ").append(fieldsName).append(".length; i++) {\n");
     builder.append("      SerializationFieldInfo fieldInfo = ").append(fieldsName).append("[i];\n");
     appendDebugRead("before", "fieldInfo", 6);
-    if (!(groupName.equals("BuildIn") && hasDirectReadField())) {
+    if (!hasDirectReadField()) {
       builder
           .append("      Object fieldValue = ")
           .append(helperName)
@@ -336,11 +313,11 @@ final class StaticSerializerSourceWriter {
     builder.append("      switch (").append(idsName).append("[i]) {\n");
     for (SourceField field : struct.fields) {
       builder.append("        case ").append(field.id).append(":\n");
-      if (groupName.equals("BuildIn") && canEmitDirectReadField(field)) {
+      if (canEmitDirectReadField(field)) {
         appendDirectRead(field);
       } else {
         String fieldValueName = "fieldValue" + field.id;
-        if (groupName.equals("BuildIn") && hasDirectReadField()) {
+        if (hasDirectReadField()) {
           builder
               .append("          Object ")
               .append(fieldValueName)

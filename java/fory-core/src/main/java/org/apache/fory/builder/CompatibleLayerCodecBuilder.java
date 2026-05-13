@@ -244,18 +244,7 @@ public class CompatibleLayerCodecBuilder extends ObjectCodecBuilder {
     deserializeReadGroup(
         objectCodecOptimizer.boxedReadGroups, numGroups, expressions, bean, buffer);
     deserializeReadGroup(
-        objectCodecOptimizer.buildInReadGroups, numGroups, expressions, bean, buffer);
-    for (Descriptor descriptor :
-        objectCodecOptimizer.descriptorGrouper.getCollectionDescriptors()) {
-      expressions.add(
-          deserializeGroup(java.util.Collections.singletonList(descriptor), bean, buffer, false));
-    }
-    for (Descriptor descriptor : objectCodecOptimizer.descriptorGrouper.getMapDescriptors()) {
-      expressions.add(
-          deserializeGroup(java.util.Collections.singletonList(descriptor), bean, buffer, false));
-    }
-    deserializeReadGroup(
-        objectCodecOptimizer.otherReadGroups, numGroups, expressions, bean, buffer);
+        objectCodecOptimizer.nonPrimitiveReadGroups, numGroups, expressions, bean, buffer);
     expressions.add(new Expression.Return(bean));
     return expressions;
   }

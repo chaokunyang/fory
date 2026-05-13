@@ -213,6 +213,18 @@ func TestGroupFieldsUsesFlatOrderForFullyTaggedStructs(t *testing.T) {
 	require.Equal(t, "long_value", group.RemainingFields[2].Meta.Name)
 }
 
+func TestSortFieldsOrdersNonPrimitivesByFieldIdentifier(t *testing.T) {
+	fieldNames := []string{"string_value", "map_value", "custom_value", "list_value", "int_value"}
+	serializers := make([]Serializer, len(fieldNames))
+	typeIDs := []TypeId{STRING, MAP, NAMED_STRUCT, LIST, VARINT32}
+	nullables := []bool{false, false, false, false, false}
+	tagIDs := []int{20, 10, TagIDUseFieldName, TagIDUseFieldName, 30}
+
+	_, sortedNames := sortFields(nil, fieldNames, serializers, typeIDs, nullables, tagIDs)
+
+	require.Equal(t, []string{"int_value", "map_value", "string_value", "custom_value", "list_value"}, sortedNames)
+}
+
 func TestParseFieldSpecRejectsInvalidTags(t *testing.T) {
 	type DuplicateKeys struct {
 		Value int32 `fory:"id=0,id=1"`

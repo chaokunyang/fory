@@ -70,10 +70,8 @@ public class ObjectCodecOptimizer extends ExpressionOptimizer {
   final List<List<Descriptor>> primitiveGroups = new ArrayList<>();
   final List<List<Descriptor>> boxedWriteGroups = new ArrayList<>();
   final List<List<Descriptor>> boxedReadGroups = new ArrayList<>();
-  final List<List<Descriptor>> buildInWriteGroups = new ArrayList<>();
-  final List<List<Descriptor>> buildInReadGroups = new ArrayList<>();
-  final List<List<Descriptor>> otherWriteGroups = new ArrayList<>();
-  final List<List<Descriptor>> otherReadGroups = new ArrayList<>();
+  final List<List<Descriptor>> nonPrimitiveWriteGroups = new ArrayList<>();
+  final List<List<Descriptor>> nonPrimitiveReadGroups = new ArrayList<>();
 
   ObjectCodecOptimizer(
       Class<?> cls,
@@ -117,13 +115,13 @@ public class ObjectCodecOptimizer extends ExpressionOptimizer {
                 boxedReadWeight,
                 boxedReadGroups),
             MutableTuple3.of(
-                new ArrayList<>(descriptorGrouper.getBuildInDescriptors()), 8, buildInWriteGroups),
+                new ArrayList<>(descriptorGrouper.getNonPrimitiveDescriptors()),
+                6,
+                nonPrimitiveReadGroups),
             MutableTuple3.of(
-                new ArrayList<>(descriptorGrouper.getBuildInDescriptors()), 5, buildInReadGroups),
-            MutableTuple3.of(
-                new ArrayList<>(descriptorGrouper.getOtherDescriptors()), 4, otherReadGroups),
-            MutableTuple3.of(
-                new ArrayList<>(descriptorGrouper.getOtherDescriptors()), 9, otherWriteGroups));
+                new ArrayList<>(descriptorGrouper.getNonPrimitiveDescriptors()),
+                8,
+                nonPrimitiveWriteGroups));
     for (MutableTuple3<List<Descriptor>, Integer, List<List<Descriptor>>> decs : groups) {
       while (!decs.f0.isEmpty()) {
         int endIndex = Math.min(decs.f1, decs.f0.size());

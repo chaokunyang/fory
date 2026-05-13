@@ -1054,6 +1054,12 @@ export class TypeMeta {
     ) {
       return a.fieldId - b.fieldId;
     }
+    if (a.fieldId !== undefined && a.fieldId !== null) {
+      return -1;
+    }
+    if (b.fieldId !== undefined && b.fieldId !== null) {
+      return 1;
+    }
     return TypeMeta.getFieldSortKey(a).localeCompare(
       TypeMeta.getFieldSortKey(b),
     );
@@ -1069,11 +1075,7 @@ export class TypeMeta {
   >(typeInfos: Array<T>): Array<T> {
     const primitiveFields: Array<T> = [];
     const nullablePrimitiveFields: Array<T> = [];
-    const internalTypeFields: Array<T> = [];
-    const listFields: Array<T> = [];
-    const setFields: Array<T> = [];
-    const mapFields: Array<T> = [];
-    const otherFields: Array<T> = [];
+    const nonPrimitiveFields: Array<T> = [];
 
     for (const typeInfo of typeInfos) {
       const typeId = typeInfo.typeId;
@@ -1089,18 +1091,7 @@ export class TypeMeta {
         continue;
       }
 
-      // Categorize based on type_id
-      if (typeId === TypeId.LIST) {
-        listFields.push(typeInfo);
-      } else if (typeId === TypeId.SET) {
-        setFields.push(typeInfo);
-      } else if (typeId === TypeId.MAP) {
-        mapFields.push(typeInfo);
-      } else if (TypeId.isBuiltin(typeId)) {
-        internalTypeFields.push(typeInfo);
-      } else {
-        otherFields.push(typeInfo);
-      }
+      nonPrimitiveFields.push(typeInfo);
     }
 
     // Sort functions
@@ -1132,33 +1123,16 @@ export class TypeMeta {
       return -1;
     };
 
-    const typeIdThenNameSorter = (a: T, b: T) => {
-      if (a.typeId !== b.typeId) {
-        return a.typeId - b.typeId;
-      }
-      return nameSorter(a, b);
-    };
-
     const nameSorter = (a: T, b: T) => TypeMeta.compareFieldSortKey(a, b);
 
-    // Field IDs identify fields for fingerprints and compatible matching. They are only tie
-    // breakers inside the language-neutral direct payload groups, even when every field is tagged.
     primitiveFields.sort(primitiveComparator);
     nullablePrimitiveFields.sort(primitiveComparator);
-    internalTypeFields.sort(typeIdThenNameSorter);
-    listFields.sort(typeIdThenNameSorter);
-    setFields.sort(typeIdThenNameSorter);
-    mapFields.sort(typeIdThenNameSorter);
-    otherFields.sort(nameSorter);
+    nonPrimitiveFields.sort(nameSorter);
 
     return [
       primitiveFields,
       nullablePrimitiveFields,
-      internalTypeFields,
-      listFields,
-      setFields,
-      mapFields,
-      otherFields,
+      nonPrimitiveFields,
     ].flat();
   }
 }

@@ -230,27 +230,17 @@ func GroupFields(fields []FieldInfo) FieldGroup {
 		}
 	}
 
-	// Sort remainingFields: nullable primitives first (by primitiveComparator),
-	// then built-in scalar types (typeId, name), then lists, sets, maps,
-	// then primitive arrays and other fields by sort key.
+	// Sort remainingFields: nullable primitives keep primitive ordering, and every
+	// non-primitive field is ordered directly by field identifier.
 	sort.SliceStable(g.RemainingFields, func(i, j int) bool {
 		fi, fj := &g.RemainingFields[i], &g.RemainingFields[j]
 		catI, catJ := getFieldCategory(fi), getFieldCategory(fj)
 		if catI != catJ {
 			return catI < catJ
 		}
-		// Within nullable primitives category, use primitiveComparator logic
 		if catI == 0 {
 			return comparePrimitiveFields(fi, fj)
 		}
-		// Within built-in scalar or collection categories, sort by typeId then sort key.
-		if catI == 1 || catI == 2 || catI == 3 {
-			if fi.Meta.TypeId != fj.Meta.TypeId {
-				return fi.Meta.TypeId < fj.Meta.TypeId
-			}
-			return lessFieldSortKey(fi, fj)
-		}
-		// Other categories (struct, enum, etc.): sort by sort key
 		return lessFieldSortKey(fi, fj)
 	})
 
@@ -327,32 +317,12 @@ func isEnumField(field *FieldInfo) bool {
 
 // getFieldCategory returns the category for sorting remainingFields:
 // 0: nullable primitives (sorted by primitiveComparator)
-// 1: internal built-in non-container types, including primitive arrays (sorted by typeId, then sort key)
-// 2: list/set collections (sorted by typeId, then sort key)
-// 3: map collections (sorted by typeId, then sort key)
-// 4: struct, enum, and all other types (sorted by sort key)
+// 1: every non-primitive field (sorted by field identifier)
 func getFieldCategory(field *FieldInfo) int {
 	if isPrimitiveFieldGroupType(field.Meta.TypeId) &&
 		(isNullableFixedSizePrimitive(field.DispatchId) || isNullableVarintPrimitive(field.DispatchId)) {
 		return 0
 	}
-	typeId := field.Meta.TypeId
-	if typeId == UNKNOWN {
-		return 4
-	}
-	if isUserDefinedType(typeId) {
-		return 4
-	}
-	if typeId == LIST || typeId == SET {
-		return 2
-	}
-	if typeId == MAP {
-		return 3
-	}
-	if isPrimitiveArrayType(typeId) {
-		return 1
-	}
-	// Internal built-in non-container types: sorted by typeId, then sort key.
 	return 1
 }
 
@@ -743,6 +713,12 @@ func lessTripleSortKey(a, b triple) bool {
 	if a.tagID >= 0 && b.tagID >= 0 && a.tagID != b.tagID {
 		return a.tagID < b.tagID
 	}
+	if a.tagID >= 0 && b.tagID < 0 {
+		return true
+	}
+	if a.tagID < 0 && b.tagID >= 0 {
+		return false
+	}
 	aText := a.getSortKeyText()
 	bText := b.getSortKeyText()
 	if aText != bText {
@@ -764,6 +740,12 @@ func lessFieldSortKey(a, b *FieldInfo) bool {
 	bTagID := getFieldTagID(b)
 	if aTagID >= 0 && bTagID >= 0 && aTagID != bTagID {
 		return aTagID < bTagID
+	}
+	if aTagID >= 0 && bTagID < 0 {
+		return true
+	}
+	if aTagID < 0 && bTagID >= 0 {
+		return false
 	}
 	aText := getFieldSortKeyText(a)
 	bText := getFieldSortKeyText(b)
@@ -808,10 +790,10 @@ func sortFields(
 	}
 	// Ordering:
 	// 1) primitives (nullable=false), 2) primitives (nullable=true),
-	// 3) built-in non-container, 4) list/set, 5) map, 6) user-defined/unknown
+	// 3) every non-primitive field, sorted directly by field identifier.
 	// primitives = non-nullable primitive types (int, long, etc.)
 	// boxed = nullable boxed types (Integer, Long, etc. which are pointers in Go)
-	var primitives, boxed, listSet, maps, otherInternalTypeFields []triple
+	var primitives, boxed, nonPrimitives []triple
 
 	for _, t := range typeTriples {
 		switch {
@@ -822,22 +804,12 @@ func sortFields(
 			} else {
 				primitives = append(primitives, t)
 			}
-		case isPrimitiveArrayType(t.typeID):
-			// Primitive arrays are built-in non-container types in xlang field ordering.
-			otherInternalTypeFields = append(otherInternalTypeFields, t)
-		case isListType(t.typeID), isSetType(t.typeID):
-			// LIST, SET: collection group
-			listSet = append(listSet, t)
-		case isMapType(t.typeID):
-			// MAP: map group
-			maps = append(maps, t)
 		case isUserDefinedType(t.typeID):
 			userDefined = append(userDefined, t)
 		case t.typeID == UNKNOWN:
 			others = append(others, t)
 		default:
-			// STRING, BINARY, and other internal types (category 1 in reflection)
-			otherInternalTypeFields = append(otherInternalTypeFields, t)
+			nonPrimitives = append(nonPrimitives, t)
 		}
 	}
 	// Sort primitives (non-nullable) - same logic as boxed
@@ -870,40 +842,20 @@ func sortFields(
 	}
 	sortPrimitiveSlice(primitives)
 	sortPrimitiveSlice(boxed)
-	// Sort internal types (STRING, BINARY, LIST, SET, MAP) by typeId then name only.
-	// Java does NOT sort by nullable flag for these types.
-	sortByTypeIDThenName := func(s []triple) {
-		sort.Slice(s, func(i, j int) bool {
-			if s[i].typeID != s[j].typeID {
-				return s[i].typeID < s[j].typeID
-			}
-			return lessTripleSortKey(s[i], s[j])
-		})
-	}
 	sortTuple := func(s []triple) {
 		sort.Slice(s, func(i, j int) bool {
 			return lessTripleSortKey(s[i], s[j])
 		})
 	}
-	sortByTypeIDThenName(otherInternalTypeFields)
-	sortByTypeIDThenName(listSet)
-	sortByTypeIDThenName(maps)
-	// Merge primitive arrays, user-defined types, and unknown types into the same
-	// sort-key-ordered tail group.
-	otherGroup := make([]triple, 0, len(userDefined)+len(others))
-	otherGroup = append(otherGroup, userDefined...)
-	otherGroup = append(otherGroup, others...)
-	sortTuple(otherGroup)
+	nonPrimitives = append(nonPrimitives, userDefined...)
+	nonPrimitives = append(nonPrimitives, others...)
+	sortTuple(nonPrimitives)
 
-	// Order: primitives, boxed, built-in non-container, list/set, map, other (by name)
-	// This aligns with GroupFields' getFieldCategory sorting and spec ordering.
+	// Order: primitives, boxed primitives, then all non-primitives by field identifier.
 	all := make([]triple, 0, len(fieldNames))
 	all = append(all, primitives...)
 	all = append(all, boxed...)
-	all = append(all, otherInternalTypeFields...) // STRING, BINARY, time, unions, etc.
-	all = append(all, listSet...)
-	all = append(all, maps...)
-	all = append(all, otherGroup...)
+	all = append(all, nonPrimitives...)
 
 	outSer := make([]Serializer, len(all))
 	outNam := make([]string, len(all))

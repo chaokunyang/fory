@@ -196,20 +196,14 @@ impl FieldSortKey {
 fn compare_field_sort_key(a: &FieldSortKey, b: &FieldSortKey) -> std::cmp::Ordering {
     match (a.id, b.id) {
         (Some(id_a), Some(id_b)) => id_a.cmp(&id_b),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
         _ => a.text.cmp(&b.text),
     }
 }
 
 type FieldGroup = Vec<(String, FieldSortKey, u32)>;
-type FieldGroups = (
-    FieldGroup,
-    FieldGroup,
-    FieldGroup,
-    FieldGroup,
-    FieldGroup,
-    FieldGroup,
-    FieldGroup,
-);
+type FieldGroups = (FieldGroup, FieldGroup, FieldGroup);
 
 /// Extract the inner generic arguments from a type name while ignoring path qualifiers.
 ///
@@ -416,34 +410,6 @@ fn is_compress(type_id: u32) -> bool {
     .contains(&type_id)
 }
 
-fn is_internal_type_id(type_id: u32) -> bool {
-    [
-        TypeId::STRING as u32,
-        TypeId::DATE as u32,
-        TypeId::TIMESTAMP as u32,
-        TypeId::DURATION as u32,
-        TypeId::DECIMAL as u32,
-        TypeId::BINARY as u32,
-        TypeId::BOOL_ARRAY as u32,
-        TypeId::INT8_ARRAY as u32,
-        TypeId::INT16_ARRAY as u32,
-        TypeId::INT32_ARRAY as u32,
-        TypeId::INT64_ARRAY as u32,
-        TypeId::INT128_ARRAY as u32,
-        TypeId::FLOAT8_ARRAY as u32,
-        TypeId::FLOAT16_ARRAY as u32,
-        TypeId::BFLOAT16_ARRAY as u32,
-        TypeId::FLOAT32_ARRAY as u32,
-        TypeId::FLOAT64_ARRAY as u32,
-        TypeId::UINT8_ARRAY as u32,
-        TypeId::UINT16_ARRAY as u32,
-        TypeId::UINT32_ARRAY as u32,
-        TypeId::UINT64_ARRAY as u32,
-        TypeId::U128_ARRAY as u32,
-    ]
-    .contains(&type_id)
-}
-
 /// Group fields into serialization categories while normalizing field names to snake_case.
 /// The returned groups preserve the ordering rules required by the serialization layout.
 fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
@@ -451,11 +417,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
 
     let mut primitive_fields = Vec::new();
     let mut nullable_primitive_fields = Vec::new();
-    let mut internal_type_fields = Vec::new();
-    let mut list_fields = Vec::new();
-    let mut set_fields = Vec::new();
-    let mut map_fields = Vec::new();
-    let mut other_fields = Vec::new();
+    let mut non_primitive_fields = Vec::new();
 
     // First handle Forward fields separately to avoid borrow checker issues
     for (idx, field) in fields.iter().enumerate() {
@@ -463,7 +425,7 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             let raw_ident = get_field_name(field, idx);
             let ident = to_snake_case(&raw_ident);
             // Forward fields don't have explicit IDs; sort by name.
-            other_fields.push((
+            non_primitive_fields.push((
                 ident.clone(),
                 FieldSortKey::name(ident),
                 TypeId::UNKNOWN as u32,
@@ -508,20 +470,10 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
                     adjust_type_id_for_encoding(get_type_id_by_name(ty_str), &meta)
                 };
 
-                // Categorize based on type_id
                 if is_primitive {
                     primitive_fields.push((ident, sort_key, type_id));
-                } else if is_internal_type_id(type_id) {
-                    internal_type_fields.push((ident, sort_key, type_id));
-                } else if type_id == TypeId::LIST as u32 {
-                    list_fields.push((ident, sort_key, type_id));
-                } else if type_id == TypeId::SET as u32 {
-                    set_fields.push((ident, sort_key, type_id));
-                } else if type_id == TypeId::MAP as u32 {
-                    map_fields.push((ident, sort_key, type_id));
                 } else {
-                    // User-defined type
-                    other_fields.push((ident, sort_key, type_id));
+                    non_primitive_fields.push((ident, sort_key, type_id));
                 }
             };
 
@@ -560,15 +512,6 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
             .then_with(|| a.0.cmp(&b.0))
     }
 
-    fn type_id_then_name_sorter(
-        a: &(String, FieldSortKey, u32),
-        b: &(String, FieldSortKey, u32),
-    ) -> std::cmp::Ordering {
-        a.2.cmp(&b.2)
-            .then_with(|| compare_field_sort_key(&a.1, &b.1))
-            .then_with(|| a.0.cmp(&b.0))
-    }
-
     fn name_sorter(
         a: &(String, FieldSortKey, u32),
         b: &(String, FieldSortKey, u32),
@@ -578,20 +521,12 @@ fn group_fields_by_type(fields: &[&Field]) -> FieldGroups {
 
     primitive_fields.sort_by(numeric_sorter);
     nullable_primitive_fields.sort_by(numeric_sorter);
-    internal_type_fields.sort_by(type_id_then_name_sorter);
-    list_fields.sort_by(name_sorter);
-    set_fields.sort_by(name_sorter);
-    map_fields.sort_by(name_sorter);
-    other_fields.sort_by(name_sorter);
+    non_primitive_fields.sort_by(name_sorter);
 
     (
         primitive_fields,
         nullable_primitive_fields,
-        internal_type_fields,
-        list_fields,
-        set_fields,
-        map_fields,
-        other_fields,
+        non_primitive_fields,
     )
 }
 
@@ -610,23 +545,12 @@ pub(crate) fn get_sorted_field_names(fields: &[&Field]) -> Vec<String> {
 
     // For named structs, sort by Fory field order. Tag IDs are the field identifier inside each
     // group, but they do not bypass the language-neutral grouping rules.
-    let (
-        primitive_fields,
-        nullable_primitive_fields,
-        internal_type_fields,
-        list_fields,
-        set_fields,
-        map_fields,
-        other_fields,
-    ) = group_fields_by_type(fields);
+    let (primitive_fields, nullable_primitive_fields, non_primitive_fields) =
+        group_fields_by_type(fields);
 
     let mut all_fields = primitive_fields;
     all_fields.extend(nullable_primitive_fields);
-    all_fields.extend(internal_type_fields);
-    all_fields.extend(list_fields);
-    all_fields.extend(set_fields);
-    all_fields.extend(map_fields);
-    all_fields.extend(other_fields);
+    all_fields.extend(non_primitive_fields);
 
     all_fields.into_iter().map(|(name, _, _)| name).collect()
 }
@@ -989,15 +913,8 @@ mod tests {
         ];
         let field_refs: Vec<&syn::Field> = fields.iter().collect();
 
-        let (
-            primitive_fields,
-            nullable_primitive_fields,
-            internal_type_fields,
-            list_fields,
-            set_fields,
-            map_fields,
-            other_fields,
-        ) = group_fields_by_type(&field_refs);
+        let (primitive_fields, nullable_primitive_fields, non_primitive_fields) =
+            group_fields_by_type(&field_refs);
 
         let primitive_names: Vec<&str> = primitive_fields
             .iter()
@@ -1011,35 +928,20 @@ mod tests {
             .collect();
         assert_eq!(nullable_names, vec!["optional_value"]);
 
-        let internal_names: Vec<&str> = internal_type_fields
+        let non_primitive_names: Vec<&str> = non_primitive_fields
             .iter()
             .map(|(name, _, _)| name.as_str())
             .collect();
-        assert_eq!(internal_names, vec!["simple_string"]);
-
-        let list_names: Vec<&str> = list_fields
-            .iter()
-            .map(|(name, _, _)| name.as_str())
-            .collect();
-        assert_eq!(list_names, vec!["list_items"]);
-
-        let set_names: Vec<&str> = set_fields
-            .iter()
-            .map(|(name, _, _)| name.as_str())
-            .collect();
-        assert_eq!(set_names, vec!["set_items"]);
-
-        let map_names: Vec<&str> = map_fields
-            .iter()
-            .map(|(name, _, _)| name.as_str())
-            .collect();
-        assert_eq!(map_names, vec!["map_values"]);
-
-        let other_names: Vec<&str> = other_fields
-            .iter()
-            .map(|(name, _, _)| name.as_str())
-            .collect();
-        assert_eq!(other_names, vec!["custom_type"]);
+        assert_eq!(
+            non_primitive_names,
+            vec![
+                "custom_type",
+                "list_items",
+                "map_values",
+                "set_items",
+                "simple_string"
+            ]
+        );
 
         let sorted_names = get_sorted_field_names(&field_refs);
         assert_eq!(
@@ -1047,11 +949,11 @@ mod tests {
             vec![
                 "camel_case".to_string(),
                 "optional_value".to_string(),
-                "simple_string".to_string(),
-                "list_items".to_string(),
-                "set_items".to_string(),
-                "map_values".to_string(),
                 "custom_type".to_string(),
+                "list_items".to_string(),
+                "map_values".to_string(),
+                "set_items".to_string(),
+                "simple_string".to_string(),
             ]
         );
     }
@@ -1067,30 +969,23 @@ mod tests {
         ];
         let field_refs: Vec<&syn::Field> = fields.iter().collect();
 
-        let (
-            _primitive_fields,
-            _nullable_primitive_fields,
-            internal_type_fields,
-            _list_fields,
-            _set_fields,
-            _map_fields,
-            other_fields,
-        ) = group_fields_by_type(&field_refs);
+        let (_primitive_fields, _nullable_primitive_fields, non_primitive_fields) =
+            group_fields_by_type(&field_refs);
 
-        let internal_names: Vec<&str> = internal_type_fields
+        let non_primitive_names: Vec<&str> = non_primitive_fields
             .iter()
             .map(|(name, _, _)| name.as_str())
             .collect();
         assert_eq!(
-            internal_names,
-            vec!["bytes_value", "int8_array", "uint8_array", "uint16_array"]
+            non_primitive_names,
+            vec![
+                "bytes_value",
+                "int8_array",
+                "uint8_array",
+                "uint16_array",
+                "custom_type"
+            ]
         );
-
-        let other_names: Vec<&str> = other_fields
-            .iter()
-            .map(|(name, _, _)| name.as_str())
-            .collect();
-        assert_eq!(other_names, vec!["custom_type"]);
 
         let sorted_names = get_sorted_field_names(&field_refs);
         assert_eq!(

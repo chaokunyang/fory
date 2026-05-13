@@ -2111,10 +2111,7 @@ GeneratedFieldType(
   List<_GeneratedFieldSpec> _sortFields(List<_GeneratedFieldSpec> fields) {
     final primitiveFields = <_GeneratedFieldSpec>[];
     final boxedPrimitiveFields = <_GeneratedFieldSpec>[];
-    final builtInFields = <_GeneratedFieldSpec>[];
-    final collectionFields = <_GeneratedFieldSpec>[];
-    final mapFields = <_GeneratedFieldSpec>[];
-    final otherFields = <_GeneratedFieldSpec>[];
+    final nonPrimitiveFields = <_GeneratedFieldSpec>[];
 
     for (final field in fields) {
       if (_isPrimitiveTypeId(field.fieldType.typeId)) {
@@ -2123,32 +2120,19 @@ GeneratedFieldType(
         } else {
           primitiveFields.add(field);
         }
-      } else if (field.fieldType.typeId == TypeIds.list ||
-          field.fieldType.typeId == TypeIds.set) {
-        collectionFields.add(field);
-      } else if (field.fieldType.typeId == TypeIds.map) {
-        mapFields.add(field);
-      } else if (_isBuiltInTypeId(field.fieldType.typeId)) {
-        builtInFields.add(field);
       } else {
-        otherFields.add(field);
+        nonPrimitiveFields.add(field);
       }
     }
 
     primitiveFields.sort(_comparePrimitiveFields);
     boxedPrimitiveFields.sort(_comparePrimitiveFields);
-    builtInFields.sort(_compareNonPrimitiveFields);
-    collectionFields.sort(_compareNonPrimitiveFields);
-    mapFields.sort(_compareNonPrimitiveFields);
-    otherFields.sort(_compareOtherFields);
+    nonPrimitiveFields.sort(_compareOtherFields);
 
     return <_GeneratedFieldSpec>[
       ...primitiveFields,
       ...boxedPrimitiveFields,
-      ...builtInFields,
-      ...collectionFields,
-      ...mapFields,
-      ...otherFields,
+      ...nonPrimitiveFields,
     ];
   }
 
@@ -2166,21 +2150,6 @@ GeneratedFieldType(
     if (sizeCompare != 0) {
       return sizeCompare;
     }
-    final typeCompare = left.fieldType.typeId - right.fieldType.typeId;
-    if (typeCompare != 0) {
-      return typeCompare;
-    }
-    final keyCompare = _compareFieldIdentity(left, right);
-    if (keyCompare != 0) {
-      return keyCompare;
-    }
-    return left.name.compareTo(right.name);
-  }
-
-  int _compareNonPrimitiveFields(
-    _GeneratedFieldSpec left,
-    _GeneratedFieldSpec right,
-  ) {
     final typeCompare = left.fieldType.typeId - right.fieldType.typeId;
     if (typeCompare != 0) {
       return typeCompare;
@@ -2211,6 +2180,12 @@ GeneratedFieldType(
       if (idCompare != 0) {
         return idCompare;
       }
+    }
+    if (leftId != null && leftId >= 0 && (rightId == null || rightId < 0)) {
+      return -1;
+    }
+    if ((leftId == null || leftId < 0) && rightId != null && rightId >= 0) {
+      return 1;
     }
     final keyCompare = left.identifier.compareTo(right.identifier);
     if (keyCompare != 0) {

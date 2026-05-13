@@ -752,7 +752,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       // Build fieldIndexMap and putFieldTypes from serializer's field order.
       // This ensures putFields/writeFields API uses the same order as the serializer
-      // (buildIn, container, other groups), not ObjectStreamClass order.
+      // (primitive, nullable primitive, non-primitive), not ObjectStreamClass order.
       fieldIndexMap = new ObjectIntMap<>(4, 0.4f);
       if (streamTypeInfo != null
           && (streamTypeInfo.writeObjectMethod != null

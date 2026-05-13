@@ -54,8 +54,6 @@ from pyfory.policy import DEFAULT_POLICY
 from pyfory.types import (
     TypeId,
     is_primitive_array_type,
-    is_list_type,
-    is_map_type,
     get_primitive_type_size,
     is_polymorphic_type,
     is_primitive_type,
@@ -934,9 +932,7 @@ def _to_snake_case(name: str) -> str:
             next_is_lower = index + 1 < len(name) and name[index + 1].islower()
             previous_lower_or_digit = previous.islower() or previous.isdigit()
             previous_upper = previous.isupper()
-            if result and result[-1] != "_" and (
-                previous_lower_or_digit or (previous_upper and next_is_lower)
-            ):
+            if result and result[-1] != "_" and (previous_lower_or_digit or (previous_upper and next_is_lower)):
                 result.append("_")
             result.append(char.lower())
         else:

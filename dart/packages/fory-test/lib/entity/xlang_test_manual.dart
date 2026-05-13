@@ -111,6 +111,8 @@ const GeneratedFieldType _refOverrideElementFieldType = GeneratedFieldType(
 
 const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
     <GeneratedFieldInfo>[
+  // Keep this manual fixture in the same protocol order as generated structs:
+  // all fields are non-primitive, so field identifiers order the wire payload.
   GeneratedFieldInfo(
     name: 'listField',
     identifier: 'list_field',
@@ -118,19 +120,6 @@ const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
     fieldType: GeneratedFieldType(
       type: List,
       typeId: TypeIds.list,
-      nullable: false,
-      ref: false,
-      dynamic: null,
-      arguments: <GeneratedFieldType>[_refOverrideElementFieldType],
-    ),
-  ),
-  GeneratedFieldInfo(
-    name: 'setField',
-    identifier: 'set_field',
-    id: null,
-    fieldType: GeneratedFieldType(
-      type: Set,
-      typeId: TypeIds.set,
       nullable: false,
       ref: false,
       dynamic: null,
@@ -158,6 +147,19 @@ const List<GeneratedFieldInfo> _refOverrideContainerForyFieldInfo =
         ),
         _refOverrideElementFieldType,
       ],
+    ),
+  ),
+  GeneratedFieldInfo(
+    name: 'setField',
+    identifier: 'set_field',
+    id: null,
+    fieldType: GeneratedFieldType(
+      type: Set,
+      typeId: TypeIds.set,
+      nullable: false,
+      ref: false,
+      dynamic: null,
+      arguments: <GeneratedFieldType>[_refOverrideElementFieldType],
     ),
   ),
 ];
@@ -198,8 +200,8 @@ final class _RefOverrideContainerForySerializer
   void write(WriteContext context, RefOverrideContainer value) {
     final fields = _writeFields(context);
     writeGeneratedStructFieldInfoValue(context, fields[0], value.listField);
-    writeGeneratedStructFieldInfoValue(context, fields[1], value.setField);
-    writeGeneratedStructFieldInfoValue(context, fields[2], value.mapField);
+    writeGeneratedStructFieldInfoValue(context, fields[1], value.mapField);
+    writeGeneratedStructFieldInfoValue(context, fields[2], value.setField);
   }
 
   @override
@@ -210,13 +212,13 @@ final class _RefOverrideContainerForySerializer
       readGeneratedStructFieldInfoValue(context, fields[0], value.listField),
       value.listField,
     );
-    value.setField = _readRefOverrideContainerSetField(
-      readGeneratedStructFieldInfoValue(context, fields[1], value.setField),
-      value.setField,
-    );
     value.mapField = _readRefOverrideContainerMapField(
-      readGeneratedStructFieldInfoValue(context, fields[2], value.mapField),
+      readGeneratedStructFieldInfoValue(context, fields[1], value.mapField),
       value.mapField,
+    );
+    value.setField = _readRefOverrideContainerSetField(
+      readGeneratedStructFieldInfoValue(context, fields[2], value.setField),
+      value.setField,
     );
     return value;
   }
@@ -241,15 +243,15 @@ final class _RefOverrideContainerForySerializer
           );
           break;
         case 1:
-          value.setField = _readRefOverrideContainerSetField(
-            readGeneratedCompatibleStructField(context, layout, index),
-            value.setField,
-          );
-          break;
-        case 2:
           value.mapField = _readRefOverrideContainerMapField(
             readGeneratedCompatibleStructField(context, layout, index),
             value.mapField,
+          );
+          break;
+        case 2:
+          value.setField = _readRefOverrideContainerSetField(
+            readGeneratedCompatibleStructField(context, layout, index),
+            value.setField,
           );
           break;
         default:

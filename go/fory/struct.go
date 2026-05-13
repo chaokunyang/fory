@@ -2350,6 +2350,8 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 				storeFieldValue(field.Kind, fieldPtr, optInfo, buf.ReadFloat32(err))
 			case PrimitiveFloat64DispatchId:
 				storeFieldValue(field.Kind, fieldPtr, optInfo, buf.ReadFloat64(err))
+			case PrimitiveFloat16DispatchId:
+				storeFieldValue(field.Kind, fieldPtr, optInfo, buf.ReadUint16(err))
 			}
 			return
 		}
@@ -2420,6 +2422,8 @@ func (s *structSerializer) readFieldsInOrder(ctx *ReadContext, value reflect.Val
 				storeFieldValue(field.Kind, fieldPtr, optInfo, buf.ReadFloat32(err))
 			case NullableFloat64DispatchId:
 				storeFieldValue(field.Kind, fieldPtr, optInfo, buf.ReadFloat64(err))
+			case NullableFloat16DispatchId:
+				storeFieldValue(field.Kind, fieldPtr, optInfo, buf.ReadUint16(err))
 			}
 			return
 		}

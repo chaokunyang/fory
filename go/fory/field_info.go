@@ -304,11 +304,12 @@ func fieldHasNonPrimitiveSerializer(field *FieldInfo) bool {
 	if field.Serializer == nil {
 		return false
 	}
-	// ENUM (numeric ID), NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT
-	// all require special serialization and should not use the primitive fast path
-	// Note: ENUM uses unsigned VarUint32Small7 for ordinals, not signed zigzag varint
+	// Built-ins with primitive-shaped Go carriers still have protocol-owned payloads:
+	// ENUM ordinals are unsigned small varints, duration has nanos after seconds,
+	// temporal/decimal/binary values have their own layout, and named user types
+	// carry type metadata.
 	switch TypeId(field.Meta.TypeId) {
-	case ENUM, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
+	case ENUM, DURATION, DATE, TIMESTAMP, DECIMAL, BINARY, NAMED_STRUCT, NAMED_COMPATIBLE_STRUCT, NAMED_EXT:
 		return true
 	default:
 		return false

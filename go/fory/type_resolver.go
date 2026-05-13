@@ -1875,8 +1875,8 @@ func (r *TypeResolver) createSerializer(type_ reflect.Type, mapInStruct bool) (s
 }
 
 // GetSliceSerializer returns the appropriate serializer for a slice type.
-// For primitive element types (bool, int8, int16, int32, int64, uint8, float32, float64),
-// it returns the dedicated primitive slice serializer that uses ARRAY protocol.
+// For primitive element types, it returns the dedicated primitive slice serializer
+// that uses ARRAY protocol.
 // For non-primitive element types, it returns sliceSerializer (LIST protocol).
 func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, error) {
 	if sliceType.Kind() != reflect.Slice {
@@ -1905,6 +1905,10 @@ func (r *TypeResolver) GetSliceSerializer(sliceType reflect.Type) (Serializer, e
 			return bfloat16SliceSerializer{}, nil
 		}
 		return uint16SliceSerializer{}, nil
+	case reflect.Uint32:
+		return uint32SliceSerializer{}, nil
+	case reflect.Uint64:
+		return uint64SliceSerializer{}, nil
 	case reflect.Float32:
 		return float32SliceSerializer{}, nil
 	case reflect.Float64:

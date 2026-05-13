@@ -728,6 +728,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          cache-bin: false
       - name: Run Rust CI
         run: python ./ci/run_ci.py rust
 
@@ -756,6 +757,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          cache-bin: false
       - name: Run Rust Xlang Test
         env:
           FORY_RUST_JAVA_CI: "1"

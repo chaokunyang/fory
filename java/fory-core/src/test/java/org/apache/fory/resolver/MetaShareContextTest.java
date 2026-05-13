@@ -28,6 +28,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
+import org.apache.fory.meta.TypeDef;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.BeanB;
 import org.apache.fory.test.bean.Foo;
@@ -35,6 +36,10 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class MetaShareContextTest extends ForyTestBase {
+  public interface InterfacePrice {
+    int cents();
+  }
+
   @Test
   public void testShareClassName() {
     Fory fory =
@@ -64,6 +69,24 @@ public class MetaShareContextTest extends ForyTestBase {
     for (Object o : new Object[] {Foo.create(), BeanB.createBeanB(2), BeanA.createBeanA(2)}) {
       checkMetaShare(fory, o);
     }
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testMetaSharedInterfaceDoesNotBuildInstantiatingSerializer(boolean enableCodegen) {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withMetaShare(true)
+            .withScopedMetaShare(false)
+            .withCompatible(true)
+            .withCodegen(enableCodegen)
+            .requireClassRegistration(false)
+            .build();
+    TypeResolver resolver = fory.getTypeResolver();
+    TypeDef typeDef = TypeDef.buildTypeDef(resolver, InterfacePrice.class);
+    TypeInfo typeInfo = resolver.buildMetaSharedTypeInfo(typeDef);
+    Assert.assertNull(typeInfo.getSerializer());
   }
 
   private void checkMetaShare(Fory fory, Object o) {

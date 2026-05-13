@@ -61,6 +61,37 @@ public class MetaShareCompatibleTest extends ForyTestBase {
     return newObj;
   }
 
+  public interface Price {
+    int cents();
+  }
+
+  public static final class ImmutablePrice implements Price {
+    public int cents;
+
+    public ImmutablePrice() {}
+
+    public ImmutablePrice(int cents) {
+      this.cents = cents;
+    }
+
+    @Override
+    public int cents() {
+      return cents;
+    }
+  }
+
+  public static final class InterfaceFieldOrder {
+    public int id;
+    public Price price;
+
+    public InterfaceFieldOrder() {}
+
+    public InterfaceFieldOrder(int id, Price price) {
+      this.id = id;
+      this.price = price;
+    }
+  }
+
   @DataProvider
   public static Object[][] config1() {
     return Sets.cartesianProduct(
@@ -119,6 +150,32 @@ public class MetaShareCompatibleTest extends ForyTestBase {
     serDeMetaShareCheck(fory, Foo.create());
     serDeMetaShareCheck(fory, BeanB.createBeanB(2));
     serDeMetaShareCheck(fory, BeanA.createBeanA(2));
+  }
+
+  @Test(dataProvider = "enableCodegen")
+  public void testInterfaceFieldCompatibleMetaShare(boolean enableCodegen) {
+    Fory writer = foryBuilder().withRefTracking(true).withCodegen(enableCodegen).build();
+    Fory reader = foryBuilder().withRefTracking(true).withCodegen(enableCodegen).build();
+    InterfaceFieldOrder order = new InterfaceFieldOrder(1, new ImmutablePrice(100));
+    MetaWriteContext metaWriteContext = new MetaWriteContext();
+    MetaReadContext metaReadContext = new MetaReadContext();
+    setMetaContexts(writer, metaWriteContext, new MetaReadContext());
+    byte[] bytes = writer.serialize(order);
+    setMetaContexts(reader, new MetaWriteContext(), metaReadContext);
+    Object newOrder = reader.deserialize(bytes);
+    assertInterfaceFieldOrder(newOrder);
+    reader.ensureSerializersCompiled();
+    setMetaContexts(writer, metaWriteContext, new MetaReadContext());
+    bytes = writer.serialize(order);
+    setMetaContexts(reader, new MetaWriteContext(), metaReadContext);
+    newOrder = reader.deserialize(bytes);
+    assertInterfaceFieldOrder(newOrder);
+  }
+
+  private static void assertInterfaceFieldOrder(Object newOrder) {
+    Assert.assertEquals(((InterfaceFieldOrder) newOrder).id, 1);
+    Assert.assertEquals(((InterfaceFieldOrder) newOrder).price.getClass(), ImmutablePrice.class);
+    Assert.assertEquals(((InterfaceFieldOrder) newOrder).price.cents(), 100);
   }
 
   @Test(dataProvider = "config2")

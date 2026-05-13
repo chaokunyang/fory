@@ -1028,6 +1028,12 @@ public abstract class TypeResolver {
     if (clz.isArray() || cls.isEnum()) {
       return getTypeInfo(cls);
     }
+    if (ReflectionUtils.isAbstract(cls) || cls.isInterface()) {
+      // Compatible serializers allocate their root type during read. A meta-share TypeDef may name
+      // an abstract declared field type, but the actual value must be read through concrete runtime
+      // type metadata or a concrete target-class transformation.
+      return typeInfo;
+    }
     Class<? extends Serializer> sc =
         getCompatibleDeserializerClassFromGraalvmRegistry(cls, typeDef);
     if (sc == null) {

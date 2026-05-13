@@ -631,19 +631,13 @@ _ARRAY_ELEMENT_TYPE_IDS = {
 }
 
 
-def _list_array_element_type_matches(
-    list_field_type: FieldType, array_field_type: FieldType, require_non_nullable_elements: bool
-) -> bool:
+def _list_array_element_type_matches(list_field_type: FieldType, array_field_type: FieldType, require_non_nullable_elements: bool) -> bool:
     array_element_type_id = _ARRAY_ELEMENT_TYPE_IDS.get(array_field_type.type_id)
     if list_field_type.type_id != TypeId.LIST or array_element_type_id is None:
         return False
-    if require_non_nullable_elements and (
-        list_field_type.element_type.is_nullable or list_field_type.element_type.is_tracking_ref
-    ):
+    if require_non_nullable_elements and (list_field_type.element_type.is_nullable or list_field_type.element_type.is_tracking_ref):
         return False
-    return _list_element_type_matches_array_element(
-        list_field_type.element_type.type_id, array_element_type_id
-    )
+    return _list_element_type_matches_array_element(list_field_type.element_type.type_id, array_element_type_id)
 
 
 def _list_element_type_matches_array_element(list_element_type_id: TypeId, array_element_type_id: TypeId) -> bool:

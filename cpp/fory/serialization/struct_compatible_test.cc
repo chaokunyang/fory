@@ -491,7 +491,8 @@ TEST(SchemaEvolutionTest, ImmediateArrayFieldCanReadIntoListCarrier) {
   EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{4, 5, 6}));
 }
 
-TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
+TEST(SchemaEvolutionTest,
+     NullableListSchemaWithoutNullElementsCanReadIntoArrayCarrier) {
   auto writer = Fory::builder().compatible(true).xlang(true).build();
   auto reader = Fory::builder().compatible(true).xlang(true).build();
 
@@ -506,10 +507,8 @@ TEST(SchemaEvolutionTest, NullableListElementsCannotReadIntoArrayCarrier) {
   auto decoded =
       reader.deserialize<CompatibleArrayField>(payload.data(), payload.size());
 
-  ASSERT_FALSE(decoded.ok());
-  EXPECT_NE(decoded.error().to_string().find("non-null elements"),
-            std::string::npos)
-      << decoded.error().to_string();
+  ASSERT_TRUE(decoded.ok()) << decoded.error().to_string();
+  EXPECT_EQ(decoded.value().values, (std::vector<int32_t>{1, 2}));
 
   bytes = writer.serialize(CompatibleNullableListField{{1, std::nullopt}});
   ASSERT_TRUE(bytes.ok()) << bytes.error().to_string();

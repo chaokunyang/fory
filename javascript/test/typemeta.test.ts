@@ -129,11 +129,7 @@ describe("typemeta", () => {
     const bodyOnlyHash = bodyOnlyHeaderHashBits(bytes.subarray(bodyOffset));
     expect(header & HEADER_HASH_MASK).not.toBe(bodyOnlyHash);
 
-    view.setBigUint64(
-      0,
-      bodyOnlyHash | (header & LOW_HEADER_BITS_MASK),
-      true,
-    );
+    view.setBigUint64(0, bodyOnlyHash | (header & LOW_HEADER_BITS_MASK), true);
     const reader = new BinaryReader({});
     reader.reset(malformed);
 
@@ -171,9 +167,10 @@ describe("typemeta", () => {
       } as any,
       config,
     );
-    (context as any).typeMetaCache.set(Number(header >> 32n), new Map([
-      [Number(header & 0xffffffffn), typeMeta],
-    ]));
+    (context as any).typeMetaCache.set(
+      Number(header >> 32n),
+      new Map([[Number(header & 0xffffffffn), typeMeta]]),
+    );
     context.reset(writer.dump());
 
     expect(context.readTypeMeta()).toBe(typeMeta);
@@ -229,9 +226,11 @@ describe("typemeta", () => {
       value: Type.int32().setId(1),
     });
 
-    const changedBytes = changedWriterFory.register(changedWriterType).serialize({
-      value: "hello",
-    });
+    const changedBytes = changedWriterFory
+      .register(changedWriterType)
+      .serialize({
+        value: "hello",
+      });
     const localBytes = localWriterFory.register(localWriterType).serialize({
       value: 123,
     });
@@ -267,9 +266,12 @@ describe("typemeta", () => {
   test("regenerated read serializers keep getTypeInfo", () => {
     const fory = new Fory({ compatible: true });
     const serializer = (fory as any).typeResolver.regenerateReadSerializer(
-      Type.struct({ namespace: "example", typeName: "repro_struct" }, {
-        value: Type.int32(),
-      }),
+      Type.struct(
+        { namespace: "example", typeName: "repro_struct" },
+        {
+          value: Type.int32(),
+        },
+      ),
     );
 
     expect(typeof serializer.getTypeInfo).toBe("function");
@@ -291,9 +293,10 @@ describe("typemeta", () => {
     const localChildType = Type.struct(7311, {
       value: Type.int32().setId(1),
     });
-    const createParentType = () => Type.struct(7312, {
-      child: Type.struct(7311).setId(1),
-    });
+    const createParentType = () =>
+      Type.struct(7312, {
+        child: Type.struct(7311).setId(1),
+      });
 
     stringWriterFory.register(stringChildType);
     boolWriterFory.register(boolChildType);
@@ -306,8 +309,8 @@ describe("typemeta", () => {
     const reader = readerFory.register(createParentType());
 
     const typeResolver = (readerFory as any).typeResolver;
-    const generateReadSerializer
-      = typeResolver.generateReadSerializer.bind(typeResolver);
+    const generateReadSerializer =
+      typeResolver.generateReadSerializer.bind(typeResolver);
     let generatedReaders = 0;
     typeResolver.generateReadSerializer = (typeInfo: any) => {
       generatedReaders++;
@@ -409,8 +412,14 @@ describe("typemeta", () => {
     expect(result.bools).toBeInstanceOf(BoolArray);
     expect(Array.from(result.bools)).toEqual([true, false]);
     expect(result.float16s).toBeInstanceOf(Float16Array as any);
-    expect(Array.from(result.float16s as Iterable<number>)[0]).toBeCloseTo(1.5, 1);
-    expect(Array.from(result.float16s as Iterable<number>)[1]).toBeCloseTo(-2, 1);
+    expect(Array.from(result.float16s as Iterable<number>)[0]).toBeCloseTo(
+      1.5,
+      1,
+    );
+    expect(Array.from(result.float16s as Iterable<number>)[1]).toBeCloseTo(
+      -2,
+      1,
+    );
     expect(result.bfloat16s).toBeInstanceOf(BFloat16Array);
     expect(Array.from(result.bfloat16s as Iterable<number>)).toEqual([1.5, -2]);
   });
@@ -435,7 +444,7 @@ describe("typemeta", () => {
     expect(result).toEqual({ values: [1, 2, 3] });
   });
 
-  test("rejects compatible list to dense array when payload has nullable elements", () => {
+  test("adapts nullable list schema to dense array when payload has no null elements", () => {
     const writerFory = new Fory({ compatible: true });
     const readerFory = new Fory({ compatible: true });
 
@@ -453,15 +462,14 @@ describe("typemeta", () => {
       values: [1, 2, 3],
     });
     const reader = readerFory.register(readerType);
-    expect(() => reader.deserialize(nonNullBytes)).toThrow(
-      "unsupported compatible list/array schema mismatch",
-    );
+    const nonNullResult = reader.deserialize(nonNullBytes);
+    expect(Array.from(nonNullResult.values)).toEqual([1, 2, 3]);
 
     const nullableBytes = serializer.serialize({
       values: [1, null, 3],
     });
     expect(() => reader.deserialize(nullableBytes)).toThrow(
-      "unsupported compatible list/array schema mismatch",
+      "compatible list-to-array field cannot read nullable or ref-tracked elements",
     );
   });
 
@@ -480,7 +488,9 @@ describe("typemeta", () => {
       values: ["1", "2"],
     });
 
-    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow(/list\/array/);
+    expect(() => readerFory.register(readerType).deserialize(bytes)).toThrow(
+      /list\/array/,
+    );
   });
 
   test("skips nested compatible list and dense array positions", () => {
@@ -720,10 +730,7 @@ function typeMetaBodyOffset(bytes: Uint8Array) {
 
 function bodyOnlyHeaderHashBits(buffer: Uint8Array) {
   const hash = x64hash128(buffer, 47);
-  let header = BigInt.asIntN(
-    64,
-    hash.getBigInt64(0, false) << HASH_SHIFT_BITS,
-  );
+  let header = BigInt.asIntN(64, hash.getBigInt64(0, false) << HASH_SHIFT_BITS);
   if (header < 0n) {
     header = -header;
   }

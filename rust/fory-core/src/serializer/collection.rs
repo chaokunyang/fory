@@ -835,11 +835,6 @@ where
         && !remote_field_type.generics.is_empty()
         && list_element_type_matches_array_shape(remote_field_type, local_field_type)
     {
-        if remote_field_type.generics[0].nullable || remote_field_type.generics[0].track_ref {
-            return Err(Error::type_error(
-                "compatible list to array field requires non-null elements",
-            ));
-        }
         if field_ref_mode(remote_field_type) != RefMode::None {
             let ref_flag = context.reader.read_i8()?;
             if ref_flag == RefFlag::Null as i8 {

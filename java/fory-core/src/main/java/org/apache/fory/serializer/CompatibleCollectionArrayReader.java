@@ -88,16 +88,16 @@ final class CompatibleCollectionArrayReader {
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, field);
     int peerListElementTypeId = listElementTypeId(descriptor);
     if (peerListElementTypeId != Types.UNKNOWN) {
-      int nonNullablePeerListElementTypeId = nonNullableListElementTypeId(descriptor);
+      // Element nullable/ref flags in TypeDef describe what the peer schema can encode, not what
+      // this payload actually contains. Dense-array compatibility is decided here by element type;
+      // readListPayloadAsPrimitiveArray rejects payloads that carry null/ref element markers.
       int localArrayTypeId = arrayTypeId(localFieldType);
       if (localArrayTypeId != Types.UNKNOWN
-          && localArrayTypeId == denseArrayTypeId(nonNullablePeerListElementTypeId)) {
+          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId)) {
         return new ReadAction(
-            READ_LIST_TO_ARRAY,
-            localArrayTypeId,
-            nonNullablePeerListElementTypeId,
-            field.getType());
+            READ_LIST_TO_ARRAY, localArrayTypeId, peerListElementTypeId, field.getType());
       }
+      int nonNullablePeerListElementTypeId = nonNullableListElementTypeId(descriptor);
       int localListElementTypeId = nonNullableListElementTypeId(localFieldType);
       int peerArrayTypeId = denseArrayTypeId(peerListElementTypeId);
       // List-to-array and list-to-list materialize through a dense primitive array, so they cannot

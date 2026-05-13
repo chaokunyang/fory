@@ -195,10 +195,14 @@ and `array<T>` as distinct kinds.
 The adaptation is limited to the immediate schema of the matched compatible
 field. It does not apply when `list<T>` or `array<T>` appears inside another
 field type, including collection elements, map keys or values, array elements,
-union alternatives, or other generic/container positions. When a peer `list<T>`
-payload declares nullable or ref-tracked elements, a local matched `array<T>`
-field must raise a compatible-read error. Null list elements must not be coerced
-to dense-array default values.
+union alternatives, or other generic/container positions. A peer `list<T>`
+TypeDef element may be declared nullable or ref-tracked; that declaration alone
+does not prevent a local matched `array<T>` field from reading the value. The
+reader must decide from the collection payload. If the payload actually carries
+a null element or reference-tracked element encoding that cannot be represented
+as a dense array element value, the local `array<T>` field must raise a
+compatible-read error. Null list elements must not be coerced to dense-array
+default values.
 
 Users can also provide meta hints for fields of a type, or the type whole. Here is an example in java which use
 annotation to provide such information.
@@ -1169,7 +1173,7 @@ The elements header is a single byte that encodes metadata about the collection 
 | Bit | Name              | Value | Meaning when SET (1)                    | Meaning when UNSET (0)                  |
 | --- | ----------------- | ----- | --------------------------------------- | --------------------------------------- |
 | 0   | track_ref         | 0x01  | Track references for elements           | Don't track element references          |
-| 1   | has_null          | 0x02  | Collection may contain null elements    | No null elements (skip null checks)     |
+| 1   | has_null          | 0x02  | Payload contains null element markers   | No null elements (skip null checks)     |
 | 2   | is_decl_elem_type | 0x04  | Elements are the declared generic type  | Element types differ from declared type |
 | 3   | is_same_type      | 0x08  | All elements have the same runtime type | Elements have different runtime types   |
 

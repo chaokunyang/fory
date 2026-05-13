@@ -1880,14 +1880,18 @@ public abstract class XlangTestBase extends ForyTestBase {
     buffer = MemoryBuffer.newHeapBuffer(256);
     nullableListFory.serialize(buffer, nullableListWithoutNulls);
     byte[] nullableListWithoutNullsPayload = buffer.getBytes(0, buffer.writerIndex());
-    Assert.expectThrows(
-        DeserializationException.class,
-        () -> arrayFory.deserialize(MemoryUtils.wrap(nullableListWithoutNullsPayload)));
+    XlangCompatibleInt32ArrayField nullableListWithoutNullsArray =
+        (XlangCompatibleInt32ArrayField)
+            arrayFory.deserialize(MemoryUtils.wrap(nullableListWithoutNullsPayload));
+    Assert.assertEquals(nullableListWithoutNullsArray.values, new int[] {1, 2, 3});
     ctx =
         prepareExecution(
             "test_list_array_compatible_nullable_list_to_array_error",
             nullableListWithoutNullsPayload);
     runPeer(ctx);
+    nullableListWithoutNullsArray =
+        (XlangCompatibleInt32ArrayField) arrayFory.deserialize(readBuffer(ctx.dataFile()));
+    Assert.assertEquals(nullableListWithoutNullsArray.values, new int[] {1, 2, 3});
 
     XlangCompatibleNullableInt32ListField nullableListValue =
         newCompatibleNullableInt32ListField(1, null, 3);
@@ -1901,6 +1905,9 @@ public abstract class XlangTestBase extends ForyTestBase {
         prepareExecution(
             "test_list_array_compatible_nullable_list_to_array_error", nullablePayload);
     runPeer(ctx);
+    Path nullableDataFile = ctx.dataFile();
+    Assert.expectThrows(
+        DeserializationException.class, () -> arrayFory.deserialize(readBuffer(nullableDataFile)));
   }
 
   @Test(groups = "xlang", dataProvider = "enableCodegenParallel")

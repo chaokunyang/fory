@@ -603,14 +603,17 @@ func TestCompatibleSerializationScenarios(t *testing.T) {
 			},
 		},
 		{
-			name:      "NullableInt32ListWithoutNullsDoesNotMatchArray",
+			name:      "NullableInt32ListWithoutNullsMatchesArray",
 			tag:       "Int32Sequence",
 			writeType: NullableInt32ListPayloadDataClass{},
 			readType:  Int32ArrayPayloadDataClass{},
 			input: NullableInt32ListPayloadDataClass{
 				Payload: []*int32{ptr(int32(1)), ptr(int32(2)), ptr(int32(3))},
 			},
-			unmarshalErrContains: "compatible list to array field requires non-null elements",
+			assertFunc: func(t *testing.T, input any, output any) {
+				out := output.(Int32ArrayPayloadDataClass)
+				assert.Equal(t, [3]int32{1, 2, 3}, out.Payload)
+			},
 		},
 		{
 			name:      "NullableInt32ListPayloadDoesNotMatchArray",

@@ -239,10 +239,9 @@ public final class FieldInfo implements Serializable {
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localField);
     int peerListElementTypeId = listElementTypeId(fieldType);
     if (peerListElementTypeId != Types.UNKNOWN) {
-      int nonNullablePeerListElementTypeId = nonNullableListElementTypeId(fieldType);
       int localArrayTypeId = arrayTypeId(localFieldType);
       return localArrayTypeId != Types.UNKNOWN
-          && localArrayTypeId == denseArrayTypeId(nonNullablePeerListElementTypeId);
+          && localArrayTypeId == denseArrayTypeId(peerListElementTypeId);
     }
     int peerArrayTypeId = arrayTypeId(fieldType);
     if (peerArrayTypeId != Types.UNKNOWN) {

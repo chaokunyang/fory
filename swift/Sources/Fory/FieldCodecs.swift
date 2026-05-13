@@ -711,9 +711,6 @@ public enum ArrayFieldCodec<ElementCodec: FieldCodec>: FieldCodec {
            let element = remoteFieldType.generics.first,
            let localArrayTypeID = packedArrayTypeID(for: ElementCodec.self),
            TypeId.listElementTypeID(element.typeID, matchesDenseArrayTypeID: localArrayTypeID.rawValue) {
-            if element.nullable || element.trackRef {
-                throw ForyError.invalidData("compatible list-to-array field cannot read nullable elements")
-            }
             return try readListPayloadAsArray(
                 context,
                 refMode: refMode,

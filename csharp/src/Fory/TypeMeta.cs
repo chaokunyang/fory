@@ -808,13 +808,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
             {
                 return;
             }
-            if (remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
-                TryPackedArrayElementTypeId(local.TypeId).HasValue &&
-                remote.Generics.Count == 1 &&
-                (remote.Generics[0].Nullable || remote.Generics[0].TrackRef))
-            {
-                throw new InvalidDataException("compatible list to array field requires non-null elements");
-            }
             throw new InvalidDataException("unsupported compatible list/array schema mismatch");
         }
     }
@@ -854,8 +847,6 @@ public sealed class TypeMeta : IEquatable<TypeMeta>
         bool remoteListLocalArray = remote.TypeId == (uint)global::Apache.Fory.TypeId.List &&
                                     localArrayElementTypeId.HasValue &&
                                     remote.Generics.Count == 1 &&
-                                    !remote.Generics[0].Nullable &&
-                                    !remote.Generics[0].TrackRef &&
                                     CompatibleScalarTypeId(localArrayElementTypeId.Value) ==
                                     CompatibleScalarTypeId(remote.Generics[0].TypeId);
         if (remoteListLocalArray)

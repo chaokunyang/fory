@@ -534,9 +534,6 @@ func (s *structSerializer) initFieldsFromTypeDef(typeResolver *TypeResolver) err
 				shouldRead = true
 				fieldType = localType
 			} else if defTypeId == LIST && localFieldSpec != nil && compatibleListFieldHasPrimitiveArrayShape(def.typeSpec, localFieldSpec.Type, localType) {
-				if def.typeSpec.Element.Nullable || def.typeSpec.Element.TrackRef {
-					return fmt.Errorf("field %s: compatible list to array field requires non-null elements", def.name)
-				}
 				shouldRead = true
 				usesCompatibleCollectionArrayReader = true
 				fieldType = localType

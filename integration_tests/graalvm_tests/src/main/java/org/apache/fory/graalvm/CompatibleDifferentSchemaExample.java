@@ -20,7 +20,7 @@
 package org.apache.fory.graalvm;
 
 import org.apache.fory.Fory;
-import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
+import org.apache.fory.builder.Generated.GeneratedStaticCompatibleSerializer;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
@@ -70,7 +70,7 @@ public class CompatibleDifferentSchemaExample {
     if (GraalvmSupport.isGraalRuntime()) {
       Serializer<?> serializer = readSerializerForTarget(READER, bytes, ReaderSchema.class);
       Preconditions.checkArgument(
-          serializer instanceof GeneratedCompatibleMetaSharedSerializer,
+          serializer instanceof GeneratedStaticCompatibleSerializer,
           "Expected GraalVM generated compatible serializer, got %s",
           serializer.getClass());
     }

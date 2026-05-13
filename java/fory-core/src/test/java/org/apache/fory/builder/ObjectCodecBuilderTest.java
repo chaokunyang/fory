@@ -148,6 +148,36 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
                         e.getKey(), compileUnit.getQualifiedClassName(), e.getValue())));
   }
 
+  @Data
+  public static class SmallInlineFields {
+    public int f1;
+    public long f2;
+    public String f3;
+    public List<String> f4;
+    public Map<String, Integer> f5;
+  }
+
+  @Test(dataProvider = "compressNumber")
+  public void testSmallStructInlinesFieldGroups(boolean compressNumber) {
+    Fory fory =
+        Fory.builder().withNumberCompressed(compressNumber).requireClassRegistration(false).build();
+    ObjectCodecBuilder codecBuilder = new ObjectCodecBuilder(SmallInlineFields.class, fory);
+    CompileUnit compileUnit =
+        new CompileUnit(
+            CodeGenerator.getPackage(SmallInlineFields.class),
+            codecBuilder.codecClassName(SmallInlineFields.class),
+            codecBuilder::genCode);
+    byte[] bytecode =
+        JaninoUtils.toBytecode(SmallInlineFields.class.getClassLoader(), compileUnit)
+            .values()
+            .iterator()
+            .next();
+    JaninoUtils.CodeStats classStats = JaninoUtils.getClassStats(bytecode);
+    Assert.assertFalse(
+        classStats.methodsSize.keySet().stream()
+            .anyMatch(name -> name.startsWith("writeFields") || name.startsWith("readFields")));
+  }
+
   @Test
   public void testContainer() {
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();

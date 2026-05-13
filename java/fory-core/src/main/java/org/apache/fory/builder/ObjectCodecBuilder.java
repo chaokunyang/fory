@@ -191,9 +191,13 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       if (group.isEmpty()) {
         continue;
       }
-      boolean inline = group.size() == 1 && numGroups < 10;
+      boolean inline = hasFewFields() || (group.size() == 1 && numGroups < 10);
       expressions.add(serializeGroup(group, bean, buffer, inline));
     }
+  }
+
+  protected boolean hasFewFields() {
+    return objectCodecOptimizer.descriptorGrouper.getNumDescriptors() < 6;
   }
 
   protected int getNumGroups(ObjectCodecOptimizer objectCodecOptimizer) {
@@ -320,7 +324,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
         }
       }
-      if (numPrimitiveFields < 4) {
+      if (hasFewFields() || numPrimitiveFields < 4) {
         expressions.add(groupExpressions);
       } else {
         expressions.add(
@@ -476,7 +480,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         // int/long are sorted in the last.
         addIncWriterIndexExpr(groupExpressions, buffer, acc);
       }
-      if (numPrimitiveFields < 4) {
+      if (hasFewFields() || numPrimitiveFields < 4) {
         expressions.add(groupExpressions);
       } else {
         expressions.add(
@@ -588,7 +592,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       if (group.isEmpty()) {
         continue;
       }
-      boolean inline = group.size() == 1 && numGroups < 10;
+      boolean inline = hasFewFields() || (group.size() == 1 && numGroups < 10);
       expressions.add(deserializeGroup(group, bean, buffer, inline));
     }
   }
@@ -665,6 +669,11 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
                     expr ->
                         setFieldValue(exprHolder.get("bean"), d, tryInlineCast(expr, castTypeRef)));
             walkPath.removeLast();
+            if (needsGeneratedReadFieldMethod(d)) {
+              action =
+                  objectCodecOptimizer.invokeGenerated(
+                      readCutPoints(bean, buffer), action, "readField");
+            }
             groupExpressions.add(action);
           }
           return groupExpressions;
@@ -675,6 +684,12 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       return objectCodecOptimizer.invokeGenerated(
           readCutPoints(bean, buffer), exprSupplier.get(), "readFields");
     }
+  }
+
+  private boolean needsGeneratedReadFieldMethod(Descriptor descriptor) {
+    return !isMonomorphic(descriptor)
+        && !useCollectionSerialization(descriptor)
+        && !useMapSerialization(descriptor.getTypeRef());
   }
 
   protected Expression deserializeGroupForRecord(
@@ -813,7 +828,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         // `bean` will be replaced by `Reference` to cut-off expr dependency.
         groupExpressions.add(setFieldValue(bean, descriptor, fieldValue));
       }
-      if (numPrimitiveFields < 4 || isRecord) {
+      if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
         expressions.add(groupExpressions);
       } else {
         expressions.add(
@@ -966,7 +981,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       if (!compressStarted) {
         addIncReaderIndexExpr(groupExpressions, buffer, acc);
       }
-      if (numPrimitiveFields < 4 || isRecord) {
+      if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
         expressions.add(groupExpressions);
       } else {
         expressions.add(

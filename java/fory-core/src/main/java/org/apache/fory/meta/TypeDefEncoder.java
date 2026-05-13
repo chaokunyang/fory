@@ -26,8 +26,10 @@ import static org.apache.fory.meta.NativeTypeDefEncoder.writeTypeName;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.apache.fory.logging.Logger;
@@ -57,8 +59,10 @@ class TypeDefEncoder {
 
   /** Build class definition from fields of class. */
   static TypeDef buildTypeDef(XtypeResolver resolver, Class<?> type) {
+    List<Descriptor> fieldDescriptors =
+        dropShadowedXlangNameFields(type, resolver.getFieldDescriptors(type, true));
     DescriptorGrouper descriptorGrouper =
-        resolver.getFieldDescriptorGrouper(type, true, false, IDENTITY_DESCRIPTOR);
+        resolver.groupDescriptors(fieldDescriptors, false, IDENTITY_DESCRIPTOR);
     TypeInfo typeInfo = resolver.getTypeInfo(type);
     List<Descriptor> descriptors;
     int typeId = typeInfo.getTypeId();
@@ -69,6 +73,44 @@ class TypeDefEncoder {
     }
     return buildTypeDefWithFieldInfos(
         resolver, type, buildFieldsInfoFromDescriptors(resolver, type, descriptors));
+  }
+
+  private static List<Descriptor> dropShadowedXlangNameFields(
+      Class<?> type, List<Descriptor> descriptors) {
+    List<Descriptor> result = new ArrayList<>(descriptors.size());
+    Map<String, Integer> nameFieldIndex = new HashMap<>();
+    for (Descriptor descriptor : descriptors) {
+      if (descriptor.hasForyFieldId()) {
+        result.add(descriptor);
+        continue;
+      }
+      String fieldIdentifier = descriptor.getSnakeCaseName();
+      Integer previousIndex = nameFieldIndex.get(fieldIdentifier);
+      if (previousIndex == null) {
+        nameFieldIndex.put(fieldIdentifier, result.size());
+        result.add(descriptor);
+        continue;
+      }
+      Descriptor previous = result.get(previousIndex);
+      // Untagged xlang fields are addressed by snake_case identifier. When a subclass shadows an
+      // inherited field, only the nearest field can be represented without an explicit tag ID.
+      if (inheritanceDistance(type, descriptor) < inheritanceDistance(type, previous)) {
+        result.set(previousIndex, descriptor);
+      }
+    }
+    return result;
+  }
+
+  private static int inheritanceDistance(Class<?> type, Descriptor descriptor) {
+    String declaringClass = descriptor.getDeclaringClass();
+    int distance = 0;
+    for (Class<?> current = type; current != null; current = current.getSuperclass()) {
+      if (current.getName().equals(declaringClass)) {
+        return distance;
+      }
+      distance++;
+    }
+    return Integer.MAX_VALUE;
   }
 
   static List<FieldInfo> buildFieldsInfo(TypeResolver resolver, Class<?> type, List<Field> fields) {

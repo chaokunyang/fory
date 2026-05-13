@@ -275,7 +275,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     return fory.getJITContext().asyncVisitFory(f -> function.apply(f.getTypeResolver()));
   }
 
-  private boolean needWriteRef(TypeRef<?> type) {
+  protected boolean needWriteRef(TypeRef<?> type) {
     return typeResolver(r -> r.needToWriteRef(type));
   }
 
@@ -518,9 +518,9 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           elementType = TypeAnnotationUtils.getPrimitiveListElementTypeRef(descriptor);
         }
         action =
-            serializeForCollection(buffer, inputObject, typeRef, serializer, false, elementType);
+            serializeForCollection(buffer, inputObject, typeRef, serializer, true, elementType);
       } else if (useMapSerialization(typeRef)) {
-        action = serializeForMap(buffer, inputObject, typeRef, serializer, false);
+        action = serializeForMap(buffer, inputObject, typeRef, serializer, true);
       } else {
         action = serializeForNotNullObjectForField(inputObject, buffer, descriptor, serializer);
       }
@@ -2268,9 +2268,13 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
           serializer = getPrimitiveListCollectionSerializer(cls);
           elementType = TypeAnnotationUtils.getPrimitiveListElementTypeRef(descriptor);
         }
-        obj = deserializeForCollection(buffer, typeRef, serializer, null, elementType);
+        InvokeHint invokeHint = new InvokeHint(true, buffer);
+        invokeHint.add(serializer);
+        obj = deserializeForCollection(buffer, typeRef, serializer, invokeHint, elementType);
       } else if (useMapSerialization(typeRef)) {
-        obj = deserializeForMap(buffer, typeRef, serializer, null);
+        InvokeHint invokeHint = new InvokeHint(true, buffer);
+        invokeHint.add(serializer);
+        obj = deserializeForMap(buffer, typeRef, serializer, invokeHint);
       } else {
         if (serializer != null) {
           return read(serializer, buffer, OBJECT_TYPE);

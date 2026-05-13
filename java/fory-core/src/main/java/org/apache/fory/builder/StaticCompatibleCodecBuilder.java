@@ -25,7 +25,7 @@ import java.util.Collections;
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyStruct;
-import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
+import org.apache.fory.builder.Generated.GeneratedStaticCompatibleSerializer;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
@@ -36,8 +36,8 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
-import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -51,10 +51,10 @@ import org.apache.fory.util.record.RecordUtils;
  * <p>The generated class is keyed by the local Java class, not by a fixed remote schema. Its
  * constructor receives the runtime remote {@link TypeDef}; {@link
  * org.apache.fory.serializer.StaticGeneratedStructSerializer} rebuilds remote read order through
- * the same descriptor-grouper owner used by {@link MetaSharedSerializer}.
+ * the same descriptor-grouper owner used by {@link CompatibleSerializer}.
  *
  * @see ForyBuilder#withMetaShare
- * @see MetaSharedSerializer
+ * @see CompatibleSerializer
  */
 public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   private static final int DISPATCH_GROUP_SIZE = 8;
@@ -63,7 +63,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   private final boolean debug;
 
   public StaticCompatibleCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
-    super(beanType, fory, GeneratedCompatibleMetaSharedSerializer.class);
+    super(beanType, fory, GeneratedStaticCompatibleSerializer.class);
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
@@ -74,7 +74,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
 
   @Override
   protected String codecSuffix() {
-    return "CompatibleMetaShared";
+    return "StaticCompatible";
   }
 
   @Override
@@ -122,7 +122,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   @Override
   protected void addCommonImports() {
     super.addCommonImports();
-    ctx.addImport(GeneratedCompatibleMetaSharedSerializer.class);
+    ctx.addImport(GeneratedStaticCompatibleSerializer.class);
   }
 
   @Override

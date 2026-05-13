@@ -112,8 +112,8 @@ public class DuplicateFieldsTest extends ForyTestBase {
             .requireClassRegistration(false);
     Fory fory = builder.build();
     {
-      MetaSharedSerializer<C> serializer =
-          new MetaSharedSerializer<>(
+      CompatibleSerializer<C> serializer =
+          new CompatibleSerializer<>(
               fory.getTypeResolver(), C.class, fory.getTypeResolver().getTypeDef(C.class, true));
       MemoryBuffer buffer = MemoryUtils.buffer(32);
       writeSerializer(fory, serializer, buffer, c);
@@ -123,12 +123,12 @@ public class DuplicateFieldsTest extends ForyTestBase {
       assertEquals(newC, c);
     }
     {
-      // Use MetaSharedSerializer JIT version
+      // Use CompatibleSerializer JIT version
       Serializer<C> serializer =
           Serializers.newSerializer(
               fory,
               C.class,
-              CodecUtils.loadOrGenMetaSharedCodecClass(
+              CodecUtils.loadOrGenCompatibleCodecClass(
                   fory, C.class, fory.getTypeResolver().getTypeDef(C.class, true)));
       MemoryBuffer buffer = MemoryUtils.buffer(32);
       writeSerializer(fory, serializer, buffer, c);

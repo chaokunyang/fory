@@ -210,7 +210,7 @@ public class AndroidJvmRoundTripTest {
       case CODEGEN_VALUE:
         return new CodegenValue(7, "codegen", new NestedValue("nested", 13));
       case META_SHARED_VALUE:
-        return new MetaSharedValue(19, "meta", Arrays.asList(1, 2, 3));
+        return new MetaShareValue(19, "meta", Arrays.asList(1, 2, 3));
       case COLLECTION_VALUE:
         return newCollectionValue();
       case SINGLETON_VALUE:
@@ -693,14 +693,14 @@ public class AndroidJvmRoundTripTest {
     }
   }
 
-  public static final class MetaSharedValue implements Serializable {
+  public static final class MetaShareValue implements Serializable {
     public int id;
     public String name;
     public List<Integer> values;
 
-    public MetaSharedValue() {}
+    public MetaShareValue() {}
 
-    MetaSharedValue(int id, String name, List<Integer> values) {
+    MetaShareValue(int id, String name, List<Integer> values) {
       this.id = id;
       this.name = name;
       this.values = values;
@@ -708,10 +708,10 @@ public class AndroidJvmRoundTripTest {
 
     @Override
     public boolean equals(Object obj) {
-      if (!(obj instanceof MetaSharedValue)) {
+      if (!(obj instanceof MetaShareValue)) {
         return false;
       }
-      MetaSharedValue other = (MetaSharedValue) obj;
+      MetaShareValue other = (MetaShareValue) obj;
       return id == other.id && name.equals(other.name) && values.equals(other.values);
     }
 

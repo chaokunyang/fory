@@ -36,18 +36,18 @@ import org.apache.fory.type.Generics;
 import org.apache.fory.util.Preconditions;
 
 /**
- * Base class for meta-shared layer serializers. The default implementation uses reflection-backed
+ * Base class for compatible layer serializers. The default implementation uses reflection-backed
  * field access and generated layer serializers override only the hot field read/write methods.
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
-public abstract class MetaSharedLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
+public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
   protected TypeDef layerTypeDef;
   protected Class<?> layerMarkerClass;
   protected SerializationFieldInfo[] buildInFields = new SerializationFieldInfo[0];
   protected SerializationFieldInfo[] otherFields = new SerializationFieldInfo[0];
   protected SerializationFieldInfo[] containerFields = new SerializationFieldInfo[0];
 
-  public MetaSharedLayerSerializerBase(TypeResolver typeResolver, Class<T> type) {
+  public CompatibleLayerSerializerBase(TypeResolver typeResolver, Class<T> type) {
     super(typeResolver, type);
   }
 

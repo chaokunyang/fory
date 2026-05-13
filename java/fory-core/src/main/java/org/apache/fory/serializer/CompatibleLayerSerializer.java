@@ -23,13 +23,13 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.resolver.TypeResolver;
 
 /**
- * Interpreter implementation for a single meta-shared class layer. Generated layer serializers
- * extend {@link MetaSharedLayerSerializerBase} directly and override only the hot field read/write
+ * Interpreter implementation for a single compatible class layer. Generated layer serializers
+ * extend {@link CompatibleLayerSerializerBase} directly and override only the hot field read/write
  * paths.
  */
-public class MetaSharedLayerSerializer<T> extends MetaSharedLayerSerializerBase<T> {
+public class CompatibleLayerSerializer<T> extends CompatibleLayerSerializerBase<T> {
 
-  public MetaSharedLayerSerializer(
+  public CompatibleLayerSerializer(
       TypeResolver typeResolver, Class<T> type, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
     super(typeResolver, type);
     setLayerSerializerMeta(layerTypeDef, layerMarkerClass);

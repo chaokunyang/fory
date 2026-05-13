@@ -85,7 +85,7 @@ public class CyclicTest extends ForyTestBase {
   }
 
   @Test
-  public void testBeanMetaShared() throws IOException {
+  public void testBeanMetaShare() throws IOException {
     ByteArrayOutputStream s = new ByteArrayOutputStream();
     GZIPOutputStream gzipOutputStream = new GZIPOutputStream(s);
     gzipOutputStream.write(Fory.class.getName().getBytes(StandardCharsets.UTF_8));

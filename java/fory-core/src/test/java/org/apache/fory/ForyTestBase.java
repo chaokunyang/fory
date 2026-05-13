@@ -405,7 +405,7 @@ public abstract class ForyTestBase {
     Assert.assertEquals(compareHook.apply(o2), compareHook.apply(o));
   }
 
-  public static Object serDeMetaShared(Fory fory, Object obj) {
+  public static Object serDeMetaShare(Fory fory, Object obj) {
     MetaWriteContext metaWriteContext = new MetaWriteContext();
     MetaReadContext metaReadContext = new MetaReadContext();
     setMetaContexts(fory, metaWriteContext, metaReadContext);

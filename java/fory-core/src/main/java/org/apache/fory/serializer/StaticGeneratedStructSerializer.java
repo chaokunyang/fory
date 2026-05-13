@@ -390,7 +390,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       fields.put(fieldKey(descriptor), i);
     }
     // Keep compatible-read descriptor ordering owned by TypeResolver, matching the sorted
-    // DescriptorGrouper order used by ObjectCodecBuilder and MetaSharedCodecBuilder. FieldGroups
+    // DescriptorGrouper order used by ObjectCodecBuilder and CompatibleCodecBuilder. FieldGroups
     // may regroup descriptors for helper ownership, so it must not drive remote payload order.
     List<Descriptor> remoteDescriptorsInWireOrder =
         typeResolver

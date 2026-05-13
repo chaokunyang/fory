@@ -43,7 +43,7 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
- * Tests for compatible mode serialization using meta-shared approach with codegen. These tests
+ * Tests for compatible mode serialization using shared class metadata with codegen. These tests
  * verify forward/backward compatibility when using compatible mode with scoped meta share and
  * codegen enabled.
  */

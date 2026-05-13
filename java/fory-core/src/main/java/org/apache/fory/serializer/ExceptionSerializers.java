@@ -392,8 +392,8 @@ public final class ExceptionSerializers {
         if (((ObjectSerializer) slotsSerializer).getNumFields() > 0) {
           return true;
         }
-      } else if (slotsSerializer instanceof MetaSharedLayerSerializerBase) {
-        if (((MetaSharedLayerSerializerBase) slotsSerializer).getNumFields() > 0) {
+      } else if (slotsSerializer instanceof CompatibleLayerSerializerBase) {
+        if (((CompatibleLayerSerializerBase) slotsSerializer).getNumFields() > 0) {
           return true;
         }
       }
@@ -411,7 +411,7 @@ public final class ExceptionSerializers {
         TypeDef layerTypeDef = typeResolver.getTypeDef(type, false);
         Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(type, layerIndex);
         slotsSerializer =
-            new MetaSharedLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
+            new CompatibleLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
       } else {
         slotsSerializer = new ObjectSerializer<>(typeResolver, type, false);
       }
@@ -426,12 +426,13 @@ public final class ExceptionSerializers {
   private static void readAndSetFields(
       ReadContext readContext, Object target, Serializer[] slotsSerializers, Config config) {
     for (Serializer slotsSerializer : slotsSerializers) {
-      if (slotsSerializer instanceof MetaSharedLayerSerializer) {
-        MetaSharedLayerSerializer metaSerializer = (MetaSharedLayerSerializer) slotsSerializer;
+      if (slotsSerializer instanceof CompatibleLayerSerializer) {
+        CompatibleLayerSerializer compatibleSerializer =
+            (CompatibleLayerSerializer) slotsSerializer;
         if (config.isMetaShareEnabled()) {
           readAndSkipLayerClassMeta(readContext);
         }
-        metaSerializer.readAndSetFields(readContext, target);
+        compatibleSerializer.readAndSetFields(readContext, target);
       } else {
         ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, target);
       }

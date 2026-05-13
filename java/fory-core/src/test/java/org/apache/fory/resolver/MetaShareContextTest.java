@@ -45,7 +45,7 @@ public class MetaShareContextTest extends ForyTestBase {
             .requireClassRegistration(false)
             .build();
     for (Object o : new Object[] {Foo.create(), BeanB.createBeanB(2), BeanA.createBeanA(2)}) {
-      checkMetaShared(fory, o);
+      checkMetaShare(fory, o);
     }
   }
 
@@ -62,11 +62,11 @@ public class MetaShareContextTest extends ForyTestBase {
             .requireClassRegistration(false)
             .build();
     for (Object o : new Object[] {Foo.create(), BeanB.createBeanB(2), BeanA.createBeanA(2)}) {
-      checkMetaShared(fory, o);
+      checkMetaShare(fory, o);
     }
   }
 
-  private void checkMetaShared(Fory fory, Object o) {
+  private void checkMetaShare(Fory fory, Object o) {
     MetaWriteContext metaWriteContext = new MetaWriteContext();
     MetaReadContext metaReadContext = new MetaReadContext();
     setMetaContexts(fory, metaWriteContext, metaReadContext);
@@ -110,6 +110,6 @@ public class MetaShareContextTest extends ForyTestBase {
             .build();
     OuterPojo outerPojo =
         new OuterPojo(new ArrayList<>(ImmutableList.of(new InnerPojo(1), new InnerPojo(2))));
-    checkMetaShared(fory, outerPojo);
+    checkMetaShare(fory, outerPojo);
   }
 }

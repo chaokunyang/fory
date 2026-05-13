@@ -97,14 +97,14 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots).
   private final LongMap<TypeInfo> typeDefIdToTypeInfo = new LongMap<>(4, 0.4f);
 
-  private static MetaSharedLayerSerializerBase<?> newGeneratedSerializer(
+  private static CompatibleLayerSerializerBase<?> newGeneratedSerializer(
       TypeResolver typeResolver,
       Class<?> cls,
       Class<? extends Serializer> serializerClass,
       TypeDef layerTypeDef,
       Class<?> layerMarkerClass) {
-    MetaSharedLayerSerializerBase<?> serializer =
-        (MetaSharedLayerSerializerBase<?>)
+    CompatibleLayerSerializerBase<?> serializer =
+        (CompatibleLayerSerializerBase<?>)
             Serializers.newSerializer(typeResolver, cls, serializerClass);
     serializer.setLayerSerializerMeta(layerTypeDef, layerMarkerClass);
     return serializer;
@@ -119,7 +119,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     StreamTypeInfo getStreamTypeInfo();
 
-    MetaSharedLayerSerializerBase getSlotsSerializer();
+    CompatibleLayerSerializerBase getSlotsSerializer();
 
     /**
      * Read the layer TypeDef from buffer (if meta share enabled) and return the appropriate
@@ -132,7 +132,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
      * @param readContext the context to read TypeDef from
      * @return the serializer to use for reading
      */
-    MetaSharedLayerSerializerBase getReadSerializer(
+    CompatibleLayerSerializerBase getReadSerializer(
         TypeResolver typeResolver, ReadContext readContext);
 
     /**
@@ -141,7 +141,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
      *
      * @return the current read serializer
      */
-    MetaSharedLayerSerializerBase getCurrentReadSerializer();
+    CompatibleLayerSerializerBase getCurrentReadSerializer();
 
     ForyStructOutputStream getObjectOutputStream();
 
@@ -238,7 +238,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         // replacement id.
         classResolver.writeClassInternal(writeContext, slotsInfo.getCls());
         // Write layer class meta first (if meta share enabled)
-        MetaSharedLayerSerializerBase serializer = slotsInfo.getSlotsSerializer();
+        CompatibleLayerSerializerBase serializer = slotsInfo.getSlotsSerializer();
         if (config.isMetaShareEnabled()) {
           serializer.writeLayerClassMeta(writeContext);
         }
@@ -440,12 +440,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     // Get or create serializer from TypeInfo to skip the fields
-    MetaSharedLayerSerializerBase skipSerializer =
-        (MetaSharedLayerSerializerBase) typeInfo.getSerializer();
+    CompatibleLayerSerializerBase skipSerializer =
+        (CompatibleLayerSerializerBase) typeInfo.getSerializer();
     if (skipSerializer == null) {
       Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(senderClass, 0);
-      MetaSharedLayerSerializer<?> newSerializer =
-          new MetaSharedLayerSerializer(
+      CompatibleLayerSerializer<?> newSerializer =
+          new CompatibleLayerSerializer(
               typeResolver, senderClass, typeInfo.getTypeDef(), layerMarkerClass);
       typeInfo.setSerializer(newSerializer);
       skipSerializer = newSerializer;
@@ -681,7 +681,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final Class<?> cls;
     private final StreamTypeInfo streamTypeInfo;
     // mark non-final for async-jit to update it to jit-serializer.
-    private MetaSharedLayerSerializerBase slotsSerializer;
+    private CompatibleLayerSerializerBase slotsSerializer;
     private final ObjectIntMap<String> fieldIndexMap;
     private final int numPutFields;
     private final Class<?>[] putFieldTypes;
@@ -689,7 +689,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final ForyStructInputStream objectInputStream;
     private final ObjectArray getFieldPool;
     // Current read serializer (set by getReadSerializer, used by getCurrentReadSerializer)
-    private MetaSharedLayerSerializerBase currentReadSerializer;
+    private CompatibleLayerSerializerBase currentReadSerializer;
 
     public SlotsInfo(TypeResolver typeResolver, Class<?> type) {
       this.cls = type;
@@ -716,7 +716,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
       // Create interpreter-mode serializer first
       this.slotsSerializer =
-          new MetaSharedLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
+          new CompatibleLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
 
       // Register JIT callback to replace with JIT serializer when ready
       if (config.isCodeGenEnabled()
@@ -726,13 +726,13 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         typeResolver
             .getJITContext()
             .registerSerializerJITCallback(
-                () -> MetaSharedLayerSerializer.class,
+                () -> CompatibleLayerSerializer.class,
                 () ->
                     typeResolver
                         .getJITContext()
                         .asyncVisitFory(
                             fory ->
-                                CodecUtils.loadOrGenMetaSharedLayerCodecClass(
+                                CodecUtils.loadOrGenCompatibleLayerCodecClass(
                                     type, fory, layerTypeDef, layerMarkerClass)),
                 c ->
                     thisInfo.slotsSerializer =
@@ -799,7 +799,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
-    public MetaSharedLayerSerializerBase getSlotsSerializer() {
+    public CompatibleLayerSerializerBase getSlotsSerializer() {
       return slotsSerializer;
     }
 
@@ -835,9 +835,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
     @Override
     @SuppressWarnings("unchecked")
-    public MetaSharedLayerSerializerBase getReadSerializer(
+    public CompatibleLayerSerializerBase getReadSerializer(
         TypeResolver typeResolver, ReadContext readContext) {
-      MetaSharedLayerSerializerBase result;
+      CompatibleLayerSerializerBase result;
       if (!typeResolver.getConfig().isMetaShareEnabled()) {
         // Meta share not enabled - use the default slots serializer
         result = slotsSerializer;
@@ -850,12 +850,12 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
           // Get or create serializer from TypeInfo
           Serializer<?> serializer = typeInfo.getSerializer();
           if (serializer != null) {
-            result = (MetaSharedLayerSerializerBase) serializer;
+            result = (CompatibleLayerSerializerBase) serializer;
           } else {
             // Create a new serializer based on the TypeDef from stream
             Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(cls, 0);
-            MetaSharedLayerSerializer<?> newSerializer =
-                new MetaSharedLayerSerializer(
+            CompatibleLayerSerializer<?> newSerializer =
+                new CompatibleLayerSerializer(
                     typeResolver, cls, typeInfo.getTypeDef(), layerMarkerClass);
             typeInfo.setSerializer(newSerializer);
             result = newSerializer;
@@ -868,7 +868,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
 
     @Override
-    public MetaSharedLayerSerializerBase getCurrentReadSerializer() {
+    public CompatibleLayerSerializerBase getCurrentReadSerializer() {
       return currentReadSerializer;
     }
 

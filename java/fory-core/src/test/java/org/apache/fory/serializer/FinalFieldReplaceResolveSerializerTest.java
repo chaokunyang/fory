@@ -471,7 +471,7 @@ public class FinalFieldReplaceResolveSerializerTest extends ForyTestBase {
 
   /**
    * Test that final fields with writeReplace/readResolve work correctly with compatible mode, which
-   * uses MetaSharedSerializer instead of ObjectSerializer.
+   * uses CompatibleSerializer instead of ObjectSerializer.
    */
   @Test(dataProvider = "referenceTrackingConfig")
   public void testFinalFieldReplaceWithCompatible(boolean refTracking) {

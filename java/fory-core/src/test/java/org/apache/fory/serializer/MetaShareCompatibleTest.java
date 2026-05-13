@@ -32,7 +32,7 @@ import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.TestUtils;
-import org.apache.fory.builder.MetaSharedCodecBuilder;
+import org.apache.fory.builder.CompatibleCodecBuilder;
 import org.apache.fory.codegen.CompileUnit;
 import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.config.ForyBuilder;
@@ -51,12 +51,12 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 /**
- * Tests for {@link MetaSharedCodecBuilder} and {@link MetaSharedSerializer}, and protocol
+ * Tests for {@link CompatibleCodecBuilder} and {@link CompatibleSerializer}, and protocol
  * interoperability between them.
  */
-public class MetaSharedCompatibleTest extends ForyTestBase {
-  public static Object serDeMetaSharedCheck(Fory fory, Object obj) {
-    Object newObj = serDeMetaShared(fory, obj);
+public class MetaShareCompatibleTest extends ForyTestBase {
+  public static Object serDeMetaShareCheck(Fory fory, Object obj) {
+    Object newObj = serDeMetaShare(fory, obj);
     Assert.assertEquals(newObj, obj);
     return newObj;
   }
@@ -116,9 +116,9 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
             .withRefTracking(referenceTracking)
             .withCodegen(enableCodegen)
             .build();
-    serDeMetaSharedCheck(fory, Foo.create());
-    serDeMetaSharedCheck(fory, BeanB.createBeanB(2));
-    serDeMetaSharedCheck(fory, BeanA.createBeanA(2));
+    serDeMetaShareCheck(fory, Foo.create());
+    serDeMetaShareCheck(fory, BeanB.createBeanB(2));
+    serDeMetaShareCheck(fory, BeanA.createBeanA(2));
   }
 
   @Test(dataProvider = "config2")
@@ -208,7 +208,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
         loadClass(
             BeanA.class,
             code,
-            MetaSharedCompatibleTest.class + "testWriteCompatibleCollectionBasic_1");
+            MetaShareCompatibleTest.class + "testWriteCompatibleCollectionBasic_1");
     Fory fory1 =
         foryBuilder()
             .withCodegen(false)
@@ -231,7 +231,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
         loadClass(
             BeanA.class,
             code,
-            MetaSharedCompatibleTest.class + "testWriteCompatibleCollectionBasic_2");
+            MetaShareCompatibleTest.class + "testWriteCompatibleCollectionBasic_2");
     Object o2 = cls2.newInstance();
     TestUtils.unsafeCopy(beanA, o2);
     Fory fory2 =
@@ -279,7 +279,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
         loadClass(
             BeanA.class,
             code,
-            MetaSharedCompatibleTest.class + "testWriteCompatibleCollectionBasic_1");
+            MetaShareCompatibleTest.class + "testWriteCompatibleCollectionBasic_1");
     Fory fory1 =
         foryBuilder()
             .withRefTracking(referenceTracking)
@@ -302,7 +302,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
         loadClass(
             BeanA.class,
             code,
-            MetaSharedCompatibleTest.class + "testWriteCompatibleCollectionBasic_2");
+            MetaShareCompatibleTest.class + "testWriteCompatibleCollectionBasic_2");
     Object o2 = cls2.newInstance();
     TestUtils.unsafeCopy(beanA, o2);
     Fory fory2 =
@@ -366,7 +366,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
     MetaWriteContext metaWriteContext = new MetaWriteContext();
     MetaReadContext metaReadContext = new MetaReadContext();
     BeanA beanA = BeanA.createBeanA(2);
-    serDeMetaShared(fory, beanA);
+    serDeMetaShare(fory, beanA);
     Class<?> cls = ClassUtils.createCompatibleClass1();
     Object newBeanA = cls.newInstance();
     TestUtils.unsafeCopy(beanA, newBeanA);
@@ -416,7 +416,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
             .build();
     CollectionFields collectionFields = UnmodifiableSerializersTest.createCollectionFields();
     {
-      Object o = serDeMetaShared(fory, collectionFields);
+      Object o = serDeMetaShare(fory, collectionFields);
       Object o1 = CollectionFields.copyToCanEqual(o, o.getClass().newInstance());
       Object o2 =
           CollectionFields.copyToCanEqual(
@@ -489,7 +489,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
     MetaReadContext metaReadContext = new MetaReadContext();
     MapFields mapFields = UnmodifiableSerializersTest.createMapFields();
     {
-      Object o = serDeMetaShared(fory, mapFields);
+      Object o = serDeMetaShare(fory, mapFields);
       Object o1 = MapFields.copyToCanEqual(o, o.getClass().newInstance());
       Object o2 = MapFields.copyToCanEqual(mapFields, mapFields.getClass().newInstance());
       Assert.assertEquals(o1, o2);
@@ -563,7 +563,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
                 + ";\n"
                 + "import java.util.*;\n"
                 + "import java.math.*;\n"
-                + "public class DuplicateFieldsClass2 extends MetaSharedCompatibleTest.DuplicateFieldsClass1 {\n"
+                + "public class DuplicateFieldsClass2 extends MetaShareCompatibleTest.DuplicateFieldsClass1 {\n"
                 + "  int intField1;\n"
                 + "}");
     Fory fory =
@@ -585,7 +585,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
       }
     }
     {
-      Object o = serDeMetaShared(fory, o1);
+      Object o = serDeMetaShare(fory, o1);
       TestUtils.objectFieldsEquals(o, o1, true);
     }
 
@@ -599,7 +599,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
                 + ";\n"
                 + "import java.util.*;\n"
                 + "import java.math.*;\n"
-                + "public class DuplicateFieldsClass2 extends MetaSharedCompatibleTest.DuplicateFieldsClass1 {\n"
+                + "public class DuplicateFieldsClass2 extends MetaShareCompatibleTest.DuplicateFieldsClass1 {\n"
                 + "  int intField1;\n"
                 + "  int intField2;\n"
                 + "}");
@@ -622,7 +622,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
       }
     }
     {
-      Object o = serDeMetaShared(fory2, o2);
+      Object o = serDeMetaShare(fory2, o2);
       TestUtils.objectFieldsEquals(o, o2, true);
     }
     {
@@ -657,7 +657,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
                 + ";\n"
                 + "import java.util.*;\n"
                 + "import java.math.*;\n"
-                + "public class DuplicateFieldsClass2 extends MetaSharedCompatibleTest.DuplicateFieldsClass1 {\n"
+                + "public class DuplicateFieldsClass2 extends MetaShareCompatibleTest.DuplicateFieldsClass1 {\n"
                 + "}");
     Fory fory =
         foryBuilder()
@@ -671,7 +671,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
       field.setAccessible(true);
       field.setInt(o1, 10);
     }
-    Object o = serDeMetaShared(fory, o1);
+    Object o = serDeMetaShare(fory, o1);
     Assert.assertEquals(o.getClass(), o1.getClass());
     TestUtils.objectFieldsEquals(o, o1, true);
   }
@@ -684,7 +684,7 @@ public class MetaSharedCompatibleTest extends ForyTestBase {
         new NativeTypeDefEncoderTest
             .TestClassLengthTestClassLengthTestClassLengthTestClassLengthTestClassLengthTestClassLengthTestClassLength
             .InnerClassTestLengthInnerClassTestLengthInnerClassTestLength();
-    serDeMetaSharedCheck(fory, o);
+    serDeMetaShareCheck(fory, o);
   }
 
   CompileUnit aunit =

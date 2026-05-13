@@ -53,23 +53,23 @@ public class CodecUtils {
         () -> loadOrGenCodecClass(cls, fory, new ObjectCodecBuilder(cls, fory)));
   }
 
-  public static <T> Class<? extends Serializer> loadOrGenMetaSharedCodecClass(
+  public static <T> Class<? extends Serializer> loadOrGenCompatibleCodecClass(
       Fory fory, Class<T> cls, TypeDef typeDef) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
-        "loadOrGenMetaSharedCodecClass",
+        "loadOrGenCompatibleCodecClass",
         cls,
         fory,
         () ->
             loadOrGenCodecClass(
-                cls, fory, new MetaSharedCodecBuilder(TypeRef.of(cls), fory, typeDef)));
+                cls, fory, new CompatibleCodecBuilder(TypeRef.of(cls), fory, typeDef)));
   }
 
-  public static <T> Class<? extends Serializer> loadOrGenMetaSharedCodecClass(
+  public static <T> Class<? extends Serializer> loadOrGenCompatibleCodecClass(
       TypeResolver typeResolver, Class<T> cls, TypeDef typeDef) {
     return typeResolver
         .getJITContext()
-        .asyncVisitFory(f -> loadOrGenMetaSharedCodecClass(f, cls, typeDef));
+        .asyncVisitFory(f -> loadOrGenCompatibleCodecClass(f, cls, typeDef));
   }
 
   public static <T> Class<? extends Serializer> loadOrGenStaticCompatibleCodecClass(
@@ -92,7 +92,7 @@ public class CodecUtils {
   }
 
   /**
-   * Load or generate a JIT serializer class for single-layer meta-shared serialization.
+   * Load or generate a JIT serializer class for single-layer compatible serialization.
    *
    * @param cls the target class
    * @param fory the Fory instance
@@ -100,18 +100,18 @@ public class CodecUtils {
    * @param layerMarkerClass the marker class for this layer
    * @return the generated serializer class
    */
-  public static <T> Class<? extends Serializer> loadOrGenMetaSharedLayerCodecClass(
+  public static <T> Class<? extends Serializer> loadOrGenCompatibleLayerCodecClass(
       Class<T> cls, Fory fory, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
-        "loadOrGenMetaSharedLayerCodecClass",
+        "loadOrGenCompatibleLayerCodecClass",
         cls,
         fory,
         () ->
             loadOrGenCodecClass(
                 cls,
                 fory,
-                new MetaSharedLayerCodecBuilder(
+                new CompatibleLayerCodecBuilder(
                     TypeRef.of(cls), fory, layerTypeDef, layerMarkerClass)));
   }
 

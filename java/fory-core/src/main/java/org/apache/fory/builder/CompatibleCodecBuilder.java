@@ -19,7 +19,7 @@
 
 package org.apache.fory.builder;
 
-import static org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer.SERIALIZER_FIELD_NAME;
+import static org.apache.fory.builder.Generated.GeneratedCompatibleSerializer.SERIALIZER_FIELD_NAME;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 
@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.SortedMap;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
-import org.apache.fory.builder.Generated.GeneratedMetaSharedSerializer;
+import org.apache.fory.builder.Generated.GeneratedCompatibleSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Literal;
@@ -45,7 +45,7 @@ import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.CodegenSerializer;
-import org.apache.fory.serializer.MetaSharedSerializer;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
@@ -61,29 +61,27 @@ import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
 
 /**
- * A meta-shared compatible deserializer builder based on {@link TypeDef}. This builder will compare
- * fields between {@link TypeDef} and class fields, then create serializer to read and set/skip
- * corresponding fields to support type forward/backward compatibility. Serializer are forward to
- * {@link ObjectCodecBuilder} for now. We can consolidate fields between peers to create better
- * serializers to serialize common fields between peers for efficiency.
+ * A compatible deserializer builder based on shared {@link TypeDef} metadata. This builder compares
+ * remote fields with local class fields, then generates code to read, set, or skip fields for type
+ * forward/backward compatibility. Writes are delegated to {@link ObjectCodecBuilder} for now.
  *
  * <p>With meta context share enabled and compatible mode, the {@link ObjectCodecBuilder} will take
  * all non-inner final types as non-final, so that fory can write class definition when write class
  * info for those types.
  *
  * @see ForyBuilder#withMetaShare
- * @see GeneratedMetaSharedSerializer
- * @see MetaSharedSerializer
+ * @see GeneratedCompatibleSerializer
+ * @see CompatibleSerializer
  */
-public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
-  private static final Logger LOG = LoggerFactory.getLogger(MetaSharedCodecBuilder.class);
+public class CompatibleCodecBuilder extends ObjectCodecBuilder {
+  private static final Logger LOG = LoggerFactory.getLogger(CompatibleCodecBuilder.class);
 
   private final TypeDef typeDef;
   private final String defaultValueLanguage;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
-  public MetaSharedCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
-    super(beanType, fory, GeneratedMetaSharedSerializer.class);
+  public CompatibleCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
+    super(beanType, fory, GeneratedCompatibleSerializer.class);
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
@@ -146,7 +144,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
         id = idGenerator.computeIfAbsent(typeDef.getId(), k -> idGenerator.size());
       }
     }
-    return "MetaShared" + id;
+    return "Compatible" + id;
   }
 
   @Override
@@ -177,7 +175,7 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
             "serializer",
             SERIALIZER_FIELD_NAME,
             "builderClass",
-            MetaSharedCodecBuilder.class.getName(),
+            CompatibleCodecBuilder.class.getName(),
             "typeResolver",
             CONSTRUCTOR_TYPE_RESOLVER_NAME,
             "cls",
@@ -213,13 +211,13 @@ public class MetaSharedCodecBuilder extends ObjectCodecBuilder {
   @Override
   protected void addCommonImports() {
     super.addCommonImports();
-    ctx.addImport(GeneratedMetaSharedSerializer.class);
+    ctx.addImport(GeneratedCompatibleSerializer.class);
   }
 
   // Invoked by JIT.
   @SuppressWarnings({"unchecked", "rawtypes"})
   public static Serializer setCodegenSerializer(
-      TypeResolver typeResolver, Class<?> cls, GeneratedMetaSharedSerializer s) {
+      TypeResolver typeResolver, Class<?> cls, GeneratedCompatibleSerializer s) {
     if (GraalvmSupport.isGraalRuntime()) {
       return typeResolver
           .getJITContext()

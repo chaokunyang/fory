@@ -1790,14 +1790,14 @@ public class ClassResolver extends TypeResolver {
         || serializerClass == MapSerializers.DefaultJavaMapSerializer.class;
   }
 
-  private Class<? extends Serializer> getMetaSharedDeserializerClassForGraalvmBuild(
+  private Class<? extends Serializer> getCompatibleDeserializerClassForGraalvmBuild(
       Class<?> cls, TypeDef typeDef) {
     Class<? extends Serializer> serializerClass =
         getGraalvmClassRegistry().getDeserializerClass(typeDef.getId());
     if (serializerClass != null) {
       return serializerClass;
     }
-    return CodecUtils.loadOrGenMetaSharedCodecClass(this, cls, typeDef);
+    return CodecUtils.loadOrGenCompatibleCodecClass(this, cls, typeDef);
   }
 
   private void registerGraalvmSerializerClass(Class<?> cls) {
@@ -1819,7 +1819,7 @@ public class ClassResolver extends TypeResolver {
       }
       getGraalvmClassRegistry()
           .putDeserializerClass(
-              typeDef.getId(), getMetaSharedDeserializerClassForGraalvmBuild(cls, typeDef));
+              typeDef.getId(), getCompatibleDeserializerClassForGraalvmBuild(cls, typeDef));
       getGraalvmClassRegistry()
           .putCompatibleDeserializerClass(
               cls, CodecUtils.loadOrGenStaticCompatibleCodecClass(this, cls, typeDef));

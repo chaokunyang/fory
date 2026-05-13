@@ -43,7 +43,7 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 /**
- * Tests for compatible mode serialization using meta-shared approach. These tests verify
+ * Tests for compatible mode serialization using shared class metadata. These tests verify
  * forward/backward compatibility when using compatible mode with scoped meta share.
  */
 public class CompatibleSerializerTest extends ForyTestBase {

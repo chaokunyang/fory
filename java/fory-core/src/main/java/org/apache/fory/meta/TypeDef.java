@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.apache.fory.builder.MetaSharedCodecBuilder;
+import org.apache.fory.builder.CompatibleCodecBuilder;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.logging.Logger;
@@ -44,7 +44,7 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.resolver.XtypeResolver;
-import org.apache.fory.serializer.MetaSharedSerializer;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
@@ -63,9 +63,9 @@ import org.apache.fory.util.StringUtils;
  * <li>{@link ObjectStreamClass} doesn't contain any non-primitive field type info, which is not
  *     enough to create serializer in receiver.
  *
- * @see MetaSharedCodecBuilder
+ * @see CompatibleCodecBuilder
  * @see ForyBuilder#withCompatible(boolean)
- * @see MetaSharedSerializer
+ * @see CompatibleSerializer
  * @see ForyBuilder#withMetaShare
  * @see ReflectionUtils#getFieldOffset
  */

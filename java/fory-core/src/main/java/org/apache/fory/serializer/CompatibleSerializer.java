@@ -22,7 +22,7 @@ package org.apache.fory.serializer;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
-import org.apache.fory.builder.MetaSharedCodecBuilder;
+import org.apache.fory.builder.CompatibleCodecBuilder;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
@@ -51,22 +51,20 @@ import org.apache.fory.util.record.RecordInfo;
 import org.apache.fory.util.record.RecordUtils;
 
 /**
- * A meta-shared compatible deserializer builder based on {@link TypeDef}. This serializer will
- * compare fields between {@link TypeDef} and class fields, then create serializer to read and
- * set/skip corresponding fields to support type forward/backward compatibility. Serializer are
- * forward to {@link ObjectSerializer} for now. We can consolidate fields between peers to create
- * better serializers to serialize common fields between peers for efficiency.
+ * A compatible deserializer based on shared {@link TypeDef} metadata. This serializer compares
+ * remote fields with local class fields, then reads, sets, or skips fields to support type
+ * forward/backward compatibility. Writes are delegated to {@link ObjectSerializer} for now.
  *
  * <p>With meta context share enabled and compatible mode, the {@link ObjectSerializer} will take
  * all non-inner final types as non-final, so that fory can write class definition when write class
  * info for those types.
  *
  * @see ForyBuilder#withMetaShare
- * @see MetaSharedCodecBuilder
+ * @see CompatibleCodecBuilder
  * @see ObjectSerializer
  */
-public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
-  private static final Logger LOG = LoggerFactory.getLogger(MetaSharedSerializer.class);
+public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
+  private static final Logger LOG = LoggerFactory.getLogger(CompatibleSerializer.class);
 
   private final SerializationFieldInfo[] buildInFields;
   private final SerializationFieldInfo[] containerFields;
@@ -80,14 +78,14 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
   private final boolean hasDefaultValues;
   private final DefaultValueUtils.DefaultValueField[] defaultValueFields;
 
-  public MetaSharedSerializer(TypeResolver typeResolver, Class<T> type, TypeDef typeDef) {
+  public CompatibleSerializer(TypeResolver typeResolver, Class<T> type, TypeDef typeDef) {
     super(typeResolver, type);
     Preconditions.checkArgument(
         !config.checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
     Preconditions.checkArgument(config.isMetaShareEnabled(), "Meta share must be enabled.");
     if (Utils.DEBUG_OUTPUT_ENABLED) {
-      LOG.info("========== MetaSharedSerializer TypeDef for {} ==========", type.getName());
+      LOG.info("========== CompatibleSerializer TypeDef for {} ==========", type.getName());
       LOG.info("TypeDef fieldsInfo count: {}", typeDef.getFieldCount());
       for (int i = 0; i < typeDef.getFieldsInfo().size(); i++) {
         LOG.info("  [{}] {}", i, typeDef.getFieldsInfo().get(i));
@@ -96,7 +94,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     DescriptorGrouper descriptorGrouper = typeResolver.createDescriptorGrouper(typeDef, type);
     if (Utils.DEBUG_OUTPUT_ENABLED) {
       LOG.info(
-          "========== MetaSharedSerializer sorted descriptors for {} ==========", type.getName());
+          "========== CompatibleSerializer sorted descriptors for {} ==========", type.getName());
       for (Descriptor d : descriptorGrouper.getSortedDescriptors()) {
         LOG.info(
             "  {} -> {}, ref {}, nullable {}, type id {}",
@@ -156,7 +154,7 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
     this.defaultValueFields = defaultValueFields;
   }
 
-  /** Used by generated meta-shared serializers for top-level list/array compatible field reads. */
+  /** Used by generated compatible serializers for top-level list/array compatible field reads. */
   public static Object readCompatibleCollectionArrayField(
       ReadContext readContext,
       boolean trackingRef,
@@ -174,18 +172,18 @@ public class MetaSharedSerializer<T> extends AbstractObjectSerializer<T> {
         targetType);
   }
 
-  /** Used by generated meta-shared serializers to cache a top-level list/array read action. */
+  /** Used by generated compatible serializers to cache a top-level list/array read action. */
   public static int compatibleCollectionArrayReadMode(
       TypeResolver resolver, Descriptor descriptor) {
     return requireCompatibleCollectionArrayReadAction(resolver, descriptor).mode;
   }
 
-  /** Used by generated meta-shared serializers to cache the dense array carrier type. */
+  /** Used by generated compatible serializers to cache the dense array carrier type. */
   public static int compatibleCollectionArrayTypeId(TypeResolver resolver, Descriptor descriptor) {
     return requireCompatibleCollectionArrayReadAction(resolver, descriptor).arrayTypeId;
   }
 
-  /** Used by generated meta-shared serializers to cache the peer or local element type. */
+  /** Used by generated compatible serializers to cache the peer or local element type. */
   public static int compatibleCollectionElementTypeId(
       TypeResolver resolver, Descriptor descriptor) {
     return requireCompatibleCollectionArrayReadAction(resolver, descriptor).elementTypeId;

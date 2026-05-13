@@ -24,7 +24,7 @@ import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.codegen.JaninoUtils;
 import org.testng.annotations.Test;
 
-public class MetaSharedObjectSerializerTest extends ForyTestBase {
+public class MetaShareObjectSerializerTest extends ForyTestBase {
 
   @Test
   public void testIgnoreTypeInconsistentSerializer()

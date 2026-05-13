@@ -402,7 +402,7 @@ public class StreamTest extends ForyTestBase {
   }
 
   @Test
-  public void testBigBufferStreamingMetaShared() throws IOException {
+  public void testBigBufferStreamingMetaShare() throws IOException {
     Fory fory = builder().withCompatible(true).build();
     ByteArrayOutputStream bas = new ByteArrayOutputStream();
     List<Integer> list = new ArrayList<>();

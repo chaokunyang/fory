@@ -24,7 +24,7 @@ import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.Fory;
-import org.apache.fory.builder.Generated.GeneratedMetaSharedLayerSerializer;
+import org.apache.fory.builder.Generated.GeneratedCompatibleLayerSerializer;
 import org.apache.fory.codegen.CodeGenerator;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.ListExpression;
@@ -44,24 +44,24 @@ import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 
 /**
- * A JIT codec builder for single-layer meta-shared serialization. This builder generates optimized
+ * A JIT codec builder for single-layer compatible serialization. This builder generates optimized
  * serializers that only handle fields from a specific class layer, without including parent class
  * fields.
  *
  * <p>This is used by {@link org.apache.fory.serializer.ObjectStreamSerializer} to generate JIT
  * serializers for each layer in the class hierarchy.
  *
- * @see org.apache.fory.serializer.MetaSharedLayerSerializer
- * @see MetaSharedCodecBuilder
- * @see GeneratedMetaSharedLayerSerializer
+ * @see org.apache.fory.serializer.CompatibleLayerSerializer
+ * @see CompatibleCodecBuilder
+ * @see GeneratedCompatibleLayerSerializer
  */
-public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
+public class CompatibleLayerCodecBuilder extends ObjectCodecBuilder {
   private final TypeDef layerTypeDef;
   private final Class<?> layerMarkerClass;
 
-  public MetaSharedLayerCodecBuilder(
+  public CompatibleLayerCodecBuilder(
       TypeRef<?> beanType, Fory fory, TypeDef layerTypeDef, Class<?> layerMarkerClass) {
-    super(beanType, fory, GeneratedMetaSharedLayerSerializer.class);
+    super(beanType, fory, GeneratedCompatibleLayerSerializer.class);
     Preconditions.checkArgument(
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
@@ -82,7 +82,7 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
         id = idGenerator.computeIfAbsent(layerTypeDef.getId(), k -> idGenerator.size());
       }
     }
-    return "MetaSharedLayer" + id;
+    return "CompatibleLayer" + id;
   }
 
   @Override
@@ -178,7 +178,7 @@ public class MetaSharedLayerCodecBuilder extends ObjectCodecBuilder {
   @Override
   protected void addCommonImports() {
     super.addCommonImports();
-    ctx.addImport(GeneratedMetaSharedLayerSerializer.class);
+    ctx.addImport(GeneratedCompatibleLayerSerializer.class);
   }
 
   @Override

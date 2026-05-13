@@ -138,7 +138,7 @@ public class RecordSerializersTest {
   }
 
   @Test(dataProvider = "codegen")
-  public void testSimpleRecordMetaShared(boolean codegen) {
+  public void testSimpleRecordMetaShare(boolean codegen) {
     Fory fory =
         Fory.builder()
             .requireClassRegistration(false)

@@ -42,10 +42,10 @@ import org.apache.fory.xlang.PyCrossLanguageTest.Bar;
 import org.apache.fory.xlang.PyCrossLanguageTest.Foo;
 import org.testng.annotations.Test;
 
-public class MetaSharedXlangTest extends ForyTestBase {
+public class MetaShareXlangTest extends ForyTestBase {
 
   @Test
-  public void testMetaSharedBasic() {
+  public void testMetaShareBasic() {
     Fory fory = Fory.builder().withXlang(true).withCompatible(true).withCodegen(false).build();
     fory.register(Foo.class, "example.foo");
     fory.register(Bar.class, "example.bar");
@@ -54,7 +54,7 @@ public class MetaSharedXlangTest extends ForyTestBase {
   }
 
   @Test
-  public void testMetaSharedComplex1() {
+  public void testMetaShareComplex1() {
     Fory fory = Fory.builder().withXlang(true).withCompatible(true).withCodegen(false).build();
     fory.register(BeanB.class, "example.b");
     serDeCheck(fory, BeanB.createBeanB(2));

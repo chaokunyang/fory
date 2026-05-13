@@ -129,10 +129,10 @@ import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.DeferedLazySerializer.DeferredLazyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.FinalFieldReplaceResolveSerializer;
-import org.apache.fory.serializer.MetaSharedSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
@@ -425,7 +425,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     ctx.addImport(Generated.class);
     ctx.addImports(LazyInitBeanSerializer.class, EnumSerializer.class);
     ctx.addImports(Serializer.class, StringSerializer.class);
-    ctx.addImports(ObjectSerializer.class, MetaSharedSerializer.class);
+    ctx.addImports(ObjectSerializer.class, CompatibleSerializer.class);
     ctx.addImports(CollectionLikeSerializer.class, MapLikeSerializer.class);
   }
 
@@ -960,7 +960,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         }
         if (serializerClass == LazyInitBeanSerializer.class
             || serializerClass == ObjectSerializer.class
-            || serializerClass == MetaSharedSerializer.class
+            || serializerClass == CompatibleSerializer.class
             || serializerClass == DeferredLazyObjectSerializer.class) {
           // field init may get jit serializer, which will cause cast exception if not use base
           // type.
@@ -2222,23 +2222,23 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     Class<?> targetType =
         descriptor.getField() == null ? descriptor.getRawType() : descriptor.getField().getType();
     return new StaticInvoke(
-        MetaSharedSerializer.class,
+        CompatibleSerializer.class,
         "readCompatibleCollectionArrayField",
         OBJECT_TYPE,
         readContextRef(),
         Literal.ofBoolean(trackingRef),
         Literal.ofBoolean(nullable),
         Literal.ofInt(
-            MetaSharedSerializer.compatibleCollectionArrayReadMode(typeResolver, descriptor)),
+            CompatibleSerializer.compatibleCollectionArrayReadMode(typeResolver, descriptor)),
         Literal.ofInt(
-            MetaSharedSerializer.compatibleCollectionArrayTypeId(typeResolver, descriptor)),
+            CompatibleSerializer.compatibleCollectionArrayTypeId(typeResolver, descriptor)),
         Literal.ofInt(
-            MetaSharedSerializer.compatibleCollectionElementTypeId(typeResolver, descriptor)),
+            CompatibleSerializer.compatibleCollectionElementTypeId(typeResolver, descriptor)),
         Literal.ofClass(targetType));
   }
 
   protected boolean hasCompatibleCollectionArrayRead(Descriptor descriptor) {
-    return MetaSharedSerializer.hasCompatibleCollectionArrayRead(typeResolver, descriptor);
+    return CompatibleSerializer.hasCompatibleCollectionArrayRead(typeResolver, descriptor);
   }
 
   protected TypeRef<?> compatibleReadTargetTypeRef(Descriptor descriptor) {

@@ -42,7 +42,7 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.ToolProvider;
 import org.apache.fory.Fory;
-import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
+import org.apache.fory.builder.Generated.GeneratedStaticCompatibleSerializer;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.meta.TypeDef;
@@ -345,7 +345,7 @@ public class StaticCompatibleCodecBuilderTest {
         CodecUtils.loadOrGenStaticCompatibleCodecClass(
             reader.getTypeResolver(), readerClass, remoteTypeDef);
     Assert.assertTrue(
-        GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(compatibleSerializerClass));
+        GeneratedStaticCompatibleSerializer.class.isAssignableFrom(compatibleSerializerClass));
     Serializer<Object> compatibleSerializer =
         compatibleSerializerClass
             .getConstructor(TypeResolver.class, Class.class, TypeDef.class)
@@ -362,13 +362,13 @@ public class StaticCompatibleCodecBuilderTest {
       codecUtils
           .when(
               () ->
-                  CodecUtils.loadOrGenMetaSharedCodecClass(
+                  CodecUtils.loadOrGenCompatibleCodecClass(
                       same(reader.getTypeResolver()), eq(readerClass), any(TypeDef.class)))
           .thenReturn(compatibleSerializerClass);
       Object result = reader.deserialize(bytes);
       codecUtils.verify(
           () ->
-              CodecUtils.loadOrGenMetaSharedCodecClass(
+              CodecUtils.loadOrGenCompatibleCodecClass(
                   same(reader.getTypeResolver()), eq(readerClass), any(TypeDef.class)),
           atLeastOnce());
       return result;

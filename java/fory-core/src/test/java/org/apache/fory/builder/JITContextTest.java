@@ -109,7 +109,7 @@ public class JITContextTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "config2", timeOut = 60_000)
-  public void testAsyncCompilationMetaShared(
+  public void testAsyncCompilationMetaShare(
       boolean referenceTracking, boolean compatible, boolean scopedMetaShare)
       throws InterruptedException {
     Fory fory =

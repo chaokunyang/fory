@@ -253,7 +253,7 @@ public class ChildContainerSerializersTest extends ForyTestBase {
             .withScopedMetaShare(false)
             .withCodegen(enableCodegen)
             .build();
-    serDeMetaShared(fory, outerDO);
+    serDeMetaShare(fory, outerDO);
   }
 
   /**

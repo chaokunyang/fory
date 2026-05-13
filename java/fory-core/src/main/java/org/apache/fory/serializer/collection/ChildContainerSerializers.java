@@ -56,10 +56,10 @@ import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.AbstractObjectSerializer;
+import org.apache.fory.serializer.CompatibleLayerSerializer;
 import org.apache.fory.serializer.FieldGroups;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.JavaSerializer;
-import org.apache.fory.serializer.MetaSharedLayerSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.Preconditions;
@@ -634,7 +634,7 @@ public class ChildContainerSerializers {
         // This ensures unique marker classes for each layer
         Class<?> layerMarkerClass = LayerMarkerClassGenerator.getOrCreate(cls, layerIndex);
         slotsSerializer =
-            new MetaSharedLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
+            new CompatibleLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
       } else {
         slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false);
       }
@@ -652,14 +652,15 @@ public class ChildContainerSerializers {
       Object collection,
       Serializer[] slotsSerializers) {
     for (Serializer slotsSerializer : slotsSerializers) {
-      if (slotsSerializer instanceof MetaSharedLayerSerializer) {
-        MetaSharedLayerSerializer metaSerializer = (MetaSharedLayerSerializer) slotsSerializer;
+      if (slotsSerializer instanceof CompatibleLayerSerializer) {
+        CompatibleLayerSerializer compatibleSerializer =
+            (CompatibleLayerSerializer) slotsSerializer;
         // Read layer class meta first if meta share is enabled
-        // This corresponds to writeLayerClassMeta() in MetaSharedLayerSerializer.write()
+        // This corresponds to writeLayerClassMeta() in CompatibleLayerSerializer.write()
         if (typeResolver.getConfig().isMetaShareEnabled()) {
           readAndSkipLayerClassMeta(readContext);
         }
-        metaSerializer.readAndSetFields(readContext, collection);
+        compatibleSerializer.readAndSetFields(readContext, collection);
       } else {
         ((ObjectSerializer) slotsSerializer).readAndSetFields(readContext, collection);
       }
@@ -668,7 +669,7 @@ public class ChildContainerSerializers {
 
   /**
    * Read and skip the layer class meta from buffer. This is used to skip over the class definition
-   * that was written by MetaSharedLayerSerializer.writeLayerClassMeta(). For
+   * that was written by CompatibleLayerSerializer.writeLayerClassMeta(). For
    * ChildContainerSerializers, we use the same serializer on both write and read sides, so we just
    * need to skip the meta without actually parsing it.
    */

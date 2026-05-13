@@ -44,7 +44,7 @@ import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.ForyStruct;
 import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.builder.CodecUtils;
-import org.apache.fory.builder.Generated.GeneratedCompatibleMetaSharedSerializer;
+import org.apache.fory.builder.Generated.GeneratedStaticCompatibleSerializer;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
 import org.apache.fory.collection.Float16List;
@@ -185,7 +185,7 @@ public class ExampleStaticGeneratedSerializerTest {
         CodecUtils.loadOrGenStaticCompatibleCodecClass(
             reader.getTypeResolver(), InconsistentMessage.class, remoteTypeDef);
     Assert.assertTrue(
-        GeneratedCompatibleMetaSharedSerializer.class.isAssignableFrom(compatibleSerializerClass));
+        GeneratedStaticCompatibleSerializer.class.isAssignableFrom(compatibleSerializerClass));
     writer.setMetaWriteContext(new MetaWriteContext());
     byte[] bytes = writer.serialize(value);
 
@@ -194,7 +194,7 @@ public class ExampleStaticGeneratedSerializerTest {
       codecUtils
           .when(
               () ->
-                  CodecUtils.loadOrGenMetaSharedCodecClass(
+                  CodecUtils.loadOrGenCompatibleCodecClass(
                       same(reader.getTypeResolver()),
                       eq(InconsistentMessage.class),
                       any(TypeDef.class)))
@@ -203,7 +203,7 @@ public class ExampleStaticGeneratedSerializerTest {
       InconsistentMessage result = (InconsistentMessage) reader.deserialize(bytes);
       codecUtils.verify(
           () ->
-              CodecUtils.loadOrGenMetaSharedCodecClass(
+              CodecUtils.loadOrGenCompatibleCodecClass(
                   same(reader.getTypeResolver()),
                   eq(InconsistentMessage.class),
                   any(TypeDef.class)),

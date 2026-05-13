@@ -179,9 +179,9 @@ public class Serializers {
     if (serializerClass == ExceptionSerializers.StackTraceElementSerializer.class) {
       return (Serializer<T>) new ExceptionSerializers.StackTraceElementSerializer(config);
     }
-    if (serializerClass == MetaSharedSerializer.class) {
+    if (serializerClass == CompatibleSerializer.class) {
       TypeDef typeDef = typeResolver.getTypeDef(type, true);
-      return new MetaSharedSerializer(typeResolver, type, typeDef);
+      return new CompatibleSerializer(typeResolver, type, typeDef);
     }
     if (serializerClass == EnumSerializer.class) {
       return (Serializer<T>) new EnumSerializer(config, type);

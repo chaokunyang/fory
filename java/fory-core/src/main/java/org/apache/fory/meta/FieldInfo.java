@@ -149,15 +149,28 @@ public final class FieldInfo implements Serializable {
             .nullable(remoteNullable)
             .build();
       }
-      if (localFieldType != null && hasListArrayShapeMismatch(fieldType, localFieldType)) {
+      if (localFieldType != null && isListArrayRootPair(fieldType, localFieldType)) {
         throw new IllegalArgumentException(
             StringUtils.format(
-                "Unsupported nested list/array compatible field mismatch for field "
-                    + "{}.{}: peer={}, local={}",
+                "Unsupported list/array compatible field mismatch for field {}.{}: peer={}, local={}",
                 definedClass,
                 fieldName,
                 fieldType,
                 localFieldType));
+      }
+      if (localFieldType != null && hasNestedListArrayShapeMismatch(fieldType, localFieldType)) {
+        // List/array bridging is only defined for the matched field itself. If the shape differs
+        // deeper in a container, keep the remote descriptor for skipping but do not assign it to
+        // the local field.
+        TypeRef<?> remoteTypeRef = fieldType.toTypeToken(resolver, null);
+        return new DescriptorBuilder(descriptor)
+            .typeName(fieldType.getTypeName(resolver, remoteTypeRef))
+            .trackingRef(remoteTrackingRef)
+            .nullable(remoteNullable)
+            .typeRef(remoteTypeRef)
+            .type(remoteTypeRef.getRawType())
+            .field(null)
+            .build();
       }
       if (remoteNullable == descriptor.isNullable()
           && remoteTrackingRef == descriptor.isTrackingRef()
@@ -242,11 +255,7 @@ public final class FieldInfo implements Serializable {
 
   private static boolean hasListArrayShapeMismatch(
       FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
-    boolean peerList = isListField(peerFieldType);
-    boolean localList = isListField(localFieldType);
-    boolean peerArray = arrayTypeId(peerFieldType) != Types.UNKNOWN;
-    boolean localArray = arrayTypeId(localFieldType) != Types.UNKNOWN;
-    if ((peerList && localArray) || (peerArray && localList)) {
+    if (isListArrayRootPair(peerFieldType, localFieldType)) {
       return true;
     }
     if (peerFieldType.getTypeId() != localFieldType.getTypeId()) {
@@ -272,6 +281,42 @@ public final class FieldInfo implements Serializable {
           ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
     }
     return false;
+  }
+
+  private static boolean hasNestedListArrayShapeMismatch(
+      FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
+    if (peerFieldType.getTypeId() != localFieldType.getTypeId()) {
+      return false;
+    }
+    if (peerFieldType instanceof FieldTypes.CollectionFieldType
+        && localFieldType instanceof FieldTypes.CollectionFieldType) {
+      return hasListArrayShapeMismatch(
+          ((FieldTypes.CollectionFieldType) peerFieldType).getElementType(),
+          ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
+    }
+    if (peerFieldType instanceof FieldTypes.MapFieldType
+        && localFieldType instanceof FieldTypes.MapFieldType) {
+      FieldTypes.MapFieldType peerMap = (FieldTypes.MapFieldType) peerFieldType;
+      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
+      return hasListArrayShapeMismatch(peerMap.getKeyType(), localMap.getKeyType())
+          || hasListArrayShapeMismatch(peerMap.getValueType(), localMap.getValueType());
+    }
+    if (peerFieldType instanceof FieldTypes.ArrayFieldType
+        && localFieldType instanceof FieldTypes.ArrayFieldType) {
+      return hasListArrayShapeMismatch(
+          ((FieldTypes.ArrayFieldType) peerFieldType).getComponentType(),
+          ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
+    }
+    return false;
+  }
+
+  private static boolean isListArrayRootPair(
+      FieldTypes.FieldType peerFieldType, FieldTypes.FieldType localFieldType) {
+    boolean peerList = isListField(peerFieldType);
+    boolean localList = isListField(localFieldType);
+    boolean peerArray = arrayTypeId(peerFieldType) != Types.UNKNOWN;
+    boolean localArray = arrayTypeId(localFieldType) != Types.UNKNOWN;
+    return (peerList && localArray) || (peerArray && localList);
   }
 
   private static boolean isListField(FieldTypes.FieldType fieldType) {

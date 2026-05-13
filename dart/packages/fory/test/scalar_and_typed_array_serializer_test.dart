@@ -681,7 +681,7 @@ void main() {
       );
     });
 
-    test('rejects nested compatible list and dense array field positions', () {
+    test('skips nested compatible list and dense array field positions', () {
       final writer = Fory();
       final reader = Fory();
       ScalarAndTypedArraySerializerTestFory.register(
@@ -704,10 +704,8 @@ void main() {
           ],
       );
 
-      expect(
-        () => reader.deserialize<CompatibleNestedListEnvelope>(bytes),
-        throwsStateError,
-      );
+      final decoded = reader.deserialize<CompatibleNestedListEnvelope>(bytes);
+      expect(decoded.values, isEmpty);
     });
 
     test('enforces maxBinarySize on write and read', () {

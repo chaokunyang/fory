@@ -20,6 +20,7 @@
 package org.apache.fory.xlang;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
@@ -185,21 +186,23 @@ public class MetaSharedXlangTest extends ForyTestBase {
   }
 
   @Test
-  public void testNestedListArrayCompatibleReadUnsupported() {
+  public void testNestedListArrayCompatibleReadSkipped() {
     Fory nestedListFory = compatibleFory(NestedListField.class);
     NestedListField nestedListStruct = new NestedListField();
     nestedListStruct.values = Arrays.asList(Arrays.asList(1, 2));
     byte[] nestedListBytes = nestedListFory.serialize(nestedListStruct);
 
     Fory nestedArrayFory = compatibleFory(NestedArrayElementField.class);
-    assertThrows(
-        DeserializationException.class, () -> nestedArrayFory.deserialize(nestedListBytes));
+    NestedArrayElementField skippedNestedArrayStruct =
+        (NestedArrayElementField) nestedArrayFory.deserialize(nestedListBytes);
+    assertNull(skippedNestedArrayStruct.values);
 
     NestedArrayElementField nestedArrayStruct = new NestedArrayElementField();
     nestedArrayStruct.values = Arrays.asList(new int[] {1, 2});
     byte[] nestedArrayBytes = nestedArrayFory.serialize(nestedArrayStruct);
-    assertThrows(
-        DeserializationException.class, () -> nestedListFory.deserialize(nestedArrayBytes));
+    NestedListField skippedNestedListStruct =
+        (NestedListField) nestedListFory.deserialize(nestedArrayBytes);
+    assertNull(skippedNestedListStruct.values);
 
     Fory nestedSetListFory = compatibleFory(NestedSetListField.class, false);
     NestedSetListField nestedSetListStruct = new NestedSetListField();
@@ -207,14 +210,16 @@ public class MetaSharedXlangTest extends ForyTestBase {
     byte[] nestedSetListBytes = nestedSetListFory.serialize(nestedSetListStruct);
 
     Fory nestedSetArrayFory = compatibleFory(NestedSetArrayElementField.class, false);
-    assertThrows(
-        DeserializationException.class, () -> nestedSetArrayFory.deserialize(nestedSetListBytes));
+    NestedSetArrayElementField skippedNestedSetArrayStruct =
+        (NestedSetArrayElementField) nestedSetArrayFory.deserialize(nestedSetListBytes);
+    assertNull(skippedNestedSetArrayStruct.values);
 
     NestedSetArrayElementField nestedSetArrayStruct = new NestedSetArrayElementField();
     nestedSetArrayStruct.values = new LinkedHashSet<>(Arrays.asList(new int[] {1, 2}));
     byte[] nestedSetArrayBytes = nestedSetArrayFory.serialize(nestedSetArrayStruct);
-    assertThrows(
-        DeserializationException.class, () -> nestedSetListFory.deserialize(nestedSetArrayBytes));
+    NestedSetListField skippedNestedSetListStruct =
+        (NestedSetListField) nestedSetListFory.deserialize(nestedSetArrayBytes);
+    assertNull(skippedNestedSetListStruct.values);
   }
 
   private static Fory compatibleFory(Class<?> type) {

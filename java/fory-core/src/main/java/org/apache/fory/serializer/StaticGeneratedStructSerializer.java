@@ -254,6 +254,9 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
               + ": compatible list/array adaptation requires a matching non-null primitive element"
               + " schema and does not apply recursively");
     }
+    if (remoteField.nestedCollectionArrayMatch) {
+      return false;
+    }
     if (remoteField.compatibleCollectionArrayReadAction != null) {
       return true;
     }
@@ -534,6 +537,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     private final SerializationFieldInfo serializationFieldInfo;
     private final CompatibleCollectionArrayReader.ReadAction compatibleCollectionArrayReadAction;
     private final boolean incompatibleCollectionArrayMatch;
+    private final boolean nestedCollectionArrayMatch;
 
     private RemoteFieldInfo(
         TypeResolver typeResolver,
@@ -550,6 +554,9 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
           CompatibleCollectionArrayReader.readAction(typeResolver, fieldInfo, localDescriptor);
       this.incompatibleCollectionArrayMatch =
           CompatibleCollectionArrayReader.incompatibleCollectionArrayMatch(
+              typeResolver, fieldInfo, localDescriptor);
+      this.nestedCollectionArrayMatch =
+          CompatibleCollectionArrayReader.nestedCollectionArrayMatch(
               typeResolver, fieldInfo, localDescriptor);
     }
   }

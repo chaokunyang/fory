@@ -187,38 +187,82 @@ final class CompatibleCollectionArrayReader {
     }
     FieldTypes.FieldType remoteFieldType = remoteFieldInfo.getFieldType();
     FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
-    return incompatibleCollectionArrayMatch(remoteFieldType, localFieldType);
+    return isListArrayRootPair(remoteFieldType, localFieldType);
   }
 
-  private static boolean incompatibleCollectionArrayMatch(
-      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
-    int remoteListElementTypeId = listElementTypeId(remoteFieldType);
-    int localArrayTypeId = arrayTypeId(localFieldType);
-    if (remoteListElementTypeId != Types.UNKNOWN
-        && localArrayTypeId != Types.UNKNOWN
-        && localArrayTypeId == denseArrayTypeId(remoteListElementTypeId)) {
-      return true;
+  static boolean nestedCollectionArrayMatch(
+      TypeResolver resolver, FieldInfo remoteFieldInfo, Descriptor localDescriptor) {
+    if (localDescriptor == null || !resolver.isCrossLanguage()) {
+      return false;
     }
-    int remoteArrayTypeId = arrayTypeId(remoteFieldType);
-    int localListElementTypeId = listElementTypeId(localFieldType);
-    if (remoteArrayTypeId != Types.UNKNOWN
-        && localListElementTypeId != Types.UNKNOWN
-        && remoteArrayTypeId == denseArrayTypeId(localListElementTypeId)) {
+    FieldTypes.FieldType remoteFieldType = remoteFieldInfo.getFieldType();
+    FieldTypes.FieldType localFieldType = FieldTypes.buildFieldType(resolver, localDescriptor);
+    return hasNestedCollectionArrayMatch(remoteFieldType, localFieldType);
+  }
+
+  private static boolean hasCollectionArrayMatch(
+      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
+    if (isListArrayRootPair(remoteFieldType, localFieldType)) {
       return true;
     }
     if (remoteFieldType instanceof FieldTypes.CollectionFieldType
         && localFieldType instanceof FieldTypes.CollectionFieldType) {
-      return incompatibleCollectionArrayMatch(
+      return hasCollectionArrayMatch(
           ((FieldTypes.CollectionFieldType) remoteFieldType).getElementType(),
           ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
     }
+    if (remoteFieldType instanceof FieldTypes.MapFieldType
+        && localFieldType instanceof FieldTypes.MapFieldType) {
+      FieldTypes.MapFieldType remoteMap = (FieldTypes.MapFieldType) remoteFieldType;
+      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
+      return hasCollectionArrayMatch(remoteMap.getKeyType(), localMap.getKeyType())
+          || hasCollectionArrayMatch(remoteMap.getValueType(), localMap.getValueType());
+    }
     if (remoteFieldType instanceof FieldTypes.ArrayFieldType
         && localFieldType instanceof FieldTypes.ArrayFieldType) {
-      return incompatibleCollectionArrayMatch(
+      return hasCollectionArrayMatch(
           ((FieldTypes.ArrayFieldType) remoteFieldType).getComponentType(),
           ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
     }
     return false;
+  }
+
+  private static boolean hasNestedCollectionArrayMatch(
+      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
+    if (remoteFieldType.getTypeId() != localFieldType.getTypeId()) {
+      return false;
+    }
+    if (remoteFieldType instanceof FieldTypes.CollectionFieldType
+        && localFieldType instanceof FieldTypes.CollectionFieldType) {
+      return hasCollectionArrayMatch(
+          ((FieldTypes.CollectionFieldType) remoteFieldType).getElementType(),
+          ((FieldTypes.CollectionFieldType) localFieldType).getElementType());
+    }
+    if (remoteFieldType instanceof FieldTypes.MapFieldType
+        && localFieldType instanceof FieldTypes.MapFieldType) {
+      FieldTypes.MapFieldType remoteMap = (FieldTypes.MapFieldType) remoteFieldType;
+      FieldTypes.MapFieldType localMap = (FieldTypes.MapFieldType) localFieldType;
+      return hasCollectionArrayMatch(remoteMap.getKeyType(), localMap.getKeyType())
+          || hasCollectionArrayMatch(remoteMap.getValueType(), localMap.getValueType());
+    }
+    if (remoteFieldType instanceof FieldTypes.ArrayFieldType
+        && localFieldType instanceof FieldTypes.ArrayFieldType) {
+      return hasCollectionArrayMatch(
+          ((FieldTypes.ArrayFieldType) remoteFieldType).getComponentType(),
+          ((FieldTypes.ArrayFieldType) localFieldType).getComponentType());
+    }
+    return false;
+  }
+
+  private static boolean isListArrayRootPair(
+      FieldTypes.FieldType remoteFieldType, FieldTypes.FieldType localFieldType) {
+    return (isListField(remoteFieldType) && arrayTypeId(localFieldType) != Types.UNKNOWN)
+        || (arrayTypeId(remoteFieldType) != Types.UNKNOWN && isListField(localFieldType));
+  }
+
+  private static boolean isListField(FieldTypes.FieldType fieldType) {
+    return fieldType instanceof FieldTypes.CollectionFieldType
+        && fieldType.getTypeId() == Types.LIST;
   }
 
   static Object read(ReadContext readContext, RefMode refMode, ReadAction action) {

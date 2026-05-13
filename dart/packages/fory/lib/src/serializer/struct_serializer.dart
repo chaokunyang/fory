@@ -186,6 +186,14 @@ final class StructSerializer extends Serializer<Object?> {
           'Compatible field ${localField.name} has unsupported list/array schema mismatch.',
         );
       }
+      if (_hasNestedListArrayMismatch(
+        localField.field.fieldType,
+        remoteField.fieldType,
+      )) {
+        fields.add(null);
+        topLevelListArrayPairs?.add(false);
+        continue;
+      }
       if (topLevelListArrayPair) {
         topLevelListArrayPairs ??=
             List<bool>.filled(fields.length, false, growable: true);
@@ -216,14 +224,37 @@ bool _topLevelListArrayPair(FieldInfo localField, FieldInfo remoteField) {
   return isCompatibleCollectionArrayFieldPair(localField, remoteField);
 }
 
+bool _hasNestedListArrayMismatch(FieldType localType, FieldType remoteType) {
+  if (localType.typeId != remoteType.typeId ||
+      localType.arguments.length != remoteType.arguments.length) {
+    return false;
+  }
+  for (var index = 0; index < localType.arguments.length; index += 1) {
+    if (_hasListArrayMismatch(
+      localType.arguments[index],
+      remoteType.arguments[index],
+    )) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool _hasListArrayMismatch(FieldType localType, FieldType remoteType) {
+  if (isCompatibleCollectionArrayRootTypePair(localType, remoteType)) {
+    return true;
+  }
+  return _hasNestedListArrayMismatch(localType, remoteType);
+}
+
 bool _hasUnsupportedListArrayMismatch(
   FieldType localType,
   FieldType remoteType, {
   required bool topLevel,
 }) {
   if (isCompatibleCollectionArrayRootTypePair(localType, remoteType)) {
-    return !(topLevel &&
-        isCompatibleCollectionArrayTypePair(localType, remoteType));
+    return topLevel &&
+        !isCompatibleCollectionArrayTypePair(localType, remoteType);
   }
   if (localType.typeId != remoteType.typeId ||
       localType.arguments.length != remoteType.arguments.length) {

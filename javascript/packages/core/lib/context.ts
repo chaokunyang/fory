@@ -898,7 +898,7 @@ export class ReadContext {
       return false;
     }
     if (this.isListArrayRootPair(remote, local)) {
-      return !(topLevel && this.compatibleFieldTypeInfo(remote, local));
+      return topLevel && !this.compatibleFieldTypeInfo(remote, local);
     }
     if (remote.typeId !== local.typeId) {
       return false;
@@ -932,6 +932,41 @@ export class ReadContext {
       default:
         return false;
     }
+  }
+
+  private hasNestedListArrayMismatch(
+    remote: InnerFieldInfo,
+    local: TypeInfo | undefined,
+  ): boolean {
+    if (!local || remote.typeId !== local.typeId) {
+      return false;
+    }
+    switch (remote.typeId) {
+      case TypeId.MAP:
+        return (
+          this.hasListArrayMismatch(remote.options!.key!, local.options?.key)
+          || this.hasListArrayMismatch(remote.options!.value!, local.options?.value)
+        );
+      case TypeId.LIST:
+        return this.hasListArrayMismatch(remote.options!.inner!, local.options?.inner);
+      case TypeId.SET:
+        return this.hasListArrayMismatch(remote.options!.key!, local.options?.key);
+      default:
+        return false;
+    }
+  }
+
+  private hasListArrayMismatch(
+    remote: InnerFieldInfo,
+    local: TypeInfo | undefined,
+  ): boolean {
+    if (!local) {
+      return false;
+    }
+    if (this.isListArrayRootPair(remote, local)) {
+      return true;
+    }
+    return this.hasNestedListArrayMismatch(remote, local);
   }
 
   private isListArrayRootPair(remote: InnerFieldInfo, local: TypeInfo): boolean {
@@ -1001,13 +1036,20 @@ export class ReadContext {
     const props = Object.fromEntries(
       typeMeta.remapFieldNames(localProps).map((fieldInfo) => {
         const localFieldTypeInfo = localProps?.[fieldInfo.getFieldName()];
-        const fieldTypeInfo = this.fieldInfoToTypeInfo(
+        const skipRead = this.hasNestedListArrayMismatch(
           fieldInfo,
           localFieldTypeInfo,
+        );
+        const fieldTypeInfo = this.fieldInfoToTypeInfo(
+          fieldInfo,
+          skipRead ? undefined : localFieldTypeInfo,
         )
           .setNullable(fieldInfo.nullable)
           .setTrackingRef(fieldInfo.trackingRef)
           .setId(fieldInfo.fieldId);
+        if (skipRead) {
+          fieldTypeInfo.options = { ...fieldTypeInfo.options, skipRead: true };
+        }
         return [fieldInfo.getFieldName(), fieldTypeInfo];
       }),
     );

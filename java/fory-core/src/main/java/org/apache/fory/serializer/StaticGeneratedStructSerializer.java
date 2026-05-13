@@ -61,24 +61,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   @SuppressWarnings("unchecked")
   protected StaticGeneratedStructSerializer(
       TypeResolver typeResolver, Class<?> type, TypeDef typeDef, List<Descriptor> descriptors) {
-    this(typeResolver, type, typeDef, descriptors, null);
-  }
-
-  @SuppressWarnings("unchecked")
-  protected StaticGeneratedStructSerializer(
-      TypeResolver typeResolver,
-      Class<?> type,
-      TypeDef typeDef,
-      List<Descriptor> descriptors,
-      Class<?> remoteDescriptorClass) {
     super(typeResolver, (Class<T>) type);
     setSerializerIfAbsent(typeResolver, (Class<T>) type);
     List<Descriptor> runtimeDescriptors = runtimeDescriptors(descriptors);
     this.typeDef = typeDef;
     this.remoteFields =
-        typeDef == null
-            ? Collections.emptyList()
-            : buildRemoteFields(typeDef, runtimeDescriptors, remoteDescriptorClass);
+        typeDef == null ? Collections.emptyList() : buildRemoteFields(typeDef, runtimeDescriptors);
     this.localFieldsById = buildLocalFieldsById(runtimeDescriptors);
   }
 
@@ -398,8 +386,8 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   private List<RemoteFieldInfo> buildRemoteFields(
-      TypeDef remoteTypeDef, List<Descriptor> localDescriptors, Class<?> generatedRemoteClass) {
-    Class<?> remoteDescriptorClass = remoteDescriptorClass(remoteTypeDef, generatedRemoteClass);
+      TypeDef remoteTypeDef, List<Descriptor> localDescriptors) {
+    Class<?> remoteDescriptorClass = remoteDescriptorClass(remoteTypeDef);
     List<FieldInfo> remoteFieldInfos = remoteTypeDef.getFieldsInfo();
     List<Descriptor> remoteDescriptors =
         remoteTypeDef.getDescriptors(typeResolver, remoteDescriptorClass);
@@ -436,15 +424,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     return Collections.unmodifiableList(remoteFields);
   }
 
-  private Class<?> remoteDescriptorClass(TypeDef remoteTypeDef, Class<?> generatedRemoteClass) {
-    if (generatedRemoteClass != null) {
-      // Native TypeDefs for registered classes carry the registered id, so a reader that binds the
-      // same id to an evolved class decodes the TypeDef as the local class. Static-compatible
-      // codegen may still know the writer-side class; use it to preserve descriptor-only details
-      // such as primitive-list carrier raw types while keeping wire order in
-      // createDescriptorGrouper.
-      return generatedRemoteClass;
-    }
+  private Class<?> remoteDescriptorClass(TypeDef remoteTypeDef) {
     String className = remoteTypeDef.getClassName();
     if (className.equals(type.getName())) {
       return type;

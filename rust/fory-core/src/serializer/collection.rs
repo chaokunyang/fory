@@ -528,12 +528,6 @@ fn read_primitive_array_data_bulk<T: 'static>(
     }
 }
 
-fn list_element_type_matches_array(list: &FieldType, array: &FieldType) -> bool {
-    list_element_type_matches_array_shape(list, array)
-        && !list.generics[0].nullable
-        && !list.generics[0].track_ref
-}
-
 fn list_element_type_matches_array_shape(list: &FieldType, array: &FieldType) -> bool {
     primitive_array_element_type_id(array.type_id).is_some_and(|element_type_id| {
         list.type_id == type_id::LIST
@@ -792,8 +786,12 @@ where
     T: 'static,
     C: Codec<T>,
 {
+    // A dense remote array can materialize into a nullable local list by wrapping every element as
+    // Some(_). The reverse direction is stricter and is checked in
+    // read_primitive_array_vec_compatible_mismatch because a remote list may carry null/ref markers
+    // that a dense local array cannot represent.
     if local_field_type.type_id == type_id::LIST
-        && list_element_type_matches_array(local_field_type, remote_field_type)
+        && list_element_type_matches_array_shape(local_field_type, remote_field_type)
     {
         return read_array_data_as_vec_bridge::<T, C>(context, remote_field_type).map(Some);
     }

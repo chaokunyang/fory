@@ -60,8 +60,6 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   private static final int DISPATCH_GROUP_SIZE = 8;
 
   private final List<Descriptor> localDescriptors;
-  private final Class<?> remoteDescriptorClass;
-  private final String remoteTypeDefSuffix;
   private final boolean debug;
 
   public StaticCompatibleCodecBuilder(TypeRef<?> beanType, Fory fory, TypeDef typeDef) {
@@ -70,15 +68,13 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         !fory.getConfig().checkClassVersion(),
         "Class version check should be disabled when compatible mode is enabled.");
     localDescriptors = Collections.unmodifiableList(Descriptor.getDescriptors(beanClass));
-    remoteDescriptorClass = resolveRemoteDescriptorClass(typeDef);
-    remoteTypeDefSuffix = remoteTypeDefSuffix(typeDef);
     ForyStruct foryStruct = beanClass.getAnnotation(ForyStruct.class);
     debug = foryStruct != null && foryStruct.debug();
   }
 
   @Override
   protected String codecSuffix() {
-    return "CompatibleMetaShared_" + remoteTypeDefSuffix;
+    return "CompatibleMetaShared";
   }
 
   @Override
@@ -92,8 +88,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
     String constructorCode =
         StringUtils.format(
             ""
-                + "super(${typeResolver}, ${cls}, ${typeDef}, Descriptor.getDescriptors(${cls}),"
-                + " ${remoteDescriptorClass});\n"
+                + "super(${typeResolver}, ${cls}, ${typeDef}, Descriptor.getDescriptors(${cls}));\n"
                 + "this.${generatedTypeResolver} = (${generatedTypeResolverType}) ${typeResolver};\n",
             "typeResolver",
             CONSTRUCTOR_TYPE_RESOLVER_NAME,
@@ -101,8 +96,6 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
             POJO_CLASS_TYPE_NAME,
             "typeDef",
             "_f_typeDef",
-            "remoteDescriptorClass",
-            remoteDescriptorClassLiteral(),
             "generatedTypeResolver",
             TYPE_RESOLVER_NAME,
             "generatedTypeResolverType",
@@ -130,45 +123,6 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
   protected void addCommonImports() {
     super.addCommonImports();
     ctx.addImport(GeneratedCompatibleMetaSharedSerializer.class);
-  }
-
-  private Class<?> resolveRemoteDescriptorClass(TypeDef typeDef) {
-    String className = typeDef.getClassName();
-    if (className.equals(beanClass.getName())) {
-      return null;
-    }
-    ClassLoader beanClassLoader = beanClass.getClassLoader();
-    try {
-      return Class.forName(className, false, beanClassLoader);
-    } catch (ClassNotFoundException | LinkageError e) {
-      try {
-        return Class.forName(className, false, StaticCompatibleCodecBuilder.class.getClassLoader());
-      } catch (ClassNotFoundException | LinkageError ignored) {
-        return null;
-      }
-    }
-  }
-
-  static String remoteTypeDefSuffix(TypeDef typeDef) {
-    return Long.toUnsignedString(typeDef.getId(), 16)
-        + "_"
-        + Integer.toHexString(typeDef.getClassName().hashCode());
-  }
-
-  private String remoteDescriptorClassLiteral() {
-    if (remoteDescriptorClass == null || !canReferenceRemoteDescriptorClass()) {
-      return "null";
-    }
-    return ctx.type(remoteDescriptorClass) + ".class";
-  }
-
-  private boolean canReferenceRemoteDescriptorClass() {
-    if (!ctx.sourcePkgLevelAccessible(remoteDescriptorClass)) {
-      return false;
-    }
-    return ctx.sourcePublicAccessible(remoteDescriptorClass)
-        || CodeGenerator.getPackage(beanClass)
-            .equals(CodeGenerator.getPackage(remoteDescriptorClass));
   }
 
   @Override

@@ -76,8 +76,7 @@ public class CodecUtils {
       Fory fory, Class<T> cls, TypeDef typeDef) {
     Preconditions.checkNotNull(fory);
     return loadSerializer(
-        "loadOrGenStaticCompatibleCodecClass_"
-            + StaticCompatibleCodecBuilder.remoteTypeDefSuffix(typeDef),
+        "loadOrGenStaticCompatibleCodecClass",
         cls,
         fory,
         () ->

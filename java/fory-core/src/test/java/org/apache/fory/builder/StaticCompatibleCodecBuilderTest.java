@@ -326,7 +326,7 @@ public class StaticCompatibleCodecBuilderTest {
       Class<? extends Serializer> serializerB =
           CodecUtils.loadOrGenStaticCompatibleCodecClass(
               reader.getTypeResolver(), readerClass, typeDefB);
-      Assert.assertNotEquals(serializerA, serializerB);
+      Assert.assertSame(serializerA, serializerB);
 
       GraalvmSupport.GraalvmClassRegistry registry = GraalvmSupport.getClassRegistry(0);
       registry.putCompatibleDeserializerClass(readerType, serializerA);

@@ -154,7 +154,7 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
     public long f2;
     public String f3;
     public List<String> f4;
-    public Map<String, Integer> f5;
+    public Object f5;
   }
 
   @Test(dataProvider = "compressNumber")
@@ -175,7 +175,7 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
     JaninoUtils.CodeStats classStats = JaninoUtils.getClassStats(bytecode);
     Assert.assertFalse(
         classStats.methodsSize.keySet().stream()
-            .anyMatch(name -> name.startsWith("writeFields") || name.startsWith("readFields")));
+            .anyMatch(name -> name.startsWith("writeFields") || name.startsWith("readField")));
   }
 
   @Test

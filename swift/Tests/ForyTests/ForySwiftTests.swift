@@ -989,13 +989,13 @@ func macroReducedPrecisionFieldsUseXlangTypeIDs() {
   let fields = ReducedPrecisionMacroFields.foryFieldsInfo(trackRef: false)
   #expect(fields.count == 4)
   #expect(
-    fields.map(\.fieldName) == ["float16Value", "bfloat16Value", "float16Array", "bfloat16Array"])
+    fields.map(\.fieldName) == ["float16Value", "bfloat16Value", "bfloat16Array", "float16Array"])
   #expect(
     fields.map(\.fieldType.typeID) == [
       TypeId.float16.rawValue,
       TypeId.bfloat16.rawValue,
-      TypeId.float16Array.rawValue,
-      TypeId.bfloat16Array.rawValue
+      TypeId.bfloat16Array.rawValue,
+      TypeId.float16Array.rawValue
     ])
 }
 

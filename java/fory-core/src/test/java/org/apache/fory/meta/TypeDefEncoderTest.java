@@ -135,6 +135,27 @@ public class TypeDefEncoderTest {
     private int count;
   }
 
+  public static class ParentShadowedField {
+    private String duplicateName;
+  }
+
+  public static class ChildShadowedField extends ParentShadowedField {
+    private String duplicateName;
+    private int count;
+  }
+
+  public static class ClassWithSnakeCaseCollision {
+    private String fooBar;
+    private String foo_bar;
+  }
+
+  public static class ClassWithTaggedSnakeCaseCollision {
+    @ForyField(id = 7)
+    private String fooBar;
+
+    private String foo_bar;
+  }
+
   @Data
   public static class ClassWithNameOrderedNonPrimitives {
     private String zString;
@@ -471,6 +492,37 @@ public class TypeDefEncoderTest {
         TypeDef.buildTypeDef(fory.getTypeResolver(), ChildNameOrderedNonPrimitives.class);
 
     Assert.assertEquals(fieldNames(typeDef), Arrays.asList("count", "aMap", "zString"));
+  }
+
+  @Test
+  public void testTypeDefDropsOnlyInheritedShadowedXlangName() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    fory.register(ChildShadowedField.class);
+
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), ChildShadowedField.class);
+
+    Assert.assertEquals(fieldNames(typeDef), Arrays.asList("count", "duplicateName"));
+  }
+
+  @Test
+  public void testTypeDefRejectsUntaggedSnakeCaseCollision() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    fory.register(ClassWithSnakeCaseCollision.class);
+
+    Assert.assertThrows(
+        IllegalArgumentException.class,
+        () -> TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithSnakeCaseCollision.class));
+  }
+
+  @Test
+  public void testTypeDefAllowsTaggedSnakeCaseCollision() {
+    Fory fory = Fory.builder().withXlang(true).withCompatible(false).withMetaShare(true).build();
+    fory.register(ClassWithTaggedSnakeCaseCollision.class);
+
+    TypeDef typeDef =
+        TypeDef.buildTypeDef(fory.getTypeResolver(), ClassWithTaggedSnakeCaseCollision.class);
+
+    Assert.assertEquals(fieldNames(typeDef), Arrays.asList("fooBar", "foo_bar"));
   }
 
   @Test

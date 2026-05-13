@@ -530,7 +530,7 @@ public class TypeDefTest extends ForyTestBase {
     fory.register(TestFieldsOrderClass2.class, "demo.Class2");
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), TestFieldsOrderClass2.class);
     assertEquals(typeDef.getClassName(), TestFieldsOrderClass2.class.getName());
-    // xtype ignore duplicate fields from parent class.
+    // Xlang TypeDef keeps the nearest field when a child hides an inherited field by name.
     assertEquals(
         typeDef.getFieldsInfo().size(),
         ReflectionUtils.getFields(TestFieldsOrderClass2.class, true).size() - 1);

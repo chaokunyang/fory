@@ -92,9 +92,23 @@ class TypeDefEncoder {
         continue;
       }
       Descriptor previous = result.get(previousIndex);
-      // Untagged xlang fields are addressed by snake_case identifier. When a subclass shadows an
-      // inherited field, only the nearest field can be represented without an explicit tag ID.
-      if (inheritanceDistance(type, descriptor) < inheritanceDistance(type, previous)) {
+      int distance = inheritanceDistance(type, descriptor);
+      int previousDistance = inheritanceDistance(type, previous);
+      if (!descriptor.getName().equals(previous.getName()) || distance == previousDistance) {
+        throw new IllegalArgumentException(
+            "Duplicate xlang field identifier "
+                + fieldIdentifier
+                + " for fields "
+                + previous.getName()
+                + " and "
+                + descriptor.getName()
+                + " in class "
+                + type.getName()
+                + ". Configure explicit non-negative field IDs to disambiguate them.");
+      }
+      // Untagged xlang fields are addressed by snake_case identifier. Only a true Java field hide
+      // across the inheritance chain can be represented by dropping the farther inherited field.
+      if (distance < previousDistance) {
         result.set(previousIndex, descriptor);
       }
     }

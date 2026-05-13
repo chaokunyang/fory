@@ -687,7 +687,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   }
 
   private boolean needsGeneratedReadFieldMethod(Descriptor descriptor) {
-    return !isMonomorphic(descriptor)
+    return !hasFewFields()
+        && !isMonomorphic(descriptor)
         && !useCollectionSerialization(descriptor)
         && !useMapSerialization(descriptor.getTypeRef());
   }

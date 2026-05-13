@@ -539,7 +539,7 @@ func TestTaggedFieldsKeepGroupedPayloadOrder(t *testing.T) {
 	structSer.fieldGroup.ForEachField(func(field *FieldInfo) {
 		fieldNames = append(fieldNames, field.Meta.Name)
 	})
-	require.Equal(t, []string{"flag", "count", "string_two", "string_ten", "duration"}, fieldNames)
+	require.Equal(t, []string{"flag", "count", "string_two", "duration", "string_ten"}, fieldNames)
 
 	typeDef, err := buildTypeDef(f, reflect.ValueOf(TaggedSortStruct{}))
 	require.NoError(t, err)

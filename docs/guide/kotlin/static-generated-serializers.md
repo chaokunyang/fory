@@ -79,14 +79,21 @@ them.
 
 ## Supported Structs
 
-The processor generates serializers for public, concrete, non-generic classes
-in named packages. A supported class must have a primary constructor whose
-serialized parameters are `val` or `var` properties. `data class` is the common
-case, but it is not required.
+The processor generates serializers for public or internal, concrete,
+non-generic classes in named packages. A supported class must have a primary
+constructor whose serialized parameters are `val` or `var` properties. `data
+class` is the common case, but it is not required.
+
+Internal Kotlin struct classes are supported when KSP runs in the same Kotlin
+module that owns the struct. The generated Kotlin serializer is also internal,
+so it can call the internal constructor and expose the internal type in
+overrides while still producing a JVM class that the Fory Java runtime can load.
+Application code outside that Kotlin module still cannot refer to the internal
+struct directly, so registration must happen from code that can see the class.
 
 The processor rejects these declarations:
 
-- `private` or `internal` struct classes.
+- `private` struct classes.
 - local, anonymous, or nested `@ForyStruct` classes.
 - Kotlin `object` declarations.
 - interfaces, abstract classes, and sealed classes as serializer targets.

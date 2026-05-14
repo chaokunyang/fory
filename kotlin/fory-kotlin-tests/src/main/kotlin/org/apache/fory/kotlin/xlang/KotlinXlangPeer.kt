@@ -45,6 +45,12 @@ public data class KotlinUser(
 )
 
 @ForyStruct
+internal data class KotlinInternalUser(
+  @ForyField(id = 1) val id: UInt,
+  @ForyField(id = 2) val name: String = "internal",
+)
+
+@ForyStruct
 public data class KotlinConcreteCollections(
   @ForyField(id = 1) val names: ArrayList<String>,
   @ForyField(id = 2) val values: java.util.LinkedList<Int>,
@@ -121,6 +127,7 @@ public fun main(args: Array<String>) {
 private fun staticSerializerRoundTrip(dataFile: String) {
   val fory = newFory()
   fory.register(KotlinUser::class.java, "kotlin", "KotlinUser")
+  fory.register(KotlinInternalUser::class.java, "kotlin", "KotlinInternalUser")
   fory.register(KotlinConcreteCollections::class.java, "kotlin", "KotlinConcreteCollections")
   fory.register(KotlinUnsignedCollections::class.java, "kotlin", "KotlinUnsignedCollections")
   fory.register(KotlinSchemaSurface::class.java, "kotlin", "KotlinSchemaSurface")
@@ -145,6 +152,14 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(descriptors[0].foryFieldId == 1)
   check(descriptors[0].typeRef.typeExtMeta.typeId() == Types.UINT32)
   check(descriptors[2].typeRef.typeExtMeta.typeId() == Types.VARINT64)
+
+  val internalUser = KotlinInternalUser(id = UInt.MAX_VALUE, name = "internal-static")
+  check(
+    fory.deserialize(fory.serialize(internalUser), KotlinInternalUser::class.java) == internalUser
+  )
+  check(fory.getSerializer(KotlinInternalUser::class.java) is StaticGeneratedStructSerializer<*>) {
+    "KotlinInternalUser did not load a static generated serializer"
+  }
 
   val schemaSurface =
     KotlinSchemaSurface(

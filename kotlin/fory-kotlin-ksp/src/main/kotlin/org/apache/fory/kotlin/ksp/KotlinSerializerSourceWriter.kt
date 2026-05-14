@@ -79,7 +79,8 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       "@Suppress(\"UNCHECKED_CAST\", \"PLATFORM_CLASS_MAPPED_TO_KOTLIN\", \"UNNECESSARY_NOT_NULL_ASSERTION\")\n"
     )
     builder
-      .append("public class ")
+      .append(struct.serializerVisibility.keyword)
+      .append(" class ")
       .append(struct.serializerName)
       .append(" : StaticGeneratedStructSerializer<")
       .append(struct.typeName)

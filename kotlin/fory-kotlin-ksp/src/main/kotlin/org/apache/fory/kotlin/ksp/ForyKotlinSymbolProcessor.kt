@@ -80,8 +80,8 @@ internal fun unsupportedStructDeclarationDiagnostic(
 }
 
 internal fun unsupportedStructVisibilityDiagnostic(modifiers: Set<Modifier>): String? =
-  if (Modifier.PRIVATE in modifiers || Modifier.INTERNAL in modifiers) {
-    "Kotlin KSP xlang serializers generate public runtime-visible serializers, so @ForyStruct targets must not be private or internal"
+  if (Modifier.PRIVATE in modifiers) {
+    "Kotlin KSP xlang serializers require @ForyStruct targets to be public or internal; private targets are inaccessible to generated code"
   } else {
     null
   }
@@ -284,6 +284,12 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       typeName = typeName,
       qualifiedTypeName = declaration.qualifiedName!!.asString(),
       serializerName = "${escapeBinarySimpleName(typeName)}_ForySerializer",
+      serializerVisibility =
+        if (Modifier.INTERNAL in declaration.modifiers) {
+          KotlinSerializerVisibility.INTERNAL
+        } else {
+          KotlinSerializerVisibility.PUBLIC
+        },
       fields = fields,
       originatingFiles = listOfNotNull(declaration.containingFile),
     )

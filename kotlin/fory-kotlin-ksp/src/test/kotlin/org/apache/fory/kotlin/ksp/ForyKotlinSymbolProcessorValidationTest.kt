@@ -50,12 +50,10 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun rejectsNonPublicSerializerTargets() {
+  fun rejectsPrivateSerializerTargets() {
     assertNull(unsupportedStructVisibilityDiagnostic(emptySet()))
+    assertNull(unsupportedStructVisibilityDiagnostic(setOf(Modifier.INTERNAL)))
     assertTrue(unsupportedStructVisibilityDiagnostic(setOf(Modifier.PRIVATE))!!.contains("private"))
-    assertTrue(
-      unsupportedStructVisibilityDiagnostic(setOf(Modifier.INTERNAL))!!.contains("internal")
-    )
   }
 
   @Test
@@ -153,6 +151,7 @@ class ForyKotlinSymbolProcessorValidationTest {
             typeName = "NullableUIntArrayHolder",
             qualifiedTypeName = "example.NullableUIntArrayHolder",
             serializerName = "NullableUIntArrayHolder_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
             fields =
               listOf(
                 KotlinSourceField(
@@ -202,6 +201,7 @@ class ForyKotlinSymbolProcessorValidationTest {
             typeName = "NullableUIntHolder",
             qualifiedTypeName = "example.NullableUIntHolder",
             serializerName = "NullableUIntHolder_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
             fields =
               listOf(
                 KotlinSourceField(
@@ -226,5 +226,24 @@ class ForyKotlinSymbolProcessorValidationTest {
     assertTrue(source.contains("val nullableValue0 = value.value"))
     assertTrue(source.contains("buffer.writeInt32(nullableValue0.toInt())"))
     assertTrue(!source.contains("value.value.toInt()"))
+  }
+
+  @Test
+  fun internalStructGeneratesInternalSerializerSource() {
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "InternalHolder",
+            qualifiedTypeName = "example.InternalHolder",
+            serializerName = "InternalHolder_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.INTERNAL,
+            fields = emptyList(),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("internal class InternalHolder_ForySerializer"))
   }
 }

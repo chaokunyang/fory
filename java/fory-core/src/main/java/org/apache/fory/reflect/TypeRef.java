@@ -15,12 +15,8 @@
 package org.apache.fory.reflect;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.AnnotatedArrayType;
-import java.lang.reflect.AnnotatedParameterizedType;
-import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Array;
 import java.lang.reflect.GenericArrayType;
-import java.lang.reflect.GenericDeclaration;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -36,12 +32,9 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.annotation.CheckForNull;
-import org.apache.fory.annotation.Nullable;
-import org.apache.fory.annotation.Ref;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.meta.TypeExtMeta;
-import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
-import org.apache.fory.type.Types;
 
 // Mostly derived from Guava 32.1.2 com.google.common.reflect.TypeToken
 // https://github.com/google/guava/blob/9f6a3840/guava/src/com/google/common/reflect/TypeToken.java
@@ -142,90 +135,9 @@ public class TypeRef<T> {
     return new TypeRef<>(type, typeExtMeta, explicitTypeArguments, componentType);
   }
 
-  public static <T> TypeRef<T> of(AnnotatedType annotatedType) {
-    @SuppressWarnings("unchecked")
-    TypeRef<T> ref = (TypeRef<T>) ofAnnotatedType(annotatedType, true, false, false);
-    return ref;
-  }
-
-  private static TypeRef<?> ofAnnotatedType(
-      AnnotatedType annotatedType,
-      boolean includeRefMeta,
-      boolean defaultNullable,
-      boolean includeTypeAnnotation) {
-    if (annotatedType == null) {
-      return null;
-    }
-    Type type = annotatedType.getType();
-    List<TypeRef<?>> typeArguments = null;
-    TypeRef<?> componentType = null;
-    if (annotatedType instanceof AnnotatedParameterizedType) {
-      AnnotatedType[] annotatedArgs =
-          ((AnnotatedParameterizedType) annotatedType).getAnnotatedActualTypeArguments();
-      Type[] args = ((ParameterizedType) type).getActualTypeArguments();
-      List<TypeRef<?>> argRefs = new ArrayList<>(args.length);
-      boolean hasChildMeta = false;
-      for (int i = 0; i < args.length; i++) {
-        AnnotatedType annotatedArg = i < annotatedArgs.length ? annotatedArgs[i] : null;
-        Class<?> argumentRawType =
-            annotatedArg == null
-                ? TypeUtils.getRawType(args[i])
-                : TypeUtils.getRawType(annotatedArg.getType());
-        TypeRef<?> argRef =
-            annotatedArg != null
-                ? ofAnnotatedType(annotatedArg, true, !argumentRawType.isPrimitive(), true)
-                : TypeRef.of(args[i]);
-        if (argRef != null && argRef.hasTypeExtMeta()) {
-          hasChildMeta = true;
-        }
-        argRefs.add(argRef);
-      }
-      if (hasChildMeta) {
-        typeArguments = Collections.unmodifiableList(argRefs);
-      }
-    } else if (annotatedType instanceof AnnotatedArrayType) {
-      AnnotatedType annotatedComponent =
-          ((AnnotatedArrayType) annotatedType).getAnnotatedGenericComponentType();
-      Class<?> componentRawType = TypeUtils.getRawType(annotatedComponent.getType());
-      TypeRef<?> component =
-          ofAnnotatedType(
-              annotatedComponent,
-              !componentRawType.isPrimitive(),
-              !componentRawType.isPrimitive(),
-              true);
-      if (component != null && component.hasTypeExtMeta()) {
-        componentType = component;
-      }
-    }
-    TypeExtMeta meta = null;
-    if (includeRefMeta) {
-      Annotation typeAnnotation = includeTypeAnnotation ? getTypeAnnotation(annotatedType) : null;
-      boolean nullable = annotatedType.isAnnotationPresent(Nullable.class);
-      Ref ref = annotatedType.getAnnotation(Ref.class);
-      if (typeAnnotation != null) {
-        int typeId = TypeAnnotationUtils.getTypeId(typeAnnotation, TypeUtils.getRawType(type));
-        meta = TypeExtMeta.of(typeId, nullable || defaultNullable, ref != null && ref.enable());
-      } else if (ref != null || nullable) {
-        meta =
-            TypeExtMeta.of(Types.UNKNOWN, nullable || defaultNullable, ref != null && ref.enable());
-      }
-    }
-    return new TypeRef<>(type, meta, typeArguments, componentType);
-  }
-
-  private static Annotation getTypeAnnotation(AnnotatedType annotatedType) {
-    Annotation typeAnnotation =
-        TypeAnnotationUtils.getTypeAnnotation(annotatedType.getAnnotations());
-    if (typeAnnotation != null || !(annotatedType instanceof AnnotatedArrayType)) {
-      return typeAnnotation;
-    }
-    AnnotatedType annotatedComponent =
-        ((AnnotatedArrayType) annotatedType).getAnnotatedGenericComponentType();
-    Class<?> componentRawType = TypeUtils.getRawType(annotatedComponent.getType());
-    if (!componentRawType.isPrimitive()) {
-      return null;
-    }
-    return TypeAnnotationUtils.getTypeAnnotation(annotatedComponent.getAnnotations());
+  @Internal
+  public static <T> TypeRef<T> ofTypeUse(Object typeUse) {
+    return TypeUseMetadata.typeRef(typeUse);
   }
 
   /** Returns the captured type. */
@@ -359,14 +271,7 @@ public class TypeRef<T> {
    * ? super Foo}), including captured wildcards.
    */
   public boolean isWildcard() {
-    if (type instanceof WildcardType) {
-      return true;
-    }
-    // Check for captured wildcards (TypeVariable created by WildcardCapturer)
-    if (type instanceof TypeVariable) {
-      return ((TypeVariable<?>) type).getGenericDeclaration() == WildcardCapturer.class;
-    }
-    return false;
+    return type instanceof WildcardType;
   }
 
   /**
@@ -391,13 +296,6 @@ public class TypeRef<T> {
   private static boolean containsWildcard(Type t) {
     if (t instanceof WildcardType) {
       return true;
-    }
-    // Check for captured wildcards (TypeVariable created by WildcardCapturer)
-    if (t instanceof TypeVariable) {
-      TypeVariable<?> tv = (TypeVariable<?>) t;
-      if (tv.getGenericDeclaration() == WildcardCapturer.class) {
-        return true;
-      }
     }
     if (t instanceof ParameterizedType) {
       for (Type arg : ((ParameterizedType) t).getActualTypeArguments()) {
@@ -434,17 +332,6 @@ public class TypeRef<T> {
       }
       return of(Object.class);
     }
-    // Handle captured wildcards (TypeVariable created by WildcardCapturer)
-    if (type instanceof TypeVariable) {
-      TypeVariable<?> tv = (TypeVariable<?>) type;
-      if (tv.getGenericDeclaration() == WildcardCapturer.class) {
-        Type[] bounds = tv.getBounds();
-        if (bounds.length > 0) {
-          return of(bounds[0]);
-        }
-        return of(Object.class);
-      }
-    }
     return this;
   }
 
@@ -474,17 +361,6 @@ public class TypeRef<T> {
         return resolveWildcardsInType(upperBounds[0]);
       }
       return Object.class;
-    }
-    // Handle captured wildcards (TypeVariable created by WildcardCapturer)
-    if (t instanceof TypeVariable) {
-      TypeVariable<?> tv = (TypeVariable<?>) t;
-      if (tv.getGenericDeclaration() == WildcardCapturer.class) {
-        Type[] bounds = tv.getBounds();
-        if (bounds.length > 0) {
-          return resolveWildcardsInType(bounds[0]);
-        }
-        return Object.class;
-      }
     }
     if (t instanceof ParameterizedType) {
       ParameterizedType pt = (ParameterizedType) t;
@@ -1230,6 +1106,9 @@ public class TypeRef<T> {
       if (type instanceof TypeVariable) {
         return type;
       }
+      if (type instanceof CapturedWildcardType) {
+        return type;
+      }
       if (type instanceof GenericArrayType) {
         GenericArrayType arrayType = (GenericArrayType) type;
         return newArrayType(capture0(arrayType.getGenericComponentType()));
@@ -1256,17 +1135,17 @@ public class TypeRef<T> {
       throw new AssertionError("must have been one of the known types");
     }
 
-    TypeVariable<?> captureAsTypeVariable(Type[] upperBounds) {
+    Type captureAsTypeVariable(Type[] upperBounds) {
       String name =
           "capture of ? extends "
               + Stream.of(upperBounds).map(Type::toString).collect(Collectors.joining("&"));
-      return new TypeVariableImpl<>(WildcardCapturer.class, name, upperBounds);
+      return new CapturedWildcardType(name, upperBounds);
     }
 
     private WildcardCapturer forTypeVariable(TypeVariable<?> typeParam) {
       return new WildcardCapturer() {
         @Override
-        TypeVariable<?> captureAsTypeVariable(Type[] upperBounds) {
+        Type captureAsTypeVariable(Type[] upperBounds) {
           // Since this is an artificially generated type variable, we don't bother checking
           // subtyping between declared type bound and actual type bound. So it's possible that we
           // may generate something like <capture#1-of ? extends Foo&SubFoo>.
@@ -1500,50 +1379,30 @@ public class TypeRef<T> {
     }
   }
 
-  static class TypeVariableImpl<D extends GenericDeclaration> implements TypeVariable<D> {
-    private final D genericDeclaration;
+  private static final class CapturedWildcardType implements WildcardType {
+    private static final Type[] EMPTY_LOWER_BOUNDS = new Type[0];
+
     private final String name;
     private final Type[] upperBounds;
 
-    TypeVariableImpl(D genericDeclaration, String name, Type[] upperBounds) {
-      this.genericDeclaration = genericDeclaration;
+    CapturedWildcardType(String name, Type[] upperBounds) {
       this.name = name;
       this.upperBounds = upperBounds;
     }
 
     @Override
-    public Type[] getBounds() {
+    public Type[] getUpperBounds() {
       return upperBounds;
     }
 
     @Override
-    public D getGenericDeclaration() {
-      return genericDeclaration;
+    public Type[] getLowerBounds() {
+      return EMPTY_LOWER_BOUNDS;
     }
 
     @Override
-    public String getName() {
+    public String getTypeName() {
       return name;
-    }
-
-    @Override
-    public AnnotatedType[] getAnnotatedBounds() {
-      return new AnnotatedType[0];
-    }
-
-    @Override
-    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
-      return null;
-    }
-
-    @Override
-    public Annotation[] getAnnotations() {
-      return new Annotation[0];
-    }
-
-    @Override
-    public Annotation[] getDeclaredAnnotations() {
-      return new Annotation[0];
     }
 
     @Override
@@ -1552,24 +1411,20 @@ public class TypeRef<T> {
     }
 
     @Override
-    public boolean equals(Object o) {
-      if (this == o) {
+    public boolean equals(Object other) {
+      if (this == other) {
         return true;
       }
-      if (!(o instanceof TypeVariable)) {
+      if (!(other instanceof CapturedWildcardType)) {
         return false;
       }
-
-      TypeVariable<?> that = (TypeVariable<?>) o;
-      return Objects.equals(genericDeclaration, that.getGenericDeclaration())
-          && Objects.equals(name, that.getName())
-          && Arrays.equals(upperBounds, that.getBounds());
+      CapturedWildcardType that = (CapturedWildcardType) other;
+      return Objects.equals(name, that.name) && Arrays.equals(upperBounds, that.upperBounds);
     }
 
     @Override
     public int hashCode() {
-      int result = genericDeclaration != null ? genericDeclaration.hashCode() : 0;
-      result = 31 * result + (name != null ? name.hashCode() : 0);
+      int result = name != null ? name.hashCode() : 0;
       result = 31 * result + Arrays.hashCode(upperBounds);
       return result;
     }

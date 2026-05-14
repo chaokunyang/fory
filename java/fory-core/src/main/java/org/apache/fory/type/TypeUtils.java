@@ -20,9 +20,6 @@
 package org.apache.fory.type;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.AnnotatedArrayType;
-import java.lang.reflect.AnnotatedParameterizedType;
-import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
@@ -69,7 +66,6 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
-import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
@@ -90,6 +86,7 @@ import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeParameter;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.reflect.TypeUseMetadata;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -102,7 +99,6 @@ public class TypeUtils {
   private static final String SQL_DATE_CLASS_NAME = "java.sql.Date";
   private static final String SQL_TIME_CLASS_NAME = "java.sql.Time";
   private static final String SQL_TIMESTAMP_CLASS_NAME = "java.sql.Timestamp";
-  private static final boolean FIELD_ANNOTATED_TYPE_SUPPORTED = isFieldAnnotatedTypeSupported();
 
   public static final String JAVA_BOOLEAN = "boolean";
   public static final String JAVA_BYTE = "byte";
@@ -319,11 +315,11 @@ public class TypeUtils {
     if (typeRef.isPrimitive()) {
       return false;
     }
-    if (FIELD_ANNOTATED_TYPE_SUPPORTED
-        && (isAnnotatedNullable(field == null ? null : field.getAnnotatedType())
-            || isAnnotatedNullable(component == null ? null : component.getAnnotatedType())
-            || isAnnotatedNullable(
-                readMethod == null ? null : readMethod.getAnnotatedReturnType()))) {
+    if (TypeUseMetadata.isNullable(field == null ? null : getFieldTypeUse(field))
+        || TypeUseMetadata.isNullable(
+            component == null ? null : getRecordComponentTypeUse(component))
+        || TypeUseMetadata.isNullable(
+            readMethod == null ? null : getMethodReturnTypeUse(readMethod))) {
       return true;
     }
     TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
@@ -644,107 +640,74 @@ public class TypeUtils {
   }
 
   public static void applyRefTrackingOverride(
-      GenericType genericType, AnnotatedType annotatedType, boolean globalTrackingRef) {
-    if (genericType == null || annotatedType == null) {
+      GenericType genericType, Object typeUse, boolean globalTrackingRef) {
+    if (genericType == null || typeUse == null) {
       return;
     }
-    Ref ref = annotatedType.getAnnotation(Ref.class);
+    Ref ref = TypeUseMetadata.typeUseAnnotation(typeUse, Ref.class);
     if (ref != null) {
       genericType.setTrackingRefOverride(ref.enable() && globalTrackingRef);
     }
-    if (annotatedType instanceof AnnotatedParameterizedType) {
-      AnnotatedType[] annotatedArgs =
-          ((AnnotatedParameterizedType) annotatedType).getAnnotatedActualTypeArguments();
+    Object[] typeUseArgs = TypeUseMetadata.typeUseArguments(typeUse);
+    if (typeUseArgs != null) {
       GenericType[] typeParameters = genericType.getTypeParameters();
-      int len = Math.min(annotatedArgs.length, typeParameters.length);
+      int len = Math.min(typeUseArgs.length, typeParameters.length);
       for (int i = 0; i < len; i++) {
-        applyRefTrackingOverride(typeParameters[i], annotatedArgs[i], globalTrackingRef);
+        applyRefTrackingOverride(typeParameters[i], typeUseArgs[i], globalTrackingRef);
       }
     }
   }
 
   public static TypeRef<?> getFieldTypeRef(Field field) {
-    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
-      return TypeRef.of(field.getAnnotatedType());
-    }
-    return TypeRef.of(field.getGenericType());
+    Object typeUse = getFieldTypeUse(field);
+    return typeUse == null ? TypeRef.of(field.getGenericType()) : TypeRef.ofTypeUse(typeUse);
   }
 
   public static TypeRef<?> getMethodReturnTypeRef(Method method) {
-    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
-      return TypeRef.of(method.getAnnotatedReturnType());
-    }
-    return TypeRef.of(method.getGenericReturnType());
+    Object typeUse = getMethodReturnTypeUse(method);
+    return typeUse == null ? TypeRef.of(method.getGenericReturnType()) : TypeRef.ofTypeUse(typeUse);
   }
 
-  public static AnnotatedType getFieldAnnotatedType(Field field) {
-    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
-      return field.getAnnotatedType();
+  public static TypeRef<?> getMethodParameterTypeRef(Method method, int parameterIndex) {
+    Object[] typeUses = getMethodParameterTypeUses(method);
+    if (typeUses != null) {
+      return TypeRef.ofTypeUse(typeUses[parameterIndex]);
     }
-    return null;
+    return TypeRef.of(method.getGenericParameterTypes()[parameterIndex]);
   }
 
-  public static AnnotatedType getRecordComponentAnnotatedType(RecordComponent component) {
-    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
-      return component.getAnnotatedType();
-    }
-    return null;
+  private static Object getFieldTypeUse(Field field) {
+    return TypeUseMetadata.fieldTypeUse(field);
+  }
+
+  private static Object getMethodReturnTypeUse(Method method) {
+    return TypeUseMetadata.methodReturnTypeUse(method);
+  }
+
+  private static Object[] getMethodParameterTypeUses(Method method) {
+    return TypeUseMetadata.methodParameterTypeUses(method);
+  }
+
+  private static Object getRecordComponentTypeUse(RecordComponent component) {
+    return TypeUseMetadata.recordComponentTypeUse(component);
   }
 
   public static TypeRef<?> getRecordComponentTypeRef(RecordComponent component) {
-    AnnotatedType annotatedType = getRecordComponentAnnotatedType(component);
-    return annotatedType == null
-        ? TypeRef.of(component.getGenericType())
-        : TypeRef.of(annotatedType);
+    Object typeUse = getRecordComponentTypeUse(component);
+    return typeUse == null ? TypeRef.of(component.getGenericType()) : TypeRef.ofTypeUse(typeUse);
   }
 
   public static Annotation getFieldTypeUseAnnotation(Field field, String name) {
-    if (!FIELD_ANNOTATED_TYPE_SUPPORTED) {
-      return null;
-    }
-    return getTypeUseAnnotation(field.getAnnotatedType(), name);
+    return TypeUseMetadata.typeUseAnnotation(getFieldTypeUse(field), name);
   }
 
   public static Annotation getMethodReturnTypeUseAnnotation(Method method, String name) {
-    if (!FIELD_ANNOTATED_TYPE_SUPPORTED) {
-      return null;
-    }
-    return getTypeUseAnnotation(method.getAnnotatedReturnType(), name);
-  }
-
-  private static boolean isAnnotatedNullable(AnnotatedType annotatedType) {
-    return annotatedType != null && annotatedType.isAnnotationPresent(Nullable.class);
-  }
-
-  private static Annotation getTypeUseAnnotation(AnnotatedType annotatedType, String name) {
-    if (annotatedType == null) {
-      return null;
-    }
-    Annotation typeAnnotation = Descriptor.getAnnotation(annotatedType.getAnnotations(), name);
-    if (typeAnnotation != null || !(annotatedType instanceof AnnotatedArrayType)) {
-      return typeAnnotation;
-    }
-    AnnotatedType annotatedComponent =
-        ((AnnotatedArrayType) annotatedType).getAnnotatedGenericComponentType();
-    Class<?> componentRawType = getRawType(annotatedComponent.getType());
-    if (!componentRawType.isPrimitive()) {
-      return null;
-    }
-    return Descriptor.getAnnotation(annotatedComponent.getAnnotations(), name);
-  }
-
-  private static boolean isFieldAnnotatedTypeSupported() {
-    try {
-      Field.class.getMethod("getAnnotatedType");
-      return true;
-    } catch (NoSuchMethodException | LinkageError e) {
-      return false;
-    }
+    return TypeUseMetadata.typeUseAnnotation(getMethodReturnTypeUse(method), name);
   }
 
   public static void applyFieldRefTrackingOverride(
       GenericType genericType, Field field, boolean globalTrackingRef) {
-    applyRefTrackingOverride(genericType, getFieldAnnotatedType(field), globalTrackingRef);
+    applyRefTrackingOverride(genericType, getFieldTypeUse(field), globalTrackingRef);
   }
 
   public static <E> TypeRef<ArrayList<E>> arrayListOf(Class<E> elemType) {

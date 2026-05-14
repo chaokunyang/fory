@@ -21,7 +21,6 @@ package org.apache.fory.serializer;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
-import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -438,8 +437,7 @@ public class UnionSerializer extends Serializer<Union> {
         continue;
       }
       if (method.getName().equals(setterName) && method.getParameterCount() == 1) {
-        AnnotatedType[] parameterTypes = method.getAnnotatedParameterTypes();
-        return TypeRef.of(parameterTypes[0]);
+        return TypeUtils.getMethodParameterTypeRef(method, 0);
       }
     }
     String getterName = "get" + suffix;
@@ -450,7 +448,7 @@ public class UnionSerializer extends Serializer<Union> {
       if (method.getName().equals(getterName) && method.getParameterCount() == 0) {
         Class<?> returnType = method.getReturnType();
         if (returnType != void.class) {
-          return TypeRef.of(method.getAnnotatedReturnType());
+          return TypeUtils.getMethodReturnTypeRef(method);
         }
       }
     }

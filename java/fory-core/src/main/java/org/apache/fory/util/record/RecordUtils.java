@@ -22,7 +22,6 @@ package org.apache.fory.util.record;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -178,7 +177,7 @@ public class RecordUtils {
                 (String) GET_NAME.invoke(component),
                 fieldType,
                 (Type) GET_GENERIC_TYPE.invoke(component),
-                (AnnotatedType) GET_ANNOTATED_TYPE.invoke(component),
+                GET_ANNOTATED_TYPE.invoke(component),
                 accessor,
                 getter);
       }

@@ -109,25 +109,25 @@ public class TypeRefTest extends ForyTestBase {
   @Test
   public void testTypeUseMetadataKeepsNullableOwnership() throws Exception {
     Field nicknameField = TypeUseMetadataStruct.class.getDeclaredField("nickname");
-    TypeRef<?> nicknameType = TypeRef.of(nicknameField.getAnnotatedType());
+    TypeRef<?> nicknameType = TypeRef.ofTypeUse(nicknameField.getAnnotatedType());
     TypeExtMeta nicknameMeta = nicknameType.getTypeExtMeta();
     Assert.assertEquals(nicknameMeta.typeId(), Types.UNKNOWN);
     Assert.assertTrue(nicknameMeta.nullable());
     Assert.assertFalse(nicknameMeta.trackingRef());
 
     Field codeField = TypeUseMetadataStruct.class.getDeclaredField("code");
-    TypeRef<?> codeType = TypeRef.of(codeField.getAnnotatedType());
+    TypeRef<?> codeType = TypeRef.ofTypeUse(codeField.getAnnotatedType());
     Assert.assertFalse(codeType.hasTypeExtMeta());
 
     Field namesField = TypeUseMetadataStruct.class.getDeclaredField("names");
-    TypeRef<?> namesType = TypeRef.of(namesField.getAnnotatedType());
+    TypeRef<?> namesType = TypeRef.ofTypeUse(namesField.getAnnotatedType());
     TypeExtMeta namesElementMeta = namesType.getTypeArguments().get(0).getTypeExtMeta();
     Assert.assertEquals(namesElementMeta.typeId(), Types.UNKNOWN);
     Assert.assertTrue(namesElementMeta.nullable());
     Assert.assertFalse(namesElementMeta.trackingRef());
 
     Field codesField = TypeUseMetadataStruct.class.getDeclaredField("codes");
-    TypeRef<?> codesType = TypeRef.of(codesField.getAnnotatedType());
+    TypeRef<?> codesType = TypeRef.ofTypeUse(codesField.getAnnotatedType());
     TypeExtMeta codesElementMeta = codesType.getTypeArguments().get(0).getTypeExtMeta();
     Assert.assertEquals(codesElementMeta.typeId(), Types.INT32);
     Assert.assertTrue(codesElementMeta.nullable());

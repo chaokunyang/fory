@@ -27,7 +27,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -97,7 +96,7 @@ public class AndroidSupportStaticCheckTest {
           .forEach(
               path -> {
                 String relativePath = sourceRoot.relativize(path).toString().replace('\\', '/');
-                if ("type/TypeUtils.java".equals(relativePath)) {
+                if ("reflect/JvmTypeUseMetadata.java".equals(relativePath)) {
                   return;
                 }
                 try {
@@ -124,23 +123,31 @@ public class AndroidSupportStaticCheckTest {
 
   @Test
   public void testAndroidLoadedRuntimePathsDoNotReferenceAnnotatedType() throws IOException {
-    List<String> checkedPaths =
-        Arrays.asList(
-            "src/main/java/org/apache/fory/type/Descriptor.java",
-            "src/main/java/org/apache/fory/resolver/TypeResolver.java",
-            "src/main/java/org/apache/fory/serializer/AbstractObjectSerializer.java");
+    Path sourceRoot = Paths.get("src/main/java/org/apache/fory");
     List<String> violations = new ArrayList<>();
-    for (String checkedPath : checkedPaths) {
-      Path sourcePath = Paths.get(checkedPath);
-      String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
-      if (DIRECT_ANNOTATED_TYPE_REFERENCE.matcher(source).find()) {
-        violations.add(checkedPath);
-      }
+    try (Stream<Path> paths = Files.walk(sourceRoot)) {
+      paths
+          .filter(path -> path.toString().endsWith(".java"))
+          .forEach(
+              path -> {
+                try {
+                  String relativePath = sourceRoot.relativize(path).toString().replace('\\', '/');
+                  if ("reflect/JvmTypeUseMetadata.java".equals(relativePath)) {
+                    return;
+                  }
+                  String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
+                  if (DIRECT_ANNOTATED_TYPE_REFERENCE.matcher(source).find()) {
+                    violations.add(relativePath);
+                  }
+                } catch (IOException e) {
+                  throw new RuntimeException(e);
+                }
+              });
     }
     assertTrue(
         violations.isEmpty(),
-        "Android resolves AnnotatedType method descriptors while loading these serializer paths; "
-            + "keep annotated-type handling behind TypeUtils: "
+        "Android resolves AnnotatedType method descriptors while shrinking Fory core; "
+            + "use Object/Method based type-use reflection in core sources: "
             + violations);
   }
 

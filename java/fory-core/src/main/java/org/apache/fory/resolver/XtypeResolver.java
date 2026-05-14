@@ -1331,6 +1331,9 @@ public class XtypeResolver extends TypeResolver {
     if (isMap(cls)) {
       return Types.MAP;
     }
+    if (Union.class.isAssignableFrom(cls)) {
+      return Types.UNION;
+    }
     if (isRegistered(cls)) {
       return (byte) getTypeInfo(cls).getTypeId();
     } else {

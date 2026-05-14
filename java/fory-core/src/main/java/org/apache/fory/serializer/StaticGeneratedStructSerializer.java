@@ -48,6 +48,13 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   protected final List<RemoteFieldInfo> remoteFields;
   private final SerializationFieldInfo[] localFieldsById;
 
+  protected StaticGeneratedStructSerializer() {
+    super();
+    this.typeDef = null;
+    this.remoteFields = Collections.emptyList();
+    this.localFieldsById = new SerializationFieldInfo[0];
+  }
+
   @SuppressWarnings("unchecked")
   public StaticGeneratedStructSerializer(TypeResolver typeResolver, Class<?> type) {
     super(typeResolver, (Class<T>) type);
@@ -88,7 +95,11 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   @Override
   public abstract T copy(CopyContext copyContext, T value);
 
-  public abstract List<Descriptor> getDescriptors();
+  public abstract List<Descriptor> getGeneratedDescriptors();
+
+  public final List<Descriptor> getDescriptors() {
+    return getGeneratedDescriptors();
+  }
 
   public abstract T readCompatible(ReadContext readContext);
 

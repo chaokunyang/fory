@@ -22,8 +22,12 @@ package org.apache.fory.annotation.processing;
 import java.io.IOException;
 import java.io.Writer;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -57,6 +61,7 @@ import javax.lang.model.util.ElementFilter;
 import javax.lang.model.util.Elements;
 import javax.tools.Diagnostic;
 import javax.tools.JavaFileObject;
+import javax.tools.StandardLocation;
 
 @SupportedAnnotationTypes({
   "org.apache.fory.annotation.ForyStruct",
@@ -74,8 +79,12 @@ public final class ForyStructProcessor extends AbstractProcessor {
   private static final String INT32_TYPE = "org.apache.fory.annotation.Int32Type";
   private static final String INT64_TYPE = "org.apache.fory.annotation.Int64Type";
   private static final String INT8_TYPE = "org.apache.fory.annotation.Int8Type";
+  private static final String KOTLIN_METADATA = "kotlin.Metadata";
   private static final String NULLABLE = "org.apache.fory.annotation.Nullable";
   private static final String REF = "org.apache.fory.annotation.Ref";
+  private static final String STATIC_PROVIDER_SERVICE =
+      "META-INF/services/org.apache.fory.serializer.StaticGeneratedSerializerProvider"
+          + "$JavaAnnotationProcessor";
   private static final String UINT16_TYPE = "org.apache.fory.annotation.UInt16Type";
   private static final String UINT32_TYPE = "org.apache.fory.annotation.UInt32Type";
   private static final String UINT64_TYPE = "org.apache.fory.annotation.UInt64Type";
@@ -83,6 +92,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
 
   private final Set<String> processed = new HashSet<>();
   private final Map<String, TypeElement> generatedTypes = new HashMap<>();
+  private final Map<String, List<ProviderEntry>> providerEntriesByPackage = new LinkedHashMap<>();
+  private boolean providersEmitted;
   private Messager messager;
   private Filer filer;
   private Elements elements;
@@ -99,6 +110,18 @@ public final class ForyStructProcessor extends AbstractProcessor {
 
     SerializerMode(String serializerSuffix) {
       this.serializerSuffix = serializerSuffix;
+    }
+  }
+
+  private static final class ProviderEntry {
+    final String targetType;
+    final String serializerType;
+    final String mode;
+
+    ProviderEntry(String targetType, String serializerType, String mode) {
+      this.targetType = targetType;
+      this.serializerType = serializerType;
+      this.mode = mode;
     }
   }
 
@@ -139,6 +162,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
         continue;
       }
       TypeElement type = (TypeElement) element;
+      if (isKotlinClass(type)) {
+        continue;
+      }
       String binaryName = elements.getBinaryName(type).toString();
       if (!processed.add(binaryName)) {
         continue;
@@ -155,6 +181,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
             "Failed to generate Fory static serializer for " + binaryName + ": " + e.getMessage(),
             type);
       }
+    }
+    if (roundEnv.processingOver()) {
+      emitProviders();
     }
     return true;
   }
@@ -264,10 +293,153 @@ public final class ForyStructProcessor extends AbstractProcessor {
       try (Writer writer = file.openWriter()) {
         writer.write(new StaticSerializerSourceWriter(struct).write());
       }
+      providerEntriesByPackage
+          .computeIfAbsent(struct.packageName, key -> new ArrayList<>())
+          .add(
+              new ProviderEntry(
+                  struct.typeName, struct.qualifiedSerializerName(), providerMode(struct)));
     } catch (IOException e) {
       throw new InvalidStructException(
           "Failed to write generated serializer: " + e, originatingType);
     }
+  }
+
+  private String providerMode(SourceStruct struct) {
+    return struct.serializerName.endsWith(SerializerMode.XLANG.serializerSuffix)
+        ? "XLANG"
+        : "NATIVE";
+  }
+
+  private void emitProviders() {
+    if (providersEmitted || providerEntriesByPackage.isEmpty()) {
+      return;
+    }
+    providersEmitted = true;
+    List<String> providerNames = new ArrayList<>();
+    for (Map.Entry<String, List<ProviderEntry>> entry : providerEntriesByPackage.entrySet()) {
+      String packageName = entry.getKey();
+      List<ProviderEntry> providerEntries = new ArrayList<>(entry.getValue());
+      providerEntries.sort(
+          Comparator.comparing((ProviderEntry providerEntry) -> providerEntry.targetType)
+              .thenComparing(providerEntry -> providerEntry.serializerType)
+              .thenComparing(providerEntry -> providerEntry.mode));
+      String providerName = staticProviderName(providerEntries);
+      String qualifiedProviderName =
+          packageName.isEmpty() ? providerName : packageName + "." + providerName;
+      providerNames.add(qualifiedProviderName);
+      try {
+        JavaFileObject file = filer.createSourceFile(qualifiedProviderName);
+        try (Writer writer = file.openWriter()) {
+          writer.write(writeProvider(packageName, providerName, providerEntries));
+        }
+      } catch (IOException e) {
+        messager.printMessage(
+            Diagnostic.Kind.ERROR,
+            "Failed to write Fory static generated serializer provider "
+                + qualifiedProviderName
+                + ": "
+                + e.getMessage());
+      }
+    }
+    try {
+      javax.tools.FileObject serviceFile =
+          filer.createResource(StandardLocation.CLASS_OUTPUT, "", STATIC_PROVIDER_SERVICE);
+      try (Writer writer = serviceFile.openWriter()) {
+        for (String providerName : providerNames) {
+          writer.write(providerName);
+          writer.write('\n');
+        }
+      }
+    } catch (IOException e) {
+      messager.printMessage(
+          Diagnostic.Kind.ERROR,
+          "Failed to write Fory static generated serializer provider service file: "
+              + e.getMessage());
+    }
+  }
+
+  private static String staticProviderName(List<ProviderEntry> providerEntries) {
+    MessageDigest digest = sha256();
+    for (ProviderEntry entry : providerEntries) {
+      updateDigest(digest, entry.targetType);
+      updateDigest(digest, entry.serializerType);
+      updateDigest(digest, entry.mode);
+    }
+    byte[] hash = digest.digest();
+    StringBuilder suffix = new StringBuilder(16);
+    for (int i = 0; i < 8; i++) {
+      int value = hash[i] & 0xff;
+      if (value < 0x10) {
+        suffix.append('0');
+      }
+      suffix.append(Integer.toHexString(value));
+    }
+    return "__ForyStaticGeneratedSerializerProvider_" + suffix + "__";
+  }
+
+  private static MessageDigest sha256() {
+    try {
+      return MessageDigest.getInstance("SHA-256");
+    } catch (NoSuchAlgorithmException e) {
+      throw new IllegalStateException("SHA-256 is required by the Java platform", e);
+    }
+  }
+
+  private static void updateDigest(MessageDigest digest, String value) {
+    digest.update(value.getBytes(StandardCharsets.UTF_8));
+    digest.update((byte) 0);
+  }
+
+  private String writeProvider(
+      String packageName, String providerName, List<ProviderEntry> providerEntries) {
+    StringBuilder builder = new StringBuilder(4096);
+    if (!packageName.isEmpty()) {
+      builder.append("package ").append(packageName).append(";\n\n");
+    }
+    builder.append("import org.apache.fory.meta.TypeDef;\n");
+    builder.append("import org.apache.fory.resolver.TypeResolver;\n");
+    builder.append("import org.apache.fory.serializer.StaticGeneratedSerializerProvider;\n");
+    builder.append("import org.apache.fory.serializer.StaticGeneratedSerializerRegistry;\n");
+    builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer;\n\n");
+    builder.append("public final class ").append(providerName);
+    builder.append(" implements StaticGeneratedSerializerProvider.JavaAnnotationProcessor {\n");
+    builder.append("  public ").append(providerName).append("() {}\n\n");
+    builder.append("  @Override\n");
+    builder.append("  public void register(StaticGeneratedSerializerRegistry registry) {\n");
+    for (ProviderEntry entry : providerEntries) {
+      builder.append("    registry.register(");
+      builder.append(entry.targetType).append(".class, ");
+      builder.append("StaticGeneratedSerializerRegistry.Mode.").append(entry.mode).append(", ");
+      builder.append(entry.serializerType).append(".class,\n");
+      builder.append("        new StaticGeneratedSerializerRegistry.RuntimeFactory() {\n");
+      builder.append("          @Override\n");
+      builder.append("          public StaticGeneratedStructSerializer<?> create(\n");
+      builder.append("              TypeResolver resolver, Class<?> type, TypeDef typeDef) {\n");
+      builder.append("            return typeDef == null\n");
+      builder
+          .append("                ? new ")
+          .append(entry.serializerType)
+          .append("(resolver, type)\n");
+      builder
+          .append("                : new ")
+          .append(entry.serializerType)
+          .append("(resolver, type, typeDef);\n");
+      builder.append("          }\n");
+      builder.append("        },\n");
+      builder.append("        new StaticGeneratedSerializerRegistry.DescriptorFactory() {\n");
+      builder.append("          @Override\n");
+      builder.append("          public StaticGeneratedStructSerializer<?> create() {\n");
+      builder.append("            return new ").append(entry.serializerType).append("();\n");
+      builder.append("          }\n");
+      builder.append("        });\n");
+    }
+    builder.append("  }\n");
+    builder.append("}\n");
+    return builder.toString();
+  }
+
+  private boolean isKotlinClass(TypeElement type) {
+    return annotationMirror(type, KOTLIN_METADATA) != null;
   }
 
   private SourceField buildField(

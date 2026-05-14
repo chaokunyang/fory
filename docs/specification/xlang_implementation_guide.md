@@ -107,6 +107,37 @@ Generated and hand-written serializers should treat these contexts as the only
 source of operation-local services. Serializers must not keep ambient runtime
 state in thread locals, globals, or serializer instance fields.
 
+### Static generated serializer discovery
+
+The Java runtime discovers build-time generated xlang serializers through
+`StaticGeneratedSerializerProvider` service providers. A provider maps a target
+class to the generated serializer class and construction functions. Runtime
+registration still belongs to the user: users register target classes and
+their IDs or names with normal Fory registration APIs; generated providers must
+not choose user IDs or registered names.
+
+Generated-name `Class.forName` lookup is not the owner for static serializer
+discovery. Service-provider lookup is required for Android/R8 and is preferred
+for Kotlin classes. Kotlin xlang structs require a KSP-generated SPI mapping;
+missing static serializer metadata is a configuration error. When a registered
+type is a Kotlin class, or when the runtime is Android, the Java type resolver
+checks the static provider registry first. The registry must support both
+service-provider loading and explicit provider registration for Android or
+custom packaging pipelines that cannot rely on `META-INF/services` resources.
+Generated Java annotation-processor providers and Kotlin KSP providers use
+separate marker service descriptors under `StaticGeneratedSerializerProvider`
+so mixed Java/Kotlin artifacts can package both provider lists without resource
+overwrite. The registry must also load providers visible from the target class
+loader, not only the resolver class loader, so generated serializers packaged
+beside plugin or child-loader classes can be found.
+
+Static generated serializers must expose descriptor metadata through an
+instance `getGeneratedDescriptors()` method and must have a provider-callable
+no-argument construction path for descriptor reads. That construction path is
+not a user registration API. The runtime creates the descriptor instance from
+the provider; it does not parse Kotlin metadata or Java fields at runtime to
+recover the generated schema.
+
 ### `WriteContext`
 
 `WriteContext` owns all write-side per-operation state:

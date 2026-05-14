@@ -2184,7 +2184,7 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         Expression value = deserializeForNotNullForField(buffer, descriptor, null);
 
         if (serializerCallsReference) {
-          // When a field explicitly disables ref tracking (@ForyField(trackingRef=false))
+          // When a field explicitly disables ref tracking (@ForyField(ref = false))
           // but global ref tracking is enabled, the serializer will call reference().
           // We need to preserve a -1 id so that when the deserializer calls reference(),
           // it will pop this -1 and skip the setReadRef call.

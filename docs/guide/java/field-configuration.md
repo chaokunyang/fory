@@ -86,12 +86,14 @@ public class User {
 
 ### Parameters
 
-| Parameter  | Type      | Default | Description                            |
-| ---------- | --------- | ------- | -------------------------------------- |
-| `id`       | `int`     | `-1`    | Non-negative field tag ID, or no ID    |
-| `nullable` | `boolean` | `false` | Whether the field can be null          |
-| `ref`      | `boolean` | `false` | Enable reference tracking              |
-| `dynamic`  | `Dynamic` | `AUTO`  | Control polymorphism for struct fields |
+| Parameter | Type      | Default | Description                            |
+| --------- | --------- | ------- | -------------------------------------- |
+| `id`      | `int`     | `-1`    | Non-negative field tag ID, or no ID    |
+| `ref`     | `boolean` | `false` | Enable reference tracking              |
+| `dynamic` | `Dynamic` | `AUTO`  | Control polymorphism for struct fields |
+
+Use `@Nullable` on the field type or nested type position for nullable schema
+metadata. `@ForyField` does not carry nullability.
 
 ## Field ID (`id`)
 

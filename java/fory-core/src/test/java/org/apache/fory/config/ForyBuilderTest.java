@@ -126,10 +126,7 @@ public class ForyBuilderTest {
             .withXlang(true)
             .build();
     Fory xlangLanguage =
-        new ForyBuilder()
-            .withNumberCompressed(false)
-            .withLanguage(Language.XLANG)
-            .build();
+        new ForyBuilder().withNumberCompressed(false).withLanguage(Language.XLANG).build();
 
     assertTrue(xlangAfterNativeCompressionOptions.getConfig().compressInt());
     assertEquals(

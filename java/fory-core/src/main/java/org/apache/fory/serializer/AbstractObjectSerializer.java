@@ -19,6 +19,7 @@
 
 package org.apache.fory.serializer;
 
+import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -69,6 +70,14 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   protected final ObjectCreator<T> objectCreator;
   private SerializationFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
+
+  protected AbstractObjectSerializer() {
+    super();
+    this.config = null;
+    this.typeResolver = null;
+    this.isRecord = false;
+    this.objectCreator = null;
+  }
 
   public AbstractObjectSerializer(TypeResolver typeResolver, Class<T> type) {
     this(typeResolver, type, ObjectCreators.getObjectCreator(type));
@@ -1282,10 +1291,15 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       try {
         for (RecordComponent component : components) {
           Field field = type.getDeclaredField(component.getName());
-          TypeRef<?> typeRef = TypeRef.of(component.getAnnotatedType());
+          AnnotatedType componentAnnotatedType =
+              TypeUtils.getRecordComponentAnnotatedType(component);
+          TypeRef<?> typeRef =
+              componentAnnotatedType == null
+                  ? TypeRef.of(component.getGenericType())
+                  : TypeRef.of(componentAnnotatedType);
           descriptors.add(
               new Descriptor(
-                  field, typeRef, component.getAccessor(), null, component.getAnnotatedType()));
+                  field, typeRef, component.getAccessor(), null, componentAnnotatedType));
         }
       } catch (NoSuchFieldException e) {
         // impossible

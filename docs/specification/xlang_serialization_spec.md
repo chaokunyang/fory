@@ -208,14 +208,17 @@ Users can also provide meta hints for fields of a type, or the type whole. Here 
 annotation to provide such information.
 
 ```java
-@ForyStruct(fieldsNullable = false, trackingRef = false)
+@ForyStruct
 class Foo {
-  @ForyField(trackingRef = false)
+  @ArrayType
+  @ForyField(id = 0)
   int[] intArray;
-  @ForyField(polymorphic = true)
+
+  @ForyField(id = 1, dynamic = ForyField.Dynamic.TRUE)
   Object object;
+
   @Nullable
-  @ForyField(tagId = 1)
+  @ForyField(id = 2)
   List<Object> objectList;
 }
 ```

@@ -125,6 +125,25 @@ Notes:
   of the current xlang type-mapping surface.
 - Current xlang uses `*_ARRAY` for one-dimensional primitive arrays and nested `list` for
   multi-dimensional arrays.
+- Kotlin KSP xlang maps `UByte`, `UShort`, `UInt`, and `ULong` to `uint8`,
+  `uint16`, `uint32`, and `uint64` respectively. The generated descriptor uses
+  the JVM primitive carrier plus explicit Fory type metadata; it does not add
+  unsigned wrapper wire types. `ByteArray` maps to `binary` by default and to
+  `array<int8>` only when the field is explicitly marked with Fory `ArrayType`.
+  `UByteArray`, `UShortArray`, `UIntArray`, and `ULongArray` map to the dense
+  unsigned array schema types. Dense Kotlin numeric array component metadata
+  uses the fixed-width element type (`int32`, `int64`, `uint32`, or `uint64`);
+  scalar field defaults such as varint do not apply to dense array elements.
+- Kotlin collection declarations in KSP xlang mode carry schema shape, not JVM
+  implementation identity. `List<T>`, mutable list declarations, and supported
+  concrete list declarations encode as `list<T>`; `Set<T>` encodes as `set<T>`;
+  `Map<K, V>` encodes as `map<K, V>`. Deserialization may construct a different
+  concrete implementation if it is assignable to the declared field type.
+  Sorted JVM collections reconstructed with natural ordering require non-null
+  scalar or string elements or keys. JVM concurrent map declarations require
+  non-null values. `@ArrayType List<T>` maps to dense `array<T>` only for
+  non-null bool or numeric element domains; unsupported element domains are KSP
+  errors.
 - `list<T>` and `array<T>` remain distinct schema kinds. In schema-compatible struct/class field
   matching only, a direct top-level `list<T>` field may be read as a direct top-level `array<T>`
   field, and a direct top-level `array<T>` field may be read as a direct top-level `list<T>` field,

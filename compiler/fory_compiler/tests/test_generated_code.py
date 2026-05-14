@@ -611,6 +611,30 @@ def test_java_unsigned_carriers_and_integer_encoding_annotations():
     )
 
 
+def test_java_nullable_type_use_annotation_targets_top_level_type():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message Money {
+                string currency = 1;
+            }
+
+            message NullableTargets {
+                optional Money money = 1;
+                optional bytes payload = 2;
+                optional decimal amount = 3;
+            }
+            """
+        )
+    )
+    java_output = render_files(generate_files(schema, JavaGenerator))
+    assert "private @Nullable Money money;" in java_output
+    assert "private byte @Nullable [] payload;" in java_output
+    assert "private java.math.@Nullable BigDecimal amount;" in java_output
+
+
 def test_java_evolving_false_generation_uses_struct_evolution_enum():
     schema = parse_fdl(
         dedent(

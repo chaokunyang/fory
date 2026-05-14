@@ -63,6 +63,13 @@ public abstract class Serializer<T> {
 
   protected final boolean immutable;
 
+  protected Serializer() {
+    this.type = null;
+    this.needToWriteRef = false;
+    this.needToCopyRef = false;
+    this.immutable = true;
+  }
+
   /**
    * Creates a serializer using ref/copy defaults derived from {@link Config} and {@code type}.
    *

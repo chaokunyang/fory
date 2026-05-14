@@ -30,6 +30,7 @@ import org.apache.fory.serializer.BufferCallback;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
+import org.apache.fory.serializer.StaticGeneratedSerializerProvider;
 
 /** All Fory’s basic interface, including Fory’s basic methods. */
 public interface BaseFory {
@@ -154,6 +155,15 @@ public interface BaseFory {
   void setSerializerFactory(SerializerFactory serializerFactory);
 
   TypeResolver getTypeResolver();
+
+  /**
+   * Registers a build-time generated static serializer provider explicitly.
+   *
+   * <p>This is a discovery hook only: users still register target classes and their IDs or xlang
+   * names through the normal class registration APIs. It is useful for Android or custom packaging
+   * setups where service resources are not merged into the final artifact.
+   */
+  void registerStaticGeneratedSerializerProvider(StaticGeneratedSerializerProvider provider);
 
   /**
    * Ensure all compilation for serializers and accessors even for lazy initialized serializers.

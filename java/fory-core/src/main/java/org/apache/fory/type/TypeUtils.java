@@ -89,6 +89,7 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
+import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
 
 /** Type utils for common type inference and extraction. */
@@ -640,6 +641,13 @@ public class TypeUtils {
   public static AnnotatedType getFieldAnnotatedType(Field field) {
     if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
       return field.getAnnotatedType();
+    }
+    return null;
+  }
+
+  public static AnnotatedType getRecordComponentAnnotatedType(RecordComponent component) {
+    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
+      return component.getAnnotatedType();
     }
     return null;
   }

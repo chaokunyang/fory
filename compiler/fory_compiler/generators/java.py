@@ -1159,7 +1159,7 @@ class JavaGenerator(BaseGenerator):
             type_use=use_type_annotation,
         )
         if nullable:
-            java_type = f"@Nullable {java_type}"
+            java_type = self.apply_top_level_type_use_annotation(java_type, "@Nullable")
 
         lines.append(f"private {java_type} {self.to_camel_case(field.name)};")
         lines.append("")
@@ -1572,6 +1572,30 @@ class JavaGenerator(BaseGenerator):
         return None
 
     def apply_array_type_use_annotation(self, java_type: str, annotation: str) -> str:
+        return f"{annotation} {java_type}"
+
+    def apply_top_level_type_use_annotation(
+        self, java_type: str, annotation: str
+    ) -> str:
+        """Apply a type-use annotation to the top-level Java type."""
+        if java_type.endswith("[]"):
+            return f"{java_type[:-2]} {annotation} []"
+        generic_start = java_type.find("<")
+        if generic_start != -1:
+            raw_type = java_type[:generic_start]
+            suffix = java_type[generic_start:]
+        else:
+            raw_type = java_type
+            suffix = ""
+        if raw_type.startswith("@"):
+            return f"{annotation} {java_type}"
+        package_separator = raw_type.rfind(".")
+        if package_separator != -1:
+            return (
+                f"{raw_type[: package_separator + 1]}"
+                f"{annotation} {raw_type[package_separator + 1:]}"
+                f"{suffix}"
+            )
         return f"{annotation} {java_type}"
 
     def field_uses_array_type_use(self, field: Field) -> bool:

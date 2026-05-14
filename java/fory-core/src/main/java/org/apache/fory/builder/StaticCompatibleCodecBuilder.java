@@ -110,7 +110,7 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
         POJO_CLASS_TYPE_NAME,
         TypeDef.class,
         "_f_typeDef");
-    ctx.addMethod("getDescriptors", "return Descriptor.getDescriptors(type);", List.class);
+    ctx.addMethod("getGeneratedDescriptors", "return Descriptor.getDescriptors(type);", List.class);
     ctx.overrideMethod(
         "readCompatible",
         isRecord ? genRecordCompatibleRead() : genObjectCompatibleRead(),

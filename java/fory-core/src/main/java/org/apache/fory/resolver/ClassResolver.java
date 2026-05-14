@@ -1550,6 +1550,11 @@ public class ClassResolver extends TypeResolver {
         return serializerClass;
       }
     }
+    Class<? extends Serializer> staticSerializerClass =
+        getStaticGeneratedStructSerializerClass(cls);
+    if (staticSerializerClass != null && shouldPreferStaticGeneratedSerializer(cls)) {
+      return staticSerializerClass;
+    }
     if (codegen) {
       if (extRegistry.getClassCtx.contains(cls)) {
         // avoid potential recursive call for seq codec generation.
@@ -1572,8 +1577,7 @@ public class ClassResolver extends TypeResolver {
       if (codegen) {
         LOG.info("Object of type {} can't be serialized by jit", cls);
       }
-      Class<? extends Serializer> serializerClass = getStaticGeneratedStructSerializerClass(cls);
-      return serializerClass == null ? ObjectSerializer.class : serializerClass;
+      return staticSerializerClass == null ? ObjectSerializer.class : staticSerializerClass;
     }
   }
 

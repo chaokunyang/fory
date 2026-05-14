@@ -127,16 +127,21 @@ final class StaticSerializerSourceWriter {
     }
     builder.append("    return Collections.unmodifiableList(descriptors);\n");
     builder.append("  }\n\n");
-    builder.append("  public static List<Descriptor> getGeneratedDescriptors() {\n");
-    builder.append("    return DESCRIPTORS;\n");
-    builder.append("  }\n\n");
     builder.append("  @Override\n");
-    builder.append("  public List<Descriptor> getDescriptors() {\n");
+    builder.append("  public List<Descriptor> getGeneratedDescriptors() {\n");
     builder.append("    return DESCRIPTORS;\n");
     builder.append("  }\n\n");
   }
 
   private void writeConstructors() {
+    builder.append("  ").append(struct.serializerName).append("() {\n");
+    builder.append("    super();\n");
+    builder.append("    this.allFields = null;\n");
+    builder.append("    this.allFieldIds = null;\n");
+    builder.append("    this.fieldsById = null;\n");
+    builder.append("    this.classVersionHash = 0;\n");
+    builder.append("    this.sameSchemaCompatible = false;\n");
+    builder.append("  }\n\n");
     builder
         .append("  public ")
         .append(struct.serializerName)

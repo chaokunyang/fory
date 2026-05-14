@@ -38,6 +38,7 @@ Fory Kotlin inherits all features from Fory Java, plus Kotlin-specific optimizat
 - **High Performance**: JIT code generation, zero-copy, 20-170x faster than traditional serialization
 - **Kotlin Type Support**: Optimized serializers for data classes, unsigned types, ranges, and stdlib types
 - **Default Value Support**: Automatic handling of Kotlin data class default parameters during schema evolution
+- **Static Xlang Serializers**: KSP-generated schema serializers for Kotlin/JVM and Android xlang mode
 - **Schema Evolution**: Forward/backward compatibility for class schema changes
 
 See [Java Features](../java/index.md#features) for complete feature list.
@@ -106,3 +107,4 @@ Fory Kotlin is built on top of Fory Java. Most configuration options, features, 
 - [Fory Creation](fory-creation.md) - Kotlin-specific Fory setup requirements
 - [Type Serialization](type-serialization.md) - Serializing Kotlin types
 - [Default Values](default-values.md) - Kotlin data class default values support
+- [Static Generated Serializers](static-generated-serializers.md) - KSP xlang/schema serializer generation

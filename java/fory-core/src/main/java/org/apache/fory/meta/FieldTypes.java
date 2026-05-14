@@ -222,11 +222,12 @@ public class FieldTypes {
       nullable = !genericType.getCls().isPrimitive();
     }
 
-    // @ForyField still owns wrapper ref tracking, but nullability is type-use metadata owned by
-    // @Nullable or generated/schema descriptors. Treating tag-id-only @ForyField as nullable
-    // metadata would make xlang fields nullable just because they use stable ids.
+    // @ForyField owns wrapper ref tracking and makes Java fields required unless @Nullable or
+    // type-use metadata marks them nullable. This keeps native TypeDef metadata aligned with the
+    // normalized Descriptor used by object serializers.
     if (descriptor != null && descriptor.hasForyField()) {
       trackingRef = descriptor.isTrackingRef();
+      nullable = descriptor.isNullable();
     }
 
     boolean isUnionType = Types.isUnionType(typeId);

@@ -24,6 +24,7 @@ import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
+import org.apache.fory.serializer.StaticGeneratedSerializerProvider;
 
 public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   @Override
@@ -115,6 +116,11 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   @Override
   public TypeResolver getTypeResolver() {
     return execute(Fory::getTypeResolver);
+  }
+
+  @Override
+  public void registerStaticGeneratedSerializerProvider(StaticGeneratedSerializerProvider provider) {
+    registerCallback(fory -> fory.registerStaticGeneratedSerializerProvider(provider));
   }
 
   @Override

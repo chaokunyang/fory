@@ -145,8 +145,8 @@ public class Descriptor {
     this.nullable =
         resolveNullable(
             typeRef,
-            true,
-            field.getAnnotatedType(),
+            !hasForyField,
+            TypeUtils.getFieldAnnotatedType(field),
             componentAnnotatedType,
             readMethod == null ? null : readMethod.getAnnotatedReturnType());
     this.trackingRef = hasForyField && foryField.ref();
@@ -271,8 +271,8 @@ public class Descriptor {
     this.nullable =
         resolveNullable(
             typeRef,
-            true,
-            field.getAnnotatedType(),
+            !hasForyField,
+            TypeUtils.getFieldAnnotatedType(field),
             componentAnnotatedType,
             readMethod == null ? null : readMethod.getAnnotatedReturnType());
     this.trackingRef = hasForyField && foryField.ref();
@@ -296,7 +296,7 @@ public class Descriptor {
     typeAnnotation =
         getTypeUseAnnotation(readMethod.getAnnotatedReturnType(), readMethod.getName());
     arrayType = readMethod.isAnnotationPresent(ArrayType.class);
-    this.nullable = resolveNullable(typeRef, true, readMethod.getAnnotatedReturnType());
+    this.nullable = resolveNullable(typeRef, !hasForyField, readMethod.getAnnotatedReturnType());
     this.trackingRef = hasForyField && foryField.ref();
   }
 
@@ -663,8 +663,10 @@ public class Descriptor {
       try {
         for (RecordComponent component : components) {
           Field field = clz.getDeclaredField(component.getName());
+          AnnotatedType componentAnnotatedType =
+              TypeUtils.getRecordComponentAnnotatedType(component);
           descriptorMap.put(
-              field, new Descriptor(field, component.getAccessor(), component.getAnnotatedType()));
+              field, new Descriptor(field, component.getAccessor(), componentAnnotatedType));
         }
       } catch (NoSuchFieldException e) {
         // impossible

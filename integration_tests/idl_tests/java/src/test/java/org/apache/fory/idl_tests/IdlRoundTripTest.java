@@ -707,7 +707,8 @@ public class IdlRoundTripTest {
             .filter(value -> !value.isEmpty())
             .collect(Collectors.toList());
     if (peers.contains("all")) {
-      return Arrays.asList("python", "go", "rust", "cpp", "swift", "javascript", "csharp", "dart");
+      return Arrays.asList(
+          "python", "go", "rust", "cpp", "swift", "javascript", "csharp", "dart", "scala");
     }
     return peers;
   }
@@ -789,6 +790,16 @@ public class IdlRoundTripTest {
         command =
             Arrays.asList(
                 "dart", "test", "--name", "interop file roundtrip hooks when env vars are set");
+        peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
+        break;
+      case "scala":
+        workDir = idlRoot.resolve("scala");
+        command =
+            Arrays.asList(
+                "sbt",
+                "--batch",
+                "++3.3.1",
+                "Test/runMain org.apache.fory.idl_tests.ScalaIdlRoundTripPeer");
         peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
         break;
       default:

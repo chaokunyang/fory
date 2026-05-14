@@ -26,7 +26,12 @@ import java.lang.annotation.Target;
 
 /** Type-use annotation to explicitly enable/disable reference tracking for generic elements. */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE_USE, ElementType.TYPE_PARAMETER})
+@Target({
+  ElementType.FIELD,
+  ElementType.PARAMETER,
+  ElementType.TYPE_USE,
+  ElementType.TYPE_PARAMETER
+})
 public @interface Ref {
   /** Whether to enable reference tracking for the annotated type. */
   boolean enable() default true;

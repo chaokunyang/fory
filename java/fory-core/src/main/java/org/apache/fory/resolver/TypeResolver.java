@@ -82,12 +82,14 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.CompatibleSerializer;
+import org.apache.fory.serializer.DeferedLazySerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
+import org.apache.fory.serializer.StaticGeneratedStructSerializerFactory;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
 import org.apache.fory.serializer.UnknownClass.UnknownStruct;
@@ -290,6 +292,26 @@ public abstract class TypeResolver {
       Class<?> type, String namespace, String typeName, Serializer<?> serializer);
 
   /**
+   * Registers {@code caseType} as a runtime class alias for an already registered union type.
+   *
+   * <p>Some JVM languages compile a union value to concrete case subclasses even though the wire
+   * type is owned by the sealed union base. This method makes runtime dispatch for those case
+   * subclasses use the base union {@link TypeInfo}; it must not create another wire type name or
+   * user type ID.
+   */
+  @Internal
+  public abstract void registerUnionCase(Class<?> unionType, Class<?> caseType);
+
+  /** Registers a non-Java enum type with a user-specified ID and serializer. */
+  @Internal
+  public abstract void registerEnum(Class<?> type, long id, Serializer<?> serializer);
+
+  /** Registers a non-Java enum type with a namespace, type name, and serializer. */
+  @Internal
+  public abstract void registerEnum(
+      Class<?> type, String namespace, String typeName, Serializer<?> serializer);
+
+  /**
    * Registers a custom serializer for a type.
    *
    * @param type the class to register
@@ -426,6 +448,10 @@ public abstract class TypeResolver {
 
   public boolean isCollectionDescriptor(Descriptor descriptor) {
     return isCollection(descriptor.getRawType());
+  }
+
+  public boolean isMapDescriptor(Descriptor descriptor) {
+    return isMap(descriptor.getRawType());
   }
 
   public abstract boolean isMonomorphic(Descriptor descriptor);
@@ -1032,6 +1058,13 @@ public abstract class TypeResolver {
       // type metadata or a concrete target-class transformation.
       return typeInfo;
     }
+    StaticGeneratedStructSerializer<?> registeredStaticSerializer =
+        sharedRegistry.staticGeneratedSerializerRegistry.newRegisteredSerializer(
+            this, cls, typeDef);
+    if (registeredStaticSerializer != null) {
+      typeInfo.setSerializer(this, registeredStaticSerializer);
+      return typeInfo;
+    }
     Class<? extends Serializer> sc =
         getCompatibleDeserializerClassFromGraalvmRegistry(cls, typeDef);
     if (sc == null) {
@@ -1282,6 +1315,21 @@ public abstract class TypeResolver {
   public abstract <T> void setSerializer(Class<T> cls, Serializer<T> serializer);
 
   public abstract <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer);
+
+  @Internal
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  public final <T> void registerStaticGeneratedStructSerializerFactory(
+      Class<T> cls, StaticGeneratedStructSerializerFactory<T> factory) {
+    if (!isRegistered(cls)) {
+      register(cls);
+    }
+    sharedRegistry.staticGeneratedSerializerRegistry.registerFactory(
+        cls, isCrossLanguage(), factory);
+    Serializer<T> serializer =
+        new DeferedLazySerializer.DeferredLazyObjectSerializer(
+            this, cls, () -> Tuple2.of(true, factory.newSerializer(this, cls, null)));
+    setSerializer(cls, serializer);
+  }
 
   /**
    * Reset serializer if {@code serializer} is not null, otherwise clear serializer for {@code cls}.
@@ -1539,6 +1587,7 @@ public abstract class TypeResolver {
                 this::usesPrimitiveFieldOrdering,
                 this::isBuildIn,
                 this::isCollectionDescriptor,
+                this::isMapDescriptor,
                 descriptors,
                 descriptorsGroupedOrdered,
                 descriptorUpdator,
@@ -1556,6 +1605,12 @@ public abstract class TypeResolver {
   }
 
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
+    List<Descriptor> registeredStaticDescriptors =
+        sharedRegistry.staticGeneratedSerializerRegistry.getRegisteredDescriptors(
+            clz, isCrossLanguage());
+    if (registeredStaticDescriptors != null) {
+      return normalizeFieldDescriptors(clz, searchParent, registeredStaticDescriptors);
+    }
     if (shouldPreferStaticGeneratedSerializer(clz)) {
       List<Descriptor> staticDescriptors = getStaticGeneratedStructDescriptors(clz);
       if (staticDescriptors != null) {
@@ -1861,9 +1916,11 @@ public abstract class TypeResolver {
    *   <li>Otherwise: return true only for Optional types, false for all other non-primitives
    * </ul>
    *
-   * <p>For native mode: reflected value fields are nullable by default. Descriptors without a
-   * backing field already carry schema-owned nullability, for example TypeDef descriptors and
-   * annotation-processor generated native descriptors.
+   * <p>Descriptors without a backing Java {@link Field} already carry schema-owned nullability, for
+   * example TypeDef descriptors and static descriptors emitted by annotation processors or Scala
+   * macro derivation.
+   *
+   * <p>For native reflected descriptors: value fields are nullable by default.
    *
    * <p>Important: this must match the TypeDef metadata for the same descriptor source. Xlang local
    * descriptors use xlang defaults, native reflected descriptors use native nullable-by-default
@@ -1878,14 +1935,14 @@ public abstract class TypeResolver {
     if (typeExtMeta != null) {
       return typeExtMeta.nullable();
     }
+    if (descriptor.getField() == null) {
+      return descriptor.isNullable();
+    }
     if (isCrossLanguage()) {
       // For xlang mode: apply xlang defaults
       // This must match what TypeDefEncoder.buildFieldType uses for TypeDef metadata
       // Default for xlang: false for all non-primitives, except Optional types
       return TypeUtils.isOptionalType(rawType);
-    }
-    if (descriptor.getField() == null) {
-      return descriptor.isNullable();
     }
     return descriptor.hasForyField() ? descriptor.isNullable() : true;
   }

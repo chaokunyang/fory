@@ -1,0 +1,136 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
+package org.apache.fory.scala
+
+import org.apache.fory.{Fory, ThreadSafeFory}
+import org.apache.fory.meta.TypeDef
+import org.apache.fory.resolver.TypeResolver
+import org.apache.fory.serializer.{
+  Serializer,
+  StaticGeneratedStructSerializerFactory
+}
+
+trait ForySerializer[T] {
+  def createSerializer(typeResolver: TypeResolver): Serializer[T] =
+    createSerializer(typeResolver, null)
+
+  def createSerializer(typeResolver: TypeResolver, typeDef: TypeDef): Serializer[T]
+
+  def isUnion: Boolean = false
+
+  def registrationClasses(cls: Class[T]): Array[Class[_]] = Array(cls)
+}
+
+object ForySerializer {
+  inline def derived[T]: ForySerializer[T] =
+    ${ org.apache.fory.scala.internal.ForySerializerMacros.derive[T] }
+
+  def register[T](fory: Fory, cls: Class[T])(using serializer: ForySerializer[T]): Unit = {
+    register(fory, cls, null, null)
+  }
+
+  def register[T](
+      fory: Fory,
+      cls: Class[T],
+      typeId: Long)(using serializer: ForySerializer[T]): Unit = {
+    register(fory, cls, java.lang.Long.valueOf(typeId), null, null)
+  }
+
+  def register[T](
+      fory: Fory,
+      cls: Class[T],
+      namespace: String,
+      typeName: String)(using serializer: ForySerializer[T]): Unit = {
+    register(fory, cls, null, namespace, typeName)
+  }
+
+  private def register[T](
+      fory: Fory,
+      cls: Class[T],
+      typeId: java.lang.Long,
+      namespace: String,
+      typeName: String)(using serializer: ForySerializer[T]): Unit = {
+    val resolver = fory.getTypeResolver
+    serializer match {
+      case factory: StaticGeneratedStructSerializerFactory[T] @unchecked =>
+        registerType(fory, cls, typeId, namespace, typeName)
+        resolver.registerStaticGeneratedStructSerializerFactory(cls, factory)
+      case _ if serializer.isUnion =>
+        val unionSerializer = serializer.createSerializer(resolver)
+        if typeId != null then {
+          resolver.registerUnion(cls, typeId.longValue(), unionSerializer)
+        } else {
+          val unionNamespace =
+            if namespace != null then namespace else Option(cls.getPackage).map(_.getName).orNull
+          val unionTypeName = if typeName != null then typeName else cls.getSimpleName
+          fory.registerUnion(
+            cls,
+            if unionNamespace == null then "" else unionNamespace,
+            unionTypeName,
+            unionSerializer)
+        }
+        serializer.registrationClasses(cls).foreach { registrationClass =>
+          if registrationClass != cls then {
+            resolver.registerUnionCase(cls, registrationClass)
+          }
+        }
+      case _ =>
+        registerType(fory, cls, typeId, namespace, typeName)
+        resolver.setSerializer(cls, serializer.createSerializer(resolver))
+    }
+  }
+
+  def register[T](
+      fory: ThreadSafeFory,
+      cls: Class[T])(using serializer: ForySerializer[T]): Unit = {
+    fory.registerCallback((runtime: Fory) => register(runtime, cls)(using serializer))
+  }
+
+  def register[T](
+      fory: ThreadSafeFory,
+      cls: Class[T],
+      typeId: Long)(using serializer: ForySerializer[T]): Unit = {
+    fory.registerCallback((runtime: Fory) => register(runtime, cls, typeId)(using serializer))
+  }
+
+  def register[T](
+      fory: ThreadSafeFory,
+      cls: Class[T],
+      namespace: String,
+      typeName: String)(using serializer: ForySerializer[T]): Unit = {
+    fory.registerCallback((runtime: Fory) =>
+      register(runtime, cls, namespace, typeName)(using serializer))
+  }
+
+  private def registerType[T](
+      fory: Fory,
+      cls: Class[T],
+      typeId: java.lang.Long,
+      namespace: String,
+      typeName: String): Unit = {
+    if typeId != null then {
+      fory.getTypeResolver.register(cls, typeId.longValue())
+    } else if namespace == null || typeName == null then {
+      fory.register(cls)
+    } else {
+      fory.register(cls, namespace, typeName)
+    }
+  }
+}

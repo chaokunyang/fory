@@ -26,6 +26,7 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
+import org.apache.fory.serializer.StaticGeneratedStructSerializerFactory;
 import org.apache.fory.type.Descriptor;
 
 /** Shared registry of build-time generated static serializer mappings. */
@@ -90,10 +91,47 @@ public final class StaticGeneratedSerializerRegistry {
 
   private final ConcurrentHashMap<Class<?>, Entry> xlangSerializers = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Class<?>, Entry> nativeSerializers = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Class<?>, StaticGeneratedStructSerializerFactory<?>>
+      xlangFactories = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Class<?>, StaticGeneratedStructSerializerFactory<?>>
+      nativeFactories = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Class<?>, Boolean> missingXlangSerializers =
       new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Class<?>, Boolean> missingNativeSerializers =
       new ConcurrentHashMap<>();
+
+  void registerFactory(
+      Class<?> targetType, boolean xlang, StaticGeneratedStructSerializerFactory<?> factory) {
+    ConcurrentHashMap<Class<?>, StaticGeneratedStructSerializerFactory<?>> factories =
+        xlang ? xlangFactories : nativeFactories;
+    StaticGeneratedStructSerializerFactory<?> existing = factories.putIfAbsent(targetType, factory);
+    if (existing != null && existing != factory && existing.getClass() != factory.getClass()) {
+      throw new IllegalArgumentException(
+          "Conflicting static generated serializer factory for " + targetType.getName());
+    }
+  }
+
+  StaticGeneratedStructSerializer<?> newRegisteredSerializer(
+      TypeResolver resolver, Class<?> targetType, TypeDef typeDef) {
+    StaticGeneratedStructSerializerFactory<?> factory =
+        getRegisteredFactory(targetType, resolver.isCrossLanguage());
+    if (factory == null) {
+      return null;
+    }
+    return factory.newSerializer(resolver, targetType, typeDef);
+  }
+
+  List<Descriptor> getRegisteredDescriptors(Class<?> targetType, boolean xlang) {
+    StaticGeneratedStructSerializerFactory<?> factory = getRegisteredFactory(targetType, xlang);
+    return factory == null ? null : factory.getGeneratedDescriptors();
+  }
+
+  private StaticGeneratedStructSerializerFactory<?> getRegisteredFactory(
+      Class<?> targetType, boolean xlang) {
+    ConcurrentHashMap<Class<?>, StaticGeneratedStructSerializerFactory<?>> factories =
+        xlang ? xlangFactories : nativeFactories;
+    return factories.get(targetType);
+  }
 
   Class<? extends StaticGeneratedStructSerializer> getSerializerClass(
       Class<?> targetType, boolean xlang) {

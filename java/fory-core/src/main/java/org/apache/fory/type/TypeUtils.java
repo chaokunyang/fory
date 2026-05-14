@@ -576,7 +576,7 @@ public class TypeUtils {
       List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
       if (typeArguments.size() == 1) {
         Class<?> rawType = getRawType(typeRef);
-        if (Iterable.class.isAssignableFrom(rawType)) {
+        if (Iterable.class.isAssignableFrom(rawType) || isScalaCollectionClass(rawType)) {
           return typeArguments.get(0);
         }
       }
@@ -612,7 +612,8 @@ public class TypeUtils {
       List<TypeRef<?>> typeArguments = typeRef.getTypeArguments();
       if (typeArguments.size() == 2) {
         Class<?> rawType = getRawType(typeRef);
-        if (Map.class.isAssignableFrom(rawType) && rawType.getTypeParameters().length == 2) {
+        if ((Map.class.isAssignableFrom(rawType) || isScalaCollectionClass(rawType))
+            && rawType.getTypeParameters().length == 2) {
           return Tuple2.of(typeArguments.get(0), typeArguments.get(1));
         }
       }
@@ -638,6 +639,10 @@ public class TypeUtils {
     TypeRef<?> keyType = getElementType(supertype.resolveType(KEY_SET_RETURN_TYPE));
     TypeRef<?> valueType = getElementType(supertype.resolveType(VALUES_RETURN_TYPE));
     return Tuple2.of(keyType, valueType);
+  }
+
+  private static boolean isScalaCollectionClass(Class<?> rawType) {
+    return rawType.getName().startsWith("scala.collection");
   }
 
   public static void applyRefTrackingOverride(

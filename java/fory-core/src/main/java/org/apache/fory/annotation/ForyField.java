@@ -25,7 +25,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.PARAMETER})
 public @interface ForyField {
 
   /** Controls polymorphism behavior for struct fields in cross-language serialization. */

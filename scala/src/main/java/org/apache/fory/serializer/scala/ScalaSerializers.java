@@ -41,6 +41,9 @@ public class ScalaSerializers {
 
   public static void registerSerializers(Fory fory) {
     TypeResolver resolver = setSerializerFactory(fory);
+    if (resolver.isCrossLanguage()) {
+      return;
+    }
     Config config = resolver.getConfig();
 
     resolver.registerSerializer(
@@ -169,6 +172,16 @@ public class ScalaSerializers {
     resolver.register(scala.collection.mutable.Stack$.class);
     resolver.register(scala.collection.mutable.BitSet.class);
     resolver.register(scala.collection.mutable.BitSet$.class);
+  }
+
+  public static void registerEnum(Fory fory, Class<?> cls, long typeId) {
+    TypeResolver resolver = fory.getTypeResolver();
+    resolver.registerEnum(cls, typeId, new ScalaEnumSerializer(resolver, cls));
+  }
+
+  public static void registerEnum(Fory fory, Class<?> cls, String namespace, String typeName) {
+    TypeResolver resolver = fory.getTypeResolver();
+    resolver.registerEnum(cls, namespace, typeName, new ScalaEnumSerializer(resolver, cls));
   }
 
   private static TypeResolver setSerializerFactory(Fory fory) {

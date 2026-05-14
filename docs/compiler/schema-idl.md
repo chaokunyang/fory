@@ -818,6 +818,7 @@ message Person [id=100] {
 ### Rules
 
 - Case IDs must be unique within the union
+- Case IDs must be positive. Case ID `0` is reserved for generated unknown-case carriers in languages that expose one.
 - Cases cannot be `optional` or `ref`
 - Union cases do not support field options
 - Case types can be primitives, enums, messages, or other named types
@@ -886,6 +887,7 @@ message User {
 | C++        | `std::string name` | `std::optional<std::string> name` |
 | JavaScript | `name: string`     | `name?: string \| null`           |
 | Dart       | `String name`      | `String? email`                   |
+| Scala      | `name: String`     | `email: Option[String]`           |
 
 **Default Values:**
 
@@ -923,6 +925,7 @@ message Node {
 | C++        | `Node parent`  | `std::shared_ptr<Node> parent`             |
 | JavaScript | `parent: Node` | `parent: Node` (no ref distinction)        |
 | Dart       | `Node parent`  | `Node parent` with `@ForyField(ref: true)` |
+| Scala      | `parent: Node` | `parent: Node @Ref`                        |
 
 Rust uses `Arc` by default; use `ref(thread_safe=false)` or `ref(weak=true)`
 to customize pointer types. For protobuf option syntax, see
@@ -970,12 +973,12 @@ apply to elements. `repeated` is accepted as an alias for `list`.
 
 **List modifier mapping:**
 
-| Fory IDL                | Java                                    | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                          |
-| ----------------------- | --------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------- |
-| `optional list<string>` | `@Nullable List<String>`                | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                               |
-| `list<optional string>` | `List<String>` (nullable elements)      | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                               |
-| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)` | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`                        |
-| `list<ref User>`        | `List<User>`                            | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` |
+| Fory IDL                | Java                                    | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                          | Scala                  |
+| ----------------------- | --------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------- | ---------------------- |
+| `optional list<string>` | `@Nullable List<String>`                | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                               | `Option[List[String]]` |
+| `list<optional string>` | `List<String>` (nullable elements)      | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                               | `List[Option[String]]` |
+| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)` | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`                        | `List[User] @Ref`      |
+| `list<ref User>`        | `List<User>`                            | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` | `List[User @Ref]`      |
 
 Use `ref(thread_safe=false)` in Fory IDL (or `[(fory).thread_safe_pointer = false]` in protobuf)
 to generate `Rc` instead of `Arc` in Rust.

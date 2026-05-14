@@ -4,7 +4,7 @@ The FDL compiler generates cross-language serialization code from schema definit
 
 ## Features
 
-- **Multi-language code generation**: Java, Python, Go, Rust, C++, C#, JavaScript, and Swift
+- **Multi-language code generation**: Java, Python, Go, Rust, C++, C#, JavaScript, Swift, Dart, and Scala
 - **Rich type system**: Primitives, enums, messages, lists, dense arrays, maps
 - **Cross-language serialization**: Generated code works seamlessly with Apache Fory
 - **Type ID and namespace support**: Both numeric IDs and name-based type registration
@@ -64,16 +64,16 @@ message Cat [id=103] {
 foryc schema.fdl --output ./generated
 
 # Generate for specific languages
-foryc schema.fdl --lang java,python,csharp,javascript --output ./generated
+foryc schema.fdl --lang java,python,csharp,javascript,scala --output ./generated
 
 # Override package name
 foryc schema.fdl --package myapp.models --output ./generated
 
 # Language-specific output directories (protoc-style)
-foryc schema.fdl --java_out=./src/main/java --python_out=./python/src --csharp_out=./csharp/src/Generated --javascript_out=./javascript
+foryc schema.fdl --java_out=./src/main/java --python_out=./python/src --csharp_out=./csharp/src/Generated --javascript_out=./javascript --scala_out=./scala/src/main/scala
 
 # Combine with other options
-foryc schema.fdl --java_out=./gen --go_out=./gen/go --csharp_out=./gen/csharp --javascript_out=./gen/js -I ./proto
+foryc schema.fdl --java_out=./gen --go_out=./gen/go --csharp_out=./gen/csharp --javascript_out=./gen/js --scala_out=./gen/scala -I ./proto
 ```
 
 ### 3. Use Generated Code
@@ -457,7 +457,7 @@ Arguments:
   FILES                 FDL files to compile
 
 Options:
-  --lang TEXT          Target languages (java,python,cpp,rust,go,csharp,javascript or "all")
+  --lang TEXT          Target languages (java,python,cpp,rust,go,csharp,javascript,swift,dart,scala or "all")
                        Default: all
   --output, -o PATH    Output directory
                        Default: ./generated

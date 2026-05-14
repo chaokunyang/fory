@@ -89,6 +89,7 @@ import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveArraySerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
 import org.apache.fory.serializer.SqlTimeSerializers;
@@ -260,7 +261,7 @@ public class XtypeResolver extends TypeResolver {
       if (typeInfo.typeName != null) {
         String prevNamespace = typeInfo.decodeNamespace();
         String prevTypeName = typeInfo.decodeTypeName();
-        if (!namespace.equals(prevNamespace) || typeName.equals(prevTypeName)) {
+        if (!namespace.equals(prevNamespace) || !typeName.equals(prevTypeName)) {
           throw new IllegalArgumentException(
               String.format(
                   "Type %s has been registered with namespace %s type %s",
@@ -376,7 +377,7 @@ public class XtypeResolver extends TypeResolver {
     if (typeInfo != null && typeInfo.typeName != null) {
       String prevNamespace = typeInfo.decodeNamespace();
       String prevTypeName = typeInfo.decodeTypeName();
-      if (!namespace.equals(prevNamespace) || typeName.equals(prevTypeName)) {
+      if (!namespace.equals(prevNamespace) || !typeName.equals(prevTypeName)) {
         throw new IllegalArgumentException(
             String.format(
                 "Type %s has been registered with namespace %s type %s",
@@ -385,6 +386,73 @@ public class XtypeResolver extends TypeResolver {
     }
     int xtypeId = Types.NAMED_UNION;
     register(type, serializer, namespace, typeName, xtypeId, -1);
+  }
+
+  @Override
+  public void registerUnionCase(Class<?> unionType, Class<?> caseType) {
+    checkRegisterAllowed();
+    TypeInfo typeInfo = classInfoMap.get(unionType);
+    Preconditions.checkArgument(
+        typeInfo != null && Types.isUnionType(typeInfo.typeId),
+        "Union type %s must be registered before case type %s",
+        unionType,
+        caseType);
+    TypeInfo existingInfo = classInfoMap.get(caseType);
+    Preconditions.checkArgument(
+        existingInfo == null || existingInfo == typeInfo,
+        "Union case type %s has been registered as %s",
+        caseType,
+        existingInfo);
+    classInfoMap.put(caseType, typeInfo);
+    extRegistry.registeredClasses.put(caseType.getName(), caseType);
+    registerGraalvmClass(caseType);
+  }
+
+  @Override
+  public void registerEnum(Class<?> type, long userTypeId, Serializer<?> serializer) {
+    checkRegisterAllowed();
+    Preconditions.checkNotNull(serializer);
+    int checkedUserTypeId = toUserTypeId(userTypeId);
+    Preconditions.checkArgument(
+        !containsUserTypeId(checkedUserTypeId), "Type id %s has been registered", userTypeId);
+    TypeInfo typeInfo = classInfoMap.get(type);
+    if (typeInfo != null && typeInfo.typeId != 0) {
+      throw new IllegalArgumentException(
+          String.format("Type %s has been registered with id %s", type, typeInfo.typeId));
+    }
+    register(
+        type,
+        serializer,
+        ReflectionUtils.getPackage(type),
+        ReflectionUtils.getClassNameWithoutPackage(type),
+        Types.ENUM,
+        checkedUserTypeId);
+  }
+
+  @Override
+  public void registerEnum(
+      Class<?> type, String namespace, String typeName, Serializer<?> serializer) {
+    checkRegisterAllowed();
+    Preconditions.checkNotNull(serializer);
+    if (namespace == null) {
+      namespace = "";
+    }
+    Preconditions.checkArgument(
+        !typeName.contains("."),
+        "Typename %s should not contains `.`, please put it into namespace",
+        typeName);
+    TypeInfo typeInfo = classInfoMap.get(type);
+    if (typeInfo != null && typeInfo.typeName != null) {
+      String prevNamespace = typeInfo.decodeNamespace();
+      String prevTypeName = typeInfo.decodeTypeName();
+      if (!namespace.equals(prevNamespace) || !typeName.equals(prevTypeName)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Type %s has been registered with namespace %s type %s",
+                type, prevNamespace, prevTypeName));
+      }
+    }
+    register(type, serializer, namespace, typeName, Types.NAMED_ENUM, -1);
   }
 
   /**
@@ -651,6 +719,12 @@ public class XtypeResolver extends TypeResolver {
           return false;
         }
         byte typeIdByte = getInternalTypeId(rawType);
+        if (Types.isUnionType(typeIdByte)) {
+          return true;
+        }
+        if (Types.isEnumType(typeIdByte)) {
+          return true;
+        }
         if (isCompatible()) {
           return !Types.isUserDefinedType(typeIdByte) && typeIdByte != Types.UNKNOWN;
         }
@@ -680,6 +754,9 @@ public class XtypeResolver extends TypeResolver {
     }
     TypeInfo typeInfo = getTypeInfo(clz, false);
     if (typeInfo != null) {
+      if (Types.isEnumType(typeInfo.typeId) || Types.isUnionType(typeInfo.typeId)) {
+        return true;
+      }
       Serializer<?> s = typeInfo.serializer;
       if (s instanceof TimeSerializers.TimeSerializer
           || s instanceof MapLikeSerializer
@@ -801,15 +878,7 @@ public class XtypeResolver extends TypeResolver {
         cls = HashMap.class;
         serializer = new HashMapSerializer(this);
       } else {
-        TypeInfo cachedTypeInfo = classInfoMap.get(cls);
-        if (cachedTypeInfo != null
-            && cachedTypeInfo.serializer != null
-            && cachedTypeInfo.serializer instanceof MapLikeSerializer
-            && ((MapLikeSerializer) cachedTypeInfo.serializer).supportCodegenHook()) {
-          serializer = cachedTypeInfo.serializer;
-        } else {
-          serializer = new MapSerializer(this, cls);
-        }
+        serializer = getMapSerializer(cls);
       }
       typeId = Types.MAP;
     } else if (UnknownClass.class.isAssignableFrom(cls)) {
@@ -845,7 +914,31 @@ public class XtypeResolver extends TypeResolver {
         && ((CollectionLikeSerializer) (typeInfo.serializer)).supportCodegenHook()) {
       return typeInfo.serializer;
     }
+    Serializer<?> serializer = createSerializerFromFactory(cls);
+    if (serializer != null) {
+      return serializer;
+    }
     return new CollectionSerializer(this, cls);
+  }
+
+  private Serializer<?> getMapSerializer(Class<?> cls) {
+    TypeInfo typeInfo = classInfoMap.get(cls);
+    if (typeInfo != null
+        && typeInfo.serializer != null
+        && typeInfo.serializer instanceof MapLikeSerializer
+        && ((MapLikeSerializer) typeInfo.serializer).supportCodegenHook()) {
+      return typeInfo.serializer;
+    }
+    Serializer<?> serializer = createSerializerFromFactory(cls);
+    if (serializer != null) {
+      return serializer;
+    }
+    return new MapSerializer(this, cls);
+  }
+
+  private Serializer<?> createSerializerFromFactory(Class<?> cls) {
+    SerializerFactory serializerFactory = getSerializerFactory();
+    return serializerFactory == null ? null : serializerFactory.createSerializer(this, cls);
   }
 
   private void registerDefaultTypes() {

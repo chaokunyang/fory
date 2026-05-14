@@ -1,0 +1,820 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+"""Scala 3 schema IDL generator."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import List, Optional, Set
+
+from fory_compiler.generators.base import BaseGenerator, GeneratedFile
+from fory_compiler.frontend.utils import parse_idl_file
+from fory_compiler.ir.ast import (
+    ArrayType,
+    Enum,
+    Field,
+    FieldType,
+    ListType,
+    MapType,
+    Message,
+    NamedType,
+    Schema,
+    PrimitiveType,
+    Union,
+)
+from fory_compiler.ir.construction import analyze_message_construction_shapes
+from fory_compiler.ir.types import PrimitiveKind
+
+
+class ScalaGenerator(BaseGenerator):
+    """Generates Scala 3 models with Fory macro-derived serializers."""
+
+    language_name = "scala"
+    file_extension = ".scala"
+
+    PRIMITIVE_MAP = {
+        PrimitiveKind.BOOL: "Boolean",
+        PrimitiveKind.INT8: "Byte",
+        PrimitiveKind.INT16: "Short",
+        PrimitiveKind.INT32: "Int",
+        PrimitiveKind.INT64: "Long",
+        PrimitiveKind.UINT8: "Int",
+        PrimitiveKind.UINT16: "Int",
+        PrimitiveKind.UINT32: "Long",
+        PrimitiveKind.UINT64: "Long",
+        PrimitiveKind.FLOAT16: "Float16",
+        PrimitiveKind.BFLOAT16: "BFloat16",
+        PrimitiveKind.FLOAT32: "Float",
+        PrimitiveKind.FLOAT64: "Double",
+        PrimitiveKind.STRING: "String",
+        PrimitiveKind.BYTES: "Array[Byte]",
+        PrimitiveKind.DATE: "LocalDate",
+        PrimitiveKind.TIMESTAMP: "Instant",
+        PrimitiveKind.DURATION: "Duration",
+        PrimitiveKind.DECIMAL: "BigDecimal",
+        PrimitiveKind.ANY: "AnyRef",
+    }
+
+    ARRAY_ELEMENT_MAP = {
+        PrimitiveKind.BOOL: "Boolean",
+        PrimitiveKind.INT8: "Byte",
+        PrimitiveKind.INT16: "Short",
+        PrimitiveKind.INT32: "Int",
+        PrimitiveKind.INT64: "Long",
+        PrimitiveKind.UINT8: "Byte",
+        PrimitiveKind.UINT16: "Short",
+        PrimitiveKind.UINT32: "Int",
+        PrimitiveKind.UINT64: "Long",
+        PrimitiveKind.FLOAT16: "Short",
+        PrimitiveKind.BFLOAT16: "Short",
+        PrimitiveKind.FLOAT32: "Float",
+        PrimitiveKind.FLOAT64: "Double",
+    }
+
+    RESERVED = {
+        "abstract",
+        "case",
+        "catch",
+        "class",
+        "def",
+        "do",
+        "else",
+        "enum",
+        "export",
+        "extends",
+        "false",
+        "final",
+        "finally",
+        "for",
+        "given",
+        "if",
+        "implicit",
+        "import",
+        "lazy",
+        "match",
+        "new",
+        "null",
+        "object",
+        "override",
+        "package",
+        "private",
+        "protected",
+        "return",
+        "sealed",
+        "super",
+        "then",
+        "this",
+        "throw",
+        "trait",
+        "true",
+        "try",
+        "type",
+        "val",
+        "var",
+        "while",
+        "with",
+        "yield",
+    }
+
+    def __init__(self, schema, options):
+        super().__init__(schema, options)
+        self._construction_shapes = analyze_message_construction_shapes(schema)
+
+    def get_scala_package(self) -> Optional[str]:
+        return self.options.package_override or self.schema.package
+
+    def get_scala_package_path(self) -> str:
+        package = self.get_scala_package()
+        return package.replace(".", "/") if package else ""
+
+    def get_registration_class_name(self) -> str:
+        package = self.get_scala_package()
+        if package:
+            return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
+        return "ForyRegistration"
+
+    def is_imported_type(self, type_def: object) -> bool:
+        if not self.schema.source_file:
+            return False
+        location = getattr(type_def, "location", None)
+        if location is None or not location.file:
+            return False
+        try:
+            return (
+                Path(location.file).resolve() != Path(self.schema.source_file).resolve()
+            )
+        except Exception:
+            return location.file != self.schema.source_file
+
+    def _normalize_import_path(self, path_str: str) -> str:
+        if not path_str:
+            return path_str
+        try:
+            return str(Path(path_str).resolve())
+        except Exception:
+            return path_str
+
+    def _load_schema(self, file_path: str) -> Optional[Schema]:
+        if not file_path:
+            return None
+        if not hasattr(self, "_schema_cache"):
+            self._schema_cache = {}
+        cache = self._schema_cache
+        path = Path(file_path).resolve()
+        if path in cache:
+            return cache[path]
+        try:
+            schema = parse_idl_file(path)
+        except Exception:
+            return None
+        cache[path] = schema
+        return schema
+
+    def _scala_package_for_schema(self, schema: Schema) -> Optional[str]:
+        return schema.package
+
+    def _registration_class_name_for_schema(self, schema: Schema) -> str:
+        package = self._scala_package_for_schema(schema)
+        if package:
+            return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
+        return "ForyRegistration"
+
+    def _scala_package_for_type(self, type_def: object) -> Optional[str]:
+        location = getattr(type_def, "location", None)
+        file_path = getattr(location, "file", None) if location else None
+        schema = self._load_schema(file_path)
+        if schema is None:
+            return None
+        return self._scala_package_for_schema(schema)
+
+    def _collect_imported_registrations(self) -> List[tuple[str, str]]:
+        packages: dict[str, str] = {}
+        for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
+            if not self.is_imported_type(type_def):
+                continue
+            package = self._scala_package_for_type(type_def)
+            if not package or package in packages:
+                continue
+            schema = self._load_schema(
+                getattr(getattr(type_def, "location", None), "file", None)
+            )
+            if schema is None:
+                continue
+            packages[package] = self._registration_class_name_for_schema(schema)
+
+        ordered: List[tuple[str, str]] = []
+        used: Set[str] = set()
+        if self.schema.source_file:
+            base_dir = Path(self.schema.source_file).resolve().parent
+            for imp in self.schema.imports:
+                candidate = self._normalize_import_path(str((base_dir / imp.path).resolve()))
+                schema = self._load_schema(candidate)
+                if schema is None:
+                    continue
+                package = self._scala_package_for_schema(schema)
+                if not package or package in used:
+                    continue
+                ordered.append((package, self._registration_class_name_for_schema(schema)))
+                used.add(package)
+        for package, registration in sorted(packages.items()):
+            if package not in used:
+                ordered.append((package, registration))
+        return ordered
+
+    def generate(self) -> List[GeneratedFile]:
+        files: List[GeneratedFile] = []
+        for enum in self.schema.enums:
+            if self.is_imported_type(enum):
+                continue
+            files.append(self.generate_enum_file(enum))
+        for union in self.schema.unions:
+            if self.is_imported_type(union):
+                continue
+            files.append(self.generate_union_file(union))
+        for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
+            files.append(self.generate_message_file(message))
+        files.append(self.generate_registration_file())
+        return files
+
+    def generate_enum_file(self, enum: Enum) -> GeneratedFile:
+        lines = self.source_header(
+            {"org.apache.fory.annotation.ForyEnumId", "org.apache.fory.scala.ForyScalaEnum"}
+        )
+        comment = self.format_type_id_comment(enum, "//")
+        if comment:
+            lines.append(comment)
+        lines.extend(self.generate_enum(enum))
+        return self.source_file(enum.name, lines)
+
+    def generate_union_file(self, union: Union) -> GeneratedFile:
+        imports = {
+            "org.apache.fory.annotation.{ForyCase, ForyUnion}",
+            "org.apache.fory.scala.ForySerializer",
+        }
+        self.collect_union_imports(union, imports)
+        lines = self.source_header(imports)
+        comment = self.format_type_id_comment(union, "//")
+        if comment:
+            lines.append(comment)
+        lines.extend(self.generate_union(union, parent_stack=[]))
+        return self.source_file(union.name, lines)
+
+    def generate_message_file(self, message: Message) -> GeneratedFile:
+        imports = {
+            "org.apache.fory.annotation.{ForyField, ForyStruct}",
+            "org.apache.fory.scala.ForySerializer",
+        }
+        self.collect_message_imports(message, imports)
+        lines = self.source_header(imports)
+        comment = self.format_type_id_comment(message, "//")
+        if comment:
+            lines.append(comment)
+        lines.extend(self.generate_message(message, parent_stack=[]))
+        return self.source_file(message.name, lines)
+
+    def source_header(self, imports: Set[str]) -> List[str]:
+        lines = [self.get_license_header(), ""]
+        package = self.get_scala_package()
+        if package:
+            lines.append(f"package {package}")
+            lines.append("")
+        for item in sorted(imports):
+            lines.append(f"import {item}")
+        if imports:
+            lines.append("")
+        return lines
+
+    def source_file(self, type_name: str, lines: List[str]) -> GeneratedFile:
+        path = self.get_scala_package_path()
+        file_path = f"{path}/{type_name}.scala" if path else f"{type_name}.scala"
+        return GeneratedFile(path=file_path, content="\n".join(lines) + "\n")
+
+    def generate_enum(self, enum: Enum, indent: int = 0) -> List[str]:
+        ind = self.indent_str * indent
+        lines = [f"{ind}enum {enum.name}(val foryId: Int) extends ForyScalaEnum {{"]
+        for value in enum.values:
+            case_name = self.safe_identifier(
+                self.to_pascal_case(self.strip_enum_prefix(enum.name, value.name))
+            )
+            lines.append(f"{ind}    case {case_name} extends {enum.name}({value.value})")
+        lines.append("")
+        lines.append(f"{ind}    @ForyEnumId")
+        lines.append(f"{ind}    def getForyId: Int = foryId")
+        lines.append(f"{ind}}}")
+        lines.append("")
+        return lines
+
+    def generate_union(
+        self,
+        union: Union,
+        indent: int = 0,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
+        ind = self.indent_str * indent
+        lines = [f"{ind}@ForyUnion", f"{ind}enum {union.name} derives ForySerializer {{"]
+        lines.append(f"{ind}    @ForyCase(id = 0)")
+        lines.append(f"{ind}    case UnknownCase(caseId: Int, value: Any)")
+        lines.append("")
+        for field in union.fields:
+            lines.append(f"{ind}    @ForyCase(id = {field.number})")
+            case_name = self.to_pascal_case(field.name)
+            field_type = self.generate_type(
+                field.field_type,
+                nullable=False,
+                element_optional=field.element_optional,
+                element_ref=field.element_ref,
+                top_level_ref=field.ref,
+                parent_stack=parent_stack,
+            )
+            lines.append(f"{ind}    case {case_name}Case(value: {field_type})")
+            lines.append("")
+        lines.append(f"{ind}}}")
+        lines.append("")
+        return lines
+
+    def generate_message(
+        self,
+        message: Message,
+        indent: int = 0,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
+        if self._construction_shapes.get(message.name, None) and self._construction_shapes[
+            message.name
+        ].cycle_owned:
+            return self.generate_normal_class(message, indent, parent_stack)
+        return self.generate_case_class(message, indent, parent_stack)
+
+    def generate_case_class(
+        self,
+        message: Message,
+        indent: int = 0,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
+        ind = self.indent_str * indent
+        current_stack = self.current_stack(parent_stack, message)
+        lines = [f"{ind}@ForyStruct", f"{ind}final case class {message.name}("]
+        for index, field in enumerate(message.fields):
+            suffix = "," if index < len(message.fields) - 1 else ""
+            lines.append(
+                f"{ind}    {self.generate_parameter(field, current_stack)}{suffix}"
+            )
+        lines.append(f"{ind}) derives ForySerializer")
+        lines.append("")
+        lines.extend(self.generate_nested_types(message, indent, current_stack))
+        return lines
+
+    def generate_normal_class(
+        self,
+        message: Message,
+        indent: int = 0,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> List[str]:
+        ind = self.indent_str * indent
+        current_stack = self.current_stack(parent_stack, message)
+        lines = [f"{ind}@ForyStruct", f"{ind}final class {message.name}() derives ForySerializer {{"]
+        for field in message.fields:
+            field_type = self.generate_type(
+                field.field_type,
+                nullable=field.optional,
+                element_optional=field.element_optional,
+                element_ref=field.element_ref,
+                top_level_ref=field.ref,
+                parent_stack=current_stack,
+            )
+            if field.ref and self.is_ref_target_type(field.field_type):
+                lines.append(f"{ind}    @Ref")
+            lines.append(f"{ind}    @ForyField(id = {field.number})")
+            lines.append(
+                f"{ind}    var {self.safe_identifier(self.to_camel_case(field.name))}: {field_type} = {self.default_value(field)}"
+            )
+            lines.append("")
+        lines.append(f"{ind}}}")
+        lines.append("")
+        lines.extend(self.generate_nested_types(message, indent, current_stack))
+        return lines
+
+    def generate_nested_types(
+        self, message: Message, indent: int, parent_stack: List[Message]
+    ) -> List[str]:
+        if not (
+            message.nested_enums or message.nested_unions or message.nested_messages
+        ):
+            return []
+        ind = self.indent_str * indent
+        lines = [f"{ind}object {message.name} {{"]
+        for enum in message.nested_enums:
+            lines.extend(self.generate_enum(enum, indent + 1))
+        for union in message.nested_unions:
+            lines.extend(self.generate_union(union, indent + 1, parent_stack))
+        for nested in message.nested_messages:
+            lines.extend(self.generate_message(nested, indent + 1, parent_stack))
+        lines.append(f"{ind}}}")
+        lines.append("")
+        return lines
+
+    def generate_parameter(self, field: Field, parent_stack: List[Message]) -> str:
+        field_name = self.safe_identifier(self.to_camel_case(field.name))
+        field_type = self.generate_type(
+            field.field_type,
+            nullable=field.optional,
+            element_optional=field.element_optional,
+            element_ref=field.element_ref,
+            top_level_ref=field.ref,
+            parent_stack=parent_stack,
+        )
+        ref_annotation = (
+            "@Ref " if field.ref and self.is_ref_target_type(field.field_type) else ""
+        )
+        return f"{ref_annotation}@ForyField(id = {field.number}) {field_name}: {field_type}"
+
+    def generate_type(
+        self,
+        field_type: FieldType,
+        nullable: bool = False,
+        element_optional: bool = False,
+        element_ref: bool = False,
+        top_level_ref: bool = False,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        base = self._generate_non_optional_type(
+            field_type, element_optional, element_ref, parent_stack
+        )
+        if top_level_ref and self.is_ref_target_type(field_type):
+            base = self.apply_type_annotation(base, "Ref")
+        return f"Option[{base}]" if nullable else base
+
+    def _generate_non_optional_type(
+        self,
+        field_type: FieldType,
+        element_optional: bool = False,
+        element_ref: bool = False,
+        parent_stack: Optional[List[Message]] = None,
+    ) -> str:
+        if isinstance(field_type, PrimitiveType):
+            scala_type = self.PRIMITIVE_MAP[field_type.kind]
+            return self.apply_primitive_annotation(scala_type, field_type)
+        if isinstance(field_type, NamedType):
+            return self.resolve_scala_type_name(field_type.name, parent_stack)
+        if isinstance(field_type, ListType):
+            element = self.generate_type(
+                field_type.element_type,
+                nullable=element_optional or field_type.element_optional,
+                element_optional=False,
+                element_ref=False,
+                top_level_ref=element_ref or field_type.element_ref,
+                parent_stack=parent_stack,
+            )
+            return f"List[{element}]"
+        if isinstance(field_type, ArrayType):
+            element = self.generate_array_element_type(field_type.element_type)
+            return f"Array[{element}]"
+        if isinstance(field_type, MapType):
+            key = self.generate_type(field_type.key_type, parent_stack=parent_stack)
+            value = self.generate_type(
+                field_type.value_type,
+                nullable=field_type.value_optional,
+                top_level_ref=field_type.value_ref,
+                parent_stack=parent_stack,
+            )
+            return f"Map[{key}, {value}]"
+        return "AnyRef"
+
+    def generate_array_element_type(self, field_type: FieldType) -> str:
+        if not isinstance(field_type, PrimitiveType):
+            return self._generate_non_optional_type(field_type)
+        scala_type = self.ARRAY_ELEMENT_MAP[field_type.kind]
+        annotation = self.get_array_element_annotation(field_type)
+        if annotation is not None:
+            return self.apply_type_annotation(scala_type, annotation)
+        return scala_type
+
+    def current_stack(
+        self, parent_stack: Optional[List[Message]], message: Message
+    ) -> List[Message]:
+        return [*(parent_stack or []), message]
+
+    def resolve_scala_type_name(
+        self, name: str, parent_stack: Optional[List[Message]]
+    ) -> str:
+        if "." in name:
+            root_name = name.split(".", 1)[0]
+            named_type = self.schema.get_type(root_name)
+            if named_type is not None and self.is_imported_type(named_type):
+                package = self._scala_package_for_type(named_type)
+                if package and package != self.get_scala_package():
+                    return f"{package}.{name}"
+            return name
+        named_type = self.schema.get_type(name)
+        if named_type is not None and self.is_imported_type(named_type):
+            package = self._scala_package_for_type(named_type)
+            if package and package != self.get_scala_package():
+                return f"{package}.{name}"
+        if parent_stack:
+            for index in range(len(parent_stack) - 1, -1, -1):
+                owner = parent_stack[index]
+                if owner.get_nested_type(name) is not None:
+                    return ".".join([message.name for message in parent_stack[: index + 1]] + [name])
+        return name
+
+    def apply_type_annotation(self, scala_type: str, annotation: str) -> str:
+        return f"{scala_type} @{annotation}"
+
+    def apply_primitive_annotation(
+        self, scala_type: str, field_type: PrimitiveType
+    ) -> str:
+        annotation = self.get_integer_annotation(field_type)
+        if annotation is not None:
+            return self.apply_type_annotation(scala_type, annotation)
+        return scala_type
+
+    def get_integer_annotation(self, field_type: PrimitiveType) -> Optional[str]:
+        kind = field_type.kind
+        if kind == PrimitiveKind.INT32 and field_type.encoding_modifier == "fixed":
+            return "Int32Type(encoding = Int32Encoding.FIXED)"
+        if kind == PrimitiveKind.INT32 and field_type.encoding_modifier == "varint":
+            return "Int32Type(encoding = Int32Encoding.VARINT)"
+        if kind == PrimitiveKind.INT64 and field_type.encoding_modifier == "fixed":
+            return "Int64Type(encoding = Int64Encoding.FIXED)"
+        if kind == PrimitiveKind.INT64 and field_type.encoding_modifier == "varint":
+            return "Int64Type(encoding = Int64Encoding.VARINT)"
+        if kind == PrimitiveKind.INT64 and field_type.encoding_modifier == "tagged":
+            return "Int64Type(encoding = Int64Encoding.TAGGED)"
+        if kind == PrimitiveKind.UINT8:
+            return "UInt8Type"
+        if kind == PrimitiveKind.UINT16:
+            return "UInt16Type"
+        if kind == PrimitiveKind.UINT32 and field_type.encoding_modifier == "fixed":
+            return "UInt32Type(encoding = Int32Encoding.FIXED)"
+        if kind == PrimitiveKind.UINT32 and field_type.encoding_modifier == "varint":
+            return "UInt32Type(encoding = Int32Encoding.VARINT)"
+        if kind == PrimitiveKind.UINT32:
+            return "UInt32Type"
+        if kind == PrimitiveKind.UINT64 and field_type.encoding_modifier == "fixed":
+            return "UInt64Type(encoding = Int64Encoding.FIXED)"
+        if kind == PrimitiveKind.UINT64 and field_type.encoding_modifier == "varint":
+            return "UInt64Type(encoding = Int64Encoding.VARINT)"
+        if kind == PrimitiveKind.UINT64 and field_type.encoding_modifier == "tagged":
+            return "UInt64Type(encoding = Int64Encoding.TAGGED)"
+        if kind == PrimitiveKind.UINT64:
+            return "UInt64Type"
+        return None
+
+    def get_array_element_annotation(self, field_type: PrimitiveType) -> Optional[str]:
+        kind = field_type.kind
+        if kind == PrimitiveKind.INT8:
+            return "Int8Type"
+        if kind == PrimitiveKind.UINT8:
+            return "UInt8Type"
+        if kind == PrimitiveKind.UINT16:
+            return "UInt16Type"
+        if kind == PrimitiveKind.UINT32:
+            return "UInt32Type"
+        if kind == PrimitiveKind.UINT64:
+            return "UInt64Type"
+        if kind == PrimitiveKind.FLOAT16:
+            return "Float16Type"
+        if kind == PrimitiveKind.BFLOAT16:
+            return "BFloat16Type"
+        return None
+
+    def default_value(self, field: Field) -> str:
+        if field.optional:
+            return "None"
+        return self.default_value_for_type(field.field_type)
+
+    def default_value_for_type(self, field_type: FieldType) -> str:
+        if isinstance(field_type, PrimitiveType):
+            defaults = {
+                PrimitiveKind.BOOL: "false",
+                PrimitiveKind.INT8: "0.toByte",
+                PrimitiveKind.INT16: "0.toShort",
+                PrimitiveKind.INT32: "0",
+                PrimitiveKind.INT64: "0L",
+                PrimitiveKind.UINT8: "0",
+                PrimitiveKind.UINT16: "0",
+                PrimitiveKind.UINT32: "0L",
+                PrimitiveKind.UINT64: "0L",
+                PrimitiveKind.FLOAT32: "0.0f",
+                PrimitiveKind.FLOAT64: "0.0d",
+                PrimitiveKind.STRING: '""',
+                PrimitiveKind.BYTES: "Array.emptyByteArray",
+                PrimitiveKind.DECIMAL: "BigDecimal.ZERO",
+            }
+            return defaults.get(field_type.kind, "null")
+        if isinstance(field_type, ListType):
+            return "List.empty"
+        if isinstance(field_type, ArrayType):
+            return "Array.empty"
+        if isinstance(field_type, MapType):
+            return "Map.empty"
+        return "null"
+
+    def collect_message_imports(self, message: Message, imports: Set[str]) -> None:
+        for field in message.fields:
+            self.collect_type_imports(field.field_type, imports)
+            if field.ref or self.field_type_has_ref(field.field_type):
+                imports.add("org.apache.fory.annotation.Ref")
+        for enum in message.nested_enums:
+            imports.add("org.apache.fory.annotation.ForyEnumId")
+            imports.add("org.apache.fory.scala.ForyScalaEnum")
+        for union in message.nested_unions:
+            imports.add("org.apache.fory.annotation.{ForyCase, ForyUnion}")
+        for nested in message.nested_messages:
+            self.collect_message_imports(nested, imports)
+
+    def collect_union_imports(self, union: Union, imports: Set[str]) -> None:
+        for field in union.fields:
+            self.collect_type_imports(field.field_type, imports)
+            if field.ref or self.field_type_has_ref(field.field_type):
+                imports.add("org.apache.fory.annotation.Ref")
+
+    def collect_type_imports(self, field_type: FieldType, imports: Set[str]) -> None:
+        if isinstance(field_type, PrimitiveType):
+            if field_type.kind == PrimitiveKind.DATE:
+                imports.add("java.time.LocalDate")
+            elif field_type.kind == PrimitiveKind.TIMESTAMP:
+                imports.add("java.time.Instant")
+            elif field_type.kind == PrimitiveKind.DURATION:
+                imports.add("java.time.Duration")
+            elif field_type.kind == PrimitiveKind.DECIMAL:
+                imports.add("java.math.BigDecimal")
+            elif field_type.kind == PrimitiveKind.FLOAT16:
+                imports.add("org.apache.fory.`type`.Float16")
+            elif field_type.kind == PrimitiveKind.BFLOAT16:
+                imports.add("org.apache.fory.`type`.BFloat16")
+            self.collect_integer_imports(field_type, imports)
+            return
+        if isinstance(field_type, ListType):
+            self.collect_type_imports(field_type.element_type, imports)
+            return
+        if isinstance(field_type, ArrayType):
+            self.collect_type_imports(field_type.element_type, imports)
+            if isinstance(field_type.element_type, PrimitiveType):
+                self.collect_array_element_imports(field_type.element_type, imports)
+            return
+        if isinstance(field_type, MapType):
+            self.collect_type_imports(field_type.key_type, imports)
+            self.collect_type_imports(field_type.value_type, imports)
+
+    def collect_integer_imports(
+        self, field_type: FieldType, imports: Set[str]
+    ) -> None:
+        if not isinstance(field_type, PrimitiveType):
+            return
+        kind = field_type.kind
+        if kind == PrimitiveKind.INT32:
+            if field_type.encoding_modifier in ("fixed", "varint"):
+                imports.add("org.apache.fory.annotation.Int32Type")
+                imports.add("org.apache.fory.config.Int32Encoding")
+        elif kind == PrimitiveKind.INT64:
+            if field_type.encoding_modifier in ("fixed", "varint", "tagged"):
+                imports.add("org.apache.fory.annotation.Int64Type")
+                imports.add("org.apache.fory.config.Int64Encoding")
+        elif kind == PrimitiveKind.UINT8:
+            imports.add("org.apache.fory.annotation.UInt8Type")
+        elif kind == PrimitiveKind.UINT16:
+            imports.add("org.apache.fory.annotation.UInt16Type")
+        elif kind == PrimitiveKind.UINT32:
+            imports.add("org.apache.fory.annotation.UInt32Type")
+            if field_type.encoding_modifier in ("fixed", "varint"):
+                imports.add("org.apache.fory.config.Int32Encoding")
+        elif kind == PrimitiveKind.UINT64:
+            imports.add("org.apache.fory.annotation.UInt64Type")
+            if field_type.encoding_modifier in ("fixed", "varint", "tagged"):
+                imports.add("org.apache.fory.config.Int64Encoding")
+
+    def collect_array_element_imports(
+        self, field_type: PrimitiveType, imports: Set[str]
+    ) -> None:
+        kind = field_type.kind
+        if kind == PrimitiveKind.INT8:
+            imports.add("org.apache.fory.annotation.Int8Type")
+        elif kind == PrimitiveKind.UINT8:
+            imports.add("org.apache.fory.annotation.UInt8Type")
+        elif kind == PrimitiveKind.UINT16:
+            imports.add("org.apache.fory.annotation.UInt16Type")
+        elif kind == PrimitiveKind.UINT32:
+            imports.add("org.apache.fory.annotation.UInt32Type")
+        elif kind == PrimitiveKind.UINT64:
+            imports.add("org.apache.fory.annotation.UInt64Type")
+        elif kind == PrimitiveKind.FLOAT16:
+            imports.add("org.apache.fory.annotation.Float16Type")
+        elif kind == PrimitiveKind.BFLOAT16:
+            imports.add("org.apache.fory.annotation.BFloat16Type")
+
+    def field_type_has_ref(self, field_type: FieldType) -> bool:
+        if isinstance(field_type, ListType):
+            return field_type.element_ref or self.field_type_has_ref(field_type.element_type)
+        if isinstance(field_type, MapType):
+            return field_type.value_ref or self.field_type_has_ref(field_type.value_type)
+        return False
+
+    def is_ref_target_type(self, field_type: FieldType) -> bool:
+        if not isinstance(field_type, NamedType):
+            return False
+        return self.schema.get_type(field_type.name) is not None
+
+    def generate_registration_file(self) -> GeneratedFile:
+        imports = {
+            "org.apache.fory.{Fory, ThreadSafeFory}",
+            "org.apache.fory.scala.ForySerializer",
+            "org.apache.fory.serializer.scala.ScalaSerializers",
+        }
+        lines = self.source_header(imports)
+        class_name = self.get_registration_class_name()
+        lines.append(f"object {class_name} {{")
+        lines.append("    private lazy val fory: ThreadSafeFory = createFory()")
+        lines.append("")
+        lines.append("    def getFory: ThreadSafeFory = fory")
+        lines.append("")
+        lines.append("    private def createFory(): ThreadSafeFory = {")
+        lines.append(
+            "        val runtime = Fory.builder().withXlang(true).withCompatible(true).withRefTracking(true).withScalaOptimizationEnabled(true).buildThreadSafeFory()"
+        )
+        imported_registrations = self._collect_imported_registrations()
+        if imported_registrations:
+            lines.append("        runtime.registerCallback((fory: Fory) => {")
+            for package, registration in imported_registrations:
+                lines.append(f"            {package}.{registration}.register(fory)")
+            lines.append("            register(fory)")
+            lines.append("        })")
+        else:
+            lines.append("        runtime.registerCallback((fory: Fory) => register(fory))")
+        lines.append("        runtime")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    def register(fory: Fory): Unit = {")
+        lines.append("        ScalaSerializers.registerSerializers(fory)")
+        for enum in self.schema.enums:
+            if self.is_imported_type(enum):
+                continue
+            self.generate_type_registration(lines, enum)
+        for message in self.schema.messages:
+            if self.is_imported_type(message):
+                continue
+            self.generate_type_registration(lines, message)
+            self.generate_nested_registration(lines, message.name, message)
+        for union in self.schema.unions:
+            if self.is_imported_type(union):
+                continue
+            self.generate_type_registration(lines, union)
+        lines.append("    }")
+        lines.append("}")
+        return self.source_file(class_name, lines)
+
+    def generate_nested_registration(
+        self, lines: List[str], owner_path: str, message: Message
+    ) -> None:
+        for enum in message.nested_enums:
+            self.generate_type_registration(lines, enum, owner_path)
+        for nested in message.nested_messages:
+            nested_path = f"{owner_path}.{nested.name}"
+            self.generate_type_registration(lines, nested, owner_path)
+            self.generate_nested_registration(lines, nested_path, nested)
+        for union in message.nested_unions:
+            self.generate_type_registration(lines, union, owner_path)
+
+    def generate_type_registration(
+        self, lines: List[str], type_def, owner_path: Optional[str] = None
+    ) -> None:
+        class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name
+        if isinstance(type_def, Enum):
+            if self.should_register_by_id(type_def):
+                lines.append(
+                    f"        ScalaSerializers.registerEnum(fory, classOf[{class_ref}], {type_def.type_id}L)"
+                )
+            else:
+                namespace = self.schema.package or "default"
+                lines.append(
+                    f'        ScalaSerializers.registerEnum(fory, classOf[{class_ref}], "{namespace}", "{type_def.name}")'
+                )
+            return
+        if self.should_register_by_id(type_def):
+            lines.append(
+                f"        ForySerializer.register(fory, classOf[{class_ref}], {type_def.type_id}L)"
+            )
+        else:
+            namespace = self.schema.package or "default"
+            lines.append(
+                f'        ForySerializer.register(fory, classOf[{class_ref}], "{namespace}", "{type_def.name}")'
+            )
+
+    def safe_identifier(self, name: str) -> str:
+        return f"`{name}`" if name in self.RESERVED else name

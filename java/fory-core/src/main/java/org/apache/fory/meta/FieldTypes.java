@@ -119,6 +119,10 @@ public class FieldTypes {
             && !primitiveList
             && TypeAnnotationUtils.isBoxedListArrayType(descriptor);
     TypeExtMeta typeExtMeta = genericType.getTypeRef().getTypeExtMeta();
+    int primitiveArrayTypeIdFromComponentMeta =
+        rawType.isArray() && rawType.getComponentType().isPrimitive()
+            ? primitiveArrayTypeIdFromComponentMeta(genericType.getTypeRef())
+            : Types.UNKNOWN;
     TypeExtMeta primitiveListArgumentMeta =
         primitiveList ? primitiveListArgumentMeta(genericType.getTypeRef()) : null;
     TypeExtMeta primitiveListInlineMeta =
@@ -156,6 +160,8 @@ public class FieldTypes {
       // For primitive arrays with type annotations, use getDescriptorTypeId to parse annotation.
       // This allows @UInt8Type etc. to override the default byte[] bytes schema.
       typeId = Types.getDescriptorTypeId(resolver, descriptor);
+    } else if (primitiveArrayTypeIdFromComponentMeta != Types.UNKNOWN) {
+      typeId = primitiveArrayTypeIdFromComponentMeta;
     } else if (typeAnnotation != null && rawType.isArray() && descriptor != null) {
       typeId = Types.getDescriptorTypeId(resolver, descriptor);
     } else {
@@ -254,7 +260,8 @@ public class FieldTypes {
               elementNullable, elementTrackingRef, primitiveListElementTypeId, -1));
     }
 
-    if (COLLECTION_TYPE.isSupertypeOf(genericType.getTypeRef())) {
+    if (COLLECTION_TYPE.isSupertypeOf(genericType.getTypeRef())
+        || (isXlang && (resolver.isCollection(rawType) || resolver.isSet(rawType)))) {
       return new CollectionFieldType(
           typeId,
           nullable,
@@ -265,7 +272,8 @@ public class FieldTypes {
               genericType.getTypeParameter0() == null
                   ? GenericType.build(Object.class)
                   : genericType.getTypeParameter0()));
-    } else if (MAP_TYPE.isSupertypeOf(genericType.getTypeRef())) {
+    } else if (MAP_TYPE.isSupertypeOf(genericType.getTypeRef())
+        || (isXlang && resolver.isMap(rawType))) {
       Tuple2<TypeRef<?>, TypeRef<?>> mapKeyValueType = getMapKeyValueType(genericType);
       return new MapFieldType(
           typeId,
@@ -285,6 +293,8 @@ public class FieldTypes {
                   : resolver.buildGenericType(mapKeyValueType.f1)));
     } else if (isUnionType || Union.class.isAssignableFrom(rawType)) {
       return new UnionFieldType(nullable, trackingRef);
+    } else if (Types.isEnumType(typeId)) {
+      return new EnumFieldType(nullable, Types.ENUM, -1);
     } else if (TypeUtils.unwrap(rawType).isPrimitive()) {
       // unified basic types for xlang and native mode
       return new RegisteredFieldType(nullable, trackingRef, typeId, -1);
@@ -351,6 +361,18 @@ public class FieldTypes {
     TypeRef<?> elementType = TypeUtils.getElementType(typeRef);
     TypeExtMeta elementMeta = elementType.getTypeExtMeta();
     return elementMeta != null && Types.isPrimitiveType(elementMeta.typeId()) ? elementMeta : null;
+  }
+
+  private static int primitiveArrayTypeIdFromComponentMeta(TypeRef<?> typeRef) {
+    TypeRef<?> componentType = typeRef.getComponentType();
+    if (componentType == null) {
+      return Types.UNKNOWN;
+    }
+    TypeExtMeta componentMeta = componentType.getTypeExtMeta();
+    if (componentMeta == null || componentMeta.typeId() == Types.UNKNOWN) {
+      return Types.UNKNOWN;
+    }
+    return TypeAnnotationUtils.getArrayTypeIdFromElementType(componentType);
   }
 
   public abstract static class FieldType implements Serializable {
@@ -886,8 +908,13 @@ public class FieldTypes {
         if (declElementType.equals(elementType)) {
           return declared;
         }
-        return collectionOf(
-            declaredClass, elementType, new TypeExtMeta(typeId, nullable, trackingRef));
+        TypeExtMeta extMeta = new TypeExtMeta(typeId, nullable, trackingRef);
+        if (!java.util.Collection.class.isAssignableFrom(declaredClass)
+            && resolver.isCollection(declaredClass)) {
+          return TypeRef.of(
+              declaredClass, extMeta, java.util.Collections.singletonList(elementType), null);
+        }
+        return collectionOf(declaredClass, elementType, extMeta);
       }
       // Build array type from element type
       // elementType could be base type (int) or intermediate array (int[])
@@ -984,13 +1011,18 @@ public class FieldTypes {
         }
         if (valueDecl.hasWildcard()) {
           // handle generic bound
-          valueDecl = keyDecl.resolveAllWildcards();
+          valueDecl = valueDecl.resolveAllWildcards();
         }
-        return mapOf(
-            declared.getRawType(),
-            keyType.toTypeToken(classResolver, keyDecl),
-            valueType.toTypeToken(classResolver, valueDecl),
-            new TypeExtMeta(typeId, nullable, trackingRef));
+        TypeExtMeta extMeta = new TypeExtMeta(typeId, nullable, trackingRef);
+        TypeRef<?> keyTypeRef = keyType.toTypeToken(classResolver, keyDecl);
+        TypeRef<?> valueTypeRef = valueType.toTypeToken(classResolver, valueDecl);
+        Class<?> declaredClass = declared.getRawType();
+        if (!java.util.Map.class.isAssignableFrom(declaredClass)
+            && classResolver.isMap(declaredClass)) {
+          return TypeRef.of(
+              declaredClass, extMeta, java.util.Arrays.asList(keyTypeRef, valueTypeRef), null);
+        }
+        return mapOf(declaredClass, keyTypeRef, valueTypeRef, extMeta);
       }
       return mapOf(
           keyType.toTypeToken(classResolver, keyDecl),
@@ -1040,8 +1072,8 @@ public class FieldTypes {
 
     @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
-      if (declared != null && declared.getRawType().isEnum()) {
-        return declared;
+      if (declared != null) {
+        return TypeRef.of(declared.getRawType(), new TypeExtMeta(Types.ENUM, nullable, false));
       }
       return TypeRef.of(UnknownClass.UnknownEnum.class);
     }

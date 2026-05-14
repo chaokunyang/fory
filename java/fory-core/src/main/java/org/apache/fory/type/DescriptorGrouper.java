@@ -60,6 +60,7 @@ public class DescriptorGrouper {
   private final Predicate<Descriptor> usesPrimitiveFieldOrdering;
   private final Predicate<Descriptor> isBuildIn;
   private final Predicate<Descriptor> isCollection;
+  private final Predicate<Descriptor> isMap;
   private final Function<Descriptor, Descriptor> descriptorUpdater;
   private final boolean descriptorsGroupedOrdered;
   private boolean sorted = false;
@@ -89,6 +90,7 @@ public class DescriptorGrouper {
       Predicate<Descriptor> usesPrimitiveFieldOrdering,
       Predicate<Descriptor> isBuildIn,
       Predicate<Descriptor> isCollection,
+      Predicate<Descriptor> isMap,
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdater,
@@ -98,6 +100,7 @@ public class DescriptorGrouper {
     this.descriptors = descriptors;
     this.isBuildIn = isBuildIn;
     this.isCollection = isCollection;
+    this.isMap = isMap;
     this.descriptorUpdater = descriptorUpdater;
     this.descriptorsGroupedOrdered = descriptorsGroupedOrdered;
     this.primitiveDescriptors =
@@ -166,7 +169,7 @@ public class DescriptorGrouper {
         }
       } else if (isCollection.test(descriptor)) {
         collectionDescriptors.add(descriptorUpdater.apply(descriptor));
-      } else if (TypeUtils.isMap(descriptor.getRawType())) {
+      } else if (isMap.test(descriptor)) {
         mapDescriptors.add(descriptorUpdater.apply(descriptor));
       } else if (isBuildIn.test(descriptor)) {
         buildInDescriptors.add(descriptorUpdater.apply(descriptor));
@@ -260,6 +263,7 @@ public class DescriptorGrouper {
                 || TypeUtils.isBoxed(descriptor.getRawType()),
         isBuildIn,
         DescriptorGrouper::isDefaultCollectionDescriptor,
+        descriptor -> TypeUtils.isMap(descriptor.getRawType()),
         descriptors,
         descriptorsGroupedOrdered,
         descriptorUpdator,
@@ -279,6 +283,7 @@ public class DescriptorGrouper {
         usesPrimitiveFieldOrdering,
         isBuildIn,
         DescriptorGrouper::isDefaultCollectionDescriptor,
+        descriptor -> TypeUtils.isMap(descriptor.getRawType()),
         descriptors,
         descriptorsGroupedOrdered,
         descriptorUpdator,
@@ -290,6 +295,7 @@ public class DescriptorGrouper {
       Predicate<Descriptor> usesPrimitiveFieldOrdering,
       Predicate<Descriptor> isBuildIn,
       Predicate<Descriptor> isCollection,
+      Predicate<Descriptor> isMap,
       Collection<Descriptor> descriptors,
       boolean descriptorsGroupedOrdered,
       Function<Descriptor, Descriptor> descriptorUpdator,
@@ -299,6 +305,7 @@ public class DescriptorGrouper {
         usesPrimitiveFieldOrdering,
         isBuildIn,
         isCollection,
+        isMap,
         descriptors,
         descriptorsGroupedOrdered,
         descriptorUpdator == null ? DescriptorGrouper::createDescriptor : descriptorUpdator,

@@ -197,6 +197,140 @@ public class UnionSerializer extends Serializer<Union> {
     return factory.apply(union.getIndex(), copiedValue);
   }
 
+  /**
+   * Writes a schema-defined union case for generated non-Java union carriers.
+   *
+   * <p>The union envelope is owned here so generated serializers for Scala/Kotlin/etc. do not
+   * duplicate protocol details or allocate temporary Java {@link Union} carriers.
+   */
+  public static void writeCaseValue(
+      TypeResolver resolver,
+      WriteContext writeContext,
+      FieldGroups.SerializationFieldInfo fieldInfo,
+      Object value,
+      int caseId) {
+    writeContext.getBuffer().writeVarUInt32(caseId);
+    writeKnownCasePayload(resolver, writeContext, fieldInfo, value);
+  }
+
+  /**
+   * Writes an unknown union case payload using dynamic value metadata.
+   *
+   * <p>Unknown cases preserve the original peer case id; id {@code 0} remains the local unknown
+   * carrier tag and is not written for schema-defined cases.
+   */
+  public static void writeUnknownCaseValue(
+      WriteContext writeContext, Object value, int originalCaseId) {
+    Preconditions.checkArgument(
+        originalCaseId > 0, "Unknown union case id must preserve a positive original id");
+    writeContext.getBuffer().writeVarUInt32(originalCaseId);
+    writeContext.writeRef(value);
+  }
+
+  /** Reads a schema-defined union case payload for generated non-Java union carriers. */
+  public static Object readCaseValue(
+      TypeResolver resolver,
+      ReadContext readContext,
+      FieldGroups.SerializationFieldInfo fieldInfo) {
+    int typeId = Types.getDescriptorTypeId(resolver, fieldInfo.descriptor);
+    if (typeId == Types.UNKNOWN) {
+      return readContext.readRef();
+    }
+    int nextReadRefId = readContext.tryPreserveRefId();
+    if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
+      TypeInfo declared = getDeclaredCaseTypeInfo(fieldInfo, typeId);
+      TypeInfo readTypeInfo = resolver.readTypeInfo(readContext, declared);
+      Serializer serializer = getCaseSerializer(fieldInfo, readTypeInfo.getTypeId(), readTypeInfo);
+      Object caseValue =
+          readCaseValue(
+              readContext, serializer, getCaseGenericType(fieldInfo, readTypeInfo.getTypeId()));
+      readContext.setReadRef(nextReadRefId, caseValue);
+      return caseValue;
+    }
+    return readContext.getReadRef();
+  }
+
+  private static void writeKnownCasePayload(
+      TypeResolver resolver,
+      WriteContext writeContext,
+      FieldGroups.SerializationFieldInfo fieldInfo,
+      Object value) {
+    int typeId = Types.getDescriptorTypeId(resolver, fieldInfo.descriptor);
+    if (typeId == Types.UNKNOWN) {
+      writeContext.writeRef(value);
+      return;
+    }
+    MemoryBuffer buffer = writeContext.getBuffer();
+    if (value == null) {
+      buffer.writeByte(Fory.NULL_FLAG);
+      return;
+    }
+    TypeInfo typeInfo = getCaseTypeInfo(resolver, fieldInfo, value, typeId);
+    Serializer serializer = getCaseSerializer(fieldInfo, typeId, typeInfo);
+    if (serializer != null && serializer.needToWriteRef()) {
+      if (writeContext.writeRefOrNull(value)) {
+        return;
+      }
+    } else {
+      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+    }
+    if (!Types.isUserDefinedType(typeId)) {
+      buffer.writeUInt8(typeId);
+    } else {
+      resolver.writeTypeInfo(writeContext, typeInfo);
+    }
+    writeValue(writeContext, value, typeId, serializer, getCaseGenericType(fieldInfo, typeId));
+  }
+
+  private static TypeInfo getCaseTypeInfo(
+      TypeResolver resolver,
+      FieldGroups.SerializationFieldInfo fieldInfo,
+      Object value,
+      int typeId) {
+    if (Types.isPrimitiveType(typeId)) {
+      return resolver.getTypeInfoByTypeId(typeId);
+    }
+    TypeInfo declared = getDeclaredCaseTypeInfo(fieldInfo, typeId);
+    if (declared != null) {
+      return declared;
+    }
+    if (!Types.isUserDefinedType(typeId)) {
+      return resolver.getTypeInfoByTypeId(typeId);
+    }
+    return resolver.getTypeInfo(value.getClass());
+  }
+
+  private static TypeInfo getDeclaredCaseTypeInfo(
+      FieldGroups.SerializationFieldInfo fieldInfo, int typeId) {
+    if (Types.isPrimitiveType(typeId)) {
+      return null;
+    }
+    if (fieldInfo.containerTypeInfo != null) {
+      return fieldInfo.containerTypeInfo;
+    }
+    return fieldInfo.typeInfo;
+  }
+
+  private static Serializer getCaseSerializer(
+      FieldGroups.SerializationFieldInfo fieldInfo, int typeId, TypeInfo fallbackTypeInfo) {
+    if (fieldInfo.containerSerializerOverride != null
+        && (typeId == Types.LIST
+            || typeId == Types.SET
+            || typeId == Types.MAP
+            || Types.isPrimitiveArray(typeId))) {
+      return fieldInfo.containerSerializerOverride;
+    }
+    return fallbackTypeInfo.getSerializer();
+  }
+
+  private static GenericType getCaseGenericType(
+      FieldGroups.SerializationFieldInfo fieldInfo, int typeId) {
+    if (typeId != Types.LIST && typeId != Types.SET && typeId != Types.MAP) {
+      return null;
+    }
+    return fieldInfo.genericType;
+  }
+
   private void writeCaseValue(WriteContext writeContext, Object value, int typeId, int caseId) {
     MemoryBuffer buffer = writeContext.getBuffer();
     byte internalTypeId = (byte) typeId;
@@ -233,7 +367,7 @@ public class UnionSerializer extends Serializer<Union> {
     writeValue(writeContext, value, typeId, serializer, getCaseGenericType(caseId, typeId));
   }
 
-  private void writeCaseValue(
+  private static void writeCaseValue(
       WriteContext writeContext, Serializer serializer, GenericType genericType, Object value) {
     if (genericType == null) {
       Serializers.write(writeContext, serializer, value);
@@ -249,7 +383,7 @@ public class UnionSerializer extends Serializer<Union> {
     }
   }
 
-  private void writeValue(
+  private static void writeValue(
       WriteContext writeContext,
       Object value,
       int typeId,
@@ -317,7 +451,7 @@ public class UnionSerializer extends Serializer<Union> {
     throw new IllegalStateException("Missing serializer for union type id " + typeId);
   }
 
-  private Object readCaseValue(
+  private static Object readCaseValue(
       ReadContext readContext, Serializer serializer, GenericType genericType) {
     if (genericType == null) {
       return Serializers.read(readContext, serializer);

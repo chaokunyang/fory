@@ -117,12 +117,6 @@ internal enum class CollectionFactory {
   CONCURRENT_SKIP_LIST_MAP,
 }
 
-internal data class ProviderEntry(
-  val packageName: String,
-  val targetClass: String,
-  val serializerClass: String,
-)
-
 internal data class ForyFieldMeta(
   val hasAnnotation: Boolean,
   val id: Int,

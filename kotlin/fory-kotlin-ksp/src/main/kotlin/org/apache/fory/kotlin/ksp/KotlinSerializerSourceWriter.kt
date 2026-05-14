@@ -125,7 +125,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   }
 
   private fun writeConstructors() {
-    builder.append("  internal constructor() : super() {\n")
+    builder.append("  public constructor() : super() {\n")
     builder.append("    this.allFields = emptyArray()\n")
     builder.append("    this.allFieldIds = IntArray(0)\n")
     builder.append("    this.fieldsById = arrayOfNulls(0)\n")

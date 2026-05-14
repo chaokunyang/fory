@@ -54,8 +54,6 @@ import org.testng.annotations.Test;
 @Test
 public class KotlinXlangTest extends XlangTestBase {
   private static final String STATIC_SERIALIZER_CASE = "static_serializer_round_trip";
-  private static final String SERVICE_LOADER_STATIC_SERIALIZER_CASE =
-      "service_loader_static_serializer_round_trip";
   private static final String DENSE_ARRAY_CASE = "dense_array_round_trip";
   private static final String UNSIGNED_COLLECTION_CASE = "unsigned_collection_round_trip";
   private static final File KOTLIN_DIR = new File("../../kotlin");
@@ -115,7 +113,6 @@ public class KotlinXlangTest extends XlangTestBase {
   @Override
   protected ExecutionContext prepareExecution(String caseName, byte[] payload) throws IOException {
     if (!STATIC_SERIALIZER_CASE.equals(caseName)
-        && !SERVICE_LOADER_STATIC_SERIALIZER_CASE.equals(caseName)
         && !DENSE_ARRAY_CASE.equals(caseName)
         && !UNSIGNED_COLLECTION_CASE.equals(caseName)) {
       throw new SkipException(
@@ -137,21 +134,6 @@ public class KotlinXlangTest extends XlangTestBase {
     Assert.assertEquals(response.id, 4_294_967_294L);
     Assert.assertEquals(response.name, "kotlin-to-java");
     Assert.assertEquals(response.score, 987654321L);
-  }
-
-  @Test(groups = "xlang")
-  public void testServiceLoaderStaticGeneratedSerializer() throws IOException {
-    Fory fory = newFory();
-    fory.register(KotlinUserMirror.class, "kotlin", "KotlinUser");
-    KotlinUserMirror request = new KotlinUserMirror();
-    request.id = 4_294_967_295L;
-    request.name = "java-to-kotlin";
-    request.score = -123456789L;
-    ExecutionContext context = executePeer(SERVICE_LOADER_STATIC_SERIALIZER_CASE, fory, request);
-    KotlinUserMirror response = (KotlinUserMirror) fory.deserialize(readBuffer(context.dataFile()));
-    Assert.assertEquals(response.id, 4_294_967_293L);
-    Assert.assertEquals(response.name, "kotlin-service-loader");
-    Assert.assertEquals(response.score, 123456789L);
   }
 
   @Test(groups = "xlang")

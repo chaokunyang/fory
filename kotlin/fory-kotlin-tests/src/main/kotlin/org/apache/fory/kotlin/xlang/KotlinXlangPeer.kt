@@ -112,7 +112,6 @@ public fun main(args: Array<String>) {
   }
   when (args[0]) {
     "static_serializer_round_trip" -> staticSerializerRoundTrip(args[1])
-    "service_loader_static_serializer_round_trip" -> serviceLoaderStaticSerializerRoundTrip(args[1])
     "dense_array_round_trip" -> denseArrayRoundTrip(args[1])
     "unsigned_collection_round_trip" -> unsignedCollectionRoundTrip(args[1])
     else -> throw IllegalArgumentException("Unsupported Kotlin xlang case ${args[0]}")
@@ -174,7 +173,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
     checkNotNull(
         fory.getSerializer(KotlinSchemaSurface::class.java) as? StaticGeneratedStructSerializer<*>
       ) {
-        "KotlinSchemaSurface did not load a static generated serializer SPI mapping"
+        "KotlinSchemaSurface did not load a static generated serializer"
       }
       .generatedDescriptors
   check(schemaDescriptors[3].isArrayType)
@@ -252,7 +251,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
     checkNotNull(
         fory.getSerializer(KotlinDenseArrays::class.java) as? StaticGeneratedStructSerializer<*>
       ) {
-        "KotlinDenseArrays did not load a static generated serializer SPI mapping"
+        "KotlinDenseArrays did not load a static generated serializer"
       }
       .generatedDescriptors
   check(arrayDescriptors[2].typeRef.componentType.typeExtMeta.typeId() == Types.UINT32)
@@ -280,24 +279,6 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(compatibleDecoded.maybeLong == null)
   check(compatibleDecoded.maybeUInt == null)
   check(compatibleDecoded.maybeULong == null)
-}
-
-private fun serviceLoaderStaticSerializerRoundTrip(dataFile: String) {
-  val fory = newFory()
-  fory.register(KotlinUser::class.java, "kotlin", "KotlinUser")
-  val javaRequest =
-    fory.deserialize(MemoryUtils.wrap(java.io.File(dataFile).readBytes()), KotlinUser::class.java)
-  check(
-    javaRequest == KotlinUser(id = UInt.MAX_VALUE, name = "java-to-kotlin", score = -123456789L)
-  )
-  val response =
-    KotlinUser(id = UInt.MAX_VALUE - 2u, name = "kotlin-service-loader", score = 123456789L)
-  val bytes = fory.serialize(response)
-  val userSerializer = fory.getSerializer(KotlinUser::class.java)
-  check(userSerializer is StaticGeneratedStructSerializer<*>) {
-    "KotlinUser did not load a static generated serializer from SPI: ${userSerializer::class.java.name}"
-  }
-  java.io.File(dataFile).writeBytes(bytes)
 }
 
 private fun denseArrayRoundTrip(dataFile: String) {

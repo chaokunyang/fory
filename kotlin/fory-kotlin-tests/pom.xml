@@ -36,7 +36,7 @@
             <resource>
                 <directory>${project.build.directory}/generated-resources/ksp</directory>
                 <includes>
-                    <include>META-INF/services/**</include>
+                    <include>META-INF/proguard/**</include>
                 </includes>
             </resource>
         </resources>

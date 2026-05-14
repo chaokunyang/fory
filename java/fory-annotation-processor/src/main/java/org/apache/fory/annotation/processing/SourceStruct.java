@@ -26,6 +26,7 @@ import java.util.List;
 final class SourceStruct {
   final String packageName;
   final String typeName;
+  final String targetBinaryName;
   final String serializerName;
   final boolean record;
   final boolean debug;
@@ -36,6 +37,7 @@ final class SourceStruct {
   SourceStruct(
       String packageName,
       String typeName,
+      String targetBinaryName,
       String serializerName,
       boolean record,
       boolean debug,
@@ -43,6 +45,7 @@ final class SourceStruct {
       List<SourceField> recordConstructorFields) {
     this.packageName = packageName;
     this.typeName = typeName;
+    this.targetBinaryName = targetBinaryName;
     this.serializerName = serializerName;
     this.record = record;
     this.debug = debug;

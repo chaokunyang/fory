@@ -1633,8 +1633,7 @@ public abstract class TypeResolver {
       return null;
     }
     Class<? extends StaticGeneratedStructSerializer> serializerClass =
-        sharedRegistry.staticGeneratedSerializerRegistry.getSerializerClass(
-            cls, isCrossLanguage(), extRegistry.classLoader);
+        sharedRegistry.staticGeneratedSerializerRegistry.getSerializerClass(cls, isCrossLanguage());
     return serializerClass == null ? null : serializerClass.asSubclass(Serializer.class);
   }
 
@@ -1648,19 +1647,21 @@ public abstract class TypeResolver {
     }
     if (requiresStaticGeneratedSerializer(cls) || shouldPreferStaticGeneratedSerializer(cls)) {
       throw new ForyException(
-          "No static generated serializer SPI mapping for "
+          "Static generated serializer for "
               + cls.getName()
-              + " and "
-              + serializerClass.getName());
+              + " was required but "
+              + serializerClass.getName()
+              + " could not be constructed");
     }
     if (GeneratedStaticCompatibleSerializer.class.isAssignableFrom(serializerClass)) {
       return newRuntimeStaticCompatibleSerializer(serializerClass, cls, typeDef);
     }
     throw new ForyException(
-        "No static generated serializer SPI mapping for "
+        "Static generated serializer for "
             + cls.getName()
-            + " and "
-            + serializerClass.getName());
+            + " resolved to "
+            + serializerClass.getName()
+            + " but could not be constructed");
   }
 
   private StaticGeneratedStructSerializer<?> newRuntimeStaticCompatibleSerializer(
@@ -1694,7 +1695,7 @@ public abstract class TypeResolver {
       return null;
     }
     return sharedRegistry.staticGeneratedSerializerRegistry.getGeneratedDescriptors(
-        cls, isCrossLanguage(), extRegistry.classLoader);
+        cls, isCrossLanguage());
   }
 
   protected final boolean shouldPreferStaticGeneratedSerializer(Class<?> cls) {
@@ -1707,10 +1708,13 @@ public abstract class TypeResolver {
 
   private ForyException missingStaticGeneratedSerializer(Class<?> cls) {
     return new ForyException(
-        "No static generated serializer SPI mapping found for Kotlin struct "
+        "Static generated serializer for Kotlin struct "
             + cls.getName()
-            + ". Kotlin @ForyStruct types in xlang mode must be compiled with fory-kotlin-ksp "
-            + "and registered as target classes with the Fory Java registration API.");
+            + " was required but "
+            + StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+                cls, StaticGeneratedSerializerRegistry.Mode.XLANG)
+            + " was not found. Ensure annotation processing or KSP ran and generated R8 rules "
+            + "were packaged.");
   }
 
   private static boolean isKotlinClass(Class<?> cls) {

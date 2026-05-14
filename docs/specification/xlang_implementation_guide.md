@@ -109,36 +109,38 @@ state in thread locals, globals, or serializer instance fields.
 
 ### Static generated serializer discovery
 
-The Java runtime discovers build-time generated xlang serializers through
-`StaticGeneratedSerializerProvider` service providers. A provider maps a target
-class to the generated serializer class and construction functions. Runtime
-registration still belongs to the user: users register target classes and
-their IDs or names with normal Fory registration APIs; generated providers must
-not choose user IDs or registered names.
+The Java runtime discovers build-time generated xlang serializers by
+deterministic generated class name. Runtime registration still belongs to the
+user: users register target classes and their IDs or names with normal Fory
+registration APIs; generated serializers must not choose user IDs or registered
+names.
 
-Generated-name `Class.forName` lookup is not the owner for static serializer
-discovery. Service-provider lookup is required for Android/R8 and is preferred
-for Kotlin classes. Kotlin xlang structs require a KSP-generated SPI mapping;
-missing static serializer metadata is a configuration error. When a registered
-type is a Kotlin class, or when the runtime is Android, the Java type resolver
-checks the static provider registry first. The static provider registry is
-resolver-owned shared metadata: it is held by `SharedRegistry`, not by
-serializer classes or by individual `TypeResolver` instances. The registry must
-be GraalVM build-time initialized so build-time `Fory` instances can embed their
-shared resolver metadata in the native-image heap without runtime-initialization
-conflicts. Generated Java annotation-processor providers and Kotlin KSP
-providers use separate marker service descriptors under
-`StaticGeneratedSerializerProvider` so mixed Java/Kotlin artifacts can package
-both provider lists without resource overwrite. The registry must load
-providers visible from the resolver class loader, the target class loader, and
-the context class loader, so generated serializers packaged beside plugin or
-child-loader classes can be found.
+For a target class, the runtime computes the generated serializer binary name
+from the target binary name and serialization mode. Xlang serializers use the
+`_ForySerializer` suffix. Java native static serializers use the
+`_ForyNativeSerializer` suffix. In the generated simple name, nested binary `$`
+is encoded as `_`, source `_` is encoded as `_u_`, and other non-identifier code
+points are encoded as `_x<hex>_`.
+
+The static generated serializer registry is resolver-owned shared metadata: it
+is held by `SharedRegistry`, not by serializer classes or by individual
+`TypeResolver` instances. The registry loads the generated serializer with the
+target class's class loader and caches positive and negative lookup results by
+target `Class<?>` and mode. It does not use service resources, generated
+provider classes, or user-facing registration helpers.
+
+Requiredness is owned by `TypeResolver`. The registry only reports whether the
+deterministic generated serializer exists and whether its constructor contract
+is valid. Kotlin xlang structs require KSP-generated serializers; missing static
+serializer metadata is a configuration error. Android may also require static
+serializers for schema cases whose non-generated runtime path cannot preserve
+source type metadata.
 
 Static generated serializers must expose descriptor metadata through an
-instance `getGeneratedDescriptors()` method and must have a provider-callable
-no-argument construction path for descriptor reads. That construction path is
-not a user registration API. The runtime creates the descriptor instance from
-the provider; it does not parse Kotlin metadata or Java fields at runtime to
+instance `getGeneratedDescriptors()` method and must have a public no-argument
+construction path for descriptor reads. That construction path is not a user
+registration API. The runtime creates the descriptor instance from the generated
+serializer class; it does not parse Kotlin metadata or Java fields at runtime to
 recover the generated schema.
 
 ### `WriteContext`

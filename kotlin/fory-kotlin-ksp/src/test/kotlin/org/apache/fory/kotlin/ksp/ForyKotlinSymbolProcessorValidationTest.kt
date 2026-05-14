@@ -99,21 +99,24 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun staticProviderNameIsDeterministicAndModuleSpecific() {
-    val first =
-      listOf(
-        ProviderEntry("example", "example.User", "example.User__ForySerializer__"),
-        ProviderEntry("example", "example.Team", "example.Team__ForySerializer__"),
-      )
-    val firstReordered = listOf(first[1], first[0])
-    val second = listOf(ProviderEntry("other", "other.User", "other.User__ForySerializer__"))
-
-    assertEquals(staticProviderName(first), staticProviderName(firstReordered))
-    assertTrue(
-      staticProviderName(first).startsWith("__ForyKotlinStaticGeneratedSerializerProvider_")
+  fun generatedSerializerNameEscapingMatchesGoldenVectors() {
+    assertEquals(escapeBinarySimpleName("User") + "_ForySerializer", "User_ForySerializer")
+    assertEquals(
+      escapeBinarySimpleName("Outer\$Inner") + "_ForySerializer",
+      "Outer_Inner_ForySerializer",
     )
-    assertTrue(staticProviderName(first).endsWith("__"))
-    assertTrue(staticProviderName(first) != staticProviderName(second))
+    assertEquals(
+      escapeBinarySimpleName("Outer_Inner") + "_ForySerializer",
+      "Outer_u_Inner_ForySerializer",
+    )
+    assertEquals(
+      escapeBinarySimpleName("Outer__Inner") + "_ForySerializer",
+      "Outer_u__u_Inner_ForySerializer",
+    )
+    assertEquals(
+      escapeBinarySimpleName("Outer-Inner") + "_ForySerializer",
+      "Outer_x2d_Inner_ForySerializer",
+    )
   }
 
   @Test
@@ -149,7 +152,7 @@ class ForyKotlinSymbolProcessorValidationTest {
             packageName = "example",
             typeName = "NullableUIntArrayHolder",
             qualifiedTypeName = "example.NullableUIntArrayHolder",
-            serializerName = "NullableUIntArrayHolder__ForySerializer__",
+            serializerName = "NullableUIntArrayHolder_ForySerializer",
             fields =
               listOf(
                 KotlinSourceField(
@@ -198,7 +201,7 @@ class ForyKotlinSymbolProcessorValidationTest {
             packageName = "example",
             typeName = "NullableUIntHolder",
             qualifiedTypeName = "example.NullableUIntHolder",
-            serializerName = "NullableUIntHolder__ForySerializer__",
+            serializerName = "NullableUIntHolder_ForySerializer",
             fields =
               listOf(
                 KotlinSourceField(

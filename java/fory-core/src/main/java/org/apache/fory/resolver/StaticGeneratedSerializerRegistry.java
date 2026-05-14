@@ -19,11 +19,8 @@
 
 package org.apache.fory.resolver;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
+import java.lang.reflect.Constructor;
 import java.util.List;
-import java.util.ServiceLoader;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.ForyException;
@@ -39,27 +36,21 @@ public final class StaticGeneratedSerializerRegistry {
     NATIVE
   }
 
-  public interface RuntimeFactory {
-    StaticGeneratedStructSerializer<?> create(
-        TypeResolver resolver, Class<?> type, TypeDef typeDef);
-  }
-
-  public interface DescriptorFactory {
-    StaticGeneratedStructSerializer<?> create();
-  }
-
   private static final class Entry {
     private final Class<? extends StaticGeneratedStructSerializer> serializerClass;
-    private final RuntimeFactory runtimeFactory;
-    private final DescriptorFactory descriptorFactory;
+    private final Constructor<? extends StaticGeneratedStructSerializer> descriptorConstructor;
+    private final Constructor<? extends StaticGeneratedStructSerializer> runtimeConstructor;
+    private final Constructor<? extends StaticGeneratedStructSerializer> compatibleConstructor;
 
     private Entry(
         Class<? extends StaticGeneratedStructSerializer> serializerClass,
-        RuntimeFactory runtimeFactory,
-        DescriptorFactory descriptorFactory) {
+        Constructor<? extends StaticGeneratedStructSerializer> descriptorConstructor,
+        Constructor<? extends StaticGeneratedStructSerializer> runtimeConstructor,
+        Constructor<? extends StaticGeneratedStructSerializer> compatibleConstructor) {
       this.serializerClass = serializerClass;
-      this.runtimeFactory = runtimeFactory;
-      this.descriptorFactory = descriptorFactory;
+      this.descriptorConstructor = descriptorConstructor;
+      this.runtimeConstructor = runtimeConstructor;
+      this.compatibleConstructor = compatibleConstructor;
     }
 
     Class<? extends StaticGeneratedStructSerializer> getSerializerClass() {
@@ -68,45 +59,42 @@ public final class StaticGeneratedSerializerRegistry {
 
     StaticGeneratedStructSerializer<?> newSerializer(
         TypeResolver resolver, Class<?> type, TypeDef typeDef) {
-      return runtimeFactory.create(resolver, type, typeDef);
+      try {
+        return typeDef == null
+            ? runtimeConstructor.newInstance(resolver, type)
+            : compatibleConstructor.newInstance(resolver, type, typeDef);
+      } catch (ReflectiveOperationException e) {
+        throw new ForyException(
+            "Failed to create static generated serializer "
+                + serializerClass.getName()
+                + " for "
+                + type.getName(),
+            e);
+      }
     }
 
     List<Descriptor> getGeneratedDescriptors() {
-      return descriptorFactory.create().getGeneratedDescriptors();
+      try {
+        return descriptorConstructor.newInstance().getGeneratedDescriptors();
+      } catch (ReflectiveOperationException e) {
+        throw new ForyException(
+            "Failed to create descriptor-only static generated serializer "
+                + serializerClass.getName(),
+            e);
+      }
     }
   }
 
   private final ConcurrentHashMap<Class<?>, Entry> xlangSerializers = new ConcurrentHashMap<>();
   private final ConcurrentHashMap<Class<?>, Entry> nativeSerializers = new ConcurrentHashMap<>();
-  private final Set<ClassLoader> loadedClassLoaders =
-      Collections.newSetFromMap(new IdentityHashMap<>());
-
-  public void register(
-      Class<?> targetType,
-      Mode mode,
-      Class<? extends StaticGeneratedStructSerializer> serializerClass,
-      RuntimeFactory runtimeFactory,
-      DescriptorFactory descriptorFactory) {
-    Entry entry = new Entry(serializerClass, runtimeFactory, descriptorFactory);
-    ConcurrentHashMap<Class<?>, Entry> entries =
-        mode == Mode.XLANG ? xlangSerializers : nativeSerializers;
-    Entry existing = entries.putIfAbsent(targetType, entry);
-    if (existing != null && existing.getSerializerClass() != serializerClass) {
-      throw new ForyException(
-          "Conflicting static generated serializer SPI mapping for "
-              + targetType.getName()
-              + " in "
-              + mode
-              + " mode. Existing="
-              + existing.getSerializerClass().getName()
-              + ", new="
-              + serializerClass.getName());
-    }
-  }
+  private final ConcurrentHashMap<Class<?>, Boolean> missingXlangSerializers =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Class<?>, Boolean> missingNativeSerializers =
+      new ConcurrentHashMap<>();
 
   Class<? extends StaticGeneratedStructSerializer> getSerializerClass(
-      Class<?> targetType, boolean xlang, ClassLoader resolverClassLoader) {
-    Entry entry = getEntry(targetType, xlang, resolverClassLoader);
+      Class<?> targetType, boolean xlang) {
+    Entry entry = getEntry(targetType, xlang);
     return entry == null ? null : entry.getSerializerClass();
   }
 
@@ -115,53 +103,96 @@ public final class StaticGeneratedSerializerRegistry {
       Class<?> targetType,
       Class<? extends StaticGeneratedStructSerializer> serializerClass,
       TypeDef typeDef) {
-    Entry entry = getEntry(targetType, resolver.isCrossLanguage(), resolver.getClassLoader());
+    Entry entry = getEntry(targetType, resolver.isCrossLanguage());
     if (entry == null || entry.getSerializerClass() != serializerClass) {
       return null;
     }
     return entry.newSerializer(resolver, targetType, typeDef);
   }
 
-  List<Descriptor> getGeneratedDescriptors(
-      Class<?> targetType, boolean xlang, ClassLoader resolverClassLoader) {
-    Entry entry = getEntry(targetType, xlang, resolverClassLoader);
+  List<Descriptor> getGeneratedDescriptors(Class<?> targetType, boolean xlang) {
+    Entry entry = getEntry(targetType, xlang);
     return entry == null ? null : entry.getGeneratedDescriptors();
   }
 
-  private Entry getEntry(Class<?> targetType, boolean xlang, ClassLoader resolverClassLoader) {
-    loadFrom(resolverClassLoader);
-    ClassLoader targetClassLoader = targetType.getClassLoader();
-    if (targetClassLoader != resolverClassLoader) {
-      loadFrom(targetClassLoader);
+  private Entry getEntry(Class<?> targetType, boolean xlang) {
+    ConcurrentHashMap<Class<?>, Entry> entries = xlang ? xlangSerializers : nativeSerializers;
+    Entry entry = entries.get(targetType);
+    if (entry != null) {
+      return entry;
     }
-    ClassLoader contextClassLoader = Thread.currentThread().getContextClassLoader();
-    if (contextClassLoader != null
-        && contextClassLoader != resolverClassLoader
-        && contextClassLoader != targetClassLoader) {
-      loadFrom(contextClassLoader);
+    ConcurrentHashMap<Class<?>, Boolean> misses =
+        xlang ? missingXlangSerializers : missingNativeSerializers;
+    if (misses.containsKey(targetType)) {
+      return null;
     }
-    return (xlang ? xlangSerializers : nativeSerializers).get(targetType);
+    entry = loadEntry(targetType, xlang ? Mode.XLANG : Mode.NATIVE);
+    if (entry == null) {
+      misses.put(targetType, Boolean.TRUE);
+      return null;
+    }
+    Entry existing = entries.putIfAbsent(targetType, entry);
+    return existing == null ? entry : existing;
   }
 
-  private void loadFrom(ClassLoader classLoader) {
-    synchronized (loadedClassLoaders) {
-      if (!loadedClassLoaders.add(classLoader)) {
-        return;
+  private Entry loadEntry(Class<?> targetType, Mode mode) {
+    String serializerName =
+        StaticGeneratedSerializerNames.generatedSerializerBinaryName(targetType, mode);
+    Class<?> serializerClass;
+    try {
+      serializerClass = Class.forName(serializerName, false, targetType.getClassLoader());
+    } catch (ClassNotFoundException e) {
+      return null;
+    }
+    if (!StaticGeneratedStructSerializer.class.isAssignableFrom(serializerClass)) {
+      throw new ForyException(
+          "Generated serializer "
+              + serializerName
+              + " for "
+              + targetType.getName()
+              + " does not extend "
+              + StaticGeneratedStructSerializer.class.getName());
+    }
+    return newEntry(serializerClass.asSubclass(StaticGeneratedStructSerializer.class));
+  }
+
+  private Entry newEntry(Class<? extends StaticGeneratedStructSerializer> serializerClass) {
+    Constructor<? extends StaticGeneratedStructSerializer> descriptorConstructor =
+        constructor(serializerClass);
+    Constructor<? extends StaticGeneratedStructSerializer> runtimeConstructor =
+        constructor(serializerClass, TypeResolver.class, Class.class);
+    Constructor<? extends StaticGeneratedStructSerializer> compatibleConstructor =
+        constructor(serializerClass, TypeResolver.class, Class.class, TypeDef.class);
+    return new Entry(
+        serializerClass, descriptorConstructor, runtimeConstructor, compatibleConstructor);
+  }
+
+  private Constructor<? extends StaticGeneratedStructSerializer> constructor(
+      Class<? extends StaticGeneratedStructSerializer> serializerClass,
+      Class<?>... parameterTypes) {
+    try {
+      Constructor<? extends StaticGeneratedStructSerializer> constructor =
+          serializerClass.getDeclaredConstructor(parameterTypes);
+      constructor.setAccessible(true);
+      return constructor;
+    } catch (NoSuchMethodException e) {
+      throw new ForyException(
+          "Generated serializer "
+              + serializerClass.getName()
+              + " is missing required constructor "
+              + constructorSignature(parameterTypes),
+          e);
+    }
+  }
+
+  private static String constructorSignature(Class<?>[] parameterTypes) {
+    StringBuilder builder = new StringBuilder("(");
+    for (int i = 0; i < parameterTypes.length; i++) {
+      if (i != 0) {
+        builder.append(", ");
       }
-      loadFrom(classLoader, StaticGeneratedSerializerProvider.class);
-      loadFrom(classLoader, StaticGeneratedSerializerProvider.JavaAnnotationProcessor.class);
-      loadFrom(classLoader, StaticGeneratedSerializerProvider.KotlinSymbolProcessor.class);
+      builder.append(parameterTypes[i].getSimpleName());
     }
-  }
-
-  private <T extends StaticGeneratedSerializerProvider> void loadFrom(
-      ClassLoader classLoader, Class<T> providerType) {
-    ServiceLoader<T> providers =
-        classLoader == null
-            ? ServiceLoader.load(providerType)
-            : ServiceLoader.load(providerType, classLoader);
-    for (T provider : providers) {
-      provider.register(this);
-    }
+    return builder.append(')').toString();
   }
 }

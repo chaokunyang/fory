@@ -56,6 +56,7 @@ import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.union.Union2;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -106,6 +107,26 @@ public class ForyAndroidInstrumentedTest {
     Object copy = roundTrip(fory, value);
 
     assertEquals(value, copy);
+  }
+
+  @Test
+  public void staticGeneratedSerializerSurvivesReleaseMinification() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .requireClassRegistration(true)
+            .registerGuavaTypes(false)
+            .build();
+    fory.register(AndroidGeneratedStruct.class, "android", "GeneratedStruct");
+
+    Serializer<?> serializer = fory.getTypeResolver().getSerializer(AndroidGeneratedStruct.class);
+    assertTrue(serializer instanceof StaticGeneratedStructSerializer);
+    assertEquals(
+        "org.apache.fory.android.AndroidGeneratedStruct_ForySerializer",
+        serializer.getClass().getName());
+
+    AndroidGeneratedStruct value = new AndroidGeneratedStruct(7, "generated");
+    assertEquals(value, roundTrip(fory, value));
   }
 
   @Test

@@ -30,20 +30,16 @@ import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
-import com.google.devtools.ksp.symbol.KSFile
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSTypeArgument
 import com.google.devtools.ksp.symbol.Modifier
 import com.google.devtools.ksp.symbol.Nullability
-import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
 import java.util.Locale
 
 private const val MAX_CONSTRUCTOR_FIELDS = Long.SIZE_BITS - 1
 private const val MAX_DEFAULT_CONSTRUCTOR_FIELDS = 12
-private const val STATIC_PROVIDER_PACKAGE = "org.apache.fory.kotlin.generated"
 
 internal fun constructorFieldLimitDiagnostic(fieldCount: Int): String? =
   if (fieldCount > MAX_CONSTRUCTOR_FIELDS) {
@@ -85,7 +81,7 @@ internal fun unsupportedStructDeclarationDiagnostic(
 
 internal fun unsupportedStructVisibilityDiagnostic(modifiers: Set<Modifier>): String? =
   if (Modifier.PRIVATE in modifiers || Modifier.INTERNAL in modifiers) {
-    "Kotlin KSP xlang serializers generate public SPI-visible serializers, so @ForyStruct targets must not be private or internal"
+    "Kotlin KSP xlang serializers generate public runtime-visible serializers, so @ForyStruct targets must not be private or internal"
   } else {
     null
   }
@@ -104,26 +100,10 @@ internal fun unsupportedPrimaryConstructorVisibilityDiagnostic(modifiers: Set<Mo
     null
   }
 
-internal fun staticProviderName(entries: List<ProviderEntry>): String {
-  val digest = MessageDigest.getInstance("SHA-256")
-  entries
-    .sortedWith(compareBy<ProviderEntry> { it.targetClass }.thenBy { it.serializerClass })
-    .forEach { entry ->
-      digest.update(entry.targetClass.toByteArray(StandardCharsets.UTF_8))
-      digest.update(0)
-      digest.update(entry.serializerClass.toByteArray(StandardCharsets.UTF_8))
-      digest.update(0)
-    }
-  val suffix = digest.digest().take(8).joinToString("") { "%02x".format(it) }
-  return "__ForyKotlinStaticGeneratedSerializerProvider_${suffix}__"
-}
-
 internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcessorEnvironment) :
   SymbolProcessor {
   private val codeGenerator: CodeGenerator = environment.codeGenerator
   private val logger: KSPLogger = environment.logger
-  private val providerEntries = mutableListOf<ProviderEntry>()
-  private val providerFiles = linkedSetOf<KSFile>()
   private val generatedTypes = linkedSetOf<String>()
 
   override fun process(resolver: Resolver): List<KSAnnotated> {
@@ -155,10 +135,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       }
       val struct = parseStruct(declaration) ?: continue
       KotlinSerializerSourceWriter(struct).writeTo(codeGenerator)
-      providerEntries.add(
-        ProviderEntry(struct.packageName, struct.qualifiedTypeName, struct.qualifiedSerializerName)
-      )
-      providerFiles.addAll(struct.originatingFiles)
+      writeR8Rules(struct)
     }
     return deferred
   }
@@ -175,39 +152,6 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         sequenceOf(declaration)
       else emptySequence()
     return current + declaration.declarations.flatMap { structDeclarations(it) }
-  }
-
-  override fun finish() {
-    if (providerEntries.isEmpty()) {
-      return
-    }
-    val dependencies = Dependencies(aggregating = true, sources = providerFiles.toTypedArray())
-    val sortedEntries =
-      providerEntries.sortedWith(
-        compareBy<ProviderEntry> { it.targetClass }.thenBy { it.serializerClass }
-      )
-    val providerName = staticProviderName(sortedEntries)
-    val output =
-      codeGenerator.createNewFile(
-        dependencies,
-        STATIC_PROVIDER_PACKAGE,
-        providerName,
-        "kt",
-      )
-    OutputStreamWriter(output, StandardCharsets.UTF_8).use {
-      it.write(
-        KotlinProviderSourceWriter(STATIC_PROVIDER_PACKAGE, providerName, sortedEntries).write()
-      )
-    }
-    val serviceOutput =
-      codeGenerator.createNewFileByPath(
-        dependencies,
-        "META-INF/services/org.apache.fory.resolver.StaticGeneratedSerializerProvider\$KotlinSymbolProcessor",
-        "",
-      )
-    OutputStreamWriter(serviceOutput, StandardCharsets.UTF_8).use {
-      it.write("$STATIC_PROVIDER_PACKAGE.$providerName\n")
-    }
   }
 
   private fun parseStruct(declaration: KSClassDeclaration): KotlinSourceStruct? {
@@ -339,10 +283,36 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       packageName = packageName,
       typeName = typeName,
       qualifiedTypeName = declaration.qualifiedName!!.asString(),
-      serializerName = "${typeName}__ForySerializer__",
+      serializerName = "${escapeBinarySimpleName(typeName)}_ForySerializer",
       fields = fields,
       originatingFiles = listOfNotNull(declaration.containingFile),
     )
+  }
+
+  private fun writeR8Rules(struct: KotlinSourceStruct) {
+    val dependencies =
+      Dependencies(aggregating = false, sources = struct.originatingFiles.toTypedArray())
+    val output =
+      codeGenerator.createNewFileByPath(
+        dependencies,
+        "META-INF/proguard/fory-static-generated-${escapedResourceName(struct.qualifiedTypeName)}.pro",
+        "",
+      )
+    output.use { it.write(r8Rules(struct).toByteArray(StandardCharsets.UTF_8)) }
+  }
+
+  private fun r8Rules(struct: KotlinSourceStruct): String = buildString {
+    append("-keepnames class ").append(struct.qualifiedTypeName).append('\n').append('\n')
+    append("-keepattributes RuntimeVisibleAnnotations\n")
+    append('\n')
+    append("-if class ").append(struct.qualifiedTypeName).append('\n')
+    append("-keep,allowoptimization class ").append(struct.qualifiedSerializerName).append(" {\n")
+    append("  public <init>();\n")
+    append("  public <init>(org.apache.fory.resolver.TypeResolver, java.lang.Class);\n")
+    append(
+      "  public <init>(org.apache.fory.resolver.TypeResolver, java.lang.Class, org.apache.fory.meta.TypeDef);\n"
+    )
+    append("}\n")
   }
 
   private fun KSClassDeclaration.isConcreteStruct(): Boolean {
@@ -1133,6 +1103,20 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
   private fun isAnnotation(annotation: KSAnnotation, qualifiedName: String): Boolean =
     annotation.annotationType.resolve().declaration.qualifiedName?.asString() == qualifiedName
 
+  private fun escapedResourceName(targetBinaryName: String): String {
+    val builder = StringBuilder(targetBinaryName.length + 32)
+    for (char in targetBinaryName) {
+      when {
+        char == '.' -> builder.append('.')
+        char == '$' -> builder.append('_')
+        char == '_' -> builder.append("_u_")
+        Character.isJavaIdentifierPart(char) -> builder.append(char)
+        else -> builder.append("_x").append(char.code.toString(16)).append('_')
+      }
+    }
+    return builder.toString()
+  }
+
   private sealed class Encoding(val sourceName: String) {
     object Fixed : Encoding("@Fixed")
 
@@ -1163,4 +1147,20 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     const val TAGGED = "org.apache.fory.kotlin.Tagged"
     val UnsupportedScalar = ScalarType("", "", "", "", false)
   }
+}
+
+internal fun escapeBinarySimpleName(binarySimpleName: String): String {
+  val builder = StringBuilder(binarySimpleName.length + 32)
+  var index = 0
+  while (index < binarySimpleName.length) {
+    val codePoint = Character.codePointAt(binarySimpleName, index)
+    when {
+      codePoint == '$'.code -> builder.append('_')
+      codePoint == '_'.code -> builder.append("_u_")
+      Character.isJavaIdentifierPart(codePoint) -> builder.appendCodePoint(codePoint)
+      else -> builder.append("_x").append(codePoint.toString(16)).append('_')
+    }
+    index += Character.charCount(codePoint)
+  }
+  return builder.toString()
 }

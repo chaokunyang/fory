@@ -45,18 +45,17 @@ supported by this module.
 Phase 1 KSP generation emits serializers for public concrete, non-generic
 `@ForyStruct` classes with primary-constructor fields and a public or internal
 primary constructor. Kotlin `private` and `internal` struct classes are rejected
-because generated serializers and SPI providers are public runtime entry
-points. Kotlin `object` declarations, annotated interfaces, abstract classes,
-sealed declarations, and generic struct targets are rejected during KSP
-processing because they are not single constructor-field serializer targets for
-the phase 1 generator. Dense primitive and unsigned array types, such as
-`IntArray` and `UIntArray`, are supported as top-level fields. Nested dense
-arrays, such as `List<UIntArray>` or `Map<String, IntArray>`, are rejected in
-phase 1. Fory Java `@ArrayType` is also supported on top-level `List<T>` fields
-when `T` is a non-null bool or numeric dense-array element domain. The generated
-serializer writes the field as dense `array<T>` schema and converts decoded JVM
-list elements back to the declared Kotlin carrier, such as `Int`, `UInt`, or
-`Double`.
+because generated serializers are public runtime entry points. Kotlin `object`
+declarations, annotated interfaces, abstract classes, sealed declarations, and
+generic struct targets are rejected during KSP processing because they are not
+single constructor-field serializer targets for the phase 1 generator. Dense
+primitive and unsigned array types, such as `IntArray` and `UIntArray`, are
+supported as top-level fields. Nested dense arrays, such as `List<UIntArray>` or
+`Map<String, IntArray>`, are rejected in phase 1. Fory Java `@ArrayType` is also
+supported on top-level `List<T>` fields when `T` is a non-null bool or numeric
+dense-array element domain. The generated serializer writes the field as dense
+`array<T>` schema and converts decoded JVM list elements back to the declared
+Kotlin carrier, such as `Int`, `UInt`, or `Double`.
 
 ## Annotations
 
@@ -124,42 +123,18 @@ KotlinSerializers.registerSerializers(fory)
 fory.register(User::class.java, "example", "User")
 ```
 
-The KSP processor emits a service provider that maps target classes to their
-generated serializers. On Android and for Kotlin classes, the Java runtime
-requires this provider mapping for xlang structs. Missing KSP/SPI metadata is a
-configuration error, not a reflective fallback path. This avoids generated-name
-`Class.forName` lookups and works as an R8-compatible discovery path when the
-generated service resource and serializer classes are kept by the application
-build.
+The KSP processor emits serializer classes in the same package as each target
+class. The runtime resolves those serializers by deterministic generated name
+from the registered target class. Missing KSP generated serializers for Kotlin
+xlang structs are configuration errors, not reflective fallback paths.
 
-Android builds that run R8 must preserve the generated SPI resource and the
-generated provider/serializer classes. Application shrinker rules should keep:
+The generated serializer name is `<target>_ForySerializer`, with nested binary
+`$` changed to `_` and source underscores escaped as `_u_`. Users should not
+reference generated serializer classes directly.
 
-```text
--keep class * implements org.apache.fory.resolver.StaticGeneratedSerializerProvider { *; }
--keep class * implements org.apache.fory.resolver.StaticGeneratedSerializerProvider$KotlinSymbolProcessor { *; }
--keep class * implements org.apache.fory.resolver.StaticGeneratedSerializerProvider$JavaAnnotationProcessor { *; }
--keep class **.*__ForySerializer__ { *; }
--keep class org.apache.fory.resolver.StaticGeneratedSerializerProvider { *; }
--keep class org.apache.fory.resolver.StaticGeneratedSerializerProvider$* { *; }
-```
-
-The Kotlin KSP generated service resource
-`META-INF/services/org.apache.fory.resolver.StaticGeneratedSerializerProvider$KotlinSymbolProcessor`
-must also be packaged. Java annotation-processor generated serializers use the
-separate
-`META-INF/services/org.apache.fory.resolver.StaticGeneratedSerializerProvider$JavaAnnotationProcessor`
-resource so mixed Java/Kotlin artifacts do not overwrite one another's provider
-lists. If a build plugin strips service resources, configure the application
-packaging step to retain these files.
-
-The KSP processor emits one aggregate provider for the compilation module in
-`org.apache.fory.kotlin.generated`. The provider class name includes a stable
-hash of the generated target mappings, so multiple Kotlin artifacts can publish
-providers on the same classpath without binary-name collisions. That provider
-contains mappings for all annotated Kotlin structs in the module, across source
-packages.
-
-Applications must package the generated service resource. There is no manual
-provider registration API; users still register only target classes and their
-IDs or xlang names through the normal Fory Java registration APIs.
+Android builds that run R8 should not need user-written generated serializer
+keep rules. KSP emits generated consumer R8/ProGuard rules under
+`META-INF/proguard/` for the exact serializer constructors used by Fory and the
+Kotlin metadata needed for runtime requiredness checks. Users still register
+only target classes and their IDs or xlang names through the normal Fory Java
+registration APIs.

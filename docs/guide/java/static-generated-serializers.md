@@ -78,11 +78,11 @@ public class Order {
 The processor generates serializer classes in the same Java package as the annotated class. For
 `Order`, the generated classes are:
 
-- `Order__ForySerializer__` for cross-language mode.
-- `Order__ForyNativeSerializer__` for Java native mode.
+- `Order_ForySerializer` for cross-language mode.
+- `Order_ForyNativeSerializer` for Java native mode.
 
 For a static nested type such as `Outer.Inner`, the generated top-level classes are
-`Outer$Inner__ForySerializer__` and `Outer$Inner__ForyNativeSerializer__`.
+`Outer_Inner_ForySerializer` and `Outer_Inner_ForyNativeSerializer`.
 
 ## Field Debug Tracing
 
@@ -113,6 +113,9 @@ Fory uses static generated serializers when they are available on:
 - compatible-mode reads when the target struct has a generated serializer.
 
 On an ordinary JVM with `codegen=true`, Fory continues to prefer runtime-generated serializers.
+
+The runtime resolves generated serializers from the registered target class name. Application code
+should not reference generated serializer classes directly.
 
 ## Field Access Rules
 
@@ -150,6 +153,10 @@ public class ImageBlock {
 Without the generated serializer metadata, Android may not expose enough nested type information for
 Fory to preserve annotations such as `@Ref`, `@Int8Type`, `@UInt8Type`, `@Float16Type`, or
 `@BFloat16Type`.
+
+The annotation processor emits generated consumer R8/ProGuard rules under `META-INF/proguard/` for
+the exact serializer constructors used by Fory. Android applications should not add broad generated
+serializer keep rules by hand.
 
 ## Compatible Reads
 

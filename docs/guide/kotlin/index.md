@@ -108,3 +108,4 @@ Fory Kotlin is built on top of Fory Java. Most configuration options, features, 
 - [Type Serialization](type-serialization.md) - Serializing Kotlin types
 - [Default Values](default-values.md) - Kotlin data class default values support
 - [Static Generated Serializers](static-generated-serializers.md) - KSP xlang/schema serializer generation
+- [Android Support](android-support.md) - Android setup, R8 behavior, and release-build validation

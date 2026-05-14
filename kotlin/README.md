@@ -1,210 +1,115 @@
-# Apache Fory™ Kotlin
+# Apache Fory Kotlin
 
-Apache Fory™ Kotlin provides optimized serializers for Kotlin types, built on top of Fory Java. It delivers high-performance serialization for the Kotlin ecosystem with full support for Kotlin-specific types and idioms.
+Apache Fory Kotlin adds Kotlin/JVM and Android support on top of the Fory Java
+runtime.
 
-Most standard Kotlin types work out of the box with the default Fory Java implementation, while Fory Kotlin adds additional support for Kotlin-specific types.
+The Kotlin tree contains three Maven modules:
 
-## Features
+- `fory-kotlin`: runtime integration for Kotlin/JVM and Android.
+- `fory-kotlin-ksp`: KSP processor for Kotlin xlang/schema static serializers.
+- `fory-kotlin-tests`: Java-driven Kotlin xlang test fixtures.
 
-### Supported Types
+## Runtime Module
 
-Apache Fory™ Kotlin is tested and works with the following types:
-
-- **Data classes**: Full support for data class serialization with all field types
-- **Primitives**: `Byte`, `Boolean`, `Int`, `Short`, `Long`, `Char`, `Float`, `Double` (works out of the box)
-- **Unsigned primitives**: `UByte`, `UShort`, `UInt`, `ULong`
-- **Unsigned arrays**: `UByteArray`, `UShortArray`, `UIntArray`, `ULongArray`
-- **Collections**: `ArrayList`, `HashMap`, `HashSet`, `LinkedHashSet`, `LinkedHashMap` (works out of the box), `ArrayDeque`
-- **Empty collections**: `emptyList`, `emptyMap`, `emptySet`
-- **Arrays**: All standard array types (works out of the box)
-- **Stdlib types**: `Pair`, `Triple`, `Result`
-- **Ranges**: `IntRange`, `LongRange`, `CharRange`, `IntProgression`, `LongProgression`, `CharProgression`, `UIntRange`, `ULongRange`
-- **Other**: `kotlin.text.Regex`, `kotlin.time.Duration`, `kotlin.uuid.Uuid`, `kotlin.random.Random`
-
-### Kotlin-Specific Features
-
-- **Default Value Support**: Automatic handling of Kotlin data class default parameters during schema evolution
-- **Unsigned Type Support**: Full support for Kotlin unsigned primitives and arrays
-- **Range Serialization**: Optimized serializers for Kotlin ranges and progressions
-
-## Quick Start
+Add `fory-kotlin` when application code serializes Kotlin values:
 
 ```kotlin
-import org.apache.fory.Fory
-import org.apache.fory.ThreadSafeFory
-import org.apache.fory.serializer.kotlin.KotlinSerializers
-
-data class Person(val name: String, val id: Long, val github: String)
-data class Point(val x: Int, val y: Int, val z: Int)
-
-fun main() {
-    // Create Fory instance (should be reused)
-    val fory: ThreadSafeFory = Fory.builder()
-        .requireClassRegistration(true)
-        .buildThreadSafeFory()
-
-    // Register Kotlin serializers
-    KotlinSerializers.registerSerializers(fory)
-
-    // Register your classes
-    fory.register(Person::class.java)
-    fory.register(Point::class.java)
-
-    val p = Person("Shawn Yang", 1, "https://github.com/chaokunyang")
-    println(fory.deserialize(fory.serialize(p)))
-    println(fory.deserialize(fory.serialize(Point(1, 2, 3))))
-}
+implementation("org.apache.fory:fory-kotlin:<fory-version>")
 ```
 
-## Default Value Support
-
-Apache Fory™ Kotlin provides support for Kotlin data class default values during deserialization. This feature enables forward/backward compatibility when data class schemas evolve.
-
-### How It Works
-
-When a Kotlin data class has parameters with default values, Fory can:
-
-1. **Detect default values** using Kotlin reflection
-2. **Apply default values** during deserialization when fields are missing from serialized data
-3. **Support schema evolution** by allowing new fields with defaults to be added without breaking existing serialized data
-
-### Example Usage
+Register the Kotlin runtime serializers once for each Fory instance:
 
 ```kotlin
 import org.apache.fory.Fory
 import org.apache.fory.serializer.kotlin.KotlinSerializers
 
-// Original data class
-data class User(val name: String, val age: Int)
-
-// Evolved data class with new field and default value
-data class UserV2(val name: String, val age: Int, val email: String = "default@example.com")
-
-fun main() {
-    val fory = Fory.builder()
-        .withCompatible(true)
-        .build()
-    KotlinSerializers.registerSerializers(fory)
-    fory.register(User::class.java)
-    fory.register(UserV2::class.java)
-
-    // Serialize with old schema
-    val oldUser = User("John", 30)
-    val serialized = fory.serialize(oldUser)
-
-    // Deserialize with new schema - missing field gets default value
-    val newUser = fory.deserialize(serialized) as UserV2
-    println(newUser) // UserV2(name=John, age=30, email=default@example.com)
-}
-```
-
-## Thread-Safe Usage
-
-For multi-threaded applications, use `ThreadSafeFory`:
-
-```kotlin
-import org.apache.fory.Fory
-import org.apache.fory.ThreadSafeFory
-import org.apache.fory.serializer.kotlin.KotlinSerializers
-
-object ForyHolder {
-    val fory: ThreadSafeFory = Fory.builder()
-        .requireClassRegistration(true)
-        .buildThreadSafeFory().also {
-            KotlinSerializers.registerSerializers(it)
-            it.register(Person::class.java)
-        }
-}
-
-// Use in multiple threads
-val bytes = ForyHolder.fory.serialize(person)
-val result = ForyHolder.fory.deserialize(bytes)
-```
-
-## Configuration
-
-Fory Kotlin is built on Fory Java, so all Java configuration options are available:
-
-```kotlin
-import org.apache.fory.Fory
-import org.apache.fory.serializer.kotlin.KotlinSerializers
+data class User(val name: String, val id: UInt)
 
 val fory = Fory.builder()
-    // Enable reference tracking for circular references
-    .withRefTracking(true)
-    // Enable schema evolution support
-    .withCompatible(true)
-    // Enable async compilation for better startup performance
-    .withAsyncCompilation(true)
-    // Compression options
-    .withIntCompressed(true)
-    .withLongCompressed(true)
-    .build()
+  .requireClassRegistration(true)
+  .build()
 
 KotlinSerializers.registerSerializers(fory)
+fory.register(User::class.java)
 ```
+
+`fory-kotlin` supports Kotlin-specific runtime types such as unsigned
+primitives, unsigned arrays, Kotlin collection carriers, default constructor
+values, `kotlin.time.Duration`, `kotlin.text.Regex`, and `kotlin.uuid.Uuid`.
+
+## KSP Xlang Serializers
+
+Use `fory-kotlin-ksp` only for Kotlin classes that participate in Fory
+cross-language schema mode:
+
+```kotlin
+plugins {
+  id("com.google.devtools.ksp")
+}
+
+dependencies {
+  implementation("org.apache.fory:fory-kotlin:<fory-version>")
+  ksp("org.apache.fory:fory-kotlin-ksp:<fory-version>")
+}
+```
+
+KSP generated serializers:
+
+- are generated Kotlin source.
+- target Fory xlang/schema mode only.
+- call the existing Fory Java runtime.
+- are resolved from registered target classes.
+- are not Java native object serializers.
+
+Application code should register target classes through the normal Fory Java
+APIs and should not reference generated serializer classes directly.
+
+## Android
+
+Android projects should use `fory-kotlin` for Kotlin runtime serializers and
+`fory-kotlin-ksp` for Kotlin xlang/schema structs. Validate Android behavior
+with a minified release build because debug builds do not prove R8 reachability.
+
+See [Kotlin Android Support](../docs/guide/kotlin/android-support.md) for the
+Android setup and [Kotlin Static Generated Serializers](../docs/guide/kotlin/static-generated-serializers.md)
+for the generated serializer model.
+
+If an Android app also contains Java `@ForyStruct` classes, configure the Java
+annotation processor described in
+[Java Static Generated Serializers](../docs/guide/java/static-generated-serializers.md).
 
 ## Documentation
 
-| Resource          | Link                                               |
-| ----------------- | -------------------------------------------------- |
-| **Website**       | https://fory.apache.org/docs/guide/kotlin          |
-| **Source Docs**   | [docs/guide/kotlin](../docs/guide/kotlin/index.md) |
-| **Java Guide**    | [docs/guide/java](../docs/guide/java/index.md)     |
-| **API Reference** | [Fory Java API](../java/README.md)                 |
+- [Kotlin Guide](../docs/guide/kotlin/index.md)
+- [Kotlin Static Generated Serializers](../docs/guide/kotlin/static-generated-serializers.md)
+- [Kotlin Android Support](../docs/guide/kotlin/android-support.md)
+- [Java Guide](../docs/guide/java/index.md)
 
-## Installation
+## Build
 
-### Maven
-
-```xml
-<dependency>
-  <groupId>org.apache.fory</groupId>
-  <artifactId>fory-kotlin</artifactId>
-  <version>0.17.0</version>
-</dependency>
-```
-
-### Gradle
-
-```kotlin
-implementation("org.apache.fory:fory-kotlin:0.17.0")
-```
-
-## Building
-
-Fory Kotlin requires Fory Java to be installed first:
+Install the Java modules first, then build Kotlin:
 
 ```bash
-# Install Fory Java
-cd ../java && mvn -T16 install -DskipTests
+cd ../java
+mvn -T16 install -DskipTests
 
-# Build Fory Kotlin
 cd ../kotlin
 mvn clean package
 ```
 
-## Testing
+Run Kotlin tests from this directory:
 
 ```bash
 mvn test
 ```
 
-## Code Format
+Format Kotlin and Java sources:
 
 ```bash
 mvn spotless:apply
 ```
 
-## Additional Notes
+## Scope
 
-- **Fory Reuse**: Always reuse Fory instances; creation is expensive
-- **withDefault Collections**: Wrapper classes created from `withDefault` method are currently not supported
-
-## Contributing
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for development guidelines.
-
-## License
-
-Licensed under the [Apache License 2.0](../LICENSE).
+Fory Kotlin targets Kotlin/JVM and Android. Kotlin/Native and Kotlin/JS are not
+supported.

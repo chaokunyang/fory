@@ -246,6 +246,9 @@ For library modules, package the generated `META-INF/proguard/` resources into
 the produced artifact. For Android application modules, make sure your KSP
 setup includes generated resources in the minified variant.
 
+See [Android Support](android-support.md) for Android Gradle setup and
+release-minified validation guidance.
+
 ## Native Object Mode
 
 Kotlin KSP generated serializers are only for xlang/schema mode. They do not

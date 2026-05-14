@@ -88,7 +88,6 @@ import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
-import org.apache.fory.serializer.StaticGeneratedSerializerProvider;
 import org.apache.fory.serializer.StaticGeneratedSerializerRegistry;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.UnknownClass;
@@ -1714,12 +1713,6 @@ public abstract class TypeResolver {
       staticGeneratedSerializerRegistry = registry;
     }
     return registry;
-  }
-
-  public final void registerStaticGeneratedSerializerProvider(
-      StaticGeneratedSerializerProvider provider) {
-    checkRegisterAllowed();
-    getStaticGeneratedSerializerRegistry().registerProvider(provider);
   }
 
   private void loadStaticGeneratedSerializerProviders(ClassLoader classLoader) {

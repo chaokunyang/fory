@@ -62,7 +62,6 @@ import org.apache.fory.serializer.BufferCallback;
 import org.apache.fory.serializer.BufferObject;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
-import org.apache.fory.serializer.StaticGeneratedSerializerProvider;
 import org.apache.fory.type.Generics;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
@@ -632,12 +631,6 @@ public final class Fory implements BaseFory {
   @Internal
   public TypeResolver getTypeResolver() {
     return typeResolver;
-  }
-
-  @Override
-  public void registerStaticGeneratedSerializerProvider(
-      StaticGeneratedSerializerProvider provider) {
-    typeResolver.registerStaticGeneratedSerializerProvider(provider);
   }
 
   public WriteContext getWriteContext() {

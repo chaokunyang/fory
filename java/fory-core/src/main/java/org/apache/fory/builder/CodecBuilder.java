@@ -163,8 +163,13 @@ public abstract class CodecBuilder {
   protected Expression tryCastIfPublic(
       Expression expression, TypeRef<?> targetType, String valuePrefix) {
     Class<?> rawType = getRawType(targetType);
+    Class<?> expressionRawType = getRawType(expression.type());
+    // Source casts use erased Java types. Captured wildcard metadata can fail full generic subtype
+    // checks even when the emitted local variable already has an assignable raw type.
+    boolean rawTypeAlreadyAssignable = rawType.isAssignableFrom(expressionRawType);
     if (sourcePublicAccessible(rawType)
-        && !expression.type().wrap().isSubtypeOf(targetType.wrap())) {
+        && !expression.type().wrap().isSubtypeOf(targetType.wrap())
+        && !rawTypeAlreadyAssignable) {
       return new Cast(expression, targetType, valuePrefix);
     }
     if (rawType.isArray()) {

@@ -294,6 +294,11 @@ public class TypeUtilsTest {
         TypeUtils.getRawType(Test3.class.getDeclaredField("upperBound").getGenericType()),
         ArrayList.class);
     assertEquals(TypeUtils.getRawType(new EmptyUpperBoundWildcardType()), Object.class);
+    TypeRef<?> capturedWildcardType =
+        TypeUtils.getMapKeyValueType(new TypeRef<Map<String, ? extends Collection<Integer>>>() {})
+            .f1;
+    assertTrue(capturedWildcardType.isWildcard());
+    assertEquals(TypeUtils.getRawType(capturedWildcardType.getType()), Collection.class);
   }
 
   @Test

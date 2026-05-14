@@ -242,7 +242,7 @@ public class TypeRefTest extends ForyTestBase {
 
   @Test
   public void testCapturedWildcard() {
-    // When resolving type arguments, wildcards get "captured" as TypeVariables
+    // When resolving type arguments, wildcards get captured with their upper bounds.
     // Test that captured wildcards are detected properly
     TypeRef<Map<String, ?>> mapWithWildcard = new TypeRef<Map<String, ?>>() {};
     Tuple2<TypeRef<?>, TypeRef<?>> keyValueTypes = TypeUtils.getMapKeyValueType(mapWithWildcard);

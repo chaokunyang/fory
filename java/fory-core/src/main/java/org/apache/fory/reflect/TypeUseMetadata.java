@@ -24,7 +24,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.annotation.Nullable;
-import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.util.record.RecordComponent;
 
 /** Platform-selected access to Java type-use metadata. */
@@ -77,11 +76,9 @@ public final class TypeUseMetadata {
   }
 
   private static Support loadSupport() {
-    if (AndroidSupport.IS_ANDROID) {
-      return NoTypeUseSupport.INSTANCE;
-    }
     try {
-      // Keep JVM-only method descriptors out of Android/R8's reachable graph.
+      // Keep the JVM implementation loaded by name so Android/R8 can fall back before resolving
+      // JVM-only type-use descriptors from JvmTypeUseMetadata.
       String className = TypeUseMetadata.class.getPackage().getName() + ".Jvm" + "TypeUseMetadata";
       Class<?> cls = Class.forName(className, true, TypeUseMetadata.class.getClassLoader());
       return (Support) cls.getDeclaredConstructor().newInstance();

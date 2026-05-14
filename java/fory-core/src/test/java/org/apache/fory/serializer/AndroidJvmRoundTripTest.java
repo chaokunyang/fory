@@ -27,6 +27,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -50,13 +51,20 @@ import java.util.SortedSet;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.Int32Type;
+import org.apache.fory.annotation.Nullable;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.config.CompatibleMode;
+import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.scala.SingletonCollectionSerializer;
 import org.apache.fory.serializer.scala.SingletonMapSerializer;
 import org.apache.fory.serializer.scala.SingletonObjectSerializer;
+import org.apache.fory.type.Types;
 import org.testng.Assert;
 import org.testng.SkipException;
 import org.testng.annotations.DataProvider;
@@ -64,6 +72,11 @@ import org.testng.annotations.Test;
 
 public class AndroidJvmRoundTripTest {
   private static final String ANDROID_ENABLED_ENV = "FORY_ANDROID_ENABLED";
+
+  static class TypeUseStruct {
+    @Nullable String name;
+    List<@Ref(enable = false) @Int32Type(encoding = Int32Encoding.FIXED) Integer> codes;
+  }
 
   @DataProvider(name = "roundTripKinds")
   public Object[][] roundTripKinds() {
@@ -105,6 +118,22 @@ public class AndroidJvmRoundTripTest {
     Fory fory = newFory(RoundTripKind.STRING_VALUES);
     expectUnsupported(fory.getSerializer(LambdaSerializer.ReplaceStub.class));
     expectUnsupported(fory.getSerializer(SerializedLambda.class));
+  }
+
+  @Test
+  public void testForcedAndroidJvmModeKeepsTypeUseMetadata() throws Exception {
+    requireAndroidMode();
+    Assert.assertTrue(AndroidSupport.IS_ANDROID);
+
+    Field nameField = TypeUseStruct.class.getDeclaredField("name");
+    TypeExtMeta nameMeta = TypeRef.ofTypeUse(nameField.getAnnotatedType()).getTypeExtMeta();
+    Assert.assertTrue(nameMeta.nullable());
+
+    Field codesField = TypeUseStruct.class.getDeclaredField("codes");
+    TypeExtMeta elementMeta =
+        TypeRef.ofTypeUse(codesField.getAnnotatedType()).getTypeArguments().get(0).getTypeExtMeta();
+    Assert.assertEquals(elementMeta.typeId(), Types.INT32);
+    Assert.assertFalse(elementMeta.trackingRef());
   }
 
   private static void runJvmPeer(RoundTripKind kind, File androidPayload, File jvmPayload)

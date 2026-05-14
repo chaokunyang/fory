@@ -88,7 +88,6 @@ import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveArraySerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
-import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
@@ -458,9 +457,7 @@ public class XtypeResolver extends TypeResolver {
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
     checkRegisterAllowed();
     TypeInfo typeInfo = checkClassRegistration(type);
-    if (!serializer.getClass().getPackage().getName().startsWith("org.apache.fory")) {
-      SerializationUtils.validate(type, serializer.getClass());
-    }
+    checkSerializerRegistration(type, serializer.getClass());
     boolean localOverride = typeInfo.serializer != null;
     boolean shouldShare = serializer instanceof Shareable && !localOverride;
     if (shouldShare) {
@@ -483,6 +480,25 @@ public class XtypeResolver extends TypeResolver {
     if (typeInfo.typeName != null) {
       TypeNameBytes typeNameBytes = new TypeNameBytes(typeInfo.namespace, typeInfo.typeName);
       compositeClassNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+    }
+  }
+
+  private void checkSerializerRegistration(Class<?> type, Class<?> serializerClass) {
+    if (isCollection(type) || Collection.class.isAssignableFrom(type)) {
+      if (!CollectionLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Serializer %s is not supported for xlang collection type %s.",
+                serializerClass.getName(), type.getName()));
+      }
+    }
+    if (isMap(type) || Map.class.isAssignableFrom(type)) {
+      if (!MapLikeSerializer.class.isAssignableFrom(serializerClass)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Serializer %s is not supported for xlang map type %s.",
+                serializerClass.getName(), type.getName()));
+      }
     }
   }
 

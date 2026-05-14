@@ -128,7 +128,6 @@ import org.apache.fory.serializer.OptionalSerializers;
 import org.apache.fory.serializer.PrimitiveArraySerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
-import org.apache.fory.serializer.SerializationUtils;
 import org.apache.fory.serializer.SerializedLambdaSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
@@ -1137,9 +1136,6 @@ public class ClassResolver extends TypeResolver {
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
     checkRegisterAllowed();
     checkSerializerRegistration(type, serializer.getClass());
-    if (!serializer.getClass().getPackage().getName().startsWith("org.apache.fory")) {
-      SerializationUtils.validate(type, serializer.getClass());
-    }
     registerSerializerImpl(type, serializer);
   }
 
@@ -1167,14 +1163,13 @@ public class ClassResolver extends TypeResolver {
     if (classId == null) {
       registerInternal(type);
     }
+    // Internal serializers are owned by the resolver path, not by their runtime package name.
+    // Android/R8 may obfuscate Fory packages, so package text is not a stable internal marker.
     registerSerializerImpl(type, serializer);
   }
 
   private void registerSerializerImpl(Class<?> type, Serializer<?> serializer) {
     checkRegisterAllowed();
-    if (!serializer.getClass().getPackage().getName().startsWith("org.apache.fory")) {
-      SerializationUtils.validate(type, serializer.getClass());
-    }
     TypeInfo existingTypeInfo = classInfoMap.get(type);
     boolean localOverride = existingTypeInfo != null && existingTypeInfo.serializer != null;
     boolean shareable = serializer instanceof Shareable;
@@ -1208,7 +1203,7 @@ public class ClassResolver extends TypeResolver {
     boolean replaceResolveSerializer =
         ReplaceResolveSerializer.class.isAssignableFrom(serializerClass)
             && useReplaceResolveSerializer(type);
-    if (isCollection(type)) {
+    if (isCollection(type) || Collection.class.isAssignableFrom(type)) {
       if (!CollectionLikeSerializer.class.isAssignableFrom(serializerClass)
           && !replaceResolveSerializer) {
         throw new IllegalArgumentException(
@@ -1219,7 +1214,7 @@ public class ClassResolver extends TypeResolver {
                 CollectionSerializers.JDKCompatibleCollectionSerializer.class.getName()));
       }
     }
-    if (isMap(type)) {
+    if (isMap(type) || Map.class.isAssignableFrom(type)) {
       if (!MapLikeSerializer.class.isAssignableFrom(serializerClass) && !replaceResolveSerializer) {
         throw new IllegalArgumentException(
             String.format(

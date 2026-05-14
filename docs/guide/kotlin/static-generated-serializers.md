@@ -19,47 +19,39 @@ license: |
   limitations under the License.
 ---
 
-`fory-kotlin-ksp` generates Kotlin source serializers for Fory xlang/schema
-mode. The generated serializers use the existing Java runtime
-`WriteContext`, `ReadContext`, and `MemoryBuffer`; they do not define a
-Kotlin-only protocol or buffer abstraction.
+Use `fory-kotlin-ksp` when Kotlin classes must participate in Fory
+cross-language schema serialization. The processor generates Kotlin source
+serializers at build time. Those serializers call the existing Fory Java
+runtime, including `WriteContext`, `ReadContext`, and `MemoryBuffer`; there is
+no Kotlin-only protocol.
 
-## Scope
+Static generated Kotlin serializers are for Kotlin/JVM and Android xlang/schema
+mode. They are not Java native object serializers and do not preserve JVM object
+graph implementation details such as the exact concrete collection class.
 
-KSP generation is only for xlang/schema mode. It does not generate Fory Java
-native object serializers and does not preserve concrete JVM runtime identity
-for object graphs. Collection declarations are schema carriers: `List<T>` is
-encoded as `list<T>`, `Map<K, V>` as `map<K, V>`, and deserialization only
-guarantees a value assignable to the declared Kotlin field type.
+## Add KSP
 
-Mutable collection interface fields are supported by reconstructing a mutable
-implementation assignable to the declared type. Sorted collection declarations
-without an explicit comparator, such as `TreeSet` and `ConcurrentSkipListSet`,
-are accepted only for non-null scalar or string elements. Concurrent map
-declarations are accepted only with non-null values because the JVM concurrent
-map implementations reject null entries.
+Add `fory-kotlin` at runtime and run `fory-kotlin-ksp` as a KSP processor in
+the module that compiles your `@ForyStruct` Kotlin classes.
 
-Kotlin/JVM and Android are supported. Kotlin/Native and Kotlin/JS are not
-supported by this module.
+```kotlin
+plugins {
+  id("com.google.devtools.ksp") version "<ksp-version>"
+}
 
-Phase 1 KSP generation emits serializers for public concrete, non-generic
-`@ForyStruct` classes with primary-constructor fields and a public or internal
-primary constructor. Kotlin `private` and `internal` struct classes are rejected
-because generated serializers are public runtime entry points. Kotlin `object`
-declarations, annotated interfaces, abstract classes, sealed declarations, and
-generic struct targets are rejected during KSP processing because they are not
-single constructor-field serializer targets for the phase 1 generator. Dense
-primitive and unsigned array types, such as `IntArray` and `UIntArray`, are
-supported as top-level fields. Nested dense arrays, such as `List<UIntArray>` or
-`Map<String, IntArray>`, are rejected in phase 1. Fory Java `@ArrayType` is also
-supported on top-level `List<T>` fields when `T` is a non-null bool or numeric
-dense-array element domain. The generated serializer writes the field as dense
-`array<T>` schema and converts decoded JVM list elements back to the declared
-Kotlin carrier, such as `Int`, `UInt`, or `Double`.
+dependencies {
+  implementation("org.apache.fory:fory-kotlin:<fory-version>")
+  ksp("org.apache.fory:fory-kotlin-ksp:<fory-version>")
+}
+```
 
-## Annotations
+For Android, configure KSP in the Android module or library module that owns
+the Kotlin model classes.
 
-Reuse Java annotations for Fory concepts:
+## Define A Struct
+
+Reuse the Java Fory annotations for schema concepts. Use Kotlin type-use
+annotations only when you need to override integer encoding.
 
 ```kotlin
 import org.apache.fory.annotation.ForyField
@@ -74,27 +66,119 @@ data class User(
 
   @ForyField(id = 2)
   val score: @VarInt Long,
+
+  @ForyField(id = 3)
+  val tags: List<String>,
 )
 ```
 
-Use `@ForyField(id = 1)`. `@field:ForyField(id = 1)` is also accepted for
-field-backed properties. `@get:ForyField` and `@set:ForyField` are rejected
-because accessors are not schema fields.
+Use `@ForyField(id = 1)` on constructor properties. `@field:ForyField(id = 1)`
+is also accepted for field-backed properties. Do not use `@get:ForyField` or
+`@set:ForyField`; accessors are not schema fields and the processor rejects
+them.
 
-Kotlin nullability is expressed with `?`, including nested positions such as
-`List<String?>?`. Do not use Fory `@Nullable` in Kotlin source.
+## Supported Structs
 
-`@ForyField(ref = true)` is rejected by the KSP xlang processor. Phase 1
-generated serializers construct Kotlin values through primary constructors and
-therefore cannot publish partially constructed objects for cyclic
-back-references. Use non-cyclic xlang schemas for Kotlin KSP serializers.
+The processor generates serializers for public, concrete, non-generic classes
+in named packages. A supported class must have a primary constructor whose
+serialized parameters are `val` or `var` properties. `data class` is the common
+case, but it is not required.
 
-Kotlin default constructor arguments are supported for compatible reads by
-generating constructor calls that omit missing defaulted arguments. Because
-Kotlin source generation must emit these calls statically, the first KSP
-implementation supports at most 12 defaulted constructor fields per struct.
+The processor rejects these declarations:
 
-## Encoding
+- `private` or `internal` struct classes.
+- local, anonymous, or nested `@ForyStruct` classes.
+- Kotlin `object` declarations.
+- interfaces, abstract classes, and sealed classes as serializer targets.
+- generic `@ForyStruct` classes.
+- private constructor properties.
+- private or protected primary constructors.
+
+Kotlin default constructor arguments are supported for compatible reads. A
+struct can have up to 12 defaulted constructor fields.
+
+## Nullability
+
+Use Kotlin `?` to describe nullable schema positions. Nullability is preserved
+inside collections and maps.
+
+```kotlin
+@ForyStruct
+data class NullabilityExample(
+  @ForyField(id = 1)
+  val a: List<String>,
+
+  @ForyField(id = 2)
+  val b: List<String?>,
+
+  @ForyField(id = 3)
+  val c: List<String>?,
+
+  @ForyField(id = 4)
+  val d: List<String?>?,
+)
+```
+
+Do not use Fory `@Nullable` in Kotlin source. The KSP processor rejects it so
+the schema is always read from Kotlin source nullability.
+
+## References
+
+`@ForyField(ref = true)` is not supported by Kotlin xlang generated
+serializers. Generated reads construct Kotlin values through primary
+constructors, so they cannot publish partially constructed objects for cyclic
+back-references. Use non-cyclic schemas for Kotlin xlang structs.
+
+## Collections
+
+Collection declarations carry schema shape, not JVM implementation identity.
+For example, `List<String>` is encoded as `list<string>` and
+`Map<String, Int>` is encoded as `map<string, int32>`.
+
+Deserialization only guarantees that the result is assignable to the declared
+field type. Fory does not preserve whether the original runtime value was an
+`ArrayList`, `LinkedList`, `Collections.unmodifiableList`, synchronized
+collection wrapper, or another JVM-specific collection implementation.
+
+Supported collection declarations include Kotlin and Java list, set, and map
+types. Mutable collection interface fields are deserialized to mutable
+implementations assignable to the declared type. Sorted collections without an
+explicit comparator, such as `TreeSet` and `ConcurrentSkipListSet`, are accepted
+only for non-null scalar or string elements. Concurrent map declarations are
+accepted only with non-null values because JVM concurrent map implementations
+reject null entries.
+
+`Set<*>`, `Map<*, T>`, `Map<*, *>`, and raw Java collections are rejected.
+`List<*>` and `Map<K, *>` are accepted and use dynamic nullable values.
+
+## Dense Arrays
+
+Kotlin dense primitive and unsigned array fields are supported:
+
+- `BooleanArray`
+- `ByteArray`
+- `ShortArray`
+- `IntArray`
+- `LongArray`
+- `FloatArray`
+- `DoubleArray`
+- `UByteArray`
+- `UShortArray`
+- `UIntArray`
+- `ULongArray`
+
+Dense arrays are supported as top-level fields. Nested dense arrays, such as
+`List<UIntArray>` or `Map<String, IntArray>`, are rejected.
+
+`ByteArray` is encoded as Fory `binary` unless you explicitly annotate the
+field with Java `@ArrayType`.
+
+`@ArrayType` is also supported on top-level `List<T>` fields when `T` is a
+non-null boolean or numeric dense-array element type. In that case the field is
+encoded as dense `array<T>` schema, and generated reads convert decoded JVM list
+elements back to the declared Kotlin element carrier.
+
+## Integer Encoding
 
 Kotlin type-use encoding annotations map to Fory xlang integer encodings:
 
@@ -108,10 +192,11 @@ Without an annotation, xlang `Int`, `Long`, `UInt`, and `ULong` use varint
 encoding. This is required by xlang mode and is not controlled by Java native
 mode numeric compression options.
 
-## Registration
+## Register Classes
 
-Users register Kotlin struct classes with the normal Fory Java registration
-APIs. Do not reference generated serializer class names.
+Register Kotlin struct classes with the normal Fory Java registration APIs. You
+choose the xlang namespace and type name; generated serializers do not choose
+IDs or names for you.
 
 ```kotlin
 val fory = Fory.builder()
@@ -123,18 +208,42 @@ KotlinSerializers.registerSerializers(fory)
 fory.register(User::class.java, "example", "User")
 ```
 
-The KSP processor emits serializer classes in the same package as each target
-class. The runtime resolves those serializers by deterministic generated name
-from the registered target class. Missing KSP generated serializers for Kotlin
-xlang structs are configuration errors, not reflective fallback paths.
+`KotlinSerializers.registerSerializers(fory)` installs the Kotlin runtime
+serializers used by Kotlin-specific carriers such as unsigned types. The
+`fory.register(...)` call registers your xlang schema type name.
 
-The generated serializer name is `<target>_ForySerializer`, with nested binary
-`$` changed to `_` and source underscores escaped as `_u_`. Users should not
-reference generated serializer classes directly.
+Do not register or reference generated serializer classes in application code.
+The runtime resolves them from the registered target class.
 
-Android builds that run R8 should not need user-written generated serializer
-keep rules. KSP emits generated consumer R8/ProGuard rules under
-`META-INF/proguard/` for the exact serializer constructors used by Fory and the
-Kotlin metadata needed for runtime requiredness checks. Users still register
-only target classes and their IDs or xlang names through the normal Fory Java
-registration APIs.
+## Generated Names
+
+The generated serializer is emitted in the same package as the target class.
+Its name is `<target>_ForySerializer`. For nested binary names, `$` is encoded
+as `_`; source underscores are encoded as `_u_`.
+
+These names are an implementation detail. They matter for diagnostics and
+Android shrinking, but user code should only register target classes.
+
+If a Kotlin xlang struct is registered but its KSP generated serializer is
+missing, Fory fails with a configuration error. It does not fall back to
+runtime reflection for Kotlin schema metadata.
+
+## Android And R8
+
+Android apps should not need user-written keep rules for generated Kotlin
+serializers. KSP emits generated consumer R8/ProGuard rules under
+`META-INF/proguard/` for the generated serializer constructors used by Fory and
+the Kotlin metadata needed to detect required Kotlin generated serializers.
+
+For library modules, package the generated `META-INF/proguard/` resources into
+the produced artifact. For Android application modules, make sure your KSP
+setup includes generated resources in the minified variant.
+
+## Native Object Mode
+
+Kotlin KSP generated serializers are only for xlang/schema mode. They do not
+replace Fory Java native object serializers and do not preserve JVM object graph
+identity. If you use Fory with `withXlang(false)`, Fory uses the normal Java and
+Kotlin runtime serializers instead.
+
+Kotlin/Native and Kotlin/JS are not supported by this module.

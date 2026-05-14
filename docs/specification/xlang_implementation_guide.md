@@ -107,42 +107,6 @@ Generated and hand-written serializers should treat these contexts as the only
 source of operation-local services. Serializers must not keep ambient runtime
 state in thread locals, globals, or serializer instance fields.
 
-### Static generated serializer discovery
-
-The Java runtime discovers build-time generated xlang serializers by
-deterministic generated class name. Runtime registration still belongs to the
-user: users register target classes and their IDs or names with normal Fory
-registration APIs; generated serializers must not choose user IDs or registered
-names.
-
-For a target class, the runtime computes the generated serializer binary name
-from the target binary name and serialization mode. Xlang serializers use the
-`_ForySerializer` suffix. Java native static serializers use the
-`_ForyNativeSerializer` suffix. In the generated simple name, nested binary `$`
-is encoded as `_`, source `_` is encoded as `_u_`, and other non-identifier code
-points are encoded as `_x<hex>_`.
-
-The static generated serializer registry is resolver-owned shared metadata: it
-is held by `SharedRegistry`, not by serializer classes or by individual
-`TypeResolver` instances. The registry loads the generated serializer with the
-target class's class loader and caches positive and negative lookup results by
-target `Class<?>` and mode. It does not use service resources, generated
-provider classes, or user-facing registration helpers.
-
-Requiredness is owned by `TypeResolver`. The registry only reports whether the
-deterministic generated serializer exists and whether its constructor contract
-is valid. Kotlin xlang structs require KSP-generated serializers; missing static
-serializer metadata is a configuration error. Android may also require static
-serializers for schema cases whose non-generated runtime path cannot preserve
-source type metadata.
-
-Static generated serializers must expose descriptor metadata through an
-instance `getGeneratedDescriptors()` method and must have a public no-argument
-construction path for descriptor reads. That construction path is not a user
-registration API. The runtime creates the descriptor instance from the generated
-serializer class; it does not parse Kotlin metadata or Java fields at runtime to
-recover the generated schema.
-
 ### `WriteContext`
 
 `WriteContext` owns all write-side per-operation state:

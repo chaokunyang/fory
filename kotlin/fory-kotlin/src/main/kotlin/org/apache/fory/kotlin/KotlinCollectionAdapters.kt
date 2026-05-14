@@ -20,7 +20,168 @@
 package org.apache.fory.kotlin
 
 /** Declared Kotlin/JVM collection target adapters for generated xlang serializers. */
+@Suppress("UNCHECKED_CAST")
 public object KotlinCollectionAdapters {
+  @JvmStatic
+  public fun toByteList(value: Collection<*>): List<Byte> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toByte()
+      }
+      return list as List<Byte>
+    }
+    val result = java.util.ArrayList<Byte>(value.size)
+    for (element in value) {
+      result.add((element as Number).toByte())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toShortList(value: Collection<*>): List<Short> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toShort()
+      }
+      return list as List<Short>
+    }
+    val result = java.util.ArrayList<Short>(value.size)
+    for (element in value) {
+      result.add((element as Number).toShort())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toIntList(value: Collection<*>): List<Int> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toInt()
+      }
+      return list as List<Int>
+    }
+    val result = java.util.ArrayList<Int>(value.size)
+    for (element in value) {
+      result.add((element as Number).toInt())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toLongList(value: Collection<*>): List<Long> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toLong()
+      }
+      return list as List<Long>
+    }
+    val result = java.util.ArrayList<Long>(value.size)
+    for (element in value) {
+      result.add((element as Number).toLong())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toUByteList(value: Collection<*>): List<UByte> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toByte().toUByte()
+      }
+      return list as List<UByte>
+    }
+    val result = java.util.ArrayList<UByte>(value.size)
+    for (element in value) {
+      result.add((element as Number).toByte().toUByte())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toUShortList(value: Collection<*>): List<UShort> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toShort().toUShort()
+      }
+      return list as List<UShort>
+    }
+    val result = java.util.ArrayList<UShort>(value.size)
+    for (element in value) {
+      result.add((element as Number).toShort().toUShort())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toUIntList(value: Collection<*>): List<UInt> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toInt().toUInt()
+      }
+      return list as List<UInt>
+    }
+    val result = java.util.ArrayList<UInt>(value.size)
+    for (element in value) {
+      result.add((element as Number).toInt().toUInt())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toULongList(value: Collection<*>): List<ULong> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toLong().toULong()
+      }
+      return list as List<ULong>
+    }
+    val result = java.util.ArrayList<ULong>(value.size)
+    for (element in value) {
+      result.add((element as Number).toLong().toULong())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toFloatList(value: Collection<*>): List<Float> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toFloat()
+      }
+      return list as List<Float>
+    }
+    val result = java.util.ArrayList<Float>(value.size)
+    for (element in value) {
+      result.add((element as Number).toFloat())
+    }
+    return result
+  }
+
+  @JvmStatic
+  public fun toDoubleList(value: Collection<*>): List<Double> {
+    if (value is MutableList<*>) {
+      val list = value as MutableList<Any?>
+      for (i in list.indices) {
+        list[i] = (list[i] as Number).toDouble()
+      }
+      return list as List<Double>
+    }
+    val result = java.util.ArrayList<Double>(value.size)
+    for (element in value) {
+      result.add((element as Number).toDouble())
+    }
+    return result
+  }
+
   @JvmStatic
   public fun <E> toMutableList(value: Collection<E>): MutableList<E> =
     if (value is MutableList<*>) value as MutableList<E> else java.util.ArrayList(value)

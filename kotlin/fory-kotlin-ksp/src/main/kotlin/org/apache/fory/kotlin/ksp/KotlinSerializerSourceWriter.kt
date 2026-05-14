@@ -506,6 +506,13 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     expression: String,
     compatible: Boolean = false,
   ): String {
+    val denseListConversion = denseArrayListConversion(field)
+    if (denseListConversion != null) {
+      if (field.nullable) {
+        return "($expression as Collection<*>?)?.let { KotlinCollectionAdapters.$denseListConversion(it) }"
+      }
+      return "KotlinCollectionAdapters.$denseListConversion($expression as Collection<*>)"
+    }
     val denseUnsigned = denseUnsignedArrayConversion(field)
     if (denseUnsigned != null) {
       if (field.nullable) {
@@ -754,6 +761,25 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       "ULongArray" -> "readULongArray"
       else -> null
     }
+
+  private fun denseArrayListConversion(field: KotlinSourceField): String? {
+    if (!field.arrayType || field.type.typeArguments.size != 1) {
+      return null
+    }
+    return when (field.type.typeArguments.single().valueTypeName.removeSuffix("?")) {
+      "Byte" -> "toByteList"
+      "Short" -> "toShortList"
+      "Int" -> "toIntList"
+      "Long" -> "toLongList"
+      "UByte" -> "toUByteList"
+      "UShort" -> "toUShortList"
+      "UInt" -> "toUIntList"
+      "ULong" -> "toULongList"
+      "Float" -> "toFloatList"
+      "Double" -> "toDoubleList"
+      else -> null
+    }
+  }
 
   private fun denseUnsignedArrayConversion(field: KotlinSourceField): String? =
     when (field.type.valueTypeName.removeSuffix("?")) {

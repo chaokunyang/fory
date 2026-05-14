@@ -34,7 +34,7 @@
     <build>
         <resources>
             <resource>
-                <directory>${project.build.directory}/generated-sources/ksp</directory>
+                <directory>${project.build.directory}/generated-resources/ksp</directory>
                 <includes>
                     <include>META-INF/services/**</include>
                 </includes>

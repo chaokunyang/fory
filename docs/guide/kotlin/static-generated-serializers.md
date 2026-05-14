@@ -52,7 +52,11 @@ processing because they are not single constructor-field serializer targets for
 the phase 1 generator. Dense primitive and unsigned array types, such as
 `IntArray` and `UIntArray`, are supported as top-level fields. Nested dense
 arrays, such as `List<UIntArray>` or `Map<String, IntArray>`, are rejected in
-phase 1.
+phase 1. Fory Java `@ArrayType` is also supported on top-level `List<T>` fields
+when `T` is a non-null bool or numeric dense-array element domain. The generated
+serializer writes the field as dense `array<T>` schema and converts decoded JVM
+list elements back to the declared Kotlin carrier, such as `Int`, `UInt`, or
+`Double`.
 
 ## Annotations
 

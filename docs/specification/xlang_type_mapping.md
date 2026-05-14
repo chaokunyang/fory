@@ -133,7 +133,12 @@ Notes:
   `UByteArray`, `UShortArray`, `UIntArray`, and `ULongArray` map to the dense
   unsigned array schema types. Dense Kotlin numeric array component metadata
   uses the fixed-width element type (`int32`, `int64`, `uint32`, or `uint64`);
-  scalar field defaults such as varint do not apply to dense array elements.
+  scalar field defaults such as varint do not apply to dense Kotlin array
+  components. For `@ArrayType List<Int>`, `@ArrayType List<Long>`,
+  `@ArrayType List<UInt>`, and `@ArrayType List<ULong>`, Kotlin KSP records a
+  dense array schema on the list field and fixed-width dense element domain
+  metadata on the list element type. Generated Kotlin reads must restore the
+  declared Kotlin element carrier after decoding the erased JVM list.
 - Kotlin collection declarations in KSP xlang mode carry schema shape, not JVM
   implementation identity. `List<T>`, mutable list declarations, and supported
   concrete list declarations encode as `list<T>`; `Set<T>` encodes as `set<T>`;

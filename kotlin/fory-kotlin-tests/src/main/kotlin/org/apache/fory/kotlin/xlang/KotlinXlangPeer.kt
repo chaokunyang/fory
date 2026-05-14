@@ -146,6 +146,30 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(descriptors[0].foryFieldId == 1)
   check(descriptors[0].typeRef.typeExtMeta.typeId() == Types.UINT32)
   check(descriptors[2].typeRef.typeExtMeta.typeId() == Types.VARINT64)
+
+  val schemaSurface =
+    KotlinSchemaSurface(
+      nullableNames = listOf("first", null),
+      dynamicList = emptyList<Any?>(),
+      dynamicValues = emptyMap<String, Any?>(),
+      bytesAsArray = byteArrayOf(1, 2),
+      bits = booleanArrayOf(true, false),
+      unsignedLongs = ulongArrayOf(1uL, ULong.MAX_VALUE),
+      fieldSiteId = 7,
+      denseIds = listOf(1, 2, 3),
+    )
+  val decodedSchemaSurface =
+    fory.deserialize(fory.serialize(schemaSurface), KotlinSchemaSurface::class.java)
+  check(decodedSchemaSurface.nullableNames == schemaSurface.nullableNames)
+  check(decodedSchemaSurface.dynamicList == schemaSurface.dynamicList)
+  check(decodedSchemaSurface.dynamicValues == schemaSurface.dynamicValues)
+  check(decodedSchemaSurface.bytesAsArray contentEquals schemaSurface.bytesAsArray)
+  check(decodedSchemaSurface.bits contentEquals schemaSurface.bits)
+  check(decodedSchemaSurface.unsignedLongs contentEquals schemaSurface.unsignedLongs)
+  check(decodedSchemaSurface.fieldSiteId == schemaSurface.fieldSiteId)
+  check(decodedSchemaSurface.denseIds == schemaSurface.denseIds) {
+    "denseIds round trip mismatch: expected=${schemaSurface.denseIds}, actual=${decodedSchemaSurface.denseIds}"
+  }
   val schemaDescriptors =
     checkNotNull(
         fory.getSerializer(KotlinSchemaSurface::class.java) as? StaticGeneratedStructSerializer<*>
@@ -158,17 +182,6 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(schemaDescriptors[6].foryFieldId == 7)
   check(schemaDescriptors[7].isArrayType)
   check(schemaDescriptors[7].typeRef.typeExtMeta.typeId() == Types.INT32_ARRAY)
-  val arrayDescriptors =
-    checkNotNull(
-        fory.getSerializer(KotlinDenseArrays::class.java) as? StaticGeneratedStructSerializer<*>
-      ) {
-        "KotlinDenseArrays did not load a static generated serializer SPI mapping"
-      }
-      .generatedDescriptors
-  check(arrayDescriptors[2].typeRef.componentType.typeExtMeta.typeId() == Types.UINT32)
-  check(arrayDescriptors[3].typeRef.componentType.typeExtMeta.typeId() == Types.UINT64)
-  check(arrayDescriptors[4].typeRef.componentType.typeExtMeta.typeId() == Types.INT32)
-  check(arrayDescriptors[5].typeRef.componentType.typeExtMeta.typeId() == Types.INT64)
 
   val collections =
     KotlinConcreteCollections(
@@ -235,6 +248,17 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(decodedArrays.doubles contentEquals arrays.doubles)
   check(decodedArrays.booleans contentEquals arrays.booleans)
   check(decodedArrays.nullableUInts!!.contentEquals(arrays.nullableUInts!!))
+  val arrayDescriptors =
+    checkNotNull(
+        fory.getSerializer(KotlinDenseArrays::class.java) as? StaticGeneratedStructSerializer<*>
+      ) {
+        "KotlinDenseArrays did not load a static generated serializer SPI mapping"
+      }
+      .generatedDescriptors
+  check(arrayDescriptors[2].typeRef.componentType.typeExtMeta.typeId() == Types.UINT32)
+  check(arrayDescriptors[3].typeRef.componentType.typeExtMeta.typeId() == Types.UINT64)
+  check(arrayDescriptors[4].typeRef.componentType.typeExtMeta.typeId() == Types.INT32)
+  check(arrayDescriptors[5].typeRef.componentType.typeExtMeta.typeId() == Types.INT64)
 
   val nullArrays = arrays.copy(nullableUInts = null)
   val decodedNullArrays =

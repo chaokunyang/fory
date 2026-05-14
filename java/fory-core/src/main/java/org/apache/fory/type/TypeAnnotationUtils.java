@@ -342,7 +342,10 @@ public class TypeAnnotationUtils {
       return Types.UNKNOWN;
     }
     TypeRef<?> elementTypeRef = TypeUtils.getElementType(descriptor.getTypeRef());
-    int typeId = getArrayTypeIdFromElementType(elementTypeRef);
+    // Fieldless static descriptors already carry the dense array contract on the parent
+    // descriptor. Their element TypeExtMeta is the dense element domain, not a Java source-level
+    // scalar encoding annotation.
+    int typeId = getArrayTypeIdFromElementType(elementTypeRef, true);
     if (typeId == Types.UNKNOWN) {
       throw new IllegalArgumentException(
           "@ArrayType List<T> field "
@@ -353,9 +356,16 @@ public class TypeAnnotationUtils {
   }
 
   public static int getArrayTypeIdFromElementType(TypeRef<?> elementTypeRef) {
+    return getArrayTypeIdFromElementType(elementTypeRef, false);
+  }
+
+  private static int getArrayTypeIdFromElementType(
+      TypeRef<?> elementTypeRef, boolean allowDenseElementTypeIds) {
     TypeExtMeta extMeta = elementTypeRef.getTypeExtMeta();
     if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {
-      checkArrayElementTypeIdHasNoEncodingModifier(extMeta.typeId());
+      if (!allowDenseElementTypeIds) {
+        checkArrayElementTypeIdHasNoEncodingModifier(extMeta.typeId());
+      }
       return getArrayTypeIdFromElementTypeId(extMeta.typeId());
     }
     Class<?> elementRawType = TypeUtils.unwrap(elementTypeRef.getRawType());
@@ -393,12 +403,16 @@ public class TypeAnnotationUtils {
         return Types.INT16_ARRAY;
       case Types.UINT16:
         return Types.UINT16_ARRAY;
+      case Types.INT32:
       case Types.VARINT32:
         return Types.INT32_ARRAY;
+      case Types.UINT32:
       case Types.VAR_UINT32:
         return Types.UINT32_ARRAY;
+      case Types.INT64:
       case Types.VARINT64:
         return Types.INT64_ARRAY;
+      case Types.UINT64:
       case Types.VAR_UINT64:
         return Types.UINT64_ARRAY;
       case Types.FLOAT16:

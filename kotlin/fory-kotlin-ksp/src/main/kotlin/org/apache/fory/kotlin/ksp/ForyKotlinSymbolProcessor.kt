@@ -891,13 +891,9 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       "Types.INT16" -> "Types.INT16_ARRAY"
       "Types.UINT16" -> "Types.UINT16_ARRAY"
       "Types.INT32" -> "Types.INT32_ARRAY"
-      "Types.VARINT32" -> "Types.INT32_ARRAY"
       "Types.UINT32" -> "Types.UINT32_ARRAY"
-      "Types.VAR_UINT32" -> "Types.UINT32_ARRAY"
       "Types.INT64" -> "Types.INT64_ARRAY"
-      "Types.VARINT64" -> "Types.INT64_ARRAY"
       "Types.UINT64" -> "Types.UINT64_ARRAY"
-      "Types.VAR_UINT64" -> "Types.UINT64_ARRAY"
       "Types.FLOAT32" -> "Types.FLOAT32_ARRAY"
       "Types.FLOAT64" -> "Types.FLOAT64_ARRAY"
       else -> {

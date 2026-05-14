@@ -123,13 +123,16 @@ missing static serializer metadata is a configuration error. When a registered
 type is a Kotlin class, or when the runtime is Android, the Java type resolver
 checks the static provider registry first. The static provider registry is
 resolver-owned shared metadata: it is held by `SharedRegistry`, not by
-serializer classes or by individual `TypeResolver` instances. Generated Java
-annotation-processor providers and Kotlin KSP providers use separate marker
-service descriptors under `StaticGeneratedSerializerProvider` so mixed
-Java/Kotlin artifacts can package both provider lists without resource
-overwrite. The registry must load providers visible from the resolver class
-loader, the target class loader, and the context class loader, so generated
-serializers packaged beside plugin or child-loader classes can be found.
+serializer classes or by individual `TypeResolver` instances. The registry must
+be GraalVM build-time initialized so build-time `Fory` instances can embed their
+shared resolver metadata in the native-image heap without runtime-initialization
+conflicts. Generated Java annotation-processor providers and Kotlin KSP
+providers use separate marker service descriptors under
+`StaticGeneratedSerializerProvider` so mixed Java/Kotlin artifacts can package
+both provider lists without resource overwrite. The registry must load
+providers visible from the resolver class loader, the target class loader, and
+the context class loader, so generated serializers packaged beside plugin or
+child-loader classes can be found.
 
 Static generated serializers must expose descriptor metadata through an
 instance `getGeneratedDescriptors()` method and must have a provider-callable

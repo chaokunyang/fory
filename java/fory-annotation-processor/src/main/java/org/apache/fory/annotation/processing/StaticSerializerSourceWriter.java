@@ -60,7 +60,6 @@ final class StaticSerializerSourceWriter {
     builder.append("import org.apache.fory.memory.MemoryBuffer;\n");
     builder.append("import org.apache.fory.meta.TypeDef;\n");
     builder.append("import org.apache.fory.meta.TypeExtMeta;\n");
-    builder.append("import org.apache.fory.reflect.TypeRef;\n");
     builder.append("import org.apache.fory.resolver.TypeResolver;\n");
     builder.append("import org.apache.fory.serializer.FieldGroups;\n");
     builder.append("import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;\n");
@@ -102,7 +101,7 @@ final class StaticSerializerSourceWriter {
     for (SourceField field : struct.fields) {
       builder
           .append("    descriptors.add(new Descriptor(")
-          .append(field.typeNode.typeRefExpression())
+          .append(field.typeNode.generatedTypeExpression())
           .append(", \"")
           .append(escape(field.typeNode.typeName))
           .append("\", \"")

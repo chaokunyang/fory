@@ -89,7 +89,7 @@ public class ForyStructProcessorTest {
     }
     String rules =
         result.generatedResource("META-INF/proguard/fory-static-generated-test.SimpleStruct.pro");
-    Assert.assertTrue(rules.contains("-keepnames class test.SimpleStruct"));
+    Assert.assertTrue(rules.contains("-keep,allowoptimization class test.SimpleStruct { *; }"));
     Assert.assertTrue(rules.contains("class test.SimpleStruct_ForySerializer"));
     Assert.assertTrue(rules.contains("class test.SimpleStruct_ForyNativeSerializer"));
   }
@@ -334,6 +334,9 @@ public class ForyStructProcessorTest {
                 + "  public MetadataStruct() {}\n"
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
+    String generatedSource = result.generatedSource("test/MetadataStruct_ForySerializer.java");
+    Assert.assertFalse(generatedSource.contains("TypeRef"), generatedSource);
+    Assert.assertTrue(generatedSource.contains("Descriptor.generatedType("), generatedSource);
     try (URLClassLoader loader = result.classLoader()) {
       Class<?> type = loader.loadClass("test.MetadataStruct");
       Class<?> serializerType = loader.loadClass("test.MetadataStruct_ForySerializer");

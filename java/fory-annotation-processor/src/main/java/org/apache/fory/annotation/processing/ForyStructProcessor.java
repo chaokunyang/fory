@@ -299,7 +299,10 @@ public final class ForyStructProcessor extends AbstractProcessor {
   private String writeR8Rules(List<SourceStruct> structs) {
     StringBuilder builder = new StringBuilder(1024);
     String targetType = structs.get(0).targetBinaryName;
-    builder.append("-keepnames class ").append(targetType).append("\n\n");
+    // Android release app R8 cannot see instrumentation-test or dynamic registration references.
+    // Keep the struct class itself so the generated serializer and user registration target remain
+    // installable even when the app has no other code roots.
+    builder.append("-keep,allowoptimization class ").append(targetType).append(" { *; }\n\n");
     for (SourceStruct struct : structs) {
       builder.append("-if class ").append(targetType).append("\n");
       builder

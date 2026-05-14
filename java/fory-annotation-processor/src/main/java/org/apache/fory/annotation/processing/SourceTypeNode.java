@@ -52,18 +52,20 @@ final class SourceTypeNode {
     this.nestedCompatibleStruct = nestedCompatibleStruct;
   }
 
-  String typeRefExpression() {
+  String generatedTypeExpression() {
+    // Generated serializers must not reference TypeRef directly: Android javac resolves TypeRef's
+    // AnnotatedType overloads while compiling generated source.
     if (typeExtMeta == null && typeArguments.isEmpty() && componentType == null) {
-      return "TypeRef.of(" + rawType + ".class)";
+      return "Descriptor.generatedType(" + rawType + ".class)";
     }
-    return "TypeRef.of("
+    return "Descriptor.generatedType("
         + rawType
         + ".class, "
         + (typeExtMeta == null ? "null" : typeExtMeta)
         + ", "
         + typeArgumentsExpression()
         + ", "
-        + (componentType == null ? "null" : componentType.typeRefExpression())
+        + (componentType == null ? "null" : componentType.generatedTypeExpression())
         + ")";
   }
 
@@ -71,12 +73,12 @@ final class SourceTypeNode {
     if (typeArguments.isEmpty()) {
       return "null";
     }
-    StringBuilder builder = new StringBuilder("Arrays.<TypeRef<?>>asList(");
+    StringBuilder builder = new StringBuilder("Arrays.<Descriptor.GeneratedType>asList(");
     for (int i = 0; i < typeArguments.size(); i++) {
       if (i > 0) {
         builder.append(", ");
       }
-      builder.append(typeArguments.get(i).typeRefExpression());
+      builder.append(typeArguments.get(i).generatedTypeExpression());
     }
     builder.append(')');
     return builder.toString();

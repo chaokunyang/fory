@@ -61,6 +61,7 @@ import org.apache.fory.collection.CacheBuilder;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.util.ExceptionUtils;
@@ -111,6 +112,63 @@ public class Descriptor {
   private final boolean trackingRef;
   private FieldConverter<?> fieldConverter;
 
+  /**
+   * Type tree emitted by static generated serializers without exposing TypeRef in generated code.
+   */
+  @Internal
+  public static final class GeneratedType {
+    private final Class<?> rawType;
+    private final TypeExtMeta typeExtMeta;
+    private final List<GeneratedType> typeArguments;
+    private final GeneratedType componentType;
+
+    private GeneratedType(
+        Class<?> rawType,
+        TypeExtMeta typeExtMeta,
+        List<GeneratedType> typeArguments,
+        GeneratedType componentType) {
+      this.rawType = Objects.requireNonNull(rawType);
+      this.typeExtMeta = typeExtMeta;
+      this.typeArguments =
+          typeArguments == null
+              ? java.util.Collections.emptyList()
+              : java.util.Collections.unmodifiableList(new ArrayList<>(typeArguments));
+      this.componentType = componentType;
+    }
+  }
+
+  @Internal
+  public static GeneratedType generatedType(Class<?> rawType) {
+    return new GeneratedType(rawType, null, null, null);
+  }
+
+  @Internal
+  public static GeneratedType generatedType(
+      Class<?> rawType,
+      TypeExtMeta typeExtMeta,
+      List<GeneratedType> typeArguments,
+      GeneratedType componentType) {
+    return new GeneratedType(rawType, typeExtMeta, typeArguments, componentType);
+  }
+
+  private static TypeRef<?> toTypeRef(GeneratedType generatedType) {
+    Objects.requireNonNull(generatedType);
+    List<TypeRef<?>> typeArguments = null;
+    if (!generatedType.typeArguments.isEmpty()) {
+      typeArguments = new ArrayList<>(generatedType.typeArguments.size());
+      for (GeneratedType typeArgument : generatedType.typeArguments) {
+        typeArguments.add(toTypeRef(typeArgument));
+      }
+    }
+    TypeRef<?> componentType =
+        generatedType.componentType == null ? null : toTypeRef(generatedType.componentType);
+    if (generatedType.typeExtMeta == null && typeArguments == null && componentType == null) {
+      return TypeRef.of(generatedType.rawType);
+    }
+    return TypeRef.of(
+        generatedType.rawType, generatedType.typeExtMeta, typeArguments, componentType);
+  }
+
   public Descriptor(Field field, TypeRef<?> typeRef, Method readMethod, Method writeMethod) {
     this(field, typeRef, readMethod, writeMethod, null);
   }
@@ -148,6 +206,32 @@ public class Descriptor {
             ? resolveNullable(typeRef, !hasForyField, field, null, readMethod)
             : nullableOverride;
     this.trackingRef = hasForyField && foryField.ref();
+  }
+
+  public Descriptor(
+      GeneratedType generatedType,
+      String typeName,
+      String name,
+      int modifier,
+      String declaringClass,
+      boolean hasForyField,
+      int foryFieldId,
+      boolean nullable,
+      boolean trackingRef,
+      ForyField.Dynamic dynamic,
+      boolean arrayType) {
+    this(
+        toTypeRef(generatedType),
+        typeName,
+        name,
+        modifier,
+        declaringClass,
+        hasForyField,
+        foryFieldId,
+        nullable,
+        trackingRef,
+        dynamic,
+        arrayType);
   }
 
   public Descriptor(

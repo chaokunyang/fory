@@ -19,11 +19,14 @@
 
 package org.apache.fory.type;
 
+import java.lang.annotation.Annotation;
+import java.lang.reflect.AnnotatedArrayType;
 import java.lang.reflect.AnnotatedParameterizedType;
 import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.GenericArrayType;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -66,6 +69,7 @@ import java.util.Set;
 import java.util.TimeZone;
 import java.util.WeakHashMap;
 import java.util.stream.Collectors;
+import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.BFloat16List;
 import org.apache.fory.collection.BoolList;
@@ -296,6 +300,34 @@ public class TypeUtils {
 
   public static boolean isNullable(Class<?> clz) {
     return !isPrimitive(clz);
+  }
+
+  public static boolean isNullable(TypeRef<?> typeRef, boolean defaultNullable) {
+    if (typeRef.isPrimitive()) {
+      return false;
+    }
+    TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
+    return typeExtMeta == null ? defaultNullable : typeExtMeta.nullable();
+  }
+
+  public static boolean isNullable(
+      TypeRef<?> typeRef,
+      boolean defaultNullable,
+      Field field,
+      RecordComponent component,
+      Method readMethod) {
+    if (typeRef.isPrimitive()) {
+      return false;
+    }
+    if (FIELD_ANNOTATED_TYPE_SUPPORTED
+        && (isAnnotatedNullable(field == null ? null : field.getAnnotatedType())
+            || isAnnotatedNullable(component == null ? null : component.getAnnotatedType())
+            || isAnnotatedNullable(
+                readMethod == null ? null : readMethod.getAnnotatedReturnType()))) {
+      return true;
+    }
+    TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
+    return typeExtMeta == null ? defaultNullable : typeExtMeta.nullable();
   }
 
   public static boolean isPrimitive(Class<?> clz) {
@@ -638,6 +670,13 @@ public class TypeUtils {
     return TypeRef.of(field.getGenericType());
   }
 
+  public static TypeRef<?> getMethodReturnTypeRef(Method method) {
+    if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
+      return TypeRef.of(method.getAnnotatedReturnType());
+    }
+    return TypeRef.of(method.getGenericReturnType());
+  }
+
   public static AnnotatedType getFieldAnnotatedType(Field field) {
     if (FIELD_ANNOTATED_TYPE_SUPPORTED) {
       return field.getAnnotatedType();
@@ -650,6 +689,48 @@ public class TypeUtils {
       return component.getAnnotatedType();
     }
     return null;
+  }
+
+  public static TypeRef<?> getRecordComponentTypeRef(RecordComponent component) {
+    AnnotatedType annotatedType = getRecordComponentAnnotatedType(component);
+    return annotatedType == null
+        ? TypeRef.of(component.getGenericType())
+        : TypeRef.of(annotatedType);
+  }
+
+  public static Annotation getFieldTypeUseAnnotation(Field field, String name) {
+    if (!FIELD_ANNOTATED_TYPE_SUPPORTED) {
+      return null;
+    }
+    return getTypeUseAnnotation(field.getAnnotatedType(), name);
+  }
+
+  public static Annotation getMethodReturnTypeUseAnnotation(Method method, String name) {
+    if (!FIELD_ANNOTATED_TYPE_SUPPORTED) {
+      return null;
+    }
+    return getTypeUseAnnotation(method.getAnnotatedReturnType(), name);
+  }
+
+  private static boolean isAnnotatedNullable(AnnotatedType annotatedType) {
+    return annotatedType != null && annotatedType.isAnnotationPresent(Nullable.class);
+  }
+
+  private static Annotation getTypeUseAnnotation(AnnotatedType annotatedType, String name) {
+    if (annotatedType == null) {
+      return null;
+    }
+    Annotation typeAnnotation = Descriptor.getAnnotation(annotatedType.getAnnotations(), name);
+    if (typeAnnotation != null || !(annotatedType instanceof AnnotatedArrayType)) {
+      return typeAnnotation;
+    }
+    AnnotatedType annotatedComponent =
+        ((AnnotatedArrayType) annotatedType).getAnnotatedGenericComponentType();
+    Class<?> componentRawType = getRawType(annotatedComponent.getType());
+    if (!componentRawType.isPrimitive()) {
+      return null;
+    }
+    return Descriptor.getAnnotation(annotatedComponent.getAnnotations(), name);
   }
 
   private static boolean isFieldAnnotatedTypeSupported() {

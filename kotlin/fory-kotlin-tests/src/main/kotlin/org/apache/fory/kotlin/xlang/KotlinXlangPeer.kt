@@ -33,6 +33,7 @@ import org.apache.fory.config.Language
 import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.VarInt
 import org.apache.fory.memory.MemoryUtils
+import org.apache.fory.serializer.StaticGeneratedSerializerRegistry
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.serializer.kotlin.KotlinSerializers
 import org.apache.fory.type.Types
@@ -124,6 +125,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   fory.register(KotlinUser::class.java, "kotlin", "KotlinUser")
   fory.register(KotlinConcreteCollections::class.java, "kotlin", "KotlinConcreteCollections")
   fory.register(KotlinUnsignedCollections::class.java, "kotlin", "KotlinUnsignedCollections")
+  fory.register(KotlinSchemaSurface::class.java, "kotlin", "KotlinSchemaSurface")
   fory.register(KotlinDenseArrays::class.java, "kotlin", "KotlinDenseArrays")
 
   val javaRequest =
@@ -145,13 +147,23 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(descriptors[0].foryFieldId == 1)
   check(descriptors[0].typeRef.typeExtMeta.typeId() == Types.UINT32)
   check(descriptors[2].typeRef.typeExtMeta.typeId() == Types.VARINT64)
-  val schemaDescriptors = KotlinSchemaSurface__ForySerializer__().generatedDescriptors
+  val staticRegistry =
+    StaticGeneratedSerializerRegistry.load(KotlinSchemaSurface::class.java.classLoader)
+  val schemaDescriptors =
+    checkNotNull(staticRegistry.get(KotlinSchemaSurface::class.java, true)) {
+        "KotlinSchemaSurface did not load a static generated serializer SPI mapping"
+      }
+      .generatedDescriptors
   check(schemaDescriptors[3].isArrayType)
   check(schemaDescriptors[6].hasForyField())
   check(schemaDescriptors[6].foryFieldId == 7)
   check(schemaDescriptors[7].isArrayType)
   check(schemaDescriptors[7].typeRef.typeExtMeta.typeId() == Types.INT32_ARRAY)
-  val arrayDescriptors = KotlinDenseArrays__ForySerializer__().generatedDescriptors
+  val arrayDescriptors =
+    checkNotNull(staticRegistry.get(KotlinDenseArrays::class.java, true)) {
+        "KotlinDenseArrays did not load a static generated serializer SPI mapping"
+      }
+      .generatedDescriptors
   check(arrayDescriptors[2].typeRef.componentType.typeExtMeta.typeId() == Types.UINT32)
   check(arrayDescriptors[3].typeRef.componentType.typeExtMeta.typeId() == Types.UINT64)
   check(arrayDescriptors[4].typeRef.componentType.typeExtMeta.typeId() == Types.INT32)

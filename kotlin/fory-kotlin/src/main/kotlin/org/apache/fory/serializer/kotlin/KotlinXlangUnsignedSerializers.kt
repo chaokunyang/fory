@@ -54,9 +54,8 @@ public object KotlinXlangUnsignedSerializers {
   private fun unsupported(typeId: Int, kotlinTypeName: String): IllegalArgumentException =
     IllegalArgumentException("Unsupported Kotlin unsigned xlang type $kotlinTypeName/$typeId")
 
-  private class UByteXlangSerializer(
-    config: Config
-  ) : ImmutableSerializer<UByte>(config, UByte::class.java, false, true), Shareable {
+  private class UByteXlangSerializer(config: Config) :
+    ImmutableSerializer<UByte>(config, UByte::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: UByte) {
       writeContext.buffer.writeByte(value.toInt())
     }
@@ -64,20 +63,17 @@ public object KotlinXlangUnsignedSerializers {
     override fun read(readContext: ReadContext): UByte = readContext.buffer.readByte().toUByte()
   }
 
-  private class UShortXlangSerializer(
-    config: Config
-  ) : ImmutableSerializer<UShort>(config, UShort::class.java, false, true), Shareable {
+  private class UShortXlangSerializer(config: Config) :
+    ImmutableSerializer<UShort>(config, UShort::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: UShort) {
       writeContext.buffer.writeInt16(value.toShort())
     }
 
-    override fun read(readContext: ReadContext): UShort =
-      readContext.buffer.readInt16().toUShort()
+    override fun read(readContext: ReadContext): UShort = readContext.buffer.readInt16().toUShort()
   }
 
-  private class FixedUIntXlangSerializer(
-    config: Config
-  ) : ImmutableSerializer<UInt>(config, UInt::class.java, false, true), Shareable {
+  private class FixedUIntXlangSerializer(config: Config) :
+    ImmutableSerializer<UInt>(config, UInt::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: UInt) {
       writeContext.buffer.writeInt32(value.toInt())
     }
@@ -85,9 +81,8 @@ public object KotlinXlangUnsignedSerializers {
     override fun read(readContext: ReadContext): UInt = readContext.buffer.readInt32().toUInt()
   }
 
-  private class VarUIntXlangSerializer(
-    config: Config
-  ) : ImmutableSerializer<UInt>(config, UInt::class.java, false, true), Shareable {
+  private class VarUIntXlangSerializer(config: Config) :
+    ImmutableSerializer<UInt>(config, UInt::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: UInt) {
       writeContext.buffer.writeVarUInt32(value.toInt())
     }
@@ -95,9 +90,8 @@ public object KotlinXlangUnsignedSerializers {
     override fun read(readContext: ReadContext): UInt = readContext.buffer.readVarUInt32().toUInt()
   }
 
-  private class FixedULongXlangSerializer(
-    config: Config
-  ) : ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
+  private class FixedULongXlangSerializer(config: Config) :
+    ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: ULong) {
       writeContext.buffer.writeInt64(value.toLong())
     }
@@ -105,9 +99,8 @@ public object KotlinXlangUnsignedSerializers {
     override fun read(readContext: ReadContext): ULong = readContext.buffer.readInt64().toULong()
   }
 
-  private class VarULongXlangSerializer(
-    config: Config
-  ) : ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
+  private class VarULongXlangSerializer(config: Config) :
+    ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: ULong) {
       writeContext.buffer.writeVarUInt64(value.toLong())
     }
@@ -116,9 +109,8 @@ public object KotlinXlangUnsignedSerializers {
       readContext.buffer.readVarUInt64().toULong()
   }
 
-  private class TaggedULongXlangSerializer(
-    config: Config
-  ) : ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
+  private class TaggedULongXlangSerializer(config: Config) :
+    ImmutableSerializer<ULong>(config, ULong::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: ULong) {
       writeContext.buffer.writeTaggedUInt64(value.toLong())
     }

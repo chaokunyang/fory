@@ -27,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -37,6 +38,8 @@ public class AndroidSupportStaticCheckTest {
       Pattern.compile("\\bClassValue\\s*<|new\\s+ClassValue\\s*<");
   private static final Pattern DIRECT_FIELD_GET_ANNOTATED_TYPE =
       Pattern.compile("\\.getAnnotatedType\\s*\\(");
+  private static final Pattern DIRECT_ANNOTATED_TYPE_REFERENCE =
+      Pattern.compile("\\bAnnotatedType\\b");
   private static final Pattern ANDROID_GATED_FIELD_GET_ANNOTATED_TYPE =
       Pattern.compile(
           "AndroidSupport\\.IS_ANDROID[\\s\\S]{0,160}\\.getAnnotatedType\\s*\\(", Pattern.DOTALL);
@@ -116,6 +119,28 @@ public class AndroidSupportStaticCheckTest {
     assertTrue(
         violations.isEmpty(),
         "Field#getAnnotatedType is absent on Android API 26; gate direct access with AndroidSupport: "
+            + violations);
+  }
+
+  @Test
+  public void testAndroidLoadedRuntimePathsDoNotReferenceAnnotatedType() throws IOException {
+    List<String> checkedPaths =
+        Arrays.asList(
+            "src/main/java/org/apache/fory/type/Descriptor.java",
+            "src/main/java/org/apache/fory/resolver/TypeResolver.java",
+            "src/main/java/org/apache/fory/serializer/AbstractObjectSerializer.java");
+    List<String> violations = new ArrayList<>();
+    for (String checkedPath : checkedPaths) {
+      Path sourcePath = Paths.get(checkedPath);
+      String source = new String(Files.readAllBytes(sourcePath), StandardCharsets.UTF_8);
+      if (DIRECT_ANNOTATED_TYPE_REFERENCE.matcher(source).find()) {
+        violations.add(checkedPath);
+      }
+    }
+    assertTrue(
+        violations.isEmpty(),
+        "Android resolves AnnotatedType method descriptors while loading these serializer paths; "
+            + "keep annotated-type handling behind TypeUtils: "
             + violations);
   }
 

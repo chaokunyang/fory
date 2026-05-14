@@ -133,7 +133,26 @@ kotlin_tests() {
   echo "Executing fory kotlin tests"
   cd "$ROOT/kotlin"
   set +e
-  mvn -T16 --batch-mode --no-transfer-progress test -DfailIfNoTests=false
+  # The KSP Maven plugin discovers processors from JAR artifacts. Build and install the
+  # processor first so the generated-test module does not see the reactor classes directory as
+  # its processor artifact.
+  mvn -T16 --batch-mode --no-transfer-progress -pl fory-kotlin,fory-kotlin-ksp -am -DskipTests install
+  testcode=$?
+  if [[ $testcode -ne 0 ]]; then
+    exit $testcode
+  fi
+  java_version=$(java -version 2>&1 | awk -F '"' '/version/ {print $2; exit}')
+  if [[ "$java_version" == 1.* ]]; then
+    java_major=$(echo "$java_version" | cut -d. -f2)
+  else
+    java_major=$(echo "$java_version" | cut -d. -f1)
+  fi
+  if [[ "$java_major" -ge 17 ]]; then
+    mvn -T16 --batch-mode --no-transfer-progress test -DfailIfNoTests=false
+  else
+    echo "Skipping fory-kotlin-tests on JDK < 17 because ksp-maven-plugin requires Java 17+"
+    mvn -T16 --batch-mode --no-transfer-progress -pl fory-kotlin,fory-kotlin-ksp -am test -DfailIfNoTests=false
+  fi
   testcode=$?
   if [[ $testcode -ne 0 ]]; then
     exit $testcode

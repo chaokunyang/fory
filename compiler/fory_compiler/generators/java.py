@@ -1593,7 +1593,7 @@ class JavaGenerator(BaseGenerator):
         if package_separator != -1:
             return (
                 f"{raw_type[: package_separator + 1]}"
-                f"{annotation} {raw_type[package_separator + 1:]}"
+                f"{annotation} {raw_type[package_separator + 1 :]}"
                 f"{suffix}"
             )
         return f"{annotation} {java_type}"

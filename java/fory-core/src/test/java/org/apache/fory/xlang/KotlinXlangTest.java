@@ -92,16 +92,10 @@ public class KotlinXlangTest extends XlangTestBase {
       throw new AssertionError("Failed to install Kotlin xlang processor dependencies");
     }
     List<String> buildCommand =
-        Arrays.asList(
-            "mvn",
-            "--no-transfer-progress",
-            "-pl",
-            "fory-kotlin-tests",
-            "-am",
-            "-DskipTests",
-            "package");
+        Arrays.asList("mvn", "--no-transfer-progress", "-DskipTests", "clean", "package");
     boolean buildSuccess =
-        TestUtils.executeCommand(buildCommand, 180, Collections.emptyMap(), KOTLIN_DIR);
+        TestUtils.executeCommand(
+            buildCommand, 180, Collections.emptyMap(), new File(KOTLIN_DIR, "fory-kotlin-tests"));
     if (!buildSuccess || !PEER_JAR.exists()) {
       throw new AssertionError("Failed to build Kotlin xlang peer jar");
     }
@@ -226,8 +220,7 @@ public class KotlinXlangTest extends XlangTestBase {
       throws IOException {
     MemoryBuffer buffer = MemoryUtils.buffer(128);
     fory.serialize(buffer, request);
-    ExecutionContext context =
-        prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
+    ExecutionContext context = prepareExecution(caseName, buffer.getBytes(0, buffer.writerIndex()));
     Assert.assertTrue(
         TestUtils.executeCommand(
             context.commandContext().command(),

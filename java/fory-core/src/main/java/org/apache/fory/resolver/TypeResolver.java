@@ -21,7 +21,6 @@ package org.apache.fory.resolver;
 
 import static org.apache.fory.type.Types.INVALID_USER_TYPE_ID;
 
-import java.lang.reflect.AnnotatedType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
@@ -1939,10 +1938,9 @@ public abstract class TypeResolver {
     Map<String, GenericType> map = new HashMap<>();
     Map<String, GenericType> map2 = new HashMap<>();
     for (Field field : ReflectionUtils.getFields(cls, true)) {
-      AnnotatedType annotatedType = TypeUtils.getFieldAnnotatedType(field);
       TypeRef<?> typeRef = TypeUtils.getFieldTypeRef(field);
       GenericType genericType = buildGenericType(typeRef);
-      TypeUtils.applyRefTrackingOverride(genericType, annotatedType, trackingRef());
+      TypeUtils.applyFieldRefTrackingOverride(genericType, field, trackingRef());
       buildGenericMap(map, genericType);
       buildGenericMap(map2, typeRef);
     }

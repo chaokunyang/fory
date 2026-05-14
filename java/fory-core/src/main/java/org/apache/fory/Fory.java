@@ -635,7 +635,8 @@ public final class Fory implements BaseFory {
   }
 
   @Override
-  public void registerStaticGeneratedSerializerProvider(StaticGeneratedSerializerProvider provider) {
+  public void registerStaticGeneratedSerializerProvider(
+      StaticGeneratedSerializerProvider provider) {
     typeResolver.registerStaticGeneratedSerializerProvider(provider);
   }
 

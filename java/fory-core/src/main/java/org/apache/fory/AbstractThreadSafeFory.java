@@ -119,7 +119,8 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   }
 
   @Override
-  public void registerStaticGeneratedSerializerProvider(StaticGeneratedSerializerProvider provider) {
+  public void registerStaticGeneratedSerializerProvider(
+      StaticGeneratedSerializerProvider provider) {
     registerCallback(fory -> fory.registerStaticGeneratedSerializerProvider(provider));
   }
 

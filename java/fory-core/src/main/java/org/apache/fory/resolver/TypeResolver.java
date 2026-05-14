@@ -1711,7 +1711,7 @@ public abstract class TypeResolver {
         "Static generated serializer for Kotlin struct "
             + cls.getName()
             + " was required but "
-            + StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+            + StaticGeneratedSerializerRegistry.generatedSerializerBinaryName(
                 cls, StaticGeneratedSerializerRegistry.Mode.XLANG)
             + " was not found. Ensure annotation processing or KSP ran and generated R8 rules "
             + "were packaged.");

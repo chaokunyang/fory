@@ -31,6 +31,9 @@ import org.apache.fory.type.Descriptor;
 /** Shared registry of build-time generated static serializer mappings. */
 @Internal
 public final class StaticGeneratedSerializerRegistry {
+  private static final String XLANG_SUFFIX = "_ForySerializer";
+  private static final String NATIVE_SUFFIX = "_ForyNativeSerializer";
+
   public enum Mode {
     XLANG,
     NATIVE
@@ -136,8 +139,7 @@ public final class StaticGeneratedSerializerRegistry {
   }
 
   private Entry loadEntry(Class<?> targetType, Mode mode) {
-    String serializerName =
-        StaticGeneratedSerializerNames.generatedSerializerBinaryName(targetType, mode);
+    String serializerName = generatedSerializerBinaryName(targetType, mode);
     Class<?> serializerClass;
     try {
       serializerClass = Class.forName(serializerName, false, targetType.getClassLoader());
@@ -194,5 +196,45 @@ public final class StaticGeneratedSerializerRegistry {
       builder.append(parameterTypes[i].getSimpleName());
     }
     return builder.append(')').toString();
+  }
+
+  static String generatedSerializerBinaryName(Class<?> targetType, Mode mode) {
+    return generatedSerializerBinaryName(targetType.getName(), mode);
+  }
+
+  static String generatedSerializerBinaryName(String targetBinaryName, Mode mode) {
+    int packageEnd = targetBinaryName.lastIndexOf('.');
+    if (packageEnd < 0) {
+      return generatedSerializerSimpleName(targetBinaryName, mode);
+    }
+    return targetBinaryName.substring(0, packageEnd)
+        + "."
+        + generatedSerializerSimpleName(targetBinaryName.substring(packageEnd + 1), mode);
+  }
+
+  static String generatedSerializerSimpleName(String targetBinarySimpleName, Mode mode) {
+    return escapeBinarySimpleName(targetBinarySimpleName) + suffix(mode);
+  }
+
+  private static String suffix(Mode mode) {
+    return mode == Mode.XLANG ? XLANG_SUFFIX : NATIVE_SUFFIX;
+  }
+
+  private static String escapeBinarySimpleName(String binarySimpleName) {
+    StringBuilder builder = new StringBuilder(binarySimpleName.length() + 32);
+    for (int i = 0; i < binarySimpleName.length(); ) {
+      int codePoint = binarySimpleName.codePointAt(i);
+      if (codePoint == '$') {
+        builder.append('_');
+      } else if (codePoint == '_') {
+        builder.append("_u_");
+      } else if (Character.isJavaIdentifierPart(codePoint)) {
+        builder.appendCodePoint(codePoint);
+      } else {
+        builder.append("_x").append(Integer.toHexString(codePoint)).append('_');
+      }
+      i += Character.charCount(codePoint);
+    }
+    return builder.toString();
   }
 }

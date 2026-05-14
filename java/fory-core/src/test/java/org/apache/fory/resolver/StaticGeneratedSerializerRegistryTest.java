@@ -22,31 +22,31 @@ package org.apache.fory.resolver;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
-public class StaticGeneratedSerializerNamesTest {
+public class StaticGeneratedSerializerRegistryTest {
   @Test
   public void testGoldenGeneratedSerializerNames() {
     Assert.assertEquals(
-        StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+        StaticGeneratedSerializerRegistry.generatedSerializerBinaryName(
             "com.example.User", StaticGeneratedSerializerRegistry.Mode.XLANG),
         "com.example.User_ForySerializer");
     Assert.assertEquals(
-        StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+        StaticGeneratedSerializerRegistry.generatedSerializerBinaryName(
             "com.example.User", StaticGeneratedSerializerRegistry.Mode.NATIVE),
         "com.example.User_ForyNativeSerializer");
     Assert.assertEquals(
-        StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+        StaticGeneratedSerializerRegistry.generatedSerializerBinaryName(
             "com.example.Outer$Inner", StaticGeneratedSerializerRegistry.Mode.XLANG),
         "com.example.Outer_Inner_ForySerializer");
     Assert.assertEquals(
-        StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+        StaticGeneratedSerializerRegistry.generatedSerializerBinaryName(
             "com.example.Outer_Inner", StaticGeneratedSerializerRegistry.Mode.XLANG),
         "com.example.Outer_u_Inner_ForySerializer");
     Assert.assertEquals(
-        StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+        StaticGeneratedSerializerRegistry.generatedSerializerBinaryName(
             "com.example.Outer__Inner", StaticGeneratedSerializerRegistry.Mode.XLANG),
         "com.example.Outer_u__u_Inner_ForySerializer");
     Assert.assertEquals(
-        StaticGeneratedSerializerNames.generatedSerializerBinaryName(
+        StaticGeneratedSerializerRegistry.generatedSerializerBinaryName(
             "com.example.Outer-Inner", StaticGeneratedSerializerRegistry.Mode.XLANG),
         "com.example.Outer_x2d_Inner_ForySerializer");
   }

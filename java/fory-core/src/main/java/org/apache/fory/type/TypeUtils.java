@@ -457,7 +457,8 @@ public class TypeUtils {
     if (type instanceof TypeVariable) {
       return getRawType(((TypeVariable<?>) type).getBounds()[0]);
     } else if (type instanceof WildcardType) {
-      return getRawType(((WildcardType) type).getUpperBounds()[0]);
+      Type[] upperBounds = ((WildcardType) type).getUpperBounds();
+      return upperBounds.length == 0 ? Object.class : getRawType(upperBounds[0]);
     } else if (type instanceof ParameterizedType) {
       return (Class<?>) ((ParameterizedType) type).getRawType();
     } else if (type instanceof Class) {

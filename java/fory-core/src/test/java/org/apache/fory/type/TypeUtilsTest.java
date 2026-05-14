@@ -26,6 +26,7 @@ import static org.testng.Assert.assertTrue;
 import com.google.common.collect.ImmutableList;
 import com.google.common.primitives.Primitives;
 import java.lang.reflect.Type;
+import java.lang.reflect.WildcardType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.AbstractList;
@@ -260,6 +261,20 @@ public class TypeUtilsTest {
     public ArrayList<? extends Number> upperBound;
   }
 
+  private static final class EmptyUpperBoundWildcardType implements WildcardType {
+    private static final Type[] EMPTY_BOUNDS = new Type[0];
+
+    @Override
+    public Type[] getUpperBounds() {
+      return EMPTY_BOUNDS;
+    }
+
+    @Override
+    public Type[] getLowerBounds() {
+      return EMPTY_BOUNDS;
+    }
+  }
+
   @Test
   public void testGetRawType() throws NoSuchFieldException {
     assertEquals(
@@ -278,6 +293,7 @@ public class TypeUtilsTest {
     assertEquals(
         TypeUtils.getRawType(Test3.class.getDeclaredField("upperBound").getGenericType()),
         ArrayList.class);
+    assertEquals(TypeUtils.getRawType(new EmptyUpperBoundWildcardType()), Object.class);
   }
 
   @Test

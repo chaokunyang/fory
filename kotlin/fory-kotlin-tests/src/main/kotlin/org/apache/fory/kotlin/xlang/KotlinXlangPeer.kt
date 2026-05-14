@@ -33,7 +33,6 @@ import org.apache.fory.config.Language
 import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.VarInt
 import org.apache.fory.memory.MemoryUtils
-import org.apache.fory.serializer.StaticGeneratedSerializerRegistry
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.serializer.kotlin.KotlinSerializers
 import org.apache.fory.type.Types
@@ -147,10 +146,10 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(descriptors[0].foryFieldId == 1)
   check(descriptors[0].typeRef.typeExtMeta.typeId() == Types.UINT32)
   check(descriptors[2].typeRef.typeExtMeta.typeId() == Types.VARINT64)
-  val staticRegistry =
-    StaticGeneratedSerializerRegistry.load(KotlinSchemaSurface::class.java.classLoader)
   val schemaDescriptors =
-    checkNotNull(staticRegistry.get(KotlinSchemaSurface::class.java, true)) {
+    checkNotNull(
+        fory.getSerializer(KotlinSchemaSurface::class.java) as? StaticGeneratedStructSerializer<*>
+      ) {
         "KotlinSchemaSurface did not load a static generated serializer SPI mapping"
       }
       .generatedDescriptors
@@ -160,7 +159,9 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(schemaDescriptors[7].isArrayType)
   check(schemaDescriptors[7].typeRef.typeExtMeta.typeId() == Types.INT32_ARRAY)
   val arrayDescriptors =
-    checkNotNull(staticRegistry.get(KotlinDenseArrays::class.java, true)) {
+    checkNotNull(
+        fory.getSerializer(KotlinDenseArrays::class.java) as? StaticGeneratedStructSerializer<*>
+      ) {
         "KotlinDenseArrays did not load a static generated serializer SPI mapping"
       }
       .generatedDescriptors

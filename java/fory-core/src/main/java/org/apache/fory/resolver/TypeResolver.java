@@ -28,7 +28,6 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -88,7 +87,6 @@ import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
-import org.apache.fory.serializer.StaticGeneratedSerializerRegistry;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
@@ -153,9 +151,6 @@ public abstract class TypeResolver {
   // Cache for readTypeInfo(MemoryBuffer) - persists between calls to avoid reloading
   // dynamically created classes that can't be found by Class.forName
   private TypeInfo typeInfoCache;
-  private StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry;
-  private final Set<ClassLoader> staticGeneratedSerializerClassLoaders =
-      Collections.newSetFromMap(new IdentityHashMap<>());
   private boolean registrationFinished;
 
   protected TypeResolver(
@@ -1414,10 +1409,10 @@ public abstract class TypeResolver {
       boolean shareMeta,
       boolean codegen,
       JITContext.SerializerJITCallback<Class<? extends Serializer>> callback) {
-    StaticGeneratedSerializerRegistry.Entry staticGeneratedSerializer =
-        getStaticGeneratedStructSerializerEntry(cls);
+    Class<? extends Serializer> staticGeneratedSerializer =
+        getStaticGeneratedStructSerializerClass(cls);
     if (staticGeneratedSerializer != null && shouldPreferStaticGeneratedSerializer(cls)) {
-      return staticGeneratedSerializer.getSerializerClass();
+      return staticGeneratedSerializer;
     }
     if (requiresStaticGeneratedSerializer(cls)) {
       throw missingStaticGeneratedSerializer(cls);
@@ -1438,9 +1433,7 @@ public abstract class TypeResolver {
         }
       }
     } else {
-      return staticGeneratedSerializer == null
-          ? ObjectSerializer.class
-          : staticGeneratedSerializer.getSerializerClass();
+      return staticGeneratedSerializer == null ? ObjectSerializer.class : staticGeneratedSerializer;
     }
   }
 
@@ -1636,15 +1629,22 @@ public abstract class TypeResolver {
 
   protected final Class<? extends Serializer> getStaticGeneratedStructSerializerClass(
       Class<?> cls) {
-    StaticGeneratedSerializerRegistry.Entry entry = getStaticGeneratedStructSerializerEntry(cls);
-    return entry == null ? null : entry.getSerializerClass().asSubclass(Serializer.class);
+    if (GraalvmSupport.isGraalBuildTime() || GraalvmSupport.isGraalRuntime()) {
+      return null;
+    }
+    Class<? extends StaticGeneratedStructSerializer> serializerClass =
+        sharedRegistry.staticGeneratedSerializerRegistry.getSerializerClass(
+            cls, isCrossLanguage(), extRegistry.classLoader);
+    return serializerClass == null ? null : serializerClass.asSubclass(Serializer.class);
   }
 
   protected final StaticGeneratedStructSerializer<?> newStaticGeneratedStructSerializer(
       Class<? extends Serializer> serializerClass, Class<?> cls, TypeDef typeDef) {
-    StaticGeneratedSerializerRegistry.Entry entry = getStaticGeneratedStructSerializerEntry(cls);
-    if (entry != null && entry.getSerializerClass() == serializerClass) {
-      return entry.newSerializer(this, cls, typeDef);
+    StaticGeneratedStructSerializer<?> serializer =
+        sharedRegistry.staticGeneratedSerializerRegistry.newSerializer(
+            this, cls, serializerClass.asSubclass(StaticGeneratedStructSerializer.class), typeDef);
+    if (serializer != null) {
+      return serializer;
     }
     if (requiresStaticGeneratedSerializer(cls) || shouldPreferStaticGeneratedSerializer(cls)) {
       throw new ForyException(
@@ -1690,38 +1690,11 @@ public abstract class TypeResolver {
   }
 
   private List<Descriptor> getStaticGeneratedStructDescriptors(Class<?> cls) {
-    StaticGeneratedSerializerRegistry.Entry entry = getStaticGeneratedStructSerializerEntry(cls);
-    if (entry == null) {
-      return null;
-    }
-    return entry.getGeneratedDescriptors();
-  }
-
-  private StaticGeneratedSerializerRegistry.Entry getStaticGeneratedStructSerializerEntry(
-      Class<?> cls) {
     if (GraalvmSupport.isGraalBuildTime() || GraalvmSupport.isGraalRuntime()) {
       return null;
     }
-    loadStaticGeneratedSerializerProviders(cls.getClassLoader());
-    return getStaticGeneratedSerializerRegistry().get(cls, isCrossLanguage());
-  }
-
-  private StaticGeneratedSerializerRegistry getStaticGeneratedSerializerRegistry() {
-    StaticGeneratedSerializerRegistry registry = staticGeneratedSerializerRegistry;
-    if (registry == null) {
-      registry = StaticGeneratedSerializerRegistry.load(extRegistry.classLoader);
-      staticGeneratedSerializerRegistry = registry;
-    }
-    return registry;
-  }
-
-  private void loadStaticGeneratedSerializerProviders(ClassLoader classLoader) {
-    StaticGeneratedSerializerRegistry registry = getStaticGeneratedSerializerRegistry();
-    synchronized (staticGeneratedSerializerClassLoaders) {
-      if (staticGeneratedSerializerClassLoaders.add(classLoader)) {
-        registry.loadFrom(classLoader);
-      }
-    }
+    return sharedRegistry.staticGeneratedSerializerRegistry.getGeneratedDescriptors(
+        cls, isCrossLanguage(), extRegistry.classLoader);
   }
 
   protected final boolean shouldPreferStaticGeneratedSerializer(Class<?> cls) {

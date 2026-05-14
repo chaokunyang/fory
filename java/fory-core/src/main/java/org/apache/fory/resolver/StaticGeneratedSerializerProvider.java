@@ -17,9 +17,10 @@
  * under the License.
  */
 
-package org.apache.fory.serializer;
+package org.apache.fory.resolver;
 
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 
 /**
  * Service provider for build-time generated {@link StaticGeneratedStructSerializer} classes.

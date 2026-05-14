@@ -81,6 +81,8 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
+  final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
+      new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
   private final AtomicInteger cachedTypeDefCount = new AtomicInteger();
   volatile IdentityHashMap<Class<?>, Integer> registeredClassIdMap;

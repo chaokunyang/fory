@@ -132,19 +132,19 @@ Android builds that run R8 must preserve the generated SPI resource and the
 generated provider/serializer classes. Application shrinker rules should keep:
 
 ```text
--keep class * implements org.apache.fory.serializer.StaticGeneratedSerializerProvider { *; }
--keep class * implements org.apache.fory.serializer.StaticGeneratedSerializerProvider$KotlinSymbolProcessor { *; }
--keep class * implements org.apache.fory.serializer.StaticGeneratedSerializerProvider$JavaAnnotationProcessor { *; }
+-keep class * implements org.apache.fory.resolver.StaticGeneratedSerializerProvider { *; }
+-keep class * implements org.apache.fory.resolver.StaticGeneratedSerializerProvider$KotlinSymbolProcessor { *; }
+-keep class * implements org.apache.fory.resolver.StaticGeneratedSerializerProvider$JavaAnnotationProcessor { *; }
 -keep class **.*__ForySerializer__ { *; }
--keep class org.apache.fory.serializer.StaticGeneratedSerializerProvider { *; }
--keep class org.apache.fory.serializer.StaticGeneratedSerializerProvider$* { *; }
+-keep class org.apache.fory.resolver.StaticGeneratedSerializerProvider { *; }
+-keep class org.apache.fory.resolver.StaticGeneratedSerializerProvider$* { *; }
 ```
 
 The Kotlin KSP generated service resource
-`META-INF/services/org.apache.fory.serializer.StaticGeneratedSerializerProvider$KotlinSymbolProcessor`
+`META-INF/services/org.apache.fory.resolver.StaticGeneratedSerializerProvider$KotlinSymbolProcessor`
 must also be packaged. Java annotation-processor generated serializers use the
 separate
-`META-INF/services/org.apache.fory.serializer.StaticGeneratedSerializerProvider$JavaAnnotationProcessor`
+`META-INF/services/org.apache.fory.resolver.StaticGeneratedSerializerProvider$JavaAnnotationProcessor`
 resource so mixed Java/Kotlin artifacts do not overwrite one another's provider
 lists. If a build plugin strips service resources, configure the application
 packaging step to retain these files.
@@ -156,9 +156,6 @@ providers on the same classpath without binary-name collisions. That provider
 contains mappings for all annotated Kotlin structs in the module, across source
 packages.
 
-Applications that cannot rely on service-resource merging may register the
-generated provider explicitly before registering target classes. The exact
-provider class name is the line written to
-`META-INF/services/org.apache.fory.serializer.StaticGeneratedSerializerProvider$KotlinSymbolProcessor`
-in the generated output. Explicit provider registration still does not choose
-type IDs or registered names.
+Applications must package the generated service resource. There is no manual
+provider registration API; users still register only target classes and their
+IDs or xlang names through the normal Fory Java registration APIs.

@@ -83,7 +83,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
   private static final String NULLABLE = "org.apache.fory.annotation.Nullable";
   private static final String REF = "org.apache.fory.annotation.Ref";
   private static final String STATIC_PROVIDER_SERVICE =
-      "META-INF/services/org.apache.fory.serializer.StaticGeneratedSerializerProvider"
+      "META-INF/services/org.apache.fory.resolver.StaticGeneratedSerializerProvider"
           + "$JavaAnnotationProcessor";
   private static final String UINT16_TYPE = "org.apache.fory.annotation.UInt16Type";
   private static final String UINT32_TYPE = "org.apache.fory.annotation.UInt32Type";
@@ -397,9 +397,9 @@ public final class ForyStructProcessor extends AbstractProcessor {
       builder.append("package ").append(packageName).append(";\n\n");
     }
     builder.append("import org.apache.fory.meta.TypeDef;\n");
+    builder.append("import org.apache.fory.resolver.StaticGeneratedSerializerProvider;\n");
+    builder.append("import org.apache.fory.resolver.StaticGeneratedSerializerRegistry;\n");
     builder.append("import org.apache.fory.resolver.TypeResolver;\n");
-    builder.append("import org.apache.fory.serializer.StaticGeneratedSerializerProvider;\n");
-    builder.append("import org.apache.fory.serializer.StaticGeneratedSerializerRegistry;\n");
     builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer;\n\n");
     builder.append("public final class ").append(providerName);
     builder.append(" implements StaticGeneratedSerializerProvider.JavaAnnotationProcessor {\n");

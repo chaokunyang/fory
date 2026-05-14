@@ -30,9 +30,9 @@ internal class KotlinProviderSourceWriter(
       builder.append("package ").append(packageName).append("\n\n")
     }
     builder.append("import org.apache.fory.meta.TypeDef\n")
+    builder.append("import org.apache.fory.resolver.StaticGeneratedSerializerProvider\n")
+    builder.append("import org.apache.fory.resolver.StaticGeneratedSerializerRegistry\n")
     builder.append("import org.apache.fory.resolver.TypeResolver\n")
-    builder.append("import org.apache.fory.serializer.StaticGeneratedSerializerProvider\n")
-    builder.append("import org.apache.fory.serializer.StaticGeneratedSerializerRegistry\n")
     builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer\n\n")
     builder
       .append("public class ")

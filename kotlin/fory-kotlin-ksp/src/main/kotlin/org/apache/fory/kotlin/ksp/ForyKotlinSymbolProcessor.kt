@@ -202,7 +202,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     val serviceOutput =
       codeGenerator.createNewFileByPath(
         dependencies,
-        "META-INF/services/org.apache.fory.serializer.StaticGeneratedSerializerProvider\$KotlinSymbolProcessor",
+        "META-INF/services/org.apache.fory.resolver.StaticGeneratedSerializerProvider\$KotlinSymbolProcessor",
         "",
       )
     OutputStreamWriter(serviceOutput, StandardCharsets.UTF_8).use {

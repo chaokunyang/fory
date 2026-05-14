@@ -44,7 +44,7 @@ public class InternalSerializerRegistrationTest {
   public static final class InternalList extends AbstractList<String> {
     @Override
     public String get(int index) {
-      throw new IndexOutOfBoundsException(index);
+      throw new IndexOutOfBoundsException(String.valueOf(index));
     }
 
     @Override

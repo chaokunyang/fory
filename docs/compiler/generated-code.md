@@ -1042,6 +1042,8 @@ void main() {
 }
 ```
 
+## Scala
+
 ## Cross-Language Notes
 
 ### Type ID Behavior

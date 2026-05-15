@@ -35,3 +35,4 @@ fory-derive.workspace = true
 [features]
 default = []
 chrono = ["fory-core/chrono"]
+tests = []

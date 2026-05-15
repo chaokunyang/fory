@@ -41,6 +41,7 @@ num-bigint = "0.4"
 [features]
 default = []
 chrono = ["dep:chrono"]
+tests = []
 
 [[bench]]
 name = "simd_bench"

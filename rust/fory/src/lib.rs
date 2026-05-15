@@ -981,9 +981,9 @@
 //!
 //! ### Date and Time
 //!
-//! - `Date` - Date without timezone
-//! - `Timestamp` - Point in time
-//! - `Duration` - Signed duration
+//! - `Date` - Date without timezone, with epoch-day accessors and checked day arithmetic
+//! - `Timestamp` - Point in time, with epoch unit conversions and checked duration arithmetic
+//! - `Duration` - Signed duration, with normalized parts, total unit conversions, and checked arithmetic
 //! - `chrono::NaiveDate`, `chrono::NaiveDateTime`, and `chrono::Duration` when the `chrono` feature is enabled
 //!
 //! ### Custom Types

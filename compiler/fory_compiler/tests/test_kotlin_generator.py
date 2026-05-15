@@ -33,7 +33,7 @@ def generate_kotlin(source: str):
     return {item.path: item.content for item in generator.generate()}
 
 
-def test_kotlin_generator_emits_models_and_registration():
+def test_emits_models():
     files = generate_kotlin(
         """
         package demo;
@@ -105,7 +105,7 @@ def test_kotlin_generator_emits_models_and_registration():
     )
 
 
-def test_kotlin_generator_uses_fdl_package_without_kotlin_package():
+def test_fdl_package():
     files = generate_kotlin(
         """
         package demo.models;
@@ -120,7 +120,7 @@ def test_kotlin_generator_uses_fdl_package_without_kotlin_package():
     assert "package demo.models" in files["demo/models/User.kt"]
 
 
-def test_kotlin_generator_package_override_applies_to_imports(tmp_path):
+def test_package_override_imports(tmp_path):
     common = tmp_path / "common.fdl"
     common.write_text(
         """
@@ -158,7 +158,7 @@ def test_kotlin_generator_package_override_applies_to_imports(tmp_path):
     assert "org.override.shared.SharedForyRegistration.register(fory)" in registration
 
 
-def test_kotlin_generator_keeps_container_refs_as_data_classes():
+def test_container_refs():
     files = generate_kotlin(
         """
         package graph;
@@ -176,7 +176,7 @@ def test_kotlin_generator_keeps_container_refs_as_data_classes():
     assert "public class Node()" not in node
 
 
-def test_kotlin_generator_uses_lateinit_for_cycle_class_object_fields():
+def test_cycle_class_fields():
     files = generate_kotlin(
         """
         package graph;
@@ -197,14 +197,14 @@ def test_kotlin_generator_uses_lateinit_for_cycle_class_object_fields():
 
     node = files["graph/Node.kt"]
     assert "public class Node()" in node
-    assert "public var id: String = \"\"" in node
+    assert 'public var id: String = ""' in node
     assert "import org.apache.fory.annotation.Nullable" in node
     assert "@ForyField(id = 2)\n    public var parent: @Nullable Node? = null" in node
     assert "@ForyField(id = 3)\n    public lateinit var status: Status" in node
     assert "public var ttl: Duration = Duration.ZERO" in node
 
 
-def test_kotlin_generator_mutable_cycle_defaults_are_valid_kotlin():
+def test_cycle_defaults():
     files = generate_kotlin(
         """
         package graph;

@@ -201,13 +201,13 @@ public class KotlinSerializers {
   public static void registerUnion(Fory fory, Class<?> cls, long typeId) {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.registerUnion(cls, typeId, newGeneratedSerializer(resolver, cls));
-    registerNestedRuntimeTypeAliases(fory, cls);
+    registerCaseAliases(fory, cls);
   }
 
   public static void registerUnion(Fory fory, Class<?> cls, String namespace, String typeName) {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.registerUnion(cls, namespace, typeName, newGeneratedSerializer(resolver, cls));
-    registerNestedRuntimeTypeAliases(fory, cls);
+    registerCaseAliases(fory, cls);
   }
 
   private static Serializer<?> newGeneratedSerializer(TypeResolver resolver, Class<?> cls) {
@@ -280,7 +280,7 @@ public class KotlinSerializers {
     return (Class<Enum>) cls;
   }
 
-  private static void registerNestedRuntimeTypeAliases(Fory fory, Class<?> canonicalClass) {
+  private static void registerCaseAliases(Fory fory, Class<?> canonicalClass) {
     for (Class<?> nestedClass : canonicalClass.getDeclaredClasses()) {
       if (canonicalClass.isAssignableFrom(nestedClass)) {
         fory.getTypeResolver().registerRuntimeTypeAlias(nestedClass, canonicalClass);

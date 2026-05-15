@@ -52,7 +52,7 @@ class _Dependency:
     constructor_owned: bool
 
 
-def analyze_message_construction_shapes(
+def analyze_shapes(
     schema: Schema,
 ) -> Dict[str, MessageConstructionShape]:
     """Return construction shapes for all messages in ``schema``.

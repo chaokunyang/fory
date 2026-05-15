@@ -37,7 +37,7 @@ from fory_compiler.ir.ast import (
     Schema,
     Union,
 )
-from fory_compiler.ir.construction import analyze_message_construction_shapes
+from fory_compiler.ir.construction import analyze_shapes
 from fory_compiler.ir.types import PrimitiveKind
 
 
@@ -119,7 +119,7 @@ class KotlinGenerator(BaseGenerator):
 
     def __init__(self, schema: Schema, options):
         super().__init__(schema, options)
-        self._construction_shapes = analyze_message_construction_shapes(schema)
+        self._construction_shapes = analyze_shapes(schema)
 
     def generate(self) -> List[GeneratedFile]:
         files: List[GeneratedFile] = []
@@ -192,7 +192,7 @@ class KotlinGenerator(BaseGenerator):
             "org.apache.fory.annotation.ForyStruct",
         }
         self.collect_message_imports(message, imports)
-        if self.message_uses_runtime_nullable_annotations(message, parent_stack):
+        if self.needs_runtime_nulls(message, parent_stack):
             imports.add("org.apache.fory.annotation.Nullable")
         current_stack = [*parent_stack, message]
         lines = self.source_header(imports, self.uses_unsigned_message(message))
@@ -264,7 +264,9 @@ class KotlinGenerator(BaseGenerator):
                 top_level_ref=field.ref,
                 parent_stack=parent_stack,
             )
-            value_prefix = "@field:ArrayType " if self.is_array_type_field(field) else ""
+            value_prefix = (
+                "@field:ArrayType " if self.is_array_type_field(field) else ""
+            )
             lines.append(
                 f"    public data class {case_name}Case({value_prefix}public val value: {field_type}) : {union_name}()"
             )
@@ -458,7 +460,7 @@ class KotlinGenerator(BaseGenerator):
         class_name = self.get_registration_class_name()
         lines.append(f"public object {class_name} {{")
         lines.append("    public fun register(fory: Fory) {")
-        for package, registration in self._collect_imported_registrations():
+        for package, registration in self._imported_regs():
             lines.append(f"        {package}.{registration}.register(fory)")
         registrations = self.registration_order()
         for type_def, owner_path in registrations:
@@ -469,7 +471,7 @@ class KotlinGenerator(BaseGenerator):
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):
                 if not self.uses_dynamic_registration(type_def, owner_path):
-                    self.generate_serializer_registration(lines, type_def, owner_path)
+                    self.serializer_registration(lines, type_def, owner_path)
             else:
                 self.generate_type_registration(lines, type_def, owner_path)
         lines.append("    }")
@@ -505,7 +507,7 @@ class KotlinGenerator(BaseGenerator):
                 f'        KotlinSerializers.{method}(fory, {class_ref}::class.java, "{namespace}", "{type_def.name}")'
             )
 
-    def generate_serializer_registration(
+    def serializer_registration(
         self, lines: List[str], type_def, owner_path: Optional[str] = None
     ) -> None:
         class_ref = self.type_name(type_def, self.owner_path_stack(owner_path))
@@ -585,17 +587,13 @@ class KotlinGenerator(BaseGenerator):
         if isinstance(type_def, Message):
             lookup_stack = [*parent_stack, type_def]
             for field in type_def.fields:
-                self.collect_registration_dependencies(
-                    field.field_type, lookup_stack, dependencies
-                )
+                self.collect_reg_deps(field.field_type, lookup_stack, dependencies)
         elif isinstance(type_def, Union):
             for field in type_def.fields:
-                self.collect_registration_dependencies(
-                    field.field_type, parent_stack, dependencies
-                )
+                self.collect_reg_deps(field.field_type, parent_stack, dependencies)
         return [dependency for dependency in dependencies if dependency is not type_def]
 
-    def collect_registration_dependencies(
+    def collect_reg_deps(
         self,
         field_type: FieldType,
         parent_stack: List[Message],
@@ -607,22 +605,14 @@ class KotlinGenerator(BaseGenerator):
                 dependencies.append(dependency)
             return
         if isinstance(field_type, ListType):
-            self.collect_registration_dependencies(
-                field_type.element_type, parent_stack, dependencies
-            )
+            self.collect_reg_deps(field_type.element_type, parent_stack, dependencies)
             return
         if isinstance(field_type, ArrayType):
-            self.collect_registration_dependencies(
-                field_type.element_type, parent_stack, dependencies
-            )
+            self.collect_reg_deps(field_type.element_type, parent_stack, dependencies)
             return
         if isinstance(field_type, MapType):
-            self.collect_registration_dependencies(
-                field_type.key_type, parent_stack, dependencies
-            )
-            self.collect_registration_dependencies(
-                field_type.value_type, parent_stack, dependencies
-            )
+            self.collect_reg_deps(field_type.key_type, parent_stack, dependencies)
+            self.collect_reg_deps(field_type.value_type, parent_stack, dependencies)
 
     def resolve_named_type(
         self, name: str, parent_stack: List[Message]
@@ -743,31 +733,33 @@ class KotlinGenerator(BaseGenerator):
             if self.is_array_type_field(field):
                 imports.add("org.apache.fory.annotation.ArrayType")
 
-    def message_uses_runtime_nullable_annotations(
+    def needs_runtime_nulls(
         self, message: Message, parent_stack: List[Message]
     ) -> bool:
-        shape = self._construction_shapes.get(self.construction_key(parent_stack, message))
+        shape = self._construction_shapes.get(
+            self.construction_key(parent_stack, message)
+        )
         if shape is None or not shape.cycle_owned:
             return False
         return any(
-            field.optional or self.field_type_has_optional_position(field.field_type)
+            field.optional or self.has_optional_position(field.field_type)
             for field in message.fields
         )
 
-    def field_type_has_optional_position(self, field_type: FieldType) -> bool:
+    def has_optional_position(self, field_type: FieldType) -> bool:
         if isinstance(field_type, PrimitiveType):
             return field_type.kind == PrimitiveKind.ANY
         if isinstance(field_type, ListType):
-            return field_type.element_optional or self.field_type_has_optional_position(
+            return field_type.element_optional or self.has_optional_position(
                 field_type.element_type
             )
         if isinstance(field_type, ArrayType):
-            return self.field_type_has_optional_position(field_type.element_type)
+            return self.has_optional_position(field_type.element_type)
         if isinstance(field_type, MapType):
             return (
                 field_type.value_optional
-                or self.field_type_has_optional_position(field_type.key_type)
-                or self.field_type_has_optional_position(field_type.value_type)
+                or self.has_optional_position(field_type.key_type)
+                or self.has_optional_position(field_type.value_type)
             )
         return False
 
@@ -908,9 +900,11 @@ class KotlinGenerator(BaseGenerator):
         return schema
 
     def _kotlin_package_for_schema(self, schema: Schema) -> Optional[str]:
-        return schema.get_option("kotlin_package") or self.package_with_override(schema.package)
+        return schema.get_option("kotlin_package") or self.package_with_override(
+            schema.package
+        )
 
-    def _registration_class_name_for_schema(self, schema: Schema) -> str:
+    def _registration_name(self, schema: Schema) -> str:
         package = self._kotlin_package_for_schema(schema)
         if package:
             return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
@@ -924,7 +918,7 @@ class KotlinGenerator(BaseGenerator):
             return None
         return self._kotlin_package_for_schema(schema)
 
-    def _collect_imported_registrations(self) -> List[tuple[str, str]]:
+    def _imported_regs(self) -> List[tuple[str, str]]:
         packages: dict[str, str] = {}
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
@@ -937,7 +931,7 @@ class KotlinGenerator(BaseGenerator):
             )
             if schema is None:
                 continue
-            packages[package] = self._registration_class_name_for_schema(schema)
+            packages[package] = self._registration_name(schema)
         return sorted(packages.items())
 
     def safe_identifier(self, name: str) -> str:

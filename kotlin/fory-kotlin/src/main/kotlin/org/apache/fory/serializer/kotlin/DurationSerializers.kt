@@ -23,22 +23,21 @@ import kotlin.time.Duration
 import org.apache.fory.config.Config
 import org.apache.fory.context.ReadContext
 import org.apache.fory.context.WriteContext
-import org.apache.fory.kotlin.KotlinXlangDurationEncoding
+import org.apache.fory.kotlin.DurationEncoding
 import org.apache.fory.serializer.ImmutableSerializer
 import org.apache.fory.serializer.Serializer
 import org.apache.fory.serializer.Shareable
 
 /** Kotlin duration serializer used by generated xlang collection/map field generics. */
-public object KotlinXlangDurationSerializers {
+public object DurationSerializers {
   @JvmStatic public fun serializer(config: Config): Serializer<*> = DurationXlangSerializer(config)
 
   private class DurationXlangSerializer(config: Config) :
     ImmutableSerializer<Duration>(config, Duration::class.java, false, true), Shareable {
     override fun write(writeContext: WriteContext, value: Duration) {
-      KotlinXlangDurationEncoding.write(writeContext, value)
+      DurationEncoding.write(writeContext, value)
     }
 
-    override fun read(readContext: ReadContext): Duration =
-      KotlinXlangDurationEncoding.read(readContext)
+    override fun read(readContext: ReadContext): Duration = DurationEncoding.read(readContext)
   }
 }

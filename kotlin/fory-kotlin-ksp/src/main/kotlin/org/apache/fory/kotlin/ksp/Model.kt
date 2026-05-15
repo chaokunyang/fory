@@ -31,7 +31,7 @@ internal data class KotlinSourceStruct(
   val qualifiedSerializerName: String =
     if (packageName.isEmpty()) serializerName else "$packageName.$serializerName"
 
-  val hasNestedCompatibleStructFields: Boolean = fields.any { it.type.hasNestedCompatibleStruct() }
+  val hasCompatStructFields: Boolean = fields.any { it.type.hasNestedCompatibleStruct() }
 }
 
 internal data class KotlinSourceUnion(

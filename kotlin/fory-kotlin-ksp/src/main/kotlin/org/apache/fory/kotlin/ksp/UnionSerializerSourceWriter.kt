@@ -24,7 +24,7 @@ import com.google.devtools.ksp.processing.Dependencies
 import java.io.OutputStreamWriter
 import java.nio.charset.StandardCharsets
 
-internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSourceUnion) {
+internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion) {
   private val builder = StringBuilder(16384)
 
   fun writeTo(codeGenerator: CodeGenerator) {
@@ -61,7 +61,7 @@ internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSource
     builder.append("import org.apache.fory.context.ReadContext\n")
     builder.append("import org.apache.fory.context.WriteContext\n")
     builder.append("import org.apache.fory.kotlin.KotlinXlangArrayEncoding\n")
-    builder.append("import org.apache.fory.kotlin.KotlinXlangDurationEncoding\n")
+    builder.append("import org.apache.fory.kotlin.DurationEncoding\n")
     builder.append("import org.apache.fory.meta.TypeDef\n")
     builder.append("import org.apache.fory.meta.TypeExtMeta\n")
     builder.append("import org.apache.fory.reflect.TypeRef\n")
@@ -71,7 +71,7 @@ internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSource
     builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer\n")
     builder.append("import org.apache.fory.serializer.UnionSerializer\n")
     builder.append("import org.apache.fory.serializer.collection.CollectionFlags\n")
-    builder.append("import org.apache.fory.serializer.kotlin.KotlinXlangDurationSerializers\n")
+    builder.append("import org.apache.fory.serializer.kotlin.DurationSerializers\n")
     builder.append("import org.apache.fory.serializer.kotlin.KotlinXlangUnsignedSerializers\n")
     builder.append("import org.apache.fory.collection.Int8List\n")
     builder.append("import org.apache.fory.type.Descriptor\n")
@@ -138,7 +138,7 @@ internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSource
     builder.append("    for (i in allFields.indices) {\n")
     builder.append("      this.caseFields[allFieldIds[i]] = allFields[i]\n")
     builder.append("    }\n")
-    writeKotlinScalarSerializerBindings()
+    writeScalarBindings()
     builder.append("  }\n\n")
     builder
       .append("  public constructor(typeResolver: TypeResolver, type: Class<*>, typeDef: TypeDef?)")
@@ -300,7 +300,7 @@ internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSource
       "Types.FLOAT32" -> "buffer.writeFloat32($value)"
       "Types.FLOAT64" -> "buffer.writeFloat64($value)"
       "Types.STRING" -> "writeContext.writeString($value)"
-      "Types.DURATION" -> "KotlinXlangDurationEncoding.write(writeContext, $value)"
+      "Types.DURATION" -> "DurationEncoding.write(writeContext, $value)"
       else -> null
     }
   }
@@ -336,7 +336,7 @@ internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSource
       "Types.FLOAT32" -> "buffer.readFloat32()"
       "Types.FLOAT64" -> "buffer.readFloat64()"
       "Types.STRING" -> "readContext.readString()"
-      "Types.DURATION" -> "KotlinXlangDurationEncoding.read(readContext)"
+      "Types.DURATION" -> "DurationEncoding.read(readContext)"
       else -> null
     }
   }
@@ -387,22 +387,16 @@ internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSource
       else -> null
     }
 
-  private fun writeKotlinScalarSerializerBindings() {
+  private fun writeScalarBindings() {
     for ((index, case) in union.cases.withIndex()) {
-      if (
-        case.valueType.typeArguments.isEmpty() ||
-          !containsKotlinScalarNeedingSerializer(case.valueType)
-      ) {
+      if (case.valueType.typeArguments.isEmpty() || !needsScalarSerializer(case.valueType)) {
         continue
       }
-      writeKotlinScalarSerializerBinding(case.valueType, "this.caseFields[$index]!!.genericType")
+      writeScalarBinding(case.valueType, "this.caseFields[$index]!!.genericType")
     }
   }
 
-  private fun writeKotlinScalarSerializerBinding(
-    type: KotlinSourceTypeNode,
-    genericExpression: String
-  ) {
+  private fun writeScalarBinding(type: KotlinSourceTypeNode, genericExpression: String) {
     if (type.unsigned && type.componentType == null) {
       builder
         .append("    ")
@@ -420,21 +414,18 @@ internal class KotlinUnionSerializerSourceWriter(private val union: KotlinSource
       builder
         .append("    ")
         .append(genericExpression)
-        .append(".setSerializer(KotlinXlangDurationSerializers.serializer(typeResolver.config))\n")
+        .append(".setSerializer(DurationSerializers.serializer(typeResolver.config))\n")
       return
     }
     for (i in type.typeArguments.indices) {
-      writeKotlinScalarSerializerBinding(
-        type.typeArguments[i],
-        "$genericExpression.getTypeParameter$i()"
-      )
+      writeScalarBinding(type.typeArguments[i], "$genericExpression.getTypeParameter$i()")
     }
   }
 
-  private fun containsKotlinScalarNeedingSerializer(type: KotlinSourceTypeNode): Boolean =
+  private fun needsScalarSerializer(type: KotlinSourceTypeNode): Boolean =
     (type.unsigned && type.componentType == null) ||
       type.typeId == "Types.DURATION" ||
-      type.typeArguments.any { containsKotlinScalarNeedingSerializer(it) }
+      type.typeArguments.any { needsScalarSerializer(it) }
 
   private fun directCopyCaseValue(type: KotlinSourceTypeNode, value: String): String? {
     if (type.unsigned && type.componentType != null) {

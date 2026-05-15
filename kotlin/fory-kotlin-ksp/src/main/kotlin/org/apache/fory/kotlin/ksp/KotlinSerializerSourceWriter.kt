@@ -61,10 +61,10 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("import org.apache.fory.context.WriteContext\n")
     builder.append("import org.apache.fory.exception.DeserializationException\n")
     builder.append("import org.apache.fory.kotlin.KotlinCollectionAdapters\n")
-    builder.append("import org.apache.fory.kotlin.KotlinXlangDurationEncoding\n")
+    builder.append("import org.apache.fory.kotlin.DurationEncoding\n")
     builder.append("import org.apache.fory.kotlin.KotlinXlangArrayEncoding\n")
     builder.append("import org.apache.fory.serializer.kotlin.KotlinXlangUnsignedSerializers\n")
-    builder.append("import org.apache.fory.serializer.kotlin.KotlinXlangDurationSerializers\n")
+    builder.append("import org.apache.fory.serializer.kotlin.DurationSerializers\n")
     builder.append("import org.apache.fory.meta.TypeDef\n")
     builder.append("import org.apache.fory.meta.TypeExtMeta\n")
     builder.append("import org.apache.fory.reflect.TypeRef\n")
@@ -100,8 +100,8 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   private fun writeDescriptors() {
     builder.append("  public companion object {\n")
     builder
-      .append("    private const val HAS_NESTED_COMPATIBLE_STRUCT_FIELDS: Boolean = ")
-      .append(struct.hasNestedCompatibleStructFields)
+      .append("    private const val HAS_COMPAT_NESTED_FIELDS: Boolean = ")
+      .append(struct.hasCompatStructFields)
       .append("\n\n")
     builder.append("    @JvmField\n")
     builder.append("    public val DESCRIPTORS: List<Descriptor> = buildDescriptors()\n\n")
@@ -150,7 +150,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     )
     writeConstructorBody(
       "buildLocalFieldGroups(DESCRIPTORS)",
-      "typeDef != null && !HAS_NESTED_COMPATIBLE_STRUCT_FIELDS && typeDef.id == TypeDef.buildTypeDef(typeResolver, type).id",
+      "typeDef != null && !HAS_COMPAT_NESTED_FIELDS && typeDef.id == TypeDef.buildTypeDef(typeResolver, type).id",
     )
     builder.append("  }\n\n")
   }
@@ -163,28 +163,23 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    for (i in this.allFields.indices) {\n")
     builder.append("      this.fieldsById[this.allFieldIds[i]] = this.allFields[i]\n")
     builder.append("    }\n")
-    writeKotlinScalarSerializerBindings()
+    writeScalarBindings()
     builder.append(
       "    this.classVersionHash = if (typeResolver.checkClassVersion()) computeClassVersionHash(DESCRIPTORS) else 0\n"
     )
     builder.append("    this.sameSchemaCompatible = ").append(sameSchemaExpression).append("\n")
   }
 
-  private fun writeKotlinScalarSerializerBindings() {
+  private fun writeScalarBindings() {
     for (field in struct.fields) {
-      if (
-        field.type.typeArguments.isEmpty() || !containsKotlinScalarNeedingSerializer(field.type)
-      ) {
+      if (field.type.typeArguments.isEmpty() || !needsScalarSerializer(field.type)) {
         continue
       }
-      writeKotlinScalarSerializerBinding(field.type, "this.fieldsById[${field.id}]!!.genericType")
+      writeScalarBinding(field.type, "this.fieldsById[${field.id}]!!.genericType")
     }
   }
 
-  private fun writeKotlinScalarSerializerBinding(
-    type: KotlinSourceTypeNode,
-    genericExpression: String
-  ) {
+  private fun writeScalarBinding(type: KotlinSourceTypeNode, genericExpression: String) {
     if (type.unsigned && type.componentType == null) {
       builder
         .append("    ")
@@ -202,14 +197,11 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       builder
         .append("    ")
         .append(genericExpression)
-        .append(".setSerializer(KotlinXlangDurationSerializers.serializer(typeResolver.config))\n")
+        .append(".setSerializer(DurationSerializers.serializer(typeResolver.config))\n")
       return
     }
     for (i in type.typeArguments.indices) {
-      writeKotlinScalarSerializerBinding(
-        type.typeArguments[i],
-        "$genericExpression.getTypeParameter$i()"
-      )
+      writeScalarBinding(type.typeArguments[i], "$genericExpression.getTypeParameter$i()")
     }
   }
 
@@ -302,7 +294,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    if (sameSchemaCompatible) {\n")
     builder.append("      return readSchemaConsistent(readContext)\n")
     builder.append("    }\n")
-    writeCompatiblePresenceDeclarations()
+    writePresenceVars()
     writeLocalDeclarations()
     builder.append("    for (i in remoteFields.indices) {\n")
     builder.append("      val remoteField = remoteFields[i]\n")
@@ -359,11 +351,11 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       }
       builder.append("    }\n")
     }
-    writeDefaultConstructorDispatch()
+    writeDefaultDispatch()
     builder.append("  }\n\n")
   }
 
-  private fun writeCompatiblePresenceDeclarations() {
+  private fun writePresenceVars() {
     val maxId = struct.fields.maxOfOrNull { it.id } ?: -1
     val chunks = maxId / java.lang.Long.SIZE + 1
     for (index in 0 until chunks) {
@@ -464,7 +456,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     }
   }
 
-  private fun writeDefaultConstructorDispatch() {
+  private fun writeDefaultDispatch() {
     val defaultFields = struct.fields.filter { it.hasDefault }
     if (defaultFields.isEmpty()) {
       builder.append("    return ")
@@ -569,12 +561,12 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     val denseUnsigned = denseUnsignedArrayConversion(field)
     if (denseUnsigned != null) {
       if (field.nullable) {
-        return "($expression as ${denseUnsignedArrayDelegateType(field)}?)?.let { KotlinXlangArrayEncoding.$denseUnsigned(it) }"
+        return "($expression as ${denseUnsignedDelegate(field)}?)?.let { KotlinXlangArrayEncoding.$denseUnsigned(it) }"
       }
-      return "KotlinXlangArrayEncoding.$denseUnsigned($expression as ${denseUnsignedArrayDelegateType(field)})"
+      return "KotlinXlangArrayEncoding.$denseUnsigned($expression as ${denseUnsignedDelegate(field)})"
     }
-    if (compatible && containsKotlinCompatibleScalar(field.type)) {
-      return fromJavaKotlinCompatibleExpression(field.type, expression)
+    if (compatible && hasKotlinScalar(field.type)) {
+      return fromJavaCompatExpr(field.type, expression)
     }
     if (field.type.valueTypeName == "Any?") {
       return expression
@@ -582,15 +574,15 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     return "($expression as ${field.type.valueTypeName})"
   }
 
-  private fun containsKotlinCompatibleScalar(type: KotlinSourceTypeNode): Boolean =
+  private fun hasKotlinScalar(type: KotlinSourceTypeNode): Boolean =
     (type.unsigned && type.componentType == null) ||
       type.typeId == "Types.DURATION" ||
-      type.typeArguments.any { containsKotlinCompatibleScalar(it) }
+      type.typeArguments.any { hasKotlinScalar(it) }
 
-  private fun containsKotlinScalarNeedingSerializer(type: KotlinSourceTypeNode): Boolean =
+  private fun needsScalarSerializer(type: KotlinSourceTypeNode): Boolean =
     (type.unsigned && type.componentType == null) ||
       type.typeId == "Types.DURATION" ||
-      type.typeArguments.any { containsKotlinScalarNeedingSerializer(it) }
+      type.typeArguments.any { needsScalarSerializer(it) }
 
   private fun KotlinSourceTypeNode.isCollectionOrMap(): Boolean =
     typeId == "Types.LIST" || typeId == "Types.SET" || typeId == "Types.MAP"
@@ -648,14 +640,14 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     return "(copyContext.copyObject($expression) as ${type.valueTypeName.removeSuffix("?")})"
   }
 
-  private fun fromJavaKotlinCompatibleExpression(
+  private fun fromJavaCompatExpr(
     type: KotlinSourceTypeNode,
     expression: String,
     depth: Int = 0
   ): String {
     if (type.nullable) {
       val valueName = "value$depth"
-      return "($expression)?.let { $valueName -> ${fromJavaKotlinCompatibleExpression(type.copy(nullable = false), valueName, depth + 1)} }"
+      return "($expression)?.let { $valueName -> ${fromJavaCompatExpr(type.copy(nullable = false), valueName, depth + 1)} }"
     }
     if (type.unsigned && type.componentType == null) {
       val compatibleValue = "compatibleValue$depth"
@@ -673,7 +665,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     }
     if (type.typeId == "Types.DURATION") {
       val compatibleValue = "compatibleValue$depth"
-      return "run { val $compatibleValue = $expression; if ($compatibleValue is kotlin.time.Duration) $compatibleValue else KotlinXlangDurationEncoding.fromJava($compatibleValue as java.time.Duration) }"
+      return "run { val $compatibleValue = $expression; if ($compatibleValue is kotlin.time.Duration) $compatibleValue else DurationEncoding.fromJava($compatibleValue as java.time.Duration) }"
     }
     if (type.typeArguments.isEmpty()) {
       return "($expression as ${type.valueTypeName})"
@@ -682,12 +674,12 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       "Types.LIST",
       "Types.SET" -> {
         val element = type.typeArguments[0]
-        if (containsKotlinCompatibleScalar(element)) {
+        if (hasKotlinScalar(element)) {
           val elementName = "element$depth"
           if (type.typeId == "Types.SET") {
-            "run { val source$depth = ($expression as java.util.Collection<*>); val target$depth = java.util.LinkedHashSet<Any?>(source$depth.size()); for ($elementName in source$depth) { target$depth.add(${fromJavaKotlinCompatibleExpression(element, elementName, depth + 1)}) }; target$depth as ${type.valueTypeName} }"
+            "run { val source$depth = ($expression as java.util.Collection<*>); val target$depth = java.util.LinkedHashSet<Any?>(source$depth.size()); for ($elementName in source$depth) { target$depth.add(${fromJavaCompatExpr(element, elementName, depth + 1)}) }; target$depth as ${type.valueTypeName} }"
           } else {
-            "run { val source$depth = ($expression as java.util.Collection<*>); val target$depth = java.util.ArrayList<Any?>(source$depth.size()); for ($elementName in source$depth) { target$depth.add(${fromJavaKotlinCompatibleExpression(element, elementName, depth + 1)}) }; target$depth as ${type.valueTypeName} }"
+            "run { val source$depth = ($expression as java.util.Collection<*>); val target$depth = java.util.ArrayList<Any?>(source$depth.size()); for ($elementName in source$depth) { target$depth.add(${fromJavaCompatExpr(element, elementName, depth + 1)}) }; target$depth as ${type.valueTypeName} }"
           }
         } else {
           "($expression as ${type.valueTypeName})"
@@ -696,9 +688,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       "Types.MAP" -> {
         val key = type.typeArguments[0]
         val value = type.typeArguments[1]
-        if (containsKotlinCompatibleScalar(key) || containsKotlinCompatibleScalar(value)) {
+        if (hasKotlinScalar(key) || hasKotlinScalar(value)) {
           val entryName = "entry$depth"
-          "run { val source$depth = ($expression as kotlin.collections.Map<*, *>); val target$depth = java.util.LinkedHashMap<Any?, Any?>(source$depth.size); for ($entryName in source$depth.entries) { target$depth[${fromJavaKotlinCompatibleExpression(key, "$entryName.key", depth + 1)}] = ${fromJavaKotlinCompatibleExpression(value, "$entryName.value", depth + 1)} }; target$depth as ${type.valueTypeName} }"
+          "run { val source$depth = ($expression as kotlin.collections.Map<*, *>); val target$depth = java.util.LinkedHashMap<Any?, Any?>(source$depth.size); for ($entryName in source$depth.entries) { target$depth[${fromJavaCompatExpr(key, "$entryName.key", depth + 1)}] = ${fromJavaCompatExpr(value, "$entryName.value", depth + 1)} }; target$depth as ${type.valueTypeName} }"
         } else {
           "($expression as ${type.valueTypeName})"
         }
@@ -746,9 +738,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     if (field.type.typeId == "Types.DURATION" && !field.trackingRef) {
       if (field.nullable) {
         val nullableValue = "nullableValue${field.id}"
-        return "val $nullableValue = $value; if ($nullableValue == null) { buffer.writeByte(Fory.NULL_FLAG) } else { buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG); KotlinXlangDurationEncoding.write(writeContext, $nullableValue) }"
+        return "val $nullableValue = $value; if ($nullableValue == null) { buffer.writeByte(Fory.NULL_FLAG) } else { buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG); DurationEncoding.write(writeContext, $nullableValue) }"
       }
-      return "KotlinXlangDurationEncoding.write(writeContext, $value)"
+      return "DurationEncoding.write(writeContext, $value)"
     }
     if (!canDirect(field)) {
       return null
@@ -800,9 +792,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     }
     if (field.type.typeId == "Types.DURATION" && !field.trackingRef) {
       if (field.nullable) {
-        return "if (buffer.readByte() == Fory.NULL_FLAG) null else KotlinXlangDurationEncoding.read(readContext)"
+        return "if (buffer.readByte() == Fory.NULL_FLAG) null else DurationEncoding.read(readContext)"
       }
-      return "KotlinXlangDurationEncoding.read(readContext)"
+      return "DurationEncoding.read(readContext)"
     }
     if (!canDirect(field)) {
       return null
@@ -876,7 +868,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       else -> null
     }
 
-  private fun denseUnsignedArrayDelegateType(field: KotlinSourceField): String =
+  private fun denseUnsignedDelegate(field: KotlinSourceField): String =
     when (field.type.valueTypeName.removeSuffix("?")) {
       "UByteArray" -> "ByteArray"
       "UShortArray" -> "ShortArray"

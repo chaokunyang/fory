@@ -26,69 +26,57 @@ import org.testng.Assert.assertNull
 import org.testng.Assert.assertTrue
 import org.testng.annotations.Test
 
-class ForyKotlinSymbolProcessorValidationTest {
+class ProcessorValidationTest {
   @Test
-  fun rejectsUnsupportedSerializerTargets() {
-    assertNull(unsupportedStructDeclarationDiagnostic(ClassKind.CLASS, emptySet()))
+  fun rejectsBadTargets() {
+    assertNull(structKindError(ClassKind.CLASS, emptySet()))
 
-    val objectDiagnostic =
-      unsupportedStructDeclarationDiagnostic(ClassKind.OBJECT, emptySet()).orEmpty()
+    val objectDiagnostic = structKindError(ClassKind.OBJECT, emptySet()).orEmpty()
     assertTrue(objectDiagnostic.contains("concrete class"))
     assertTrue(objectDiagnostic.contains("object declarations do not expose primary-constructor"))
 
-    val interfaceDiagnostic =
-      unsupportedStructDeclarationDiagnostic(ClassKind.INTERFACE, emptySet()).orEmpty()
+    val interfaceDiagnostic = structKindError(ClassKind.INTERFACE, emptySet()).orEmpty()
     assertTrue(interfaceDiagnostic.contains("interfaces are not concrete serializer targets"))
 
-    val abstractDiagnostic =
-      unsupportedStructDeclarationDiagnostic(ClassKind.CLASS, setOf(Modifier.ABSTRACT)).orEmpty()
+    val abstractDiagnostic = structKindError(ClassKind.CLASS, setOf(Modifier.ABSTRACT)).orEmpty()
     assertTrue(abstractDiagnostic.contains("abstract declarations are polymorphic bases"))
 
-    val sealedDiagnostic =
-      unsupportedStructDeclarationDiagnostic(ClassKind.CLASS, setOf(Modifier.SEALED)).orEmpty()
+    val sealedDiagnostic = structKindError(ClassKind.CLASS, setOf(Modifier.SEALED)).orEmpty()
     assertTrue(sealedDiagnostic.contains("sealed declarations are polymorphic bases"))
   }
 
   @Test
-  fun rejectsPrivateSerializerTargets() {
-    assertNull(unsupportedStructVisibilityDiagnostic(emptySet()))
-    assertNull(unsupportedStructVisibilityDiagnostic(setOf(Modifier.INTERNAL)))
-    assertTrue(unsupportedStructVisibilityDiagnostic(setOf(Modifier.PRIVATE))!!.contains("private"))
+  fun rejectsPrivateTargets() {
+    assertNull(structVisibilityError(emptySet()))
+    assertNull(structVisibilityError(setOf(Modifier.INTERNAL)))
+    assertTrue(structVisibilityError(setOf(Modifier.PRIVATE))!!.contains("private"))
   }
 
   @Test
-  fun rejectsGenericSerializerTargets() {
-    assertNull(unsupportedStructTypeParameterDiagnostic(0))
-    assertTrue(unsupportedStructTypeParameterDiagnostic(1)!!.contains("generic @ForyStruct"))
+  fun rejectsGenericTargets() {
+    assertNull(structTypeParamError(0))
+    assertTrue(structTypeParamError(1)!!.contains("generic @ForyStruct"))
   }
 
   @Test
-  fun rejectsInaccessiblePrimaryConstructors() {
-    assertNull(unsupportedPrimaryConstructorVisibilityDiagnostic(emptySet()))
-    assertNull(unsupportedPrimaryConstructorVisibilityDiagnostic(setOf(Modifier.INTERNAL)))
-    assertTrue(
-      unsupportedPrimaryConstructorVisibilityDiagnostic(setOf(Modifier.PRIVATE))!!.contains(
-        "primary constructor"
-      )
-    )
-    assertTrue(
-      unsupportedPrimaryConstructorVisibilityDiagnostic(setOf(Modifier.PROTECTED))!!.contains(
-        "primary constructor"
-      )
-    )
+  fun rejectsHiddenCtors() {
+    assertNull(ctorVisibilityError(emptySet()))
+    assertNull(ctorVisibilityError(setOf(Modifier.INTERNAL)))
+    assertTrue(ctorVisibilityError(setOf(Modifier.PRIVATE))!!.contains("primary constructor"))
+    assertTrue(ctorVisibilityError(setOf(Modifier.PROTECTED))!!.contains("primary constructor"))
   }
 
   @Test
-  fun rejectsDefaultConstructorFieldCountOverflow() {
-    assertNull(defaultConstructorFieldLimitDiagnostic(12))
+  fun rejectsManyDefaults() {
+    assertNull(fieldLimitError(12))
     assertEquals(
-      defaultConstructorFieldLimitDiagnostic(13),
+      fieldLimitError(13),
       "Kotlin KSP xlang serializers currently support at most 12 defaulted constructor fields because Kotlin source generation must call constructors with omitted default arguments",
     )
   }
 
   @Test
-  fun compatiblePresenceTrackingSupportsWideConstructors() {
+  fun tracksWidePresence() {
     val intType =
       KotlinSourceTypeNode(
         rawClassExpression = "Int::class.javaPrimitiveType!!",
@@ -138,7 +126,7 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun generatedSerializerNameEscapingMatchesGoldenVectors() {
+  fun escapesSerializerNames() {
     assertEquals(escapeBinarySimpleName("User") + "_ForySerializer", "User_ForySerializer")
     assertEquals(
       escapeBinarySimpleName("Outer\$Inner") + "_ForySerializer",
@@ -185,7 +173,7 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun nullableUnsignedDenseArrayUsesDirectGeneratedPath() {
+  fun writesNullableUIntArray() {
     val uintType =
       KotlinSourceTypeNode(
         rawClassExpression = "Int::class.javaPrimitiveType!!",
@@ -215,9 +203,9 @@ class ForyKotlinSymbolProcessorValidationTest {
       KotlinSerializerSourceWriter(
           KotlinSourceStruct(
             packageName = "example",
-            typeName = "NullableUIntArrayHolder",
-            qualifiedTypeName = "example.NullableUIntArrayHolder",
-            serializerName = "NullableUIntArrayHolder_ForySerializer",
+            typeName = "UIntArrayBox",
+            qualifiedTypeName = "example.UIntArrayBox",
+            serializerName = "UIntArrayBox_ForySerializer",
             serializerVisibility = KotlinSerializerVisibility.PUBLIC,
             fields =
               listOf(
@@ -248,7 +236,7 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun nullableUnsignedScalarUsesStableLocal() {
+  fun writesNullableUInt() {
     val nullableUInt =
       KotlinSourceTypeNode(
         rawClassExpression = "Int::class.javaPrimitiveType!!",
@@ -296,7 +284,7 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun internalStructGeneratesInternalSerializerSource() {
+  fun internalStructSerializer() {
     val source =
       KotlinSerializerSourceWriter(
           KotlinSourceStruct(
@@ -315,7 +303,7 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun durationUsesXlangEncodingHelper() {
+  fun durationUsesCodec() {
     val duration =
       KotlinSourceTypeNode(
         rawClassExpression = "java.time.Duration::class.java",
@@ -357,12 +345,12 @@ class ForyKotlinSymbolProcessorValidationTest {
         )
         .write()
 
-    assertTrue(source.contains("KotlinXlangDurationEncoding.write(writeContext, value.value)"))
-    assertTrue(source.contains("KotlinXlangDurationEncoding.read(readContext)"))
+    assertTrue(source.contains("DurationEncoding.write(writeContext, value.value)"))
+    assertTrue(source.contains("DurationEncoding.read(readContext)"))
   }
 
   @Test
-  fun compatibleUnsignedContainersUseExplicitLoops() {
+  fun unsignedContainersUseLoops() {
     val uint =
       KotlinSourceTypeNode(
         rawClassExpression = "Int::class.javaPrimitiveType!!",
@@ -483,14 +471,14 @@ class ForyKotlinSymbolProcessorValidationTest {
 
     assertTrue(source.contains("java.util.ArrayList<Any?>(source0.size())"))
     assertTrue(source.contains("java.util.LinkedHashMap<Any?, Any?>(source0.size)"))
-    assertTrue(source.contains("KotlinXlangDurationEncoding.fromJava"))
+    assertTrue(source.contains("DurationEncoding.fromJava"))
     assertTrue(!source.contains(".map {"))
     assertTrue(!source.contains(".mapTo("))
     assertTrue(!source.contains(".associate {"))
   }
 
   @Test
-  fun unionSerializerUsesCoreUnionPayloadHelpers() {
+  fun unionUsesCoreHelpers() {
     val owner =
       KotlinSourceTypeNode(
         rawClassExpression = "example.Owner::class.java",
@@ -579,7 +567,7 @@ class ForyKotlinSymbolProcessorValidationTest {
         componentType = uint,
       )
     val source =
-      KotlinUnionSerializerSourceWriter(
+      UnionSerializerSourceWriter(
           KotlinSourceUnion(
             packageName = "example",
             typeName = "Pet",
@@ -647,12 +635,12 @@ class ForyKotlinSymbolProcessorValidationTest {
     assertTrue(source.contains("buffer.writeUInt8(Types.VAR_UINT32)"))
     assertTrue(source.contains("buffer.writeVarUInt32(value.value.toInt())"))
     assertTrue(source.contains("example.Pet.CountCase(value.value)"))
-    assertTrue(source.contains("KotlinXlangDurationEncoding.write(writeContext, value.value)"))
-    assertTrue(source.contains("KotlinXlangDurationEncoding.read(readContext)"))
+    assertTrue(source.contains("DurationEncoding.write(writeContext, value.value)"))
+    assertTrue(source.contains("DurationEncoding.read(readContext)"))
     assertTrue(source.contains("example.Pet.DurationCase(value.value)"))
     assertTrue(source.contains("TypeRef.of<Any>(java.time.Duration::class.java"))
     assertTrue(source.contains("KotlinXlangUnsignedSerializers.serializer(typeResolver.config"))
-    assertTrue(source.contains("KotlinXlangDurationSerializers.serializer(typeResolver.config"))
+    assertTrue(source.contains("DurationSerializers.serializer(typeResolver.config"))
     assertTrue(source.contains("listValue.isNotEmpty()"))
     assertTrue(source.contains("buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL)"))
     assertTrue(source.contains("if (size > 0)"))

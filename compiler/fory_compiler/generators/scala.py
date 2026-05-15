@@ -37,7 +37,7 @@ from fory_compiler.ir.ast import (
     PrimitiveType,
     Union,
 )
-from fory_compiler.ir.construction import analyze_message_construction_shapes
+from fory_compiler.ir.construction import analyze_shapes
 from fory_compiler.ir.types import PrimitiveKind
 
 
@@ -133,7 +133,7 @@ class ScalaGenerator(BaseGenerator):
 
     def __init__(self, schema, options):
         super().__init__(schema, options)
-        self._construction_shapes = analyze_message_construction_shapes(schema)
+        self._construction_shapes = analyze_shapes(schema)
 
     def get_scala_package(self) -> Optional[str]:
         return self.options.package_override or self.schema.package
@@ -188,7 +188,7 @@ class ScalaGenerator(BaseGenerator):
     def _scala_package_for_schema(self, schema: Schema) -> Optional[str]:
         return schema.package
 
-    def _registration_class_name_for_schema(self, schema: Schema) -> str:
+    def _registration_name(self, schema: Schema) -> str:
         package = self._scala_package_for_schema(schema)
         if package:
             return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
@@ -202,7 +202,7 @@ class ScalaGenerator(BaseGenerator):
             return None
         return self._scala_package_for_schema(schema)
 
-    def _collect_imported_registrations(self) -> List[tuple[str, str]]:
+    def _imported_regs(self) -> List[tuple[str, str]]:
         packages: dict[str, str] = {}
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
@@ -215,7 +215,7 @@ class ScalaGenerator(BaseGenerator):
             )
             if schema is None:
                 continue
-            packages[package] = self._registration_class_name_for_schema(schema)
+            packages[package] = self._registration_name(schema)
 
         ordered: List[tuple[str, str]] = []
         used: Set[str] = set()
@@ -231,9 +231,7 @@ class ScalaGenerator(BaseGenerator):
                 package = self._scala_package_for_schema(schema)
                 if not package or package in used:
                     continue
-                ordered.append(
-                    (package, self._registration_class_name_for_schema(schema))
-                )
+                ordered.append((package, self._registration_name(schema)))
                 used.add(package)
         for package, registration in sorted(packages.items()):
             if package not in used:
@@ -781,7 +779,7 @@ class ScalaGenerator(BaseGenerator):
         lines.append(
             "        val runtime = Fory.builder().withXlang(true).withCompatible(true).withRefTracking(true).withScalaOptimizationEnabled(true).buildThreadSafeFory()"
         )
-        imported_registrations = self._collect_imported_registrations()
+        imported_registrations = self._imported_regs()
         if imported_registrations:
             lines.append("        runtime.registerCallback((fory: Fory) => {")
             for package, registration in imported_registrations:
@@ -805,7 +803,7 @@ class ScalaGenerator(BaseGenerator):
                 )
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):
-                self.generate_serializer_registration(lines, type_def, owner_path)
+                self.serializer_registration(lines, type_def, owner_path)
             else:
                 self.generate_type_registration(lines, type_def, owner_path)
         lines.append("    }")
@@ -871,17 +869,13 @@ class ScalaGenerator(BaseGenerator):
         if isinstance(type_def, Message):
             lookup_stack = [*parent_stack, type_def]
             for field in type_def.fields:
-                self.collect_registration_dependencies(
-                    field.field_type, lookup_stack, dependencies
-                )
+                self.collect_reg_deps(field.field_type, lookup_stack, dependencies)
         elif isinstance(type_def, Union):
             for field in type_def.fields:
-                self.collect_registration_dependencies(
-                    field.field_type, parent_stack, dependencies
-                )
+                self.collect_reg_deps(field.field_type, parent_stack, dependencies)
         return [dependency for dependency in dependencies if dependency is not type_def]
 
-    def collect_registration_dependencies(
+    def collect_reg_deps(
         self,
         field_type: FieldType,
         parent_stack: List[Message],
@@ -893,22 +887,14 @@ class ScalaGenerator(BaseGenerator):
                 dependencies.append(dependency)
             return
         if isinstance(field_type, ListType):
-            self.collect_registration_dependencies(
-                field_type.element_type, parent_stack, dependencies
-            )
+            self.collect_reg_deps(field_type.element_type, parent_stack, dependencies)
             return
         if isinstance(field_type, ArrayType):
-            self.collect_registration_dependencies(
-                field_type.element_type, parent_stack, dependencies
-            )
+            self.collect_reg_deps(field_type.element_type, parent_stack, dependencies)
             return
         if isinstance(field_type, MapType):
-            self.collect_registration_dependencies(
-                field_type.key_type, parent_stack, dependencies
-            )
-            self.collect_registration_dependencies(
-                field_type.value_type, parent_stack, dependencies
-            )
+            self.collect_reg_deps(field_type.key_type, parent_stack, dependencies)
+            self.collect_reg_deps(field_type.value_type, parent_stack, dependencies)
 
     def resolve_named_type(
         self, name: str, parent_stack: List[Message]
@@ -953,7 +939,7 @@ class ScalaGenerator(BaseGenerator):
                 f'        ForySerializer.{method}(fory, classOf[{class_ref}], "{namespace}", "{type_name}")'
             )
 
-    def generate_serializer_registration(
+    def serializer_registration(
         self, lines: List[str], type_def, owner_path: Optional[str] = None
     ) -> None:
         class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name

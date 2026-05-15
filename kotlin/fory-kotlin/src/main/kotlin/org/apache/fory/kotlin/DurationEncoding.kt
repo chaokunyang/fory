@@ -27,7 +27,7 @@ import org.apache.fory.context.WriteContext
 import org.apache.fory.exception.ForyException
 
 /** Xlang duration payload adapter for Kotlin's source-level Duration carrier. */
-public object KotlinXlangDurationEncoding {
+public object DurationEncoding {
   @JvmStatic
   public fun write(writeContext: WriteContext, value: Duration) {
     if (value.isInfinite()) {

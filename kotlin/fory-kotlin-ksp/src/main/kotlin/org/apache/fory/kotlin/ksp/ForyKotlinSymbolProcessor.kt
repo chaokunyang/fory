@@ -40,16 +40,16 @@ import com.google.devtools.ksp.symbol.Nullability
 import java.nio.charset.StandardCharsets
 import java.util.Locale
 
-private const val MAX_DEFAULT_CONSTRUCTOR_FIELDS = 12
+private const val MAX_DEFAULT_FIELDS = 12
 
-internal fun defaultConstructorFieldLimitDiagnostic(defaultFieldCount: Int): String? =
-  if (defaultFieldCount > MAX_DEFAULT_CONSTRUCTOR_FIELDS) {
-    "Kotlin KSP xlang serializers currently support at most $MAX_DEFAULT_CONSTRUCTOR_FIELDS defaulted constructor fields because Kotlin source generation must call constructors with omitted default arguments"
+internal fun fieldLimitError(defaultFieldCount: Int): String? =
+  if (defaultFieldCount > MAX_DEFAULT_FIELDS) {
+    "Kotlin KSP xlang serializers currently support at most $MAX_DEFAULT_FIELDS defaulted constructor fields because Kotlin source generation must call constructors with omitted default arguments"
   } else {
     null
   }
 
-internal fun unsupportedStructDeclarationDiagnostic(
+internal fun structKindError(
   classKind: ClassKind,
   modifiers: Set<Modifier>,
 ): String? {
@@ -73,21 +73,21 @@ internal fun unsupportedStructDeclarationDiagnostic(
   return "Kotlin KSP xlang serializers require each @ForyStruct serializer target to be a concrete class; $reason"
 }
 
-internal fun unsupportedStructVisibilityDiagnostic(modifiers: Set<Modifier>): String? =
+internal fun structVisibilityError(modifiers: Set<Modifier>): String? =
   if (Modifier.PRIVATE in modifiers) {
     "Kotlin KSP xlang serializers require @ForyStruct targets to be public or internal; private targets are inaccessible to generated code"
   } else {
     null
   }
 
-internal fun unsupportedStructTypeParameterDiagnostic(typeParameterCount: Int): String? =
+internal fun structTypeParamError(typeParameterCount: Int): String? =
   if (typeParameterCount > 0) {
     "Kotlin KSP xlang serializers do not support generic @ForyStruct targets in phase 1"
   } else {
     null
   }
 
-internal fun unsupportedPrimaryConstructorVisibilityDiagnostic(modifiers: Set<Modifier>): String? =
+internal fun ctorVisibilityError(modifiers: Set<Modifier>): String? =
   if (Modifier.PRIVATE in modifiers || Modifier.PROTECTED in modifiers) {
     "Kotlin KSP xlang serializers require a public or internal primary constructor because generated serializers call it directly"
   } else {
@@ -123,7 +123,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         continue
       }
       if (!declaration.isConcreteStruct()) {
-        reportUnsupportedStructDeclaration(declaration)
+        reportBadStruct(declaration)
         continue
       }
       val qualifiedName = declaration.qualifiedName?.asString()
@@ -152,7 +152,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         continue
       }
       val union = parseUnion(declaration) ?: continue
-      KotlinUnionSerializerSourceWriter(union).writeTo(codeGenerator)
+      UnionSerializerSourceWriter(union).writeTo(codeGenerator)
       writeR8Rules(union)
     }
     return deferred
@@ -201,13 +201,12 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       )
       return null
     }
-    val visibilityDiagnostic = unsupportedStructVisibilityDiagnostic(declaration.modifiers)
+    val visibilityDiagnostic = structVisibilityError(declaration.modifiers)
     if (visibilityDiagnostic != null) {
       logger.error(visibilityDiagnostic, declaration)
       return null
     }
-    val typeParameterDiagnostic =
-      unsupportedStructTypeParameterDiagnostic(declaration.typeParameters.size)
+    val typeParameterDiagnostic = structTypeParamError(declaration.typeParameters.size)
     if (typeParameterDiagnostic != null) {
       logger.error(typeParameterDiagnostic, declaration)
       return null
@@ -217,10 +216,9 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       logger.error("Kotlin KSP xlang serializers require a primary constructor", declaration)
       return null
     }
-    val constructorVisibilityDiagnostic =
-      unsupportedPrimaryConstructorVisibilityDiagnostic(primaryConstructor.modifiers)
-    if (constructorVisibilityDiagnostic != null) {
-      logger.error(constructorVisibilityDiagnostic, primaryConstructor)
+    val ctorError = ctorVisibilityError(primaryConstructor.modifiers)
+    if (ctorError != null) {
+      logger.error(ctorError, primaryConstructor)
       return null
     }
     val propertiesByName = declaration.getAllProperties().associateBy { it.simpleName.asString() }
@@ -299,7 +297,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       return null
     }
     val defaultFieldCount = fields.count { it.hasDefault }
-    val defaultFieldLimitDiagnostic = defaultConstructorFieldLimitDiagnostic(defaultFieldCount)
+    val defaultFieldLimitDiagnostic = fieldLimitError(defaultFieldCount)
     if (defaultFieldLimitDiagnostic != null) {
       logger.error(defaultFieldLimitDiagnostic, declaration)
       return null
@@ -353,7 +351,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       logger.error("@ForyUnion targets must be sealed classes", declaration)
       return null
     }
-    val visibilityDiagnostic = unsupportedStructVisibilityDiagnostic(declaration.modifiers)
+    val visibilityDiagnostic = structVisibilityError(declaration.modifiers)
     if (visibilityDiagnostic != null) {
       logger.error(visibilityDiagnostic, declaration)
       return null
@@ -575,12 +573,12 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
   }
 
   private fun KSClassDeclaration.isConcreteStruct(): Boolean {
-    return unsupportedStructDeclarationDiagnostic(classKind, modifiers) == null
+    return structKindError(classKind, modifiers) == null
   }
 
-  private fun reportUnsupportedStructDeclaration(declaration: KSClassDeclaration) {
+  private fun reportBadStruct(declaration: KSClassDeclaration) {
     logger.error(
-      unsupportedStructDeclarationDiagnostic(declaration.classKind, declaration.modifiers)
+      structKindError(declaration.classKind, declaration.modifiers)
         ?: "Kotlin KSP xlang serializers require each @ForyStruct serializer target to be a concrete class",
       declaration,
     )

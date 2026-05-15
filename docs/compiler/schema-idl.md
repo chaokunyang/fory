@@ -846,8 +846,7 @@ field_type field_name = field_number;
 ```protobuf
 optional list<string> tags = 1;  // Nullable list
 list<optional string> tags = 2;  // Elements may be null
-ref list<Node> nodes = 3;        // Collection tracked as a reference
-list<ref Node> nodes = 4;        // Elements tracked as references
+list<ref Node> nodes = 3;        // Elements tracked as references
 ```
 
 **Grammar:**
@@ -860,8 +859,9 @@ list_type    := 'list' '<' { 'optional' | 'ref' | scalar_encoding } field_type '
 array_type   := 'array' '<' array_element_type '>'
 ```
 
-Modifiers apply to the field/collection. Use `list<...>` to describe element
-modifiers. `repeated` is accepted as an alias for `list`.
+`optional` before `list` applies to the collection field. `ref` is only valid
+for named message/union fields; for collection contents, use `list<ref T>` or
+`map<K, ref V>`. `repeated` is accepted as an alias for `list`.
 
 ### Field Modifiers
 
@@ -962,23 +962,22 @@ Modifiers can be combined:
 message Example {
     optional list<string> tags = 1;  // Nullable list
     list<optional string> aliases = 2; // Elements may be null
-    ref list<Node> nodes = 3;          // Collection tracked as a reference
-    list<ref Node> children = 4;       // Elements tracked as references
-    optional ref User owner = 5;          // Nullable tracked reference
+    list<ref Node> children = 3;       // Elements tracked as references
+    optional ref User owner = 4;       // Nullable tracked reference
 }
 ```
 
-Modifiers before `list` apply to the field/collection. Modifiers after `list`
-apply to elements. `repeated` is accepted as an alias for `list`.
+`optional` before `list` applies to the field/collection. `ref` before `list` or
+`map` is invalid; put `ref` inside the element/value type instead. `repeated` is
+accepted as an alias for `list`.
 
 **List modifier mapping:**
 
-| Fory IDL                | Java                                    | Python                                  | Go                      | Rust                  | C++                                       | Dart                                                          | Scala                  |
-| ----------------------- | --------------------------------------- | --------------------------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------- | ---------------------- |
-| `optional list<string>` | `@Nullable List<String>`                | `Optional[List[str]]`                   | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                               | `Option[List[String]]` |
-| `list<optional string>` | `List<String>` (nullable elements)      | `List[Optional[str]]`                   | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                               | `List[Option[String]]` |
-| `ref list<User>`        | `List<User>` + `@ForyField(ref = true)` | `List[User]` + `pyfory.field(ref=True)` | `[]User` + `ref`        | `Arc<Vec<User>>`      | `std::shared_ptr<std::vector<User>>`      | `List<User>` + `@ForyField(ref: true)`                        | `List[User] @Ref`      |
-| `list<ref User>`        | `List<User>`                            | `List[User]`                            | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` | `List[User @Ref]`      |
+| Fory IDL                | Java                               | Python                | Go                      | Rust                  | C++                                       | Dart                                                          | Scala                  |
+| ----------------------- | ---------------------------------- | --------------------- | ----------------------- | --------------------- | ----------------------------------------- | ------------------------------------------------------------- | ---------------------- |
+| `optional list<string>` | `@Nullable List<String>`           | `Optional[List[str]]` | `[]string` + `nullable` | `Option<Vec<String>>` | `std::optional<std::vector<std::string>>` | `List<String>?`                                               | `Option[List[String]]` |
+| `list<optional string>` | `List<String>` (nullable elements) | `List[Optional[str]]` | `[]*string`             | `Vec<Option<String>>` | `std::vector<std::optional<std::string>>` | `List<String?>`                                               | `List[Option[String]]` |
+| `list<ref User>`        | `List<User>`                       | `List[User]`          | `[]*User` + `ref=false` | `Vec<Arc<User>>`      | `std::vector<std::shared_ptr<User>>`      | `List<User>` + `@ListField(element: DeclaredType(ref: true))` | `List[User @Ref]`      |
 
 Use `ref(thread_safe=false)` in Fory IDL (or `[(fory).thread_safe_pointer = false]` in protobuf)
 to generate `Rc` instead of `Arc` in Rust.
@@ -1363,6 +1362,11 @@ code. When `enable_auto_type_id = false`, types without explicit IDs are
 registered by namespace and name instead. Collisions are detected at
 compile-time across the current file and all imports; when a collision occurs,
 the compiler raises an error and asks for an explicit `id` or an `alias`.
+For Java and Scala generated code, nested name registration appends the parent
+path to the namespace and keeps the nested type's simple name. For example,
+`package demo; message Envelope { message Payload { ... } }` registers
+`Payload` as namespace `demo.Envelope` and type name `Payload` in those JVM
+targets.
 
 ```protobuf
 enum Color [id=100] { ... }

@@ -30,6 +30,7 @@ class ScalaXlangSerializerTest extends AnyWordSpec with Matchers {
     val runtime = Fory.builder()
       .withXlang(true)
       .withRefTracking(true)
+      .withRefCopy(true)
       .withScalaOptimizationEnabled(true)
       .requireClassRegistration(false)
       .suppressClassRegistrationWarnings(false)
@@ -61,5 +62,64 @@ class ScalaXlangSerializerTest extends AnyWordSpec with Matchers {
         .toMap shouldEqual map
     }
 
+    "copy mutable collections with cyclic references" in {
+      val runtime = fory
+      val list = scala.collection.mutable.ArrayBuffer.empty[AnyRef]
+      list += list
+
+      val copiedList = runtime.copy(list).asInstanceOf[scala.collection.Seq[AnyRef]]
+
+      copiedList should not be theSameInstanceAs(list)
+      copiedList.head shouldBe theSameInstanceAs(copiedList)
+    }
+
+    "copy mutable maps with cyclic references" in {
+      val runtime = fory
+      val map = scala.collection.mutable.LinkedHashMap.empty[String, AnyRef]
+      map.put("self", map)
+
+      val copiedMap = runtime.copy(map).asInstanceOf[scala.collection.Map[String, AnyRef]]
+
+      copiedMap should not be theSameInstanceAs(map)
+      copiedMap("self") shouldBe theSameInstanceAs(copiedMap)
+    }
+
+    "copy concrete mutable collection classes" in {
+      val runtime = fory
+      val set = scala.collection.mutable.HashSet("a", "b")
+      val map = scala.collection.mutable.HashMap("a" -> "b", "c" -> "d")
+
+      val copiedSet = runtime.copy(set).asInstanceOf[scala.collection.mutable.HashSet[String]]
+      val copiedMap =
+        runtime.copy(map).asInstanceOf[scala.collection.mutable.HashMap[String, String]]
+
+      copiedSet shouldEqual set
+      copiedSet should not be theSameInstanceAs(set)
+      copiedMap shouldEqual map
+      copiedMap should not be theSameInstanceAs(map)
+    }
+
+    "copy fixed-size mutable collections" in {
+      val runtime = fory
+      val arraySeq = scala.collection.mutable.ArraySeq("a", "b")
+      val intArraySeq = scala.collection.mutable.ArraySeq(1, 2)
+      val cyclic = scala.collection.mutable.ArraySeq[AnyRef](null)
+      cyclic.update(0, cyclic)
+
+      val copied =
+        runtime.copy(arraySeq).asInstanceOf[scala.collection.mutable.ArraySeq[String]]
+      val copiedIntArraySeq =
+        runtime.copy(intArraySeq).asInstanceOf[scala.collection.mutable.ArraySeq[Int]]
+      val copiedCyclic =
+        runtime.copy(cyclic).asInstanceOf[scala.collection.mutable.ArraySeq[AnyRef]]
+
+      copied shouldEqual arraySeq
+      copied should not be theSameInstanceAs(arraySeq)
+      copiedIntArraySeq shouldEqual intArraySeq
+      copiedIntArraySeq should not be theSameInstanceAs(intArraySeq)
+      copiedIntArraySeq.getClass shouldBe intArraySeq.getClass
+      copiedCyclic should not be theSameInstanceAs(cyclic)
+      copiedCyclic(0) shouldBe theSameInstanceAs(copiedCyclic)
+    }
   }
 }

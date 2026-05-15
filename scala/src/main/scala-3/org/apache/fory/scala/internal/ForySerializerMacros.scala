@@ -401,46 +401,92 @@ object ForySerializerMacros {
       }
     }
 
-    def copyValue(valueExpr: Expr[T]): Expr[T] = {
+    def copiedValueArg(
+        valueExpr: Expr[T],
+        field: FieldMeta,
+        copyContextExpr: Expr[org.apache.fory.context.CopyContext],
+        fieldsByIdExpr: Expr[Array[FieldGroups.SerializationFieldInfo]]): Expr[Any] = {
+      val selected = selectValue(valueExpr, field)
+      val wireValue =
+        if field.option then '{ $selected.asInstanceOf[Option[Any]].orNull }
+        else selected
+      val copied =
+        '{
+          StaticGeneratedStructSerializer.copyFieldValue(
+            $copyContextExpr,
+            $wireValue,
+            $fieldsByIdExpr(${ Expr(field.index) }))
+        }
+      decodeValue(copied, field)
+    }
+
+    def referenceCopy(
+        copyContextExpr: Expr[org.apache.fory.context.CopyContext],
+        sourceExpr: Expr[T],
+        copiedExpr: Expr[T]): Term =
+      '{ $copyContextExpr.reference($sourceExpr, $copiedExpr) }.asTerm
+
+    def copyValue(
+        valueExpr: Expr[T],
+        copyContextExpr: Expr[org.apache.fory.context.CopyContext],
+        fieldsByIdExpr: Expr[Array[FieldGroups.SerializationFieldInfo]]): Expr[T] = {
       val constructorOwned = fields.filter(_.constructorOwned)
       val postConstruction = fields.filterNot(_.constructorOwned)
-      if postConstruction.isEmpty then {
-        val args = constructorOwned.map { field =>
-          val selected = selectValue(valueExpr, field)
-          field.sourceType.asType match {
-            case '[a] => '{ $selected.asInstanceOf[a] }.asTerm
+
+      def copyBody(): Expr[T] =
+        if postConstruction.isEmpty then {
+          val obj = Symbol.newVal(Symbol.spliceOwner, "obj", TypeRepr.of[T], Flags.EmptyFlags, Symbol.noSymbol)
+          val args = constructorOwned.map { field =>
+            copiedValueArg(valueExpr, field, copyContextExpr, fieldsByIdExpr).asTerm
           }
-        }
-        Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), args).asExprOf[T]
-      } else if constructorOwned.isEmpty then {
-        val obj = Symbol.newVal(Symbol.spliceOwner, "obj", TypeRepr.of[T], Flags.EmptyFlags, Symbol.noSymbol)
-        val construct = Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), Nil)
-        val assignments = postConstruction.map { field =>
-          val selected = selectValue(valueExpr, field)
-          val copied = field.sourceType.asType match {
-            case '[a] => '{ $selected.asInstanceOf[a] }
+          val construct = Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), args)
+          Block(
+            ValDef(obj, Some(construct)) ::
+              referenceCopy(copyContextExpr, valueExpr, Ref(obj).asExprOf[T]) ::
+              Nil,
+            Ref(obj)).asExprOf[T]
+        } else if constructorOwned.isEmpty then {
+          val obj = Symbol.newVal(Symbol.spliceOwner, "obj", TypeRepr.of[T], Flags.EmptyFlags, Symbol.noSymbol)
+          val construct = Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), Nil)
+          val assignments = postConstruction.map { field =>
+            val copied = copiedValueArg(valueExpr, field, copyContextExpr, fieldsByIdExpr)
+            Assign(Select.unique(Ref(obj), field.name), copied.asTerm)
           }
-          Assign(Select.unique(Ref(obj), field.name), copied.asTerm)
-        }
-        Block(ValDef(obj, Some(construct)) :: assignments, Ref(obj)).asExprOf[T]
-      } else {
-        val obj = Symbol.newVal(Symbol.spliceOwner, "obj", TypeRepr.of[T], Flags.EmptyFlags, Symbol.noSymbol)
-        val args = constructorOwned.map { field =>
-          val selected = selectValue(valueExpr, field)
-          field.sourceType.asType match {
-            case '[a] => '{ $selected.asInstanceOf[a] }.asTerm
+          Block(
+            ValDef(obj, Some(construct)) ::
+              referenceCopy(copyContextExpr, valueExpr, Ref(obj).asExprOf[T]) ::
+              assignments,
+            Ref(obj)).asExprOf[T]
+        } else {
+          val obj = Symbol.newVal(Symbol.spliceOwner, "obj", TypeRepr.of[T], Flags.EmptyFlags, Symbol.noSymbol)
+          val args = constructorOwned.map { field =>
+            copiedValueArg(valueExpr, field, copyContextExpr, fieldsByIdExpr).asTerm
           }
-        }
-        val construct = Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), args)
-        val assignments = postConstruction.map { field =>
-          val selected = selectValue(valueExpr, field)
-          val copied = field.sourceType.asType match {
-            case '[a] => '{ $selected.asInstanceOf[a] }
+          val construct = Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), args)
+          val assignments = postConstruction.map { field =>
+            val copied = copiedValueArg(valueExpr, field, copyContextExpr, fieldsByIdExpr)
+            Assign(Select.unique(Ref(obj), field.name), copied.asTerm)
           }
-          Assign(Select.unique(Ref(obj), field.name), copied.asTerm)
+          Block(
+            ValDef(obj, Some(construct)) ::
+              referenceCopy(copyContextExpr, valueExpr, Ref(obj).asExprOf[T]) ::
+              assignments,
+            Ref(obj)).asExprOf[T]
         }
-        Block(ValDef(obj, Some(construct)) :: assignments, Ref(obj)).asExprOf[T]
-      }
+
+      if constructorOwned.nonEmpty then {
+        '{
+          if $copyContextExpr.copyTrackingRef() then {
+            $copyContextExpr.markCopyInProgress($valueExpr)
+            try ${ copyBody() }
+            catch {
+              case throwable: Throwable =>
+                $copyContextExpr.clearCopyInProgress($valueExpr)
+                throw throwable
+            }
+          } else ${ copyBody() }
+        }
+      } else copyBody()
     }
 
     def constructRead(valuesExpr: Expr[Array[Any]], readContextExpr: Expr[org.apache.fory.context.ReadContext]): Expr[T] = {
@@ -652,7 +698,7 @@ object ForySerializerMacros {
 
             override def copy(
                 copyContext: org.apache.fory.context.CopyContext,
-                value: T): T = ${ copyValue('value) }
+                value: T): T = ${ copyValue('value, 'copyContext, 'fieldsById) }
           }
         }
       }
@@ -667,10 +713,34 @@ object ForySerializerMacros {
         symbol: Symbol,
         id: Int,
         payloadType: TypeRepr,
+        option: Boolean,
         payloadName: String,
         unknownIdName: String,
         unknown: Boolean,
         fieldIndex: Int)
+
+    def peelAnnotations(tpe: TypeRepr): (TypeRepr, List[Term]) = {
+      tpe match {
+        case AnnotatedType(underlying, annotation) =>
+          val (base, annotations) = peelAnnotations(underlying)
+          (base, annotation :: annotations)
+        case other =>
+          other.dealias match {
+            case AnnotatedType(underlying, annotation) =>
+              val (base, annotations) = peelAnnotations(underlying)
+              (base, annotation :: annotations)
+            case dealiased => (dealiased, Nil)
+          }
+      }
+    }
+
+    def optionElement(tpe: TypeRepr): Option[TypeRepr] = {
+      peelAnnotations(tpe)._1.dealias match {
+        case AppliedType(base, List(arg)) if base.typeSymbol.fullName == "scala.Option" =>
+          Some(arg)
+        case _ => None
+      }
+    }
 
     def payloadMeta(child: Symbol, id: Int): (TypeRepr, String, String) = {
       val params = child.primaryConstructor.paramSymss.flatten
@@ -708,7 +778,15 @@ object ForySerializerMacros {
       annotationIntArg[ForyCase](child, "id").map { id =>
         if id < 0 then report.errorAndAbort(s"${child.fullName} @ForyCase id must be >= 0")
         val (tpe, payloadName, unknownIdName) = payloadMeta(child, id)
-        CaseMeta(child, id, tpe, payloadName, unknownIdName, id == 0, -1)
+        CaseMeta(
+          child,
+          id,
+          tpe,
+          optionElement(tpe).nonEmpty,
+          payloadName,
+          unknownIdName,
+          id == 0,
+          -1)
       }
     }
     var nextFieldIndex = 0
@@ -730,29 +808,6 @@ object ForySerializerMacros {
     val unknown =
       cases.find(_.unknown).getOrElse(
         report.errorAndAbort(s"${owner.fullName} must define @ForyCase(id = 0) unknown case"))
-
-    def peelAnnotations(tpe: TypeRepr): (TypeRepr, List[Term]) = {
-      tpe match {
-        case AnnotatedType(underlying, annotation) =>
-          val (base, annotations) = peelAnnotations(underlying)
-          (base, annotation :: annotations)
-        case other =>
-          other.dealias match {
-            case AnnotatedType(underlying, annotation) =>
-              val (base, annotations) = peelAnnotations(underlying)
-              (base, annotation :: annotations)
-            case dealiased => (dealiased, Nil)
-          }
-      }
-    }
-
-    def optionElement(tpe: TypeRepr): Option[TypeRepr] = {
-      peelAnnotations(tpe)._1.dealias match {
-        case AppliedType(base, List(arg)) if base.typeSymbol.fullName == "scala.Option" =>
-          Some(arg)
-        case _ => None
-      }
-    }
 
     def boxedIfPrimitive(tpe: TypeRepr): TypeRepr = {
       val (base, annotations) = peelAnnotations(tpe)
@@ -906,6 +961,31 @@ object ForySerializerMacros {
         java.util.Collections.unmodifiableList(${ Expr.ofList(knownCases.map(caseDescriptor)) }.asJava)
       }
 
+    def wirePayload(payloadExpr: Expr[Any], unionCase: CaseMeta): Expr[Any] =
+      if unionCase.option then '{ $payloadExpr.asInstanceOf[Option[Any]].orNull }
+      else payloadExpr
+
+    def decodePayload(payloadExpr: Expr[Any], unionCase: CaseMeta): Expr[Any] = {
+      optionElement(unionCase.payloadType) match {
+        case Some(inner) =>
+          inner.asType match {
+            case '[p] =>
+              unionCase.payloadType.asType match {
+                case '[a] =>
+                  '{
+                    val rawPayload = $payloadExpr
+                    if rawPayload == null then None.asInstanceOf[a]
+                    else Option(${ coercePayload[p]('rawPayload, inner) }).asInstanceOf[a]
+                  }
+              }
+          }
+        case None =>
+          unionCase.payloadType.asType match {
+            case '[p] => coercePayload[p](payloadExpr, unionCase.payloadType)
+          }
+      }
+    }
+
     def writeDispatch(
         valueExpr: Expr[T],
         writeContextExpr: Expr[org.apache.fory.context.WriteContext],
@@ -938,13 +1018,14 @@ object ForySerializerMacros {
                 Select.unique(
                   '{ $valueExpr.asInstanceOf[c] }.asTerm,
                   unionCase.payloadName).asExpr
+              val payloadValue = wirePayload(payload, unionCase)
               '{
                 if $valueExpr.isInstanceOf[c] then {
                   UnionSerializer.writeCaseValue(
                     $resolverExpr,
                     $writeContextExpr,
                     $caseFieldInfosExpr(${ Expr(unionCase.fieldIndex) }),
-                    $payload,
+                    $payloadValue,
                     ${ Expr(unionCase.id) })
                 } else {
                   $next
@@ -968,19 +1049,59 @@ object ForySerializerMacros {
       val unknownPayload = '{ $readContextExpr.readRef() }
       val unknownExpr = construct(unknown, List(caseIdExpr.asTerm, unknownPayload.asTerm))
       knownCases.foldRight(unknownExpr) { (unionCase, next) =>
-        unionCase.payloadType.asType match {
-          case '[p] =>
-            val rawPayload =
+        val rawPayload =
+          '{
+            UnionSerializer.readCaseValue(
+              $resolverExpr,
+              $readContextExpr,
+              $caseFieldInfosExpr(${ Expr(unionCase.fieldIndex) }))
+          }
+        val payload = decodePayload(rawPayload, unionCase)
+        val current = construct(unionCase, List(payload.asTerm))
+        '{
+          if $caseIdExpr == ${ Expr(unionCase.id) } then $current else $next
+        }
+      }
+    }
+
+    def copyDispatch(
+        valueExpr: Expr[T],
+        copyContextExpr: Expr[org.apache.fory.context.CopyContext],
+        caseFieldInfosExpr: Expr[Array[FieldGroups.SerializationFieldInfo]]): Expr[T] = {
+      cases.foldRight(
+        '{
+          throw new IllegalStateException("Unknown Scala union case " + $valueExpr)
+        }: Expr[T]) { (unionCase, next) =>
+        unionCase.symbol.typeRef.asType match {
+          case '[c] =>
+            val payload =
+              Select.unique(
+                '{ $valueExpr.asInstanceOf[c] }.asTerm,
+                unionCase.payloadName).asExpr
+            if unionCase.unknown then {
+              val originalId =
+                Select.unique(
+                  '{ $valueExpr.asInstanceOf[c] }.asTerm,
+                  unionCase.unknownIdName).asExprOf[Int]
+              val copiedPayload = '{ $copyContextExpr.copyObject($payload) }
+              val current = construct(unknown, List(originalId.asTerm, copiedPayload.asTerm))
               '{
-                UnionSerializer.readCaseValue(
-                  $resolverExpr,
-                  $readContextExpr,
-                  $caseFieldInfosExpr(${ Expr(unionCase.fieldIndex) }))
+                if $valueExpr.isInstanceOf[c] then $current else $next
               }
-            val payload = coercePayload[p](rawPayload, unionCase.payloadType)
-            val current = construct(unionCase, List(payload.asTerm))
-            '{
-              if $caseIdExpr == ${ Expr(unionCase.id) } then $current else $next
+            } else {
+              val payloadValue = wirePayload(payload, unionCase)
+              val copiedPayload =
+                '{
+                  UnionSerializer.copyCaseValue(
+                    $copyContextExpr,
+                    $caseFieldInfosExpr(${ Expr(unionCase.fieldIndex) }),
+                    $payloadValue)
+                }
+              val coerced = decodePayload(copiedPayload, unionCase)
+              val current = construct(unionCase, List(coerced.asTerm))
+              '{
+                if $valueExpr.isInstanceOf[c] then $current else $next
+              }
             }
         }
       }
@@ -1081,8 +1202,22 @@ object ForySerializerMacros {
               ${ readDispatch('caseId, 'readContext, 'resolver, 'caseFieldInfos) }
             }
 
-            override def copy(copyContext: org.apache.fory.context.CopyContext, value: T): T =
-              value
+            override def copy(copyContext: org.apache.fory.context.CopyContext, value: T): T = {
+              if copyContext.copyTrackingRef() then {
+                copyContext.markCopyInProgress(value)
+                try {
+                  val copied = ${ copyDispatch('value, 'copyContext, 'caseFieldInfos) }
+                  copyContext.reference(value, copied)
+                  copied
+                } catch {
+                  case throwable: Throwable =>
+                    copyContext.clearCopyInProgress(value)
+                    throw throwable
+                }
+              } else {
+                ${ copyDispatch('value, 'copyContext, 'caseFieldInfos) }
+              }
+            }
           }
         }
       }

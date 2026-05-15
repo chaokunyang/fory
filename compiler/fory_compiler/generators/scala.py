@@ -367,10 +367,10 @@ class ScalaGenerator(BaseGenerator):
         indent: int = 0,
         parent_stack: Optional[List[Message]] = None,
     ) -> List[str]:
-        if (
-            self._construction_shapes.get(message.name, None)
-            and self._construction_shapes[message.name].cycle_owned
-        ):
+        shape = self._construction_shapes.get(
+            self.construction_key(parent_stack, message), None
+        )
+        if shape is not None and shape.cycle_owned:
             return self.generate_normal_class(message, indent, parent_stack)
         return self.generate_case_class(message, indent, parent_stack)
 
@@ -414,7 +414,7 @@ class ScalaGenerator(BaseGenerator):
                 top_level_ref=field.ref,
                 parent_stack=current_stack,
             )
-            if field.ref and self.is_ref_target_type(field.field_type):
+            if field.ref and self.is_ref_target_type(field.field_type, current_stack):
                 lines.append(f"{ind}    @Ref")
             lines.append(f"{ind}    @ForyField(id = {field.number})")
             lines.append(
@@ -456,7 +456,9 @@ class ScalaGenerator(BaseGenerator):
             parent_stack=parent_stack,
         )
         ref_annotation = (
-            "@Ref " if field.ref and self.is_ref_target_type(field.field_type) else ""
+            "@Ref "
+            if field.ref and self.is_ref_target_type(field.field_type, parent_stack)
+            else ""
         )
         return f"{ref_annotation}@ForyField(id = {field.number}) {field_name}: {field_type}"
 
@@ -472,7 +474,7 @@ class ScalaGenerator(BaseGenerator):
         base = self._generate_non_optional_type(
             field_type, element_optional, element_ref, parent_stack
         )
-        if top_level_ref and self.is_ref_target_type(field_type):
+        if top_level_ref and self.is_ref_target_type(field_type, parent_stack):
             base = self.apply_type_annotation(base, "Ref")
         return f"Option[{base}]" if nullable else base
 
@@ -526,6 +528,11 @@ class ScalaGenerator(BaseGenerator):
     ) -> List[Message]:
         return [*(parent_stack or []), message]
 
+    def construction_key(
+        self, parent_stack: Optional[List[Message]], message: Message
+    ) -> str:
+        return ".".join([*[owner.name for owner in parent_stack or []], message.name])
+
     def resolve_scala_type_name(
         self, name: str, parent_stack: Optional[List[Message]]
     ) -> str:
@@ -537,11 +544,6 @@ class ScalaGenerator(BaseGenerator):
                 if package and package != self.get_scala_package():
                     return f"{package}.{name}"
             return name
-        named_type = self.schema.get_type(name)
-        if named_type is not None and self.is_imported_type(named_type):
-            package = self._scala_package_for_type(named_type)
-            if package and package != self.get_scala_package():
-                return f"{package}.{name}"
         if parent_stack:
             for index in range(len(parent_stack) - 1, -1, -1):
                 owner = parent_stack[index]
@@ -549,6 +551,11 @@ class ScalaGenerator(BaseGenerator):
                     return ".".join(
                         [message.name for message in parent_stack[: index + 1]] + [name]
                     )
+        named_type = self.schema.get_type(name)
+        if named_type is not None and self.is_imported_type(named_type):
+            package = self._scala_package_for_type(named_type)
+            if package and package != self.get_scala_package():
+                return f"{package}.{name}"
         return name
 
     def apply_type_annotation(self, scala_type: str, annotation: str) -> str:
@@ -746,10 +753,18 @@ class ScalaGenerator(BaseGenerator):
             )
         return False
 
-    def is_ref_target_type(self, field_type: FieldType) -> bool:
+    def is_ref_target_type(
+        self, field_type: FieldType, parent_stack: Optional[List[Message]] = None
+    ) -> bool:
         if not isinstance(field_type, NamedType):
             return False
-        return self.schema.get_type(field_type.name) is not None
+        if "." in field_type.name or not parent_stack:
+            return isinstance(self.schema.get_type(field_type.name), (Message, Union))
+        for index in range(len(parent_stack) - 1, -1, -1):
+            resolved = parent_stack[index].get_nested_type(field_type.name)
+            if resolved is not None:
+                return isinstance(resolved, (Message, Union))
+        return isinstance(self.schema.get_type(field_type.name), (Message, Union))
 
     def generate_registration_file(self) -> GeneratedFile:
         imports = {
@@ -817,15 +832,18 @@ class ScalaGenerator(BaseGenerator):
         self, lines: List[str], type_def, owner_path: Optional[str] = None
     ) -> None:
         class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name
+        namespace = self.schema.package or "default"
+        type_name = type_def.name
+        if owner_path:
+            namespace = f"{namespace}.{owner_path}"
         if isinstance(type_def, Enum):
             if self.should_register_by_id(type_def):
                 lines.append(
                     f"        ScalaSerializers.registerEnum(fory, classOf[{class_ref}], {type_def.type_id}L)"
                 )
             else:
-                namespace = self.schema.package or "default"
                 lines.append(
-                    f'        ScalaSerializers.registerEnum(fory, classOf[{class_ref}], "{namespace}", "{type_def.name}")'
+                    f'        ScalaSerializers.registerEnum(fory, classOf[{class_ref}], "{namespace}", "{type_name}")'
                 )
             return
         if self.should_register_by_id(type_def):
@@ -833,9 +851,8 @@ class ScalaGenerator(BaseGenerator):
                 f"        ForySerializer.register(fory, classOf[{class_ref}], {type_def.type_id}L)"
             )
         else:
-            namespace = self.schema.package or "default"
             lines.append(
-                f'        ForySerializer.register(fory, classOf[{class_ref}], "{namespace}", "{type_def.name}")'
+                f'        ForySerializer.register(fory, classOf[{class_ref}], "{namespace}", "{type_name}")'
             )
 
     def safe_identifier(self, name: str) -> str:

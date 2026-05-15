@@ -456,11 +456,21 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
             + buffer.readerIndex());
   }
 
-  protected final Object copyFieldValue(
+  public static Object copyFieldValue(
       CopyContext copyContext, Object fieldValue, SerializationFieldInfo fieldInfo) {
+    if (fieldValue == null) {
+      return null;
+    }
     if (fieldInfo.containerSerializerOverride != null) {
       @SuppressWarnings("unchecked")
       Serializer<Object> serializer = (Serializer<Object>) fieldInfo.containerSerializerOverride;
+      return copyContext.copyObject(fieldValue, serializer);
+    }
+    if (fieldInfo.codecCategory == FieldGroups.FieldCodecCategory.CONTAINER
+        && fieldInfo.containerTypeInfo != null) {
+      @SuppressWarnings("unchecked")
+      Serializer<Object> serializer =
+          (Serializer<Object>) fieldInfo.containerTypeInfo.getSerializer();
       return copyContext.copyObject(fieldValue, serializer);
     }
     return copyContext.copyObject(fieldValue, fieldInfo.dispatchId);

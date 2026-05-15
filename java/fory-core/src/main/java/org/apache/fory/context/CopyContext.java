@@ -21,6 +21,7 @@ package org.apache.fory.context;
 
 import java.util.Arrays;
 import org.apache.fory.collection.IdentityMap;
+import org.apache.fory.exception.CopyException;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -38,6 +39,8 @@ import org.apache.fory.type.Types;
  */
 @SuppressWarnings("unchecked")
 public final class CopyContext {
+  private static final Object COPY_IN_PROGRESS = new Object();
+
   private final TypeResolver typeResolver;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
@@ -86,9 +89,36 @@ public final class CopyContext {
     }
   }
 
+  /**
+   * Marks an origin as being copied before the destination value can be constructed.
+   *
+   * <p>Constructor-owned immutable values cannot publish a copy early. Serializers for those values
+   * use this marker so recursive copies fail with a clear error instead of recursing until stack
+   * overflow.
+   */
+  public <T> void markCopyInProgress(T origin) {
+    if (copyRefTracking && origin != null) {
+      originToCopyMap.put(origin, COPY_IN_PROGRESS);
+    }
+  }
+
+  /** Clears a copy-in-progress marker if no completed copy replaced it. */
+  public <T> void clearCopyInProgress(T origin) {
+    if (copyRefTracking && origin != null && originToCopyMap.get(origin) == COPY_IN_PROGRESS) {
+      originToCopyMap.remove(origin);
+    }
+  }
+
   /** Returns the previously registered copy for {@code origin}, or {@code null} if absent. */
   public <T> T getCopyObject(T origin) {
-    return (T) originToCopyMap.get(origin);
+    Object copied = originToCopyMap.get(origin);
+    if (copied == COPY_IN_PROGRESS) {
+      throw new CopyException(
+          "Cannot copy cyclic object graph rooted at constructor-owned immutable value "
+              + origin.getClass().getName()
+              + " because its copy cannot be referenced before construction completes");
+    }
+    return (T) copied;
   }
 
   /**

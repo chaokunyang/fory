@@ -87,6 +87,7 @@ import monster.Color;
 import monster.Monster;
 import monster.MonsterForyRegistration;
 import monster.Vec3;
+import nested_name.NestedNameForyRegistration;
 import optional_types.AllOptionalTypes;
 import optional_types.OptionalHolder;
 import optional_types.OptionalTypesForyRegistration;
@@ -135,6 +136,16 @@ public class IdlRoundTripTest {
   @Test
   public void testAutoIdRoundTripSchemaConsistent() throws Exception {
     runAutoIdRoundTrip(false);
+  }
+
+  @Test
+  public void testNestedNameRoundTripCompatible() throws Exception {
+    runNestedNameRoundTrip(true);
+  }
+
+  @Test
+  public void testNestedNameRoundTripSchemaConsistent() throws Exception {
+    runNestedNameRoundTrip(false);
   }
 
   @Test
@@ -201,6 +212,34 @@ public class IdlRoundTripTest {
       Object roundTrip = fory.deserialize(peerBytes);
       Assert.assertTrue(roundTrip instanceof Envelope);
       Assert.assertEquals(roundTrip, envelope);
+    }
+  }
+
+  private void runNestedNameRoundTrip(boolean compatible) throws Exception {
+    Fory fory = buildRefFory(compatible);
+    NestedNameForyRegistration.register(fory);
+
+    nested_name.Envelope envelope = buildNestedNameEnvelope();
+    byte[] bytes = fory.serialize(envelope);
+    Object decoded = fory.deserialize(bytes);
+
+    Assert.assertTrue(decoded instanceof nested_name.Envelope);
+    assertNestedNameEnvelope((nested_name.Envelope) decoded);
+
+    for (String peer : resolvePeers("scala")) {
+      Path dataFile = Files.createTempFile("idl-nested-name-" + peer + "-", ".bin");
+      dataFile.toFile().deleteOnExit();
+      Files.write(dataFile, bytes);
+
+      Map<String, String> env = new HashMap<>();
+      env.put("DATA_FILE_NESTED_NAME", dataFile.toAbsolutePath().toString());
+      PeerCommand command = buildPeerCommand(peer, env, compatible);
+      runPeer(command, peer);
+
+      byte[] peerBytes = Files.readAllBytes(dataFile);
+      Object peerRoundTrip = fory.deserialize(peerBytes);
+      Assert.assertTrue(peerRoundTrip instanceof nested_name.Envelope);
+      assertNestedNameEnvelope((nested_name.Envelope) peerRoundTrip);
     }
   }
 
@@ -713,6 +752,15 @@ public class IdlRoundTripTest {
     return peers;
   }
 
+  private List<String> resolvePeers(String... supportedPeers) {
+    List<String> peers = resolvePeers();
+    if (supportedPeers.length == 0) {
+      return peers;
+    }
+    List<String> supported = Arrays.asList(supportedPeers);
+    return peers.stream().filter(supported::contains).collect(Collectors.toList());
+  }
+
   private PeerCommand buildPeerCommand(
       String peer, Map<String, String> environment, boolean compatible) {
     Path repoRoot = repoRoot();
@@ -951,6 +999,35 @@ public class IdlRoundTripTest {
 
   private Wrapper buildAutoIdWrapper(Envelope envelope) {
     return Wrapper.ofEnvelope(envelope);
+  }
+
+  private nested_name.Envelope buildNestedNameEnvelope() {
+    nested_name.Envelope.Node root = new nested_name.Envelope.Node();
+    root.setId("root");
+    nested_name.Envelope.Node child = new nested_name.Envelope.Node();
+    child.setId("child");
+    child.setParent(root);
+    child.setChildren(Collections.emptyList());
+    root.setChildren(Collections.singletonList(child));
+
+    nested_name.Envelope envelope = new nested_name.Envelope();
+    envelope.setRoot(root);
+    envelope.setKind(nested_name.Envelope.Kind.ACTIVE);
+    envelope.setChoice(nested_name.Envelope.Choice.ofNode(child));
+    return envelope;
+  }
+
+  private void assertNestedNameEnvelope(nested_name.Envelope envelope) {
+    Assert.assertEquals(envelope.getKind(), nested_name.Envelope.Kind.ACTIVE);
+    Assert.assertNotNull(envelope.getRoot());
+    nested_name.Envelope.Node root = envelope.getRoot();
+    Assert.assertEquals(root.getId(), "root");
+    Assert.assertEquals(root.getChildren().size(), 1);
+    nested_name.Envelope.Node child = root.getChildren().get(0);
+    Assert.assertEquals(child.getId(), "child");
+    Assert.assertSame(child.getParent(), root);
+    Assert.assertTrue(envelope.getChoice().hasNode());
+    Assert.assertSame(envelope.getChoice().getNode(), child);
   }
 
   private PrimitiveTypes buildPrimitiveTypes() {

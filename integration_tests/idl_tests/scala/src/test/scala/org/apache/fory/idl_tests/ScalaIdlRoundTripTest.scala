@@ -28,6 +28,7 @@ import collection.{
   NumericCollectionsArray
 }
 import example.{ExampleForyRegistration, ExampleMessage, ExampleState}
+import nested_name.NestedNameForyRegistration
 import org.apache.fory.Fory
 import org.apache.fory.meta.FieldTypes
 import org.apache.fory.scala.{ForyScalaEnum, ForySerializer}
@@ -175,6 +176,39 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
       roundTrip.id shouldEqual "root"
       roundTrip.children.head.id shouldEqual "child"
       roundTrip.children.head.parent.get shouldBe theSameInstanceAs(roundTrip)
+    }
+
+    "round trip name-registered nested messages, enums, and unions" in {
+      val fory = Fory.builder()
+        .withXlang(true)
+        .withCompatible(true)
+        .withRefTracking(true)
+        .withScalaOptimizationEnabled(true)
+        .requireClassRegistration(true)
+        .build()
+      NestedNameForyRegistration.register(fory)
+
+      val root = new nested_name.Envelope.Node()
+      root.id = "root"
+      val child = new nested_name.Envelope.Node()
+      child.id = "child"
+      child.parent = Some(root)
+      child.children = List.empty
+      root.children = List(child)
+      val envelope = nested_name.Envelope(
+        Some(root),
+        nested_name.Envelope.Kind.Active,
+        nested_name.Envelope.Choice.NodeCase(child))
+
+      val roundTrip = fory.deserialize(fory.serialize(envelope)).asInstanceOf[nested_name.Envelope]
+      roundTrip.kind shouldBe nested_name.Envelope.Kind.Active
+      val roundTripRoot = roundTrip.root.get
+      roundTripRoot.id shouldEqual "root"
+      val roundTripChild = roundTripRoot.children.head
+      roundTripChild.id shouldEqual "child"
+      roundTripChild.parent.get shouldBe theSameInstanceAs(roundTripRoot)
+      roundTrip.choice.asInstanceOf[nested_name.Envelope.Choice.NodeCase].value shouldBe
+        theSameInstanceAs(roundTripChild)
     }
   }
 }

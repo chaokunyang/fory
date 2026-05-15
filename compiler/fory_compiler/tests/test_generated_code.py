@@ -449,6 +449,80 @@ def test_generated_code_nested_messages_equivalent():
     assert_all_languages_equal(schemas)
 
 
+def test_java_nested_name_registration_uses_owner_namespace():
+    schema = parse_fdl(
+        """
+        option enable_auto_type_id = false;
+        package demo;
+
+        message Envelope {
+            message Payload {
+                int32 value = 1;
+            }
+
+            enum Kind {
+                UNKNOWN = 0;
+                ACTIVE = 1;
+            }
+
+            union Choice {
+                Payload payload = 1;
+                string note = 2;
+            }
+
+            Payload payload = 1;
+            Kind kind = 2;
+            Choice choice = 3;
+            list<ref Payload> payloads = 4;
+        }
+        """
+    )
+    output = render_files(generate_files(schema, JavaGenerator))
+
+    assert "import org.apache.fory.annotation.Ref;" in output
+    assert "private List<@Ref Payload> payloads;" in output
+    assert 'resolver.register(Envelope.class, "demo", "Envelope");' in output
+    assert (
+        'resolver.register(Envelope.Payload.class, "demo.Envelope", "Payload");'
+        in output
+    )
+    assert 'resolver.register(Envelope.Kind.class, "demo.Envelope", "Kind");' in output
+    assert (
+        'resolver.registerUnion(Envelope.Choice.class, "demo.Envelope", "Choice"'
+        in output
+    )
+
+
+def test_java_nested_enum_shadowing_does_not_emit_ref_annotations():
+    schema = parse_fdl(
+        """
+        package demo;
+
+        message Node {
+            Envelope owner = 1;
+        }
+
+        message Envelope {
+            enum Node {
+                UNKNOWN = 0;
+                ACTIVE = 1;
+            }
+
+            Node kind = 1;
+            list<Node> kinds = 2;
+            map<string, Node> indexed = 3;
+        }
+        """
+    )
+    output = render_files(generate_files(schema, JavaGenerator))
+
+    assert "import org.apache.fory.annotation.Ref;" not in output
+    assert "private Node kind;" in output
+    assert "private List<Node> kinds;" in output
+    assert "private Map<String, Node> indexed;" in output
+    assert "@Ref" not in output
+
+
 def test_generated_code_tree_ref_options_equivalent():
     fdl = dedent(
         """

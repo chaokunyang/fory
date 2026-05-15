@@ -163,30 +163,30 @@ Notes:
 The Scala schema IDL target emits Scala 3 source only. The `fory-scala` runtime
 artifact remains cross-built for Scala 2.13 and Scala 3.
 
-| Fory schema kind                      | Scala generated carrier                                                    |
-| ------------------------------------- | -------------------------------------------------------------------------- |
-| `optional T`                          | `Option[T]`                                                                |
-| `bool`                                | `Boolean`                                                                  |
-| `int8`, `int16`, `int32`, `int64`     | `Byte`, `Short`, `Int`, `Long`                                             |
-| `uint8`, `uint16`, `uint32`, `uint64` | `Int`, `Int`, `Long`, `Long` plus unsigned Fory type metadata              |
-| `float16`, `bfloat16`                 | JVM half-float and bfloat16 carriers                                       |
-| `float32`, `float64`                  | `Float`, `Double`                                                          |
-| `string`                              | `String`                                                                   |
-| `binary`                              | `Array[Byte]`                                                              |
-| `list<T>`, `set<T>`, `map<K, V>`      | `List[T]`, `Set[T]`, `Map[K, V]`                                           |
-| `array<bool>`                         | `Array[Boolean]`                                                           |
-| `array<int8>`, `array<uint8>`         | `Array[Byte]` with signed/unsigned descriptor metadata                     |
-| `array<int16>`, `array<uint16>`       | `Array[Short]` with signed/unsigned descriptor metadata                    |
-| `array<int32>`, `array<uint32>`       | `Array[Int]` with signed/unsigned descriptor metadata                      |
-| `array<int64>`, `array<uint64>`       | `Array[Long]` with signed/unsigned descriptor metadata                     |
-| `array<float16>`, `array<bfloat16>`   | `Array[Short]` with reduced-precision descriptor metadata                  |
-| `array<float32>`, `array<float64>`    | `Array[Float]`, `Array[Double]`                                            |
-| `date`, `timestamp`, `duration`       | `java.time.LocalDate`, `java.time.Instant`, `java.time.Duration`           |
-| `decimal`                             | `java.math.BigDecimal`                                                     |
-| `message`                             | Scala 3 `case class` by default; normal class only for construction cycles |
-| `enum`                                | Scala 3 `enum` with stable Fory enum IDs                                   |
-| `union`                               | Scala 3 ADT `enum derives ForySerializer`                                  |
-| `any`                                 | `AnyRef`                                                                   |
+| Fory schema kind                      | Scala generated carrier                                                                  |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `optional T`                          | `Option[T]`                                                                              |
+| `bool`                                | `Boolean`                                                                                |
+| `int8`, `int16`, `int32`, `int64`     | `Byte`, `Short`, `Int`, `Long`                                                           |
+| `uint8`, `uint16`, `uint32`, `uint64` | `Int`, `Int`, `Long`, `Long` plus unsigned Fory type metadata                            |
+| `float16`, `bfloat16`                 | JVM half-float and bfloat16 carriers                                                     |
+| `float32`, `float64`                  | `Float`, `Double`                                                                        |
+| `string`                              | `String`                                                                                 |
+| `binary`                              | `Array[Byte]`                                                                            |
+| `list<T>`, `set<T>`, `map<K, V>`      | `List[T]`, `Set[T]`, `Map[K, V]`                                                         |
+| `array<bool>`                         | `Array[Boolean]`                                                                         |
+| `array<int8>`, `array<uint8>`         | `Array[Byte]` with signed/unsigned descriptor metadata                                   |
+| `array<int16>`, `array<uint16>`       | `Array[Short]` with signed/unsigned descriptor metadata                                  |
+| `array<int32>`, `array<uint32>`       | `Array[Int]` with signed/unsigned descriptor metadata                                    |
+| `array<int64>`, `array<uint64>`       | `Array[Long]` with signed/unsigned descriptor metadata                                   |
+| `array<float16>`, `array<bfloat16>`   | `Array[Short]` with reduced-precision descriptor metadata                                |
+| `array<float32>`, `array<float64>`    | `Array[Float]`, `Array[Double]`                                                          |
+| `date`, `timestamp`, `duration`       | `java.time.LocalDate`, `java.time.Instant`, `java.time.Duration`                         |
+| `decimal`                             | `java.math.BigDecimal`                                                                   |
+| `message`                             | Scala 3 `case class` by default; normal class only for message/union construction cycles |
+| `enum`                                | Scala 3 `enum` with stable Fory enum IDs                                                 |
+| `union`                               | Scala 3 ADT `enum derives ForySerializer`                                                |
+| `any`                                 | `AnyRef`                                                                                 |
 
 Generated Scala descriptor metadata is produced by Scala 3 macro derivation
 from Scala compile-time types, including nested generics, `Option`, arrays,

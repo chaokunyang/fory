@@ -465,7 +465,7 @@ class JavaGenerator(BaseGenerator):
 
         # Fields
         for field in message.fields:
-            field_lines = self.generate_field(field)
+            field_lines = self.generate_field(field, [message])
             for line in field_lines:
                 lines.append(f"    {line}")
 
@@ -478,7 +478,7 @@ class JavaGenerator(BaseGenerator):
 
         # Getters and setters
         for field in message.fields:
-            getter_setter = self.generate_getter_setter(field)
+            getter_setter = self.generate_getter_setter(field, [message])
             for line in getter_setter:
                 lines.append(f"    {line}")
 
@@ -588,10 +588,16 @@ class JavaGenerator(BaseGenerator):
 
         return GeneratedFile(path=path, content="\n".join(lines))
 
-    def collect_message_imports(self, message: Message, imports: Set[str]):
+    def collect_message_imports(
+        self,
+        message: Message,
+        imports: Set[str],
+        parent_stack: Optional[List[Message]] = None,
+    ):
         """Collect imports for a message and all its nested types recursively."""
+        lineage = (parent_stack or []) + [message]
         for field in message.fields:
-            self.collect_field_imports(field, imports)
+            self.collect_field_imports(field, imports, lineage)
 
         imports.add("org.apache.fory.annotation.ForyStruct")
         if not self.get_effective_evolving(message):
@@ -607,15 +613,20 @@ class JavaGenerator(BaseGenerator):
 
         # Collect imports from nested messages
         for nested_msg in message.nested_messages:
-            self.collect_message_imports(nested_msg, imports)
+            self.collect_message_imports(nested_msg, imports, lineage)
         for nested_union in message.nested_unions:
-            self.collect_union_imports(nested_union, imports)
+            self.collect_union_imports(nested_union, imports, lineage)
 
     def collect_enum_imports(self, imports: Set[str]):
         """Collect imports required by generated Java enums."""
         imports.add("org.apache.fory.annotation.ForyEnumId")
 
-    def collect_union_imports(self, union: Union, imports: Set[str]):
+    def collect_union_imports(
+        self,
+        union: Union,
+        imports: Set[str],
+        parent_stack: Optional[List[Message]] = None,
+    ):
         """Collect imports for a union and its cases."""
         imports.add("org.apache.fory.type.union.Union")
         imports.add("org.apache.fory.type.Types")
@@ -631,6 +642,7 @@ class JavaGenerator(BaseGenerator):
                 field.element_optional,
                 field.element_ref,
                 field,
+                parent_stack=parent_stack,
             )
 
     def has_array_field_recursive(self, message: Message) -> bool:
@@ -743,7 +755,7 @@ class JavaGenerator(BaseGenerator):
         for field in union.fields:
             case_name = self.to_pascal_case(field.name)
             case_enum_name = self.to_upper_snake_case(field.name)
-            case_type = self.get_union_case_type(field)
+            case_type = self.get_union_case_type(field, parent_stack)
             lines.append(
                 f"{ind}    public static {union.name} of{case_name}({case_type} v) {{"
             )
@@ -774,8 +786,8 @@ class JavaGenerator(BaseGenerator):
         for field in union.fields:
             case_name = self.to_pascal_case(field.name)
             case_enum_name = self.to_upper_snake_case(field.name)
-            case_type = self.get_union_case_type(field)
-            cast_type = self.get_union_case_cast_type(field)
+            case_type = self.get_union_case_type(field, parent_stack)
+            cast_type = self.get_union_case_cast_type(field, parent_stack)
             wrap_array_type: Optional[str] = None
             wrap_list_type: Optional[str] = None
             if (
@@ -872,7 +884,9 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         return lines
 
-    def get_union_case_type(self, field: Field) -> str:
+    def get_union_case_type(
+        self, field: Field, parent_stack: Optional[List[Message]] = None
+    ) -> str:
         """Return the Java type for a union case."""
         return self.generate_type(
             field.field_type,
@@ -880,16 +894,19 @@ class JavaGenerator(BaseGenerator):
             field.element_optional,
             field.element_ref,
             field,
+            parent_stack=parent_stack,
         )
 
-    def get_union_case_cast_type(self, field: Field) -> str:
+    def get_union_case_cast_type(
+        self, field: Field, parent_stack: Optional[List[Message]] = None
+    ) -> str:
         """Return the Java cast type for a union case value."""
         if isinstance(field.field_type, PrimitiveType):
             boxed = self.BOXED_MAP.get(field.field_type.kind)
             if boxed is not None:
                 return boxed
             return self.PRIMITIVE_MAP[field.field_type.kind]
-        return self.get_union_case_type(field)
+        return self.get_union_case_type(field, parent_stack)
 
     def get_union_case_type_id_expr(
         self, field: Field, parent_stack: Optional[List[Message]]
@@ -1076,7 +1093,7 @@ class JavaGenerator(BaseGenerator):
 
         # Fields
         for field in message.fields:
-            field_lines = self.generate_field(field)
+            field_lines = self.generate_field(field, lineage)
             for line in field_lines:
                 lines.append(f"    {line}")
 
@@ -1089,7 +1106,7 @@ class JavaGenerator(BaseGenerator):
 
         # Getters and setters
         for field in message.fields:
-            getter_setter = self.generate_getter_setter(field)
+            getter_setter = self.generate_getter_setter(field, lineage)
             for line in getter_setter:
                 lines.append(f"    {line}")
 
@@ -1117,7 +1134,9 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         return lines
 
-    def generate_field(self, field: Field) -> List[str]:
+    def generate_field(
+        self, field: Field, parent_stack: Optional[List[Message]]
+    ) -> List[str]:
         """Generate field declaration with annotations."""
         lines = []
 
@@ -1157,6 +1176,7 @@ class JavaGenerator(BaseGenerator):
             field.element_ref,
             field,
             type_use=use_type_annotation,
+            parent_stack=parent_stack,
         )
         if nullable:
             java_type = self.apply_top_level_type_use_annotation(java_type, "@Nullable")
@@ -1166,7 +1186,9 @@ class JavaGenerator(BaseGenerator):
 
         return lines
 
-    def generate_getter_setter(self, field: Field) -> List[str]:
+    def generate_getter_setter(
+        self, field: Field, parent_stack: Optional[List[Message]]
+    ) -> List[str]:
         """Generate getter and setter for a field."""
         lines = []
         is_any = (
@@ -1180,6 +1202,7 @@ class JavaGenerator(BaseGenerator):
             field.element_optional,
             field.element_ref,
             field,
+            parent_stack=parent_stack,
         )
         field_name = self.to_camel_case(field.name)
         pascal_name = self.to_pascal_case(field.name)
@@ -1206,6 +1229,7 @@ class JavaGenerator(BaseGenerator):
         element_ref: bool = False,
         field: Optional[Field] = None,
         type_use: bool = False,
+        parent_stack: Optional[List[Message]] = None,
     ) -> str:
         """Generate Java type string."""
         if isinstance(field_type, PrimitiveType):
@@ -1220,6 +1244,13 @@ class JavaGenerator(BaseGenerator):
             return java_type
 
         elif isinstance(field_type, NamedType):
+            if "." not in field_type.name and parent_stack:
+                for index in range(len(parent_stack), 0, -1):
+                    if (
+                        parent_stack[index - 1].get_nested_type(field_type.name)
+                        is not None
+                    ):
+                        return field_type.name
             named_type = self.schema.get_type(field_type.name)
             if named_type is not None and self.is_imported_type(named_type):
                 java_package = self._java_package_for_type(named_type)
@@ -1255,9 +1286,12 @@ class JavaGenerator(BaseGenerator):
                                 )
                         return java_type
             element_type = self.generate_type(
-                field_type.element_type, True, type_use=True
+                field_type.element_type,
+                True,
+                type_use=True,
+                parent_stack=parent_stack,
             )
-            if self.is_ref_target_type(field_type.element_type):
+            if self.is_ref_target_type(field_type.element_type, parent_stack):
                 ref_annotation = "@Ref" if child_ref else "@Ref(enable=false)"
                 element_type = f"{ref_annotation} {element_type}"
             return f"List<{element_type}>"
@@ -1274,9 +1308,19 @@ class JavaGenerator(BaseGenerator):
             return java_type
 
         elif isinstance(field_type, MapType):
-            key_type = self.generate_type(field_type.key_type, True, type_use=True)
-            value_type = self.generate_type(field_type.value_type, True, type_use=True)
-            if self.is_ref_target_type(field_type.value_type):
+            key_type = self.generate_type(
+                field_type.key_type,
+                True,
+                type_use=True,
+                parent_stack=parent_stack,
+            )
+            value_type = self.generate_type(
+                field_type.value_type,
+                True,
+                type_use=True,
+                parent_stack=parent_stack,
+            )
+            if self.is_ref_target_type(field_type.value_type, parent_stack):
                 ref_annotation = (
                     "@Ref" if field_type.value_ref else "@Ref(enable=false)"
                 )
@@ -1293,6 +1337,7 @@ class JavaGenerator(BaseGenerator):
         element_ref: bool = False,
         field: Optional[Field] = None,
         type_use: bool = False,
+        parent_stack: Optional[List[Message]] = None,
     ):
         """Collect required imports for a field type."""
         if isinstance(field_type, PrimitiveType):
@@ -1330,12 +1375,21 @@ class JavaGenerator(BaseGenerator):
                             PrimitiveKind.FLOAT16,
                             PrimitiveKind.BFLOAT16,
                         ):
-                            self.collect_type_imports(field_type.element_type, imports)
+                            self.collect_type_imports(
+                                field_type.element_type,
+                                imports,
+                                parent_stack=parent_stack,
+                            )
                         return
             imports.add("java.util.List")
-            if self.is_ref_target_type(field_type.element_type):
+            if self.is_ref_target_type(field_type.element_type, parent_stack):
                 imports.add("org.apache.fory.annotation.Ref")
-            self.collect_type_imports(field_type.element_type, imports, type_use=True)
+            self.collect_type_imports(
+                field_type.element_type,
+                imports,
+                type_use=True,
+                parent_stack=parent_stack,
+            )
 
         elif isinstance(field_type, ArrayType):
             kind = field_type.element_type.kind
@@ -1348,17 +1402,35 @@ class JavaGenerator(BaseGenerator):
             self.collect_array_type_use_imports(field_type, imports, type_use)
             if kind not in (PrimitiveKind.FLOAT16, PrimitiveKind.BFLOAT16):
                 self.collect_type_imports(
-                    field_type.element_type, imports, type_use=True
+                    field_type.element_type,
+                    imports,
+                    type_use=True,
+                    parent_stack=parent_stack,
                 )
 
         elif isinstance(field_type, MapType):
             imports.add("java.util.Map")
-            if self.is_ref_target_type(field_type.value_type):
+            if self.is_ref_target_type(field_type.value_type, parent_stack):
                 imports.add("org.apache.fory.annotation.Ref")
-            self.collect_type_imports(field_type.key_type, imports, type_use=True)
-            self.collect_type_imports(field_type.value_type, imports, type_use=True)
+            self.collect_type_imports(
+                field_type.key_type,
+                imports,
+                type_use=True,
+                parent_stack=parent_stack,
+            )
+            self.collect_type_imports(
+                field_type.value_type,
+                imports,
+                type_use=True,
+                parent_stack=parent_stack,
+            )
 
-    def collect_field_imports(self, field: Field, imports: Set[str]):
+    def collect_field_imports(
+        self,
+        field: Field,
+        imports: Set[str],
+        parent_stack: Optional[List[Message]] = None,
+    ):
         """Collect imports for a field, including list modifiers."""
         is_any = (
             isinstance(field.field_type, PrimitiveType)
@@ -1371,6 +1443,7 @@ class JavaGenerator(BaseGenerator):
             field.element_optional,
             field.element_ref,
             field,
+            parent_stack=parent_stack,
         )
         self.collect_integer_imports(field.field_type, imports)
         self.collect_array_imports(field, imports)
@@ -1379,11 +1452,18 @@ class JavaGenerator(BaseGenerator):
         if field.ref or field.tag_id is not None:
             imports.add("org.apache.fory.annotation.ForyField")
 
-    def is_ref_target_type(self, field_type: FieldType) -> bool:
+    def is_ref_target_type(
+        self, field_type: FieldType, parent_stack: Optional[List[Message]] = None
+    ) -> bool:
         if not isinstance(field_type, NamedType):
             return False
-        resolved = self.schema.get_type(field_type.name)
-        return isinstance(resolved, (Message, Union))
+        if "." in field_type.name or not parent_stack:
+            return isinstance(self.schema.get_type(field_type.name), (Message, Union))
+        for index in range(len(parent_stack), 0, -1):
+            resolved = parent_stack[index - 1].get_nested_type(field_type.name)
+            if resolved is not None:
+                return isinstance(resolved, (Message, Union))
+        return isinstance(self.schema.get_type(field_type.name), (Message, Union))
 
     def java_array(self, field: Optional[Field]) -> bool:
         if field is None:
@@ -2045,8 +2125,10 @@ class JavaGenerator(BaseGenerator):
         lines.append("        private static final ThreadSafeFory FORY = createFory();")
         lines.append("    }")
         lines.append("")
-        # When outer_classname is set, all top-level types become inner classes
-        type_prefix = outer_classname if outer_classname else ""
+        # When outer_classname is set, all top-level types become inner classes.
+        # The outer class is a JVM code-shape owner only; it is not part of the
+        # schema namespace used for name registration.
+        class_prefix = outer_classname if outer_classname else ""
 
         local_enums = [e for e in self.schema.enums if not self.is_imported_type(e)]
         local_unions = [u for u in self.schema.unions if not self.is_imported_type(u)]
@@ -2060,15 +2142,15 @@ class JavaGenerator(BaseGenerator):
 
         # Register enums (top-level)
         for enum in local_enums:
-            self.generate_enum_registration(lines, enum, type_prefix)
+            self.generate_enum_registration(lines, enum, class_prefix)
 
         # Register unions (top-level)
         for union in local_unions:
-            self.generate_union_registration(lines, union, type_prefix)
+            self.generate_union_registration(lines, union, class_prefix)
 
         # Register messages (top-level and nested)
         for message in local_messages:
-            self.generate_message_registration(lines, message, type_prefix)
+            self.generate_message_registration(lines, message, class_prefix)
 
         lines.append("    }")
         lines.append("}")
@@ -2084,12 +2166,18 @@ class JavaGenerator(BaseGenerator):
         return GeneratedFile(path=path, content="\n".join(lines))
 
     def generate_enum_registration(
-        self, lines: List[str], enum: Enum, parent_path: str
+        self,
+        lines: List[str],
+        enum: Enum,
+        class_parent_path: str,
+        schema_parent_path: str = "",
     ):
         """Generate registration code for an enum."""
         # In Java, nested class references use OuterClass.InnerClass
-        class_ref = f"{parent_path}.{enum.name}" if parent_path else enum.name
-        type_name = class_ref if parent_path else enum.name
+        class_ref = (
+            f"{class_parent_path}.{enum.name}" if class_parent_path else enum.name
+        )
+        type_name = enum.name
 
         if self.should_register_by_id(enum):
             lines.append(
@@ -2098,17 +2186,25 @@ class JavaGenerator(BaseGenerator):
         else:
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
+            if schema_parent_path:
+                ns = f"{ns}.{schema_parent_path}"
             lines.append(
                 f'        resolver.register({class_ref}.class, "{ns}", "{type_name}");'
             )
 
     def generate_message_registration(
-        self, lines: List[str], message: Message, parent_path: str
+        self,
+        lines: List[str],
+        message: Message,
+        class_parent_path: str,
+        schema_parent_path: str = "",
     ):
         """Generate registration code for a message and its nested types."""
         # In Java, nested class references use OuterClass.InnerClass
-        class_ref = f"{parent_path}.{message.name}" if parent_path else message.name
-        type_name = class_ref if parent_path else message.name
+        class_ref = (
+            f"{class_parent_path}.{message.name}" if class_parent_path else message.name
+        )
+        type_name = message.name
 
         if self.should_register_by_id(message):
             lines.append(
@@ -2117,27 +2213,47 @@ class JavaGenerator(BaseGenerator):
         else:
             # Use FDL package for namespace (consistent across languages)
             ns = self.schema.package or "default"
+            if schema_parent_path:
+                ns = f"{ns}.{schema_parent_path}"
             lines.append(
                 f'        resolver.register({class_ref}.class, "{ns}", "{type_name}");'
             )
 
+        nested_schema_parent_path = (
+            f"{schema_parent_path}.{message.name}"
+            if schema_parent_path
+            else message.name
+        )
+
         # Register nested enums
         for nested_enum in message.nested_enums:
-            self.generate_enum_registration(lines, nested_enum, class_ref)
+            self.generate_enum_registration(
+                lines, nested_enum, class_ref, nested_schema_parent_path
+            )
 
         # Register nested unions
         for nested_union in message.nested_unions:
-            self.generate_union_registration(lines, nested_union, class_ref)
+            self.generate_union_registration(
+                lines, nested_union, class_ref, nested_schema_parent_path
+            )
 
         # Register nested messages
         for nested_msg in message.nested_messages:
-            self.generate_message_registration(lines, nested_msg, class_ref)
+            self.generate_message_registration(
+                lines, nested_msg, class_ref, nested_schema_parent_path
+            )
 
     def generate_union_registration(
-        self, lines: List[str], union: Union, parent_path: str
+        self,
+        lines: List[str],
+        union: Union,
+        class_parent_path: str,
+        schema_parent_path: str = "",
     ):
         """Generate registration code for a union."""
-        class_ref = f"{parent_path}.{union.name}" if parent_path else union.name
+        class_ref = (
+            f"{class_parent_path}.{union.name}" if class_parent_path else union.name
+        )
         type_name = union.name
         serializer_ref = f"new org.apache.fory.serializer.UnionSerializer(resolver, {class_ref}.class)"
 
@@ -2147,8 +2263,8 @@ class JavaGenerator(BaseGenerator):
             )
         else:
             ns = self.schema.package or "default"
-            if parent_path:
-                ns = f"{ns}.{parent_path}"
+            if schema_parent_path:
+                ns = f"{ns}.{schema_parent_path}"
             lines.append(
                 f'        resolver.registerUnion({class_ref}.class, "{ns}", "{type_name}", {serializer_ref});'
             )

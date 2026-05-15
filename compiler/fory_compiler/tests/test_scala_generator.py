@@ -98,6 +98,208 @@ def test_scala_generator_uses_mutable_normal_class_for_construction_cycles():
     assert "var parent: Option[Node @Ref] = None" in node
 
 
+def test_scala_generator_uses_mutable_normal_class_for_nested_construction_cycles():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Envelope [id=120] {
+            message Node [id=121] {
+                string id = 1;
+                ref Node parent = 2;
+            }
+
+            Node root = 1;
+        }
+        """
+    )
+
+    envelope = files["graph/Envelope.scala"]
+    assert "final case class Envelope(" in envelope
+    assert "object Envelope {" in envelope
+    assert "final class Node() derives ForySerializer" in envelope
+    assert 'var id: String = ""' in envelope
+    assert "var parent: Option[Envelope.Node @Ref] = None" in envelope
+
+
+def test_scala_generator_marks_nested_owner_child_cycles_mutable():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Envelope [id=130] {
+            message Node [id=131] {
+                string id = 1;
+                ref Envelope owner = 2;
+            }
+
+            Node root = 1;
+        }
+        """
+    )
+
+    envelope = files["graph/Envelope.scala"]
+    assert "final class Envelope() derives ForySerializer" in envelope
+    assert "var root: Option[Envelope.Node] = None" in envelope
+    assert "final class Node() derives ForySerializer" in envelope
+    assert "var owner: Option[Envelope @Ref] = None" in envelope
+
+
+def test_scala_generator_marks_union_mediated_cycles_mutable():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Node [id=140] {
+            string id = 1;
+            ref Choice choice = 2;
+        }
+
+        union Choice [id=141] {
+            Node node = 1;
+        }
+        """
+    )
+
+    node = files["graph/Node.scala"]
+    assert "final class Node() derives ForySerializer" in node
+    assert 'var id: String = ""' in node
+    assert "var choice: Choice @Ref = null" in node
+
+
+def test_scala_generator_marks_nested_union_mediated_cycles_mutable():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Envelope [id=150] {
+            union Choice [id=151] {
+                Node node = 1;
+            }
+
+            message Node [id=152] {
+                string id = 1;
+                ref Choice choice = 2;
+            }
+
+            Node root = 1;
+        }
+        """
+    )
+
+    envelope = files["graph/Envelope.scala"]
+    assert "final case class Envelope(" in envelope
+    assert "@ForyField(id = 1) root: Option[Envelope.Node]" in envelope
+    assert "enum Choice derives ForySerializer" in envelope
+    assert "case NodeCase(value: Envelope.Node)" in envelope
+    assert "final class Node() derives ForySerializer" in envelope
+    assert 'var id: String = ""' in envelope
+    assert "var choice: Envelope.Choice @Ref = null" in envelope
+
+
+def test_scala_generator_resolves_shadowed_nested_types_before_top_level_types():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Node {
+            string label = 1;
+        }
+
+        message Envelope {
+            message Node {
+                string id = 1;
+                ref Node parent = 2;
+            }
+
+            Node root = 1;
+        }
+        """
+    )
+
+    envelope = files["graph/Envelope.scala"]
+    assert "final class Node() derives ForySerializer" in envelope
+    assert "var parent: Option[Envelope.Node @Ref] = None" in envelope
+    assert "@ForyField(id = 1) root: Option[Envelope.Node]" in envelope
+
+
+def test_scala_generator_does_not_make_cycles_from_shadowed_nested_enums():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Node [id=160] {
+            Envelope owner = 1;
+        }
+
+        message Envelope [id=161] {
+            enum Node {
+                UNKNOWN = 0;
+                ACTIVE = 1;
+            }
+
+            Node kind = 1;
+            list<Node> kinds = 2;
+        }
+        """
+    )
+
+    node = files["graph/Node.scala"]
+    envelope = files["graph/Envelope.scala"]
+    assert "final case class Node(" in node
+    assert "final case class Envelope(" in envelope
+    assert "@ForyField(id = 1) kind: Envelope.Node" in envelope
+    assert "@ForyField(id = 2) kinds: List[Envelope.Node]" in envelope
+    assert "List[Envelope.Node @Ref]" not in envelope
+
+
+def test_scala_generator_uses_jvm_nested_names_for_name_registration():
+    files = generate_scala(
+        """
+        option enable_auto_type_id = false;
+        package demo;
+
+        message Envelope {
+            message Payload {
+                int32 value = 1;
+            }
+
+            enum Kind {
+                UNKNOWN = 0;
+                ACTIVE = 1;
+            }
+
+            union Choice {
+                Payload payload = 1;
+                string note = 2;
+            }
+
+            Payload payload = 1;
+            Kind kind = 2;
+            Choice choice = 3;
+        }
+        """
+    )
+
+    registration = files["demo/DemoForyRegistration.scala"]
+    assert (
+        'ForySerializer.register(fory, classOf[Envelope], "demo", "Envelope")'
+        in registration
+    )
+    assert (
+        'ForySerializer.register(fory, classOf[Envelope.Payload], "demo.Envelope", "Payload")'
+        in registration
+    )
+    assert (
+        'ScalaSerializers.registerEnum(fory, classOf[Envelope.Kind], "demo.Envelope", "Kind")'
+        in registration
+    )
+    assert (
+        'ForySerializer.register(fory, classOf[Envelope.Choice], "demo.Envelope", "Choice")'
+        in registration
+    )
+
+
 def test_scala_generator_keeps_imported_types_in_owner_package():
     repo_root = Path(__file__).resolve().parents[3]
     idl_dir = repo_root / "integration_tests" / "idl_tests" / "idl"

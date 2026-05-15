@@ -42,6 +42,11 @@ SCHEMAS = [
     IDL_DIR / "idl" / "example.fdl",
 ]
 
+LANG_EXTRA_SCHEMAS = {
+    "java": [IDL_DIR / "idl" / "nested_name.fdl"],
+    "scala": [IDL_DIR / "idl" / "nested_name.fdl"],
+}
+
 LANG_OUTPUTS = {
     "java": REPO_ROOT / "integration_tests/idl_tests/java/src/main/java/generated",
     "python": REPO_ROOT / "integration_tests/idl_tests/python/idl_tests/generated",
@@ -127,7 +132,18 @@ def main() -> int:
             env=env,
         )
 
-    for schema in SCHEMAS:
+    schemas_by_lang = {
+        lang: [*SCHEMAS, *LANG_EXTRA_SCHEMAS.get(lang, [])] for lang in langs
+    }
+    schemas = []
+    seen_schemas = set()
+    for lang in langs:
+        for schema in schemas_by_lang[lang]:
+            if schema not in seen_schemas:
+                schemas.append(schema)
+                seen_schemas.add(schema)
+
+    for schema in schemas:
         cmd = [
             sys.executable,
             "-m",
@@ -137,6 +153,8 @@ def main() -> int:
         ]
 
         for lang in langs:
+            if schema not in schemas_by_lang[lang]:
+                continue
             out_dir = LANG_OUTPUTS[lang]
             if lang == "go":
                 out_dir = GO_OUTPUT_OVERRIDES.get(schema.name, out_dir)

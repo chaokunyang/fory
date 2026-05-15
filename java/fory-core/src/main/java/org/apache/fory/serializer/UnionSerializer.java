@@ -197,6 +197,12 @@ public class UnionSerializer extends Serializer<Union> {
     return factory.apply(union.getIndex(), copiedValue);
   }
 
+  /** Copies a schema-defined union case payload for generated non-Java union carriers. */
+  public static Object copyCaseValue(
+      CopyContext copyContext, FieldGroups.SerializationFieldInfo fieldInfo, Object value) {
+    return StaticGeneratedStructSerializer.copyFieldValue(copyContext, value, fieldInfo);
+  }
+
   /**
    * Writes a schema-defined union case for generated non-Java union carriers.
    *

@@ -27,6 +27,7 @@ import complex_pb.ComplexPbForyRegistration
 import example.ExampleForyRegistration
 import graph.GraphForyRegistration
 import monster.MonsterForyRegistration
+import nested_name.NestedNameForyRegistration
 import optional_types.OptionalTypesForyRegistration
 import org.apache.fory.Fory
 import org.apache.fory.serializer.scala.ScalaSerializers
@@ -39,6 +40,8 @@ object ScalaIdlRoundTripPeer {
     val compatible = sys.env.get("IDL_COMPATIBLE").forall(_.toBoolean)
     roundTrip("DATA_FILE", compatible, refTracking = false)(AddressbookForyRegistration.register)
     roundTrip("DATA_FILE_AUTO_ID", compatible, refTracking = false)(AutoIdForyRegistration.register)
+    roundTrip("DATA_FILE_NESTED_NAME", compatible, refTracking = true)(
+      NestedNameForyRegistration.register)
     roundTrip("DATA_FILE_PRIMITIVES", compatible, refTracking = false) { fory =>
       AddressbookForyRegistration.register(fory)
       ComplexPbForyRegistration.register(fory)

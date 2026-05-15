@@ -510,10 +510,21 @@ class TestJavaOuterClassname:
         """Test that registration uses outer class as prefix."""
         source = """
         package myapp;
+        option enable_auto_type_id = false;
         option java_outer_classname = "DescriptorProtos";
 
         message User {
+            message Payload {
+                string value = 1;
+            }
+
+            union Choice {
+                Payload payload = 1;
+            }
+
             string name = 1;
+            Payload payload = 2;
+            Choice choice = 3;
         }
         """
         lexer = Lexer(source)
@@ -529,6 +540,18 @@ class TestJavaOuterClassname:
 
         # Should reference types with outer class prefix
         assert "DescriptorProtos.User.class" in registration_file.content
+        assert (
+            'resolver.register(DescriptorProtos.User.class, "myapp", "User");'
+            in registration_file.content
+        )
+        assert (
+            'resolver.register(DescriptorProtos.User.Payload.class, "myapp.User", "Payload");'
+            in registration_file.content
+        )
+        assert (
+            'resolver.registerUnion(DescriptorProtos.User.Choice.class, "myapp.User", "Choice"'
+            in registration_file.content
+        )
 
     def test_outer_classname_with_nested_types(self):
         """Test java_outer_classname with nested types."""

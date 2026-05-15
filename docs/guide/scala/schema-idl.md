@@ -68,6 +68,10 @@ Messages in compiler-detected construction cycles generate normal classes with
 mutable serialized fields so the deserializer can allocate and register the
 object before reading fields that can point back to it. A top-level `ref Foo`,
 nested `list<ref Foo>`, or `any` field does not by itself force this shape.
+The compiler analyzes message and union dependencies together, so
+message-to-union-to-message cycles also make the participating messages normal
+classes. Acyclic owner messages that only contain a cyclic nested type remain
+case classes.
 
 Reference tracking is expressed with the shared `@Ref` annotation, including
 type-use positions:
@@ -154,3 +158,10 @@ direct assignments for mutable post-construction fields. It builds descriptor
 metadata from Scala compile-time types, including nested generics, `Option`,
 arrays, scalar encoding annotations, nullability, and `@Ref` metadata. Java
 reflection is not the source of truth for generated Scala metadata.
+
+During copy, cyclic graphs are supported when the copied root can be allocated
+and registered before cyclic fields are copied, which is the normal-class shape
+used by schema IDL for construction cycles. If a copy starts at an immutable
+constructor-owned value that participates in the cycle, such as a Scala enum
+case or case class, the serializer fails with a clear error because no copied
+identity can be published until construction has completed.

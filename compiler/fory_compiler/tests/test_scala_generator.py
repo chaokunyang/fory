@@ -97,7 +97,8 @@ def test_scala_generator_uses_mutable_normal_class_for_construction_cycles():
     node = files["graph/Node.scala"]
     assert "final class Node() derives ForySerializer" in node
     assert 'var id: String = ""' in node
-    assert "var parent: Option[Node @Ref] = None" in node
+    assert "@Ref\n    @ForyField(id = 2)\n    var parent: Option[Node] = None" in node
+    assert "Option[Node @Ref]" not in node
 
 
 def test_scala_generator_uses_mutable_normal_class_for_nested_construction_cycles():
@@ -121,7 +122,11 @@ def test_scala_generator_uses_mutable_normal_class_for_nested_construction_cycle
     assert "object Envelope {" in envelope
     assert "final class Node() derives ForySerializer" in envelope
     assert 'var id: String = ""' in envelope
-    assert "var parent: Option[Envelope.Node @Ref] = None" in envelope
+    assert (
+        "@Ref\n        @ForyField(id = 2)\n        var parent: Option[Envelope.Node] = None"
+        in envelope
+    )
+    assert "Option[Envelope.Node @Ref]" not in envelope
 
 
 def test_scala_generator_keeps_container_recursive_messages_as_case_classes():
@@ -166,7 +171,8 @@ def test_scala_generator_marks_container_cycle_with_constructor_edge_mutable():
     assert "final class Node() derives ForySerializer" in node
     assert "var edges: List[Edge @Ref] = List.empty" in node
     assert "final class Edge() derives ForySerializer" in edge
-    assert "var owner: Option[Node @Ref] = None" in edge
+    assert "@Ref\n    @ForyField(id = 2)\n    var owner: Option[Node] = None" in edge
+    assert "Option[Node @Ref]" not in edge
 
 
 def test_scala_generator_marks_nested_owner_child_cycles_mutable():
@@ -189,7 +195,11 @@ def test_scala_generator_marks_nested_owner_child_cycles_mutable():
     assert "final class Envelope() derives ForySerializer" in envelope
     assert "var root: Option[Envelope.Node] = None" in envelope
     assert "final class Node() derives ForySerializer" in envelope
-    assert "var owner: Option[Envelope @Ref] = None" in envelope
+    assert (
+        "@Ref\n        @ForyField(id = 2)\n        var owner: Option[Envelope] = None"
+        in envelope
+    )
+    assert "Option[Envelope @Ref]" not in envelope
 
 
 def test_scala_generator_marks_union_mediated_cycles_mutable():
@@ -211,7 +221,8 @@ def test_scala_generator_marks_union_mediated_cycles_mutable():
     node = files["graph/Node.scala"]
     assert "final class Node() derives ForySerializer" in node
     assert 'var id: String = ""' in node
-    assert "var choice: Choice @Ref = null" in node
+    assert "@Ref\n    @ForyField(id = 2)\n    var choice: Choice = null" in node
+    assert "Choice @Ref" not in node
 
 
 def test_scala_generator_collects_nested_union_payload_imports():
@@ -272,7 +283,11 @@ def test_scala_generator_marks_nested_union_mediated_cycles_mutable():
     assert "case NodeCase(value: Envelope.Node)" in envelope
     assert "final class Node() derives ForySerializer" in envelope
     assert 'var id: String = ""' in envelope
-    assert "var choice: Envelope.Choice @Ref = null" in envelope
+    assert (
+        "@Ref\n        @ForyField(id = 2)\n        var choice: Envelope.Choice = null"
+        in envelope
+    )
+    assert "Envelope.Choice @Ref" not in envelope
 
 
 def test_scala_generator_resolves_shadowed_nested_types_before_top_level_types():
@@ -297,7 +312,11 @@ def test_scala_generator_resolves_shadowed_nested_types_before_top_level_types()
 
     envelope = files["graph/Envelope.scala"]
     assert "final class Node() derives ForySerializer" in envelope
-    assert "var parent: Option[Envelope.Node @Ref] = None" in envelope
+    assert (
+        "@Ref\n        @ForyField(id = 2)\n        var parent: Option[Envelope.Node] = None"
+        in envelope
+    )
+    assert "Option[Envelope.Node @Ref]" not in envelope
     assert "@ForyField(id = 1) root: Option[Envelope.Node]" in envelope
 
 

@@ -98,7 +98,7 @@ object ForySerializerDerivationTest {
 
     @Ref
     @ForyField(id = 2)
-    var parent: Option[RefNode @Ref] = None
+    var parent: Option[RefNode] = None
   }
 
   @ForyStruct
@@ -108,7 +108,7 @@ object ForySerializerDerivationTest {
 
     @Ref
     @ForyField(id = 2)
-    var choice: Option[UnionCycle @Ref] = None
+    var choice: Option[UnionCycle] = None
   }
 
   @ForyStruct

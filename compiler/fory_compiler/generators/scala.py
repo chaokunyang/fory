@@ -402,7 +402,11 @@ class ScalaGenerator(BaseGenerator):
                 nullable=field.optional,
                 element_optional=field.element_optional,
                 element_ref=field.element_ref,
-                top_level_ref=field.ref,
+                # Message fields own top-level ref metadata through the field
+                # annotation below. Type-use @Ref is reserved for nested
+                # element/value/payload refs so optional top-level refs do not
+                # carry duplicate metadata like Option[Foo @Ref] plus @Ref.
+                top_level_ref=False,
                 parent_stack=current_stack,
             )
             if field.ref and self.is_ref_target_type(field.field_type, current_stack):
@@ -443,7 +447,10 @@ class ScalaGenerator(BaseGenerator):
             nullable=field.optional,
             element_optional=field.element_optional,
             element_ref=field.element_ref,
-            top_level_ref=field.ref,
+            # Message constructor parameters use @Ref on the parameter for
+            # top-level ref metadata. Nested refs still flow through
+            # element_ref/value_ref type-use annotations.
+            top_level_ref=False,
             parent_stack=parent_stack,
         )
         ref_annotation = (

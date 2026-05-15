@@ -240,8 +240,8 @@ final case class RefInnerSchemaConsistent(id: Int, name: String) derives ForySer
 
 @ForyStruct
 final case class RefOuterSchemaConsistent(
-    inner1: Option[RefInnerSchemaConsistent @Ref],
-    inner2: Option[RefInnerSchemaConsistent @Ref])
+    @Ref inner1: Option[RefInnerSchemaConsistent],
+    @Ref inner2: Option[RefInnerSchemaConsistent])
     derives ForySerializer
 
 @ForyStruct
@@ -249,8 +249,8 @@ final case class RefInnerCompatible(id: Int, name: String) derives ForySerialize
 
 @ForyStruct
 final case class RefOuterCompatible(
-    inner1: Option[RefInnerCompatible @Ref],
-    inner2: Option[RefInnerCompatible @Ref])
+    @Ref inner1: Option[RefInnerCompatible],
+    @Ref inner2: Option[RefInnerCompatible])
     derives ForySerializer
 
 @ForyStruct
@@ -267,7 +267,8 @@ final case class RefOverrideContainer(
 final class CircularRefStruct derives ForySerializer {
   var name: String = ""
 
-  var selfRef: Option[CircularRefStruct @Ref] = None
+  @Ref
+  var selfRef: Option[CircularRefStruct] = None
 }
 
 @ForyStruct

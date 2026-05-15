@@ -34,6 +34,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -215,9 +216,50 @@ public class ExampleStaticGeneratedSerializerTest {
     }
   }
 
+  @Test
+  public void testMetaShareStaticSkipShapes() throws Exception {
+    StaticGeneratedMetaShareWriter value = new StaticGeneratedMetaShareWriter();
+    value.date = LocalDate.of(2026, 5, 15);
+    value.flags = Arrays.asList(true, false, true);
+    value.after = "after";
+    Fory writer = foryWithNativeId(StaticGeneratedMetaShareWriter.class, 1700);
+    Fory reader = foryWithNativeId(StaticGeneratedMetaShareReader.class, 1700);
+    assertStaticSerializer(writer, StaticGeneratedMetaShareWriter.class);
+    assertStaticSerializer(reader, StaticGeneratedMetaShareReader.class);
+
+    writer.setMetaWriteContext(new MetaWriteContext());
+    byte[] bytes = writer.serialize(value);
+    reader.setMetaReadContext(new MetaReadContext());
+    StaticGeneratedMetaShareReader result =
+        (StaticGeneratedMetaShareReader) reader.deserialize(bytes);
+    Assert.assertEquals(result.after, "after");
+  }
+
   @ForyStruct
   public static class EmptyMessage {
     public EmptyMessage() {}
+  }
+
+  @ForyStruct
+  public static class StaticGeneratedMetaShareWriter {
+    @ForyField(id = 1)
+    public LocalDate date;
+
+    @ForyField(id = 2)
+    public List<Boolean> flags;
+
+    @ForyField(id = 3)
+    public String after;
+
+    public StaticGeneratedMetaShareWriter() {}
+  }
+
+  @ForyStruct
+  public static class StaticGeneratedMetaShareReader {
+    @ForyField(id = 3)
+    public String after;
+
+    public StaticGeneratedMetaShareReader() {}
   }
 
   public static class RuntimeEmptyMessage {
@@ -269,18 +311,27 @@ public class ExampleStaticGeneratedSerializerTest {
   }
 
   private static Fory fory(Class<?> type, boolean xlang, boolean compatible, boolean codegen) {
-    Fory fory =
-        Fory.builder()
-            .withName("latest-static-" + FORY_ID.incrementAndGet())
-            .withXlang(xlang)
-            .withCodegen(codegen)
-            .withMetaShare(compatible)
-            .withScopedMetaShare(false)
-            .withCompatible(compatible)
-            .requireClassRegistration(false)
-            .build();
+    Fory fory = newFory(xlang, compatible, codegen);
     registerType(fory, type, xlang);
     return fory;
+  }
+
+  private static Fory foryWithNativeId(Class<?> type, int nativeId) {
+    Fory fory = newFory(false, true, false);
+    register(fory, type, false, nativeId, type.getSimpleName());
+    return fory;
+  }
+
+  private static Fory newFory(boolean xlang, boolean compatible, boolean codegen) {
+    return Fory.builder()
+        .withName("latest-static-" + FORY_ID.incrementAndGet())
+        .withXlang(xlang)
+        .withCodegen(codegen)
+        .withMetaShare(compatible)
+        .withScopedMetaShare(false)
+        .withCompatible(compatible)
+        .requireClassRegistration(false)
+        .build();
   }
 
   private static void registerType(org.apache.fory.BaseFory fory, Class<?> type, boolean xlang) {
@@ -307,6 +358,15 @@ public class ExampleStaticGeneratedSerializerTest {
   }
 
   private static void assertStaticSerializer(ThreadSafeFory fory, Class<?> type) {
+    Serializer<?> serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
+    if (serializer instanceof DeferedLazySerializer) {
+      serializer = ((DeferedLazySerializer) serializer).resolveSerializer();
+    }
+    Assert.assertTrue(
+        serializer instanceof StaticGeneratedStructSerializer, serializer.getClass().getName());
+  }
+
+  private static void assertStaticSerializer(Fory fory, Class<?> type) {
     Serializer<?> serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
     if (serializer instanceof DeferedLazySerializer) {
       serializer = ((DeferedLazySerializer) serializer).resolveSerializer();

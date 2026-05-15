@@ -23,8 +23,10 @@ import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
@@ -34,6 +36,8 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.meta.TypeExtMeta;
+import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
@@ -154,14 +158,53 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   public final FieldGroups buildLocalFieldGroups(List<Descriptor> descriptors) {
-    // Generated descriptors carry source-only field metadata such as Scala Option wrappers. A
-    // schema TypeDef descriptor is the canonical remote contract, but it cannot replace the local
-    // generated descriptor view used to choose allocation-free field readers and writers.
-    return buildFieldGroups(descriptors);
+    if (!typeResolver.isShareMeta() || hasSourceOnlyMetadata(descriptors)) {
+      return buildFieldGroups(descriptors);
+    }
+    // In meta-share mode, Java static-generated writers must use the same local TypeDef-reified
+    // descriptor view as ObjectSerializer; otherwise readers can disagree on built-in and
+    // collection wire shapes during compatible skips. Scala macro descriptors are the exception:
+    // Option wrappers are source-only metadata used for generated accessor adaptation and are not
+    // represented in TypeDef, so those descriptors must stay on the generated path.
+    DescriptorGrouper grouper =
+        typeResolver.createDescriptorGrouper(typeResolver.getTypeDef(type, true), type);
+    return FieldGroups.buildFieldInfos(typeResolver, grouper);
   }
 
   protected final List<Descriptor> runtimeDescriptors(List<Descriptor> descriptors) {
     return typeResolver.normalizeFieldDescriptors(type, true, descriptors);
+  }
+
+  private static boolean hasSourceOnlyMetadata(List<Descriptor> descriptors) {
+    Set<TypeRef<?>> visitedTypes = Collections.newSetFromMap(new IdentityHashMap<>());
+    for (Descriptor descriptor : descriptors) {
+      if (hasSourceOnlyMetadata(descriptor.getTypeRef(), visitedTypes)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean hasSourceOnlyMetadata(TypeRef<?> typeRef, Set<TypeRef<?>> visitedTypes) {
+    if (!visitedTypes.add(typeRef)) {
+      return false;
+    }
+    TypeExtMeta meta = typeRef.getTypeExtMeta();
+    if (meta != null && meta.nullableWrapper()) {
+      return true;
+    }
+    for (TypeRef<?> argument : typeRef.getTypeArguments()) {
+      if (hasSourceOnlyMetadata(argument, visitedTypes)) {
+        return true;
+      }
+    }
+    // TypeRef.getComponentType() is only meaningful for arrays here; walking it for arbitrary
+    // TypeRefs can loop through self-like component views while checking a cold descriptor path.
+    if (!typeRef.isArray()) {
+      return false;
+    }
+    TypeRef<?> componentType = typeRef.getComponentType();
+    return componentType != null && hasSourceOnlyMetadata(componentType, visitedTypes);
   }
 
   public final int[] localFieldIds(

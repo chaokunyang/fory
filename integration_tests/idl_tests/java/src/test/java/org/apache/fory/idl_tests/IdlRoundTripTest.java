@@ -1252,7 +1252,7 @@ public class IdlRoundTripTest {
 
   private ExampleMessageUnion buildExampleUnion() {
     return ExampleMessageUnion.ofInt32ArrayList(
-        Arrays.asList(new int[] {1, 2}, new int[] {3, 4}));
+        Arrays.asList(new int[] {11, 12}, new int[] {13, 14}));
   }
 
   private void assertNumericCollectionUnion(Object decoded, NumericCollectionUnion expected) {

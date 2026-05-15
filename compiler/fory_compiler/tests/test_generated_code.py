@@ -176,6 +176,31 @@ def test_rust_generated_code_uses_fory_temporal_carriers():
     assert "chrono::" not in rust_output
 
 
+def test_rust_generated_code_can_use_chrono_temporal_types():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+            option rust_use_chrono_temporal_types = true;
+
+            message TemporalTypes {
+                date day = 1;
+                timestamp instant = 2;
+                duration elapsed = 3;
+            }
+            """
+        )
+    )
+
+    rust_output = render_files(generate_files(schema, RustGenerator))
+    assert "pub day: ::chrono::NaiveDate," in rust_output
+    assert "pub instant: ::chrono::NaiveDateTime," in rust_output
+    assert "pub elapsed: ::chrono::Duration," in rust_output
+    assert "::fory::Date" not in rust_output
+    assert "::fory::Timestamp" not in rust_output
+    assert "::fory::Duration" not in rust_output
+
+
 def test_generated_code_integer_encoding_variants_equivalent():
     fdl = dedent(
         """

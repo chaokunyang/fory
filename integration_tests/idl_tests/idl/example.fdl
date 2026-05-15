@@ -20,6 +20,7 @@ package example;
 
 option go_package = "github.com/apache/fory/integration_tests/idl_tests/go/example/generated;example";
 option evolving = false;
+option rust_use_chrono_temporal_types = true;
 
 enum ExampleState [id=1504] {
     UNKNOWN = 0;

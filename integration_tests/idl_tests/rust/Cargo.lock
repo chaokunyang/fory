@@ -93,9 +93,6 @@ dependencies = [
  "num-bigint",
  "num_enum",
  "paste",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
  "thiserror",
 ]
 
@@ -107,7 +104,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.114",
- "thiserror",
 ]
 
 [[package]]

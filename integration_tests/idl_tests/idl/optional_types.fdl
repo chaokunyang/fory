@@ -17,6 +17,8 @@
 
 package optional_types;
 
+option rust_use_chrono_temporal_types = true;
+
 message AllOptionalTypes [id=120] {
     optional bool bool_value = 1;
     optional int8 int8_value = 2;

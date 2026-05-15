@@ -54,6 +54,7 @@ KNOWN_FILE_OPTIONS: Set[str] = {
     "enable_auto_type_id",
     "go_nested_type_style",
     "swift_namespace_style",
+    "rust_use_chrono_temporal_types",
     "evolving",
 }
 

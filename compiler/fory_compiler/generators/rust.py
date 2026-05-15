@@ -61,12 +61,34 @@ class RustGenerator(BaseGenerator):
         PrimitiveKind.FLOAT64: "f64",
         PrimitiveKind.STRING: "::std::string::String",
         PrimitiveKind.BYTES: "::std::vec::Vec<u8>",
-        PrimitiveKind.DATE: "::fory::Date",
-        PrimitiveKind.TIMESTAMP: "::fory::Timestamp",
-        PrimitiveKind.DURATION: "::fory::Duration",
         PrimitiveKind.DECIMAL: "::fory::Decimal",
         PrimitiveKind.ANY: "::std::boxed::Box<dyn ::std::any::Any>",
     }
+
+    FORY_TEMPORAL_MAP = {
+        PrimitiveKind.DATE: "::fory::Date",
+        PrimitiveKind.TIMESTAMP: "::fory::Timestamp",
+        PrimitiveKind.DURATION: "::fory::Duration",
+    }
+
+    CHRONO_TEMPORAL_MAP = {
+        PrimitiveKind.DATE: "::chrono::NaiveDate",
+        PrimitiveKind.TIMESTAMP: "::chrono::NaiveDateTime",
+        PrimitiveKind.DURATION: "::chrono::Duration",
+    }
+
+    def use_chrono_temporal_types(self) -> bool:
+        return self.schema.get_option("rust_use_chrono_temporal_types") is True
+
+    def primitive_type_name(self, kind: PrimitiveKind) -> str:
+        if kind in self.FORY_TEMPORAL_MAP:
+            temporal_map = (
+                self.CHRONO_TEMPORAL_MAP
+                if self.use_chrono_temporal_types()
+                else self.FORY_TEMPORAL_MAP
+            )
+            return temporal_map[kind]
+        return self.PRIMITIVE_MAP[kind]
 
     def generate(self) -> List[GeneratedFile]:
         """Generate Rust files for the schema."""
@@ -723,7 +745,7 @@ class RustGenerator(BaseGenerator):
         if isinstance(field_type, PrimitiveType):
             if field_type.kind == PrimitiveKind.ANY:
                 return "::std::boxed::Box<dyn ::std::any::Any>"
-            base_type = self.PRIMITIVE_MAP[field_type.kind]
+            base_type = self.primitive_type_name(field_type.kind)
             if nullable:
                 return f"::std::option::Option<{base_type}>"
             return base_type

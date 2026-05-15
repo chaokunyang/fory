@@ -31,3 +31,7 @@ description = "Apache Fory: Blazingly fast multi-language serialization framewor
 [dependencies]
 fory-core.workspace = true
 fory-derive.workspace = true
+
+[features]
+default = []
+chrono = ["fory-core/chrono"]

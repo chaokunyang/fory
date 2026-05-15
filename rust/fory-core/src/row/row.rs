@@ -15,10 +15,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use crate::util::EPOCH;
+use crate::types::{Date, Duration, Timestamp};
 use crate::{buffer::Writer, error::Error};
 use byteorder::{ByteOrder, LittleEndian};
-use chrono::{DateTime, Days, NaiveDate, NaiveDateTime};
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
@@ -133,40 +132,50 @@ impl<'a, T: Row<'a>, const N: usize> Row<'a> for [T; N] {
     }
 }
 
-impl Row<'_> for NaiveDate {
-    type ReadResult = Result<NaiveDate, Error>;
+impl Row<'_> for Date {
+    type ReadResult = Result<Date, Error>;
 
     fn write(v: &Self, writer: &mut Writer) -> Result<(), Error> {
-        let days_since_epoch = v.signed_duration_since(EPOCH).num_days();
-        writer.write_u32(days_since_epoch as u32);
+        let days = i32::try_from(v.epoch_days()).map_err(|_| {
+            Error::invalid_data(format!(
+                "row date day count {} exceeds date32 range",
+                v.epoch_days()
+            ))
+        })?;
+        writer.write_i32(days);
         Ok(())
     }
 
     fn cast(bytes: &[u8]) -> Self::ReadResult {
-        let days = LittleEndian::read_u32(bytes);
-        EPOCH
-            .checked_add_days(Days::new(days.into()))
-            .ok_or(Error::invalid_data(format!(
-                "Date out of range, {days} days since epoch"
-            )))
+        Ok(Date::from_epoch_days(i64::from(LittleEndian::read_i32(
+            bytes,
+        ))))
     }
 }
 
-impl Row<'_> for NaiveDateTime {
-    type ReadResult = Result<NaiveDateTime, Error>;
+impl Row<'_> for Timestamp {
+    type ReadResult = Result<Timestamp, Error>;
 
     fn write(v: &Self, writer: &mut Writer) -> Result<(), Error> {
-        writer.write_i64(v.and_utc().timestamp_millis());
+        writer.write_i64(v.to_epoch_micros()?);
         Ok(())
     }
 
     fn cast(bytes: &[u8]) -> Self::ReadResult {
-        let timestamp = LittleEndian::read_u64(bytes);
-        DateTime::from_timestamp_millis(timestamp as i64)
-            .map(|dt| dt.naive_utc())
-            .ok_or(Error::invalid_data(format!(
-                "Date out of range, timestamp:{timestamp}"
-            )))
+        Ok(Timestamp::from_epoch_micros(LittleEndian::read_i64(bytes)))
+    }
+}
+
+impl Row<'_> for Duration {
+    type ReadResult = Result<Duration, Error>;
+
+    fn write(v: &Self, writer: &mut Writer) -> Result<(), Error> {
+        writer.write_i64(v.to_micros()?);
+        Ok(())
+    }
+
+    fn cast(bytes: &[u8]) -> Self::ReadResult {
+        Ok(Duration::from_micros(LittleEndian::read_i64(bytes)))
     }
 }
 

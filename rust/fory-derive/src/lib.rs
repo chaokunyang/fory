@@ -133,8 +133,10 @@
 //! - `Option<T>` for nullable values
 //!
 //! **Date/Time:**
-//! - `chrono::NaiveDate`
-//! - `chrono::NaiveDateTime`
+//! - `fory::Date`
+//! - `fory::Timestamp`
+//! - `fory::Duration`
+//! - `chrono::NaiveDate`, `chrono::NaiveDateTime`, and `chrono::Duration` when the `chrono` feature is enabled
 //!
 //! **Custom Types:**
 //! - Any type that implements `Serializer` (for `Fory`) or `Row` (for `ForyRow`)

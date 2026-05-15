@@ -61,9 +61,9 @@ class RustGenerator(BaseGenerator):
         PrimitiveKind.FLOAT64: "f64",
         PrimitiveKind.STRING: "::std::string::String",
         PrimitiveKind.BYTES: "::std::vec::Vec<u8>",
-        PrimitiveKind.DATE: "::chrono::NaiveDate",
-        PrimitiveKind.TIMESTAMP: "::chrono::NaiveDateTime",
-        PrimitiveKind.DURATION: "::chrono::Duration",
+        PrimitiveKind.DATE: "::fory::Date",
+        PrimitiveKind.TIMESTAMP: "::fory::Timestamp",
+        PrimitiveKind.DURATION: "::fory::Duration",
         PrimitiveKind.DECIMAL: "::fory::Decimal",
         PrimitiveKind.ANY: "::std::boxed::Box<dyn ::std::any::Any>",
     }

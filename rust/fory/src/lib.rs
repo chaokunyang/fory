@@ -979,10 +979,12 @@
 //! - `RefCell<T>` - Interior mutability with runtime borrow checking
 //! - `Mutex<T>` - Thread-safe interior mutability
 //!
-//! ### Date and Time (requires `chrono` feature)
+//! ### Date and Time
 //!
-//! - `chrono::NaiveDate` - Date without timezone
-//! - `chrono::NaiveDateTime` - Timestamp without timezone
+//! - `Date` - Date without timezone
+//! - `Timestamp` - Point in time
+//! - `Duration` - Signed duration
+//! - `chrono::NaiveDate`, `chrono::NaiveDateTime`, and `chrono::Duration` when the `chrono` feature is enabled
 //!
 //! ### Custom Types
 //!
@@ -1202,7 +1204,7 @@
 
 pub use fory_core::{
     error::Error, fory::Fory, fory::ForyBuilder, register_trait_type, row::from_row, row::to_row,
-    ArcWeak, BFloat16, Decimal, Float16, ForyDefault, RcWeak, ReadContext, Reader, RefFlag,
-    RefMode, Serializer, TypeId, TypeResolver, WriteContext, Writer,
+    ArcWeak, BFloat16, Date, Decimal, Duration, Float16, ForyDefault, RcWeak, ReadContext, Reader,
+    RefFlag, RefMode, Serializer, Timestamp, TypeId, TypeResolver, WriteContext, Writer,
 };
 pub use fory_derive::{ForyEnum, ForyRow, ForyStruct, ForyUnion};

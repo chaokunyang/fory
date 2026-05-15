@@ -294,9 +294,11 @@ pub(crate) fn get_type_id_by_name(ty: &str) -> u32 {
     // Check internal types
     match unqualified_ty {
         "String" => return TypeId::STRING as u32,
+        "Date" => return TypeId::DATE as u32,
+        "Timestamp" => return TypeId::TIMESTAMP as u32,
+        "Duration" => return TypeId::DURATION as u32,
         "NaiveDate" => return TypeId::DATE as u32,
         "NaiveDateTime" => return TypeId::TIMESTAMP as u32,
-        "Duration" => return TypeId::DURATION as u32,
         "Decimal" => return TypeId::DECIMAL as u32,
         "bytes" => return TypeId::BINARY as u32,
         _ => {}

@@ -154,6 +154,28 @@ def test_generated_code_scalar_types_equivalent():
     assert_all_languages_equal(schemas)
 
 
+def test_rust_generated_code_uses_fory_temporal_carriers():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message TemporalTypes {
+                date day = 1;
+                timestamp instant = 2;
+                duration elapsed = 3;
+            }
+            """
+        )
+    )
+
+    rust_output = render_files(generate_files(schema, RustGenerator))
+    assert "pub day: ::fory::Date," in rust_output
+    assert "pub instant: ::fory::Timestamp," in rust_output
+    assert "pub elapsed: ::fory::Duration," in rust_output
+    assert "chrono::" not in rust_output
+
+
 def test_generated_code_integer_encoding_variants_equivalent():
     fdl = dedent(
         """

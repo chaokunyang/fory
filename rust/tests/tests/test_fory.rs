@@ -197,7 +197,7 @@ fn test_serialize_to_detailed() {
     }
 }
 
-use chrono::{DateTime, NaiveDateTime, Utc};
+use fory_core::Timestamp;
 
 macro_rules! impl_value {
     ($record:ident, $value:ident, { $($field:ident : $ty:ty = $expr:expr),* $(,)? }) => {
@@ -227,7 +227,7 @@ macro_rules! impl_value {
 pub struct KeyValue {
     feature_key: String,
     count: u64,
-    last_seen_event_time: DateTime<Utc>,
+    last_seen_event_time: Timestamp,
 }
 
 impl_value!(
@@ -235,7 +235,7 @@ impl_value!(
     Value,
     {
         count: u64 = count,
-        last_seen_event_time: NaiveDateTime = last_seen_event_time.naive_utc(),
+        last_seen_event_time: Timestamp = last_seen_event_time,
     }
 );
 
@@ -244,15 +244,12 @@ fn test_in_macro() {
     let key_value = KeyValue {
         feature_key: "test_key".to_string(),
         count: 100,
-        last_seen_event_time: Utc::now(),
+        last_seen_event_time: Timestamp::new(1_689_912_359, 123).unwrap(),
     };
     let (key, value) = key_value.clone().to_key_value();
     assert_eq!(key, "test_key");
     assert_eq!(value.count, 100);
-    assert_eq!(
-        value.last_seen_event_time,
-        key_value.last_seen_event_time.naive_utc()
-    );
+    assert_eq!(value.last_seen_event_time, key_value.last_seen_event_time);
 }
 
 #[test]

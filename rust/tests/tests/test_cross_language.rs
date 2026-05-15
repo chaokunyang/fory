@@ -15,14 +15,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use chrono::{NaiveDate, NaiveDateTime};
 use fory_core::buffer::{Reader, Writer};
 use fory_core::error::Error;
 use fory_core::resolver::TypeResolver;
 use fory_core::serializer::{ForyDefault, Serializer};
 use fory_core::type_id::TypeId;
 use fory_core::util::murmurhash3_x64_128;
-use fory_core::{read_data, write_data, BFloat16, Decimal, Float16, Fory};
+use fory_core::{read_data, write_data, BFloat16, Date, Decimal, Float16, Fory, Timestamp};
 use fory_core::{ReadContext, WriteContext};
 use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use num_bigint::BigInt;
@@ -116,14 +115,13 @@ fn test_buffer() {
 }
 
 #[test]
-#[allow(deprecated)]
-fn test_naive_date_uses_var_i64_day_count() {
+fn test_date_uses_var_i64_day_count() {
     let fory = Fory::builder()
         .xlang(true)
         .compatible(false)
         .track_ref(false)
         .build();
-    let day = NaiveDate::from_ymd_opt(1969, 12, 31).unwrap();
+    let day = Date::from_epoch_days(-1);
     let mut buf = Vec::new();
     fory.serialize_to(&mut buf, &day).unwrap();
 
@@ -136,10 +134,9 @@ fn test_naive_date_uses_var_i64_day_count() {
 }
 
 #[test]
-#[allow(deprecated)]
-fn test_naive_date_uses_i32_day_count_in_native_mode() {
+fn test_date_uses_i32_day_count_in_native_mode() {
     let fory = Fory::builder().xlang(false).track_ref(false).build();
-    let day = NaiveDate::from_ymd_opt(1969, 12, 31).unwrap();
+    let day = Date::from_epoch_days(-1);
     let mut buf = Vec::new();
     fory.serialize_to(&mut buf, &day).unwrap();
 
@@ -330,10 +327,9 @@ macro_rules! assert_de {
 
 #[test]
 #[ignore]
-#[allow(deprecated)]
 fn test_cross_language_serializer() {
-    let day = NaiveDate::from_ymd_opt(2021, 11, 23).unwrap();
-    let instant = NaiveDateTime::from_timestamp(100, 0);
+    let day = Date::from_epoch_days(18_954);
+    let instant = Timestamp::new(100, 0).unwrap();
     let str_list = vec!["hello".to_string(), "world".to_string()];
     let str_set = HashSet::from(["hello".to_string(), "world".to_string()]);
     let str_map = HashMap::<String, String>::from([
@@ -361,8 +357,8 @@ fn test_cross_language_serializer() {
     assert_de!(fory, reader, f32, -1f32);
     assert_de!(fory, reader, f64, -1f64);
     assert_de!(fory, reader, String, "str".to_string());
-    assert_de!(fory, reader, NaiveDate, day);
-    assert_de!(fory, reader, NaiveDateTime, instant);
+    assert_de!(fory, reader, Date, day);
+    assert_de!(fory, reader, Timestamp, instant);
     assert_de!(fory, reader, Vec<bool>, [true, false]);
     assert_de!(fory, reader, Vec<u8>, [1, i8::MAX as u8]);
     assert_de!(fory, reader, Vec<i16>, [1, i16::MAX]);

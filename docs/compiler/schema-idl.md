@@ -1150,27 +1150,27 @@ Underscore spellings for integer encoding are not FDL type names.
 
 ##### Date
 
-| Language   | Type                        | Notes                   |
-| ---------- | --------------------------- | ----------------------- |
-| Java       | `java.time.LocalDate`       |                         |
-| Python     | `datetime.date`             |                         |
-| Go         | `time.Time`                 | Time portion ignored    |
-| Rust       | `chrono::NaiveDate`         | Requires `chrono` crate |
-| C++        | `fory::serialization::Date` |                         |
-| JavaScript | `Date`                      |                         |
-| Dart       | `LocalDate`                 | Fory package type       |
+| Language   | Type                        | Notes                                                           |
+| ---------- | --------------------------- | --------------------------------------------------------------- |
+| Java       | `java.time.LocalDate`       |                                                                 |
+| Python     | `datetime.date`             |                                                                 |
+| Go         | `time.Time`                 | Time portion ignored                                            |
+| Rust       | `fory::Date`                | `chrono::NaiveDate` is supported with the Rust `chrono` feature |
+| C++        | `fory::serialization::Date` |                                                                 |
+| JavaScript | `Date`                      |                                                                 |
+| Dart       | `LocalDate`                 | Fory package type                                               |
 
 ##### Timestamp
 
-| Language   | Type                             | Notes                   |
-| ---------- | -------------------------------- | ----------------------- |
-| Java       | `java.time.Instant`              | UTC-based               |
-| Python     | `datetime.datetime`              |                         |
-| Go         | `time.Time`                      |                         |
-| Rust       | `chrono::NaiveDateTime`          | Requires `chrono` crate |
-| C++        | `fory::serialization::Timestamp` |                         |
-| JavaScript | `Date`                           |                         |
-| Dart       | `Timestamp`                      | Fory package type       |
+| Language   | Type                             | Notes                                                               |
+| ---------- | -------------------------------- | ------------------------------------------------------------------- |
+| Java       | `java.time.Instant`              | UTC-based                                                           |
+| Python     | `datetime.datetime`              |                                                                     |
+| Go         | `time.Time`                      |                                                                     |
+| Rust       | `fory::Timestamp`                | `chrono::NaiveDateTime` is supported with the Rust `chrono` feature |
+| C++        | `fory::serialization::Timestamp` |                                                                     |
+| JavaScript | `Date`                           |                                                                     |
+| Dart       | `Timestamp`                      | Fory package type                                                   |
 
 #### Any
 

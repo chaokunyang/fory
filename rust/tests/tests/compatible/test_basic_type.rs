@@ -15,8 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use chrono::{NaiveDate, NaiveDateTime};
-use fory_core::{fory::Fory, Reader};
+use fory_core::{fory::Fory, Date, Reader, Timestamp};
 
 // primitive_val
 const BOOL_VAL: bool = true;
@@ -29,10 +28,13 @@ const F64_VAL: f64 = 47.0;
 // string
 const STR_LATIN1_VAL: &str = "Çüéâäàåçêëèïî";
 // time
-#[allow(deprecated)]
-const TIMESTAMP_VAL: NaiveDateTime = NaiveDateTime::from_timestamp(100, 0);
-#[allow(deprecated)]
-const LOCAL_DATE_VAL: NaiveDate = NaiveDate::from_ymd(2021, 11, 23);
+fn timestamp_val() -> Timestamp {
+    Timestamp::new(100, 0).unwrap()
+}
+
+fn local_date_val() -> Date {
+    Date::from_epoch_days(18_954)
+}
 
 const BOOL_ARRAY: [bool; 1] = [true];
 const INT8_ARRAY: [i8; 1] = [48];
@@ -53,8 +55,8 @@ fn serialize_non_null(fory: &Fory) -> Vec<u8> {
     fory.serialize_to(&mut buf, &F64_VAL).unwrap();
     fory.serialize_to(&mut buf, &STR_LATIN1_VAL.to_string())
         .unwrap();
-    fory.serialize_to(&mut buf, &LOCAL_DATE_VAL).unwrap();
-    fory.serialize_to(&mut buf, &TIMESTAMP_VAL).unwrap();
+    fory.serialize_to(&mut buf, &local_date_val()).unwrap();
+    fory.serialize_to(&mut buf, &timestamp_val()).unwrap();
     fory.serialize_to(&mut buf, &BOOL_ARRAY.to_vec()).unwrap();
     fory.serialize_to(&mut buf, &INT8_ARRAY.to_vec()).unwrap();
     fory.serialize_to(&mut buf, &INT16_ARRAY.to_vec()).unwrap();
@@ -78,8 +80,9 @@ fn serialize_nullable(fory: &Fory) -> Vec<u8> {
     fory.serialize_to(&mut buf, &Some(F64_VAL)).unwrap();
     fory.serialize_to(&mut buf, &Some(STR_LATIN1_VAL.to_string()))
         .unwrap();
-    fory.serialize_to(&mut buf, &Some(LOCAL_DATE_VAL)).unwrap();
-    fory.serialize_to(&mut buf, &Some(TIMESTAMP_VAL)).unwrap();
+    fory.serialize_to(&mut buf, &Some(local_date_val()))
+        .unwrap();
+    fory.serialize_to(&mut buf, &Some(timestamp_val())).unwrap();
     fory.serialize_to(&mut buf, &Some(BOOL_ARRAY.to_vec()))
         .unwrap();
     fory.serialize_to(&mut buf, &Some(INT8_ARRAY.to_vec()))
@@ -103,9 +106,8 @@ fn serialize_nullable(fory: &Fory) -> Vec<u8> {
     fory.serialize_to(&mut buf, &Option::<f64>::None).unwrap();
     fory.serialize_to(&mut buf, &Option::<String>::None)
         .unwrap();
-    fory.serialize_to(&mut buf, &Option::<NaiveDate>::None)
-        .unwrap();
-    fory.serialize_to(&mut buf, &Option::<NaiveDateTime>::None)
+    fory.serialize_to(&mut buf, &Option::<Date>::None).unwrap();
+    fory.serialize_to(&mut buf, &Option::<Timestamp>::None)
         .unwrap();
     fory.serialize_to(&mut buf, &Option::<Vec<bool>>::None)
         .unwrap();
@@ -141,12 +143,12 @@ fn deserialize_non_null(fory: &Fory, bins: Vec<u8>, auto_conv: bool) {
         fory.deserialize_from::<String>(&mut reader).unwrap()
     );
     assert_eq!(
-        LOCAL_DATE_VAL,
-        fory.deserialize_from::<NaiveDate>(&mut reader).unwrap()
+        local_date_val(),
+        fory.deserialize_from::<Date>(&mut reader).unwrap()
     );
     assert_eq!(
-        TIMESTAMP_VAL,
-        fory.deserialize_from::<NaiveDateTime>(&mut reader).unwrap()
+        timestamp_val(),
+        fory.deserialize_from::<Timestamp>(&mut reader).unwrap()
     );
 
     assert_eq!(
@@ -211,12 +213,12 @@ fn deserialize_non_null(fory: &Fory, bins: Vec<u8>, auto_conv: bool) {
             fory.deserialize_from::<String>(&mut reader).unwrap()
         );
         assert_eq!(
-            NaiveDate::default(),
-            fory.deserialize_from::<NaiveDate>(&mut reader).unwrap()
+            Date::default(),
+            fory.deserialize_from::<Date>(&mut reader).unwrap()
         );
         assert_eq!(
-            NaiveDateTime::default(),
-            fory.deserialize_from::<NaiveDateTime>(&mut reader).unwrap()
+            Timestamp::default(),
+            fory.deserialize_from::<Timestamp>(&mut reader).unwrap()
         );
 
         assert_eq!(
@@ -286,13 +288,12 @@ fn deserialize_nullable(fory: &Fory, bins: Vec<u8>, auto_conv: bool) {
             .unwrap()
     );
     assert_eq!(
-        Some(LOCAL_DATE_VAL),
-        fory.deserialize_from::<Option<NaiveDate>>(&mut reader)
-            .unwrap()
+        Some(local_date_val()),
+        fory.deserialize_from::<Option<Date>>(&mut reader).unwrap()
     );
     assert_eq!(
-        Some(TIMESTAMP_VAL),
-        fory.deserialize_from::<Option<NaiveDateTime>>(&mut reader)
+        Some(timestamp_val()),
+        fory.deserialize_from::<Option<Timestamp>>(&mut reader)
             .unwrap()
     );
     assert_eq!(
@@ -366,12 +367,11 @@ fn deserialize_nullable(fory: &Fory, bins: Vec<u8>, auto_conv: bool) {
         );
         assert_eq!(
             None,
-            fory.deserialize_from::<Option<NaiveDate>>(&mut reader)
-                .unwrap()
+            fory.deserialize_from::<Option<Date>>(&mut reader).unwrap()
         );
         assert_eq!(
             None,
-            fory.deserialize_from::<Option<NaiveDateTime>>(&mut reader)
+            fory.deserialize_from::<Option<Timestamp>>(&mut reader)
                 .unwrap()
         );
         assert_eq!(

@@ -16,9 +16,9 @@
 // under the License.
 
 use fory_core::fory::Fory;
+use fory_core::{Date, Timestamp};
 use fory_derive::{ForyEnum, ForyStruct};
 // use std::any::Any;
-use chrono::{DateTime, NaiveDate, NaiveDateTime};
 use std::collections::HashMap;
 
 // RUSTFLAGS="-Awarnings" cargo expand -p tests --test test_complex_struct
@@ -83,8 +83,8 @@ fn complex_struct() {
         // age: u16,
         op: Option<String>,
         op2: Option<String>,
-        date: NaiveDate,
-        time: NaiveDateTime,
+        date: Date,
+        time: Timestamp,
         c5: f32,
         c6: f64,
     }
@@ -103,8 +103,8 @@ fn complex_struct() {
         // age: 12,
         op: Some("option".to_string()),
         op2: None,
-        date: NaiveDate::from_ymd_opt(2025, 12, 12).unwrap(),
-        time: DateTime::from_timestamp(1689912359, 0).unwrap().naive_utc(),
+        date: Date::from_epoch_days(20_434),
+        time: Timestamp::new(1_689_912_359, 0).unwrap(),
         c5: 2.0,
         c6: 4.0,
     };

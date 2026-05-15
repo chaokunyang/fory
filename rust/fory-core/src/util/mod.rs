@@ -24,15 +24,6 @@ pub use string_util::{
 };
 pub use sync::{Spinlock, SpinlockGuard};
 
-use chrono::NaiveDate;
-
-pub const EPOCH: NaiveDate = match NaiveDate::from_ymd_opt(1970, 1, 1) {
-    None => {
-        panic!("Unreachable code")
-    }
-    Some(epoch) => epoch,
-};
-
 /// Set `ENABLE_FORY_DEBUG_OUTPUT=1` at compile time to enable debug output.
 #[allow(unexpected_cfgs)]
 pub const ENABLE_FORY_DEBUG_OUTPUT: bool = cfg!(fory_debug_output);

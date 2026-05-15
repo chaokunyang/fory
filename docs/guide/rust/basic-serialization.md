@@ -119,10 +119,19 @@ assert_eq!(person, decoded);
 
 ### Date and Time
 
-| Rust Type               | Description                |
-| ----------------------- | -------------------------- |
-| `chrono::NaiveDate`     | Date without timezone      |
-| `chrono::NaiveDateTime` | Timestamp without timezone |
+| Rust Type   | Description                                             |
+| ----------- | ------------------------------------------------------- |
+| `Date`      | Date without timezone, stored as epoch days             |
+| `Timestamp` | Point in time, stored as epoch seconds and nanos        |
+| `Duration`  | Signed duration, stored as seconds and normalized nanos |
+
+`chrono::NaiveDate`, `chrono::NaiveDateTime`, and `chrono::Duration` are supported when the Rust
+`chrono` feature is enabled:
+
+```toml
+[dependencies]
+fory = { version = "0.13", features = ["chrono"] }
+```
 
 ### Custom Types
 

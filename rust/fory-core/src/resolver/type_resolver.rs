@@ -24,8 +24,10 @@ use crate::meta::{
 use crate::resolver::RefMode;
 use crate::serializer::{ForyDefault, Serializer, StructSerializer};
 use crate::type_id::{get_ext_actual_type_id, is_enum_type_id};
+use crate::types::{Date, Duration, Timestamp};
 use crate::TypeId;
-use chrono::{NaiveDate, NaiveDateTime};
+#[cfg(feature = "chrono")]
+use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime};
 use std::collections::{HashSet, LinkedList};
 use std::rc::Rc;
 use std::vec;
@@ -771,8 +773,15 @@ impl TypeResolver {
         self.register_internal_serializer::<usize>(TypeId::USIZE)?;
         self.register_internal_serializer::<u128>(TypeId::U128)?;
         self.register_internal_serializer::<String>(TypeId::STRING)?;
-        self.register_internal_serializer::<NaiveDateTime>(TypeId::TIMESTAMP)?;
-        self.register_internal_serializer::<NaiveDate>(TypeId::DATE)?;
+        #[cfg(feature = "chrono")]
+        {
+            self.register_internal_serializer::<ChronoDuration>(TypeId::DURATION)?;
+            self.register_internal_serializer::<NaiveDateTime>(TypeId::TIMESTAMP)?;
+            self.register_internal_serializer::<NaiveDate>(TypeId::DATE)?;
+        }
+        self.register_internal_serializer::<Duration>(TypeId::DURATION)?;
+        self.register_internal_serializer::<Timestamp>(TypeId::TIMESTAMP)?;
+        self.register_internal_serializer::<Date>(TypeId::DATE)?;
         self.register_internal_serializer::<crate::types::Decimal>(TypeId::DECIMAL)?;
 
         self.register_internal_serializer::<Vec<bool>>(TypeId::BOOL_ARRAY)?;

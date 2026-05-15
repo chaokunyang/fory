@@ -32,7 +32,7 @@
 //! - **`serializer`**: Type-specific serialization implementations
 //! - **`resolver`**: Type resolution and metadata management
 //! - **`meta`**: Metadata handling for schema evolution
-//! - **`types`**: Runtime value carriers such as decimal, Float16, BFloat16, and weak refs
+//! - **`types`**: Runtime value carriers such as temporal values, decimal, Float16, BFloat16, and weak refs
 //! - **`type_id`**: Type IDs and protocol header helpers
 //! - **`error`**: Error handling and result types
 //! - **`util`**: Utility functions and helpers
@@ -52,7 +52,7 @@
 //! - Primitive types (bool, integers, floats, strings)
 //! - Collections (Vec, HashMap, BTreeMap)
 //! - Optional types (`Option<T>`)
-//! - Date/time types (chrono integration)
+//! - Date/time carriers with optional chrono integration
 //! - Custom structs and enums
 //! - Trait objects (Box, Rc, Arc)
 //!
@@ -205,4 +205,4 @@ pub use crate::serializer::{read_data, write_data, ForyDefault, Serializer, Stru
 pub use crate::type_id::TypeId;
 pub use crate::types::bfloat16::bfloat16 as BFloat16;
 pub use crate::types::float16::float16 as Float16;
-pub use crate::types::{ArcWeak, Decimal, RcWeak};
+pub use crate::types::{ArcWeak, Date, Decimal, Duration, RcWeak, Timestamp};

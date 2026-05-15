@@ -23,9 +23,9 @@ use crate::serializer::collection::{DECL_ELEMENT_TYPE, HAS_NULL, IS_SAME_TYPE};
 use crate::serializer::util;
 use crate::serializer::Serializer;
 use crate::type_id as types;
+use crate::types::{Date, Duration, Timestamp};
 use crate::util::ENABLE_FORY_DEBUG_OUTPUT;
 use crate::RefFlag;
-use chrono::{Duration, NaiveDate, NaiveDateTime};
 use std::rc::Rc;
 
 #[allow(unreachable_code)]
@@ -608,12 +608,12 @@ fn skip_value(
 
         // ============ TIMESTAMP (TypeId = 36) ============
         types::TIMESTAMP => {
-            <NaiveDateTime as Serializer>::fory_read_data(context)?;
+            <Timestamp as Serializer>::fory_read_data(context)?;
         }
 
         // ============ DATE (TypeId = 37) ============
         types::DATE => {
-            <NaiveDate as Serializer>::fory_read_data(context)?;
+            <Date as Serializer>::fory_read_data(context)?;
         }
 
         // ============ DECIMAL (TypeId = 38) ============

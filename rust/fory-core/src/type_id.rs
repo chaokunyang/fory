@@ -184,7 +184,7 @@ pub const fn is_enum_type_id(type_id: TypeId) -> bool {
     matches!(type_id, TypeId::ENUM | TypeId::NAMED_ENUM | TypeId::UNION)
 }
 
-pub static BASIC_TYPES: [TypeId; 34] = [
+pub static BASIC_TYPES: [TypeId; 35] = [
     TypeId::BOOL,
     TypeId::INT8,
     TypeId::INT16,
@@ -200,6 +200,7 @@ pub static BASIC_TYPES: [TypeId; 34] = [
     TypeId::STRING,
     TypeId::DATE,
     TypeId::TIMESTAMP,
+    TypeId::DURATION,
     TypeId::BOOL_ARRAY,
     TypeId::BINARY,
     TypeId::INT8_ARRAY,
@@ -272,7 +273,7 @@ pub static PRIMITIVE_ARRAY_TYPES: [u32; 19] = [
     TypeId::USIZE_ARRAY as u32,
     TypeId::ISIZE_ARRAY as u32,
 ];
-pub static BASIC_TYPE_NAMES: [&str; 20] = [
+pub static BASIC_TYPE_NAMES: [&str; 21] = [
     "bool",
     "i8",
     "i16",
@@ -282,8 +283,9 @@ pub static BASIC_TYPE_NAMES: [&str; 20] = [
     "f32",
     "f64",
     "String",
-    "NaiveDate",
-    "NaiveDateTime",
+    "Date",
+    "Timestamp",
+    "Duration",
     "u8",
     "u16",
     "u32",

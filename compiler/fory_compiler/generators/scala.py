@@ -20,7 +20,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.frontend.utils import parse_idl_file
@@ -258,12 +258,7 @@ class ScalaGenerator(BaseGenerator):
         return files
 
     def generate_enum_file(self, enum: Enum) -> GeneratedFile:
-        lines = self.source_header(
-            {
-                "org.apache.fory.annotation.ForyEnumId",
-                "org.apache.fory.scala.ForyScalaEnum",
-            }
-        )
+        lines = self.source_header({"org.apache.fory.annotation.ForyEnumId"})
         comment = self.format_type_id_comment(enum, "//")
         if comment:
             lines.append(comment)
@@ -315,17 +310,13 @@ class ScalaGenerator(BaseGenerator):
 
     def generate_enum(self, enum: Enum, indent: int = 0) -> List[str]:
         ind = self.indent_str * indent
-        lines = [f"{ind}enum {enum.name}(val foryId: Int) extends ForyScalaEnum {{"]
+        lines = [f"{ind}enum {enum.name} {{"]
         for value in enum.values:
             case_name = self.safe_identifier(
                 self.to_pascal_case(self.strip_enum_prefix(enum.name, value.name))
             )
-            lines.append(
-                f"{ind}    case {case_name} extends {enum.name}({value.value})"
-            )
-        lines.append("")
-        lines.append(f"{ind}    @ForyEnumId")
-        lines.append(f"{ind}    def getForyId: Int = foryId")
+            lines.append(f"{ind}    @ForyEnumId({value.value})")
+            lines.append(f"{ind}    case {case_name}")
         lines.append(f"{ind}}}")
         lines.append("")
         return lines
@@ -658,9 +649,9 @@ class ScalaGenerator(BaseGenerator):
                 imports.add("org.apache.fory.annotation.Ref")
         for enum in message.nested_enums:
             imports.add("org.apache.fory.annotation.ForyEnumId")
-            imports.add("org.apache.fory.scala.ForyScalaEnum")
         for union in message.nested_unions:
             imports.add("org.apache.fory.annotation.{ForyCase, ForyUnion}")
+            self.collect_union_imports(union, imports)
         for nested in message.nested_messages:
             self.collect_message_imports(nested, imports)
 
@@ -799,37 +790,134 @@ class ScalaGenerator(BaseGenerator):
         lines.append("")
         lines.append("    def register(fory: Fory): Unit = {")
         lines.append("        ScalaSerializers.registerSerializers(fory)")
-        for enum in self.schema.enums:
-            if self.is_imported_type(enum):
-                continue
-            self.generate_type_registration(lines, enum)
-        for message in self.schema.messages:
-            if self.is_imported_type(message):
-                continue
-            self.generate_type_registration(lines, message)
-            self.generate_nested_registration(lines, message.name, message)
-        for union in self.schema.unions:
-            if self.is_imported_type(union):
-                continue
-            self.generate_type_registration(lines, union)
+        registrations = self.registration_order()
+        for type_def, owner_path in registrations:
+            if isinstance(type_def, Message):
+                self.generate_type_registration(lines, type_def, owner_path, type_only=True)
+        for type_def, owner_path in registrations:
+            if isinstance(type_def, Message):
+                self.generate_serializer_registration(lines, type_def, owner_path)
+            else:
+                self.generate_type_registration(lines, type_def, owner_path)
         lines.append("    }")
         lines.append("}")
         return self.source_file(class_name, lines)
 
-    def generate_nested_registration(
-        self, lines: List[str], owner_path: str, message: Message
+    def registration_order(self) -> List[Tuple[object, Optional[str]]]:
+        entries: List[Tuple[object, Optional[str], List[Message]]] = []
+
+        def message_path(messages: List[Message]) -> str:
+            return ".".join(message.name for message in messages)
+
+        def add_message(message: Message, parent_stack: List[Message]) -> None:
+            owner_path = ".".join(owner.name for owner in parent_stack) or None
+            entries.append((message, owner_path, parent_stack))
+            current_stack = [*parent_stack, message]
+            for enum in message.nested_enums:
+                entries.append((enum, message_path(current_stack), current_stack))
+            for union in message.nested_unions:
+                entries.append((union, message_path(current_stack), current_stack))
+            for nested in message.nested_messages:
+                add_message(nested, current_stack)
+
+        for enum in self.schema.enums:
+            entries.append((enum, None, []))
+        for union in self.schema.unions:
+            entries.append((union, None, []))
+        for message in self.schema.messages:
+            add_message(message, [])
+
+        local_entries: Dict[int, Tuple[object, Optional[str], List[Message]]] = {
+            id(type_def): (type_def, owner_path, parent_stack)
+            for type_def, owner_path, parent_stack in entries
+            if not self.is_imported_type(type_def)
+        }
+        ordered: List[Tuple[object, Optional[str]]] = []
+        visiting: Set[int] = set()
+        visited: Set[int] = set()
+
+        def visit(type_def: object) -> None:
+            key = id(type_def)
+            if key in visited or key not in local_entries:
+                return
+            if key in visiting:
+                return
+            visiting.add(key)
+            _, _, parent_stack = local_entries[key]
+            for dependency in self.registration_dependencies(type_def, parent_stack):
+                visit(dependency)
+            visiting.remove(key)
+            visited.add(key)
+            current, owner_path, _ = local_entries[key]
+            ordered.append((current, owner_path))
+
+        for type_def, _, _ in entries:
+            visit(type_def)
+        return ordered
+
+    def registration_dependencies(
+        self, type_def: object, parent_stack: List[Message]
+    ) -> List[object]:
+        dependencies: List[object] = []
+        if isinstance(type_def, Message):
+            lookup_stack = [*parent_stack, type_def]
+            for field in type_def.fields:
+                self.collect_registration_dependencies(
+                    field.field_type, lookup_stack, dependencies
+                )
+        elif isinstance(type_def, Union):
+            for field in type_def.fields:
+                self.collect_registration_dependencies(
+                    field.field_type, parent_stack, dependencies
+                )
+        return [dependency for dependency in dependencies if dependency is not type_def]
+
+    def collect_registration_dependencies(
+        self,
+        field_type: FieldType,
+        parent_stack: List[Message],
+        dependencies: List[object],
     ) -> None:
-        for enum in message.nested_enums:
-            self.generate_type_registration(lines, enum, owner_path)
-        for nested in message.nested_messages:
-            nested_path = f"{owner_path}.{nested.name}"
-            self.generate_type_registration(lines, nested, owner_path)
-            self.generate_nested_registration(lines, nested_path, nested)
-        for union in message.nested_unions:
-            self.generate_type_registration(lines, union, owner_path)
+        if isinstance(field_type, NamedType):
+            dependency = self.resolve_named_type(field_type.name, parent_stack)
+            if dependency is not None and dependency not in dependencies:
+                dependencies.append(dependency)
+            return
+        if isinstance(field_type, ListType):
+            self.collect_registration_dependencies(
+                field_type.element_type, parent_stack, dependencies
+            )
+            return
+        if isinstance(field_type, ArrayType):
+            self.collect_registration_dependencies(
+                field_type.element_type, parent_stack, dependencies
+            )
+            return
+        if isinstance(field_type, MapType):
+            self.collect_registration_dependencies(
+                field_type.key_type, parent_stack, dependencies
+            )
+            self.collect_registration_dependencies(
+                field_type.value_type, parent_stack, dependencies
+            )
+
+    def resolve_named_type(
+        self, name: str, parent_stack: List[Message]
+    ) -> Optional[object]:
+        if "." in name:
+            return self.schema.get_type(name)
+        for index in range(len(parent_stack) - 1, -1, -1):
+            nested = parent_stack[index].get_nested_type(name)
+            if nested is not None:
+                return nested
+        return self.schema.get_type(name)
 
     def generate_type_registration(
-        self, lines: List[str], type_def, owner_path: Optional[str] = None
+        self,
+        lines: List[str],
+        type_def,
+        owner_path: Optional[str] = None,
+        type_only: bool = False,
     ) -> None:
         class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name
         namespace = self.schema.package or "default"
@@ -846,14 +934,21 @@ class ScalaGenerator(BaseGenerator):
                     f'        ScalaSerializers.registerEnum(fory, classOf[{class_ref}], "{namespace}", "{type_name}")'
                 )
             return
+        method = "registerType" if type_only else "register"
         if self.should_register_by_id(type_def):
             lines.append(
-                f"        ForySerializer.register(fory, classOf[{class_ref}], {type_def.type_id}L)"
+                f"        ForySerializer.{method}(fory, classOf[{class_ref}], {type_def.type_id}L)"
             )
         else:
             lines.append(
-                f'        ForySerializer.register(fory, classOf[{class_ref}], "{namespace}", "{type_name}")'
+                f'        ForySerializer.{method}(fory, classOf[{class_ref}], "{namespace}", "{type_name}")'
             )
+
+    def generate_serializer_registration(
+        self, lines: List[str], type_def, owner_path: Optional[str] = None
+    ) -> None:
+        class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name
+        lines.append(f"        ForySerializer.registerSerializer(fory, classOf[{class_ref}])")
 
     def safe_identifier(self, name: str) -> str:
         return f"`{name}`" if name in self.RESERVED else name

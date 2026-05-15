@@ -444,10 +444,10 @@ In xlang mode, for cross-language compatibility:
 **Annotation examples:**
 
 ```java
-// Java: use @ForyField annotation
+// Java: use @Ref for reference tracking
 public class MyClass {
     @Nullable
-    @ForyField(ref = true)
+    @Ref
     private Object refField;
 
     private String requiredField;
@@ -456,10 +456,10 @@ public class MyClass {
 
 ```python
 # Python: use typing with fory field descriptors
-from pyfory import Fory, ForyField
+from pyfory import ForyField, Ref
 
 class MyClass:
-    ref_field: ForyField(SomeType, nullable=True, ref=True)
+    ref_field: ForyField(Ref[SomeType], nullable=True)
     required_field: ForyField(str, nullable=False)
 ```
 

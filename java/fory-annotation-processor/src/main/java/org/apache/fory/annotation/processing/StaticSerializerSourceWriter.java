@@ -118,6 +118,8 @@ final class StaticSerializerSourceWriter {
           .append(field.nullable)
           .append(", ")
           .append(field.trackingRef)
+          .append(", ")
+          .append(field.hasTrackingRefMetadata)
           .append(", ForyField.Dynamic.")
           .append(field.dynamic)
           .append(", ")

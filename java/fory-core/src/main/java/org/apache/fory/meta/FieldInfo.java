@@ -24,6 +24,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.Objects;
 import org.apache.fory.annotation.ForyField;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.converter.FieldConverter;
@@ -90,7 +91,8 @@ public final class FieldInfo implements Serializable {
    * null. Don't invoke this method if class does have <code>fieldName</code> field. In such case,
    * reflection should be used to get the descriptor.
    */
-  Descriptor toDescriptor(TypeResolver resolver, Descriptor descriptor) {
+  @Internal
+  public Descriptor toDescriptor(TypeResolver resolver, Descriptor descriptor) {
     TypeRef<?> declared = descriptor != null ? descriptor.getTypeRef() : primitiveListCarrierType();
     TypeRef<?> typeRef = fieldType.toTypeToken(resolver, declared);
     String typeName = fieldType.getTypeName(resolver, typeRef);

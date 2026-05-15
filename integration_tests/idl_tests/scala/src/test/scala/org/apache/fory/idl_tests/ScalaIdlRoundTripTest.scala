@@ -30,10 +30,11 @@ import collection.{
 import example.{ExampleForyRegistration, ExampleMessage, ExampleState}
 import nested_name.NestedNameForyRegistration
 import org.apache.fory.Fory
+import org.apache.fory.annotation.ForyEnumId
 import org.apache.fory.meta.FieldTypes
-import org.apache.fory.scala.{ForyScalaEnum, ForySerializer}
-import org.apache.fory.serializer.StaticGeneratedStructSerializerFactory
-import org.apache.fory.`type`.{TypeUtils, Types}
+import org.apache.fory.scala.ForySerializer
+import org.apache.fory.serializer.StaticGeneratedStructSerializer
+import org.apache.fory.`type`.{ScalaTypes, TypeUtils, Types}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 import tree.{TreeForyRegistration, TreeNode}
@@ -108,11 +109,23 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
     }
 
     "preserve generated Scala enum metadata in nested descriptors" in {
-      classOf[ForyScalaEnum].isAssignableFrom(classOf[ExampleState]) shouldBe true
-      val factory =
+      ScalaTypes.isScalaEnumType(classOf[ExampleState]) shouldBe true
+      val readyCase =
+        Class.forName("example.ExampleState$").getDeclaredField("Ready").getAnnotation(classOf[ForyEnumId])
+      readyCase.value() shouldBe 1
+      val fory = Fory.builder()
+        .withXlang(true)
+        .withCompatible(false)
+        .withRefTracking(false)
+        .withScalaOptimizationEnabled(true)
+        .requireClassRegistration(true)
+        .build()
+      ExampleForyRegistration.register(fory)
+      val serializer =
         summon[ForySerializer[ExampleMessage]]
-          .asInstanceOf[StaticGeneratedStructSerializerFactory[ExampleMessage]]
-      val descriptors = factory.getGeneratedDescriptors.asScala
+          .createSerializer(fory.getTypeResolver)
+          .asInstanceOf[StaticGeneratedStructSerializer[ExampleMessage]]
+      val descriptors = serializer.getGeneratedDescriptors.asScala
       val enumValue = descriptors.find(_.getName == "enumValue").get
       val enumList = descriptors.find(_.getName == "enumList").get
       val enumMap = descriptors.find(_.getName == "enumValuesByName").get
@@ -127,16 +140,7 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
       TypeUtils.getMapKeyValueType(uint8ArrayMap.getTypeRef).f1.getComponentType.getTypeExtMeta
         .typeId() shouldBe Types.UINT8
 
-      val fory = Fory.builder()
-        .withXlang(true)
-        .withCompatible(false)
-        .withRefTracking(false)
-        .withScalaOptimizationEnabled(true)
-        .requireClassRegistration(true)
-        .build()
-      ExampleForyRegistration.register(fory)
-      val serializer = factory.newSerializer(fory.getTypeResolver, classOf[ExampleMessage], null)
-      val fieldGroups = serializer.buildLocalFieldGroups(factory.getGeneratedDescriptors)
+      val fieldGroups = serializer.buildLocalFieldGroups(serializer.getGeneratedDescriptors)
       val enumListInfo = fieldGroups.allFields.find(_.descriptor.getName == "enumList").get
       enumListInfo.genericType.getTypeParameter0.getTypeRef.getTypeExtMeta.typeId() shouldBe
         Types.ENUM

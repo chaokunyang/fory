@@ -64,10 +64,12 @@ def test_scala_generator_emits_case_classes_options_enums_and_unions():
     assert "derives ForySerializer" in user
 
     status = files["demo/Status.scala"]
-    assert "enum Status(val foryId: Int)" in status
-    assert "case Unknown extends Status(0)" in status
-    assert "case Ok extends Status(7)" in status
-    assert "@ForyEnumId" in status
+    assert "enum Status {" in status
+    assert "@ForyEnumId(0)" in status
+    assert "case Unknown" in status
+    assert "@ForyEnumId(7)" in status
+    assert "case Ok" in status
+    assert "ForyScalaEnum" not in status
 
     union = files["demo/SearchTarget.scala"]
     assert "@ForyUnion" in union
@@ -122,6 +124,51 @@ def test_scala_generator_uses_mutable_normal_class_for_nested_construction_cycle
     assert "var parent: Option[Envelope.Node @Ref] = None" in envelope
 
 
+def test_scala_generator_keeps_container_recursive_messages_as_case_classes():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Node [id=125] {
+            string id = 1;
+            list<ref Node> children = 2;
+            map<string, Node> lookup = 3;
+        }
+        """
+    )
+
+    node = files["graph/Node.scala"]
+    assert "final case class Node(" in node
+    assert "children: List[Node @Ref]" in node
+    assert "lookup: Map[String, Node]" in node
+    assert "final class Node() derives ForySerializer" not in node
+
+
+def test_scala_generator_marks_container_cycle_with_constructor_edge_mutable():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Node [id=126] {
+            string id = 1;
+            list<ref Edge> edges = 2;
+        }
+
+        message Edge [id=127] {
+            string id = 1;
+            ref Node owner = 2;
+        }
+        """
+    )
+
+    node = files["graph/Node.scala"]
+    edge = files["graph/Edge.scala"]
+    assert "final class Node() derives ForySerializer" in node
+    assert "var edges: List[Edge @Ref] = List.empty" in node
+    assert "final class Edge() derives ForySerializer" in edge
+    assert "var owner: Option[Node @Ref] = None" in edge
+
+
 def test_scala_generator_marks_nested_owner_child_cycles_mutable():
     files = generate_scala(
         """
@@ -165,6 +212,37 @@ def test_scala_generator_marks_union_mediated_cycles_mutable():
     assert "final class Node() derives ForySerializer" in node
     assert 'var id: String = ""' in node
     assert "var choice: Choice @Ref = null" in node
+
+
+def test_scala_generator_collects_nested_union_payload_imports():
+    files = generate_scala(
+        """
+        package demo;
+
+        message Envelope [id=150] {
+            message User [id=151] {
+                string name = 1;
+            }
+
+            union Target [id=152] {
+                fixed int32 fixed_id = 1;
+                list<ref User> users = 2;
+            }
+
+            Target target = 1;
+        }
+        """
+    )
+
+    envelope = files["demo/Envelope.scala"]
+    assert "import org.apache.fory.annotation.Int32Type" in envelope
+    assert "import org.apache.fory.annotation.Ref" in envelope
+    assert "import org.apache.fory.config.Int32Encoding" in envelope
+    assert (
+        "case FixedIdCase(value: Int @Int32Type(encoding = Int32Encoding.FIXED))"
+        in envelope
+    )
+    assert "case UsersCase(value: List[Envelope.User @Ref])" in envelope
 
 
 def test_scala_generator_marks_nested_union_mediated_cycles_mutable():
@@ -283,13 +361,14 @@ def test_scala_generator_uses_jvm_nested_names_for_name_registration():
 
     registration = files["demo/DemoForyRegistration.scala"]
     assert (
-        'ForySerializer.register(fory, classOf[Envelope], "demo", "Envelope")'
+        'ForySerializer.registerType(fory, classOf[Envelope], "demo", "Envelope")'
         in registration
     )
     assert (
-        'ForySerializer.register(fory, classOf[Envelope.Payload], "demo.Envelope", "Payload")'
+        'ForySerializer.registerType(fory, classOf[Envelope.Payload], "demo.Envelope", "Payload")'
         in registration
     )
+    assert "ForySerializer.registerSerializer(fory, classOf[Envelope.Payload])" in registration
     assert (
         'ScalaSerializers.registerEnum(fory, classOf[Envelope.Kind], "demo.Envelope", "Kind")'
         in registration
@@ -298,6 +377,33 @@ def test_scala_generator_uses_jvm_nested_names_for_name_registration():
         'ForySerializer.register(fory, classOf[Envelope.Choice], "demo.Envelope", "Choice")'
         in registration
     )
+    assert "ForySerializer.registerSerializer(fory, classOf[Envelope])" in registration
+
+
+def test_scala_generator_pre_registers_message_type_graph_before_serializers():
+    files = generate_scala(
+        """
+        package graph;
+
+        message Node {
+            list<ref Edge> edges = 1;
+        }
+
+        message Edge {
+            ref Node node = 1;
+        }
+        """
+    )
+
+    registration = files["graph/GraphForyRegistration.scala"]
+    node_type = registration.index("ForySerializer.registerType(fory, classOf[Node]")
+    edge_type = registration.index("ForySerializer.registerType(fory, classOf[Edge]")
+    node_serializer = registration.index("ForySerializer.registerSerializer(fory, classOf[Node])")
+    edge_serializer = registration.index("ForySerializer.registerSerializer(fory, classOf[Edge])")
+    assert node_type < node_serializer
+    assert edge_type < node_serializer
+    assert node_type < edge_serializer
+    assert edge_type < edge_serializer
 
 
 def test_scala_generator_keeps_imported_types_in_owner_package():

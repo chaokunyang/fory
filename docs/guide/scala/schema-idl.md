@@ -47,6 +47,13 @@ ExampleForyRegistration.register(fory)
 For `ThreadSafeFory`, generated registration helpers install a callback so each
 runtime instance gets the same serializers.
 
+Generated helpers register message type identities before installing message
+serializers. This two-phase order lets mutually recursive message graphs build
+descriptor metadata through the normal `TypeResolver` path without placeholder
+serializers or Scala-specific registration state in Java core. Enums and unions
+are registered with their serializers directly because their derived serializers
+own case dispatch.
+
 ## Generated Messages
 
 Acyclic messages generate case classes:
@@ -88,7 +95,13 @@ final class Node() derives ForySerializer {
 }
 ```
 
-`@ForyField(ref = true)` is not the Scala macro or IDL API.
+`@Ref` is the JVM reference-tracking annotation for Scala macro and IDL APIs.
+
+Generated xlang collection fields use immutable Scala collection types:
+`List[T]`, `Set[T]`, and `Map[K, V]`. The runtime xlang serializers can also
+rebuild supported mutable collection interfaces such as `scala.collection.Seq`
+and `scala.collection.Map`, but concrete mutable collection classes are outside
+the schema IDL surface unless explicitly generated.
 
 ## Generated Enums
 
@@ -96,19 +109,18 @@ IDL enums generate Scala 3 enums only. No Java enum sidecar is emitted.
 
 ```scala
 import org.apache.fory.annotation.ForyEnumId
-import org.apache.fory.scala.ForyScalaEnum
 
-enum Status(val foryId: Int) extends ForyScalaEnum {
-  case Unknown extends Status(0)
-  case Ok extends Status(1)
+enum Status {
+  @ForyEnumId(0)
+  case Unknown
 
-  @ForyEnumId
-  def getForyId: Int = foryId
+  @ForyEnumId(1)
+  case Ok
 }
 ```
 
-Generated registration uses `ScalaSerializers.registerEnum(...)` so stable Fory
-enum IDs are used in xlang mode.
+Generated registration uses `ScalaSerializers.registerEnum(...)` so the stable
+Fory enum IDs from case-level `@ForyEnumId` metadata are used in xlang mode.
 
 ## Generated Unions
 

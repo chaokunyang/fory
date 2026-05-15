@@ -20,11 +20,26 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
+import org.apache.fory.annotation.ForyEnumId
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
 object ScalaEnumTest {
   enum ColorEnum { case Red, Green, Blue }
+
+  enum StableColorV1 {
+    @ForyEnumId(7)
+    case Red
+    @ForyEnumId(3)
+    case Green
+  }
+
+  enum StableColorV2 {
+    @ForyEnumId(3)
+    case Green
+    @ForyEnumId(7)
+    case Red
+  }
 
   case class Colors(set: Set[ColorEnum])
 }
@@ -47,6 +62,24 @@ class ScalaEnumTest extends AnyWordSpec with Matchers {
       val colors = Colors(Set(ColorEnum.Green, ColorEnum.Red))
       val bytes = fory.serialize(colors)
       fory.deserialize(bytes) shouldEqual colors
+    }
+    "use case-level ForyEnumId metadata for stable xlang enum tags" in {
+      val writer = Fory.builder()
+        .withXlang(true)
+        .withRefTracking(false)
+        .withScalaOptimizationEnabled(true)
+        .requireClassRegistration(true)
+        .build()
+      val reader = Fory.builder()
+        .withXlang(true)
+        .withRefTracking(false)
+        .withScalaOptimizationEnabled(true)
+        .requireClassRegistration(true)
+        .build()
+      ScalaSerializers.registerEnum(writer, classOf[StableColorV1], "scala_test", "StableColor")
+      ScalaSerializers.registerEnum(reader, classOf[StableColorV2], "scala_test", "StableColor")
+
+      reader.deserialize(writer.serialize(StableColorV1.Green)) shouldBe StableColorV2.Green
     }
   }
 }

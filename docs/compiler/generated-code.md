@@ -1095,15 +1095,16 @@ Enums generate Scala 3 enums with stable Fory IDs:
 
 ```scala
 import org.apache.fory.annotation.ForyEnumId
-import org.apache.fory.scala.ForyScalaEnum
 
-enum PhoneType(val foryId: Int) extends ForyScalaEnum {
-  case Mobile extends PhoneType(0)
-  case Home extends PhoneType(1)
-  case Work extends PhoneType(2)
+enum PhoneType {
+  @ForyEnumId(0)
+  case Mobile
 
-  @ForyEnumId
-  def getForyId: Int = foryId
+  @ForyEnumId(1)
+  case Home
+
+  @ForyEnumId(2)
+  case Work
 }
 ```
 
@@ -1127,8 +1128,7 @@ enum Animal derives ForySerializer {
 }
 ```
 
-`optional T` fields generate `Option[T]`. Reference tracking uses `@Ref`;
-`@ForyField(ref = true)` is not emitted by the Scala generator.
+`optional T` fields generate `Option[T]`. Reference tracking uses `@Ref`.
 
 ### Registration
 

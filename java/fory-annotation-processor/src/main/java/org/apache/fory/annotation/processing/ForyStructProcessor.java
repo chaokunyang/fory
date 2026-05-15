@@ -386,6 +386,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
     ForyFieldMeta foryField = foryField(field);
     Object fieldTypeTree = typeTree(field);
     boolean nullable = fieldNullable(field.asType(), fieldTypeTree, mode);
+    boolean trackingRef = fieldTrackingRef(field, fieldTypeTree);
+    boolean hasTrackingRefMetadata = fieldHasTrackingRefMetadata(field, fieldTypeTree);
     SourceTypeNode typeNode = buildFieldTypeNode(field.asType(), fieldTypeTree, nullable, field);
     String erasedType = canonicalName(types.erasure(field.asType()));
     String declaringClass =
@@ -437,7 +439,8 @@ public final class ForyStructProcessor extends AbstractProcessor {
         foryField.hasForyField,
         foryField.id,
         nullable,
-        foryField.hasForyField && foryField.ref,
+        trackingRef,
+        hasTrackingRefMetadata,
         foryField.dynamic);
   }
 
@@ -452,6 +455,22 @@ public final class ForyStructProcessor extends AbstractProcessor {
       return true;
     }
     return isOptionalType(type);
+  }
+
+  private boolean fieldTrackingRef(VariableElement field, Object tree) {
+    TypeUseAnnotation ref = typeUseAnnotation(field.asType(), typeTreeInfo(tree).annotations, REF);
+    if (ref == null) {
+      AnnotationMirror fieldRef = annotationMirror(field, REF);
+      ref = fieldRef == null ? null : new TypeUseAnnotation(fieldRef, null);
+    }
+    return ref != null && booleanValue(ref, "enable", true);
+  }
+
+  private boolean fieldHasTrackingRefMetadata(VariableElement field, Object tree) {
+    if (hasAnnotation(field, REF)) {
+      return true;
+    }
+    return typeUseAnnotation(field.asType(), typeTreeInfo(tree).annotations, REF) != null;
   }
 
   private boolean isOptionalType(TypeMirror type) {
@@ -1169,7 +1188,6 @@ public final class ForyStructProcessor extends AbstractProcessor {
     Map<? extends ExecutableElement, ? extends AnnotationValue> values =
         elements.getElementValuesWithDefaults(mirror);
     int id = -1;
-    boolean ref = false;
     String dynamic = "AUTO";
     for (Map.Entry<? extends ExecutableElement, ? extends AnnotationValue> entry :
         values.entrySet()) {
@@ -1177,8 +1195,6 @@ public final class ForyStructProcessor extends AbstractProcessor {
       Object value = entry.getValue().getValue();
       if ("id".equals(name)) {
         id = ((Number) value).intValue();
-      } else if ("ref".equals(name)) {
-        ref = (Boolean) value;
       } else if ("dynamic".equals(name)) {
         dynamic = String.valueOf(value);
       }
@@ -1187,7 +1203,7 @@ public final class ForyStructProcessor extends AbstractProcessor {
       throw new InvalidStructException(
           "@ForyField id must be -1 (no tag ID) or a non-negative tag ID", field);
     }
-    return new ForyFieldMeta(true, id, ref, dynamic);
+    return new ForyFieldMeta(true, id, dynamic);
   }
 
   private String canonicalName(TypeMirror type) {
@@ -1278,17 +1294,15 @@ public final class ForyStructProcessor extends AbstractProcessor {
   }
 
   private static final class ForyFieldMeta {
-    static final ForyFieldMeta NONE = new ForyFieldMeta(false, -1, false, "AUTO");
+    static final ForyFieldMeta NONE = new ForyFieldMeta(false, -1, "AUTO");
 
     final boolean hasForyField;
     final int id;
-    final boolean ref;
     final String dynamic;
 
-    ForyFieldMeta(boolean hasForyField, int id, boolean ref, String dynamic) {
+    ForyFieldMeta(boolean hasForyField, int id, String dynamic) {
       this.hasForyField = hasForyField;
       this.id = id;
-      this.ref = ref;
       this.dynamic = dynamic;
     }
   }

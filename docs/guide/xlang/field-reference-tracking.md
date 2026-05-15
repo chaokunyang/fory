@@ -136,7 +136,7 @@ By default, **most fields do not track references** even when global `refTrackin
 
 ### Customizing Per-Field Ref Tracking
 
-#### Java: @ForyField Annotation
+#### Java: @Ref Annotation
 
 ```java
 public class Document {
@@ -144,12 +144,11 @@ public class Document {
     String title;
 
     // Enable ref tracking for this field
-    @ForyField(ref = true)
+    @Ref
     Author author;
 
     // Shared across documents, track refs to avoid duplicates
-    @ForyField(ref = true)
-    List<Tag> tags;
+    List<@Ref Tag> tags;
 }
 ```
 
@@ -197,8 +196,8 @@ struct Document {
 
 #### Scala: @Ref Annotation
 
-Scala schema IDL and Scala 3 macro derivation use the shared JVM `@Ref`
-annotation instead of `@ForyField(ref = true)`:
+Scala schema IDL and Scala 3 macro derivation use the same shared JVM `@Ref`
+annotation:
 
 ```scala
 import org.apache.fory.annotation.{ForyField, ForyStruct, Ref}

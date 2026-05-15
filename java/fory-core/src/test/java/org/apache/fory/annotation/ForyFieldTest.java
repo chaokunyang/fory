@@ -20,6 +20,7 @@
 package org.apache.fory.annotation;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertTrue;
 
@@ -30,6 +31,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.type.Descriptor;
 import org.testng.annotations.Test;
 
 public class ForyFieldTest extends ForyTestBase {
@@ -39,10 +41,10 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class Point {
-    @ForyField(id = 0, ref = false)
+    @ForyField(id = 0)
     public double x;
 
-    @ForyField(id = 1, ref = false)
+    @ForyField(id = 1)
     public double y;
   }
 
@@ -61,21 +63,21 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class User {
-    @ForyField(id = 0, ref = false)
+    @ForyField(id = 0)
     public long userId;
 
-    @ForyField(id = 1, ref = false)
+    @ForyField(id = 1)
     public String username;
 
     @Nullable
-    @ForyField(id = 2, ref = false)
+    @ForyField(id = 2)
     public String email; // Can be null during account creation
 
     @Nullable
-    @ForyField(id = 3, ref = false)
+    @ForyField(id = 3)
     public String phoneNumber; // Optional contact method
 
-    @ForyField(id = 4, ref = false)
+    @ForyField(id = 4)
     public long createdAt;
   }
 
@@ -108,10 +110,10 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class Customer {
-    @ForyField(id = 0, ref = false)
+    @ForyField(id = 0)
     public long customerId;
 
-    @ForyField(id = 1, ref = false)
+    @ForyField(id = 1)
     public String name;
   }
 
@@ -119,14 +121,15 @@ public class ForyFieldTest extends ForyTestBase {
   @NoArgsConstructor
   @AllArgsConstructor
   public static class Order {
-    @ForyField(id = 0, ref = false)
+    @ForyField(id = 0)
     public long orderId;
 
-    @ForyField(id = 1, ref = true)
+    @ForyField(id = 1)
+    @Ref
     public Customer customer; // Same Customer might appear in many orders
 
     @Nullable
-    @ForyField(id = 2, ref = false)
+    @ForyField(id = 2)
     public String notes; // Unique per order
   }
 
@@ -156,7 +159,7 @@ public class ForyFieldTest extends ForyTestBase {
     assertEquals(deserialized.get(1).orderId, 101L);
     assertEquals(deserialized.get(0).customer.customerId, 1L);
     assertEquals(deserialized.get(1).customer.customerId, 1L);
-    // Both orders should reference the same customer object due to ref=true
+    // Both orders should reference the same customer object due to @Ref
     // (though this is more about serialization efficiency than behavior)
   }
 
@@ -183,15 +186,16 @@ public class ForyFieldTest extends ForyTestBase {
     assertNull(deserialized.field2);
   }
 
-  /** Test ref defaults */
+  /** Test field-wrapper reference tracking defaults */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class DefaultRefTest {
-    @ForyField(id = 0) // ref defaults to false
+    @ForyField(id = 0) // no @Ref, so field-wrapper ref tracking is disabled
     public String field1;
 
-    @ForyField(id = 1, ref = true)
+    @ForyField(id = 1)
+    @Ref
     public String field2;
   }
 
@@ -234,6 +238,41 @@ public class ForyFieldTest extends ForyTestBase {
     assertEquals(deserialized.annotatedField, "annotated");
     assertEquals(deserialized.regularField, "regular");
     assertNull(deserialized.anotherAnnotatedField);
+  }
+
+  @Data
+  @NoArgsConstructor
+  @AllArgsConstructor
+  public static class RefOwnerDefaults {
+    @ForyField(id = 0)
+    public Customer foryFieldOnly;
+
+    @Ref(enable = false)
+    public Customer refDisabled;
+  }
+
+  @Test
+  public void testRefAnnotationOwnsNativeRefOverride() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
+    List<Descriptor> descriptors =
+        fory.getTypeResolver().getFieldDescriptors(RefOwnerDefaults.class, true);
+
+    assertTrue(descriptorNamed(descriptors, "foryFieldOnly").isTrackingRef());
+    assertFalse(descriptorNamed(descriptors, "refDisabled").isTrackingRef());
+  }
+
+  private static Descriptor descriptorNamed(List<Descriptor> descriptors, String name) {
+    for (Descriptor descriptor : descriptors) {
+      if (descriptor.getName().equals(name)) {
+        return descriptor;
+      }
+    }
+    throw new AssertionError("Descriptor not found: " + name);
   }
 
   /** Test with primitive types */

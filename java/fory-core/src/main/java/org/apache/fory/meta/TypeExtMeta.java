@@ -25,15 +25,26 @@ public class TypeExtMeta {
   private final int typeId;
   private final boolean nullable;
   private final boolean trackingRef;
+  private final boolean nullableWrapper;
 
   public static TypeExtMeta of(int typeId, boolean nullable, boolean trackingRef) {
     return new TypeExtMeta(typeId, nullable, trackingRef);
   }
 
+  public static TypeExtMeta of(
+      int typeId, boolean nullable, boolean trackingRef, boolean nullableWrapper) {
+    return new TypeExtMeta(typeId, nullable, trackingRef, nullableWrapper);
+  }
+
   TypeExtMeta(int typeId, boolean nullable, boolean trackingRef) {
+    this(typeId, nullable, trackingRef, false);
+  }
+
+  TypeExtMeta(int typeId, boolean nullable, boolean trackingRef, boolean nullableWrapper) {
     this.typeId = typeId;
     this.nullable = nullable;
     this.trackingRef = trackingRef;
+    this.nullableWrapper = nullableWrapper;
   }
 
   public int typeId() {
@@ -48,6 +59,11 @@ public class TypeExtMeta {
     return trackingRef;
   }
 
+  /** Whether the local source type wraps a nullable value in a language-level container. */
+  public boolean nullableWrapper() {
+    return nullableWrapper;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) {
@@ -57,12 +73,15 @@ public class TypeExtMeta {
       return false;
     }
     TypeExtMeta that = (TypeExtMeta) o;
-    return typeId == that.typeId && nullable == that.nullable && trackingRef == that.trackingRef;
+    return typeId == that.typeId
+        && nullable == that.nullable
+        && trackingRef == that.trackingRef
+        && nullableWrapper == that.nullableWrapper;
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(typeId, nullable, trackingRef);
+    return Objects.hash(typeId, nullable, trackingRef, nullableWrapper);
   }
 
   @Override
@@ -74,6 +93,8 @@ public class TypeExtMeta {
         + nullable
         + ", trackingRef="
         + trackingRef
+        + ", nullableWrapper="
+        + nullableWrapper
         + '}';
   }
 }

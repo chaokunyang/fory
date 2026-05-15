@@ -596,46 +596,6 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Override
-  public void registerUnionCase(Class<?> unionType, Class<?> caseType) {
-    checkRegisterAllowed();
-    TypeInfo typeInfo = classInfoMap.get(unionType);
-    Preconditions.checkArgument(
-        typeInfo != null && Types.isUnionType(typeInfo.typeId),
-        "Union type %s must be registered before case type %s",
-        unionType,
-        caseType);
-    TypeInfo existingInfo = classInfoMap.get(caseType);
-    Preconditions.checkArgument(
-        existingInfo == null || existingInfo == typeInfo,
-        "Union case type %s has been registered as %s",
-        caseType,
-        existingInfo);
-    classInfoMap.put(caseType, typeInfo);
-    extRegistry.registeredClasses.put(caseType.getName(), caseType);
-    registerGraalvmClass(caseType);
-  }
-
-  @Override
-  public void registerEnumCase(Class<?> enumType, Class<?> caseType) {
-    checkRegisterAllowed();
-    TypeInfo typeInfo = classInfoMap.get(enumType);
-    Preconditions.checkArgument(
-        typeInfo != null && Types.isEnumType(typeInfo.typeId),
-        "Enum type %s must be registered before case type %s",
-        enumType,
-        caseType);
-    TypeInfo existingInfo = classInfoMap.get(caseType);
-    Preconditions.checkArgument(
-        existingInfo == null || existingInfo == typeInfo,
-        "Enum case type %s has been registered as %s",
-        caseType,
-        existingInfo);
-    classInfoMap.put(caseType, typeInfo);
-    extRegistry.registeredClasses.put(caseType.getName(), caseType);
-    registerGraalvmClass(caseType);
-  }
-
-  @Override
   public void registerEnum(Class<?> cls, long userId, Serializer<?> serializer) {
     checkRegisterAllowed();
     int checkedUserId = toUserTypeId(userId);

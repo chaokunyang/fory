@@ -41,6 +41,7 @@ final class SourceField {
   final int foryFieldId;
   final boolean nullable;
   final boolean trackingRef;
+  final boolean hasTrackingRefMetadata;
   final String dynamic;
 
   SourceField(
@@ -60,6 +61,7 @@ final class SourceField {
       int foryFieldId,
       boolean nullable,
       boolean trackingRef,
+      boolean hasTrackingRefMetadata,
       String dynamic) {
     this.id = id;
     this.name = name;
@@ -77,6 +79,7 @@ final class SourceField {
     this.foryFieldId = foryFieldId;
     this.nullable = nullable;
     this.trackingRef = trackingRef;
+    this.hasTrackingRefMetadata = hasTrackingRefMetadata;
     this.dynamic = dynamic;
   }
 

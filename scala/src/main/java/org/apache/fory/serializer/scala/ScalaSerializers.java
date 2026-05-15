@@ -22,9 +22,9 @@ package org.apache.fory.serializer.scala;
 import org.apache.fory.AbstractThreadSafeFory;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.Config;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import scala.collection.immutable.NumericRange;
 import scala.collection.immutable.Range;
@@ -40,7 +40,8 @@ public class ScalaSerializers {
   }
 
   public static void registerSerializers(Fory fory) {
-    TypeResolver resolver = setSerializerFactory(fory);
+    TypeResolver resolver = fory.getTypeResolver();
+    ensureScalaDispatcher(fory);
     if (resolver.isCrossLanguage()) {
       return;
     }
@@ -177,40 +178,38 @@ public class ScalaSerializers {
   public static void registerEnum(Fory fory, Class<?> cls, long typeId) {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.registerEnum(cls, typeId, new ScalaEnumSerializer(resolver, cls));
-    registerEnumCases(resolver, cls);
+    registerEnumRuntimeAliases(fory, cls);
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, String namespace, String typeName) {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.registerEnum(cls, namespace, typeName, new ScalaEnumSerializer(resolver, cls));
-    registerEnumCases(resolver, cls);
+    registerEnumRuntimeAliases(fory, cls);
   }
 
-  private static void registerEnumCases(TypeResolver resolver, Class<?> cls) {
-    for (Object enumConstant : ScalaEnumSerializer.loadValues(cls)) {
-      Class<?> caseClass = enumConstant.getClass();
-      if (caseClass != cls) {
-        resolver.registerEnumCase(cls, caseClass);
+  @Internal
+  public static void registerRuntimeTypeAlias(
+      Fory fory, Class<?> runtimeClass, Class<?> canonicalClass) {
+    fory.getTypeResolver().registerRuntimeTypeAlias(runtimeClass, canonicalClass);
+  }
+
+  private static void registerEnumRuntimeAliases(Fory fory, Class<?> cls) {
+    for (Object value : ScalaEnumSerializer.loadValues(cls)) {
+      Class<?> runtimeClass = value.getClass();
+      if (runtimeClass != cls) {
+        registerRuntimeTypeAlias(fory, runtimeClass, cls);
       }
     }
   }
 
-  private static TypeResolver setSerializerFactory(Fory fory) {
+  private static ScalaDispatcher ensureScalaDispatcher(Fory fory) {
     TypeResolver resolver = fory.getTypeResolver();
-    ScalaDispatcher dispatcher = new ScalaDispatcher();
     SerializerFactory factory = resolver.getSerializerFactory();
-    if (factory != null) {
-      SerializerFactory newFactory = (typeResolver, cls) -> {
-        Serializer serializer = factory.createSerializer(typeResolver, cls);
-        if (serializer == null) {
-          serializer = dispatcher.createSerializer(typeResolver, cls);
-        }
-        return serializer;
-      };
-      resolver.setSerializerFactory(newFactory);
-    } else {
-      resolver.setSerializerFactory(dispatcher);
+    if (factory instanceof ScalaDispatcher) {
+      return (ScalaDispatcher) factory;
     }
-    return resolver;
+    ScalaDispatcher dispatcher = new ScalaDispatcher(factory);
+    resolver.setSerializerFactory(dispatcher);
+    return dispatcher;
   }
 }

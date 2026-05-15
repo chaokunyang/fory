@@ -2184,8 +2184,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         Expression value = deserializeForNotNullForField(buffer, descriptor, null);
 
         if (serializerCallsReference) {
-          // When a field explicitly disables ref tracking (@ForyField(ref = false))
-          // but global ref tracking is enabled, the serializer will call reference().
+          // When field-wrapper ref tracking is disabled but global ref tracking is enabled, the
+          // serializer will call reference().
           // We need to preserve a -1 id so that when the deserializer calls reference(),
           // it will pop this -1 and skip the setReadRef call.
           Expression preserveStubRefId =
@@ -2218,11 +2218,8 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   protected Expression deserializeCompatibleListArrayField(Descriptor descriptor) {
     TypeExtMeta extMeta = descriptor.getTypeRef().getTypeExtMeta();
     boolean nullable = extMeta == null ? descriptor.isNullable() : extMeta.nullable();
-    // A top-level @Nullable TypeExtMeta must not erase @ForyField(ref = true).
-    boolean trackingRef =
-        extMeta == null || descriptor.hasForyField()
-            ? descriptor.isTrackingRef()
-            : extMeta.trackingRef();
+    // Descriptor owns field-wrapper reference tracking through @Ref or generated metadata.
+    boolean trackingRef = descriptor.isTrackingRef();
     Class<?> targetType =
         descriptor.getField() == null ? descriptor.getRawType() : descriptor.getField().getType();
     return new StaticInvoke(

@@ -19,21 +19,28 @@
 
 package org.apache.fory.serializer.scala;
 
+import java.lang.reflect.Method;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.scala.ForyScalaEnum;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.util.Preconditions;
 import scala.collection.generic.DefaultSerializable;
 
-import java.lang.reflect.Method;
-
 /**
  * Serializer dispatcher for scala types.
  */
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ScalaDispatcher implements SerializerFactory {
+  private final SerializerFactory delegate;
+
+  public ScalaDispatcher() {
+    this(null);
+  }
+
+  public ScalaDispatcher(SerializerFactory delegate) {
+    this.delegate = delegate;
+  }
 
   /**
    * Get Serializer for scala type.
@@ -43,7 +50,14 @@ public class ScalaDispatcher implements SerializerFactory {
    */
   @Override
   public Serializer createSerializer(TypeResolver typeResolver, Class<?> clz) {
-    if (ForyScalaEnum.class.isAssignableFrom(clz)) {
+    Serializer serializer;
+    if (delegate != null) {
+      serializer = delegate.createSerializer(typeResolver, clz);
+      if (serializer != null) {
+        return serializer;
+      }
+    }
+    if (ScalaEnumSerializer.canSerialize(clz)) {
       return new ScalaEnumSerializer(typeResolver, clz);
     }
     if (scala.Option.class.isAssignableFrom(clz)) {

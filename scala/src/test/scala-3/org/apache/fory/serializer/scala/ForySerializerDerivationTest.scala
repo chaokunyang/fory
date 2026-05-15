@@ -20,13 +20,24 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
-import org.apache.fory.annotation.{ForyCase, ForyField, ForyStruct, ForyUnion, Ref}
+import org.apache.fory.annotation.{
+  ForyCase,
+  ForyField,
+  ForyStruct,
+  ForyUnion,
+  Ref,
+  UInt64Type,
+  UInt8Type
+}
+import org.apache.fory.config.Int64Encoding
+import org.apache.fory.meta.TypeDef
 import org.apache.fory.scala.ForySerializer
-import org.apache.fory.serializer.StaticGeneratedStructSerializerFactory
-import org.apache.fory.`type`.TypeUtils
+import org.apache.fory.serializer.StaticGeneratedStructSerializer
+import org.apache.fory.`type`.{Types, TypeUtils}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
+import scala.compiletime.testing.typeCheckErrors
 import scala.jdk.CollectionConverters._
 
 object ForySerializerDerivationTest {
@@ -48,10 +59,36 @@ object ForySerializerDerivationTest {
       derives ForySerializer
 
   @ForyStruct
+  final case class OptionalCollectionBox(
+      @ForyField(id = 1) names: List[Option[String]],
+      @ForyField(id = 2) unsigned: List[Option[Int @UInt8Type]],
+      @ForyField(id = 3)
+      scores: Map[String, Option[Long @UInt64Type(encoding = Int64Encoding.TAGGED)]],
+      @ForyField(id = 4) keyed: Map[Option[String], Int])
+      derives ForySerializer
+
+  @ForyStruct
+  final case class OptionalCollectionBoxWriter(
+      @ForyField(id = 1) names: List[Option[String]],
+      @ForyField(id = 2) unsigned: List[Option[Int @UInt8Type]],
+      @ForyField(id = 3)
+      scores: Map[String, Option[Long @UInt64Type(encoding = Int64Encoding.TAGGED)]],
+      @ForyField(id = 4) keyed: Map[Option[String], Int],
+      @ForyField(id = 5) extra: String)
+      derives ForySerializer
+
+  @ForyStruct
   final case class CopyBox(
       @ForyField(id = 1) user: SearchUser,
       @ForyField(id = 2) names: List[String],
       @ForyField(id = 3) values: Array[Int])
+      derives ForySerializer
+
+  @ForyStruct
+  final case class RefMetadataBox(
+      @ForyField(id = 1) peer: SearchUser,
+      @ForyField(id = 2) localOnly: SearchUser @Ref(enable = false),
+      @ForyField(id = 3) shared: SearchUser @Ref)
       derives ForySerializer
 
   @ForyStruct
@@ -93,6 +130,9 @@ object ForySerializerDerivationTest {
 
     @ForyCase(id = 3)
     case OptionalUserCase(value: Option[SearchUser])
+
+    @ForyCase(id = 4)
+    case OptionalTaggedCase(value: Option[Long @UInt64Type(encoding = Int64Encoding.TAGGED)])
   }
 
   @ForyUnion
@@ -117,12 +157,32 @@ object ForySerializerDerivationTest {
     ForySerializer.register(fory, classOf[Person], "scala_test", "Person")
     ForySerializer.register(fory, classOf[SearchUser], "scala_test", "SearchUser")
     ForySerializer.register(fory, classOf[CollectionBox], "scala_test", "CollectionBox")
+    ForySerializer.register(
+      fory,
+      classOf[OptionalCollectionBox],
+      "scala_test",
+      "OptionalCollectionBox")
     ForySerializer.register(fory, classOf[CopyBox], "scala_test", "CopyBox")
+    ForySerializer.register(fory, classOf[RefMetadataBox], "scala_test", "RefMetadataBox")
     ForySerializer.register(fory, classOf[RefNode], "scala_test", "RefNode")
     ForySerializer.register(fory, classOf[UnionRefNode], "scala_test", "UnionRefNode")
     ForySerializer.register(fory, classOf[MixedRecord], "scala_test", "MixedRecord")
     ForySerializer.register(fory, classOf[SearchTarget], "scala_test", "SearchTarget")
     ForySerializer.register(fory, classOf[UnionCycle], "scala_test", "UnionCycle")
+    fory
+  }
+
+  def compatibleXlangFory(): Fory = {
+    val fory = Fory.builder()
+      .withXlang(true)
+      .withCompatible(true)
+      .withRefTracking(true)
+      .withRefCopy(true)
+      .withScalaOptimizationEnabled(true)
+      .requireClassRegistration(true)
+      .suppressClassRegistrationWarnings(false)
+      .build()
+    ScalaSerializers.registerSerializers(fory)
     fory
   }
 }
@@ -151,6 +211,94 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
       val fory = xlangFory()
       val box = CollectionBox(List("a", "b"), Set("x", "y"), Map("a" -> 1, "b" -> 2))
       fory.deserialize(fory.serialize(box)) shouldEqual box
+
+      val serializer =
+        summon[ForySerializer[CollectionBox]]
+          .createSerializer(fory.getTypeResolver)
+          .asInstanceOf[StaticGeneratedStructSerializer[CollectionBox]]
+      val tags = serializer.getGeneratedDescriptors.asScala.find(_.getName == "tags").get
+      val tagMeta = TypeUtils.getElementType(tags.getTypeRef).getTypeExtMeta
+      if tagMeta != null then {
+        tagMeta.nullableWrapper() shouldBe false
+      }
+    }
+
+    "serialize derived Scala collection fields with Option elements" in {
+      val fory = xlangFory()
+      val box = OptionalCollectionBox(
+        List(Some("a"), None),
+        List(Some(1), None),
+        Map("a" -> Some(9L), "b" -> None),
+        Map(Some("a") -> 1, None -> 2))
+
+      fory.deserialize(fory.serialize(box)) shouldEqual box
+    }
+
+    "preserve Option collection wrappers on compatible remote reads" in {
+      val writerFory = ForySerializerDerivationTest.compatibleXlangFory()
+      ForySerializer.register(
+        writerFory,
+        classOf[OptionalCollectionBoxWriter],
+        "scala_test",
+        "OptionalCollectionBox")
+      val readerFory = ForySerializerDerivationTest.compatibleXlangFory()
+      ForySerializer.register(
+        readerFory,
+        classOf[OptionalCollectionBox],
+        "scala_test",
+        "OptionalCollectionBox")
+
+      val writerValue = OptionalCollectionBoxWriter(
+        List(Some("a"), None),
+        List(Some(1), None),
+        Map("a" -> Some(9L), "b" -> None),
+        Map(Some("a") -> 1, None -> 2),
+        "ignored")
+      val readerValue =
+        readerFory.deserialize(writerFory.serialize(writerValue)).asInstanceOf[OptionalCollectionBox]
+
+      readerValue shouldEqual OptionalCollectionBox(
+        List(Some("a"), None),
+        List(Some(1), None),
+        Map("a" -> Some(9L), "b" -> None),
+        Map(Some("a") -> 1, None -> 2))
+    }
+
+    "emit inner nullable metadata for Option collection elements" in {
+      val fory = xlangFory()
+      val serializer =
+        summon[ForySerializer[OptionalCollectionBox]]
+          .createSerializer(fory.getTypeResolver)
+          .asInstanceOf[StaticGeneratedStructSerializer[OptionalCollectionBox]]
+      val descriptors = serializer.getGeneratedDescriptors.asScala
+      val names = descriptors.find(_.getName == "names").get
+      val unsigned = descriptors.find(_.getName == "unsigned").get
+      val scores = descriptors.find(_.getName == "scores").get
+      val keyed = descriptors.find(_.getName == "keyed").get
+
+      val nameElement = TypeUtils.getElementType(names.getTypeRef)
+      nameElement.getRawType shouldBe classOf[String]
+      nameElement.getTypeExtMeta.nullable() shouldBe true
+      nameElement.getTypeExtMeta.nullableWrapper() shouldBe true
+      nameElement.getTypeExtMeta.typeId() shouldBe Types.STRING
+
+      val unsignedElement = TypeUtils.getElementType(unsigned.getTypeRef)
+      unsignedElement.getRawType shouldBe classOf[java.lang.Integer]
+      unsignedElement.getTypeExtMeta.nullable() shouldBe true
+      unsignedElement.getTypeExtMeta.nullableWrapper() shouldBe true
+      unsignedElement.getTypeExtMeta.typeId() shouldBe Types.UINT8
+
+      val mapValue = TypeUtils.getMapKeyValueType(scores.getTypeRef).f1
+      mapValue.getRawType shouldBe classOf[java.lang.Long]
+      mapValue.getTypeExtMeta.nullable() shouldBe true
+      mapValue.getTypeExtMeta.nullableWrapper() shouldBe true
+      mapValue.getTypeExtMeta.typeId() shouldBe Types.TAGGED_UINT64
+
+      val mapKey = TypeUtils.getMapKeyValueType(keyed.getTypeRef).f0
+      mapKey.getRawType shouldBe classOf[String]
+      mapKey.getTypeExtMeta.nullable() shouldBe true
+      mapKey.getTypeExtMeta.nullableWrapper() shouldBe true
+      mapKey.getTypeExtMeta.typeId() shouldBe Types.STRING
     }
 
     "serialize mixed constructor and mutable field classes" in {
@@ -163,10 +311,12 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
     }
 
     "preserve nested reference metadata in generated descriptors" in {
-      val factory =
+      val fory = xlangFory()
+      val serializer =
         summon[ForySerializer[RefNode]]
-          .asInstanceOf[StaticGeneratedStructSerializerFactory[RefNode]]
-      val descriptors = factory.getGeneratedDescriptors.asScala
+          .createSerializer(fory.getTypeResolver)
+          .asInstanceOf[StaticGeneratedStructSerializer[RefNode]]
+      val descriptors = serializer.getGeneratedDescriptors.asScala
       val children = descriptors.find(_.getName == "children").get
       val parent = descriptors.find(_.getName == "parent").get
 
@@ -174,6 +324,66 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
       TypeUtils.getElementType(children.getTypeRef).getTypeExtMeta.trackingRef() shouldBe true
       parent.isNullable shouldBe true
       parent.isTrackingRef shouldBe true
+    }
+
+    "preserve explicit top-level ref metadata presence in generated descriptors" in {
+      val fory = xlangFory()
+      val serializer =
+        summon[ForySerializer[RefMetadataBox]]
+          .createSerializer(fory.getTypeResolver)
+          .asInstanceOf[StaticGeneratedStructSerializer[RefMetadataBox]]
+      val descriptors = serializer.getGeneratedDescriptors.asScala
+      val peer = descriptors.find(_.getName == "peer").get
+      val localOnly = descriptors.find(_.getName == "localOnly").get
+      val shared = descriptors.find(_.getName == "shared").get
+
+      peer.hasTrackingRefMetadata shouldBe false
+      peer.isTrackingRef shouldBe false
+      localOnly.hasTrackingRefMetadata shouldBe true
+      localOnly.isTrackingRef shouldBe false
+      shared.hasTrackingRefMetadata shouldBe true
+      shared.isTrackingRef shouldBe true
+    }
+
+    "disable same-schema compatible fast path for nested compatible structs" in {
+      def sameSchemaCompatible(serializer: AnyRef): Boolean = {
+        val field = serializer.getClass.getDeclaredField("sameSchemaCompatible")
+        field.setAccessible(true)
+        field.getBoolean(serializer)
+      }
+
+      val fory = xlangFory()
+      val resolver = fory.getTypeResolver
+      val personFactory = summon[ForySerializer[Person]]
+      val copyBoxFactory = summon[ForySerializer[CopyBox]]
+
+      val personSerializer =
+        personFactory.createSerializer(resolver, TypeDef.buildTypeDef(resolver, classOf[Person]))
+      val copyBoxSerializer =
+        copyBoxFactory.createSerializer(resolver, TypeDef.buildTypeDef(resolver, classOf[CopyBox]))
+
+      sameSchemaCompatible(personSerializer.asInstanceOf[AnyRef]) shouldBe true
+      sameSchemaCompatible(copyBoxSerializer.asInstanceOf[AnyRef]) shouldBe false
+    }
+
+    "reject union enum cases without ForyCase metadata" in {
+      val errors = typeCheckErrors("""
+        import org.apache.fory.annotation.{ForyCase, ForyStruct, ForyUnion}
+        import org.apache.fory.scala.ForySerializer
+
+        @ForyStruct
+        final case class MissingCaseUser(name: String) derives ForySerializer
+
+        @ForyUnion
+        enum MissingCaseUnion derives ForySerializer {
+          @ForyCase(id = 0)
+          case UnknownCase(caseId: Int, value: Any)
+
+          case UserCase(value: MissingCaseUser)
+        }
+      """)
+
+      errors.exists(_.message.contains("must be annotated with @ForyCase")) shouldBe true
     }
 
     "serialize derived union unknown cases with original ids" in {
@@ -187,18 +397,25 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
       val some: SearchTarget.OptionalUserCase =
         SearchTarget.OptionalUserCase(Some(SearchUser("Ada")))
       val none: SearchTarget.OptionalUserCase = SearchTarget.OptionalUserCase(None)
+      val taggedSome = SearchTarget.OptionalTaggedCase(Some(99L))
+      val taggedNone = SearchTarget.OptionalTaggedCase(None)
 
       fory.deserialize(fory.serialize(some)) shouldEqual some
       fory.deserialize(fory.serialize(none)) shouldEqual none
+      fory.deserialize(fory.serialize(taggedSome)) shouldEqual taggedSome
+      fory.deserialize(fory.serialize(taggedNone)) shouldEqual taggedNone
 
       val copiedSome = fory.copy(some).asInstanceOf[SearchTarget.OptionalUserCase]
       val copiedNone = fory.copy(none).asInstanceOf[SearchTarget.OptionalUserCase]
+      val copiedTagged = fory.copy(taggedSome).asInstanceOf[SearchTarget.OptionalTaggedCase]
 
       copiedSome shouldEqual some
       copiedSome should not be theSameInstanceAs(some)
       copiedSome.value.get should not be theSameInstanceAs(some.value.get)
       copiedNone shouldEqual none
       copiedNone should not be theSameInstanceAs(none)
+      copiedTagged shouldEqual taggedSome
+      copiedTagged should not be theSameInstanceAs(taggedSome)
     }
 
     "copy derived case classes through field serializers" in {

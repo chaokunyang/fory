@@ -28,6 +28,7 @@ import org.apache.fory.reflect.TypeRef;
 /** Scala types utils using reflection without dependency on scala library. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ScalaTypes {
+  private static final String SCALA_ENUM_TYPE_NAME = "scala.reflect.Enum";
   private static volatile Class<?> SCALA_MAP_TYPE;
   private static volatile Class<?> SCALA_SEQ_TYPE;
   private static volatile Class<?> SCALA_SET_TYPE;
@@ -114,5 +115,29 @@ public class ScalaTypes {
 
   public static boolean isScalaProductType(Class<?> cls) {
     return getScalaProductType().isAssignableFrom(cls);
+  }
+
+  public static boolean isScalaEnumType(Class<?> cls) {
+    return resolveScalaEnumClass(cls) != null;
+  }
+
+  public static Class<?> resolveScalaEnumClass(Class<?> cls) {
+    for (Class<?> current = cls;
+        current != null && current != Object.class;
+        current = current.getSuperclass()) {
+      if (implementsInterfaceNamed(current, SCALA_ENUM_TYPE_NAME)) {
+        return current;
+      }
+    }
+    return null;
+  }
+
+  private static boolean implementsInterfaceNamed(Class<?> cls, String interfaceName) {
+    for (Class<?> iface : cls.getInterfaces()) {
+      if (iface.getName().equals(interfaceName) || implementsInterfaceNamed(iface, interfaceName)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

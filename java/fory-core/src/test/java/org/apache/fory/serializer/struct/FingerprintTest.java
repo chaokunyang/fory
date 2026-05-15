@@ -20,19 +20,29 @@
 package org.apache.fory.serializer.struct;
 
 import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
 
 import java.util.List;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.annotation.ForyStruct;
+import org.apache.fory.annotation.Ref;
+import org.apache.fory.config.Language;
 import org.apache.fory.data.AllUnsignedFields;
 import org.apache.fory.data.UnsignedArrayFields;
 import org.apache.fory.data.UnsignedScalarFields;
+import org.apache.fory.meta.TypeDef;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
 import org.testng.annotations.Test;
 
 /** Tests for {@link Fingerprint} with unsigned integer types and unsigned integer array types. */
 public class FingerprintTest extends ForyTestBase {
+
+  @ForyStruct
+  public static class RefWithoutForyFieldStruct {
+    @Ref public RefWithoutForyFieldStruct peer;
+  }
 
   @Test
   public void testUnsignedScalarFieldsFingerprint() {
@@ -136,5 +146,19 @@ public class FingerprintTest extends ForyTestBase {
             + Types.UINT8_ARRAY
             + ",0,1;";
     assertEquals(fingerprint, expected);
+  }
+
+  @Test
+  public void testRefWithoutForyFieldAffectsFingerprintAndTypeDef() {
+    Fory fory = Fory.builder().withLanguage(Language.XLANG).withRefTracking(true).build();
+    fory.register(RefWithoutForyFieldStruct.class, 701);
+    List<Descriptor> descriptors = Descriptor.getDescriptors(RefWithoutForyFieldStruct.class);
+
+    String fingerprint = Fingerprint.computeStructFingerprint(fory, descriptors);
+
+    assertEquals(fingerprint, "peer," + Types.UNKNOWN + ",1,0;");
+    TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), RefWithoutForyFieldStruct.class);
+    assertEquals(typeDef.getFieldCount(), 1);
+    assertTrue(typeDef.getFieldsInfo().get(0).getFieldType().trackingRef());
   }
 }

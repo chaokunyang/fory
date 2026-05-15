@@ -2707,11 +2707,13 @@ public abstract class XlangTestBase extends ForyTestBase {
   @ForyStruct
   static class RefOuterSchemaConsistent {
     @Nullable
-    @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE)
+    @ForyField(dynamic = ForyField.Dynamic.FALSE)
+    @Ref
     RefInnerSchemaConsistent inner1;
 
     @Nullable
-    @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE)
+    @ForyField(dynamic = ForyField.Dynamic.FALSE)
+    @Ref
     RefInnerSchemaConsistent inner2;
   }
 
@@ -2787,13 +2789,9 @@ public abstract class XlangTestBase extends ForyTestBase {
   @Data
   @ForyStruct
   static class RefOuterCompatible {
-    @Nullable
-    @ForyField(ref = true)
-    RefInnerCompatible inner1;
+    @Nullable @Ref RefInnerCompatible inner1;
 
-    @Nullable
-    @ForyField(ref = true)
-    RefInnerCompatible inner2;
+    @Nullable @Ref RefInnerCompatible inner2;
   }
 
   /**
@@ -3017,9 +3015,7 @@ public abstract class XlangTestBase extends ForyTestBase {
   static class CircularRefStruct {
     String name;
 
-    @Nullable
-    @ForyField(ref = true)
-    CircularRefStruct selfRef;
+    @Nullable @Ref CircularRefStruct selfRef;
   }
 
   /**

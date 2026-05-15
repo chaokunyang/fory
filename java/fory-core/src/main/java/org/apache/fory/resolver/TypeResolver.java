@@ -89,7 +89,6 @@ import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
-import org.apache.fory.serializer.StaticGeneratedStructSerializerFactory;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
 import org.apache.fory.serializer.UnknownClass.UnknownStruct;
@@ -272,6 +271,48 @@ public abstract class TypeResolver {
   }
 
   /**
+   * Registers {@code runtimeType} to use the already-registered metadata and serializer of {@code
+   * canonicalType}.
+   *
+   * <p>This is only for language runtimes where one source type has multiple JVM runtime classes,
+   * such as enum or ADT case classes. The resolver owns the runtime class lookup; the caller owns
+   * deciding which runtime classes are aliases.
+   */
+  @Internal
+  public final void registerRuntimeTypeAlias(Class<?> runtimeType, Class<?> canonicalType) {
+    Preconditions.checkNotNull(runtimeType, "runtimeType");
+    Preconditions.checkNotNull(canonicalType, "canonicalType");
+    if (runtimeType == canonicalType) {
+      return;
+    }
+    checkRegisterAllowed();
+    TypeInfo canonicalInfo = classInfoMap.get(canonicalType);
+    Preconditions.checkArgument(
+        canonicalInfo != null,
+        "Canonical type must be registered before registering a runtime type alias: "
+            + canonicalType.getName());
+    TypeInfo existingInfo = classInfoMap.get(runtimeType);
+    Preconditions.checkArgument(
+        existingInfo == null || existingInfo == canonicalInfo,
+        "Runtime type is already registered with different type metadata: "
+            + runtimeType.getName());
+    String runtimeTypeName = runtimeType.getName();
+    Class<?> registeredType = extRegistry.registeredClasses.get(runtimeTypeName);
+    Preconditions.checkArgument(
+        registeredType == null || registeredType == runtimeType,
+        "Runtime type alias name is already registered with different class: "
+            + runtimeTypeName);
+    String registeredName = extRegistry.registeredClasses.inverse().get(runtimeType);
+    Preconditions.checkArgument(
+        registeredName == null || registeredName.equals(runtimeTypeName),
+        "Runtime type alias is already registered with different name: "
+            + registeredName);
+    classInfoMap.put(runtimeType, canonicalInfo);
+    extRegistry.registeredClasses.put(runtimeTypeName, runtimeType);
+    registerGraalvmClass(runtimeType);
+  }
+
+  /**
    * Registers a union type with a user-specified ID and serializer.
    *
    * @param type the union class to register
@@ -290,27 +331,6 @@ public abstract class TypeResolver {
    */
   public abstract void registerUnion(
       Class<?> type, String namespace, String typeName, Serializer<?> serializer);
-
-  /**
-   * Registers {@code caseType} as a runtime class alias for an already registered union type.
-   *
-   * <p>Some JVM languages compile a union value to concrete case subclasses even though the wire
-   * type is owned by the sealed union base. This method makes runtime dispatch for those case
-   * subclasses use the base union {@link TypeInfo}; it must not create another wire type name or
-   * user type ID.
-   */
-  @Internal
-  public abstract void registerUnionCase(Class<?> unionType, Class<?> caseType);
-
-  /**
-   * Registers {@code caseType} as a runtime class alias for an already registered enum type.
-   *
-   * <p>Some JVM languages compile enum cases to concrete singleton subclasses even though the wire
-   * type is owned by the enum base. This method makes runtime dispatch for those case subclasses
-   * use the base enum {@link TypeInfo}; it must not create another wire type name or user type ID.
-   */
-  @Internal
-  public abstract void registerEnumCase(Class<?> enumType, Class<?> caseType);
 
   /** Registers a non-Java enum type with a user-specified ID and serializer. */
   @Internal
@@ -1068,11 +1088,10 @@ public abstract class TypeResolver {
       // type metadata or a concrete target-class transformation.
       return typeInfo;
     }
-    StaticGeneratedStructSerializer<?> registeredStaticSerializer =
-        sharedRegistry.staticGeneratedSerializerRegistry.newRegisteredSerializer(
-            this, cls, typeDef);
-    if (registeredStaticSerializer != null) {
-      typeInfo.setSerializer(this, registeredStaticSerializer);
+    StaticGeneratedStructSerializer<?> copiedStaticSerializer =
+        copyRegisteredStaticGeneratedStructSerializer(cls, typeDef);
+    if (copiedStaticSerializer != null) {
+      typeInfo.setSerializer(this, copiedStaticSerializer);
       return typeInfo;
     }
     Class<? extends Serializer> sc =
@@ -1325,21 +1344,6 @@ public abstract class TypeResolver {
   public abstract <T> void setSerializer(Class<T> cls, Serializer<T> serializer);
 
   public abstract <T> void setSerializerIfAbsent(Class<T> cls, Serializer<T> serializer);
-
-  @Internal
-  @SuppressWarnings({"rawtypes", "unchecked"})
-  public final <T> void registerStaticGeneratedStructSerializerFactory(
-      Class<T> cls, StaticGeneratedStructSerializerFactory<T> factory) {
-    if (!isRegistered(cls)) {
-      register(cls);
-    }
-    sharedRegistry.staticGeneratedSerializerRegistry.registerFactory(
-        cls, isCrossLanguage(), factory);
-    Serializer<T> serializer =
-        new DeferedLazySerializer.DeferredLazyObjectSerializer(
-            this, cls, () -> Tuple2.of(true, factory.newSerializer(this, cls, null)));
-    setSerializer(cls, serializer);
-  }
 
   /**
    * Reset serializer if {@code serializer} is not null, otherwise clear serializer for {@code cls}.
@@ -1616,8 +1620,7 @@ public abstract class TypeResolver {
 
   private List<Descriptor> buildFieldDescriptors(Class<?> clz, boolean searchParent) {
     List<Descriptor> registeredStaticDescriptors =
-        sharedRegistry.staticGeneratedSerializerRegistry.getRegisteredDescriptors(
-            clz, isCrossLanguage());
+        getRegisteredStaticGeneratedStructDescriptors(clz);
     if (registeredStaticDescriptors != null) {
       return normalizeFieldDescriptors(clz, searchParent, registeredStaticDescriptors);
     }
@@ -1651,23 +1654,18 @@ public abstract class TypeResolver {
       if (!searchParent && !descriptor.getDeclaringClass().equals(clz.getName())) {
         continue;
       }
-      boolean hasForyField = descriptor.hasForyField();
       // Compute the final isTrackingRef value:
-      // For xlang mode: "Reference tracking is disabled by default" (xlang spec)
-      //   - Only enable ref tracking if explicitly set via @ForyField(ref=true)
-      // For Java mode:
-      //   - If global ref tracking is enabled and no @ForyField, use global setting
-      //   - If @ForyField(ref=true) is set, use that (but can be overridden if global is off)
+      // For xlang mode: reference tracking is disabled by default and only @Ref enables it.
+      // For Java mode: @Ref explicitly overrides the type-based default in both directions.
       boolean ref = globalRefTracking;
       if (globalRefTracking) {
         if (isXlang) {
-          // In xlang mode, only track refs if explicitly annotated with @ForyField(ref=true)
-          ref = hasForyField && descriptor.isTrackingRef();
+          ref = descriptor.isTrackingRef();
         } else {
-          if (hasForyField) {
+          if (descriptor.hasTrackingRefMetadata()) {
             ref = descriptor.isTrackingRef();
           } else {
-            ref = needToWriteRef(descriptor.getTypeRef());
+            ref = needToWriteRef(TypeRef.of(descriptor.getRawType()));
           }
         }
       }
@@ -1677,7 +1675,7 @@ public abstract class TypeResolver {
 
       if (needsUpdate) {
         Descriptor newDescriptor =
-            new DescriptorBuilder(descriptor).trackingRef(ref).nullable(nullable).build();
+            new DescriptorBuilder(descriptor).inferredTrackingRef(ref).nullable(nullable).build();
         result.add(newDescriptor);
       } else {
         result.add(descriptor);
@@ -1761,6 +1759,26 @@ public abstract class TypeResolver {
     }
     return sharedRegistry.staticGeneratedSerializerRegistry.getGeneratedDescriptors(
         cls, isCrossLanguage());
+  }
+
+  private List<Descriptor> getRegisteredStaticGeneratedStructDescriptors(Class<?> cls) {
+    TypeInfo typeInfo = getTypeInfo(cls, false);
+    if (typeInfo == null
+        || !(typeInfo.getSerializer() instanceof StaticGeneratedStructSerializer)) {
+      return null;
+    }
+    return ((StaticGeneratedStructSerializer<?>) typeInfo.getSerializer()).getGeneratedDescriptors();
+  }
+
+  private StaticGeneratedStructSerializer<?> copyRegisteredStaticGeneratedStructSerializer(
+      Class<?> cls, TypeDef typeDef) {
+    TypeInfo typeInfo = getTypeInfo(cls, false);
+    if (typeInfo == null
+        || !(typeInfo.getSerializer() instanceof StaticGeneratedStructSerializer)) {
+      return null;
+    }
+    return ((StaticGeneratedStructSerializer<?>) typeInfo.getSerializer())
+        .copySerializer(this, cls, typeDef);
   }
 
   protected final boolean shouldPreferStaticGeneratedSerializer(Class<?> cls) {

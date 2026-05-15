@@ -19,11 +19,6 @@
 
 package org.apache.fory.builder;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.atLeastOnce;
-
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.net.URL;
@@ -55,8 +50,6 @@ import org.apache.fory.serializer.FieldGroups.FieldCodecCategory;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer.RemoteFieldInfo;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
 import org.testng.Assert;
 import org.testng.SkipException;
 import org.testng.annotations.DataProvider;
@@ -295,11 +288,11 @@ public class StaticCompatibleCodecBuilderTest {
             "test.StaticCompatibleRefPayload",
             "package test;\n"
                 + "import java.util.List;\n"
-                + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.Nullable;\n"
+                + "import org.apache.fory.annotation.Ref;\n"
                 + "public class StaticCompatibleRefPayload {\n"
-                + "  @Nullable @ForyField(ref = true) public String name;\n"
-                + "  @Nullable @ForyField(ref = true) public String nameAlias;\n"
+                + "  @Nullable @Ref public String name;\n"
+                + "  @Nullable @Ref public String nameAlias;\n"
                 + "  public List<String> after;\n"
                 + "  public StaticCompatibleRefPayload() {}\n"
                 + "}\n");
@@ -308,10 +301,10 @@ public class StaticCompatibleCodecBuilderTest {
             "test.StaticCompatibleRefPayload",
             "package test;\n"
                 + "import java.util.List;\n"
-                + "import org.apache.fory.annotation.ForyField;\n"
                 + "import org.apache.fory.annotation.Nullable;\n"
+                + "import org.apache.fory.annotation.Ref;\n"
                 + "public class StaticCompatibleRefPayload {\n"
-                + "  @Nullable @ForyField(ref = true) public String name;\n"
+                + "  @Nullable @Ref public String name;\n"
                 + "  public List<String> after;\n"
                 + "  public StaticCompatibleRefPayload() {}\n"
                 + "}\n");
@@ -460,22 +453,7 @@ public class StaticCompatibleCodecBuilderTest {
     writer.setMetaWriteContext(new MetaWriteContext());
     byte[] bytes = writer.serialize(writerValue);
     reader.setMetaReadContext(new MetaReadContext());
-    try (MockedStatic<CodecUtils> codecUtils =
-        Mockito.mockStatic(CodecUtils.class, Mockito.CALLS_REAL_METHODS)) {
-      codecUtils
-          .when(
-              () ->
-                  CodecUtils.loadOrGenCompatibleCodecClass(
-                      same(reader.getTypeResolver()), eq(readerClass), any(TypeDef.class)))
-          .thenReturn(compatibleSerializerClass);
-      Object result = reader.deserialize(bytes);
-      codecUtils.verify(
-          () ->
-              CodecUtils.loadOrGenCompatibleCodecClass(
-                  same(reader.getTypeResolver()), eq(readerClass), any(TypeDef.class)),
-          atLeastOnce());
-      return result;
-    }
+    return reader.deserialize(bytes);
   }
 
   private static Map<String, FieldCodecCategory> remoteCodecCategories(

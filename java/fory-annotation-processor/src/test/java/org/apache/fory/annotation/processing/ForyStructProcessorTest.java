@@ -42,6 +42,8 @@ import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.SerializationException;
+import org.apache.fory.meta.FieldInfo;
+import org.apache.fory.meta.TypeDef;
 import org.apache.fory.serializer.StaticGeneratedStructSerializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.Types;
@@ -370,6 +372,49 @@ public class ForyStructProcessorTest {
   }
 
   @Test
+  public void testGeneratedDescriptorsPreserveRefMetadataPresence() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.RefMetadataStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "import org.apache.fory.annotation.Ref;\n"
+                + "@ForyStruct public class RefMetadataStruct {\n"
+                + "  public Customer peer;\n"
+                + "  @Ref(enable = false) public Customer localOnly;\n"
+                + "  public RefMetadataStruct() {}\n"
+                + "  public static class Customer { public String id; public Customer() {} }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.RefMetadataStruct");
+      Class<?> serializerType = loader.loadClass("test.RefMetadataStruct_ForyNativeSerializer");
+      Fory fory =
+          Fory.builder()
+              .withClassLoader(loader)
+              .withCodegen(false)
+              .withRefTracking(true)
+              .requireClassRegistration(false)
+              .build();
+      StaticGeneratedStructSerializer<?> serializer =
+          (StaticGeneratedStructSerializer<?>)
+              serializerType
+                  .getConstructor(org.apache.fory.resolver.TypeResolver.class, Class.class)
+                  .newInstance(fory.getTypeResolver(), type);
+      Descriptor peer = descriptor(serializer.getDescriptors(), "peer");
+      Assert.assertFalse(peer.hasTrackingRefMetadata());
+      Assert.assertFalse(peer.isTrackingRef());
+      Descriptor localOnly = descriptor(serializer.getDescriptors(), "localOnly");
+      Assert.assertTrue(localOnly.hasTrackingRefMetadata());
+      Assert.assertFalse(localOnly.isTrackingRef());
+
+      TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), type);
+      Assert.assertTrue(fieldInfo(typeDef, "peer").getFieldType().trackingRef());
+      Assert.assertFalse(fieldInfo(typeDef, "localOnly").getFieldType().trackingRef());
+    }
+  }
+
+  @Test
   public void testGeneratedUnsignedScalarWritesValidateRange() throws Exception {
     CompilationResult result =
         compile(
@@ -547,9 +592,10 @@ public class ForyStructProcessorTest {
                 + "import org.apache.fory.annotation.ForyField.Dynamic;\n"
                 + "import org.apache.fory.annotation.ForyStruct;\n"
                 + "import org.apache.fory.annotation.Nullable;\n"
+                + "import org.apache.fory.annotation.Ref;\n"
                 + "@ForyStruct public class RecursiveStruct {\n"
                 + "  public int id;\n"
-                + "  @Nullable @ForyField(ref = true, dynamic = Dynamic.FALSE)\n"
+                + "  @Nullable @Ref @ForyField(dynamic = Dynamic.FALSE)\n"
                 + "  public RecursiveStruct next;\n"
                 + "  public RecursiveStruct() {}\n"
                 + "}\n");
@@ -1005,6 +1051,15 @@ public class ForyStructProcessorTest {
       }
     }
     throw new AssertionError("Missing descriptor " + name);
+  }
+
+  private static FieldInfo fieldInfo(TypeDef typeDef, String name) {
+    for (FieldInfo fieldInfo : typeDef.getFieldsInfo()) {
+      if (fieldInfo.getFieldName().equals(name)) {
+        return fieldInfo;
+      }
+    }
+    throw new AssertionError("Missing field info " + name);
   }
 
   private static final class CompilationResult {

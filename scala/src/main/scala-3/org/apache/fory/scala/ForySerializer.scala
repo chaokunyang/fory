@@ -20,12 +20,11 @@
 package org.apache.fory.scala
 
 import org.apache.fory.{Fory, ThreadSafeFory}
+import org.apache.fory.annotation.Internal
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.resolver.TypeResolver
-import org.apache.fory.serializer.{
-  Serializer,
-  StaticGeneratedStructSerializerFactory
-}
+import org.apache.fory.serializer.Serializer
+import org.apache.fory.serializer.scala.ScalaSerializers
 
 trait ForySerializer[T] {
   def createSerializer(typeResolver: TypeResolver): Serializer[T] =
@@ -35,7 +34,7 @@ trait ForySerializer[T] {
 
   def isUnion: Boolean = false
 
-  def registrationClasses(cls: Class[T]): Array[Class[_]] = Array(cls)
+  private[scala] def handledRuntimeClasses(cls: Class[T]): Array[Class[_]] = Array.empty
 }
 
 object ForySerializer {
@@ -61,6 +60,25 @@ object ForySerializer {
     register(fory, cls, null, namespace, typeName)
   }
 
+  @Internal
+  def registerType[T](fory: Fory, cls: Class[T], typeId: Long): Unit = {
+    registerType(fory, cls, java.lang.Long.valueOf(typeId), null, null)
+  }
+
+  @Internal
+  def registerType[T](fory: Fory, cls: Class[T], namespace: String, typeName: String): Unit = {
+    registerType(fory, cls, null, namespace, typeName)
+  }
+
+  @Internal
+  def registerSerializer[T](fory: Fory, cls: Class[T])(using serializer: ForySerializer[T]): Unit = {
+    if serializer.isUnion then {
+      throw new IllegalArgumentException("Use ForySerializer.register for Scala union serializers")
+    }
+    val resolver = fory.getTypeResolver
+    resolver.setSerializer(cls, serializer.createSerializer(resolver))
+  }
+
   private def register[T](
       fory: Fory,
       cls: Class[T],
@@ -69,9 +87,6 @@ object ForySerializer {
       typeName: String)(using serializer: ForySerializer[T]): Unit = {
     val resolver = fory.getTypeResolver
     serializer match {
-      case factory: StaticGeneratedStructSerializerFactory[T] @unchecked =>
-        registerType(fory, cls, typeId, namespace, typeName)
-        resolver.registerStaticGeneratedStructSerializerFactory(cls, factory)
       case _ if serializer.isUnion =>
         val unionSerializer = serializer.createSerializer(resolver)
         if typeId != null then {
@@ -86,10 +101,8 @@ object ForySerializer {
             unionTypeName,
             unionSerializer)
         }
-        serializer.registrationClasses(cls).foreach { registrationClass =>
-          if registrationClass != cls then {
-            resolver.registerUnionCase(cls, registrationClass)
-          }
+        serializer.handledRuntimeClasses(cls).foreach { runtimeClass =>
+          ScalaSerializers.registerRuntimeTypeAlias(fory, runtimeClass, cls)
         }
       case _ =>
         registerType(fory, cls, typeId, namespace, typeName)

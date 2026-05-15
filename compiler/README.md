@@ -318,12 +318,12 @@ Each generator extends `BaseGenerator` and implements:
 Generates POJOs with:
 
 - Private fields with getters/setters
-- `@Nullable` annotations for nullable fields and `@ForyField` annotations for ref fields
+- `@Nullable` annotations for nullable fields and `@Ref` annotations for ref fields
 - Registration helper class
 
 ```java
 public class Cat {
-    @ForyField(ref = true)
+    @Ref
     private Dog friend;
 
     @Nullable

@@ -126,10 +126,9 @@ internal enum class CollectionFactory {
 internal data class ForyFieldMeta(
   val hasAnnotation: Boolean,
   val id: Int,
-  val ref: Boolean,
   val dynamic: String,
 ) {
   companion object {
-    val NONE: ForyFieldMeta = ForyFieldMeta(false, -1, false, "AUTO")
+    val NONE: ForyFieldMeta = ForyFieldMeta(false, -1, "AUTO")
   }
 }

@@ -108,10 +108,8 @@ public class Fingerprint {
         fieldIdentifier = descriptor.getSnakeCaseName();
       }
 
-      // Get ref flag from @ForyField annotation only (compile-time info)
-      // If annotation is absent or ref not explicitly set to true, ref is 0
-      // This allows fingerprint to be computed at compile time for C++/Rust
-      char ref = (descriptor.hasForyField() && descriptor.isTrackingRef()) ? '1' : '0';
+      // Descriptor owns the normalized top-level ref bit from @Ref or generated metadata.
+      char ref = descriptor.isTrackingRef() ? '1' : '0';
 
       // Get nullable flag:
       // - Primitives are always non-nullable

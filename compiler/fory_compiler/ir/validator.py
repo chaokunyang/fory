@@ -270,6 +270,11 @@ class SchemaValidator:
             case_numbers = {}
             case_names = {}
             for f in union.fields:
+                if f.number <= 0:
+                    self._error(
+                        f"Union case id {f.number} in {full_name} is reserved; use ids starting from 1",
+                        f.location,
+                    )
                 if f.number in case_numbers:
                     self._error(
                         f"Duplicate union case id {f.number} in {full_name}: {f.name} and {case_numbers[f.number].name}",

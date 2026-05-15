@@ -583,6 +583,10 @@ def test_generated_code_tree_ref_options_equivalent():
     )
     assert 'Parent *TreeNode `fory:"id=4,nullable=false,ref"`' in go_output
 
+    java_output = render_files(generate_files(schemas["fdl"], JavaGenerator))
+    assert "import org.apache.fory.annotation.Ref;" in java_output
+    assert "private @Ref TreeNode parent;" in java_output
+
 
 def test_java_float16_equals_hash_contract_generation():
     schema = parse_fdl(

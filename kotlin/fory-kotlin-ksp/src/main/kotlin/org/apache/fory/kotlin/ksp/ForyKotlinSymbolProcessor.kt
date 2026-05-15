@@ -25,6 +25,7 @@ import com.google.devtools.ksp.processing.KSPLogger
 import com.google.devtools.ksp.processing.Resolver
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
+import com.google.devtools.ksp.symbol.AnnotationUseSiteTarget
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSAnnotation
@@ -41,6 +42,8 @@ import java.util.Locale
 
 private const val MAX_CONSTRUCTOR_FIELDS = Long.SIZE_BITS - 1
 private const val MAX_DEFAULT_CONSTRUCTOR_FIELDS = 12
+private const val REF_NOT_SUPPORTED_DIAGNOSTIC =
+  "@Ref is not supported by Kotlin KSP xlang serializers because constructor-based reads cannot publish partially constructed objects"
 
 internal fun constructorFieldLimitDiagnostic(fieldCount: Int): String? =
   if (fieldCount > MAX_CONSTRUCTOR_FIELDS) {
@@ -232,14 +235,12 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         )
         return null
       }
-      val type = parameter.type.resolve()
-      if (fieldMeta.ref) {
-        logger.error(
-          "@ForyField(ref = true) is not supported by Kotlin KSP xlang serializers because constructor-based reads cannot publish partially constructed objects",
-          property,
-        )
+      val hasFieldRef = resolveFieldRef(property, parameter) ?: return null
+      if (hasFieldRef) {
+        logger.error(REF_NOT_SUPPORTED_DIAGNOSTIC, property)
         return null
       }
+      val type = parameter.type.resolve()
       val typeNode =
         parseType(type, property, arrayType = hasFieldAnnotation(property, ARRAY_TYPE))
           ?: return null
@@ -256,7 +257,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
           type = typeNode,
           hasForyField = fieldMeta.hasAnnotation,
           foryFieldId = fieldMeta.id,
-          trackingRef = fieldMeta.ref,
+          trackingRef = false,
           dynamic = fieldMeta.dynamic,
           arrayType = hasFieldAnnotation(property, ARRAY_TYPE),
           hasDefault = parameter.hasDefault,
@@ -374,20 +375,100 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     return property.annotations.any { isAnnotation(it, qualifiedName) } || false
   }
 
+  private fun resolveFieldRef(
+    property: KSPropertyDeclaration,
+    parameter: KSValueParameter,
+  ): Boolean? {
+    val getterHasRef = property.getter?.annotations?.any { isAnnotation(it, REF) } == true
+    val setterHasRef = property.setter?.annotations?.any { isAnnotation(it, REF) } == true
+    if (getterHasRef || setterHasRef) {
+      logger.error("@get:Ref and @set:Ref are not valid for Kotlin xlang schema fields", property)
+      return null
+    }
+    val refs = mutableListOf<KSAnnotation>()
+    if (!appendFieldRefAnnotations(refs, property.annotations, property)) {
+      return null
+    }
+    if (!appendParameterRefAnnotations(refs, parameter.annotations, property)) {
+      return null
+    }
+    return refs.isNotEmpty()
+  }
+
+  private fun appendFieldRefAnnotations(
+    refs: MutableList<KSAnnotation>,
+    annotations: Sequence<KSAnnotation>,
+    owner: KSAnnotated,
+  ): Boolean {
+    for (annotation in annotations) {
+      if (!isAnnotation(annotation, REF)) {
+        continue
+      }
+      val useSiteTarget = annotation.useSiteTarget
+      when (useSiteTarget) {
+        null,
+        AnnotationUseSiteTarget.PROPERTY,
+        AnnotationUseSiteTarget.FIELD -> refs.add(annotation)
+        AnnotationUseSiteTarget.GET,
+        AnnotationUseSiteTarget.SET ->
+          logger.error(
+            "@get:Ref and @set:Ref are not valid for Kotlin xlang schema fields",
+            owner,
+          )
+        else ->
+          logger.error(
+            "@${useSiteTarget.name.lowercase(Locale.ROOT)}:Ref is not valid for Kotlin xlang schema fields",
+            owner,
+          )
+      }
+      if (
+        useSiteTarget != null &&
+          useSiteTarget != AnnotationUseSiteTarget.PROPERTY &&
+          useSiteTarget != AnnotationUseSiteTarget.FIELD
+      ) {
+        return false
+      }
+    }
+    return true
+  }
+
+  private fun appendParameterRefAnnotations(
+    refs: MutableList<KSAnnotation>,
+    annotations: Sequence<KSAnnotation>,
+    owner: KSAnnotated,
+  ): Boolean {
+    for (annotation in annotations) {
+      if (!isAnnotation(annotation, REF)) {
+        continue
+      }
+      val useSiteTarget = annotation.useSiteTarget
+      when (useSiteTarget) {
+        null,
+        AnnotationUseSiteTarget.PARAM -> refs.add(annotation)
+        else -> {
+          logger.error(
+            "@${useSiteTarget.name.lowercase(Locale.ROOT)}:Ref is not valid for Kotlin constructor parameters",
+            owner,
+          )
+          return false
+        }
+      }
+    }
+    return true
+  }
+
   private fun foryFieldMeta(annotations: Sequence<KSAnnotation>): ForyFieldMeta? {
     val annotation = annotations.firstOrNull { isAnnotation(it, FORY_FIELD) } ?: return null
     var id = -1
-    var ref = false
     var dynamic = "AUTO"
     for (argument in annotation.arguments) {
       when (argument.name?.asString()) {
         "id" -> id = argument.value as Int
-        "ref" -> ref = argument.value as Boolean
         "dynamic" ->
           dynamic = argument.value.toString().substringAfterLast('.').uppercase(Locale.ROOT)
       }
     }
-    return ForyFieldMeta(true, id, ref, dynamic)
+    return ForyFieldMeta(true, id, dynamic)
   }
 
   private fun parseType(
@@ -406,6 +487,11 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       return null
     }
     val nullable = type.nullability == Nullability.NULLABLE
+    val hasTypeRef = hasRefAnnotation(type, owner) ?: return null
+    if (hasTypeRef) {
+      logger.error(REF_NOT_SUPPORTED_DIAGNOSTIC, owner)
+      return null
+    }
     val encoding = encodingAnnotation(type, owner)
     if (encoding == Encoding.Invalid) {
       return null
@@ -660,6 +746,15 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       return Encoding.Invalid
     }
     return encodings.firstOrNull()
+  }
+
+  private fun hasRefAnnotation(type: KSType, owner: KSAnnotated): Boolean? {
+    val refs = type.annotations.filter { isAnnotation(it, REF) }.toList()
+    if (refs.size > 1) {
+      logger.error("Kotlin xlang field types must not repeat @Ref", owner)
+      return null
+    }
+    return refs.isNotEmpty()
   }
 
   private fun scalarType(
@@ -1162,6 +1257,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     const val FORY_FIELD = "org.apache.fory.annotation.ForyField"
     const val ARRAY_TYPE = "org.apache.fory.annotation.ArrayType"
     const val NULLABLE = "org.apache.fory.annotation.Nullable"
+    const val REF = "org.apache.fory.annotation.Ref"
     const val FIXED = "org.apache.fory.kotlin.Fixed"
     const val VAR_INT = "org.apache.fory.kotlin.VarInt"
     const val TAGGED = "org.apache.fory.kotlin.Tagged"

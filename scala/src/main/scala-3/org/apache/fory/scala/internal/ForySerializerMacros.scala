@@ -22,16 +22,14 @@ package org.apache.fory.scala.internal
 import org.apache.fory.annotation.{ForyCase, ForyField, ForyStruct, ForyUnion}
 import org.apache.fory.meta.{TypeDef => ForyTypeDef, TypeExtMeta}
 import org.apache.fory.resolver.TypeResolver
-import org.apache.fory.scala.ForyScalaEnum
 import org.apache.fory.scala.ForySerializer
 import org.apache.fory.serializer.{
   FieldGroups,
   Serializer,
   StaticGeneratedStructSerializer,
-  StaticGeneratedStructSerializerFactory,
   UnionSerializer
 }
-import org.apache.fory.`type`.{Descriptor, Types}
+import org.apache.fory.`type`.{Descriptor, ScalaTypes, Types}
 
 import java.lang.reflect.Modifier
 import scala.quoted.*
@@ -58,6 +56,7 @@ object ForySerializerMacros {
         option: Boolean,
         nullable: Boolean,
         trackingRef: Boolean,
+        hasTrackingRefMetadata: Boolean,
         constructorOwned: Boolean)
 
     if !hasAnnotation[ForyStruct](owner) then {
@@ -188,6 +187,7 @@ object ForySerializerMacros {
         case Some(inner) => (boxedIfPrimitive(inner), true, true)
         case None => (sourceType, false, false)
       }
+      val refTracking = refAnnotation(field).orElse(topLevelTypeRefTracking(sourceType))
       FieldMeta(
         field,
         field.name,
@@ -197,16 +197,20 @@ object ForySerializerMacros {
         wireType,
         option,
         nullable,
-        hasRef(field) || topLevelTypeHasRef(sourceType),
+        refTracking.getOrElse(false),
+        refTracking.nonEmpty,
         constructorFieldSet.contains(field))
     }
+    val hasNestedCompatibleStructFields =
+      fields.exists(field => hasNestedCompatibleStruct(field.sourceType))
 
     def generatedType(tpe: TypeRepr): Expr[Descriptor.GeneratedType] = {
       val (outer, outerAnnotations) = peelAnnotations(tpe)
       val option = optionElement(outer)
       val fieldSource = option.map(boxedIfPrimitive).getOrElse(outer)
       val (base, baseAnnotations) = peelAnnotations(fieldSource)
-      val annotations = outerAnnotations ++ baseAnnotations
+      val optionInnerAnnotations = option.toList.flatMap(inner => peelAnnotations(inner)._2)
+      val annotations = outerAnnotations ++ baseAnnotations ++ optionInnerAnnotations
       val argumentSource = fieldSource
       def appliedType(tpe: TypeRepr): Option[(TypeRepr, List[TypeRepr])] = {
         val directArgs = tpe.typeArgs
@@ -251,7 +255,10 @@ object ForySerializerMacros {
       val componentExpr: Expr[Descriptor.GeneratedType] =
         component.getOrElse('{ null.asInstanceOf[Descriptor.GeneratedType] })
       val typeId =
-        annotations.flatMap(typeIdForAnnotation).headOption
+        annotations
+          .flatMap(typeIdForAnnotation)
+          .headOption
+          .orElse(option.map(inner => wireTypeId(peelAnnotations(boxedIfPrimitive(inner))._1)))
           .orElse {
             if hasAnnotation[ForyUnion](base.typeSymbol) then Some(Types.UNION) else None
           }
@@ -263,9 +270,33 @@ object ForySerializerMacros {
       val typeExtMeta = generatedTypeExtMeta(
         typeId,
         nullable = option.nonEmpty,
-        trackingRef = annotations.exists(isRefAnnotation),
+        trackingRef = refTrackingFromAnnotations(annotations).getOrElse(false),
+        hasTrackingRefMetadata = refTrackingFromAnnotations(annotations).nonEmpty,
+        nullableWrapper = option.nonEmpty,
         rawClass = Some(rawClass))
       '{ Descriptor.generatedType($rawClass, $typeExtMeta, $argList, $componentExpr) }
+    }
+
+    def wireTypeId(tpe: TypeRepr): Int = {
+      val normalized = peelAnnotations(tpe.widen)._1.dealias
+      if normalized =:= TypeRepr.of[Boolean] then Types.BOOL
+      else if normalized =:= TypeRepr.of[Byte] then Types.INT8
+      else if normalized =:= TypeRepr.of[Short] then Types.INT16
+      else if normalized =:= TypeRepr.of[Int] then Types.INT32
+      else if normalized =:= TypeRepr.of[Long] then Types.INT64
+      else if normalized =:= TypeRepr.of[Float] then Types.FLOAT32
+      else if normalized =:= TypeRepr.of[Double] then Types.FLOAT64
+      else {
+        val fullName = normalized.typeSymbol.fullName
+        if normalized =:= TypeRepr.of[String] ||
+            normalized.typeSymbol == TypeRepr.of[String].typeSymbol ||
+            fullName == "scala.Predef.String" ||
+            fullName == "scala.Predef$.String" ||
+            fullName.endsWith("Predef.String") ||
+            fullName.endsWith("Predef$.String")
+        then Types.STRING
+        else Types.UNKNOWN
+      }
     }
 
     def descriptor(field: FieldMeta): Expr[Descriptor] = {
@@ -280,6 +311,7 @@ object ForySerializerMacros {
           ${ Expr(field.fieldId) },
           ${ Expr(field.nullable) },
           ${ Expr(field.trackingRef) },
+          ${ Expr(field.hasTrackingRefMetadata) },
           ForyField.Dynamic.AUTO,
           false
         )
@@ -420,6 +452,21 @@ object ForySerializerMacros {
       decodeValue(copied, field)
     }
 
+    def failIfCopiedDuringConstructorArgCopy(
+        valueExpr: Expr[T],
+        copyContextExpr: Expr[org.apache.fory.context.CopyContext]): Expr[Unit] = {
+      '{
+        if $copyContextExpr.copyTrackingRef() &&
+            $copyContextExpr.getCopyObject($valueExpr) != null
+        then {
+          throw new org.apache.fory.exception.CopyException(
+            "Cannot copy cyclic object graph rooted at constructor-owned immutable value " +
+              $valueExpr.getClass.getName +
+              " because its copy cannot be referenced before construction completes")
+        }
+      }
+    }
+
     def referenceCopy(
         copyContextExpr: Expr[org.apache.fory.context.CopyContext],
         sourceExpr: Expr[T],
@@ -439,9 +486,13 @@ object ForySerializerMacros {
           val args = constructorOwned.map { field =>
             copiedValueArg(valueExpr, field, copyContextExpr, fieldsByIdExpr).asTerm
           }
+          val cycleCheck = failIfCopiedDuringConstructorArgCopy(
+            valueExpr,
+            copyContextExpr).asTerm
           val construct = Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), args)
           Block(
-            ValDef(obj, Some(construct)) ::
+            cycleCheck ::
+              ValDef(obj, Some(construct)) ::
               referenceCopy(copyContextExpr, valueExpr, Ref(obj).asExprOf[T]) ::
               Nil,
             Ref(obj)).asExprOf[T]
@@ -462,31 +513,23 @@ object ForySerializerMacros {
           val args = constructorOwned.map { field =>
             copiedValueArg(valueExpr, field, copyContextExpr, fieldsByIdExpr).asTerm
           }
+          val cycleCheck = failIfCopiedDuringConstructorArgCopy(
+            valueExpr,
+            copyContextExpr).asTerm
           val construct = Apply(Select(New(TypeTree.of[T]), owner.primaryConstructor), args)
           val assignments = postConstruction.map { field =>
             val copied = copiedValueArg(valueExpr, field, copyContextExpr, fieldsByIdExpr)
             Assign(Select.unique(Ref(obj), field.name), copied.asTerm)
           }
           Block(
-            ValDef(obj, Some(construct)) ::
+            cycleCheck ::
+              ValDef(obj, Some(construct)) ::
               referenceCopy(copyContextExpr, valueExpr, Ref(obj).asExprOf[T]) ::
               assignments,
             Ref(obj)).asExprOf[T]
         }
 
-      if constructorOwned.nonEmpty then {
-        '{
-          if $copyContextExpr.copyTrackingRef() then {
-            $copyContextExpr.markCopyInProgress($valueExpr)
-            try ${ copyBody() }
-            catch {
-              case throwable: Throwable =>
-                $copyContextExpr.clearCopyInProgress($valueExpr)
-                throw throwable
-            }
-          } else ${ copyBody() }
-        }
-      } else copyBody()
+      copyBody()
     }
 
     def constructRead(valuesExpr: Expr[Array[Any]], readContextExpr: Expr[org.apache.fory.context.ReadContext]): Expr[T] = {
@@ -612,21 +655,13 @@ object ForySerializerMacros {
       '{ Class.forName(${ Expr(ownerClassName) }).asInstanceOf[Class[T]] }
 
     '{
-      new ForySerializer[T] with StaticGeneratedStructSerializerFactory[T] {
+      new ForySerializer[T] {
         private val descriptors: java.util.List[Descriptor] = $descriptorsExpr
-
-        override def getGeneratedDescriptors(): java.util.List[Descriptor] = descriptors
 
         override def createSerializer(
             resolver: TypeResolver,
             remoteTypeDef: ForyTypeDef): Serializer[T] = {
-          newSerializer(resolver, $classExpr, remoteTypeDef)
-        }
-
-        override def newSerializer(
-            resolver: TypeResolver,
-            cls: Class[?],
-            remoteTypeDef: ForyTypeDef): StaticGeneratedStructSerializer[T] = {
+          val cls = $classExpr
           new StaticGeneratedStructSerializer[T](resolver, cls, remoteTypeDef, descriptors) {
             private val generatedSerializer: StaticGeneratedStructSerializer[T] = this
             private val fieldGroups: FieldGroups =
@@ -647,9 +682,16 @@ object ForySerializerMacros {
               if resolver.checkClassVersion() then computeClassVersionHash(descriptors) else 0
             private val sameSchemaCompatible: Boolean =
               remoteTypeDef != null &&
+                !${ Expr(hasNestedCompatibleStructFields) } &&
                 remoteTypeDef.getId == ForyTypeDef.buildTypeDef(resolver, cls).getId
 
             override def getGeneratedDescriptors(): java.util.List[Descriptor] = descriptors
+
+            override def copySerializer(
+                typeResolver: TypeResolver,
+                typeClass: Class[?],
+                typeDef: ForyTypeDef): StaticGeneratedStructSerializer[T] =
+              createSerializer(typeResolver, typeDef).asInstanceOf[StaticGeneratedStructSerializer[T]]
 
             override def write(
                 writeContext: org.apache.fory.context.WriteContext,
@@ -714,6 +756,8 @@ object ForySerializerMacros {
         id: Int,
         payloadType: TypeRepr,
         option: Boolean,
+        trackingRef: Boolean,
+        hasTrackingRefMetadata: Boolean,
         payloadName: String,
         unknownIdName: String,
         unknown: Boolean,
@@ -774,20 +818,24 @@ object ForySerializerMacros {
       }
     }
 
-    val rawCases = owner.children.flatMap { child =>
-      annotationIntArg[ForyCase](child, "id").map { id =>
-        if id < 0 then report.errorAndAbort(s"${child.fullName} @ForyCase id must be >= 0")
-        val (tpe, payloadName, unknownIdName) = payloadMeta(child, id)
-        CaseMeta(
-          child,
-          id,
-          tpe,
-          optionElement(tpe).nonEmpty,
-          payloadName,
-          unknownIdName,
-          id == 0,
-          -1)
+    val rawCases = owner.children.filter(_.flags.is(Flags.Case)).map { child =>
+      val id = annotationIntArg[ForyCase](child, "id").getOrElse {
+        report.errorAndAbort(s"${child.fullName} must be annotated with @ForyCase")
       }
+      if id < 0 then report.errorAndAbort(s"${child.fullName} @ForyCase id must be >= 0")
+      val (tpe, payloadName, unknownIdName) = payloadMeta(child, id)
+      val refTracking = topLevelTypeRefTracking(tpe)
+      CaseMeta(
+        child,
+        id,
+        tpe,
+        optionElement(tpe).nonEmpty,
+        refTracking.getOrElse(false),
+        refTracking.nonEmpty,
+        payloadName,
+        unknownIdName,
+        id == 0,
+        -1)
     }
     var nextFieldIndex = 0
     val cases = rawCases.map { unionCase =>
@@ -875,7 +923,8 @@ object ForySerializerMacros {
       val option = optionElement(outer)
       val fieldSource = option.map(boxedIfPrimitive).getOrElse(outer)
       val (base, baseAnnotations) = peelAnnotations(fieldSource)
-      val annotations = outerAnnotations ++ baseAnnotations
+      val optionInnerAnnotations = option.toList.flatMap(inner => peelAnnotations(inner)._2)
+      val annotations = outerAnnotations ++ baseAnnotations ++ optionInnerAnnotations
       val argumentSource = fieldSource
       def appliedType(tpe: TypeRepr): Option[(TypeRepr, List[TypeRepr])] = {
         val directArgs = tpe.typeArgs
@@ -920,7 +969,10 @@ object ForySerializerMacros {
       val componentExpr: Expr[Descriptor.GeneratedType] =
         component.getOrElse('{ null.asInstanceOf[Descriptor.GeneratedType] })
       val typeId =
-        annotations.flatMap(typeIdForAnnotation).headOption
+        annotations
+          .flatMap(typeIdForAnnotation)
+          .headOption
+          .orElse(option.map(inner => wireTypeId(peelAnnotations(boxedIfPrimitive(inner))._1)))
           .orElse {
             if hasAnnotation[ForyUnion](base.typeSymbol) then Some(Types.UNION) else None
           }
@@ -932,9 +984,33 @@ object ForySerializerMacros {
       val typeExtMeta = generatedTypeExtMeta(
         typeId,
         nullable = option.nonEmpty,
-        trackingRef = annotations.exists(isRefAnnotation),
+        trackingRef = refTrackingFromAnnotations(annotations).getOrElse(false),
+        hasTrackingRefMetadata = refTrackingFromAnnotations(annotations).nonEmpty,
+        nullableWrapper = option.nonEmpty,
         rawClass = Some(rawClass))
       '{ Descriptor.generatedType($rawClass, $typeExtMeta, $argList, $componentExpr) }
+    }
+
+    def wireTypeId(tpe: TypeRepr): Int = {
+      val normalized = peelAnnotations(tpe.widen)._1.dealias
+      if normalized =:= TypeRepr.of[Boolean] then Types.BOOL
+      else if normalized =:= TypeRepr.of[Byte] then Types.INT8
+      else if normalized =:= TypeRepr.of[Short] then Types.INT16
+      else if normalized =:= TypeRepr.of[Int] then Types.INT32
+      else if normalized =:= TypeRepr.of[Long] then Types.INT64
+      else if normalized =:= TypeRepr.of[Float] then Types.FLOAT32
+      else if normalized =:= TypeRepr.of[Double] then Types.FLOAT64
+      else {
+        val fullName = normalized.typeSymbol.fullName
+        if normalized =:= TypeRepr.of[String] ||
+            normalized.typeSymbol == TypeRepr.of[String].typeSymbol ||
+            fullName == "scala.Predef.String" ||
+            fullName == "scala.Predef$.String" ||
+            fullName.endsWith("Predef.String") ||
+            fullName.endsWith("Predef$.String")
+        then Types.STRING
+        else Types.UNKNOWN
+      }
     }
 
     def caseDescriptor(unionCase: CaseMeta): Expr[Descriptor] = {
@@ -947,8 +1023,9 @@ object ForySerializerMacros {
           ${ Expr(owner.fullName.replace("$.", "$")) },
           true,
           ${ Expr(unionCase.id) },
-          false,
-          false,
+          ${ Expr(unionCase.option) },
+          ${ Expr(unionCase.trackingRef) },
+          ${ Expr(unionCase.hasTrackingRefMetadata) },
           ForyField.Dynamic.AUTO,
           false
         )
@@ -1068,6 +1145,19 @@ object ForySerializerMacros {
         valueExpr: Expr[T],
         copyContextExpr: Expr[org.apache.fory.context.CopyContext],
         caseFieldInfosExpr: Expr[Array[FieldGroups.SerializationFieldInfo]]): Expr[T] = {
+      def failIfCopiedDuringPayloadCopy(): Expr[Unit] = {
+        '{
+          if $copyContextExpr.copyTrackingRef() &&
+              $copyContextExpr.getCopyObject($valueExpr) != null
+          then {
+            throw new org.apache.fory.exception.CopyException(
+              "Cannot copy cyclic object graph rooted at constructor-owned immutable value " +
+                $valueExpr.getClass.getName +
+                " because its copy cannot be referenced before construction completes")
+          }
+        }
+      }
+
       cases.foldRight(
         '{
           throw new IllegalStateException("Unknown Scala union case " + $valueExpr)
@@ -1083,24 +1173,25 @@ object ForySerializerMacros {
                 Select.unique(
                   '{ $valueExpr.asInstanceOf[c] }.asTerm,
                   unionCase.unknownIdName).asExprOf[Int]
-              val copiedPayload = '{ $copyContextExpr.copyObject($payload) }
-              val current = construct(unknown, List(originalId.asTerm, copiedPayload.asTerm))
               '{
-                if $valueExpr.isInstanceOf[c] then $current else $next
+                if $valueExpr.isInstanceOf[c] then {
+                  val copiedPayload = $copyContextExpr.copyObject($payload)
+                  ${ failIfCopiedDuringPayloadCopy() }
+                  ${ construct(unknown, List(originalId.asTerm, 'copiedPayload.asTerm)) }
+                } else $next
               }
             } else {
               val payloadValue = wirePayload(payload, unionCase)
-              val copiedPayload =
-                '{
-                  UnionSerializer.copyCaseValue(
-                    $copyContextExpr,
-                    $caseFieldInfosExpr(${ Expr(unionCase.fieldIndex) }),
-                    $payloadValue)
-                }
-              val coerced = decodePayload(copiedPayload, unionCase)
-              val current = construct(unionCase, List(coerced.asTerm))
               '{
-                if $valueExpr.isInstanceOf[c] then $current else $next
+                if $valueExpr.isInstanceOf[c] then {
+                  val copiedPayload =
+                    UnionSerializer.copyCaseValue(
+                      $copyContextExpr,
+                      $caseFieldInfosExpr(${ Expr(unionCase.fieldIndex) }),
+                      $payloadValue)
+                  ${ failIfCopiedDuringPayloadCopy() }
+                  ${ construct(unionCase, List(decodePayload('copiedPayload, unionCase).asTerm)) }
+                } else $next
               }
             }
         }
@@ -1164,16 +1255,19 @@ object ForySerializerMacros {
     val ownerClassName = owner.fullName.replace("$.", "$")
     val classExpr: Expr[Class[T]] =
       '{ Class.forName(${ Expr(ownerClassName) }).asInstanceOf[Class[T]] }
-    val caseClassesExpr: Expr[List[Class[_]]] =
-      Expr.ofList(cases.map(unionCase =>
-        '{ Class.forName(${ Expr(ownerClassName + "$" + unionCase.symbol.name) }) }))
+    val caseClassesExpr: Expr[Array[Class[_]]] = {
+      val caseClassExprs = cases.map { unionCase =>
+        '{ Class.forName(${ Expr(unionCase.symbol.fullName.replace("$.", "$")) }) }
+      }
+      '{ Array[Class[_]](${ Varargs(caseClassExprs) }*) }
+    }
 
     '{
       new ForySerializer[T] {
         override def isUnion: Boolean = true
 
-        override def registrationClasses(cls: Class[T]): Array[Class[_]] =
-          (cls :: $caseClassesExpr).toArray
+        override private[scala] def handledRuntimeClasses(cls: Class[T]): Array[Class[_]] =
+          $caseClassesExpr
 
         override def createSerializer(
             resolver: TypeResolver,
@@ -1203,20 +1297,9 @@ object ForySerializerMacros {
             }
 
             override def copy(copyContext: org.apache.fory.context.CopyContext, value: T): T = {
-              if copyContext.copyTrackingRef() then {
-                copyContext.markCopyInProgress(value)
-                try {
-                  val copied = ${ copyDispatch('value, 'copyContext, 'caseFieldInfos) }
-                  copyContext.reference(value, copied)
-                  copied
-                } catch {
-                  case throwable: Throwable =>
-                    copyContext.clearCopyInProgress(value)
-                    throw throwable
-                }
-              } else {
-                ${ copyDispatch('value, 'copyContext, 'caseFieldInfos) }
-              }
+              val copied = ${ copyDispatch('value, 'copyContext, 'caseFieldInfos) }
+              copyContext.reference(value, copied)
+              copied
             }
           }
         }
@@ -1245,12 +1328,12 @@ object ForySerializerMacros {
     symbol.annotations.exists(_.tpe <:< TypeRepr.of[A])
   }
 
-  private def hasRef(using q: Quotes)(symbol: q.reflect.Symbol): Boolean = {
-    import q.reflect.*
-    symbol.annotations.exists(_.tpe.typeSymbol.fullName == "org.apache.fory.annotation.Ref")
+  private def refAnnotation(using q: Quotes)(symbol: q.reflect.Symbol): Option[Boolean] = {
+    symbol.annotations.find(isRefAnnotation).map(refAnnotationEnabled)
   }
 
-  private def topLevelTypeHasRef(using q: Quotes)(tpe: q.reflect.TypeRepr): Boolean = {
+  private def topLevelTypeRefTracking(using q: Quotes)(
+      tpe: q.reflect.TypeRepr): Option[Boolean] = {
     import q.reflect.*
 
     def peelAnnotations(tpe: TypeRepr): (TypeRepr, List[Term]) = {
@@ -1268,15 +1351,12 @@ object ForySerializerMacros {
       }
     }
 
-    def isRef(annotation: Term): Boolean =
-      annotation.tpe.typeSymbol.fullName == "org.apache.fory.annotation.Ref"
-
     val (base, annotations) = peelAnnotations(tpe)
     base.dealias match {
       case AppliedType(optionType, List(inner))
           if optionType.typeSymbol.fullName == "scala.Option" =>
-        peelAnnotations(inner)._2.exists(isRef)
-      case _ => annotations.exists(isRef)
+        refTrackingFromAnnotations(peelAnnotations(inner)._2)
+      case _ => refTrackingFromAnnotations(annotations)
     }
   }
 
@@ -1284,30 +1364,105 @@ object ForySerializerMacros {
       typeId: Int,
       nullable: Boolean,
       trackingRef: Boolean,
+      hasTrackingRefMetadata: Boolean,
+      nullableWrapper: Boolean = false,
       rawClass: Option[Expr[Class[?]]] = None): Expr[TypeExtMeta] = {
     if typeId == Types.UNKNOWN && rawClass.nonEmpty then {
       val raw = rawClass.get
       '{
         val resolvedTypeId =
-          if classOf[ForyScalaEnum].isAssignableFrom($raw) then Types.ENUM else Types.UNKNOWN
-        if resolvedTypeId == Types.UNKNOWN && !${ Expr(nullable) } && !${ Expr(trackingRef) } then {
+          if ScalaTypes.isScalaEnumType($raw) then Types.ENUM else Types.UNKNOWN
+        if resolvedTypeId == Types.UNKNOWN &&
+            !${ Expr(nullable) } &&
+            !${ Expr(hasTrackingRefMetadata) } &&
+            !${ Expr(nullableWrapper) } then {
           null.asInstanceOf[TypeExtMeta]
         } else {
-          TypeExtMeta.of(resolvedTypeId, ${ Expr(nullable) }, ${ Expr(trackingRef) })
+          TypeExtMeta.of(
+            resolvedTypeId,
+            ${ Expr(nullable) },
+            ${ Expr(trackingRef) },
+            ${ Expr(nullableWrapper) })
         }
       }
-    } else if typeId == Types.UNKNOWN && !nullable && !trackingRef then {
+    } else if typeId == Types.UNKNOWN && !nullable && !hasTrackingRefMetadata && !nullableWrapper then {
       '{ null.asInstanceOf[TypeExtMeta] }
     } else {
-      '{ TypeExtMeta.of(${ Expr(typeId) }, ${ Expr(nullable) }, ${ Expr(trackingRef) }) }
+      '{
+        TypeExtMeta.of(
+          ${ Expr(typeId) },
+          ${ Expr(nullable) },
+          ${ Expr(trackingRef) },
+          ${ Expr(nullableWrapper) })
+      }
     }
   }
 
   private def isScalaEnumType(using q: Quotes)(tpe: q.reflect.TypeRepr): Boolean = {
     import q.reflect.*
     tpe.typeSymbol.flags.is(Flags.Enum) ||
-    tpe <:< TypeRepr.of[ForyScalaEnum] ||
-    tpe.baseClasses.exists(_.fullName == "org.apache.fory.scala.ForyScalaEnum")
+    tpe.baseClasses.exists(_.fullName == "scala.reflect.Enum")
+  }
+
+  private def hasNestedCompatibleStruct(using q: Quotes)(tpe: q.reflect.TypeRepr): Boolean = {
+    import q.reflect.*
+
+    def peel(tpe: TypeRepr): TypeRepr = {
+      tpe match {
+        case AnnotatedType(underlying, _) => peel(underlying)
+        case other =>
+          other.dealias match {
+            case AnnotatedType(underlying, _) => peel(underlying)
+            case dealiased => dealiased
+          }
+      }
+    }
+
+    def evolutionValue(annotation: Term): Option[String] = {
+      annotation match {
+        case Apply(_, args) =>
+          args.collectFirst {
+            case NamedArg("evolution", Select(_, name)) => name
+            case NamedArg("evolution", term) =>
+              val rendered = term.show
+              if rendered.endsWith(".ENABLED") then "ENABLED"
+              else if rendered.endsWith(".DISABLED") then "DISABLED"
+              else "INHERIT"
+          }
+        case _ => None
+      }
+    }
+
+    def evolvingValue(annotation: Term): Option[Boolean] = {
+      annotation match {
+        case Apply(_, args) =>
+          args.collectFirst {
+            case NamedArg("evolving", Literal(BooleanConstant(value))) => value
+          }
+        case _ => None
+      }
+    }
+
+    def compatibleStruct(symbol: Symbol): Boolean = {
+      symbol.annotations.find(_.tpe <:< TypeRepr.of[ForyStruct]) match {
+        case Some(annotation) =>
+          val evolution = evolutionValue(annotation).getOrElse("INHERIT")
+          if evolution == "DISABLED" then false
+          else evolvingValue(annotation).getOrElse(true) || evolution == "ENABLED"
+        case None => false
+      }
+    }
+
+    def loop(tpe: TypeRepr): Boolean = {
+      val base = peel(tpe.widen)
+      compatibleStruct(base.typeSymbol) ||
+      (base match {
+        case AppliedType(_, args) => args.exists(loop)
+        case _ => false
+      })
+    }
+
+    loop(tpe)
   }
 
   private def typeIdForAnnotation(using q: Quotes)(annotation: q.reflect.Term): Option[Int] = {
@@ -1352,5 +1507,22 @@ object ForySerializerMacros {
 
   private def isRefAnnotation(using q: Quotes)(annotation: q.reflect.Term): Boolean = {
     annotation.tpe.typeSymbol.fullName == "org.apache.fory.annotation.Ref"
+  }
+
+  private def refTrackingFromAnnotations(using q: Quotes)(
+      annotations: Iterable[q.reflect.Term]): Option[Boolean] = {
+    annotations.find(isRefAnnotation).map(refAnnotationEnabled)
+  }
+
+  private def refAnnotationEnabled(using q: Quotes)(annotation: q.reflect.Term): Boolean = {
+    import q.reflect.*
+    annotation match {
+      case Apply(_, args) =>
+        args.collectFirst {
+          case NamedArg("enable", Literal(BooleanConstant(value))) => value
+          case Literal(BooleanConstant(value)) => value
+        }.getOrElse(true)
+      case _ => true
+    }
   }
 }

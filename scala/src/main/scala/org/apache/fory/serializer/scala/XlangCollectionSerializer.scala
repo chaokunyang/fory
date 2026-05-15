@@ -35,19 +35,28 @@ abstract class AbstractScalaXlangCollectionSerializer[A, T <: scala.collection.I
 
   override def onCollectionWrite(writeContext: WriteContext, value: T): util.Collection[_] = {
     writeContext.getBuffer.writeVarUInt32Small7(value.size)
-    new XlangCollectionAdapter[A](value)
+    if (ScalaXlangCollectionShape.hasOptionElement(writeContext)) {
+      new XlangOptionCollectionAdapter[A](value)
+    } else {
+      new XlangCollectionAdapter[A](value)
+    }
   }
 
   override def newCollection(readContext: ReadContext): util.Collection[_] = {
     val numElements = readCollectionSize(readContext.getBuffer)
     setNumElements(numElements)
-    new XlangCollectionBuilder[A, T](newBuilder(numElements))
+    val builder = newBuilder(numElements)
+    if (ScalaXlangCollectionShape.hasOptionElement(readContext)) {
+      new XlangOptionCollectionBuilder[A, T](builder)
+    } else {
+      new XlangCollectionBuilder[A, T](builder)
+    }
   }
 
   protected def newBuilder(numElements: Int): mutable.Builder[A, T]
 
   override def onCollectionRead(collection: util.Collection[_]): T = {
-    collection.asInstanceOf[XlangCollectionBuilder[A, T]].builder.result()
+    collection.asInstanceOf[XlangBuilderResult[T]].result()
   }
 
   override def copy(copyContext: CopyContext, value: T): T = {
@@ -133,9 +142,7 @@ class ScalaXlangSeqSerializer[A, T <: scala.collection.Seq[A]](
     cls: Class[T])
   extends AbstractScalaXlangCollectionSerializer[A, T](typeResolver, cls) {
   override protected def newBuilder(numElements: Int): mutable.Builder[A, T] = {
-    val builder = simmutable.List.newBuilder[A]
-    builder.sizeHint(numElements)
-    builder.asInstanceOf[mutable.Builder[A, T]]
+    ScalaXlangCollectionShape.seqBuilder[A, T](cls, numElements)
   }
 
 }
@@ -145,9 +152,7 @@ class ScalaXlangSetSerializer[A, T <: scala.collection.Set[A]](
     cls: Class[T])
   extends AbstractScalaXlangCollectionSerializer[A, T](typeResolver, cls) {
   override protected def newBuilder(numElements: Int): mutable.Builder[A, T] = {
-    val builder = simmutable.Set.newBuilder[A]
-    builder.sizeHint(numElements)
-    builder.asInstanceOf[mutable.Builder[A, T]]
+    ScalaXlangCollectionShape.setBuilder[A, T](cls, numElements)
   }
 
 }
@@ -157,11 +162,122 @@ class ScalaXlangCollectionSerializer[A, T <: scala.collection.Iterable[A]](
     cls: Class[T])
   extends AbstractScalaXlangCollectionSerializer[A, T](typeResolver, cls) {
   override protected def newBuilder(numElements: Int): mutable.Builder[A, T] = {
-    val builder = simmutable.List.newBuilder[A]
-    builder.sizeHint(numElements)
+    ScalaXlangCollectionShape.iterableBuilder[A, T](cls, numElements)
+  }
+
+}
+
+private object ScalaXlangCollectionShape {
+  def hasOptionElement(writeContext: WriteContext): Boolean = {
+    val genericType = writeContext.getGenerics.nextGenericType(writeContext.getDepth)
+    genericType != null && isExplicitNullable(genericType.getTypeParameter0)
+  }
+
+  def hasOptionElement(readContext: ReadContext): Boolean = {
+    val genericType = readContext.getGenerics.nextGenericType(readContext.getDepth)
+    genericType != null && isExplicitNullable(genericType.getTypeParameter0)
+  }
+
+  def hasOptionKey(writeContext: WriteContext): Boolean = {
+    val genericType = writeContext.getGenerics.nextGenericType(writeContext.getDepth)
+    genericType != null &&
+    genericType.getTypeParametersCount >= 2 &&
+    isExplicitNullable(genericType.getTypeParameter0)
+  }
+
+  def hasOptionValue(writeContext: WriteContext): Boolean = {
+    val genericType = writeContext.getGenerics.nextGenericType(writeContext.getDepth)
+    genericType != null &&
+    genericType.getTypeParametersCount >= 2 &&
+    isExplicitNullable(genericType.getTypeParameter1)
+  }
+
+  def hasOptionKey(readContext: ReadContext): Boolean = {
+    val genericType = readContext.getGenerics.nextGenericType(readContext.getDepth)
+    genericType != null &&
+    genericType.getTypeParametersCount >= 2 &&
+    isExplicitNullable(genericType.getTypeParameter0)
+  }
+
+  def hasOptionValue(readContext: ReadContext): Boolean = {
+    val genericType = readContext.getGenerics.nextGenericType(readContext.getDepth)
+    genericType != null &&
+    genericType.getTypeParametersCount >= 2 &&
+    isExplicitNullable(genericType.getTypeParameter1)
+  }
+
+  def seqBuilder[A, T](declared: Class[_], size: Int): mutable.Builder[A, T] = {
+    val builder =
+      if (accepts(declared, classOf[mutable.ArrayBuffer[_]])) {
+        mutable.ArrayBuffer.newBuilder[A]
+      } else if (accepts(declared, classOf[simmutable.Vector[_]])) {
+        simmutable.Vector.newBuilder[A]
+      } else if (accepts(declared, classOf[simmutable.List[_]])) {
+        simmutable.List.newBuilder[A]
+      } else {
+        unsupported("sequence", declared)
+      }
+    builder.sizeHint(size)
     builder.asInstanceOf[mutable.Builder[A, T]]
   }
 
+  def iterableBuilder[A, T](declared: Class[_], size: Int): mutable.Builder[A, T] = {
+    val builder =
+      if (accepts(declared, classOf[mutable.ArrayBuffer[_]])) {
+        mutable.ArrayBuffer.newBuilder[A]
+      } else if (accepts(declared, classOf[simmutable.List[_]])) {
+        simmutable.List.newBuilder[A]
+      } else {
+        unsupported("iterable", declared)
+      }
+    builder.sizeHint(size)
+    builder.asInstanceOf[mutable.Builder[A, T]]
+  }
+
+  def setBuilder[A, T](declared: Class[_], size: Int): mutable.Builder[A, T] = {
+    val builder =
+      if (accepts(declared, classOf[mutable.HashSet[_]])) {
+        mutable.HashSet.newBuilder[A]
+      } else if (accepts(declared, classOf[simmutable.HashSet[_]])) {
+        simmutable.HashSet.newBuilder[A]
+      } else if (accepts(declared, classOf[simmutable.Set[_]])) {
+        simmutable.Set.newBuilder[A]
+      } else {
+        unsupported("set", declared)
+      }
+    builder.sizeHint(size)
+    builder.asInstanceOf[mutable.Builder[A, T]]
+  }
+
+  def mapBuilder[K, V, T](declared: Class[_], size: Int): mutable.Builder[(K, V), T] = {
+    val builder =
+      if (accepts(declared, classOf[mutable.HashMap[_, _]])) {
+        mutable.HashMap.newBuilder[K, V]
+      } else if (accepts(declared, classOf[simmutable.HashMap[_, _]])) {
+        simmutable.HashMap.newBuilder[K, V]
+      } else if (accepts(declared, classOf[simmutable.Map[_, _]])) {
+        simmutable.Map.newBuilder[K, V]
+      } else {
+        unsupported("map", declared)
+      }
+    builder.sizeHint(size)
+    builder.asInstanceOf[mutable.Builder[(K, V), T]]
+  }
+
+  private def isExplicitNullable(genericType: org.apache.fory.`type`.GenericType): Boolean =
+    genericType != null &&
+      genericType.getTypeRef.getTypeExtMeta != null &&
+      genericType.getTypeRef.getTypeExtMeta.nullableWrapper()
+
+  private def accepts(declared: Class[_], result: Class[_]): Boolean =
+    declared.isAssignableFrom(result)
+
+  private def unsupported(kind: String, declared: Class[_]): Nothing = {
+    throw new IllegalArgumentException(
+      "Scala xlang " + kind + " serializer cannot rebuild declared type " +
+        declared.getName +
+        ". Use a supported immutable collection type or a mutable collection interface.")
+  }
 }
 
 private final class XlangCollectionAdapter[A](coll: scala.collection.Iterable[A])
@@ -177,8 +293,29 @@ private final class XlangCollectionAdapter[A](coll: scala.collection.Iterable[A]
   override def size(): Int = coll.size
 }
 
+private final class XlangOptionCollectionAdapter[A](coll: scala.collection.Iterable[A])
+  extends util.AbstractCollection[Any] {
+  override def iterator(): util.Iterator[Any] = new util.Iterator[Any] {
+    private val it = coll.iterator
+
+    override def hasNext: Boolean = it.hasNext
+
+    override def next(): Any = {
+      val value = it.next()
+      if (value == null) null else value.asInstanceOf[Option[_]].getOrElse(null)
+    }
+  }
+
+  override def size(): Int = coll.size
+}
+
+private trait XlangBuilderResult[T] {
+  def result(): T
+}
+
 private final class XlangCollectionBuilder[A, T](val builder: mutable.Builder[A, T])
-  extends util.AbstractCollection[A] {
+  extends util.AbstractCollection[A]
+  with XlangBuilderResult[T] {
   override def add(e: A): Boolean = {
     builder.addOne(e)
     true
@@ -189,6 +326,25 @@ private final class XlangCollectionBuilder[A, T](val builder: mutable.Builder[A,
 
   override def size(): Int =
     throw new UnsupportedOperationException("Scala xlang collection builder is write-only")
+
+  override def result(): T = builder.result()
+}
+
+private final class XlangOptionCollectionBuilder[A, T](val builder: mutable.Builder[A, T])
+  extends util.AbstractCollection[Any]
+  with XlangBuilderResult[T] {
+  override def add(e: Any): Boolean = {
+    builder.addOne(Option(e).asInstanceOf[A])
+    true
+  }
+
+  override def iterator(): util.Iterator[Any] =
+    throw new UnsupportedOperationException("Scala xlang collection builder is write-only")
+
+  override def size(): Int =
+    throw new UnsupportedOperationException("Scala xlang collection builder is write-only")
+
+  override def result(): T = builder.result()
 }
 
 abstract class AbstractScalaXlangMapSerializer[K, V, T <: scala.collection.Map[K, V]](
@@ -198,19 +354,30 @@ abstract class AbstractScalaXlangMapSerializer[K, V, T <: scala.collection.Map[K
 
   override def onMapWrite(writeContext: WriteContext, value: T): util.Map[_, _] = {
     writeContext.getBuffer.writeVarUInt32Small7(value.size)
-    new XlangMapAdapter[K, V](value)
+    val optionKey = ScalaXlangCollectionShape.hasOptionKey(writeContext)
+    val optionValue = ScalaXlangCollectionShape.hasOptionValue(writeContext)
+    if (optionKey || optionValue) {
+      new XlangOptionMapAdapter[K, V](value, optionKey, optionValue)
+    } else {
+      new XlangMapAdapter[K, V](value)
+    }
   }
 
   override def newMap(readContext: ReadContext): util.Map[_, _] = {
     val numElements = readMapSize(readContext.getBuffer)
     setNumElements(numElements)
-    val builder = simmutable.Map.newBuilder[K, V]
-    builder.sizeHint(numElements)
-    new XlangMapBuilder[K, V, T](builder.asInstanceOf[mutable.Builder[(K, V), T]])
+    val builder = ScalaXlangCollectionShape.mapBuilder[K, V, T](cls, numElements)
+    val optionKey = ScalaXlangCollectionShape.hasOptionKey(readContext)
+    val optionValue = ScalaXlangCollectionShape.hasOptionValue(readContext)
+    if (optionKey || optionValue) {
+      new XlangOptionMapBuilder[K, V, T](builder, optionKey, optionValue)
+    } else {
+      new XlangMapBuilder[K, V, T](builder)
+    }
   }
 
   override def onMapRead(map: util.Map[_, _]): T = {
-    map.asInstanceOf[XlangMapBuilder[K, V, T]].builder.result()
+    map.asInstanceOf[XlangBuilderResult[T]].result()
   }
 
   override def onMapCopy(map: util.Map[_, _]): T = onMapRead(map)
@@ -229,9 +396,7 @@ abstract class AbstractScalaXlangMapSerializer[K, V, T <: scala.collection.Map[K
           copyWithBuilder(copyContext, value, value.mapFactory.newBuilder[K, V])
       }
     } else {
-      val builder = simmutable.Map.newBuilder[K, V]
-      builder.sizeHint(value.size)
-      copyWithBuilder(copyContext, value, builder)
+      copyWithBuilder(copyContext, value, ScalaXlangCollectionShape.mapBuilder[K, V, T](cls, value.size))
     }
   }
 
@@ -299,8 +464,38 @@ private final class XlangMapAdapter[K, V](map: scala.collection.Map[K, V])
     }
 }
 
+private final class XlangOptionMapAdapter[K, V](
+    map: scala.collection.Map[K, V],
+    optionKey: Boolean,
+    optionValue: Boolean)
+  extends util.AbstractMap[Any, Any] {
+  override def entrySet(): util.Set[util.Map.Entry[Any, Any]] =
+    new util.AbstractSet[util.Map.Entry[Any, Any]] {
+      override def size(): Int = map.size
+
+      override def iterator(): util.Iterator[util.Map.Entry[Any, Any]] =
+        new util.Iterator[util.Map.Entry[Any, Any]] {
+          private val it = map.iterator
+
+          override def hasNext: Boolean = it.hasNext
+
+          override def next(): util.Map.Entry[Any, Any] = {
+            val entry = it.next()
+            new org.apache.fory.collection.MapEntry[Any, Any](
+              unwrap(entry._1, optionKey),
+              unwrap(entry._2, optionValue))
+          }
+        }
+    }
+
+  private def unwrap(value: Any, option: Boolean): Any = {
+    if (option && value != null) value.asInstanceOf[Option[_]].getOrElse(null) else value
+  }
+}
+
 private final class XlangMapBuilder[K, V, T](val builder: mutable.Builder[(K, V), T])
-  extends util.AbstractMap[K, V] {
+  extends util.AbstractMap[K, V]
+  with XlangBuilderResult[T] {
   override def entrySet(): util.Set[util.Map.Entry[K, V]] =
     throw new UnsupportedOperationException("Scala xlang map builder is write-only")
 
@@ -308,6 +503,28 @@ private final class XlangMapBuilder[K, V, T](val builder: mutable.Builder[(K, V)
     builder.addOne((key, value))
     value
   }
+
+  override def result(): T = builder.result()
+}
+
+private final class XlangOptionMapBuilder[K, V, T](
+    val builder: mutable.Builder[(K, V), T],
+    optionKey: Boolean,
+    optionValue: Boolean)
+  extends util.AbstractMap[Any, Any]
+  with XlangBuilderResult[T] {
+  override def entrySet(): util.Set[util.Map.Entry[Any, Any]] =
+    throw new UnsupportedOperationException("Scala xlang map builder is write-only")
+
+  override def put(key: Any, value: Any): Any = {
+    builder.addOne((wrap(key, optionKey).asInstanceOf[K], wrap(value, optionValue).asInstanceOf[V]))
+    value
+  }
+
+  private def wrap(value: Any, option: Boolean): Any =
+    if (option) Option(value) else value
+
+  override def result(): T = builder.result()
 }
 
 final class ScalaOptionSerializer(typeResolver: TypeResolver, cls: Class[_])

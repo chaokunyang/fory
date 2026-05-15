@@ -23,6 +23,7 @@ import org.apache.fory.Fory
 import org.apache.fory.annotation.{
   ArrayType,
   ForyCase,
+  ForyEnumId,
   ForyField,
   ForyStruct,
   ForyUnion,
@@ -41,7 +42,7 @@ import org.apache.fory.context.{ReadContext, WriteContext}
 import org.apache.fory.memory.{MemoryBuffer, MemoryUtils}
 import org.apache.fory.meta.MetaCompressor
 import org.apache.fory.resolver.TypeResolver
-import org.apache.fory.scala.{ForyScalaEnum, ForySerializer}
+import org.apache.fory.scala.ForySerializer
 import org.apache.fory.serializer.Serializer
 import org.apache.fory.`type`.{BFloat16, Float16}
 import org.apache.fory.`type`.union.Union2
@@ -54,21 +55,24 @@ import java.time.{Instant, LocalDate}
 import java.util
 import scala.jdk.CollectionConverters.*
 
-enum Color(val foryId: Int) extends ForyScalaEnum {
-  case Green extends Color(0)
-  case Red extends Color(1)
-  case Blue extends Color(2)
-  case White extends Color(3)
-
-  override def getForyId(): Int = foryId
+enum Color {
+  @ForyEnumId(0)
+  case Green
+  @ForyEnumId(1)
+  case Red
+  @ForyEnumId(2)
+  case Blue
+  @ForyEnumId(3)
+  case White
 }
 
-enum TestEnum(val foryId: Int) extends ForyScalaEnum {
-  case VALUE_A extends TestEnum(0)
-  case VALUE_B extends TestEnum(1)
-  case VALUE_C extends TestEnum(2)
-
-  override def getForyId(): Int = foryId
+enum TestEnum {
+  @ForyEnumId(0)
+  case VALUE_A
+  @ForyEnumId(1)
+  case VALUE_B
+  @ForyEnumId(2)
+  case VALUE_C
 }
 
 @ForyStruct
@@ -254,9 +258,9 @@ final case class RefOverrideElement(id: Int, name: String) derives ForySerialize
 
 @ForyStruct
 final case class RefOverrideContainer(
-    listField: util.List[RefOverrideElement @Ref(enable = false)],
-    setField: util.Set[RefOverrideElement @Ref(enable = false)],
-    mapField: util.Map[String, RefOverrideElement @Ref(enable = false)])
+    listField: util.List[RefOverrideElement @Ref],
+    setField: util.Set[RefOverrideElement @Ref],
+    mapField: util.Map[String, RefOverrideElement @Ref])
     derives ForySerializer
 
 @ForyStruct

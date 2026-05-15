@@ -19,6 +19,7 @@
 
 package org.apache.fory.serializer;
 
+import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,6 +30,7 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.TypeDef;
@@ -101,6 +103,36 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   @Override
   public abstract T copy(CopyContext copyContext, T value);
 
+  /**
+   * Creates an equivalent serializer for another local/remote TypeDef view of the same generated
+   * struct.
+   *
+   * <p>Named Java/Kotlin generated serializers are rediscovered through their generated class.
+   * Macro-generated serializers may instead override this method so compatible xlang reads can
+   * reuse the same serializer-owned construction logic without a separate factory object.
+   */
+  @Internal
+  @SuppressWarnings("unchecked")
+  public StaticGeneratedStructSerializer<T> copySerializer(
+      TypeResolver typeResolver, Class<?> type, TypeDef typeDef) {
+    try {
+      Constructor<? extends StaticGeneratedStructSerializer> constructor =
+          getClass()
+              .asSubclass(StaticGeneratedStructSerializer.class)
+              .getDeclaredConstructor(TypeResolver.class, Class.class, TypeDef.class);
+      constructor.setAccessible(true);
+      return (StaticGeneratedStructSerializer<T>)
+          constructor.newInstance(typeResolver, type, typeDef);
+    } catch (ReflectiveOperationException e) {
+      throw new ForyException(
+          "Failed to copy static generated serializer "
+              + getClass().getName()
+              + " for "
+              + type.getName(),
+          e);
+    }
+  }
+
   public abstract List<Descriptor> getGeneratedDescriptors();
 
   public final List<Descriptor> getDescriptors() {
@@ -122,15 +154,10 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   public final FieldGroups buildLocalFieldGroups(List<Descriptor> descriptors) {
-    if (!typeResolver.isShareMeta()) {
-      return buildFieldGroups(descriptors);
-    }
-    // Meta-share writers use the local TypeDef-reified descriptor grouping, matching
-    // ObjectSerializer. The constructor TypeDef may be a remote schema for compatible reads, so it
-    // must not own local field access ordering.
-    DescriptorGrouper grouper =
-        typeResolver.createDescriptorGrouper(typeResolver.getTypeDef(type, true), type);
-    return FieldGroups.buildFieldInfos(typeResolver, grouper);
+    // Generated descriptors carry source-only field metadata such as Scala Option wrappers. A
+    // schema TypeDef descriptor is the canonical remote contract, but it cannot replace the local
+    // generated descriptor view used to choose allocation-free field readers and writers.
+    return buildFieldGroups(descriptors);
   }
 
   protected final List<Descriptor> runtimeDescriptors(List<Descriptor> descriptors) {
@@ -567,6 +594,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       int matchedId = matchField(fieldInfo, fieldIds, fields);
       Descriptor localDescriptor =
           matchedId == UNKNOWN_FIELD ? null : localDescriptors.get(matchedId);
+      if (localDescriptor != null) {
+        Descriptor readDescriptor = fieldInfo.toDescriptor(typeResolver, localDescriptor);
+        serializationFieldInfo =
+            new SerializationFieldInfo(
+                typeResolver, readDescriptor, serializationFieldInfo.codecCategory);
+      }
       remoteFields.add(
           new RemoteFieldInfo(
               typeResolver,

@@ -30,6 +30,7 @@ import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.annotation.Nullable;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.DeflaterMetaCompressor;
 import org.testng.Assert;
@@ -651,8 +652,8 @@ public class RecordXlangTest {
    * same RefInnerRecord instance.
    */
   public record RefOuterRecord(
-      @Nullable @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE) RefInnerRecord inner1,
-      @Nullable @ForyField(ref = true, dynamic = ForyField.Dynamic.FALSE) RefInnerRecord inner2) {}
+      @Nullable @Ref @ForyField(dynamic = ForyField.Dynamic.FALSE) RefInnerRecord inner1,
+      @Nullable @Ref @ForyField(dynamic = ForyField.Dynamic.FALSE) RefInnerRecord inner2) {}
 
   /**
    * Test reference tracking with Record in SCHEMA_CONSISTENT mode. Creates an outer struct with two

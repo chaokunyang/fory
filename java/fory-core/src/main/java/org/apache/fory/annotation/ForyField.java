@@ -63,14 +63,6 @@ public @interface ForyField {
   int id() default -1;
 
   /**
-   * Whether to track references for this field. When set to false (default): - Avoids adding the
-   * object to IdentityMap (saves hash map overhead) - Skips writing ref tracking flag (saves 1 byte
-   * for non-nullable fields) When set to true, enables reference tracking for shared/circular
-   * references. Default: false (no reference tracking, aligned with xlang protocol defaults)
-   */
-  boolean ref() default false;
-
-  /**
    * Controls polymorphism behavior for this field in cross-language serialization.
    *
    * <ul>

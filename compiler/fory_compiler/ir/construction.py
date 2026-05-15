@@ -44,6 +44,14 @@ class MessageConstructionShape:
     cycle_owned: bool
 
 
+@dataclass(frozen=True)
+class _Dependency:
+    """Message/union dependency used by construction-shape analysis."""
+
+    name: str
+    constructor_owned: bool
+
+
 def analyze_message_construction_shapes(
     schema: Schema,
 ) -> Dict[str, MessageConstructionShape]:
@@ -58,16 +66,31 @@ def analyze_message_construction_shapes(
         schema.messages, schema.unions, schema.enums
     )
     messages = {name: message for name, message, _ in message_entries}
-    graph = {}
+    graph: Dict[str, Set[str]] = {}
+    constructor_graph: Dict[str, Set[str]] = {}
     for name, message, parent_paths in message_entries:
-        graph[name] = set(
-            _field_dependencies(message.fields, types, (*parent_paths, message.name))
+        dependencies = list(
+            _field_dependencies(
+                message.fields, types, (*parent_paths, message.name), False
+            )
         )
+        graph[name] = {dependency.name for dependency in dependencies}
+        constructor_graph[name] = {
+            dependency.name
+            for dependency in dependencies
+            if dependency.constructor_owned
+        }
     for name, union, parent_paths in union_entries:
-        graph[name] = set(
-            _field_dependencies(union.fields, types, (*parent_paths, union.name))
+        dependencies = list(
+            _field_dependencies(union.fields, types, (*parent_paths, union.name), False)
         )
-    cycle_owned = _cycle_nodes(graph)
+        graph[name] = {dependency.name for dependency in dependencies}
+        constructor_graph[name] = {
+            dependency.name
+            for dependency in dependencies
+            if dependency.constructor_owned
+        }
+    cycle_owned = _cycle_nodes(graph, constructor_graph)
     return {
         name: MessageConstructionShape(cycle_owned=name in cycle_owned)
         for name in messages
@@ -112,35 +135,48 @@ def _collect_types(
 
 
 def _field_dependencies(
-    fields: Iterable[Field], types: Dict[str, object], current_path: Tuple[str, ...]
-) -> Iterable[str]:
+    fields: Iterable[Field],
+    types: Dict[str, object],
+    current_path: Tuple[str, ...],
+    nested: bool,
+) -> Iterable[_Dependency]:
     for field in fields:
-        yield from _field_type_dependencies(field.field_type, types, current_path)
+        yield from _field_type_dependencies(
+            field.field_type, types, current_path, nested
+        )
 
 
 def _field_type_dependencies(
-    field_type: FieldType, types: Dict[str, object], current_path: Tuple[str, ...]
-) -> Iterable[str]:
+    field_type: FieldType,
+    types: Dict[str, object],
+    current_path: Tuple[str, ...],
+    nested: bool,
+) -> Iterable[_Dependency]:
     if isinstance(field_type, PrimitiveType):
         return
     if isinstance(field_type, NamedType):
         resolved = _resolve_type_name(field_type.name, types, current_path)
         if resolved is not None and isinstance(resolved[1], (Message, Union)):
-            yield resolved[0]
+            yield _Dependency(resolved[0], constructor_owned=not nested)
         return
     if isinstance(field_type, ListType):
         yield from _field_type_dependencies(
-            field_type.element_type, types, current_path
+            field_type.element_type, types, current_path, True
         )
         return
     if isinstance(field_type, ArrayType):
         yield from _field_type_dependencies(
-            field_type.element_type, types, current_path
+            field_type.element_type, types, current_path, True
         )
         return
     if isinstance(field_type, MapType):
-        yield from _field_type_dependencies(field_type.key_type, types, current_path)
-        yield from _field_type_dependencies(field_type.value_type, types, current_path)
+        yield from _field_type_dependencies(
+            field_type.key_type, types, current_path, True
+        )
+        yield from _field_type_dependencies(
+            field_type.value_type, types, current_path, True
+        )
+        return
 
 
 def _resolve_type_name(
@@ -160,7 +196,9 @@ def _resolve_type_name(
     return None
 
 
-def _cycle_nodes(graph: Dict[str, Set[str]]) -> Set[str]:
+def _cycle_nodes(
+    graph: Dict[str, Set[str]], constructor_graph: Dict[str, Set[str]]
+) -> Set[str]:
     index = 0
     stack: List[str] = []
     on_stack: Set[str] = set()
@@ -194,8 +232,14 @@ def _cycle_nodes(graph: Dict[str, Set[str]]) -> Set[str]:
                 if current == node:
                     break
             if len(component) > 1:
-                result.update(component)
-            elif component[0] in graph[component[0]]:
+                component_set = set(component)
+                if any(
+                    target in component_set
+                    for current in component
+                    for target in constructor_graph[current]
+                ):
+                    result.update(component)
+            elif component[0] in constructor_graph[component[0]]:
                 result.add(component[0])
 
     for node in graph:

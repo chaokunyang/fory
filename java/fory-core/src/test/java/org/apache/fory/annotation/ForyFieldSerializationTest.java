@@ -329,23 +329,25 @@ public class ForyFieldSerializationTest extends ForyTestBase {
         "Mixed mode - %s/%s/codegen=%s: %d bytes%n", xlang, compatible, codegen, bytes.length);
   }
 
-  /** Test class for nullable and ref flags */
+  /** Test class for nullable and @Ref flags */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class TestNullableRef {
-    @ForyField(id = 0, ref = false)
+    @ForyField(id = 0)
     String nonNullableNoRef;
 
     @Nullable
-    @ForyField(id = 1, ref = false)
+    @ForyField(id = 1)
     String nullableNoRef;
 
-    @ForyField(id = 2, ref = true)
+    @ForyField(id = 2)
+    @Ref
     String nonNullableWithRef;
 
     @Nullable
-    @ForyField(id = 3, ref = true)
+    @ForyField(id = 3)
+    @Ref
     String nullableWithRef;
   }
 
@@ -379,69 +381,75 @@ public class ForyFieldSerializationTest extends ForyTestBase {
         xlang, compatible, codegen, bytes.length);
   }
 
-  /** Test class with all fields non-nullable, ref=false for size comparison */
+  /** Test class with all fields non-nullable, no-ref for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNonNullableNoRef {
-    @ForyField(id = 0, ref = false)
+    @ForyField(id = 0)
     String field1;
 
-    @ForyField(id = 1, ref = false)
+    @ForyField(id = 1)
     String field2;
 
-    @ForyField(id = 2, ref = false)
+    @ForyField(id = 2)
     String field3;
   }
 
-  /** Test class with all fields @Nullable, ref=false for size comparison */
+  /** Test class with all fields @Nullable, no-ref for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNullableNoRef {
     @Nullable
-    @ForyField(id = 0, ref = false)
+    @ForyField(id = 0)
     String field1;
 
     @Nullable
-    @ForyField(id = 1, ref = false)
+    @ForyField(id = 1)
     String field2;
 
     @Nullable
-    @ForyField(id = 2, ref = false)
+    @ForyField(id = 2)
     String field3;
   }
 
-  /** Test class with all fields non-nullable, ref=true for size comparison */
+  /** Test class with all fields non-nullable, @Ref for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNonNullableWithRef {
-    @ForyField(id = 0, ref = true)
+    @ForyField(id = 0)
+    @Ref
     String field1;
 
-    @ForyField(id = 1, ref = true)
+    @ForyField(id = 1)
+    @Ref
     String field2;
 
-    @ForyField(id = 2, ref = true)
+    @ForyField(id = 2)
+    @Ref
     String field3;
   }
 
-  /** Test class with all fields @Nullable, ref=true for size comparison */
+  /** Test class with all fields @Nullable, @Ref for size comparison */
   @Data
   @NoArgsConstructor
   @AllArgsConstructor
   public static class AllNullableWithRef {
     @Nullable
-    @ForyField(id = 0, ref = true)
+    @ForyField(id = 0)
+    @Ref
     String field1;
 
     @Nullable
-    @ForyField(id = 1, ref = true)
+    @ForyField(id = 1)
+    @Ref
     String field2;
 
     @Nullable
-    @ForyField(id = 2, ref = true)
+    @ForyField(id = 2)
+    @Ref
     String field3;
   }
 
@@ -532,8 +540,8 @@ public class ForyFieldSerializationTest extends ForyTestBase {
         "Ref flag test - %s/%s/codegen=%s/registered=%s - NoRef: %d bytes, WithRef: %d bytes%n",
         xlang, compatible, codegen, registered, bytesNoRef.length, bytesWithRef.length);
 
-    // ref=false should produce smaller or equal payload
-    // Each ref=true field may add overhead for reference tracking
+    // no-ref should produce smaller or equal payload
+    // Each @Ref field may add overhead for reference tracking
     assertTrue(
         bytesNoRef.length <= bytesWithRef.length,
         String.format(
@@ -558,9 +566,9 @@ public class ForyFieldSerializationTest extends ForyTestBase {
     }
 
     // Create objects with same data
-    // Most optimized: non-nullable, ref=false
+    // Most optimized: non-nullable, no-ref
     AllNonNullableNoRef optimized = new AllNonNullableNoRef("value1", "value2", "value3");
-    // Least optimized: @Nullable, ref=true
+    // Least optimized: @Nullable, @Ref
     AllNullableWithRef unoptimized = new AllNullableWithRef("value1", "value2", "value3");
 
     byte[] bytesOptimized = fory.serialize(optimized);
@@ -590,12 +598,12 @@ public class ForyFieldSerializationTest extends ForyTestBase {
         bytesUnoptimized.length - bytesOptimized.length,
         100.0 * (bytesUnoptimized.length - bytesOptimized.length) / bytesUnoptimized.length);
 
-    // Optimized (non-nullable, ref=false) should be smaller than unoptimized (@Nullable,
-    // ref=true)
+    // Optimized (non-nullable, no-ref) should be smaller than unoptimized (@Nullable,
+    // @Ref)
     assertTrue(
         bytesOptimized.length < bytesUnoptimized.length,
         String.format(
-            "Expected optimized (non-nullable,ref=false) %d bytes to be < unoptimized (@Nullable,ref=true) %d bytes in mode %s/%s/codegen=%s/registered=%s",
+            "Expected optimized (non-nullable,no-ref) %d bytes to be < unoptimized (@Nullable,@Ref) %d bytes in mode %s/%s/codegen=%s/registered=%s",
             bytesOptimized.length,
             bytesUnoptimized.length,
             xlang,

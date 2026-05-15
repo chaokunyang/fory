@@ -42,6 +42,7 @@ public class DescriptorBuilder {
   ForyField.Dynamic dynamic = ForyField.Dynamic.AUTO;
   boolean arrayType;
   boolean nullable;
+  boolean hasTrackingRefMetadata;
   boolean trackingRef;
   FieldConverter fieldConverter;
 
@@ -61,6 +62,7 @@ public class DescriptorBuilder {
     this.dynamic = descriptor.getMorphic();
     this.arrayType = descriptor.isArrayType();
     this.nullable = descriptor.isNullable();
+    this.hasTrackingRefMetadata = descriptor.hasTrackingRefMetadata();
     this.trackingRef = descriptor.isTrackingRef();
     this.fieldConverter = descriptor.getFieldConverter();
   }
@@ -116,6 +118,12 @@ public class DescriptorBuilder {
   }
 
   public DescriptorBuilder trackingRef(boolean trackingRef) {
+    this.hasTrackingRefMetadata = true;
+    this.trackingRef = trackingRef;
+    return this;
+  }
+
+  public DescriptorBuilder inferredTrackingRef(boolean trackingRef) {
     this.trackingRef = trackingRef;
     return this;
   }
@@ -129,7 +137,6 @@ public class DescriptorBuilder {
         throw new IllegalArgumentException(
             "@ForyField id must be -1 (no tag ID) or a non-negative tag ID");
       }
-      this.trackingRef = foryField.ref();
       this.dynamic = foryField.dynamic();
     } else {
       this.foryFieldId = -1;

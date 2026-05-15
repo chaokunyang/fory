@@ -24,7 +24,10 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/** Type-use annotation to explicitly enable/disable reference tracking for generic elements. */
+/**
+ * Type-use annotation to explicitly enable or disable reference tracking for a field or nested
+ * generic element.
+ */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({
   ElementType.FIELD,

@@ -52,6 +52,7 @@ import org.apache.fory.annotation.Int32Type;
 import org.apache.fory.annotation.Int64Type;
 import org.apache.fory.annotation.Int8Type;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.annotation.Ref;
 import org.apache.fory.annotation.UInt16Type;
 import org.apache.fory.annotation.UInt32Type;
 import org.apache.fory.annotation.UInt64Type;
@@ -63,6 +64,7 @@ import org.apache.fory.collection.Collections;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.reflect.TypeUseMetadata;
 import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.StringUtils;
@@ -107,8 +109,9 @@ public class Descriptor {
   private final Annotation typeAnnotation;
   private final boolean arrayType;
   private boolean nullable;
-  // trackingRef should only be true if explicitly set to true via @ForyField(ref=true)
-  // If no annotation or ref not specified, trackingRef stays false and type-based tracking applies
+  // Ref metadata needs a presence bit because @Ref(enable = false) must override native
+  // type-based defaults, while unrelated scalar/nullability metadata must not.
+  private final boolean hasTrackingRefMetadata;
   private final boolean trackingRef;
   private FieldConverter<?> fieldConverter;
 
@@ -205,7 +208,8 @@ public class Descriptor {
         nullableOverride == null
             ? resolveNullable(typeRef, !hasForyField, field, null, readMethod)
             : nullableOverride;
-    this.trackingRef = hasForyField && foryField.ref();
+    this.hasTrackingRefMetadata = hasTrackingRefMetadata(typeRef, field, readMethod);
+    this.trackingRef = resolveTrackingRef(typeRef, field, readMethod);
   }
 
   public Descriptor(
@@ -221,6 +225,34 @@ public class Descriptor {
       ForyField.Dynamic dynamic,
       boolean arrayType) {
     this(
+        generatedType,
+        typeName,
+        name,
+        modifier,
+        declaringClass,
+        hasForyField,
+        foryFieldId,
+        nullable,
+        trackingRef,
+        trackingRef,
+        dynamic,
+        arrayType);
+  }
+
+  public Descriptor(
+      GeneratedType generatedType,
+      String typeName,
+      String name,
+      int modifier,
+      String declaringClass,
+      boolean hasForyField,
+      int foryFieldId,
+      boolean nullable,
+      boolean trackingRef,
+      boolean hasTrackingRefMetadata,
+      ForyField.Dynamic dynamic,
+      boolean arrayType) {
+    this(
         toTypeRef(generatedType),
         typeName,
         name,
@@ -230,6 +262,7 @@ public class Descriptor {
         foryFieldId,
         nullable,
         trackingRef,
+        hasTrackingRefMetadata,
         dynamic,
         arrayType);
   }
@@ -257,6 +290,7 @@ public class Descriptor {
     typeAnnotation = null;
     arrayType = false;
     this.nullable = nullable;
+    this.hasTrackingRefMetadata = true;
     this.trackingRef = trackingRef;
   }
 
@@ -297,6 +331,34 @@ public class Descriptor {
       boolean trackingRef,
       ForyField.Dynamic dynamic,
       boolean arrayType) {
+    this(
+        typeRef,
+        typeName,
+        name,
+        modifier,
+        declaringClass,
+        hasForyField,
+        foryFieldId,
+        nullable,
+        trackingRef,
+        true,
+        dynamic,
+        arrayType);
+  }
+
+  public Descriptor(
+      TypeRef<?> typeRef,
+      String typeName,
+      String name,
+      int modifier,
+      String declaringClass,
+      boolean hasForyField,
+      int foryFieldId,
+      boolean nullable,
+      boolean trackingRef,
+      boolean hasTrackingRefMetadata,
+      ForyField.Dynamic dynamic,
+      boolean arrayType) {
     this.field = null;
     this.typeName = typeName;
     this.name = name;
@@ -320,8 +382,7 @@ public class Descriptor {
     } else {
       this.nullable = nullable;
     }
-    // Synthetic descriptors created from remote TypeDef fields must preserve schema-owned wrapper
-    // ref tracking even when the field has no tag id/@ForyField metadata.
+    this.hasTrackingRefMetadata = hasTrackingRefMetadata;
     this.trackingRef = trackingRef;
   }
 
@@ -349,7 +410,8 @@ public class Descriptor {
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
     this.nullable = resolveNullable(typeRef, !hasForyField, field, recordComponent, readMethod);
-    this.trackingRef = hasForyField && foryField.ref();
+    this.hasTrackingRefMetadata = hasTrackingRefMetadata(typeRef, field, readMethod);
+    this.trackingRef = resolveTrackingRef(typeRef, field, readMethod);
   }
 
   private Descriptor(Method readMethod) {
@@ -370,7 +432,8 @@ public class Descriptor {
     typeAnnotation = TypeUtils.getMethodReturnTypeUseAnnotation(readMethod, readMethod.getName());
     arrayType = readMethod.isAnnotationPresent(ArrayType.class);
     this.nullable = resolveNullable(typeRef, !hasForyField, null, null, readMethod);
-    this.trackingRef = hasForyField && foryField.ref();
+    this.hasTrackingRefMetadata = hasTrackingRefMetadata(typeRef, null, readMethod);
+    this.trackingRef = resolveTrackingRef(typeRef, null, readMethod);
   }
 
   public Descriptor(DescriptorBuilder builder) {
@@ -382,6 +445,7 @@ public class Descriptor {
     this.field = builder.field;
     this.readMethod = builder.readMethod;
     this.writeMethod = builder.writeMethod;
+    this.hasTrackingRefMetadata = builder.hasTrackingRefMetadata;
     this.trackingRef = builder.trackingRef;
     this.foryField =
         builder.foryField != null
@@ -433,6 +497,39 @@ public class Descriptor {
     return TypeUtils.isNullable(typeRef, defaultNullable);
   }
 
+  private static boolean hasTrackingRefMetadata(
+      TypeRef<?> typeRef, Field field, Method readMethod) {
+    if (field != null && field.getAnnotation(Ref.class) != null) {
+      return true;
+    }
+    if (getTypeUseRef(field, readMethod) != null) {
+      return true;
+    }
+    TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
+    return typeExtMeta != null && typeExtMeta.trackingRef();
+  }
+
+  private static boolean resolveTrackingRef(TypeRef<?> typeRef, Field field, Method readMethod) {
+    Ref ref = field == null ? null : field.getAnnotation(Ref.class);
+    if (ref != null) {
+      return ref.enable();
+    }
+    ref = getTypeUseRef(field, readMethod);
+    if (ref != null) {
+      return ref.enable();
+    }
+    TypeExtMeta typeExtMeta = typeRef.getTypeExtMeta();
+    return typeExtMeta != null && typeExtMeta.trackingRef();
+  }
+
+  private static Ref getTypeUseRef(Field field, Method readMethod) {
+    Object typeUse =
+        field != null
+            ? TypeUseMetadata.fieldTypeUse(field)
+            : (readMethod == null ? null : TypeUseMetadata.methodReturnTypeUse(readMethod));
+    return typeUse == null ? null : TypeUseMetadata.typeUseAnnotation(typeUse, Ref.class);
+  }
+
   private static boolean resolveNullable(
       TypeRef<?> typeRef,
       boolean defaultNullable,
@@ -468,6 +565,10 @@ public class Descriptor {
 
   public boolean isTrackingRef() {
     return trackingRef;
+  }
+
+  public boolean hasTrackingRefMetadata() {
+    return hasTrackingRefMetadata;
   }
 
   public int getModifier() {

@@ -184,7 +184,7 @@ artifact remains cross-built for Scala 2.13 and Scala 3.
 | `date`, `timestamp`, `duration`       | `java.time.LocalDate`, `java.time.Instant`, `java.time.Duration`                         |
 | `decimal`                             | `java.math.BigDecimal`                                                                   |
 | `message`                             | Scala 3 `case class` by default; normal class only for message/union construction cycles |
-| `enum`                                | Scala 3 `enum` with stable Fory enum IDs                                                 |
+| `enum`                                | Scala 3 `enum` with stable Fory enum IDs on case-level `@ForyEnumId` annotations         |
 | `union`                               | Scala 3 ADT `enum derives ForySerializer`                                                |
 | `any`                                 | `AnyRef`                                                                                 |
 
@@ -192,8 +192,8 @@ Generated Scala descriptor metadata is produced by Scala 3 macro derivation
 from Scala compile-time types, including nested generics, `Option`, arrays,
 scalar encoding annotations, nullability, and `@Ref`. Java reflection is not the
 source of truth for generated Scala TypeDef metadata. Scala `@Ref` metadata is
-represented by the shared `org.apache.fory.annotation.Ref` annotation; generated
-Scala does not use `@ForyField(ref = true)`.
+represented by the shared `org.apache.fory.annotation.Ref` annotation; `@Ref`
+is the JVM owner for reference tracking metadata.
 
 ## Type info
 

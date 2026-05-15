@@ -155,13 +155,25 @@ object ForySerializerMacros {
       if params.nonEmpty then params else owner.caseFields
     }
     val constructorFieldSet = constructorFields.toSet
-    val bodyFields =
-      owner.fieldMembers.filter(field =>
-        !constructorFieldSet.contains(field) && annotationIntArg[ForyField](field, "id").nonEmpty)
-    val serializableFields = constructorFields ++ bodyFields
-    if serializableFields.isEmpty then {
-      report.errorAndAbort(s"${owner.fullName} has no serializable fields")
+    val bodyFields = {
+      val candidates = owner.fieldMembers.filter { field =>
+        !constructorFieldSet.contains(field) &&
+        !field.flags.is(Flags.Private) &&
+        !field.flags.is(Flags.Synthetic) &&
+        !field.name.contains("$")
+      }
+      val selected =
+        if constructorFields.isEmpty then candidates
+        else candidates.filter(field => annotationIntArg[ForyField](field, "id").nonEmpty)
+      selected.foreach { field =>
+        if !field.flags.is(Flags.Mutable) then {
+          report.errorAndAbort(
+            s"${owner.fullName}.${field.name} is a post-construction field and must be a mutable var")
+        }
+      }
+      selected
     }
+    val serializableFields = constructorFields ++ bodyFields
 
     def declaredType(symbol: Symbol): TypeRepr = {
       symbol.tree match {

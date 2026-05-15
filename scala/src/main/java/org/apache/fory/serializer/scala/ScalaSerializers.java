@@ -177,11 +177,22 @@ public class ScalaSerializers {
   public static void registerEnum(Fory fory, Class<?> cls, long typeId) {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.registerEnum(cls, typeId, new ScalaEnumSerializer(resolver, cls));
+    registerEnumCases(resolver, cls);
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, String namespace, String typeName) {
     TypeResolver resolver = fory.getTypeResolver();
     resolver.registerEnum(cls, namespace, typeName, new ScalaEnumSerializer(resolver, cls));
+    registerEnumCases(resolver, cls);
+  }
+
+  private static void registerEnumCases(TypeResolver resolver, Class<?> cls) {
+    for (Object enumConstant : ScalaEnumSerializer.loadValues(cls)) {
+      Class<?> caseClass = enumConstant.getClass();
+      if (caseClass != cls) {
+        resolver.registerEnumCase(cls, caseClass);
+      }
+    }
   }
 
   private static TypeResolver setSerializerFactory(Fory fory) {

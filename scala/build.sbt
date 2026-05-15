@@ -47,6 +47,16 @@ libraryDependencies ++= Seq(
   "dev.zio" %% "zio" % "2.1.7" % Test,
 )
 
+lazy val writeTestClasspath = taskKey[File]("Writes the Scala test runtime classpath")
+
+writeTestClasspath := {
+  val output = target.value / "scala-xlang-test-classpath"
+  IO.write(
+    output,
+    (Test / fullClasspath).value.map(_.data.getAbsolutePath).mkString(java.io.File.pathSeparator))
+  output
+}
+
 // Exclude sonatypeRelease and sonatypeBundleRelease commands because we
 // don't want to release this project to Maven Central without having
 // to complete the release using the repository.apache.org web site.

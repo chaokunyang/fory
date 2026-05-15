@@ -302,6 +302,16 @@ public abstract class TypeResolver {
   @Internal
   public abstract void registerUnionCase(Class<?> unionType, Class<?> caseType);
 
+  /**
+   * Registers {@code caseType} as a runtime class alias for an already registered enum type.
+   *
+   * <p>Some JVM languages compile enum cases to concrete singleton subclasses even though the wire
+   * type is owned by the enum base. This method makes runtime dispatch for those case subclasses
+   * use the base enum {@link TypeInfo}; it must not create another wire type name or user type ID.
+   */
+  @Internal
+  public abstract void registerEnumCase(Class<?> enumType, Class<?> caseType);
+
   /** Registers a non-Java enum type with a user-specified ID and serializer. */
   @Internal
   public abstract void registerEnum(Class<?> type, long id, Serializer<?> serializer);

@@ -110,7 +110,7 @@ public final class ScalaEnumSerializer extends ImmutableSerializer<Object> imple
     }
   }
 
-  private static Object[] loadValues(Class<?> cls) {
+  static Object[] loadValues(Class<?> cls) {
     try {
       Method values = cls.getMethod("values");
       Object result = values.invoke(null);

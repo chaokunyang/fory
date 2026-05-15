@@ -674,13 +674,11 @@ public class FieldTypes {
         if (declared != null) {
           Class<?> declaredRaw = declared.getRawType();
           if (declaredRaw.isArray()) {
-            return TypeRef.of(
-                declaredRaw, typeExtMeta(typeId, nullable, trackingRef, declared));
+            return TypeRef.of(declaredRaw, typeExtMeta(typeId, nullable, trackingRef, declared));
           }
           Class<?> listClass = getPrimitiveListClass(internalTypeId);
           if (listClass != null && listClass.isAssignableFrom(declaredRaw)) {
-            return TypeRef.of(
-                declaredRaw, typeExtMeta(typeId, nullable, trackingRef, declared));
+            return TypeRef.of(declaredRaw, typeExtMeta(typeId, nullable, trackingRef, declared));
           }
         }
         cls = getPrimitiveArrayClass(internalTypeId);
@@ -1079,7 +1077,8 @@ public class FieldTypes {
     @Override
     public TypeRef<?> toTypeToken(TypeResolver classResolver, TypeRef<?> declared) {
       if (declared != null) {
-        return TypeRef.of(declared.getRawType(), typeExtMeta(Types.ENUM, nullable, false, declared));
+        return TypeRef.of(
+            declared.getRawType(), typeExtMeta(Types.ENUM, nullable, false, declared));
       }
       return TypeRef.of(UnknownClass.UnknownEnum.class);
     }
@@ -1224,10 +1223,7 @@ public class FieldTypes {
       int typeId, boolean nullable, boolean trackingRef, TypeRef<?> declared) {
     TypeExtMeta declaredMeta = declared == null ? null : declared.getTypeExtMeta();
     return TypeExtMeta.of(
-        typeId,
-        nullable,
-        trackingRef,
-        declaredMeta != null && declaredMeta.nullableWrapper());
+        typeId, nullable, trackingRef, declaredMeta != null && declaredMeta.nullableWrapper());
   }
 
   /** Class for Union field type. Union types use declared type. */

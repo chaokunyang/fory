@@ -793,7 +793,9 @@ class ScalaGenerator(BaseGenerator):
         registrations = self.registration_order()
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):
-                self.generate_type_registration(lines, type_def, owner_path, type_only=True)
+                self.generate_type_registration(
+                    lines, type_def, owner_path, type_only=True
+                )
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):
                 self.generate_serializer_registration(lines, type_def, owner_path)
@@ -948,7 +950,9 @@ class ScalaGenerator(BaseGenerator):
         self, lines: List[str], type_def, owner_path: Optional[str] = None
     ) -> None:
         class_ref = f"{owner_path}.{type_def.name}" if owner_path else type_def.name
-        lines.append(f"        ForySerializer.registerSerializer(fory, classOf[{class_ref}])")
+        lines.append(
+            f"        ForySerializer.registerSerializer(fory, classOf[{class_ref}])"
+        )
 
     def safe_identifier(self, name: str) -> str:
         return f"`{name}`" if name in self.RESERVED else name

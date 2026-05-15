@@ -368,7 +368,10 @@ def test_scala_generator_uses_jvm_nested_names_for_name_registration():
         'ForySerializer.registerType(fory, classOf[Envelope.Payload], "demo.Envelope", "Payload")'
         in registration
     )
-    assert "ForySerializer.registerSerializer(fory, classOf[Envelope.Payload])" in registration
+    assert (
+        "ForySerializer.registerSerializer(fory, classOf[Envelope.Payload])"
+        in registration
+    )
     assert (
         'ScalaSerializers.registerEnum(fory, classOf[Envelope.Kind], "demo.Envelope", "Kind")'
         in registration
@@ -398,8 +401,12 @@ def test_scala_generator_pre_registers_message_type_graph_before_serializers():
     registration = files["graph/GraphForyRegistration.scala"]
     node_type = registration.index("ForySerializer.registerType(fory, classOf[Node]")
     edge_type = registration.index("ForySerializer.registerType(fory, classOf[Edge]")
-    node_serializer = registration.index("ForySerializer.registerSerializer(fory, classOf[Node])")
-    edge_serializer = registration.index("ForySerializer.registerSerializer(fory, classOf[Edge])")
+    node_serializer = registration.index(
+        "ForySerializer.registerSerializer(fory, classOf[Node])"
+    )
+    edge_serializer = registration.index(
+        "ForySerializer.registerSerializer(fory, classOf[Edge])"
+    )
     assert node_type < node_serializer
     assert edge_type < node_serializer
     assert node_type < edge_serializer

@@ -82,7 +82,6 @@ import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.CodegenSerializer;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
 import org.apache.fory.serializer.CompatibleSerializer;
-import org.apache.fory.serializer.DeferedLazySerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.Serializer;
@@ -300,13 +299,11 @@ public abstract class TypeResolver {
     Class<?> registeredType = extRegistry.registeredClasses.get(runtimeTypeName);
     Preconditions.checkArgument(
         registeredType == null || registeredType == runtimeType,
-        "Runtime type alias name is already registered with different class: "
-            + runtimeTypeName);
+        "Runtime type alias name is already registered with different class: " + runtimeTypeName);
     String registeredName = extRegistry.registeredClasses.inverse().get(runtimeType);
     Preconditions.checkArgument(
         registeredName == null || registeredName.equals(runtimeTypeName),
-        "Runtime type alias is already registered with different name: "
-            + registeredName);
+        "Runtime type alias is already registered with different name: " + registeredName);
     classInfoMap.put(runtimeType, canonicalInfo);
     extRegistry.registeredClasses.put(runtimeTypeName, runtimeType);
     registerGraalvmClass(runtimeType);
@@ -1767,7 +1764,8 @@ public abstract class TypeResolver {
         || !(typeInfo.getSerializer() instanceof StaticGeneratedStructSerializer)) {
       return null;
     }
-    return ((StaticGeneratedStructSerializer<?>) typeInfo.getSerializer()).getGeneratedDescriptors();
+    return ((StaticGeneratedStructSerializer<?>) typeInfo.getSerializer())
+        .getGeneratedDescriptors();
   }
 
   private StaticGeneratedStructSerializer<?> copyRegisteredStaticGeneratedStructSerializer(

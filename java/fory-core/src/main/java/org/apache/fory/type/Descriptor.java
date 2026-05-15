@@ -208,7 +208,7 @@ public class Descriptor {
         nullableOverride == null
             ? resolveNullable(typeRef, !hasForyField, field, null, readMethod)
             : nullableOverride;
-    this.hasTrackingRefMetadata = hasTrackingRefMetadata(typeRef, field, readMethod);
+    this.hasTrackingRefMetadata = resolveHasTrackingRefMetadata(typeRef, field, readMethod);
     this.trackingRef = resolveTrackingRef(typeRef, field, readMethod);
   }
 
@@ -410,7 +410,7 @@ public class Descriptor {
     typeAnnotation = getAnnotation(field);
     arrayType = field.isAnnotationPresent(ArrayType.class);
     this.nullable = resolveNullable(typeRef, !hasForyField, field, recordComponent, readMethod);
-    this.hasTrackingRefMetadata = hasTrackingRefMetadata(typeRef, field, readMethod);
+    this.hasTrackingRefMetadata = resolveHasTrackingRefMetadata(typeRef, field, readMethod);
     this.trackingRef = resolveTrackingRef(typeRef, field, readMethod);
   }
 
@@ -432,7 +432,7 @@ public class Descriptor {
     typeAnnotation = TypeUtils.getMethodReturnTypeUseAnnotation(readMethod, readMethod.getName());
     arrayType = readMethod.isAnnotationPresent(ArrayType.class);
     this.nullable = resolveNullable(typeRef, !hasForyField, null, null, readMethod);
-    this.hasTrackingRefMetadata = hasTrackingRefMetadata(typeRef, null, readMethod);
+    this.hasTrackingRefMetadata = resolveHasTrackingRefMetadata(typeRef, null, readMethod);
     this.trackingRef = resolveTrackingRef(typeRef, null, readMethod);
   }
 
@@ -493,11 +493,7 @@ public class Descriptor {
     return id;
   }
 
-  private static boolean resolveNullable(TypeRef<?> typeRef, boolean defaultNullable) {
-    return TypeUtils.isNullable(typeRef, defaultNullable);
-  }
-
-  private static boolean hasTrackingRefMetadata(
+  private static boolean resolveHasTrackingRefMetadata(
       TypeRef<?> typeRef, Field field, Method readMethod) {
     if (field != null && field.getAnnotation(Ref.class) != null) {
       return true;

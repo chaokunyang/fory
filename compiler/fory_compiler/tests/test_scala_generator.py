@@ -94,7 +94,7 @@ def test_scala_generator_uses_mutable_normal_class_for_construction_cycles():
 
     node = files["graph/Node.scala"]
     assert "final class Node() derives ForySerializer" in node
-    assert "var id: String = \"\"" in node
+    assert 'var id: String = ""' in node
     assert "var parent: Option[Node @Ref] = None" in node
 
 

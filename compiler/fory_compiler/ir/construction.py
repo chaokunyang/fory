@@ -52,7 +52,10 @@ def analyze_message_construction_shapes(
     """
 
     messages = {message.name: message for message in schema.messages}
-    graph = {name: set(_message_dependencies(message, messages)) for name, message in messages.items()}
+    graph = {
+        name: set(_message_dependencies(message, messages))
+        for name, message in messages.items()
+    }
     cycle_owned = _cycle_nodes(graph)
     return {
         name: MessageConstructionShape(cycle_owned=name in cycle_owned)

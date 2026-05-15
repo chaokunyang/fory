@@ -213,6 +213,58 @@ public class UnionSerializer extends Serializer<Union> {
     writeKnownCasePayload(resolver, writeContext, fieldInfo, value);
   }
 
+  private void writeCaseValue(WriteContext writeContext, Object value, int typeId, int caseId) {
+    MemoryBuffer buffer = writeContext.getBuffer();
+    byte internalTypeId = (byte) typeId;
+    boolean primitiveArray = Types.isPrimitiveArray(internalTypeId);
+    Serializer serializer;
+    TypeInfo typeInfo;
+    if (value == null) {
+      buffer.writeByte(Fory.NULL_FLAG);
+      return;
+    }
+    typeInfo = getFinalCaseTypeInfo(caseId);
+    if (typeInfo == null) {
+      Preconditions.checkArgument(!primitiveArray);
+      if (!Types.isUserDefinedType(internalTypeId)) {
+        typeInfo = resolver.getTypeInfoByTypeId(internalTypeId);
+      } else {
+        typeInfo = resolver.getTypeInfo(value.getClass());
+      }
+    }
+    Preconditions.checkArgument(typeInfo != null);
+    serializer = getCaseSerializer(caseId, typeId, typeInfo);
+    if (serializer != null && serializer.needToWriteRef()) {
+      if (writeContext.writeRefOrNull(value)) {
+        return;
+      }
+    } else {
+      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
+    }
+    if (!Types.isUserDefinedType(internalTypeId)) {
+      buffer.writeUInt8(typeId);
+    } else {
+      resolver.writeTypeInfo(writeContext, typeInfo);
+    }
+    writeValue(writeContext, value, typeId, serializer, getCaseGenericType(caseId, typeId));
+  }
+
+  private static void writeCaseValue(
+      WriteContext writeContext, Serializer serializer, GenericType genericType, Object value) {
+    if (genericType == null) {
+      Serializers.write(writeContext, serializer, value);
+      return;
+    }
+    writeContext.getGenerics().pushGenericType(genericType, writeContext.getDepth());
+    writeContext.increaseDepth();
+    try {
+      Serializers.write(writeContext, serializer, value);
+    } finally {
+      writeContext.decreaseDepth();
+      writeContext.getGenerics().popGenericType(writeContext.getDepth());
+    }
+  }
+
   /**
    * Writes an unknown union case payload using dynamic value metadata.
    *
@@ -248,6 +300,21 @@ public class UnionSerializer extends Serializer<Union> {
       return caseValue;
     }
     return readContext.getReadRef();
+  }
+
+  private static Object readCaseValue(
+      ReadContext readContext, Serializer serializer, GenericType genericType) {
+    if (genericType == null) {
+      return Serializers.read(readContext, serializer);
+    }
+    readContext.getGenerics().pushGenericType(genericType, readContext.getDepth());
+    readContext.increaseDepth();
+    try {
+      return Serializers.read(readContext, serializer);
+    } finally {
+      readContext.decreaseDepth();
+      readContext.getGenerics().popGenericType(readContext.getDepth());
+    }
   }
 
   private static void writeKnownCasePayload(
@@ -323,6 +390,14 @@ public class UnionSerializer extends Serializer<Union> {
     return fallbackTypeInfo.getSerializer();
   }
 
+  private Serializer getCaseSerializer(int caseId, int typeId, TypeInfo fallbackTypeInfo) {
+    Serializer serializer = finalCaseSerializers.get(caseId);
+    if (serializer != null && typeId == Types.LIST) {
+      return serializer;
+    }
+    return fallbackTypeInfo.getSerializer();
+  }
+
   private static GenericType getCaseGenericType(
       FieldGroups.SerializationFieldInfo fieldInfo, int typeId) {
     if (typeId != Types.LIST && typeId != Types.SET && typeId != Types.MAP) {
@@ -331,56 +406,11 @@ public class UnionSerializer extends Serializer<Union> {
     return fieldInfo.genericType;
   }
 
-  private void writeCaseValue(WriteContext writeContext, Object value, int typeId, int caseId) {
-    MemoryBuffer buffer = writeContext.getBuffer();
-    byte internalTypeId = (byte) typeId;
-    boolean primitiveArray = Types.isPrimitiveArray(internalTypeId);
-    Serializer serializer;
-    TypeInfo typeInfo;
-    if (value == null) {
-      buffer.writeByte(Fory.NULL_FLAG);
-      return;
+  private GenericType getCaseGenericType(int caseId, int typeId) {
+    if (typeId != Types.LIST && typeId != Types.MAP) {
+      return null;
     }
-    typeInfo = getFinalCaseTypeInfo(caseId);
-    if (typeInfo == null) {
-      Preconditions.checkArgument(!primitiveArray);
-      if (!Types.isUserDefinedType(internalTypeId)) {
-        typeInfo = resolver.getTypeInfoByTypeId(internalTypeId);
-      } else {
-        typeInfo = resolver.getTypeInfo(value.getClass());
-      }
-    }
-    Preconditions.checkArgument(typeInfo != null);
-    serializer = getCaseSerializer(caseId, typeId, typeInfo);
-    if (serializer != null && serializer.needToWriteRef()) {
-      if (writeContext.writeRefOrNull(value)) {
-        return;
-      }
-    } else {
-      buffer.writeByte(Fory.NOT_NULL_VALUE_FLAG);
-    }
-    if (!Types.isUserDefinedType(internalTypeId)) {
-      buffer.writeUInt8(typeId);
-    } else {
-      resolver.writeTypeInfo(writeContext, typeInfo);
-    }
-    writeValue(writeContext, value, typeId, serializer, getCaseGenericType(caseId, typeId));
-  }
-
-  private static void writeCaseValue(
-      WriteContext writeContext, Serializer serializer, GenericType genericType, Object value) {
-    if (genericType == null) {
-      Serializers.write(writeContext, serializer, value);
-      return;
-    }
-    writeContext.getGenerics().pushGenericType(genericType, writeContext.getDepth());
-    writeContext.increaseDepth();
-    try {
-      Serializers.write(writeContext, serializer, value);
-    } finally {
-      writeContext.decreaseDepth();
-      writeContext.getGenerics().popGenericType(writeContext.getDepth());
-    }
+    return finalCaseGenericTypes.get(caseId);
   }
 
   private static void writeValue(
@@ -449,36 +479,6 @@ public class UnionSerializer extends Serializer<Union> {
       return;
     }
     throw new IllegalStateException("Missing serializer for union type id " + typeId);
-  }
-
-  private static Object readCaseValue(
-      ReadContext readContext, Serializer serializer, GenericType genericType) {
-    if (genericType == null) {
-      return Serializers.read(readContext, serializer);
-    }
-    readContext.getGenerics().pushGenericType(genericType, readContext.getDepth());
-    readContext.increaseDepth();
-    try {
-      return Serializers.read(readContext, serializer);
-    } finally {
-      readContext.decreaseDepth();
-      readContext.getGenerics().popGenericType(readContext.getDepth());
-    }
-  }
-
-  private Serializer getCaseSerializer(int caseId, int typeId, TypeInfo fallbackTypeInfo) {
-    Serializer serializer = finalCaseSerializers.get(caseId);
-    if (serializer != null && typeId == Types.LIST) {
-      return serializer;
-    }
-    return fallbackTypeInfo.getSerializer();
-  }
-
-  private GenericType getCaseGenericType(int caseId, int typeId) {
-    if (typeId != Types.LIST && typeId != Types.MAP) {
-      return null;
-    }
-    return finalCaseGenericTypes.get(caseId);
   }
 
   private TypeInfo getFinalCaseTypeInfo(int caseId) {

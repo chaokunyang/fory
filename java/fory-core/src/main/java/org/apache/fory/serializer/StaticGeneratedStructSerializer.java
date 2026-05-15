@@ -186,6 +186,21 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
         fieldValue);
   }
 
+  private static void writeContainerFieldValue(
+      TypeResolver typeResolver,
+      WriteContext writeContext,
+      SerializationFieldInfo fieldInfo,
+      Object fieldValue) {
+    AbstractObjectSerializer.writeContainerFieldValue(
+        writeContext,
+        typeResolver,
+        writeContext.getRefWriter(),
+        writeContext.getGenerics(),
+        fieldInfo,
+        writeContext.getBuffer(),
+        fieldValue);
+  }
+
   protected final void writeOtherFieldValue(
       WriteContext writeContext, SerializationFieldInfo fieldInfo, Object fieldValue) {
     AbstractObjectSerializer.writeField(
@@ -240,21 +255,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     }
   }
 
-  private static void writeContainerFieldValue(
-      TypeResolver typeResolver,
-      WriteContext writeContext,
-      SerializationFieldInfo fieldInfo,
-      Object fieldValue) {
-    AbstractObjectSerializer.writeContainerFieldValue(
-        writeContext,
-        typeResolver,
-        writeContext.getRefWriter(),
-        writeContext.getGenerics(),
-        fieldInfo,
-        writeContext.getBuffer(),
-        fieldValue);
-  }
-
   protected final Object readBuildInFieldValue(
       ReadContext readContext, SerializationFieldInfo fieldInfo) {
     // See writeBuildInFieldValue: built-in schema groups can still need container conversion.
@@ -267,6 +267,17 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
 
   protected final Object readContainerFieldValue(
       ReadContext readContext, SerializationFieldInfo fieldInfo) {
+    return AbstractObjectSerializer.readContainerFieldValue(
+        readContext,
+        typeResolver,
+        readContext.getRefReader(),
+        readContext.getGenerics(),
+        fieldInfo,
+        readContext.getBuffer());
+  }
+
+  private static Object readContainerFieldValue(
+      TypeResolver typeResolver, ReadContext readContext, SerializationFieldInfo fieldInfo) {
     return AbstractObjectSerializer.readContainerFieldValue(
         readContext,
         typeResolver,
@@ -312,17 +323,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       default:
         throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
     }
-  }
-
-  private static Object readContainerFieldValue(
-      TypeResolver typeResolver, ReadContext readContext, SerializationFieldInfo fieldInfo) {
-    return AbstractObjectSerializer.readContainerFieldValue(
-        readContext,
-        typeResolver,
-        readContext.getRefReader(),
-        readContext.getGenerics(),
-        fieldInfo,
-        readContext.getBuffer());
   }
 
   protected final Object readRemoteField(ReadContext readContext, RemoteFieldInfo remoteField) {

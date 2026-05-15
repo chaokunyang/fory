@@ -372,7 +372,7 @@ public class FieldTypes {
     if (componentMeta == null || componentMeta.typeId() == Types.UNKNOWN) {
       return Types.UNKNOWN;
     }
-    return TypeAnnotationUtils.getArrayTypeIdFromElementType(componentType);
+    return TypeAnnotationUtils.getArrayTypeIdFromDenseElementType(componentType);
   }
 
   public abstract static class FieldType implements Serializable {

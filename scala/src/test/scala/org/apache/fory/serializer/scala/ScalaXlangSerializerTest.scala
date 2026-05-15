@@ -23,7 +23,7 @@ import org.apache.fory.Fory
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
-import scala.jdk.CollectionConverters.*
+import scala.jdk.CollectionConverters._
 
 class ScalaXlangSerializerTest extends AnyWordSpec with Matchers {
   def fory: Fory = {

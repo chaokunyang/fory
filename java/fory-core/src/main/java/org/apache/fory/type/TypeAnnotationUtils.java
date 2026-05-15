@@ -345,7 +345,7 @@ public class TypeAnnotationUtils {
     // Fieldless static descriptors already carry the dense array contract on the parent
     // descriptor. Their element TypeExtMeta is the dense element domain, not a Java source-level
     // scalar encoding annotation.
-    int typeId = getArrayTypeIdFromElementType(elementTypeRef, true);
+    int typeId = getArrayTypeIdFromDenseElementType(elementTypeRef);
     if (typeId == Types.UNKNOWN) {
       throw new IllegalArgumentException(
           "@ArrayType List<T> field "
@@ -389,6 +389,10 @@ public class TypeAnnotationUtils {
       return Types.BFLOAT16_ARRAY;
     }
     return Types.UNKNOWN;
+  }
+
+  public static int getArrayTypeIdFromDenseElementType(TypeRef<?> elementTypeRef) {
+    return getArrayTypeIdFromElementType(elementTypeRef, true);
   }
 
   public static int getArrayTypeIdFromElementTypeId(int elementTypeId) {

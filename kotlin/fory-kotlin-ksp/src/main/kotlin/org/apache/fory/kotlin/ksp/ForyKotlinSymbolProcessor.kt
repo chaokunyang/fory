@@ -33,6 +33,7 @@ import com.google.devtools.ksp.symbol.KSDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSTypeArgument
+import com.google.devtools.ksp.symbol.KSValueParameter
 import com.google.devtools.ksp.symbol.Modifier
 import com.google.devtools.ksp.symbol.Nullability
 import java.nio.charset.StandardCharsets
@@ -212,7 +213,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         )
         return null
       }
-      val fieldMeta = resolveForyField(property) ?: return null
+      val fieldMeta = resolveForyField(property, parameter) ?: return null
       if (fieldMeta.id < -1) {
         logger.error("@ForyField id must be -1 or a non-negative value", property)
         return null
@@ -333,8 +334,12 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     )
   }
 
-  private fun resolveForyField(property: KSPropertyDeclaration): ForyFieldMeta? {
+  private fun resolveForyField(
+    property: KSPropertyDeclaration,
+    parameter: KSValueParameter,
+  ): ForyFieldMeta? {
     val propertyMeta = foryFieldMeta(property.annotations)
+    val parameterMeta = foryFieldMeta(parameter.annotations)
     val getterHasFory = property.getter?.annotations?.any { isAnnotation(it, FORY_FIELD) } == true
     val setterHasFory = property.setter?.annotations?.any { isAnnotation(it, FORY_FIELD) } == true
     if (getterHasFory || setterHasFory) {
@@ -344,7 +349,16 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       )
       return null
     }
-    return propertyMeta ?: ForyFieldMeta.NONE
+    if (propertyMeta != null && parameterMeta != null && propertyMeta != parameterMeta) {
+      logger.error(
+        "@ForyField metadata on Kotlin property and constructor parameter must match",
+        property,
+      )
+      return null
+    }
+    // Java annotations on primary-constructor properties commonly land on the constructor
+    // parameter when PARAMETER is an allowed target; KSP must preserve schema IDs from that site.
+    return propertyMeta ?: parameterMeta ?: ForyFieldMeta.NONE
   }
 
   private fun hasFieldAnnotation(property: KSPropertyDeclaration, qualifiedName: String): Boolean {

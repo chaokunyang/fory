@@ -222,14 +222,18 @@ class ScalaGenerator(BaseGenerator):
         if self.schema.source_file:
             base_dir = Path(self.schema.source_file).resolve().parent
             for imp in self.schema.imports:
-                candidate = self._normalize_import_path(str((base_dir / imp.path).resolve()))
+                candidate = self._normalize_import_path(
+                    str((base_dir / imp.path).resolve())
+                )
                 schema = self._load_schema(candidate)
                 if schema is None:
                     continue
                 package = self._scala_package_for_schema(schema)
                 if not package or package in used:
                     continue
-                ordered.append((package, self._registration_class_name_for_schema(schema)))
+                ordered.append(
+                    (package, self._registration_class_name_for_schema(schema))
+                )
                 used.add(package)
         for package, registration in sorted(packages.items()):
             if package not in used:
@@ -255,7 +259,10 @@ class ScalaGenerator(BaseGenerator):
 
     def generate_enum_file(self, enum: Enum) -> GeneratedFile:
         lines = self.source_header(
-            {"org.apache.fory.annotation.ForyEnumId", "org.apache.fory.scala.ForyScalaEnum"}
+            {
+                "org.apache.fory.annotation.ForyEnumId",
+                "org.apache.fory.scala.ForyScalaEnum",
+            }
         )
         comment = self.format_type_id_comment(enum, "//")
         if comment:
@@ -313,7 +320,9 @@ class ScalaGenerator(BaseGenerator):
             case_name = self.safe_identifier(
                 self.to_pascal_case(self.strip_enum_prefix(enum.name, value.name))
             )
-            lines.append(f"{ind}    case {case_name} extends {enum.name}({value.value})")
+            lines.append(
+                f"{ind}    case {case_name} extends {enum.name}({value.value})"
+            )
         lines.append("")
         lines.append(f"{ind}    @ForyEnumId")
         lines.append(f"{ind}    def getForyId: Int = foryId")
@@ -328,7 +337,10 @@ class ScalaGenerator(BaseGenerator):
         parent_stack: Optional[List[Message]] = None,
     ) -> List[str]:
         ind = self.indent_str * indent
-        lines = [f"{ind}@ForyUnion", f"{ind}enum {union.name} derives ForySerializer {{"]
+        lines = [
+            f"{ind}@ForyUnion",
+            f"{ind}enum {union.name} derives ForySerializer {{",
+        ]
         lines.append(f"{ind}    @ForyCase(id = 0)")
         lines.append(f"{ind}    case UnknownCase(caseId: Int, value: Any)")
         lines.append("")
@@ -355,9 +367,10 @@ class ScalaGenerator(BaseGenerator):
         indent: int = 0,
         parent_stack: Optional[List[Message]] = None,
     ) -> List[str]:
-        if self._construction_shapes.get(message.name, None) and self._construction_shapes[
-            message.name
-        ].cycle_owned:
+        if (
+            self._construction_shapes.get(message.name, None)
+            and self._construction_shapes[message.name].cycle_owned
+        ):
             return self.generate_normal_class(message, indent, parent_stack)
         return self.generate_case_class(message, indent, parent_stack)
 
@@ -388,7 +401,10 @@ class ScalaGenerator(BaseGenerator):
     ) -> List[str]:
         ind = self.indent_str * indent
         current_stack = self.current_stack(parent_stack, message)
-        lines = [f"{ind}@ForyStruct", f"{ind}final class {message.name}() derives ForySerializer {{"]
+        lines = [
+            f"{ind}@ForyStruct",
+            f"{ind}final class {message.name}() derives ForySerializer {{",
+        ]
         for field in message.fields:
             field_type = self.generate_type(
                 field.field_type,
@@ -530,7 +546,9 @@ class ScalaGenerator(BaseGenerator):
             for index in range(len(parent_stack) - 1, -1, -1):
                 owner = parent_stack[index]
                 if owner.get_nested_type(name) is not None:
-                    return ".".join([message.name for message in parent_stack[: index + 1]] + [name])
+                    return ".".join(
+                        [message.name for message in parent_stack[: index + 1]] + [name]
+                    )
         return name
 
     def apply_type_annotation(self, scala_type: str, annotation: str) -> str:
@@ -673,9 +691,7 @@ class ScalaGenerator(BaseGenerator):
             self.collect_type_imports(field_type.key_type, imports)
             self.collect_type_imports(field_type.value_type, imports)
 
-    def collect_integer_imports(
-        self, field_type: FieldType, imports: Set[str]
-    ) -> None:
+    def collect_integer_imports(self, field_type: FieldType, imports: Set[str]) -> None:
         if not isinstance(field_type, PrimitiveType):
             return
         kind = field_type.kind
@@ -721,9 +737,13 @@ class ScalaGenerator(BaseGenerator):
 
     def field_type_has_ref(self, field_type: FieldType) -> bool:
         if isinstance(field_type, ListType):
-            return field_type.element_ref or self.field_type_has_ref(field_type.element_type)
+            return field_type.element_ref or self.field_type_has_ref(
+                field_type.element_type
+            )
         if isinstance(field_type, MapType):
-            return field_type.value_ref or self.field_type_has_ref(field_type.value_type)
+            return field_type.value_ref or self.field_type_has_ref(
+                field_type.value_type
+            )
         return False
 
     def is_ref_target_type(self, field_type: FieldType) -> bool:
@@ -756,7 +776,9 @@ class ScalaGenerator(BaseGenerator):
             lines.append("            register(fory)")
             lines.append("        })")
         else:
-            lines.append("        runtime.registerCallback((fory: Fory) => register(fory))")
+            lines.append(
+                "        runtime.registerCallback((fory: Fory) => register(fory))"
+            )
         lines.append("        runtime")
         lines.append("    }")
         lines.append("")

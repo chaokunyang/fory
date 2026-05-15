@@ -850,6 +850,13 @@ public class IdlRoundTripTest {
                 "Test/runMain org.apache.fory.idl_tests.ScalaIdlRoundTripPeer");
         peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
         break;
+      case "kotlin":
+        workDir = idlRoot.resolve("kotlin");
+        command =
+            Arrays.asList(
+                "java", "-jar", "target/fory-kotlin-idl-peer.jar");
+        peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");
+        break;
       default:
         throw new IllegalArgumentException("Unknown peer language: " + peer);
     }
@@ -1245,7 +1252,7 @@ public class IdlRoundTripTest {
 
   private ExampleMessageUnion buildExampleUnion() {
     return ExampleMessageUnion.ofInt32ArrayList(
-        Arrays.asList(new int[] {11, 12}, new int[] {13, 14}));
+        Arrays.asList(new int[] {1, 2}, new int[] {3, 4}));
   }
 
   private void assertNumericCollectionUnion(Object decoded, NumericCollectionUnion expected) {

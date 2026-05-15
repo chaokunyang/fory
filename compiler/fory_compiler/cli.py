@@ -264,7 +264,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         "--lang",
         type=str,
         default="all",
-        help="Comma-separated list of target languages (java,python,cpp,rust,go,csharp,javascript,swift,dart,scala). Default: all",
+        help="Comma-separated list of target languages (java,python,cpp,rust,go,csharp,javascript,swift,dart,scala,kotlin). Default: all",
     )
 
     parser.add_argument(
@@ -373,6 +373,14 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         metavar="DST_DIR",
         help="Generate Scala 3 code in DST_DIR",
+    )
+
+    parser.add_argument(
+        "--kotlin_out",
+        type=Path,
+        default=None,
+        metavar="DST_DIR",
+        help="Generate Kotlin code in DST_DIR",
     )
 
     parser.add_argument(
@@ -681,6 +689,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
         "swift": args.swift_out,
         "dart": args.dart_out,
         "scala": args.scala_out,
+        "kotlin": args.kotlin_out,
     }
 
     # Determine which languages to generate

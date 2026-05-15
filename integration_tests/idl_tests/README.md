@@ -13,3 +13,4 @@ Run tests:
 - C#: `./run_csharp_tests.sh`
 - JavaScript: `./run_javascript_tests.sh`
 - Swift: `./run_swift_tests.sh`
+- Kotlin: `./run_kotlin_tests.sh`

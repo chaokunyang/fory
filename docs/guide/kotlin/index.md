@@ -39,6 +39,7 @@ Fory Kotlin inherits all features from Fory Java, plus Kotlin-specific optimizat
 - **Kotlin Type Support**: Optimized serializers for data classes, unsigned types, ranges, and stdlib types
 - **Default Value Support**: Automatic handling of Kotlin data class default parameters during schema evolution
 - **Static Xlang Serializers**: KSP-generated schema serializers for Kotlin/JVM and Android xlang mode
+- **Schema IDL Generation**: Fory compiler output for Kotlin models, sealed unions, and registration helpers
 - **Schema Evolution**: Forward/backward compatibility for class schema changes
 
 See [Java Features](../java/index.md#features) for complete feature list.

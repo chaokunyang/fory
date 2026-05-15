@@ -103,6 +103,7 @@ package com.example.models alias models_v1;
 | C#         | Namespace                         |
 | JavaScript | Module name (last segment)        |
 | Dart       | Library name (package segments)   |
+| Kotlin     | Kotlin package                    |
 
 ## File-Level Options
 
@@ -172,6 +173,29 @@ message Payment {
 - Generated C# files use `namespace MyCorp.Payment.V1;`
 - Output path follows namespace segments (`MyCorp/Payment/V1/` under `--csharp_out`)
 - Type registration still uses the Fory IDL package (`payment`) for cross-language compatibility
+
+### Kotlin Package Option
+
+Override the Kotlin package for generated source:
+
+```protobuf
+package payment;
+option kotlin_package = "com.mycorp.payment.v1";
+
+message Payment {
+    string id = 1;
+}
+```
+
+**Effect:**
+
+- Generated Kotlin files are written under `com/mycorp/payment/v1/`
+- Kotlin source uses `package com.mycorp.payment.v1`
+- Type registration still uses the Fory IDL package (`payment`) for cross-language compatibility
+
+If `kotlin_package` is absent, Kotlin uses the FDL package. When compiler
+`--package` is provided, Kotlin treats it as a base package and appends the FDL
+package so imported schemas keep distinct generated packages.
 
 ### Go Nested Type Style Option
 
@@ -356,6 +380,11 @@ For language-specific packages/namespaces:
 1. Command-line package override (highest priority)
 2. Language-specific option (`java_package`, `go_package`, `csharp_namespace`)
 3. Fory IDL package declaration (fallback)
+
+Kotlin is intentionally different: `option kotlin_package` is the highest
+priority. If it is absent, compiler `--package` is treated as a base package
+that is prepended to the FDL package, so `--package=org.example` with
+`package model;` generates `org.example.model`.
 
 **Example:**
 

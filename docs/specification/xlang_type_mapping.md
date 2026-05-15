@@ -129,10 +129,13 @@ Notes:
   `uint16`, `uint32`, and `uint64` respectively. The generated descriptor uses
   the JVM primitive carrier plus explicit Fory type metadata; it does not add
   unsigned wrapper wire types. `ByteArray` maps to `binary` by default and to
-  `array<int8>` only when the field is explicitly marked with Fory `ArrayType`.
-  `UByteArray`, `UShortArray`, `UIntArray`, and `ULongArray` map to the dense
-  unsigned array schema types. Dense Kotlin numeric array component metadata
-  uses the fixed-width element type (`int32`, `int64`, `uint32`, or `uint64`);
+  `array<int8>` only when a top-level handwritten field is explicitly marked
+  with Fory `ArrayType`. Generated Kotlin IDL uses Java core `Int8List` for
+  `array<int8>` so nested collection, map, and union positions cannot be
+  confused with `binary`. `UByteArray`, `UShortArray`, `UIntArray`, and
+  `ULongArray` map to the dense unsigned array schema types. Dense Kotlin
+  numeric array component metadata uses the fixed-width element type (`int32`,
+  `int64`, `uint32`, or `uint64`);
   scalar field defaults such as varint do not apply to dense Kotlin array
   components. For `@ArrayType List<Int>`, `@ArrayType List<Long>`,
   `@ArrayType List<UInt>`, and `@ArrayType List<ULong>`, Kotlin KSP records a
@@ -149,6 +152,9 @@ Notes:
   non-null values. `@ArrayType List<T>` maps to dense `array<T>` only for
   non-null bool or numeric element domains; unsupported element domains are KSP
   errors.
+- Kotlin xlang `duration` uses `kotlin.time.Duration`. Infinite values are not
+  representable by the xlang duration payload and must raise a serialization
+  error.
 - `list<T>` and `array<T>` remain distinct schema kinds. In schema-compatible struct/class field
   matching only, a direct top-level `list<T>` field may be read as a direct top-level `array<T>`
   field, and a direct top-level `array<T>` field may be read as a direct top-level `list<T>` field,
@@ -157,6 +163,45 @@ Notes:
   not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>`
   payload that declares nullable or ref-tracked elements must raise a compatible-read error when the
   local matched field is `array<T>`.
+
+### Kotlin IDL Mapping
+
+The Kotlin schema IDL target emits Kotlin source only. The generated model
+source is compiled with `fory-kotlin-ksp`, which owns static serializer
+generation for constructor-based structs and sealed unions.
+
+| Fory schema kind                      | Kotlin generated carrier                                                          |
+| ------------------------------------- | --------------------------------------------------------------------------------- |
+| `optional T`                          | `T?`                                                                              |
+| `bool`                                | `Boolean`                                                                         |
+| `int8`, `int16`, `int32`, `int64`     | `Byte`, `Short`, `Int`, `Long`                                                    |
+| `uint8`, `uint16`, `uint32`, `uint64` | `UByte`, `UShort`, `UInt`, `ULong` plus unsigned Fory type metadata               |
+| `float16`, `bfloat16`                 | `org.apache.fory.type.Float16`, `org.apache.fory.type.BFloat16`                   |
+| `float32`, `float64`                  | `Float`, `Double`                                                                 |
+| `string`                              | `String`                                                                          |
+| `binary`                              | `ByteArray`                                                                       |
+| `list<T>`, `set<T>`, `map<K, V>`      | `List<T>`, `Set<T>`, `Map<K, V>`                                                  |
+| `array<bool>`                         | `BooleanArray`                                                                    |
+| `array<int8>`, `array<uint8>`         | Java core `Int8List`, `UByteArray`                                                |
+| `array<int16>`, `array<uint16>`       | `ShortArray`, `UShortArray`                                                       |
+| `array<int32>`, `array<uint32>`       | `IntArray`, `UIntArray`                                                           |
+| `array<int64>`, `array<uint64>`       | `LongArray`, `ULongArray`                                                         |
+| `array<float16>`, `array<bfloat16>`   | Java core `Float16Array`, `BFloat16Array`                                         |
+| `array<float32>`, `array<float64>`    | `FloatArray`, `DoubleArray`                                                       |
+| `date`, `timestamp`, `duration`       | `java.time.LocalDate`, `java.time.Instant`, `kotlin.time.Duration`                |
+| `decimal`                             | `java.math.BigDecimal`                                                            |
+| `message`                             | Kotlin `data class` by default; normal mutable class for compiler-detected cycles |
+| `enum`                                | Kotlin `enum class` with `@ForyEnumId` on enum entries                            |
+| `union`                               | Kotlin sealed class with `@ForyUnion` and KSP-generated serializer                |
+| `any`                                 | `Any?`                                                                            |
+
+Kotlin IDL uses `option kotlin_package` for generated source when present.
+Otherwise it uses the FDL package. When compiler `--package` is provided,
+Kotlin treats it as a base package and appends the FDL package so imported
+schemas keep distinct generated packages. Registration still uses the FDL
+package so cross-language type names remain stable. Default Kotlin `Int`,
+`Long`, `UInt`, and `ULong` fields use the xlang varint encodings; generated
+source emits `@Fixed` or `@Tagged` only for non-default encodings.
 
 ### Scala IDL Mapping
 

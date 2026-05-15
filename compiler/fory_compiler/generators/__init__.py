@@ -28,6 +28,7 @@ from fory_compiler.generators.javascript import JavaScriptGenerator
 from fory_compiler.generators.swift import SwiftGenerator
 from fory_compiler.generators.dart import DartGenerator
 from fory_compiler.generators.scala import ScalaGenerator
+from fory_compiler.generators.kotlin import KotlinGenerator
 
 GENERATORS = {
     "java": JavaGenerator,
@@ -40,6 +41,7 @@ GENERATORS = {
     "swift": SwiftGenerator,
     "dart": DartGenerator,
     "scala": ScalaGenerator,
+    "kotlin": KotlinGenerator,
 }
 
 __all__ = [
@@ -54,5 +56,6 @@ __all__ = [
     "SwiftGenerator",
     "DartGenerator",
     "ScalaGenerator",
+    "KotlinGenerator",
     "GENERATORS",
 ]

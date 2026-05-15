@@ -25,16 +25,24 @@ import java.util.TreeMap
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import org.apache.fory.Fory
 import org.apache.fory.annotation.ArrayType
+import org.apache.fory.annotation.ForyCase
 import org.apache.fory.annotation.ForyField
 import org.apache.fory.annotation.ForyStruct
+import org.apache.fory.annotation.ForyUnion
+import org.apache.fory.annotation.Ref
 import org.apache.fory.config.Language
+import org.apache.fory.exception.ForyException
 import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.VarInt
 import org.apache.fory.memory.MemoryUtils
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.serializer.kotlin.KotlinSerializers
+import org.apache.fory.type.BFloat16Array
+import org.apache.fory.type.Float16Array
 import org.apache.fory.type.Types
 
 @ForyStruct
@@ -82,6 +90,8 @@ public data class KotlinSchemaSurface(
   @ForyField(id = 6) val unsignedLongs: ULongArray,
   @field:ForyField(id = 7) val fieldSiteId: Int,
   @field:ArrayType @ForyField(id = 8) val denseIds: List<Int>,
+  @Ref(enable = false) @ForyField(id = 9) val noRefUser: KotlinUser?,
+  @ForyField(id = 10) val noRefUsers: List<@Ref(enable = false) KotlinUser>,
 )
 
 @ForyStruct
@@ -112,6 +122,22 @@ public data class KotlinNullableCompatibleReader(
   @ForyField(id = 6) var maybeULong: ULong?,
 )
 
+@ForyStruct
+public data class KotlinDurationAndHalfArrays(
+  @ForyField(id = 1) val duration: kotlin.time.Duration,
+  @ForyField(id = 2) val float16s: Float16Array,
+  @ForyField(id = 3) val bfloat16s: BFloat16Array,
+)
+
+@ForyUnion
+public sealed class KotlinPet {
+  @ForyCase(id = 0) public data class UnknownCase(val caseId: Int, val value: Any?) : KotlinPet()
+
+  @ForyCase(id = 1) public data class UserCase(val value: KotlinUser) : KotlinPet()
+
+  @ForyCase(id = 2) public data class NameCase(val value: String) : KotlinPet()
+}
+
 public fun main(args: Array<String>) {
   if (args.size < 2) {
     throw IllegalArgumentException("Usage: <case> <data-file>")
@@ -132,6 +158,8 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   fory.register(KotlinUnsignedCollections::class.java, "kotlin", "KotlinUnsignedCollections")
   fory.register(KotlinSchemaSurface::class.java, "kotlin", "KotlinSchemaSurface")
   fory.register(KotlinDenseArrays::class.java, "kotlin", "KotlinDenseArrays")
+  fory.register(KotlinDurationAndHalfArrays::class.java, "kotlin", "KotlinDurationAndHalfArrays")
+  KotlinSerializers.registerUnion(fory, KotlinPet::class.java, "kotlin", "KotlinPet")
 
   val javaRequest =
     fory.deserialize(MemoryUtils.wrap(java.io.File(dataFile).readBytes()), KotlinUser::class.java)
@@ -171,6 +199,8 @@ private fun staticSerializerRoundTrip(dataFile: String) {
       unsignedLongs = ulongArrayOf(1uL, ULong.MAX_VALUE),
       fieldSiteId = 7,
       denseIds = listOf(1, 2, 3),
+      noRefUser = null,
+      noRefUsers = emptyList(),
     )
   val decodedSchemaSurface =
     fory.deserialize(fory.serialize(schemaSurface), KotlinSchemaSurface::class.java)
@@ -196,6 +226,8 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(schemaDescriptors[6].foryFieldId == 7)
   check(schemaDescriptors[7].isArrayType)
   check(schemaDescriptors[7].typeRef.typeExtMeta.typeId() == Types.INT32_ARRAY)
+  check(!schemaDescriptors[8].isTrackingRef)
+  check(schemaDescriptors[9].typeRef.componentType.getTypeExtMeta()?.trackingRef() != true)
 
   val collections =
     KotlinConcreteCollections(
@@ -294,6 +326,32 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(compatibleDecoded.maybeLong == null)
   check(compatibleDecoded.maybeUInt == null)
   check(compatibleDecoded.maybeULong == null)
+
+  val durationAndHalfArrays =
+    KotlinDurationAndHalfArrays(
+      duration = (-500).milliseconds,
+      float16s = Float16Array.of(1.0f, -2.0f),
+      bfloat16s = BFloat16Array.of(3.0f, -4.0f),
+    )
+  val decodedDurationAndHalfArrays =
+    fory.deserialize(
+      fory.serialize(durationAndHalfArrays),
+      KotlinDurationAndHalfArrays::class.java,
+    )
+  check(decodedDurationAndHalfArrays.duration == durationAndHalfArrays.duration)
+  check(decodedDurationAndHalfArrays.float16s == durationAndHalfArrays.float16s)
+  check(decodedDurationAndHalfArrays.bfloat16s == durationAndHalfArrays.bfloat16s)
+  try {
+    fory.serialize(durationAndHalfArrays.copy(duration = Duration.INFINITE))
+    error("Infinite Kotlin xlang duration was serialized")
+  } catch (_: ForyException) {}
+
+  val pet: KotlinPet = KotlinPet.UserCase(response)
+  val decodedPet = fory.deserialize(fory.serialize(pet), KotlinPet::class.java)
+  check(decodedPet == pet)
+  check(fory.getSerializer(KotlinPet::class.java) is StaticGeneratedStructSerializer<*>) {
+    "KotlinPet did not load a static generated union serializer"
+  }
 }
 
 private fun denseArrayRoundTrip(dataFile: String) {

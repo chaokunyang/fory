@@ -79,21 +79,62 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
-  fun rejectsConstructorFieldCountOverflow() {
-    assertNull(constructorFieldLimitDiagnostic(63))
-    assertEquals(
-      constructorFieldLimitDiagnostic(64),
-      "Kotlin KSP xlang serializers currently support at most 63 constructor fields",
-    )
-  }
-
-  @Test
   fun rejectsDefaultConstructorFieldCountOverflow() {
     assertNull(defaultConstructorFieldLimitDiagnostic(12))
     assertEquals(
       defaultConstructorFieldLimitDiagnostic(13),
       "Kotlin KSP xlang serializers currently support at most 12 defaulted constructor fields because Kotlin source generation must call constructors with omitted default arguments",
     )
+  }
+
+  @Test
+  fun compatiblePresenceTrackingSupportsWideConstructors() {
+    val intType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Int::class.javaPrimitiveType!!",
+        kotlinTypeName = "kotlin.Int",
+        valueTypeName = "Int",
+        typeName = "int32",
+        typeId = "Types.VAR_INT32",
+        nullable = false,
+        trackingRef = false,
+        primitive = true,
+        unsigned = false,
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "WideStruct",
+            qualifiedTypeName = "example.WideStruct",
+            serializerName = "WideStruct_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              (0 until 70).map { id ->
+                KotlinSourceField(
+                  id = id,
+                  name = "field$id",
+                  type = intType,
+                  hasForyField = true,
+                  foryFieldId = id + 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "Int",
+                )
+              },
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(!source.contains("BooleanArray"))
+    assertTrue(source.contains("var presentMask0 = 0L"))
+    assertTrue(source.contains("var presentMask1 = 0L"))
+    assertTrue(source.contains("presentMask1 = presentMask1 or (1L shl 5)"))
+    assertTrue(source.contains("if ((presentMask1 and (1L shl 5)) == 0L)"))
   }
 
   @Test
@@ -118,10 +159,36 @@ class ForyKotlinSymbolProcessorValidationTest {
   }
 
   @Test
+  fun mapKeysFollowXlangSpec() {
+    fun scalar(typeId: String) =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Any::class.java",
+        kotlinTypeName = "Any",
+        valueTypeName = "Any",
+        typeName = "java.lang.Object",
+        typeId = typeId,
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+
+    assertTrue(isValidMapKeyType(scalar("Types.STRING")))
+    assertTrue(isValidMapKeyType(scalar("Types.VAR_UINT32")))
+    assertTrue(isValidMapKeyType(scalar("Types.DATE")))
+    assertTrue(!isValidMapKeyType(scalar("Types.FLOAT16")))
+    assertTrue(!isValidMapKeyType(scalar("Types.BFLOAT16")))
+    assertTrue(!isValidMapKeyType(scalar("Types.FLOAT32")))
+    assertTrue(!isValidMapKeyType(scalar("Types.FLOAT64")))
+    assertTrue(!isValidMapKeyType(scalar("Types.DECIMAL")))
+    assertTrue(!isValidMapKeyType(scalar("Types.BINARY")))
+  }
+
+  @Test
   fun nullableUnsignedDenseArrayUsesDirectGeneratedPath() {
     val uintType =
       KotlinSourceTypeNode(
-        rawClassExpression = "UInt::class.javaObjectType!!",
+        rawClassExpression = "Int::class.javaPrimitiveType!!",
         kotlinTypeName = "kotlin.UInt",
         valueTypeName = "UInt",
         typeName = "kotlin.UInt",
@@ -184,7 +251,7 @@ class ForyKotlinSymbolProcessorValidationTest {
   fun nullableUnsignedScalarUsesStableLocal() {
     val nullableUInt =
       KotlinSourceTypeNode(
-        rawClassExpression = "UInt::class.javaObjectType!!",
+        rawClassExpression = "Int::class.javaPrimitiveType!!",
         kotlinTypeName = "kotlin.UInt",
         valueTypeName = "UInt?",
         typeName = "kotlin.UInt",
@@ -245,5 +312,356 @@ class ForyKotlinSymbolProcessorValidationTest {
         .write()
 
     assertTrue(source.contains("internal class InternalHolder_ForySerializer"))
+  }
+
+  @Test
+  fun durationUsesXlangEncodingHelper() {
+    val duration =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.time.Duration::class.java",
+        kotlinTypeName = "kotlin.time.Duration",
+        valueTypeName = "kotlin.time.Duration",
+        typeName = "kotlin.time.Duration",
+        typeId = "Types.DURATION",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "DurationHolder",
+            qualifiedTypeName = "example.DurationHolder",
+            serializerName = "DurationHolder_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "value",
+                  type = duration,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "kotlin.time.Duration",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("KotlinXlangDurationEncoding.write(writeContext, value.value)"))
+    assertTrue(source.contains("KotlinXlangDurationEncoding.read(readContext)"))
+  }
+
+  @Test
+  fun compatibleUnsignedContainersUseExplicitLoops() {
+    val uint =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Int::class.javaPrimitiveType!!",
+        kotlinTypeName = "kotlin.UInt",
+        valueTypeName = "UInt",
+        typeName = "kotlin.UInt",
+        typeId = "Types.VAR_UINT32",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = true,
+      )
+    val list =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.List::class.java",
+        kotlinTypeName = "java.util.List",
+        valueTypeName = "List<UInt>",
+        typeName = "java.util.List",
+        typeId = "Types.LIST",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        typeArguments = listOf(uint),
+      )
+    val map =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.Map::class.java",
+        kotlinTypeName = "java.util.Map",
+        valueTypeName = "Map<UInt, UInt>",
+        typeName = "java.util.Map",
+        typeId = "Types.MAP",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        typeArguments = listOf(uint, uint),
+      )
+    val duration =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.time.Duration::class.java",
+        kotlinTypeName = "kotlin.time.Duration",
+        valueTypeName = "kotlin.time.Duration",
+        typeName = "kotlin.time.Duration",
+        typeId = "Types.DURATION",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val durationList =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.List::class.java",
+        kotlinTypeName = "java.util.List",
+        valueTypeName = "List<kotlin.time.Duration>",
+        typeName = "java.util.List",
+        typeId = "Types.LIST",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        typeArguments = listOf(duration),
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "UnsignedContainers",
+            qualifiedTypeName = "example.UnsignedContainers",
+            serializerName = "UnsignedContainers_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "values",
+                  type = list,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "List<UInt>",
+                ),
+                KotlinSourceField(
+                  id = 1,
+                  name = "by_id",
+                  type = map,
+                  hasForyField = true,
+                  foryFieldId = 2,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "Map<UInt, UInt>",
+                ),
+                KotlinSourceField(
+                  id = 2,
+                  name = "durations",
+                  type = durationList,
+                  hasForyField = true,
+                  foryFieldId = 3,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "List<kotlin.time.Duration>",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("java.util.ArrayList<Any?>(source0.size())"))
+    assertTrue(source.contains("java.util.LinkedHashMap<Any?, Any?>(source0.size)"))
+    assertTrue(source.contains("KotlinXlangDurationEncoding.fromJava"))
+    assertTrue(!source.contains(".map {"))
+    assertTrue(!source.contains(".mapTo("))
+    assertTrue(!source.contains(".associate {"))
+  }
+
+  @Test
+  fun unionSerializerUsesCoreUnionPayloadHelpers() {
+    val owner =
+      KotlinSourceTypeNode(
+        rawClassExpression = "example.Owner::class.java",
+        kotlinTypeName = "Owner",
+        valueTypeName = "Owner",
+        typeName = "example.Owner",
+        typeId = null,
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val any =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Any::class.java",
+        kotlinTypeName = "Any?",
+        valueTypeName = "Any?",
+        typeName = "java.lang.Object",
+        typeId = "Types.UNKNOWN",
+        nullable = true,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val uint =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Int::class.javaPrimitiveType!!",
+        kotlinTypeName = "kotlin.UInt",
+        valueTypeName = "UInt",
+        typeName = "kotlin.UInt",
+        typeId = "Types.VAR_UINT32",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = true,
+      )
+    val duration =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.time.Duration::class.java",
+        kotlinTypeName = "kotlin.time.Duration",
+        valueTypeName = "kotlin.time.Duration",
+        typeName = "kotlin.time.Duration",
+        typeId = "Types.DURATION",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val uintList =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.List::class.java",
+        kotlinTypeName = "java.util.List",
+        valueTypeName = "List<UInt>",
+        typeName = "java.util.List",
+        typeId = "Types.LIST",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        typeArguments = listOf(uint),
+      )
+    val durationList =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.List::class.java",
+        kotlinTypeName = "java.util.List",
+        valueTypeName = "List<kotlin.time.Duration>",
+        typeName = "java.util.List",
+        typeId = "Types.LIST",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        typeArguments = listOf(duration),
+      )
+    val uintArray =
+      KotlinSourceTypeNode(
+        rawClassExpression = "UIntArray::class.java",
+        kotlinTypeName = "kotlin.UIntArray",
+        valueTypeName = "UIntArray",
+        typeName = "kotlin.UIntArray",
+        typeId = "Types.UINT32_ARRAY",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = true,
+        componentType = uint,
+      )
+    val source =
+      KotlinUnionSerializerSourceWriter(
+          KotlinSourceUnion(
+            packageName = "example",
+            typeName = "Pet",
+            qualifiedTypeName = "example.Pet",
+            serializerName = "Pet_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            unknownCase =
+              KotlinSourceUnionCase(
+                id = 0,
+                className = "UnknownCase",
+                qualifiedClassName = "example.Pet.UnknownCase",
+                valueType = any,
+              ),
+            cases =
+              listOf(
+                KotlinSourceUnionCase(
+                  id = 1,
+                  className = "OwnerCase",
+                  qualifiedClassName = "example.Pet.OwnerCase",
+                  valueType = owner,
+                ),
+                KotlinSourceUnionCase(
+                  id = 2,
+                  className = "CountCase",
+                  qualifiedClassName = "example.Pet.CountCase",
+                  valueType = uint,
+                ),
+                KotlinSourceUnionCase(
+                  id = 3,
+                  className = "DurationCase",
+                  qualifiedClassName = "example.Pet.DurationCase",
+                  valueType = duration,
+                ),
+                KotlinSourceUnionCase(
+                  id = 4,
+                  className = "CountListCase",
+                  qualifiedClassName = "example.Pet.CountListCase",
+                  valueType = uintList,
+                ),
+                KotlinSourceUnionCase(
+                  id = 5,
+                  className = "DurationListCase",
+                  qualifiedClassName = "example.Pet.DurationListCase",
+                  valueType = durationList,
+                ),
+                KotlinSourceUnionCase(
+                  id = 6,
+                  className = "CountArrayCase",
+                  qualifiedClassName = "example.Pet.CountArrayCase",
+                  valueType = uintArray,
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("class Pet_ForySerializer"))
+    assertTrue(source.contains("UnionSerializer.writeCaseValue(typeResolver, writeContext"))
+    assertTrue(source.contains("UnionSerializer.readCaseValue(typeResolver, readContext"))
+    assertTrue(source.contains("UnionSerializer.copyCaseValue(copyContext"))
+    assertTrue(source.contains("UnionSerializer.writeUnknownCaseValue(writeContext"))
+    assertTrue(source.contains("TypeRef.of<Any>(Int::class.javaPrimitiveType!!"))
+    assertTrue(!source.contains("UInt::class.java"))
+    assertTrue(source.contains("buffer.writeUInt8(Types.VAR_UINT32)"))
+    assertTrue(source.contains("buffer.writeVarUInt32(value.value.toInt())"))
+    assertTrue(source.contains("example.Pet.CountCase(value.value)"))
+    assertTrue(source.contains("KotlinXlangDurationEncoding.write(writeContext, value.value)"))
+    assertTrue(source.contains("KotlinXlangDurationEncoding.read(readContext)"))
+    assertTrue(source.contains("example.Pet.DurationCase(value.value)"))
+    assertTrue(source.contains("TypeRef.of<Any>(java.time.Duration::class.java"))
+    assertTrue(source.contains("KotlinXlangUnsignedSerializers.serializer(typeResolver.config"))
+    assertTrue(source.contains("KotlinXlangDurationSerializers.serializer(typeResolver.config"))
+    assertTrue(source.contains("listValue.isNotEmpty()"))
+    assertTrue(source.contains("buffer.writeByte(CollectionFlags.DECL_SAME_TYPE_NOT_HAS_NULL)"))
+    assertTrue(source.contains("if (size > 0)"))
+    assertTrue(source.contains("java.util.ArrayList<Any?>(size)"))
+    assertTrue(
+      source.contains("KotlinXlangArrayEncoding.writeUIntArray(writeContext, value.value)")
+    )
+    assertTrue(source.contains("KotlinXlangArrayEncoding.readUIntArray(readContext"))
+    assertTrue(source.contains("example.Pet.CountArrayCase(value.value.copyOf())"))
+    assertTrue(!source.contains("org.apache.fory.type.union.Union"))
   }
 }

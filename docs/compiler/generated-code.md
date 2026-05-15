@@ -1042,6 +1042,125 @@ void main() {
 }
 ```
 
+## Kotlin
+
+The Kotlin target emits Kotlin source only. Generated serializers are owned by
+`fory-kotlin-ksp`; the compiler does not generate Java files or serializer
+sidecars.
+
+### Output Layout
+
+For `package addressbook`, Kotlin output is generated under:
+
+- `<kotlin_out>/addressbook/`
+- Type files: `AddressBook.kt`, `Person.kt`, `Dog.kt`, `Cat.kt`, `Animal.kt`
+- Registration helper: `AddressbookForyRegistration.kt`
+
+If `option kotlin_package = "...";` is present, the output path and Kotlin
+package use that option. Otherwise Kotlin uses the FDL package. When compiler
+`--package` is supplied, Kotlin treats it as a base package and appends the FDL
+package so imported schemas keep distinct generated packages. Registration
+still uses the FDL package so cross-language type names stay stable.
+
+### Type Generation
+
+Messages generate Kotlin `data class` declarations by default:
+
+```kotlin
+@ForyStruct
+public data class Person(
+  @field:ForyField(id = 1)
+  public val name: String,
+
+  @field:ForyField(id = 7)
+  public val phones: List<PersonPhoneNumber>,
+
+  @field:ForyField(id = 8)
+  public val pet: Animal,
+)
+```
+
+Messages that participate in compiler-detected construction cycles generate
+normal mutable classes so a runtime serializer can publish the instance before
+reading back-references:
+
+```kotlin
+@ForyStruct
+public class Node() {
+  @ForyField(id = 1)
+  public var id: String = ""
+
+  @Ref
+  @ForyField(id = 2)
+  public var parent: @Nullable Node? = null
+}
+```
+
+Compile generated Kotlin IDL sources with the Kotlin compiler option
+`-Xemit-jvm-type-annotations`. Constructor-based KSP serializers read Kotlin
+source metadata directly, but ref/cycle-owned mutable classes use the Java core
+runtime object path. That runtime path needs JVM-visible type annotations for
+generated nested `@Ref` and `@Nullable` metadata.
+
+Enums generate Kotlin enum classes with stable Fory enum IDs. Unions generate
+sealed classes with `@ForyUnion`; case ID `0` is the unknown-case carrier and
+schema-defined cases hold a single `value` property.
+
+```kotlin
+@ForyUnion
+public sealed class Animal {
+  @ForyCase(id = 0)
+  public data class UnknownCase(public val caseId: Int, public val value: Any?) : Animal()
+
+  @ForyCase(id = 1)
+  public data class DogCase(public val value: Dog) : Animal()
+}
+```
+
+Kotlin `int32`, `int64`, `uint32`, and `uint64` fields use xlang varint
+encoding by default, so generated Kotlin does not emit `@VarInt` for the
+default case. It emits `@Fixed` or `@Tagged` only when the schema requests that
+non-default encoding. `duration` maps to `kotlin.time.Duration`, and infinite
+durations are rejected when encoded. Dense `array<float16>` and
+`array<bfloat16>` use the Java core `Float16Array` and `BFloat16Array`
+carriers. Generated Kotlin IDL uses Java core `Int8List` for `array<int8>` so
+the carrier stays unambiguous in fields, collection elements, map values, and
+union cases; handwritten Kotlin may still use `ByteArray` with `@ArrayType` for
+top-level `array<int8>` fields.
+
+### Registration
+
+Generated registration helpers register schema types and resolve KSP-generated
+serializers from the target class name:
+
+```kotlin
+public object AddressbookForyRegistration {
+  public fun register(fory: Fory) {
+    KotlinSerializers.registerType(fory, Person::class.java, 100L)
+    KotlinSerializers.registerSerializer(fory, Person::class.java)
+    KotlinSerializers.registerUnion(fory, Animal::class.java, 106L)
+  }
+}
+```
+
+`registerUnion` discovers the generated `<Target>_ForySerializer`; callers do
+not pass a serializer instance. Generated Schema IDL registration does not
+install the general Kotlin runtime serializers because those serializers may
+register non-schema Kotlin stdlib classes in the user type-id space. Ref/cycle-
+owned generated classes are registered as schema types and use the runtime
+object path instead of a constructor-based KSP serializer.
+
+Run the Kotlin IDL peer test with:
+
+```bash
+cd integration_tests/idl_tests
+./run_kotlin_tests.sh
+```
+
+The runner regenerates Kotlin fixtures, compiles them through KSP, builds the
+Kotlin peer jar, and then runs Java peer round trips for addressbook, ref/cycle,
+and example schemas with `IDL_PEER_LANG=kotlin`.
+
 ## Scala
 
 The Scala target emits Scala 3 source only. The `fory-scala` runtime artifact

@@ -28,9 +28,6 @@ keywords = ["serialization", "serde", "trait-object", "zero-copy", "schema-evolu
 categories = ["encoding"]
 
 [dependencies]
-proc-macro2 = { default-features = false, version = "1.0" }
-syn = { default-features = false, version = "2.0", features = ["full", "fold"] }
-quote = { default-features = false, version = "1.0" }
 byteorder = { version = "1.4" }
 chrono = { version = "0.4", default-features = false, features = ["std"], optional = true }
 thiserror = { default-features = false, version = "1.0" }

@@ -33,6 +33,7 @@ public class EnsureSerializerExample {
     fory =
         Fory.builder()
             .withName(EnsureSerializerExample.class.getName())
+            .withXlang(false)
             .requireClassRegistration(true)
             .build();
     // register and generate serializer code.

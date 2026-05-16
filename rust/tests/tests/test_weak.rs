@@ -48,6 +48,32 @@ fn test_arc_weak_null_serialization() {
 }
 
 #[test]
+fn test_rc_weak_requires_track_ref_message() {
+    let fory = Fory::builder().track_ref(false).build();
+    let weak: RcWeak<i32> = RcWeak::new();
+
+    let err = fory.serialize(&weak).unwrap_err().to_string();
+    assert_eq!(
+        err,
+        "RcWeak requires track_ref to be enabled. Use Fory::builder().track_ref(true).build()"
+    );
+    assert!(!err.contains("xlang(false)"));
+}
+
+#[test]
+fn test_arc_weak_requires_track_ref_message() {
+    let fory = Fory::builder().track_ref(false).build();
+    let weak: ArcWeak<i32> = ArcWeak::new();
+
+    let err = fory.serialize(&weak).unwrap_err().to_string();
+    assert_eq!(
+        err,
+        "ArcWeak requires track_ref to be enabled. Use Fory::builder().track_ref(true).build()"
+    );
+    assert!(!err.contains("xlang(false)"));
+}
+
+#[test]
 fn test_rc_weak_dead_pointer_serializes_as_null() {
     let fory = Fory::builder().xlang(false).track_ref(true).build();
 

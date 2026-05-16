@@ -26,7 +26,7 @@ This guide covers concurrent usage patterns for Fory Go, including the thread-sa
 The default `Fory` instance is **not thread-safe**:
 
 ```go
-f := fory.New(fory.WithXlang(false))
+f := fory.New()
 
 // NOT SAFE: Concurrent access from multiple goroutines
 go func() {
@@ -55,7 +55,7 @@ For concurrent use, use the `threadsafe` package:
 import "github.com/apache/fory/go/fory/threadsafe"
 
 // Create thread-safe Fory
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 
 // Safe for concurrent use
 go func() {
@@ -97,7 +97,7 @@ func (f *Fory) Serialize(v any) ([]byte, error) {
 
 ```go
 // Create thread-safe instance
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 
 // Instance methods
 data, err := f.Serialize(value)
@@ -117,7 +117,7 @@ err = threadsafe.Unmarshal(data, &target)
 Type registration should be done before concurrent use:
 
 ```go
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 
 // Register types BEFORE concurrent access
 f.RegisterStruct(User{}, 1)
@@ -135,7 +135,7 @@ The thread-safe wrapper handles registration safely:
 
 ```go
 // Safe: Registration is synchronized
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 f.RegisterStruct(User{}, 1)  // Thread-safe
 ```
 
@@ -148,7 +148,7 @@ However, for best performance, register all types at startup before concurrent u
 With the default Fory, returned byte slices are views into the internal buffer:
 
 ```go
-f := fory.New(fory.WithXlang(false))
+f := fory.New()
 
 data1, _ := f.Serialize(value1)
 // data1 is valid
@@ -162,7 +162,7 @@ data2, _ := f.Serialize(value2)
 The thread-safe wrapper copies data automatically:
 
 ```go
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 
 data1, _ := f.Serialize(value1)
 data2, _ := f.Serialize(value2)
@@ -184,7 +184,7 @@ This is safer but has allocation overhead.
 
 ```go
 func BenchmarkNonThreadSafe(b *testing.B) {
-    f := fory.New(fory.WithXlang(false))
+    f := fory.New()
     f.RegisterStruct(User{}, 1)
     user := &User{ID: 1, Name: "Alice"}
 
@@ -195,7 +195,7 @@ func BenchmarkNonThreadSafe(b *testing.B) {
 }
 
 func BenchmarkThreadSafe(b *testing.B) {
-    f := threadsafe.New(fory.WithXlang(false))
+    f := threadsafe.New()
     f.RegisterStruct(User{}, 1)
     user := &User{ID: 1, Name: "Alice"}
 
@@ -215,7 +215,7 @@ For maximum performance with known goroutine count:
 ```go
 func worker(id int) {
     // Each worker has its own Fory instance
-    f := fory.New(fory.WithXlang(false))
+    f := fory.New()
     f.RegisterStruct(User{}, 1)
 
     for task := range tasks {
@@ -236,7 +236,7 @@ For dynamic goroutine count or simplicity:
 
 ```go
 // Single shared instance
-var f = threadsafe.New(fory.WithXlang(false))
+var f = threadsafe.New()
 
 func init() {
     f.RegisterStruct(User{}, 1)
@@ -252,7 +252,7 @@ func handleRequest(user *User) []byte {
 ### HTTP Handler Example
 
 ```go
-var fory = threadsafe.New(fory.WithXlang(false))
+var fory = threadsafe.New()
 
 func init() {
     fory.RegisterStruct(Response{}, 1)
@@ -282,7 +282,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 ```go
 // WRONG: Race condition
-var f = fory.New(fory.WithXlang(false))
+var f = fory.New()
 
 func handler1() {
     f.Serialize(value1)  // Race!
@@ -293,13 +293,13 @@ func handler2() {
 }
 ```
 
-**Fix**: Use `threadsafe.New(fory.WithXlang(false))` or per-goroutine instances.
+**Fix**: Use `threadsafe.New()` or per-goroutine instances.
 
 ### Keeping Reference to Buffer
 
 ```go
 // WRONG: Buffer invalidated on next call
-f := fory.New(fory.WithXlang(false))
+f := fory.New()
 data, _ := f.Serialize(value1)
 savedData := data  // Just copies the slice header!
 
@@ -315,7 +315,7 @@ savedData := make([]byte, len(data))
 copy(savedData, data)
 
 // Or use thread-safe (auto-copies)
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 data, _ := f.Serialize(value1)  // Already copied
 ```
 

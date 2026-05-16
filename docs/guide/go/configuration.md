@@ -166,7 +166,7 @@ The thread-safe wrapper:
 
 - Uses `sync.Pool` internally for efficient instance reuse
 - Automatically copies serialized data before returning
-- Accepts the same configuration options as `fory.New(fory.WithXlang(false))`
+- Accepts the same configuration options as `fory.New()`
 
 ### Global Thread-Safe Instance
 
@@ -204,7 +204,7 @@ copy(safeCopy, data1)
 The thread-safe wrapper automatically copies data, so this is not a concern:
 
 ```go
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 data1, _ := f.Serialize(value1)
 data2, _ := f.Serialize(value2)
 // Both data1 and data2 are valid

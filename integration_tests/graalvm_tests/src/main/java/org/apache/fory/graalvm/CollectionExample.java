@@ -35,6 +35,7 @@ public class CollectionExample {
     fory =
         Fory.builder()
             .withName(CollectionExample.class.getName())
+            .withXlang(false)
             .requireClassRegistration(true)
             .build();
   }

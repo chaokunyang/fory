@@ -30,9 +30,9 @@ final class IdlRoundTripTests: XCTestCase {
     }
 
     func testEvolvingRoundTrip() throws {
-        let foryV1 = Fory(xlang: true, ref: false, compatible: true)
+        let foryV1 = Fory(ref: false, compatible: true)
         try Evolving1.ForyRegistration.register(foryV1)
-        let foryV2 = Fory(xlang: true, ref: false, compatible: true)
+        let foryV2 = Fory(ref: false, compatible: true)
         try Evolving2.ForyRegistration.register(foryV2)
 
         let messageV1 = Evolving1.EvolvingMessage(id: 1, name: "Alice", city: "NYC")
@@ -100,7 +100,7 @@ final class IdlRoundTripTests: XCTestCase {
     }
 
     func testGeneratedFixedIntegerListsUseListMetadata() throws {
-        let fory = Fory(xlang: true, ref: false, compatible: true)
+        let fory = Fory(ref: false, compatible: true)
         try Example.ForyRegistration.register(fory)
         let maybeFloat16Values: [String: Float16?] = ["none": nil, "one": Float16(1)]
         let maybeBFloat16Values: [String: BFloat16?] = ["none": nil, "one": BFloat16(rawValue: 0x3F80)]
@@ -136,7 +136,7 @@ final class IdlRoundTripTests: XCTestCase {
     }
 
     private func runIdlMatrixRoundTrip(compatible: Bool) throws {
-        let fory = Fory(xlang: true, ref: false, compatible: compatible)
+        let fory = Fory(ref: false, compatible: compatible)
         try Addressbook.ForyRegistration.register(fory)
         try AutoId.ForyRegistration.register(fory)
         try Collection.ForyRegistration.register(fory)
@@ -245,7 +245,7 @@ final class IdlRoundTripTests: XCTestCase {
             )
         }
 
-        let anyProtoFory = Fory(xlang: true, ref: false, compatible: compatible)
+        let anyProtoFory = Fory(ref: false, compatible: compatible)
         try AnyExamplePb.ForyRegistration.register(anyProtoFory)
         let anyProtoHolder = buildAnyProtoHolder()
         do {
@@ -276,7 +276,7 @@ final class IdlRoundTripTests: XCTestCase {
             XCTAssertEqual(actual, expected)
         }
 
-        let refFory = Fory(xlang: true, ref: true, compatible: compatible)
+        let refFory = Fory(ref: true, compatible: compatible)
         try Tree.ForyRegistration.register(refFory)
         try GraphNamespace.ForyRegistration.register(refFory)
         try Root.ForyRegistration.register(refFory)

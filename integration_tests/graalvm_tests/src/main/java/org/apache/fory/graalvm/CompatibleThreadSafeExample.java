@@ -33,6 +33,7 @@ public class CompatibleThreadSafeExample {
               Fory f =
                   Fory.builder()
                       .withName(CompatibleThreadSafeExample.class.getName())
+                      .withXlang(false)
                       .requireClassRegistration(true)
                       .withCompatible(true)
                       .build();

@@ -257,7 +257,7 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder().xlang(false).track_ref(true).build();
+    /// let fory = Fory::builder().track_ref(true).build();
     /// ```
     pub fn track_ref(mut self, track_ref: bool) -> Self {
         self.config.track_ref = track_ref;

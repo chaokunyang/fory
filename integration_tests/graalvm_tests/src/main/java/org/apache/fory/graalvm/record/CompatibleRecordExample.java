@@ -32,6 +32,7 @@ public class CompatibleRecordExample {
     Fory fory =
         Fory.builder()
             .withName(CompatibleRecordExample.class.getName())
+            .withXlang(false)
             .requireClassRegistration(true)
             .withCompatible(true)
             .build();

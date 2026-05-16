@@ -39,6 +39,7 @@ public class CompatibleDependentSerializerExample {
     Fory fory =
         Fory.builder()
             .withName(CompatibleDependentSerializerExample.class.getName())
+            .withXlang(false)
             .requireClassRegistration(true)
             .withCompatible(true)
             .build();

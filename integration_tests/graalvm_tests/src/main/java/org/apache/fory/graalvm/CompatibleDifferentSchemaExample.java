@@ -40,6 +40,7 @@ public class CompatibleDifferentSchemaExample {
     Fory fory =
         Fory.builder()
             .withName(CompatibleDifferentSchemaExample.class.getName() + ".writer")
+            .withXlang(false)
             .withCompatible(true)
             .requireClassRegistration(true)
             .build();
@@ -52,6 +53,7 @@ public class CompatibleDifferentSchemaExample {
     Fory fory =
         Fory.builder()
             .withName(CompatibleDifferentSchemaExample.class.getName() + ".reader")
+            .withXlang(false)
             .withCompatible(true)
             .requireClassRegistration(true)
             .build();

@@ -40,6 +40,7 @@ public class ThreadSafeExample {
               Fory f =
                   Fory.builder()
                       .withName(ThreadSafeExample.class.getName())
+                      .withXlang(false)
                       .requireClassRegistration(true)
                       .build();
               // register and generate serializer code.

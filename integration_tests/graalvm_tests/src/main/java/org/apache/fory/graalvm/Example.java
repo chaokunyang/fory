@@ -28,7 +28,12 @@ public class Example {
   static Fory fory;
 
   static {
-    fory = Fory.builder().withName(Example.class.getName()).requireClassRegistration(true).build();
+    fory =
+        Fory.builder()
+            .withName(Example.class.getName())
+            .withXlang(false)
+            .requireClassRegistration(true)
+            .build();
     // register and generate serializer code.
     fory.register(Foo.class);
     fory.ensureSerializersCompiled();

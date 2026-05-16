@@ -73,6 +73,7 @@ public class FeatureTestExample {
     Fory fory =
         Fory.builder()
             .withName(FeatureTestExample.class.getName())
+            .withXlang(false)
             .requireClassRegistration(true)
             .build();
     fory.register(PrivateConstructorClass.class);

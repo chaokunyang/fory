@@ -35,6 +35,7 @@ public class ObjectStreamExample extends AbstractMap<Integer, Integer> {
   private static final Fory FORY =
       Fory.builder()
           .withName(ObjectStreamExample.class.getName() + "_compatible_async")
+          .withXlang(false)
           .registerGuavaTypes(false)
           .withRefTracking(true)
           .withCodegen(true)

@@ -31,6 +31,7 @@ public class ExceptionExample {
   private static final Fory FORY =
       Fory.builder()
           .withName(ExceptionExample.class.getName())
+          .withXlang(false)
           .requireClassRegistration(true)
           .withRefTracking(false)
           .build();

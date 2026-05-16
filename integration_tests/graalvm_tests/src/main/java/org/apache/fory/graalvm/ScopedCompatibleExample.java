@@ -32,6 +32,7 @@ public class ScopedCompatibleExample {
     Fory fory =
         Fory.builder()
             .withName(ScopedCompatibleExample.class.getName())
+            .withXlang(false)
             .requireClassRegistration(true)
             .withCompatible(true)
             .build();

@@ -147,6 +147,7 @@ public class AbstractClassExample {
     FORY =
         Fory.builder()
             .withName(AbstractClassExample.class.getName())
+            .withXlang(false)
             .registerGuavaTypes(false)
             .build();
     // Register enum type - abstract enums need to be registered

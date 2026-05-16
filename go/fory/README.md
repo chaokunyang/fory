@@ -115,7 +115,7 @@ The default Fory instance is not thread-safe. For concurrent use:
 ```go
 import "github.com/apache/fory/go/fory/threadsafe"
 
-f := threadsafe.New(fory.WithXlang(false))
+f := threadsafe.New()
 
 // Safe for concurrent use
 go func() { f.Serialize(value1) }()

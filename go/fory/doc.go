@@ -231,11 +231,7 @@ threadsafe package:
 	import "github.com/apache/fory/go/fory/threadsafe"
 
 	// Create thread-safe instance
-	f := threadsafe.New(
-		fory.WithXlang(false),
-		fory.WithTrackRef(true),
-		fory.WithCompatible(true),
-	)
+	f := threadsafe.New()
 
 	// Safe for concurrent use
 	go func() {
@@ -248,7 +244,7 @@ threadsafe package:
 The thread-safe wrapper:
   - Uses sync.Pool for efficient instance reuse
   - Automatically copies serialized data before returning
-  - Accepts the same configuration options as fory.New(fory.WithXlang(false))
+  - Accepts the same configuration options as fory.New()
 
 # Buffer Management
 

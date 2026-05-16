@@ -31,6 +31,7 @@ public class CompatibleExample {
   private static Fory createFory() {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(true)
             .withCompatible(true)
             .withScopedMetaShare(false)

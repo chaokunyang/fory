@@ -37,6 +37,7 @@ public class RecordExample2 {
     Fory fory =
         Fory.builder()
             .withName(RecordExample2.class.getName())
+            .withXlang(false)
             .requireClassRegistration(true)
             .build();
     // register and generate serializer code.

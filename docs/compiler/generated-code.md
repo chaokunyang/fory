@@ -1092,15 +1092,14 @@ public class Node() {
 
   @Ref
   @ForyField(id = 2)
-  public var parent: @Nullable Node? = null
+  public var parent: Node? = null
 }
 ```
 
-Compile generated Kotlin IDL sources with the Kotlin compiler option
-`-Xemit-jvm-type-annotations`. Constructor-based KSP serializers read Kotlin
-source metadata directly, but ref/cycle-owned mutable classes use the Java core
-runtime object path. That runtime path needs JVM-visible type annotations for
-generated nested `@Ref` and `@Nullable` metadata.
+Generated Kotlin IDL sources express nullability with Kotlin `?`, never with
+Fory `@Nullable`. KSP-generated serializers own the descriptor metadata for
+fields, nested nullability, and `@Ref` positions, including mutable classes
+emitted for compiler-detected construction cycles.
 
 Enums generate Kotlin enum classes with stable Fory enum IDs. Unions generate
 sealed classes with `@ForyUnion`; case ID `0` is the unknown-case carrier and
@@ -1147,8 +1146,8 @@ public object AddressbookForyRegistration {
 not pass a serializer instance. Generated Schema IDL registration does not
 install the general Kotlin runtime serializers because those serializers may
 register non-schema Kotlin stdlib classes in the user type-id space. Ref/cycle-
-owned generated classes are registered as schema types and use the runtime
-object path instead of a constructor-based KSP serializer.
+owned generated classes still use generated descriptor metadata; they do not
+depend on JVM-visible `@Nullable` annotations in generated source.
 
 Run the Kotlin IDL peer test with:
 

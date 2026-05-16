@@ -198,8 +198,8 @@ def test_cycle_class_fields():
     node = files["graph/Node.kt"]
     assert "public class Node()" in node
     assert 'public var id: String = ""' in node
-    assert "import org.apache.fory.annotation.Nullable" in node
-    assert "@ForyField(id = 2)\n    public var parent: @Nullable Node? = null" in node
+    assert "import org.apache.fory.annotation.Nullable" not in node
+    assert "@ForyField(id = 2)\n    public var parent: Node? = null" in node
     assert "@ForyField(id = 3)\n    public lateinit var status: Status" in node
     assert "public var ttl: Duration = Duration.ZERO" in node
 
@@ -220,6 +220,7 @@ def test_cycle_defaults():
 
     node = files["graph/Node.kt"]
     assert "public var payload: Int8List = Int8List(0)" in node
-    assert "public var metadata: @Nullable Any? = null" in node
+    assert "import org.apache.fory.annotation.Nullable" not in node
+    assert "public var metadata: Any? = null" in node
     assert "public lateinit var metadata" not in node
     assert "public var payload: Int8List = null" not in node

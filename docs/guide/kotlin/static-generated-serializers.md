@@ -132,8 +132,8 @@ data class NullabilityExample(
 
 Do not use Fory `@Nullable` in hand-written constructor-based Kotlin structs.
 The KSP processor rejects it so the schema is always read from Kotlin source
-nullability. Compiler-generated mutable IDL classes are the exception because
-they are registered on the Java core runtime object path.
+nullability. Compiler-generated Kotlin IDL sources follow the same rule and use
+Kotlin `?` for nullable fields.
 
 ## References
 
@@ -141,10 +141,9 @@ Kotlin constructor-based generated serializers preserve `@Ref` metadata for
 fields, list elements, and map values. Generated reads construct Kotlin values
 through primary constructors, so they do not own cyclic object publication.
 Schema IDL classes that need reference publication are emitted as mutable no-arg
-classes, registered as schema types, and handled by the runtime object path.
-Compile modules that contain those generated mutable IDL classes with
-`-Xemit-jvm-type-annotations`; otherwise the Java runtime path cannot see nested
-Kotlin `@Ref` or generated `@Nullable` type-use metadata.
+classes, while their KSP-generated serializers still own field descriptors,
+nested nullability, and `@Ref` metadata. Generated Kotlin IDL does not require
+`-Xemit-jvm-type-annotations` for Fory schema metadata.
 
 ## Collections
 
@@ -281,8 +280,9 @@ Android shrinking, but user code should only register target classes.
 If a constructor-owned Kotlin xlang struct is registered but its KSP generated
 serializer is missing, Fory fails with a configuration error. Constructor-owned
 structs do not fall back to runtime reflection for Kotlin schema metadata.
-Mutable no-arg schema structs are a separate runtime-object path used by
-generated IDL cycle classes and require JVM-visible type annotations.
+Mutable no-arg schema structs emitted for generated IDL cycle classes also use
+generated descriptor metadata and do not require JVM-visible `@Nullable`
+annotations.
 
 ## Android And R8
 

@@ -192,8 +192,6 @@ class KotlinGenerator(BaseGenerator):
             "org.apache.fory.annotation.ForyStruct",
         }
         self.collect_message_imports(message, imports)
-        if self.needs_runtime_nulls(message, parent_stack):
-            imports.add("org.apache.fory.annotation.Nullable")
         current_stack = [*parent_stack, message]
         lines = self.source_header(imports, self.uses_unsigned_message(message))
         comment = self.format_type_id_comment(message, "//")
@@ -334,7 +332,6 @@ class KotlinGenerator(BaseGenerator):
                 element_optional=field.element_optional,
                 element_ref=field.element_ref,
                 top_level_ref=False,
-                java_nullable_annotations=True,
                 parent_stack=current_stack,
             )
             if field.ref and self.is_ref_target_type(field.field_type, current_stack):
@@ -361,26 +358,22 @@ class KotlinGenerator(BaseGenerator):
         element_optional: bool = False,
         element_ref: bool = False,
         top_level_ref: bool = False,
-        java_nullable_annotations: bool = False,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
         if (
             isinstance(field_type, PrimitiveType)
             and field_type.kind == PrimitiveKind.ANY
         ):
-            return "@Nullable Any?" if java_nullable_annotations else "Any?"
+            return "Any?"
         base = self._generate_non_optional_type(
             field_type,
             element_optional,
             element_ref,
-            java_nullable_annotations,
             parent_stack,
         )
         if top_level_ref and self.is_ref_target_type(field_type, parent_stack):
             base = f"@Ref {base}"
         if nullable and not base.endswith("?"):
-            if java_nullable_annotations:
-                base = f"@Nullable {base}"
             return f"{base}?"
         return base
 
@@ -389,7 +382,6 @@ class KotlinGenerator(BaseGenerator):
         field_type: FieldType,
         element_optional: bool = False,
         element_ref: bool = False,
-        java_nullable_annotations: bool = False,
         parent_stack: Optional[List[Message]] = None,
     ) -> str:
         if isinstance(field_type, PrimitiveType):
@@ -404,7 +396,6 @@ class KotlinGenerator(BaseGenerator):
                 element_optional=False,
                 element_ref=False,
                 top_level_ref=element_ref or field_type.element_ref,
-                java_nullable_annotations=java_nullable_annotations,
                 parent_stack=parent_stack,
             )
             return f"List<{element}>"
@@ -416,7 +407,6 @@ class KotlinGenerator(BaseGenerator):
                 field_type.value_type,
                 nullable=field_type.value_optional,
                 top_level_ref=field_type.value_ref,
-                java_nullable_annotations=java_nullable_annotations,
                 parent_stack=parent_stack,
             )
             return f"Map<{key}, {value}>"
@@ -732,36 +722,6 @@ class KotlinGenerator(BaseGenerator):
                 imports.add("org.apache.fory.annotation.Ref")
             if self.is_array_type_field(field):
                 imports.add("org.apache.fory.annotation.ArrayType")
-
-    def needs_runtime_nulls(
-        self, message: Message, parent_stack: List[Message]
-    ) -> bool:
-        shape = self._construction_shapes.get(
-            self.construction_key(parent_stack, message)
-        )
-        if shape is None or not shape.cycle_owned:
-            return False
-        return any(
-            field.optional or self.has_optional_position(field.field_type)
-            for field in message.fields
-        )
-
-    def has_optional_position(self, field_type: FieldType) -> bool:
-        if isinstance(field_type, PrimitiveType):
-            return field_type.kind == PrimitiveKind.ANY
-        if isinstance(field_type, ListType):
-            return field_type.element_optional or self.has_optional_position(
-                field_type.element_type
-            )
-        if isinstance(field_type, ArrayType):
-            return self.has_optional_position(field_type.element_type)
-        if isinstance(field_type, MapType):
-            return (
-                field_type.value_optional
-                or self.has_optional_position(field_type.key_type)
-                or self.has_optional_position(field_type.value_type)
-            )
-        return False
 
     def collect_union_imports(self, union: Union, imports: Set[str]) -> None:
         for field in union.fields:

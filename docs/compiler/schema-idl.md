@@ -193,12 +193,8 @@ message Payment {
 - Kotlin source uses `package com.mycorp.payment.v1`
 - Type registration still uses the Fory IDL package (`payment`) for cross-language compatibility
 
-If `kotlin_package` is absent, Kotlin uses the FDL package. A compiler
-`--package` override replaces both the FDL package and `kotlin_package` for
-generated source placement. With imports, Kotlin `--package` requires a
-Kotlin-only compile and one effective Kotlin package across the schema set.
-Without `--package`, a Kotlin import graph cannot mix default-package schemas
-with named Kotlin packages.
+If `kotlin_package` is absent, Kotlin uses the FDL package. A Kotlin import
+graph cannot mix default-package schemas with named Kotlin packages.
 
 ### Go Nested Type Style Option
 
@@ -380,10 +376,9 @@ For protobuf extension options, see
 
 For language-specific packages/namespaces:
 
-1. Command-line package override (highest priority)
-2. Language-specific option (`java_package`, `go_package`, `csharp_namespace`,
+1. Language-specific option (`java_package`, `go_package`, `csharp_namespace`,
    `kotlin_package`)
-3. Fory IDL package declaration (fallback)
+2. Fory IDL package declaration (fallback)
 
 **Example:**
 
@@ -392,11 +387,10 @@ package myapp.models;
 option java_package = "com.example.generated";
 ```
 
-| Scenario                  | Java Package Used         |
-| ------------------------- | ------------------------- |
-| No override               | `com.example.generated`   |
-| CLI: `--package=override` | `override`                |
-| No java_package option    | `myapp.models` (fallback) |
+| Scenario               | Java Package Used         |
+| ---------------------- | ------------------------- |
+| `java_package` present | `com.example.generated`   |
+| No `java_package`      | `myapp.models` (fallback) |
 
 ### Cross-Language Type Registration
 

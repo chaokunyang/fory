@@ -196,8 +196,6 @@ class CSharpGenerator(BaseGenerator):
             visit_message(message, [])
 
     def get_csharp_namespace(self) -> str:
-        if self.options.package_override:
-            return self.options.package_override
         csharp_ns = self.schema.get_option("csharp_namespace")
         if csharp_ns:
             return str(csharp_ns)

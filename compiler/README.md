@@ -66,9 +66,6 @@ foryc schema.fdl --output ./generated
 # Generate for specific languages
 foryc schema.fdl --lang java,python,csharp,javascript,scala --output ./generated
 
-# Override package name
-foryc schema.fdl --package myapp.models --output ./generated
-
 # Language-specific output directories (protoc-style)
 foryc schema.fdl --java_out=./src/main/java --python_out=./python/src --csharp_out=./csharp/src/Generated --javascript_out=./javascript --scala_out=./scala/src/main/scala
 
@@ -461,7 +458,6 @@ Options:
                        Default: all
   --output, -o PATH    Output directory
                        Default: ./generated
-  --package TEXT       Override package name from FDL file
   --help               Show help message
 ```
 

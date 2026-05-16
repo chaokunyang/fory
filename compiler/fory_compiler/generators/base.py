@@ -49,7 +49,6 @@ class GeneratorOptions:
     """Options for code generation."""
 
     output_dir: Path
-    package_override: Optional[str] = None
     go_nested_type_style: Optional[str] = None
     swift_namespace_style: Optional[str] = None
     grpc: bool = False
@@ -72,7 +71,7 @@ class BaseGenerator(ABC):
     @property
     def package(self) -> Optional[str]:
         """Get the package name."""
-        return self.options.package_override or self.schema.package
+        return self.schema.package
 
     @abstractmethod
     def generate(self) -> List[GeneratedFile]:

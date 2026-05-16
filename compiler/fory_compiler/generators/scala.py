@@ -136,7 +136,7 @@ class ScalaGenerator(BaseGenerator):
         self._construction_shapes = analyze_shapes(schema)
 
     def get_scala_package(self) -> Optional[str]:
-        return self.options.package_override or self.schema.package
+        return self.schema.package
 
     def get_scala_package_path(self) -> str:
         package = self.get_scala_package()

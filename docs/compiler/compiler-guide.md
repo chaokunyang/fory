@@ -52,36 +52,28 @@ foryc --scan-generated [OPTIONS]
 
 Compile options:
 
-| Option                                | Description                                               | Default       |
-| ------------------------------------- | --------------------------------------------------------- | ------------- |
-| `--lang`                              | Comma-separated target languages                          | `all`         |
-| `--output`, `-o`                      | Output directory                                          | `./generated` |
-| `--package`                           | Override package or namespace name from the Fory IDL file | (from file)   |
-| `-I`, `--proto_path`, `--import_path` | Add directory to import search path (can be repeated)     | (none)        |
-| `--java_out=DST_DIR`                  | Generate Java code in DST_DIR                             | (none)        |
-| `--python_out=DST_DIR`                | Generate Python code in DST_DIR                           | (none)        |
-| `--cpp_out=DST_DIR`                   | Generate C++ code in DST_DIR                              | (none)        |
-| `--go_out=DST_DIR`                    | Generate Go code in DST_DIR                               | (none)        |
-| `--rust_out=DST_DIR`                  | Generate Rust code in DST_DIR                             | (none)        |
-| `--csharp_out=DST_DIR`                | Generate C# code in DST_DIR                               | (none)        |
-| `--javascript_out=DST_DIR`            | Generate JavaScript code in DST_DIR                       | (none)        |
-| `--swift_out=DST_DIR`                 | Generate Swift code in DST_DIR                            | (none)        |
-| `--dart_out=DST_DIR`                  | Generate Dart code in DST_DIR                             | (none)        |
-| `--scala_out=DST_DIR`                 | Generate Scala 3 code in DST_DIR                          | (none)        |
-| `--kotlin_out=DST_DIR`                | Generate Kotlin code in DST_DIR                           | (none)        |
-| `--go_nested_type_style`              | Go nested type naming: `camelcase` or `underscore`        | `underscore`  |
-| `--swift_namespace_style`             | Swift namespace style: `enum` or `flatten`                | `enum`        |
-| `--emit-fdl`                          | Emit translated FDL (for non-FDL inputs)                  | `false`       |
-| `--emit-fdl-path`                     | Write translated FDL to this path (file or directory)     | (stdout)      |
+| Option                                | Description                                           | Default       |
+| ------------------------------------- | ----------------------------------------------------- | ------------- |
+| `--lang`                              | Comma-separated target languages                      | `all`         |
+| `--output`, `-o`                      | Output directory                                      | `./generated` |
+| `-I`, `--proto_path`, `--import_path` | Add directory to import search path (can be repeated) | (none)        |
+| `--java_out=DST_DIR`                  | Generate Java code in DST_DIR                         | (none)        |
+| `--python_out=DST_DIR`                | Generate Python code in DST_DIR                       | (none)        |
+| `--cpp_out=DST_DIR`                   | Generate C++ code in DST_DIR                          | (none)        |
+| `--go_out=DST_DIR`                    | Generate Go code in DST_DIR                           | (none)        |
+| `--rust_out=DST_DIR`                  | Generate Rust code in DST_DIR                         | (none)        |
+| `--csharp_out=DST_DIR`                | Generate C# code in DST_DIR                           | (none)        |
+| `--javascript_out=DST_DIR`            | Generate JavaScript code in DST_DIR                   | (none)        |
+| `--swift_out=DST_DIR`                 | Generate Swift code in DST_DIR                        | (none)        |
+| `--dart_out=DST_DIR`                  | Generate Dart code in DST_DIR                         | (none)        |
+| `--scala_out=DST_DIR`                 | Generate Scala 3 code in DST_DIR                      | (none)        |
+| `--kotlin_out=DST_DIR`                | Generate Kotlin code in DST_DIR                       | (none)        |
+| `--go_nested_type_style`              | Go nested type naming: `camelcase` or `underscore`    | `underscore`  |
+| `--swift_namespace_style`             | Swift namespace style: `enum` or `flatten`            | `enum`        |
+| `--emit-fdl`                          | Emit translated FDL (for non-FDL inputs)              | `false`       |
+| `--emit-fdl-path`                     | Write translated FDL to this path (file or directory) | (stdout)      |
 
 For both `go_nested_type_style` and `swift_namespace_style`, schema-level file options are supported (`option ... = ...;`) and the CLI flag overrides the schema option when both are present.
-
-For Kotlin, `--package` is a single package override for a schema set. All input
-files and imported files must share one effective Kotlin package
-(`kotlin_package` when present, otherwise the Fory IDL package). When imports
-are present, run Kotlin generation separately so every generated Kotlin file
-uses the override. Kotlin import graphs cannot mix default-package schemas with
-named Kotlin packages.
 
 Scan options (with `--scan-generated`):
 
@@ -133,12 +125,6 @@ foryc schema.fdl --lang java,python,csharp,javascript,swift,dart,kotlin
 
 ```bash
 foryc schema.fdl --output ./src/generated
-```
-
-**Override package name:**
-
-```bash
-foryc schema.fdl --package com.myapp.models
 ```
 
 **Compile multiple files:**

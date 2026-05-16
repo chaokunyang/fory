@@ -1061,12 +1061,8 @@ the same Kotlin package need distinct generated file names; duplicate generated
 Kotlin file paths are rejected before files are written.
 
 If `option kotlin_package = "...";` is present, the output path and Kotlin
-package use that option. Otherwise Kotlin uses the FDL package. A compiler
-`--package` override replaces both the FDL package and `kotlin_package` for
-generated source placement. With imports, Kotlin `--package` requires a
-Kotlin-only compile and one effective Kotlin package across the schema set.
-Without `--package`, a Kotlin import graph cannot mix default-package schemas
-with named Kotlin packages.
+package use that option. Otherwise Kotlin uses the FDL package. A Kotlin import
+graph cannot mix default-package schemas with named Kotlin packages.
 Registration still uses the FDL package so cross-language type names stay
 stable.
 

@@ -243,36 +243,8 @@ def collect_schema_graph(
     return entries
 
 
-def validate_kotlin_package_override(
-    graph: List[Tuple[Path, Schema]],
-) -> bool:
-    """Check that one Kotlin --package override can cover all generated files."""
-    packages: Dict[Optional[str], List[str]] = {}
-    for path, schema in graph:
-        packages.setdefault(kotlin_package_for_schema(schema), []).append(str(path))
-    for paths in packages.values():
-        paths.sort()
-    if len(packages) <= 1:
-        return True
-    details = ", ".join(
-        f"{package or '<default>'}: {', '.join(paths)}"
-        for package, paths in sorted(packages.items(), key=lambda item: item[0] or "")
-    )
-    print(
-        "Error: Kotlin --package requires all input schema files to share the "
-        f"same effective Kotlin package before override; found {details}",
-        file=sys.stderr,
-    )
-    return False
-
-
-def validate_kotlin_import_packages(
-    graph: List[Tuple[Path, Schema]],
-    package_override: Optional[str],
-) -> bool:
+def validate_kotlin_import_packages(graph: List[Tuple[Path, Schema]]) -> bool:
     """Check package combinations that Kotlin source cannot compile."""
-    if package_override:
-        return True
     packages = {kotlin_package_for_schema(schema) for _, schema in graph}
     if None not in packages or len(packages) <= 1:
         return True
@@ -291,12 +263,11 @@ def validate_kotlin_import_packages(
 
 def validate_kotlin_output_paths(
     graph: List[Tuple[Path, Schema]],
-    package_override: Optional[str],
 ) -> bool:
     """Check Kotlin output paths for the current generation run."""
     outputs: Dict[str, List[str]] = {}
     for path, schema in graph:
-        for output_path, owner in kotlin_output_paths(schema, package_override):
+        for output_path, owner in kotlin_output_paths(schema):
             outputs.setdefault(output_path, []).append(f"{path} {owner}")
     collisions = {
         output_path: paths for output_path, paths in outputs.items() if len(paths) > 1
@@ -318,8 +289,6 @@ def validate_kotlin_output_paths(
 def validate_kotlin_generation(
     files: List[Path],
     import_paths: List[Path],
-    lang_output_dirs: Dict[str, Path],
-    package_override: Optional[str],
 ) -> bool:
     """Preflight Kotlin package and helper paths before writing output."""
     cache: Dict[Path, Schema] = {}
@@ -329,20 +298,9 @@ def validate_kotlin_generation(
         if file_graph is None:
             return False
         graph.extend(file_graph)
-    has_imports = any(schema.imports for _, schema in graph)
-    if package_override:
-        if has_imports and len(lang_output_dirs) != 1:
-            print(
-                "Error: Kotlin --package with imports requires Kotlin-only "
-                "generation; run Kotlin separately from other targets.",
-                file=sys.stderr,
-            )
-            return False
-        if not validate_kotlin_package_override(graph):
-            return False
-    if not validate_kotlin_import_packages(graph, package_override):
+    if not validate_kotlin_import_packages(graph):
         return False
-    return validate_kotlin_output_paths(graph, package_override)
+    return validate_kotlin_output_paths(graph)
 
 
 def _find_go_module_root(base_go_out: Path) -> Optional[Path]:
@@ -436,13 +394,6 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         type=Path,
         default=Path("./generated"),
         help="Output directory. Default: ./generated",
-    )
-
-    parser.add_argument(
-        "--package",
-        type=str,
-        default=None,
-        help="Override package name from FDL file",
     )
 
     parser.add_argument(
@@ -644,7 +595,6 @@ def get_languages(lang_arg: str) -> List[str]:
 def compile_file(
     file_path: Path,
     lang_output_dirs: Dict[str, Path],
-    package_override: Optional[str] = None,
     import_paths: Optional[List[Path]] = None,
     go_nested_type_style: Optional[str] = None,
     swift_namespace_style: Optional[str] = None,
@@ -658,7 +608,6 @@ def compile_file(
     Args:
         file_path: Path to the IDL file
         lang_output_dirs: Dictionary mapping language name to output directory
-        package_override: Optional package name override
         import_paths: List of import search paths
     """
     print(f"Compiling {file_path}...")
@@ -714,7 +663,6 @@ def compile_file(
     for lang, lang_output in lang_output_dirs.items():
         options = GeneratorOptions(
             output_dir=lang_output,
-            package_override=package_override,
             go_nested_type_style=go_nested_type_style,
             swift_namespace_style=swift_namespace_style,
             grpc=grpc,
@@ -743,7 +691,6 @@ def compile_file(
 def compile_file_recursive(
     file_path: Path,
     lang_output_dirs: Dict[str, Path],
-    package_override: Optional[str],
     import_paths: List[Path],
     go_nested_type_style: Optional[str],
     swift_namespace_style: Optional[str],
@@ -773,12 +720,6 @@ def compile_file_recursive(
         stack.remove(file_path)
         return False
 
-    if package_override and "kotlin" in lang_output_dirs:
-        graph = collect_schema_graph(file_path, import_paths, {}, set())
-        if graph is None or not validate_kotlin_package_override(graph):
-            stack.remove(file_path)
-            return False
-
     if "go" in lang_output_dirs and go_module_root is None:
         go_module_root = resolve_go_module_root(lang_output_dirs["go"], schema)
 
@@ -797,17 +738,6 @@ def compile_file_recursive(
             effective_outputs["go"] = go_out
 
     for imp in schema.imports:
-        import_package_override = None
-        if package_override and "kotlin" in lang_output_dirs:
-            if len(lang_output_dirs) != 1:
-                print(
-                    "Error: Kotlin --package with imports requires Kotlin-only "
-                    "generation; run Kotlin separately from other targets.",
-                    file=sys.stderr,
-                )
-                stack.remove(file_path)
-                return False
-            import_package_override = package_override
         import_path = resolve_import_path(imp.path, file_path, import_paths)
         if import_path is None:
             searched = [str(file_path.parent)]
@@ -825,7 +755,6 @@ def compile_file_recursive(
         if not compile_file_recursive(
             import_path,
             lang_output_dirs,
-            import_package_override,
             import_paths,
             go_nested_type_style,
             swift_namespace_style,
@@ -844,7 +773,6 @@ def compile_file_recursive(
     ok = compile_file(
         file_path,
         effective_outputs,
-        package_override,
         import_paths,
         go_nested_type_style,
         swift_namespace_style,
@@ -921,9 +849,7 @@ def cmd_compile(args: argparse.Namespace) -> int:
             import_paths.append(resolved)
 
     if "kotlin" in lang_output_dirs:
-        if not validate_kotlin_generation(
-            args.files, import_paths, lang_output_dirs, args.package
-        ):
+        if not validate_kotlin_generation(args.files, import_paths):
             return 1
 
     # Create output directories
@@ -943,7 +869,6 @@ def cmd_compile(args: argparse.Namespace) -> int:
             if not compile_file_recursive(
                 file_path,
                 lang_output_dirs,
-                args.package,
                 import_paths,
                 args.go_nested_type_style,
                 args.swift_namespace_style,

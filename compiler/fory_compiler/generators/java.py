@@ -48,12 +48,9 @@ class JavaGenerator(BaseGenerator):
         """Get the Java package name.
 
         Priority:
-        1. Command-line override (options.package_override)
-        2. java_package option from FDL file
-        3. FDL package declaration
+        1. java_package option from FDL file
+        2. FDL package declaration
         """
-        if self.options.package_override:
-            return self.options.package_override
         java_package = self.schema.get_option("java_package")
         if java_package:
             return java_package

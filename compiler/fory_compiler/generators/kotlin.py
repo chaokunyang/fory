@@ -22,7 +22,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from fory_compiler.frontend.utils import parse_idl_file
+from fory_compiler.frontend.utils import parse_idl_file, resolve_import_path
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
     ArrayType,
@@ -39,6 +39,122 @@ from fory_compiler.ir.ast import (
 )
 from fory_compiler.ir.construction import analyze_shapes
 from fory_compiler.ir.types import PrimitiveKind
+
+
+def _to_pascal_case(name: str) -> str:
+    if not name:
+        return name
+    if "_" in name:
+        return "".join(word.capitalize() for word in name.lower().split("_"))
+    if name.isupper():
+        return name.capitalize()
+    return name[0].upper() + name[1:]
+
+
+def kotlin_package_for_schema(
+    schema: Schema, package_override: Optional[str] = None
+) -> Optional[str]:
+    """Return the Kotlin source package for a schema."""
+    return package_override or schema.get_option("kotlin_package") or schema.package
+
+
+def kotlin_registration_prefix(schema: Schema) -> str:
+    """Return the Kotlin registration helper prefix for a schema."""
+    if schema.source_file and not schema.source_file.startswith("<"):
+        cleaned = "".join(
+            char if char.isascii() and (char.isalnum() or char == "_") else "_"
+            for char in Path(schema.source_file).stem
+        )
+        prefix = _to_pascal_case(cleaned) if cleaned else "Schema"
+        if not prefix or not (prefix[0].isalpha() or prefix[0] == "_"):
+            prefix = f"Schema{prefix}"
+        return prefix
+    if schema.package:
+        return _to_pascal_case(schema.package.split(".")[-1])
+    package = kotlin_package_for_schema(schema)
+    if package:
+        return _to_pascal_case(package.split(".")[-1])
+    return ""
+
+
+def kotlin_registration_name(schema: Schema) -> str:
+    """Return the Kotlin registration helper class name for a schema."""
+    prefix = kotlin_registration_prefix(schema)
+    return f"{prefix}ForyRegistration" if prefix else "ForyRegistration"
+
+
+def kotlin_registration_file_path(
+    schema: Schema, package_override: Optional[str] = None
+) -> str:
+    """Return the generated Kotlin registration helper path."""
+    package = kotlin_package_for_schema(schema, package_override)
+    package_path = package.replace(".", "/") if package else ""
+    name = kotlin_registration_name(schema)
+    return f"{package_path}/{name}.kt" if package_path else f"{name}.kt"
+
+
+def _kotlin_source_path(
+    schema: Schema, type_name: str, package_override: Optional[str] = None
+) -> str:
+    package = kotlin_package_for_schema(schema, package_override)
+    package_path = package.replace(".", "/") if package else ""
+    filename = f"{type_name}.kt"
+    return f"{package_path}/{filename}" if package_path else filename
+
+
+def _kotlin_type_name(type_def: object, owners: List[Message]) -> str:
+    if not owners:
+        return type_def.name
+    return "".join(owner.name for owner in owners) + type_def.name
+
+
+def _is_schema_local(type_def: object, schema: Schema) -> bool:
+    if not schema.source_file or schema.source_file.startswith("<"):
+        return True
+    location = getattr(type_def, "location", None)
+    file_path = getattr(location, "file", None) if location else None
+    if not file_path:
+        return True
+    try:
+        return Path(file_path).resolve() == Path(schema.source_file).resolve()
+    except Exception:
+        return file_path == schema.source_file
+
+
+def kotlin_output_paths(
+    schema: Schema,
+    package_override: Optional[str] = None,
+    local_only: bool = False,
+) -> List[Tuple[str, str]]:
+    """Return generated Kotlin output paths and their owning schema elements."""
+    outputs: List[Tuple[str, str]] = []
+
+    def add_type(type_def: object, owners: List[Message], kind: str) -> None:
+        if local_only and not _is_schema_local(type_def, schema):
+            return
+        name = _kotlin_type_name(type_def, owners)
+        outputs.append((_kotlin_source_path(schema, name, package_override), kind))
+
+    def add_message(message: Message, owners: List[Message]) -> None:
+        add_type(message, owners, f"message {message.name}")
+        current_owners = [*owners, message]
+        for enum in message.nested_enums:
+            add_type(enum, current_owners, f"enum {enum.name}")
+        for union in message.nested_unions:
+            add_type(union, current_owners, f"union {union.name}")
+        for nested in message.nested_messages:
+            add_message(nested, current_owners)
+
+    for enum in schema.enums:
+        add_type(enum, [], f"enum {enum.name}")
+    for union in schema.unions:
+        add_type(union, [], f"union {union.name}")
+    for message in schema.messages:
+        add_message(message, [])
+    outputs.append(
+        (kotlin_registration_file_path(schema, package_override), "registration helper")
+    )
+    return outputs
 
 
 class KotlinGenerator(BaseGenerator):
@@ -119,6 +235,10 @@ class KotlinGenerator(BaseGenerator):
 
     def __init__(self, schema: Schema, options):
         super().__init__(schema, options)
+        self._schema_cache: Dict[Path, Schema] = {}
+        self._validate_package_override()
+        self._validate_import_packages()
+        self._validate_output_paths()
         self._construction_shapes = analyze_shapes(schema)
 
     def generate(self) -> List[GeneratedFile]:
@@ -137,27 +257,14 @@ class KotlinGenerator(BaseGenerator):
 
     @property
     def kotlin_package(self) -> Optional[str]:
-        if self.options.package_override:
-            return self.options.package_override
-        kotlin_package = self.schema.get_option("kotlin_package")
-        if kotlin_package:
-            return kotlin_package
-        return self.schema.package
+        return kotlin_package_for_schema(self.schema, self.options.package_override)
 
     def get_kotlin_package_path(self) -> str:
         package = self.kotlin_package
         return package.replace(".", "/") if package else ""
 
     def get_registration_class_name(self) -> str:
-        if self.schema.package:
-            return (
-                self.to_pascal_case(self.schema.package.split(".")[-1])
-                + "ForyRegistration"
-            )
-        package = self.kotlin_package
-        if package:
-            return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
-        return "ForyRegistration"
+        return self._registration_name(self.schema)
 
     def generate_enum_file(
         self, enum: Enum, parent_stack: List[Message]
@@ -455,7 +562,10 @@ class KotlinGenerator(BaseGenerator):
         lines.append(f"public object {class_name} {{")
         lines.append("    public fun register(fory: Fory) {")
         for package, registration in self._imported_regs():
-            lines.append(f"        {package}.{registration}.register(fory)")
+            if package:
+                lines.append(f"        {package}.{registration}.register(fory)")
+            else:
+                lines.append(f"        {registration}.register(fory)")
         registrations = self.registration_order()
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):
@@ -841,8 +951,6 @@ class KotlinGenerator(BaseGenerator):
     def _load_schema(self, file_path: str) -> Optional[Schema]:
         if not file_path:
             return None
-        if not hasattr(self, "_schema_cache"):
-            self._schema_cache = {}
         cache = self._schema_cache
         path = Path(file_path).resolve()
         if path in cache:
@@ -854,20 +962,157 @@ class KotlinGenerator(BaseGenerator):
         cache[path] = schema
         return schema
 
+    def _schema_kotlin_package(self, schema: Schema) -> Optional[str]:
+        return kotlin_package_for_schema(schema)
+
+    def _collect_import_schemas(
+        self, schema: Schema, seen: Set[Path]
+    ) -> List[tuple[Path, Schema]]:
+        resolved_files = getattr(schema, "resolved_import_files", None)
+        if resolved_files:
+            imported_schemas: List[tuple[Path, Schema]] = []
+            for file_path in resolved_files:
+                path = Path(file_path).resolve()
+                if path in seen:
+                    continue
+                seen.add(path)
+                imported_schema = self._load_schema(str(path))
+                if imported_schema is None:
+                    continue
+                imported_schemas.append((path, imported_schema))
+            return imported_schemas
+
+        source_file = schema.source_file
+        if not source_file or source_file.startswith("<"):
+            return []
+        source_path = Path(source_file).resolve()
+        imported_schemas: List[tuple[Path, Schema]] = []
+        for imp in schema.imports:
+            resolved_path = getattr(imp, "resolved_path", None)
+            path = (
+                Path(resolved_path).resolve()
+                if resolved_path
+                else resolve_import_path(imp.path, source_path, [])
+            )
+            if path is None:
+                raise ValueError(
+                    f"Kotlin generator cannot resolve import {imp.path!r} "
+                    f"from {source_file}"
+                )
+            if path in seen:
+                continue
+            seen.add(path)
+            imported_schema = self._load_schema(str(path))
+            if imported_schema is None:
+                continue
+            imported_schemas.append((path, imported_schema))
+            imported_schemas.extend(self._collect_import_schemas(imported_schema, seen))
+        return imported_schemas
+
+    def _validate_package_override(self) -> None:
+        if not self.options.package_override:
+            return
+        root_package = self._schema_kotlin_package(self.schema)
+        mismatches: List[tuple[str, Optional[str]]] = []
+        seen: Set[Path] = set()
+        if self.schema.source_file and not self.schema.source_file.startswith("<"):
+            seen.add(Path(self.schema.source_file).resolve())
+
+        for path, schema in self._collect_import_schemas(self.schema, seen):
+            package = self._schema_kotlin_package(schema)
+            if package != root_package:
+                mismatches.append((str(path), package))
+
+        for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
+            location = getattr(type_def, "location", None)
+            file_path = getattr(location, "file", None) if location else None
+            if not file_path:
+                continue
+            path = Path(file_path).resolve()
+            if path in seen:
+                continue
+            seen.add(path)
+            if (
+                self.schema.source_file
+                and path == Path(self.schema.source_file).resolve()
+            ):
+                continue
+            schema = self._load_schema(str(path))
+            if schema is None:
+                continue
+            package = self._schema_kotlin_package(schema)
+            if package != root_package:
+                mismatches.append((str(path), package))
+        if not mismatches:
+            return
+        root_name = self.schema.source_file or "<input>"
+        root_display = root_package or "<default>"
+        mismatch_display = ", ".join(
+            f"{path} uses {package or '<default>'}" for path, package in mismatches
+        )
+        raise ValueError(
+            "Kotlin --package requires all schema files in an import graph to "
+            "share the same effective Kotlin package before override; "
+            f"{root_name} uses {root_display}, but {mismatch_display}"
+        )
+
+    def _schema_graph(self) -> List[Tuple[str, Schema]]:
+        seen: Set[Path] = set()
+        if self.schema.source_file and not self.schema.source_file.startswith("<"):
+            seen.add(Path(self.schema.source_file).resolve())
+        schemas = [(self.schema.source_file or "<input>", self.schema)]
+        schemas.extend(
+            (str(path), schema)
+            for path, schema in self._collect_import_schemas(self.schema, seen)
+        )
+        return schemas
+
+    def _validate_import_packages(self) -> None:
+        if self.options.package_override:
+            return
+        schemas = self._schema_graph()
+        packages = {self._schema_kotlin_package(schema) for _, schema in schemas}
+        if None not in packages or len(packages) <= 1:
+            return
+        details = ", ".join(
+            f"{source} uses {self._schema_kotlin_package(schema) or '<default>'}"
+            for source, schema in schemas
+        )
+        raise ValueError(
+            "Kotlin imports cannot mix default-package schemas with named "
+            f"Kotlin packages; {details}"
+        )
+
+    def _validate_output_paths(self) -> None:
+        schemas = self._schema_graph()
+        outputs: Dict[str, List[str]] = {}
+        for source, schema in schemas:
+            local_only = schema is self.schema
+            for path, owner in kotlin_output_paths(
+                schema, self.options.package_override, local_only=local_only
+            ):
+                outputs.setdefault(path, []).append(f"{source} {owner}")
+        collisions = {
+            path: sources for path, sources in outputs.items() if len(sources) > 1
+        }
+        if not collisions:
+            return
+        details = ", ".join(
+            f"{path}: {', '.join(sources)}"
+            for path, sources in sorted(collisions.items())
+        )
+        raise ValueError(
+            "Kotlin generated file path collision; rename schema files or schema "
+            f"types, or use distinct Kotlin packages. Collisions: {details}"
+        )
+
     def _kotlin_package_for_schema(self, schema: Schema) -> Optional[str]:
         if self.options.package_override:
             return self.options.package_override
-        return schema.get_option("kotlin_package") or schema.package
+        return self._schema_kotlin_package(schema)
 
     def _registration_name(self, schema: Schema) -> str:
-        if schema.package:
-            return (
-                self.to_pascal_case(schema.package.split(".")[-1]) + "ForyRegistration"
-            )
-        package = self._kotlin_package_for_schema(schema)
-        if package:
-            return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
-        return "ForyRegistration"
+        return kotlin_registration_name(schema)
 
     def _kotlin_package_for_type(self, type_def: object) -> Optional[str]:
         location = getattr(type_def, "location", None)
@@ -883,14 +1128,12 @@ class KotlinGenerator(BaseGenerator):
             if not self.is_imported_type(type_def):
                 continue
             package = self._kotlin_package_for_type(type_def)
-            if not package:
-                continue
             schema = self._load_schema(
                 getattr(getattr(type_def, "location", None), "file", None)
             )
             if schema is None:
                 continue
-            registrations.add((package, self._registration_name(schema)))
+            registrations.add((package or "", self._registration_name(schema)))
         return sorted(registrations)
 
     def safe_identifier(self, name: str) -> str:

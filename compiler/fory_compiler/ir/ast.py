@@ -160,6 +160,7 @@ class Import:
     line: int = 0
     column: int = 0
     location: Optional[SourceLocation] = None
+    resolved_path: Optional[str] = None
 
     def __repr__(self) -> str:
         return f'Import("{self.path}")'
@@ -319,6 +320,7 @@ class Schema:
     )  # File-level options (java_package, go_package, etc.)
     source_file: Optional[str] = None
     source_format: Optional[str] = None
+    resolved_import_files: List[str] = field(default_factory=list)
 
     def __repr__(self) -> str:
         opts = f", options={len(self.options)}" if self.options else ""

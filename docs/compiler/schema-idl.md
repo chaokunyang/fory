@@ -195,7 +195,10 @@ message Payment {
 
 If `kotlin_package` is absent, Kotlin uses the FDL package. A compiler
 `--package` override replaces both the FDL package and `kotlin_package` for
-generated source placement.
+generated source placement. With imports, Kotlin `--package` requires a
+Kotlin-only compile and one effective Kotlin package across the schema set.
+Without `--package`, a Kotlin import graph cannot mix default-package schemas
+with named Kotlin packages.
 
 ### Go Nested Type Style Option
 

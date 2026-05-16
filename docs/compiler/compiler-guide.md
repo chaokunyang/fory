@@ -76,6 +76,13 @@ Compile options:
 
 For both `go_nested_type_style` and `swift_namespace_style`, schema-level file options are supported (`option ... = ...;`) and the CLI flag overrides the schema option when both are present.
 
+For Kotlin, `--package` is a single package override for a schema set. All input
+files and imported files must share one effective Kotlin package
+(`kotlin_package` when present, otherwise the Fory IDL package). When imports
+are present, run Kotlin generation separately so every generated Kotlin file
+uses the override. Kotlin import graphs cannot mix default-package schemas with
+named Kotlin packages.
+
 Scan options (with `--scan-generated`):
 
 | Option       | Description                    | Default |
@@ -259,6 +266,7 @@ Compiling src/main.fdl...
 | Swift      | `swift`      | `.swift`         | Fory Swift model macros                |
 | Dart       | `dart`       | `.dart`          | `@ForyStruct` classes with annotations |
 | Scala      | `scala`      | `.scala`         | Scala 3 models with macro derivation   |
+| Kotlin     | `kotlin`     | `.kt`            | Kotlin models with KSP serializers     |
 
 ## Output Structure
 

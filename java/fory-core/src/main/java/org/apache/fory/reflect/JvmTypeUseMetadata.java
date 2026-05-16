@@ -106,8 +106,7 @@ final class JvmTypeUseMetadata implements TypeUseMetadata.Support {
       int arrayTypeId = arrayTypeId(annotatedType);
       if (arrayTypeId != Types.UNKNOWN) {
         meta =
-            TypeExtMeta.of(
-                arrayTypeId, nullable || defaultNullable, ref != null && ref.enable());
+            TypeExtMeta.of(arrayTypeId, nullable || defaultNullable, ref != null && ref.enable());
       } else if (typeAnnotation != null) {
         int typeId = TypeAnnotationUtils.getTypeId(typeAnnotation, TypeUtils.getRawType(type));
         meta = TypeExtMeta.of(typeId, nullable || defaultNullable, ref != null && ref.enable());
@@ -127,7 +126,8 @@ final class JvmTypeUseMetadata implements TypeUseMetadata.Support {
     if (!rawType.isArray() || !rawType.getComponentType().isPrimitive()) {
       return Types.UNKNOWN;
     }
-    return TypeAnnotationUtils.getArrayTypeIdFromElementType(TypeRef.of(rawType.getComponentType()));
+    return TypeAnnotationUtils.getArrayTypeIdFromElementType(
+        TypeRef.of(rawType.getComponentType()));
   }
 
   @Override

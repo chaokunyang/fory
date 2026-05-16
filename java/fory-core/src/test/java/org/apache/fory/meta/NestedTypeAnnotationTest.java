@@ -326,8 +326,7 @@ public class NestedTypeAnnotationTest extends ForyTestBase {
         assertCollection(fieldType(typeDef, "int8ArrayList"), Types.LIST).getElementType(),
         Types.INT8_ARRAY);
     assertRegistered(
-        assertCollection(fieldType(typeDef, "arrayTypeByteArrayList"), Types.LIST)
-            .getElementType(),
+        assertCollection(fieldType(typeDef, "arrayTypeByteArrayList"), Types.LIST).getElementType(),
         Types.INT8_ARRAY);
     assertRegistered(
         assertCollection(fieldType(typeDef, "uint8ArrayList"), Types.LIST).getElementType(),

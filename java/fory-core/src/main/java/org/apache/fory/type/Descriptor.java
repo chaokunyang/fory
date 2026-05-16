@@ -42,7 +42,6 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicBoolean;
-import org.apache.fory.annotation.ArrayType;
 import org.apache.fory.annotation.BFloat16Type;
 import org.apache.fory.annotation.Expose;
 import org.apache.fory.annotation.Float16Type;

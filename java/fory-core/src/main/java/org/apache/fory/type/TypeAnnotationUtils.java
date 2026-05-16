@@ -49,9 +49,9 @@ import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
 import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.config.Int64Encoding;
-import org.apache.fory.reflect.TypeUseMetadata;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.reflect.TypeUseMetadata;
 
 public class TypeAnnotationUtils {
 
@@ -605,11 +605,6 @@ public class TypeAnnotationUtils {
     return hasArrayTypeTypeUse(field);
   }
 
-  private static boolean hasArrayTypeTypeUse(Field field) {
-    Object typeUse = TypeUseMetadata.fieldTypeUse(field);
-    return typeUse != null && TypeUseMetadata.typeUseAnnotation(typeUse, ArrayType.class) != null;
-  }
-
   public static boolean isArrayType(Method method) {
     if (method == null) {
       return false;
@@ -618,6 +613,11 @@ public class TypeAnnotationUtils {
       return true;
     }
     Object typeUse = TypeUseMetadata.methodReturnTypeUse(method);
+    return typeUse != null && TypeUseMetadata.typeUseAnnotation(typeUse, ArrayType.class) != null;
+  }
+
+  private static boolean hasArrayTypeTypeUse(Field field) {
+    Object typeUse = TypeUseMetadata.fieldTypeUse(field);
     return typeUse != null && TypeUseMetadata.typeUseAnnotation(typeUse, ArrayType.class) != null;
   }
 

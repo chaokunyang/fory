@@ -130,7 +130,6 @@ import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.SerializedLambdaSerializer;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
 import org.apache.fory.serializer.SqlTimeSerializers;
@@ -165,6 +164,7 @@ import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Float16;
 import org.apache.fory.type.Float16Array;
 import org.apache.fory.type.GenericType;
+import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeAnnotationUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
@@ -999,7 +999,7 @@ public class ClassResolver extends TypeResolver {
             || requireJavaSerialization(cls)
             || useReplaceResolveSerializer(cls)
             || Functions.isLambda(cls)
-            || (config.isScalaOptimizationEnabled() && ReflectionUtils.isScalaSingletonObject(cls))
+            || (ScalaTypes.SCALA_AVAILABLE && ReflectionUtils.isScalaSingletonObject(cls))
             || Calendar.class.isAssignableFrom(cls)
             || ZoneId.class.isAssignableFrom(cls)
             || TimeZone.class.isAssignableFrom(cls)
@@ -1270,14 +1270,6 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
-  public void setSerializerFactory(SerializerFactory serializerFactory) {
-    this.extRegistry.serializerFactory = serializerFactory;
-  }
-
-  public SerializerFactory getSerializerFactory() {
-    return extRegistry.serializerFactory;
-  }
-
   /**
    * Set the serializer for <code>cls</code>, overwrite serializer if exists. Note if class info is
    * already related with a class, this method should try to reuse that class info, otherwise jit
@@ -1443,11 +1435,9 @@ public class ClassResolver extends TypeResolver {
       // serialized, which will create a class info with serializer null, see `#writeClassInternal`
       return getGraalvmSerializerClass(typeInfo.serializer);
     } else {
-      if (getSerializerFactory() != null) {
-        Serializer serializer = getSerializerFactory().createSerializer(this, cls);
-        if (serializer != null) {
-          return serializer.getClass();
-        }
+      Serializer serializer = createSerializerFromFactory(cls);
+      if (serializer != null) {
+        return serializer.getClass();
       }
       if (UnknownClass.isUnknowClass(cls)) {
         return UnknownClassSerializers.getSerializer(this, "Unknown", cls).getClass();
@@ -1493,7 +1483,7 @@ public class ClassResolver extends TypeResolver {
               String.format("Class %s doesn't support serialization.", cls));
         }
       }
-      if (config.isScalaOptimizationEnabled() && ReflectionUtils.isScalaSingletonObject(cls)) {
+      if (ScalaTypes.SCALA_AVAILABLE && ReflectionUtils.isScalaSingletonObject(cls)) {
         if (isCollection(cls)) {
           return SingletonCollectionSerializer.class;
         } else if (isMap(cls)) {
@@ -1766,11 +1756,9 @@ public class ClassResolver extends TypeResolver {
       }
     }
 
-    if (extRegistry.serializerFactory != null) {
-      Serializer serializer = extRegistry.serializerFactory.createSerializer(this, cls);
-      if (serializer != null) {
-        return serializer;
-      }
+    Serializer factorySerializer = createSerializerFromFactory(cls);
+    if (factorySerializer != null) {
+      return factorySerializer;
     }
 
     Serializer<?> shimSerializer = shimDispatcher.getSerializer(cls);

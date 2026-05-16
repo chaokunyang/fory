@@ -424,7 +424,7 @@ class TestNamespaceConsistency:
         generator = JavaGenerator(schema, options)
 
         files = generator.generate()
-        registration_file = next(f for f in files if "Registration" in f.path)
+        registration_file = next(f for f in files if "ForyModule" in f.path)
 
         # Should use myapp.models (FDL package) for namespace, not com.mycorp.generated.models
         assert '"myapp.models"' in registration_file.content
@@ -536,7 +536,7 @@ class TestJavaOuterClassname:
 
         files = generator.generate()
 
-        registration_file = next(f for f in files if "Registration" in f.path)
+        registration_file = next(f for f in files if "ForyModule" in f.path)
 
         # Should reference types with outer class prefix
         assert "DescriptorProtos.User.class" in registration_file.content
@@ -630,11 +630,11 @@ class TestJavaOuterClassname:
 
         files = generator.generate()
 
-        # Should generate separate files: Status.java, User.java, Registration.java
+        # Should generate separate files: Status.java, User.java, schema module.
         file_names = [f.path.split("/")[-1] for f in files]
         assert "Status.java" in file_names
         assert "User.java" in file_names
-        assert "MyappForyRegistration.java" in file_names
+        assert "MyappForyModule.java" in file_names
         status_file = next(f for f in files if f.path.endswith("Status.java"))
         assert "import org.apache.fory.annotation.ForyEnumId;" in status_file.content
         assert "UNKNOWN(0);" in status_file.content
@@ -679,7 +679,7 @@ class TestJavaMultipleFiles:
         assert "Status.java" in file_names
         assert "User.java" in file_names
         assert "Order.java" in file_names
-        assert "MyappForyRegistration.java" in file_names
+        assert "MyappForyModule.java" in file_names
 
     def test_multiple_files_false_with_outer_class_generates_single_file(self):
         """Test that java_multiple_files = false with outer class generates single file."""
@@ -705,12 +705,12 @@ class TestJavaMultipleFiles:
 
         files = generator.generate()
 
-        # Should generate only 2 files: outer class and registration
+        # Should generate only 2 files: outer class and schema module
         assert len(files) == 2
 
         file_names = [f.path.split("/")[-1] for f in files]
         assert "MyProtos.java" in file_names
-        assert "MyappForyRegistration.java" in file_names
+        assert "MyappForyModule.java" in file_names
 
     def test_multiple_files_true_overrides_outer_classname(self):
         """Test that java_multiple_files = true overrides java_outer_classname."""

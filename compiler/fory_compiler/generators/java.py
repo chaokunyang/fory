@@ -21,7 +21,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple, Union as TypingUnion
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
-from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.ir.ast import (
     Message,
     Enum,
@@ -44,6 +43,10 @@ class JavaGenerator(BaseGenerator):
     language_name = "java"
     file_extension = ".java"
 
+    def __init__(self, schema: Schema, options):
+        super().__init__(schema, options)
+        self._validate_import_packages()
+
     def get_java_package(self) -> Optional[str]:
         """Get the Java package name.
 
@@ -56,13 +59,9 @@ class JavaGenerator(BaseGenerator):
             return java_package
         return self.schema.package
 
-    def get_registration_class_name(self) -> str:
-        """Get the generated registration class name."""
-        java_package = self.get_java_package()
-        if java_package:
-            parts = java_package.split(".")
-            return self.to_pascal_case(parts[-1]) + "ForyRegistration"
-        return "ForyRegistration"
+    def get_module_class_name(self) -> str:
+        """Get the generated module class name."""
+        return self._module_class_name_for_schema(self.schema)
 
     def get_java_outer_classname(self) -> Optional[str]:
         """Get the Java outer classname if specified.
@@ -115,34 +114,47 @@ class JavaGenerator(BaseGenerator):
         except Exception:
             return path_str
 
-    def _load_schema(self, file_path: str) -> Optional[Schema]:
-        if not file_path:
-            return None
-        if not hasattr(self, "_schema_cache"):
-            self._schema_cache = {}
-        cache: Dict[Path, Schema] = self._schema_cache
-        path = Path(file_path).resolve()
-        if path in cache:
-            return cache[path]
-        try:
-            schema = parse_idl_file(path)
-        except Exception:
-            return None
-        cache[path] = schema
-        return schema
-
     def _java_package_for_schema(self, schema: Schema) -> Optional[str]:
         java_package = schema.get_option("java_package")
         if java_package:
             return java_package
         return schema.package
 
-    def _registration_class_name_for_schema(self, schema: Schema) -> str:
+    def _validate_import_packages(self) -> None:
+        schemas = self._schema_graph()
+        packages = {self._java_package_for_schema(schema) for _, schema in schemas}
+        if None not in packages or len(packages) <= 1:
+            return
+        details = ", ".join(
+            f"{source} uses {self._java_package_for_schema(schema) or '<default>'}"
+            for source, schema in schemas
+        )
+        raise ValueError(
+            "Java imports cannot mix default-package schemas with named "
+            f"Java packages; {details}"
+        )
+
+    def _module_class_name_for_schema(self, schema: Schema) -> str:
         java_package = self._java_package_for_schema(schema)
         if java_package:
             parts = java_package.split(".")
-            return self.to_pascal_case(parts[-1]) + "ForyRegistration"
-        return "ForyRegistration"
+            return self.to_pascal_case(parts[-1]) + "ForyModule"
+        prefix = self._module_prefix_from_source(schema)
+        if prefix:
+            return prefix + "ForyModule"
+        return "ForyModule"
+
+    def _module_prefix_from_source(self, schema: Schema) -> str:
+        if not schema.source_file or schema.source_file.startswith("<"):
+            return ""
+        cleaned = "".join(
+            char if char.isascii() and (char.isalnum() or char == "_") else "_"
+            for char in Path(schema.source_file).stem
+        )
+        prefix = self.to_pascal_case(cleaned) if cleaned else "Schema"
+        if not prefix or not (prefix[0].isalpha() or prefix[0] == "_"):
+            prefix = f"Schema{prefix}"
+        return prefix
 
     def _java_package_for_type(self, type_def: object) -> Optional[str]:
         location = getattr(type_def, "location", None)
@@ -152,25 +164,23 @@ class JavaGenerator(BaseGenerator):
             return None
         return self._java_package_for_schema(schema)
 
-    def _collect_imported_packages(self) -> List[Tuple[str, str]]:
-        packages: Dict[str, str] = {}
+    def _collect_imported_modules(self) -> List[Tuple[str, str]]:
+        modules: Dict[Tuple[str, str], Tuple[str, str]] = {}
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
                 continue
             java_package = self._java_package_for_type(type_def)
-            if not java_package:
-                continue
-            if java_package in packages:
-                continue
             schema = self._load_schema(
                 getattr(getattr(type_def, "location", None), "file", None)
             )
             if schema is None:
                 continue
-            packages[java_package] = self._registration_class_name_for_schema(schema)
+            module = self._module_class_name_for_schema(schema)
+            key = (java_package or "", module)
+            modules.setdefault(key, key)
 
         ordered: List[Tuple[str, str]] = []
-        used: Set[str] = set()
+        used: Set[Tuple[str, str]] = set()
         if self.schema.source_file:
             base_dir = Path(self.schema.source_file).resolve().parent
             for imp in self.schema.imports:
@@ -181,19 +191,20 @@ class JavaGenerator(BaseGenerator):
                 if schema is None:
                     continue
                 java_package = self._java_package_for_schema(schema)
-                if not java_package or java_package in used:
+                module = self._module_class_name_for_schema(schema)
+                key = (java_package or "", module)
+                if key in used:
                     continue
-                reg_class = self._registration_class_name_for_schema(schema)
-                ordered.append((java_package, reg_class))
-                used.add(java_package)
-        for pkg, reg in sorted(packages.items()):
-            if pkg in used:
+                ordered.append(key)
+                used.add(key)
+        for key in sorted(modules):
+            if key in used:
                 continue
-            ordered.append((pkg, reg))
+            ordered.append(key)
         return ordered
 
     def generate_bytes_methods(self, class_name: str) -> List[str]:
-        reg_class = self.get_registration_class_name()
+        reg_class = self.get_module_class_name()
         lines = []
         lines.append("public byte[] toBytes() {")
         lines.append(f"    return {reg_class}.getFory().serialize(this);")
@@ -307,8 +318,8 @@ class JavaGenerator(BaseGenerator):
         if outer_classname and not multiple_files:
             # Generate all types in a single outer class file
             files.append(self.generate_outer_class_file(outer_classname))
-            # Generate registration helper (with outer class prefix)
-            files.append(self.generate_registration_file(outer_classname))
+            # Generate schema module (with outer class prefix)
+            files.append(self.generate_module_file(outer_classname))
         else:
             # Generate separate files for each type
             # Generate enum files (top-level only, nested enums go inside message files)
@@ -329,8 +340,8 @@ class JavaGenerator(BaseGenerator):
                     continue
                 files.append(self.generate_message_file(message))
 
-            # Generate registration helper
-            files.append(self.generate_registration_file())
+            # Generate schema module
+            files.append(self.generate_module_file())
 
         return files
 
@@ -2068,10 +2079,10 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         return lines
 
-    def generate_registration_file(
+    def generate_module_file(
         self, outer_classname: Optional[str] = None
     ) -> GeneratedFile:
-        """Generate the Fory registration helper class.
+        """Generate the Fory schema module class.
 
         Args:
             outer_classname: If set, all type references will be prefixed with this outer class.
@@ -2080,7 +2091,7 @@ class JavaGenerator(BaseGenerator):
         java_package = self.get_java_package()
 
         # Determine class name
-        class_name = self.get_registration_class_name()
+        class_name = self.get_module_class_name()
 
         # License header
         lines.append(self.get_license_header())
@@ -2097,7 +2108,15 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
 
         # Class
-        lines.append(f"public class {class_name} {{")
+        lines.append(
+            f"public final class {class_name} implements org.apache.fory.ForyModule {{"
+        )
+        lines.append(
+            f"    public static final {class_name} INSTANCE = new {class_name}();"
+        )
+        lines.append("")
+        lines.append(f"    private {class_name}() {{")
+        lines.append("    }")
         lines.append("")
         lines.append("    static ThreadSafeFory getFory() {")
         lines.append("        return Holder.FORY;")
@@ -2105,18 +2124,8 @@ class JavaGenerator(BaseGenerator):
         lines.append("")
         lines.append("    private static ThreadSafeFory createFory() {")
         lines.append(
-            "        ThreadSafeFory fory = Fory.builder().withXlang(true).withCompatible(true).withRefTracking(true).buildThreadSafeFory();"
+            "        return Fory.builder().withXlang(true).withCompatible(true).withRefTracking(true).withModule(INSTANCE).buildThreadSafeFory();"
         )
-        imported_packages = self._collect_imported_packages()
-        if imported_packages:
-            lines.append("        fory.registerCallback(f -> {")
-            for java_package, reg_class in imported_packages:
-                lines.append(f"            {java_package}.{reg_class}.register(f);")
-            lines.append("            register(f);")
-            lines.append("        });")
-        else:
-            lines.append("        fory.registerCallback(f -> register(f));")
-        lines.append("        return fory;")
         lines.append("    }")
         lines.append("")
         lines.append("    private static class Holder {")
@@ -2133,7 +2142,16 @@ class JavaGenerator(BaseGenerator):
         local_messages = [
             m for m in self.schema.messages if not self.is_imported_type(m)
         ]
-        lines.append("    public static void register(Fory fory) {")
+        lines.append("    @Override")
+        lines.append("    public void install(Fory fory) {")
+        imported_modules = self._collect_imported_modules()
+        for java_package, module in imported_modules:
+            if java_package:
+                lines.append(
+                    f"        fory.register({java_package}.{module}.INSTANCE);"
+                )
+            else:
+                lines.append(f"        fory.register({module}.INSTANCE);")
         lines.append(
             "        org.apache.fory.resolver.TypeResolver resolver = fory.getTypeResolver();"
         )

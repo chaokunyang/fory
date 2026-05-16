@@ -23,7 +23,6 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.resolver.TypeChecker;
-import org.apache.fory.serializer.SerializerFactory;
 
 /**
  * Thread-safe serializer interface. {@link Fory} is not thread-safe; implementations of this
@@ -46,13 +45,6 @@ public interface ThreadSafeFory extends BaseFory {
    * @param typeChecker {@link TypeChecker} for type checking
    */
   void setTypeChecker(TypeChecker typeChecker);
-
-  /**
-   * Set tSerializerFactory of serializer for current thread only.
-   *
-   * @param serializerFactory {@link SerializerFactory} for serializerFactory
-   */
-  void setSerializerFactory(SerializerFactory serializerFactory);
 
   @Internal
   void registerCallback(Consumer<Fory> callback);

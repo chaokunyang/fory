@@ -20,41 +20,41 @@
 package org.apache.fory.idl_tests;
 
 import addressbook.AddressBook;
-import addressbook.AddressbookForyRegistration;
+import addressbook.AddressbookForyModule;
 import addressbook.Animal;
 import addressbook.Cat;
 import addressbook.Dog;
 import addressbook.Person;
 import addressbook.Person.PhoneNumber;
 import addressbook.Person.PhoneType;
-import any_example.AnyExampleForyRegistration;
+import any_example.AnyExampleForyModule;
 import any_example.AnyHolder;
 import any_example.AnyInner;
 import any_example.AnyUnion;
-import auto_id.AutoIdForyRegistration;
+import auto_id.AutoIdForyModule;
 import auto_id.Envelope;
 import auto_id.Wrapper;
-import collection.CollectionForyRegistration;
+import collection.CollectionForyModule;
 import collection.NumericCollectionArrayUnion;
 import collection.NumericCollectionUnion;
 import collection.NumericCollections;
 import collection.NumericCollectionsArray;
-import complex_fbs.ComplexFbsForyRegistration;
+import complex_fbs.ComplexFbsForyModule;
 import complex_fbs.Container;
 import complex_fbs.Metric;
 import complex_fbs.Note;
 import complex_fbs.Payload;
 import complex_fbs.ScalarPack;
 import complex_fbs.Status;
-import complex_pb.ComplexPbForyRegistration;
+import complex_pb.ComplexPbForyModule;
 import complex_pb.PrimitiveTypes;
-import evolving1.Evolving1ForyRegistration;
+import evolving1.Evolving1ForyModule;
 import evolving1.EvolvingMessage;
 import evolving1.EvolvingSizeMessage;
 import evolving1.FixedMessage;
 import evolving1.FixedSizeMessage;
-import evolving2.Evolving2ForyRegistration;
-import example.ExampleForyRegistration;
+import evolving2.Evolving2ForyModule;
+import example.ExampleForyModule;
 import example.ExampleLeaf;
 import example.ExampleLeafUnion;
 import example.ExampleMessage;
@@ -62,7 +62,7 @@ import example.ExampleMessageUnion;
 import example.ExampleState;
 import graph.Edge;
 import graph.Graph;
-import graph.GraphForyRegistration;
+import graph.GraphForyModule;
 import graph.Node;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -85,12 +85,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import monster.Color;
 import monster.Monster;
-import monster.MonsterForyRegistration;
+import monster.MonsterForyModule;
 import monster.Vec3;
-import nested_name.NestedNameForyRegistration;
+import nested_name.NestedNameForyModule;
 import optional_types.AllOptionalTypes;
 import optional_types.OptionalHolder;
-import optional_types.OptionalTypesForyRegistration;
+import optional_types.OptionalTypesForyModule;
 import optional_types.OptionalUnion;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.BFloat16List;
@@ -113,7 +113,7 @@ import org.apache.fory.type.Float16Array;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 import root.MultiHolder;
-import tree.TreeForyRegistration;
+import tree.TreeForyModule;
 import tree.TreeNode;
 
 public class IdlRoundTripTest {
@@ -155,7 +155,7 @@ public class IdlRoundTripTest {
 
   private void runAddressBookRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
-    AddressbookForyRegistration.register(fory);
+    fory.register(AddressbookForyModule.INSTANCE);
 
     AddressBook book = buildAddressBook();
     byte[] bytes = fory.serialize(book);
@@ -183,7 +183,7 @@ public class IdlRoundTripTest {
 
   private void runAutoIdRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
-    AutoIdForyRegistration.register(fory);
+    fory.register(AutoIdForyModule.INSTANCE);
 
     Envelope envelope = buildAutoIdEnvelope();
     byte[] bytes = fory.serialize(envelope);
@@ -217,7 +217,7 @@ public class IdlRoundTripTest {
 
   private void runNestedNameRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildRefFory(compatible);
-    NestedNameForyRegistration.register(fory);
+    fory.register(NestedNameForyModule.INSTANCE);
 
     nested_name.Envelope envelope = buildNestedNameEnvelope();
     byte[] bytes = fory.serialize(envelope);
@@ -246,8 +246,8 @@ public class IdlRoundTripTest {
   private void runEvolvingRoundTrip() {
     Fory foryV1 = buildFory(true);
     Fory foryV2 = buildFory(true);
-    Evolving1ForyRegistration.register(foryV1);
-    Evolving2ForyRegistration.register(foryV2);
+    foryV1.register(Evolving1ForyModule.INSTANCE);
+    foryV2.register(Evolving2ForyModule.INSTANCE);
 
     EvolvingMessage messageV1 = new EvolvingMessage();
     messageV1.setId(1);
@@ -372,8 +372,8 @@ public class IdlRoundTripTest {
 
   private void runPrimitiveTypesRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
-    AddressbookForyRegistration.register(fory);
-    ComplexPbForyRegistration.register(fory);
+    fory.register(AddressbookForyModule.INSTANCE);
+    fory.register(ComplexPbForyModule.INSTANCE);
 
     PrimitiveTypes types = buildPrimitiveTypes();
     byte[] bytes = fory.serialize(types);
@@ -411,7 +411,7 @@ public class IdlRoundTripTest {
 
   private void runCollectionRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
-    CollectionForyRegistration.register(fory);
+    fory.register(CollectionForyModule.INSTANCE);
 
     NumericCollections collections = buildNumericCollections();
     NumericCollectionUnion collectionUnion = buildNumericCollectionUnion();
@@ -494,7 +494,7 @@ public class IdlRoundTripTest {
 
   private void runExampleRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
-    ExampleForyRegistration.register(fory);
+    fory.register(ExampleForyModule.INSTANCE);
 
     ExampleMessage message = buildExampleMessage();
     byte[] messageBytes = fory.serialize(message);
@@ -547,7 +547,7 @@ public class IdlRoundTripTest {
 
   private void runOptionalTypesRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
-    OptionalTypesForyRegistration.register(fory);
+    fory.register(OptionalTypesForyModule.INSTANCE);
 
     OptionalHolder holder = buildOptionalHolder();
     byte[] bytes = fory.serialize(holder);
@@ -585,7 +585,7 @@ public class IdlRoundTripTest {
 
   private void runAnyRoundTrip(boolean compatible) {
     Fory fory = buildFory(compatible);
-    AnyExampleForyRegistration.register(fory);
+    fory.register(AnyExampleForyModule.INSTANCE);
 
     AnyHolder holder = buildAnyHolder();
     byte[] bytes = fory.serialize(holder);
@@ -607,7 +607,7 @@ public class IdlRoundTripTest {
 
   private void runTreeRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildRefFory(compatible);
-    TreeForyRegistration.register(fory);
+    fory.register(TreeForyModule.INSTANCE);
 
     TreeNode tree = buildTree();
     byte[] bytes = fory.serialize(tree);
@@ -646,7 +646,7 @@ public class IdlRoundTripTest {
 
   private void runGraphRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildRefFory(compatible);
-    GraphForyRegistration.register(fory);
+    fory.register(GraphForyModule.INSTANCE);
 
     Graph graph = buildGraph();
     byte[] bytes = fory.serialize(graph);
@@ -685,8 +685,8 @@ public class IdlRoundTripTest {
 
   private void runFlatbuffersRoundTrip(boolean compatible) throws Exception {
     Fory fory = buildFory(compatible);
-    MonsterForyRegistration.register(fory);
-    ComplexFbsForyRegistration.register(fory);
+    fory.register(MonsterForyModule.INSTANCE);
+    fory.register(ComplexFbsForyModule.INSTANCE);
 
     Monster monster = buildMonster();
     byte[] monsterBytes = fory.serialize(monster);

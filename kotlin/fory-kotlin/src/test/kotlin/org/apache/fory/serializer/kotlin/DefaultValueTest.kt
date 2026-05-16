@@ -19,7 +19,7 @@
 
 package org.apache.fory.serializer.kotlin
 
-import org.apache.fory.Fory
+import org.apache.fory.kotlin.ForyKotlin
 import org.testng.Assert.*
 import org.testng.annotations.Test
 
@@ -131,8 +131,7 @@ class DefaultValueTest {
 
   @Test
   fun testDefaultValueDeserialization() {
-    val fory = Fory.builder().requireClassRegistration(false).withCompatible(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory = ForyKotlin.builder().requireClassRegistration(false).withCompatible(true).build()
     val obj = ClassNoDefaults("test")
     val serialized = fory.serialize(obj)
     val deserialized = fory.deserialize(serialized, ClassWithDefaults::class.java)

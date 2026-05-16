@@ -22,7 +22,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
-from fory_compiler.frontend.utils import parse_idl_file, resolve_import_path
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
 from fory_compiler.ir.ast import (
     ArrayType,
@@ -56,8 +55,8 @@ def kotlin_package_for_schema(schema: Schema) -> Optional[str]:
     return schema.get_option("kotlin_package") or schema.package
 
 
-def kotlin_registration_prefix(schema: Schema) -> str:
-    """Return the Kotlin registration helper prefix for a schema."""
+def kotlin_module_prefix(schema: Schema) -> str:
+    """Return the Kotlin schema module prefix for a schema."""
     if schema.source_file and not schema.source_file.startswith("<"):
         cleaned = "".join(
             char if char.isascii() and (char.isalnum() or char == "_") else "_"
@@ -75,17 +74,17 @@ def kotlin_registration_prefix(schema: Schema) -> str:
     return ""
 
 
-def kotlin_registration_name(schema: Schema) -> str:
-    """Return the Kotlin registration helper class name for a schema."""
-    prefix = kotlin_registration_prefix(schema)
-    return f"{prefix}ForyRegistration" if prefix else "ForyRegistration"
+def kotlin_module_name(schema: Schema) -> str:
+    """Return the Kotlin schema module class name."""
+    prefix = kotlin_module_prefix(schema)
+    return f"{prefix}ForyModule" if prefix else "ForyModule"
 
 
-def kotlin_registration_file_path(schema: Schema) -> str:
-    """Return the generated Kotlin registration helper path."""
+def kotlin_module_file_path(schema: Schema) -> str:
+    """Return the generated Kotlin schema module path."""
     package = kotlin_package_for_schema(schema)
     package_path = package.replace(".", "/") if package else ""
-    name = kotlin_registration_name(schema)
+    name = kotlin_module_name(schema)
     return f"{package_path}/{name}.kt" if package_path else f"{name}.kt"
 
 
@@ -144,7 +143,7 @@ def kotlin_output_paths(
         add_type(union, [], f"union {union.name}")
     for message in schema.messages:
         add_message(message, [])
-    outputs.append((kotlin_registration_file_path(schema), "registration helper"))
+    outputs.append((kotlin_module_file_path(schema), "schema module"))
     return outputs
 
 
@@ -242,7 +241,7 @@ class KotlinGenerator(BaseGenerator):
         for message in self.schema.messages:
             if not self.is_imported_type(message):
                 files.extend(self.generate_message_files(message, []))
-        files.append(self.generate_registration_file())
+        files.append(self.generate_module_file())
         return files
 
     @property
@@ -253,8 +252,8 @@ class KotlinGenerator(BaseGenerator):
         package = self.kotlin_package
         return package.replace(".", "/") if package else ""
 
-    def get_registration_class_name(self) -> str:
-        return self._registration_name(self.schema)
+    def get_module_name(self) -> str:
+        return self._module_name(self.schema)
 
     def generate_enum_file(
         self, enum: Enum, parent_stack: List[Message]
@@ -387,7 +386,10 @@ class KotlinGenerator(BaseGenerator):
         current_stack = [*parent_stack, message]
         for field in message.fields:
             lines.extend(self.generate_constructor_property(field, current_stack))
-        lines.append(")")
+        lines.append(") {")
+        lines.extend(self.generate_to_bytes(1))
+        lines.extend(self.generate_from_bytes(message, parent_stack, 1))
+        lines.append("}")
         return lines
 
     def generate_constructor_property(
@@ -440,8 +442,31 @@ class KotlinGenerator(BaseGenerator):
                     f"    public var {field_name}: {field_type} = {default_value}"
                 )
             lines.append("")
+        lines.extend(self.generate_to_bytes(1))
+        lines.extend(self.generate_from_bytes(message, parent_stack, 1))
         lines.append("}")
         return lines
+
+    def generate_to_bytes(self, indent: int) -> List[str]:
+        ind = "    " * indent
+        module = self.get_module_name()
+        return [
+            f"{ind}public fun toBytes(): ByteArray = {module}.getFory().serialize(this)",
+            "",
+        ]
+
+    def generate_from_bytes(
+        self, message: Message, parent_stack: List[Message], indent: int
+    ) -> List[str]:
+        ind = "    " * indent
+        module = self.get_module_name()
+        name = self.type_name(message, parent_stack)
+        return [
+            f"{ind}public companion object {{",
+            f"{ind}    public fun fromBytes(bytes: ByteArray): {name} =",
+            f"{ind}        {module}.getFory().deserialize(bytes, {name}::class.java)",
+            f"{ind}}}",
+        ]
 
     def generate_type(
         self,
@@ -541,21 +566,34 @@ class KotlinGenerator(BaseGenerator):
             return f"List<{self._generate_non_optional_type(field_type)}>"
         return self.ARRAY_MAP[field_type.kind]
 
-    def generate_registration_file(self) -> GeneratedFile:
+    def generate_module_file(self) -> GeneratedFile:
         imports = {
             "org.apache.fory.Fory",
+            "org.apache.fory.ForyModule",
             "org.apache.fory.ThreadSafeFory",
+            "org.apache.fory.kotlin.ForyKotlin",
             "org.apache.fory.serializer.kotlin.KotlinSerializers",
         }
         lines = self.source_header(imports, needs_unsigned_opt_in=False)
-        class_name = self.get_registration_class_name()
-        lines.append(f"public object {class_name} {{")
-        lines.append("    public fun register(fory: Fory) {")
+        class_name = self.get_module_name()
+        lines.append(f"public object {class_name} : ForyModule {{")
+        lines.append("    private val fory: ThreadSafeFory by lazy {")
+        lines.append("        ForyKotlin.builder()")
+        lines.append("            .withXlang(true)")
+        lines.append("            .withCompatible(true)")
+        lines.append("            .withRefTracking(true)")
+        lines.append("            .withModule(this)")
+        lines.append("            .buildThreadSafeFory()")
+        lines.append("    }")
+        lines.append("")
+        lines.append("    internal fun getFory(): ThreadSafeFory = fory")
+        lines.append("")
+        lines.append("    override fun install(fory: Fory) {")
         for package, registration in self._imported_regs():
             if package:
-                lines.append(f"        {package}.{registration}.register(fory)")
+                lines.append(f"        fory.register({package}.{registration})")
             else:
-                lines.append(f"        {registration}.register(fory)")
+                lines.append(f"        fory.register({registration})")
         registrations = self.registration_order()
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):
@@ -567,10 +605,6 @@ class KotlinGenerator(BaseGenerator):
                 self.serializer_registration(lines, type_def, owner_path)
             else:
                 self.generate_type_registration(lines, type_def, owner_path)
-        lines.append("    }")
-        lines.append("")
-        lines.append("    public fun register(fory: ThreadSafeFory) {")
-        lines.append("        fory.registerCallback { runtime -> register(runtime) }")
         lines.append("    }")
         lines.append("}")
         return self.source_file(class_name, lines)
@@ -938,77 +972,8 @@ class KotlinGenerator(BaseGenerator):
         except Exception:
             return path_str
 
-    def _load_schema(self, file_path: str) -> Optional[Schema]:
-        if not file_path:
-            return None
-        cache = self._schema_cache
-        path = Path(file_path).resolve()
-        if path in cache:
-            return cache[path]
-        try:
-            schema = parse_idl_file(path)
-        except Exception:
-            return None
-        cache[path] = schema
-        return schema
-
     def _schema_kotlin_package(self, schema: Schema) -> Optional[str]:
         return kotlin_package_for_schema(schema)
-
-    def _collect_import_schemas(
-        self, schema: Schema, seen: Set[Path]
-    ) -> List[tuple[Path, Schema]]:
-        resolved_files = getattr(schema, "resolved_import_files", None)
-        if resolved_files:
-            imported_schemas: List[tuple[Path, Schema]] = []
-            for file_path in resolved_files:
-                path = Path(file_path).resolve()
-                if path in seen:
-                    continue
-                seen.add(path)
-                imported_schema = self._load_schema(str(path))
-                if imported_schema is None:
-                    continue
-                imported_schemas.append((path, imported_schema))
-            return imported_schemas
-
-        source_file = schema.source_file
-        if not source_file or source_file.startswith("<"):
-            return []
-        source_path = Path(source_file).resolve()
-        imported_schemas: List[tuple[Path, Schema]] = []
-        for imp in schema.imports:
-            resolved_path = getattr(imp, "resolved_path", None)
-            path = (
-                Path(resolved_path).resolve()
-                if resolved_path
-                else resolve_import_path(imp.path, source_path, [])
-            )
-            if path is None:
-                raise ValueError(
-                    f"Kotlin generator cannot resolve import {imp.path!r} "
-                    f"from {source_file}"
-                )
-            if path in seen:
-                continue
-            seen.add(path)
-            imported_schema = self._load_schema(str(path))
-            if imported_schema is None:
-                continue
-            imported_schemas.append((path, imported_schema))
-            imported_schemas.extend(self._collect_import_schemas(imported_schema, seen))
-        return imported_schemas
-
-    def _schema_graph(self) -> List[Tuple[str, Schema]]:
-        seen: Set[Path] = set()
-        if self.schema.source_file and not self.schema.source_file.startswith("<"):
-            seen.add(Path(self.schema.source_file).resolve())
-        schemas = [(self.schema.source_file or "<input>", self.schema)]
-        schemas.extend(
-            (str(path), schema)
-            for path, schema in self._collect_import_schemas(self.schema, seen)
-        )
-        return schemas
 
     def _validate_import_packages(self) -> None:
         schemas = self._schema_graph()
@@ -1048,8 +1013,8 @@ class KotlinGenerator(BaseGenerator):
     def _kotlin_package_for_schema(self, schema: Schema) -> Optional[str]:
         return self._schema_kotlin_package(schema)
 
-    def _registration_name(self, schema: Schema) -> str:
-        return kotlin_registration_name(schema)
+    def _module_name(self, schema: Schema) -> str:
+        return kotlin_module_name(schema)
 
     def _kotlin_package_for_type(self, type_def: object) -> Optional[str]:
         location = getattr(type_def, "location", None)
@@ -1070,7 +1035,7 @@ class KotlinGenerator(BaseGenerator):
             )
             if schema is None:
                 continue
-            registrations.add((package or "", self._registration_name(schema)))
+            registrations.add((package or "", self._module_name(schema)))
         return sorted(registrations)
 
     def safe_identifier(self, name: str) -> str:

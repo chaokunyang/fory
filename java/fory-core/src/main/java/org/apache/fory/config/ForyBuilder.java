@@ -26,6 +26,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import org.apache.fory.Fory;
+import org.apache.fory.ForyModule;
 import org.apache.fory.ThreadLocalFory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.logging.Logger;
@@ -35,12 +36,12 @@ import org.apache.fory.meta.MetaCompressor;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.pool.ThreadPoolFory;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.serializer.JavaSerializer;
 import org.apache.fory.serializer.ObjectStreamSerializer;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.TimeSerializers;
 import org.apache.fory.serializer.collection.GuavaCollectionSerializers;
 import org.apache.fory.util.ExceptionUtils;
@@ -92,7 +93,6 @@ public final class ForyBuilder {
   Boolean deserializeUnknownClass;
   boolean asyncCompilationEnabled = false;
   boolean registerGuavaTypes = true;
-  boolean scalaOptimizationEnabled = false;
   boolean suppressClassRegistrationWarnings = true;
   UnknownEnumValueStrategy unknownEnumValueStrategy = UnknownEnumValueStrategy.NOT_ALLOWED;
   boolean serializeEnumByName = false;
@@ -104,6 +104,8 @@ public final class ForyBuilder {
   float mapRefLoadFactor = 0.51f;
   boolean forVirtualThread = false;
   TypeChecker typeChecker;
+  private final List<SerializerFactory> serializerFactories = new ArrayList<>();
+  private final List<ForyModule> modules = new ArrayList<>();
   private List<Consumer<ForyBuilder>> actions = new ArrayList<>();
   private boolean replayingActions = false;
   private boolean nameExplicitlySet = false;
@@ -388,6 +390,35 @@ public final class ForyBuilder {
   }
 
   /**
+   * Registers an additional serializer factory for Fory instances built by this builder.
+   *
+   * <p>Builder serializer factories are installed before module-provided factories, so custom
+   * factories are queried before language-module fallback factories.
+   */
+  public ForyBuilder withSerializerFactory(SerializerFactory serializerFactory) {
+    SerializerFactory checkedFactory = Objects.requireNonNull(serializerFactory);
+    serializerFactories.add(checkedFactory);
+    recordAction(b -> b.withSerializerFactory(checkedFactory));
+    return this;
+  }
+
+  /**
+   * Installs a runtime module into every Fory instance created by this builder.
+   *
+   * <p>Repeated registration of the same module object is ignored. Dedupe uses identity, not {@link
+   * Object#equals(Object)}, so distinct module instances are installed independently.
+   */
+  public ForyBuilder withModule(ForyModule module) {
+    ForyModule checkedModule = Objects.requireNonNull(module);
+    if (containsModule(checkedModule)) {
+      return this;
+    }
+    modules.add(checkedModule);
+    recordAction(b -> b.withModule(checkedModule));
+    return this;
+  }
+
+  /**
    * Whether suppress class registration warnings. The warnings can be used for security audit, but
    * may be annoying, this suppression will be enabled by default.
    *
@@ -516,23 +547,6 @@ public final class ForyBuilder {
     return this;
   }
 
-  /** Whether enable scala-specific serialization optimization. */
-  public ForyBuilder withScalaOptimizationEnabled(boolean enableScalaOptimization) {
-    this.scalaOptimizationEnabled = enableScalaOptimization;
-    if (enableScalaOptimization) {
-      try {
-        Class.forName(
-            ReflectionUtils.getPackage(Fory.class) + ".serializer.scala.ScalaSerializers");
-      } catch (ClassNotFoundException e) {
-        LOG.warn(
-            "`fory-scala` library is not in the classpath, please add it to class path and invoke "
-                + "`org.apache.fory.serializer.scala.ScalaSerializers.registerSerializers` for peek performance");
-      }
-    }
-    recordAction(b -> b.withScalaOptimizationEnabled(enableScalaOptimization));
-    return this;
-  }
-
   /** Set name for Fory serialization. */
   public ForyBuilder withName(String name) {
     this.name = name;
@@ -544,6 +558,24 @@ public final class ForyBuilder {
   private void recordAction(Consumer<ForyBuilder> action) {
     if (!replayingActions) {
       actions.add(action);
+    }
+  }
+
+  private boolean containsModule(ForyModule module) {
+    for (int i = 0; i < modules.size(); i++) {
+      if (modules.get(i) == module) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private void install(Fory fory) {
+    for (int i = 0; i < serializerFactories.size(); i++) {
+      fory.registerSerializerFactory(serializerFactories.get(i));
+    }
+    for (int i = 0; i < modules.size(); i++) {
+      fory.register(modules.get(i));
     }
   }
 
@@ -672,7 +704,9 @@ public final class ForyBuilder {
   private static Fory newFory(
       ForyBuilder builder, ClassLoader classLoader, SharedRegistry sharedRegistry) {
     try {
-      return new Fory(builder, classLoader, sharedRegistry);
+      Fory fory = new Fory(builder, classLoader, sharedRegistry);
+      builder.install(fory);
+      return fory;
     } catch (Throwable t) {
       t.printStackTrace();
       LOG.error("Fory creation failed with classloader {}", classLoader);

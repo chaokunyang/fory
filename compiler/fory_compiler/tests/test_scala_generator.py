@@ -17,6 +17,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from fory_compiler.cli import resolve_imports
 from fory_compiler.frontend.fdl.lexer import Lexer
 from fory_compiler.frontend.fdl.parser import Parser
@@ -378,7 +380,20 @@ def test_scala_generator_uses_jvm_nested_names_for_name_registration():
         """
     )
 
-    registration = files["demo/DemoForyRegistration.scala"]
+    envelope = files["demo/Envelope.scala"]
+    assert "def toBytes(): Array[Byte] =" in envelope
+    assert "DemoForyModule.getFory.serialize(this)" in envelope
+    assert "def fromBytes(bytes: Array[Byte]): Envelope =" in envelope
+    assert (
+        "DemoForyModule.getFory.deserialize(bytes).asInstanceOf[Envelope]" in envelope
+    )
+
+    registration = files["demo/DemoForyModule.scala"]
+    assert "object DemoForyModule extends org.apache.fory.ForyModule" in registration
+    assert "ForyScala.builder()" in registration
+    assert ".withModule(this)" in registration
+    assert "private[demo] def getFory: ThreadSafeFory = fory" in registration
+    assert "override def install(fory: Fory): Unit" in registration
     assert (
         'ForySerializer.registerType(fory, classOf[Envelope], "demo", "Envelope")'
         in registration
@@ -402,6 +417,22 @@ def test_scala_generator_uses_jvm_nested_names_for_name_registration():
     assert "ForySerializer.registerSerializer(fory, classOf[Envelope])" in registration
 
 
+def test_scala_default_package_helper_runtime():
+    files = generate_scala(
+        """
+        message User [id=200] {
+            string name = 1;
+        }
+        """
+    )
+
+    user = files["User.scala"]
+    assert "ForyModule.getFory.serialize(this)" in user
+    registration = files["ForyModule.scala"]
+    assert "def getFory: ThreadSafeFory = fory" in registration
+    assert "private def getFory" not in registration
+
+
 def test_scala_generator_pre_registers_message_type_graph_before_serializers():
     files = generate_scala(
         """
@@ -417,7 +448,7 @@ def test_scala_generator_pre_registers_message_type_graph_before_serializers():
         """
     )
 
-    registration = files["graph/GraphForyRegistration.scala"]
+    registration = files["graph/GraphForyModule.scala"]
     node_type = registration.index("ForySerializer.registerType(fory, classOf[Node]")
     edge_type = registration.index("ForySerializer.registerType(fory, classOf[Edge]")
     node_serializer = registration.index(
@@ -444,7 +475,94 @@ def test_scala_generator_keeps_imported_types_in_owner_package():
     assert "addressbook.AddressBook" in files["root/MultiHolder.scala"]
     assert "tree.TreeNode" in files["root/MultiHolder.scala"]
 
-    registration = files["root/RootForyRegistration.scala"]
-    assert "addressbook.AddressbookForyRegistration.register(fory)" in registration
-    assert "tree.TreeForyRegistration.register(fory)" in registration
+    registration = files["root/RootForyModule.scala"]
+    assert "fory.register(addressbook.AddressbookForyModule)" in registration
+    assert "fory.register(tree.TreeForyModule)" in registration
     assert "classOf[PrimitiveTypes]" not in registration
+
+
+def test_scala_default_package_import_registers_dependency(tmp_path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        """
+        message Common [id=200] {
+            string name = 1;
+        }
+        """
+    )
+    main = tmp_path / "main.fdl"
+    main.write_text(
+        """
+        import "common.fdl";
+
+        message Holder [id=201] {
+            Common common = 1;
+        }
+        """
+    )
+
+    schema = resolve_imports(main)
+    validator = SchemaValidator(schema)
+    assert validator.validate(), validator.errors
+    generator = ScalaGenerator(schema, GeneratorOptions(output_dir=tmp_path))
+    files = {item.path: item.content for item in generator.generate()}
+
+    module = files["MainForyModule.scala"]
+    assert "object MainForyModule extends org.apache.fory.ForyModule" in module
+    assert "fory.register(CommonForyModule)" in module
+    assert "CommonForyModule.register(fory)" not in module
+
+
+def test_scala_rejects_mixed_default_and_named_imports(tmp_path):
+    default_dir = tmp_path / "default_in_named"
+    default_dir.mkdir()
+    (default_dir / "common.fdl").write_text(
+        """
+        message Common [id=200] {
+            string name = 1;
+        }
+        """
+    )
+    default_main = default_dir / "main.fdl"
+    default_main.write_text(
+        """
+        package app;
+        import "common.fdl";
+
+        message Holder [id=201] {
+            Common common = 1;
+        }
+        """
+    )
+
+    with pytest.raises(ValueError, match="default-package"):
+        ScalaGenerator(
+            resolve_imports(default_main), GeneratorOptions(output_dir=tmp_path)
+        )
+
+    named_dir = tmp_path / "named_in_default"
+    named_dir.mkdir()
+    (named_dir / "common.fdl").write_text(
+        """
+        package shared;
+
+        message Common [id=200] {
+            string name = 1;
+        }
+        """
+    )
+    named_main = named_dir / "main.fdl"
+    named_main.write_text(
+        """
+        import "common.fdl";
+
+        message Holder [id=201] {
+            optional Common common = 1;
+        }
+        """
+    )
+
+    with pytest.raises(ValueError, match="default-package"):
+        ScalaGenerator(
+            resolve_imports(named_main), GeneratorOptions(output_dir=tmp_path)
+        )

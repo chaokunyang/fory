@@ -234,34 +234,36 @@ sealed class Animal {
 }
 ```
 
-Register a sealed union with `KotlinSerializers.registerUnion`. The runtime
-discovers the generated `<Target>_ForySerializer` automatically, so callers do
-not pass a serializer instance.
+Generated schema modules register sealed unions through `KotlinSerializers.registerUnion`.
+The runtime discovers the generated `<Target>_ForySerializer` automatically, so
+callers do not pass a serializer instance.
 
 ## Register Classes
 
-Register Kotlin struct classes with the normal Fory Java registration APIs. You
+Register Kotlin struct classes with the Kotlin `register<T>` extension. You
 choose the xlang namespace and type name; generated serializers do not choose
 IDs or names for you.
 
 ```kotlin
-val fory = Fory.builder()
+import org.apache.fory.kotlin.ForyKotlin
+import org.apache.fory.kotlin.register
+
+val fory = ForyKotlin.builder()
   .withXlang(true)
   .requireClassRegistration(true)
   .build()
 
-KotlinSerializers.registerSerializers(fory)
-fory.register(User::class.java, "example", "User")
+fory.register<User>("example", "User")
 ```
 
-`KotlinSerializers.registerSerializers(fory)` installs the Kotlin runtime
-serializers used by Kotlin-specific carriers such as unsigned types. The
-`fory.register(...)` call registers your xlang schema type name.
+`ForyKotlin.builder()` installs the Kotlin runtime bootstrap for the Fory
+instance. The `fory.register<T>(...)` extension registers your xlang schema type
+name and resolves the generated serializer from the target class.
 
 Do not register or reference generated serializer classes in application code.
 The runtime resolves them from the registered target class.
 
-Generated Schema IDL registration helpers use the same path. They call
+Generated Schema IDL modules use the same path. They call
 `KotlinSerializers.registerType`, `registerSerializer`, `registerEnum`, and
 `registerUnion` as appropriate and never emit Java files.
 

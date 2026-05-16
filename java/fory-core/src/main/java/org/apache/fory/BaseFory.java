@@ -151,9 +151,26 @@ public interface BaseFory {
   void registerSerializerAndType(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator);
 
-  void setSerializerFactory(SerializerFactory serializerFactory);
+  /**
+   * Register a runtime module. Direct {@link Fory} instances install the module immediately;
+   * thread-safe runtimes install it into every underlying runtime instance.
+   *
+   * <p>For thread-safe runtimes, call this during setup before concurrent serialization,
+   * deserialization, or copy operations start.
+   */
+  void register(ForyModule module);
 
-  TypeResolver getTypeResolver();
+  /**
+   * Registers an additional serializer factory.
+   *
+   * <p>Factories are queried in registration order. This method does not replace previously
+   * registered factories and does not affect serializers that have already been resolved and
+   * cached.
+   *
+   * <p>For thread-safe runtimes, call this during setup before concurrent serialization,
+   * deserialization, or copy operations start.
+   */
+  void registerSerializerFactory(SerializerFactory serializerFactory);
 
   /**
    * Ensure all compilation for serializers and accessors even for lazy initialized serializers.

@@ -53,6 +53,7 @@ import org.apache.fory.serializer.converter.FieldConverter;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
+import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
@@ -107,7 +108,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     String defaultValueLanguage = "None";
     DefaultValueUtils.DefaultValueField[] defaultValueFields =
         new DefaultValueUtils.DefaultValueField[0];
-    if (fory.getConfig().isScalaOptimizationEnabled()) {
+    if (ScalaTypes.SCALA_AVAILABLE) {
       // Check if this is a Scala case class and build default value fields
       defaultValueFields =
           DefaultValueUtils.getScalaDefaultValueSupport()

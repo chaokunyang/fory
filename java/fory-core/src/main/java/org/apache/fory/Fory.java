@@ -23,6 +23,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.util.IdentityHashMap;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import javax.annotation.concurrent.NotThreadSafe;
@@ -100,6 +101,7 @@ public final class Fory implements BaseFory {
   private final WriteContext writeContext;
   private final ReadContext readContext;
   private final CopyContext copyContext;
+  private final IdentityHashMap<ForyModule, Boolean> installedModules = new IdentityHashMap<>();
   private final byte headerBitmap;
   private MemoryBuffer buffer;
 
@@ -241,12 +243,23 @@ public final class Fory implements BaseFory {
   }
 
   @Override
-  public void setSerializerFactory(SerializerFactory serializerFactory) {
-    typeResolver.setSerializerFactory(serializerFactory);
+  public void register(ForyModule module) {
+    Preconditions.checkNotNull(module);
+    if (installedModules.containsKey(module)) {
+      return;
+    }
+    installedModules.put(module, Boolean.TRUE);
+    try {
+      module.install(this);
+    } catch (RuntimeException | Error e) {
+      installedModules.remove(module);
+      throw e;
+    }
   }
 
-  public SerializerFactory getSerializerFactory() {
-    return typeResolver.getSerializerFactory();
+  @Override
+  public void registerSerializerFactory(SerializerFactory serializerFactory) {
+    typeResolver.registerSerializerFactory(serializerFactory);
   }
 
   public <T> Serializer<T> getSerializer(Class<T> cls) {

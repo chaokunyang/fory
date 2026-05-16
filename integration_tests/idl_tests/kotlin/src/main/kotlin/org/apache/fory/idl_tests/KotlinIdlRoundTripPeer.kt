@@ -22,18 +22,21 @@
 package org.apache.fory.idl_tests
 
 import addressbook.AddressBook
-import addressbook.AddressbookForyRegistration
-import example.ExampleForyRegistration
+import addressbook.AddressbookForyModule
+import basic.Money
+import example.ExampleForyModule
 import example.ExampleMessage
 import example.ExampleMessageUnion
 import graph.Graph
-import graph.GraphForyRegistration
+import graph.GraphForyModule
 import java.io.File
+import java.math.BigDecimal
 import org.apache.fory.Fory
-import org.apache.fory.config.Language
+import org.apache.fory.kotlin.ForyKotlin
+import org.apache.fory.kotlin.register
 import org.apache.fory.type.BFloat16Array
 import org.apache.fory.type.Float16Array
-import tree.TreeForyRegistration
+import tree.TreeForyModule
 import tree.TreeNode
 import kotlin.time.Duration.Companion.seconds
 
@@ -54,25 +57,25 @@ public fun main() {
   }
   val compatible = System.getenv("IDL_COMPATIBLE").toBoolean()
   val fory =
-    Fory.builder()
-      .withLanguage(Language.XLANG)
+    ForyKotlin.builder()
+      .withXlang(true)
       .withCompatible(compatible)
       .build()
-  AddressbookForyRegistration.register(fory)
-  ExampleForyRegistration.register(fory)
+  fory.register(AddressbookForyModule)
+  fory.register(ExampleForyModule)
 
   roundTripFile(fory, addressBookFile, AddressBook::class.java)
   roundTripFile(fory, exampleFile, ExampleMessage::class.java)
   roundTripFile(fory, exampleUnionFile, ExampleMessageUnion::class.java)
   if (treeFile != null || graphFile != null) {
     val refFory =
-      Fory.builder()
-        .withLanguage(Language.XLANG)
+      ForyKotlin.builder()
+        .withXlang(true)
         .withCompatible(compatible)
         .withRefTracking(true)
         .build()
-    TreeForyRegistration.register(refFory)
-    GraphForyRegistration.register(refFory)
+    refFory.register(TreeForyModule)
+    refFory.register(GraphForyModule)
     roundTripFile(refFory, treeFile, TreeNode::class.java)
     roundTripFile(refFory, graphFile, Graph::class.java)
   }
@@ -90,11 +93,11 @@ private fun <T : Any> roundTripFile(fory: Fory, path: String?, type: Class<T>) {
 
 private fun runGeneratedSurfaceChecks() {
   val fory =
-    Fory.builder()
-      .withLanguage(Language.XLANG)
+    ForyKotlin.builder()
+      .withXlang(true)
       .withCompatible(false)
       .build()
-  ExampleForyRegistration.register(fory)
+  fory.register(ExampleForyModule)
 
   assertRoundTrip(fory, ExampleMessageUnion.VarintU32ValueCase(UInt.MAX_VALUE))
   assertRoundTrip(fory, ExampleMessageUnion.DurationValueCase(3.seconds))
@@ -106,6 +109,26 @@ private fun runGeneratedSurfaceChecks() {
   assertRoundTrip(fory, ExampleMessageUnion.Uint32ArrayCase(uintArrayOf(1u, UInt.MAX_VALUE)))
   assertRoundTrip(fory, ExampleMessageUnion.Float16ArrayCase(Float16Array.of(1.0f, -2.0f)))
   assertRoundTrip(fory, ExampleMessageUnion.Bfloat16ArrayCase(BFloat16Array.of(3.0f, -4.0f)))
+  assertBaseForyExtensionReceivers()
+}
+
+private fun assertBaseForyExtensionReceivers() {
+  val expected = Money(BigDecimal("12.34"), "USD")
+
+  val direct = ForyKotlin.builder().withXlang(true).build()
+  direct.register<Money>(130L)
+  val directBytes = direct.serialize(expected)
+  require(direct.deserialize(directBytes, Money::class.java) == expected)
+
+  val threadLocal = ForyKotlin.builder().withXlang(true).buildThreadLocalFory()
+  threadLocal.register<Money>(130L)
+  val threadLocalBytes = threadLocal.serialize(expected)
+  require(threadLocal.deserialize(threadLocalBytes, Money::class.java) == expected)
+
+  val pooled = ForyKotlin.builder().withXlang(true).buildThreadSafeForyPool(1)
+  pooled.register<Money>(130L)
+  val pooledBytes = pooled.serialize(expected)
+  require(pooled.deserialize(pooledBytes, Money::class.java) == expected)
 }
 
 private fun assertRoundTrip(fory: Fory, value: ExampleMessageUnion) {

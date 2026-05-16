@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
+import org.apache.fory.scala.ForyScala
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -27,15 +28,13 @@ import scala.jdk.CollectionConverters._
 
 class ScalaXlangSerializerTest extends AnyWordSpec with Matchers {
   def fory: Fory = {
-    val runtime = Fory.builder()
+    val runtime = ForyScala.builder()
       .withXlang(true)
       .withRefTracking(true)
       .withRefCopy(true)
-      .withScalaOptimizationEnabled(true)
       .requireClassRegistration(false)
       .suppressClassRegistrationWarnings(false)
       .build()
-    ScalaSerializers.registerSerializers(runtime)
     runtime
   }
 

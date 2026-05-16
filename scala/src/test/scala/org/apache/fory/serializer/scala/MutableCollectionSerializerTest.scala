@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
+import org.apache.fory.scala.ForyScala
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -27,19 +28,18 @@ import scala.collection.{Seq, Map, Set, mutable}
 import scala.collection.mutable.ListBuffer
 
 class MutableCollectionSerializerTest extends AnyWordSpec with Matchers {
-  val params: Seq[(Boolean, Boolean)] = List( (true, true))
-  params.foreach{case (setOpt, setFactory) => {
-    val fory1: Fory = Fory.builder()
+  val params: Seq[Boolean] = List(false, true)
+  params.foreach { setFactory =>
+    val builder = ForyScala.builder()
       .withXlang(false)
       .withRefTracking(true)
-      .withScalaOptimizationEnabled(setOpt)
       .requireClassRegistration(false)
       .suppressClassRegistrationWarnings(false)
-      .build()
     if (setFactory) {
-      ScalaSerializers.registerSerializers(fory1)
+      builder.withSerializerFactory(new ScalaSerializerFactory())
     }
-    s"fory scala collection support: setOpt $setOpt, setFactory $setFactory" should {
+    val fory1: Fory = builder.build()
+    s"fory scala collection support: setFactory $setFactory" should {
       "serialize/deserialize Seq" in {
         val seq = mutable.Seq(100, 10000L)
         fory1.deserialize(fory1.serialize(seq)) shouldEqual seq
@@ -70,7 +70,7 @@ class MutableCollectionSerializerTest extends AnyWordSpec with Matchers {
         fory1.deserialize(fory1.serialize(struct)) shouldEqual struct
       }
     }
-    s"fory scala map support: setOpt $setOpt, setFactory $setFactory" should {
+    s"fory scala map support: setFactory $setFactory" should {
       "serialize/deserialize Map" in {
         val map = mutable.Map("a" -> 100, "b" -> 10000L)
         fory1.deserialize(fory1.serialize(map)) shouldEqual map
@@ -88,7 +88,7 @@ class MutableCollectionSerializerTest extends AnyWordSpec with Matchers {
         fory1.deserialize(fory1.serialize(struct)) shouldEqual struct
       }
     }
-  }}
+  }
 }
 
 case class CollectionStruct2(list: Seq[String])

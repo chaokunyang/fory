@@ -19,25 +19,26 @@
 
 package org.apache.fory.idl_tests
 
-import basic.{BasicEnvelope, BasicForyRegistration, BasicValue, Money}
+import basic.{BasicEnvelope, BasicForyModule, BasicValue, Money}
 import collection.{
-  CollectionForyRegistration,
+  CollectionForyModule,
   NumericCollectionArrayUnion,
   NumericCollectionUnion,
   NumericCollections,
   NumericCollectionsArray
 }
-import example.{ExampleForyRegistration, ExampleMessage, ExampleState}
-import nested_name.NestedNameForyRegistration
-import org.apache.fory.Fory
+import example.{ExampleForyModule, ExampleMessage, ExampleState}
+import nested_name.NestedNameForyModule
 import org.apache.fory.annotation.ForyEnumId
 import org.apache.fory.meta.FieldTypes
+import org.apache.fory.scala.ForyScala
 import org.apache.fory.scala.ForySerializer
+import org.apache.fory.scala.register
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.`type`.{ScalaTypes, TypeUtils, Types}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
-import tree.{TreeForyRegistration, TreeNode}
+import tree.{TreeForyModule, TreeNode}
 
 import java.math.BigDecimal
 import scala.jdk.CollectionConverters._
@@ -45,14 +46,13 @@ import scala.jdk.CollectionConverters._
 final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
   "generated Scala IDL models" should {
     "round trip case classes, Option fields, and ADT union cases" in {
-      val fory = Fory.builder()
+      val fory = ForyScala.builder()
         .withXlang(true)
         .withCompatible(true)
         .withRefTracking(true)
-        .withScalaOptimizationEnabled(true)
         .requireClassRegistration(true)
         .build()
-      BasicForyRegistration.register(fory)
+      fory.register(BasicForyModule)
 
       val envelope = BasicEnvelope(
         Some(Money(new BigDecimal("12.34"), "USD")),
@@ -62,15 +62,30 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
       fory.deserialize(fory.serialize(envelope)) shouldEqual envelope
     }
 
+    "register generated serializers through BaseFory extension receivers" in {
+      val expected = Money(new BigDecimal("12.34"), "USD")
+
+      val direct = ForyScala.builder().withXlang(true).build()
+      direct.register[Money](130L)
+      direct.deserialize(direct.serialize(expected)).asInstanceOf[Money] shouldEqual expected
+
+      val threadLocal = ForyScala.builder().withXlang(true).buildThreadLocalFory()
+      threadLocal.register[Money](130L)
+      threadLocal.deserialize(threadLocal.serialize(expected)).asInstanceOf[Money] shouldEqual expected
+
+      val pooled = ForyScala.builder().withXlang(true).buildThreadSafeForyPool(1)
+      pooled.register[Money](130L)
+      pooled.deserialize(pooled.serialize(expected)).asInstanceOf[Money] shouldEqual expected
+    }
+
     "round trip generated Scala collection metadata" in {
-      val fory = Fory.builder()
+      val fory = ForyScala.builder()
         .withXlang(true)
         .withCompatible(true)
         .withRefTracking(true)
-        .withScalaOptimizationEnabled(true)
         .requireClassRegistration(true)
         .build()
-      CollectionForyRegistration.register(fory)
+      fory.register(CollectionForyModule)
 
       val collections = NumericCollections(
         int8Values = List(1.toByte, (-2).toByte),
@@ -113,14 +128,13 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
       val readyCase =
         Class.forName("example.ExampleState$").getDeclaredField("Ready").getAnnotation(classOf[ForyEnumId])
       readyCase.value() shouldBe 1
-      val fory = Fory.builder()
+      val fory = ForyScala.builder()
         .withXlang(true)
         .withCompatible(false)
         .withRefTracking(false)
-        .withScalaOptimizationEnabled(true)
         .requireClassRegistration(true)
         .build()
-      ExampleForyRegistration.register(fory)
+      fory.register(ExampleForyModule)
       val serializer =
         summon[ForySerializer[ExampleMessage]]
           .createSerializer(fory.getTypeResolver)
@@ -158,14 +172,13 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
     }
 
     "round trip generated cycle-owned normal classes" in {
-      val fory = Fory.builder()
+      val fory = ForyScala.builder()
         .withXlang(true)
         .withCompatible(true)
         .withRefTracking(true)
-        .withScalaOptimizationEnabled(true)
         .requireClassRegistration(true)
         .build()
-      TreeForyRegistration.register(fory)
+      fory.register(TreeForyModule)
 
       val root = new TreeNode()
       root.id = "root"
@@ -183,14 +196,13 @@ final class ScalaIdlRoundTripTest extends AnyWordSpec with Matchers {
     }
 
     "round trip name-registered nested messages, enums, and unions" in {
-      val fory = Fory.builder()
+      val fory = ForyScala.builder()
         .withXlang(true)
         .withCompatible(true)
         .withRefTracking(true)
-        .withScalaOptimizationEnabled(true)
         .requireClassRegistration(true)
         .build()
-      NestedNameForyRegistration.register(fory)
+      fory.register(NestedNameForyModule)
 
       val root = new nested_name.Envelope.Node()
       root.id = "root"

@@ -21,6 +21,7 @@ package org.apache.fory.serializer.scala
 
 import java.math.{BigDecimal => JBigDecimal, BigInteger}
 import org.apache.fory.Fory
+import org.apache.fory.scala.ForyScala
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -29,10 +30,9 @@ package object SomePackageObject {
 }
 
 class ScalaTest extends AnyWordSpec with Matchers {
-  def fory: Fory = Fory.builder()
+  def fory: Fory = ForyScala.builder()
     .withXlang(false)
     .withRefTracking(true)
-    .withScalaOptimizationEnabled(true)
     .requireClassRegistration(false)
     .suppressClassRegistrationWarnings(false).build()
 
@@ -55,11 +55,10 @@ class ScalaTest extends AnyWordSpec with Matchers {
         new JBigDecimal(new BigInteger("123456789012345678901234567890123456789"), 37)
       )
       Seq(false, true).foreach { xlang =>
-        val decimalFory = Fory.builder()
+        val decimalFory = ForyScala.builder()
           .withXlang(xlang)
           .withRefTracking(true)
-          .withScalaOptimizationEnabled(true)
-          .requireClassRegistration(false)
+              .requireClassRegistration(false)
           .suppressClassRegistrationWarnings(false)
           .build()
         values.foreach { value =>
@@ -86,7 +85,6 @@ object PkgObjectMain extends App {
 
   val fory = Fory
     .builder()
-    .withScalaOptimizationEnabled(true)
     .requireClassRegistration(false)
     .withRefTracking(true).suppressClassRegistrationWarnings(false)
     .build()
@@ -105,7 +103,6 @@ object PkgObjectMain extends App {
 object PkgObjectMain2 extends App {
   val fory = Fory
     .builder()
-    .withScalaOptimizationEnabled(true)
     .requireClassRegistration(false)
     .withRefTracking(true)
     .suppressClassRegistrationWarnings(false)

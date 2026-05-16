@@ -19,7 +19,7 @@
 
 package org.apache.fory.scala
 
-import org.apache.fory.{Fory, ThreadSafeFory}
+import org.apache.fory.{BaseFory, Fory, ForyModule, ThreadSafeFory}
 import org.apache.fory.annotation.Internal
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.resolver.TypeResolver
@@ -113,14 +113,14 @@ object ForySerializer {
   def register[T](
       fory: ThreadSafeFory,
       cls: Class[T])(using serializer: ForySerializer[T]): Unit = {
-    fory.registerCallback((runtime: Fory) => register(runtime, cls)(using serializer))
+    registerModule(fory, cls, null, null, null)
   }
 
   def register[T](
       fory: ThreadSafeFory,
       cls: Class[T],
       typeId: Long)(using serializer: ForySerializer[T]): Unit = {
-    fory.registerCallback((runtime: Fory) => register(runtime, cls, typeId)(using serializer))
+    registerModule(fory, cls, java.lang.Long.valueOf(typeId), null, null)
   }
 
   def register[T](
@@ -128,8 +128,21 @@ object ForySerializer {
       cls: Class[T],
       namespace: String,
       typeName: String)(using serializer: ForySerializer[T]): Unit = {
-    fory.registerCallback((runtime: Fory) =>
-      register(runtime, cls, namespace, typeName)(using serializer))
+    registerModule(fory, cls, null, namespace, typeName)
+  }
+
+  private[scala] def registerModule[T](
+      fory: BaseFory,
+      cls: Class[T],
+      typeId: java.lang.Long,
+      namespace: String,
+      typeName: String)(using serializer: ForySerializer[T]): Unit = {
+    fory.register(new ForyModule {
+      override def install(runtime: Fory): Unit = {
+        runtime.register(ForyScala)
+        register(runtime, cls, typeId, namespace, typeName)(using serializer)
+      }
+    })
   }
 
   private def registerType[T](

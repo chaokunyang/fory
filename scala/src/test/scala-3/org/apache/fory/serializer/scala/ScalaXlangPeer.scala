@@ -43,6 +43,7 @@ import org.apache.fory.memory.{MemoryBuffer, MemoryUtils}
 import org.apache.fory.meta.MetaCompressor
 import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.scala.ForySerializer
+import org.apache.fory.scala.ForyScala
 import org.apache.fory.serializer.Serializer
 import org.apache.fory.`type`.{BFloat16, Float16}
 import org.apache.fory.`type`.union.Union2
@@ -446,16 +447,14 @@ object ScalaXlangPeer {
       refTracking: Boolean = false,
       classVersionCheck: Boolean = false,
       noCompression: Boolean = false): Fory = {
-    val builder = Fory.builder()
+    val builder = ForyScala.builder()
       .withLanguage(Language.XLANG)
       .withCompatible(compatible)
       .withRefTracking(refTracking)
-      .withScalaOptimizationEnabled(true)
       .requireClassRegistration(false)
     if classVersionCheck then builder.withClassVersionCheck(true)
     if noCompression then builder.withMetaCompressor(NoOpMetaCompressor)
     val fory = builder.build()
-    ScalaSerializers.registerSerializers(fory)
     fory
   }
 
@@ -905,13 +904,11 @@ object ScalaXlangPeer {
   }
 
   private def scalaPeerFory(): Fory = {
-    val fory = Fory.builder()
+    val fory = ForyScala.builder()
       .withLanguage(Language.XLANG)
       .withCompatible(true)
-      .withScalaOptimizationEnabled(true)
       .requireClassRegistration(true)
       .build()
-    ScalaSerializers.registerSerializers(fory)
     ForySerializer.register(fory, classOf[ScalaPeerUser], ScalaPeerNamespace, "ScalaPeerUser")
     ForySerializer.register(fory, classOf[ScalaPeerTarget], ScalaPeerNamespace, "ScalaPeerTarget")
     fory

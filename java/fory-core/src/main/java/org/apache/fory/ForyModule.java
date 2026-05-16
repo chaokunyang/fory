@@ -17,25 +17,11 @@
  * under the License.
  */
 
-package org.apache.fory.serializer.scala
+package org.apache.fory;
 
-import scala.concurrent.duration.DurationInt
-
-import org.apache.fory.Fory
-import org.apache.fory.scala.ForyScala
-import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
-
-class DurationTest extends AnyWordSpec with Matchers {
-  val fory: Fory = ForyScala.builder()
-    .withXlang(false)
-    .withRefTracking(true)
-    .requireClassRegistration(false).build()
-
-  "fory scala duration support" should {
-    "serialize/deserialize DurationInt" in {
-      val d = 100.millis
-      fory.deserialize(fory.serialize(d)) shouldEqual d
-    }
-  }
+/** A reusable Fory runtime module installed during or after runtime construction. */
+@FunctionalInterface
+public interface ForyModule {
+  /** Install this module into the concrete runtime. */
+  void install(Fory fory);
 }

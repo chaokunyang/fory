@@ -4,7 +4,7 @@ The FDL compiler generates cross-language serialization code from schema definit
 
 ## Features
 
-- **Multi-language code generation**: Java, Python, Go, Rust, C++, C#, JavaScript, Swift, Dart, and Scala
+- **Multi-language code generation**: Java, Python, Go, Rust, C++, C#, JavaScript, Swift, Dart, Scala, and Kotlin
 - **Rich type system**: Primitives, enums, messages, lists, dense arrays, maps
 - **Cross-language serialization**: Generated code works seamlessly with Apache Fory
 - **Type ID and namespace support**: Both numeric IDs and name-based type registration
@@ -81,8 +81,12 @@ foryc schema.fdl --java_out=./gen --go_out=./gen/go --csharp_out=./gen/csharp --
 import demo.*;
 import org.apache.fory.Fory;
 
-Fory fory = Fory.builder().build();
-DemoForyRegistration.register(fory);
+Fory fory = Fory.builder()
+    .withXlang(true)
+    .withCompatible(true)
+    .withRefTracking(true)
+    .withModule(DemoForyModule.INSTANCE)
+    .build();
 
 Cat cat = new Cat();
 cat.setName("Whiskers");
@@ -306,7 +310,7 @@ Each generator extends `BaseGenerator` and implements:
 
 - `generate()`: Returns list of `GeneratedFile` objects
 - `generate_type()`: Converts FDL types to target language types
-- Language-specific registration helpers
+- Language-specific registration helpers or modules
 
 ## Generated Output
 
@@ -316,7 +320,7 @@ Generates POJOs with:
 
 - Private fields with getters/setters
 - `@Nullable` annotations for nullable fields and `@Ref` annotations for ref fields
-- Registration helper class
+- Schema module class
 
 ```java
 public class Cat {

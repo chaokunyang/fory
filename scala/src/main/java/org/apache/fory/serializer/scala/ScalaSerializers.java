@@ -19,13 +19,14 @@
 
 package org.apache.fory.serializer.scala;
 
-import org.apache.fory.AbstractThreadSafeFory;
+import java.util.Collections;
+import java.util.Map;
+import java.util.WeakHashMap;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.config.Config;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.SerializerFactory;
 import scala.collection.immutable.NumericRange;
 import scala.collection.immutable.Range;
 
@@ -33,24 +34,32 @@ import static org.apache.fory.serializer.scala.ToFactorySerializers.IterableToFa
 import static org.apache.fory.serializer.scala.ToFactorySerializers.MapToFactoryClass;
 
 public class ScalaSerializers {
+  private static final Map<Fory, Boolean> INSTALLED_FORY =
+      Collections.synchronizedMap(new WeakHashMap<>());
 
   public static void registerSerializers(ThreadSafeFory fory) {
-    AbstractThreadSafeFory threadSafeFory = (AbstractThreadSafeFory) fory;
-    threadSafeFory.registerCallback(ScalaSerializers::registerSerializers);
+    fory.register(ScalaSerializers::registerSerializers);
   }
 
   public static void registerSerializers(Fory fory) {
-    TypeResolver resolver = fory.getTypeResolver();
-    ensureScalaDispatcher(fory);
-    if (resolver.isCrossLanguage()) {
-      return;
+    synchronized (INSTALLED_FORY) {
+      if (INSTALLED_FORY.containsKey(fory)) {
+        return;
+      }
+      INSTALLED_FORY.put(fory, Boolean.TRUE);
     }
-    Config config = resolver.getConfig();
+    TypeResolver resolver = fory.getTypeResolver();
+    try {
+      fory.registerSerializerFactory(new ScalaSerializerFactory());
+      if (resolver.isCrossLanguage()) {
+        return;
+      }
+      Config config = resolver.getConfig();
 
-    resolver.registerSerializer(
-        IterableToFactoryClass, new ToFactorySerializers.IterableToFactorySerializer(config));
-    resolver.registerSerializer(
-        MapToFactoryClass, new ToFactorySerializers.MapToFactorySerializer(config));
+      resolver.registerSerializer(
+          IterableToFactoryClass, new ToFactorySerializers.IterableToFactorySerializer(config));
+      resolver.registerSerializer(
+          MapToFactoryClass, new ToFactorySerializers.MapToFactorySerializer(config));
 
     // Seq
     resolver.register(scala.collection.immutable.Seq.class);
@@ -171,8 +180,14 @@ public class ScalaSerializers {
     resolver.register(scala.collection.mutable.Queue$.class);
     resolver.register(scala.collection.mutable.Stack.class);
     resolver.register(scala.collection.mutable.Stack$.class);
-    resolver.register(scala.collection.mutable.BitSet.class);
-    resolver.register(scala.collection.mutable.BitSet$.class);
+      resolver.register(scala.collection.mutable.BitSet.class);
+      resolver.register(scala.collection.mutable.BitSet$.class);
+    } catch (RuntimeException | Error e) {
+      synchronized (INSTALLED_FORY) {
+        INSTALLED_FORY.remove(fory);
+      }
+      throw e;
+    }
   }
 
   public static void registerEnum(Fory fory, Class<?> cls, long typeId) {
@@ -202,14 +217,4 @@ public class ScalaSerializers {
     }
   }
 
-  private static ScalaDispatcher ensureScalaDispatcher(Fory fory) {
-    TypeResolver resolver = fory.getTypeResolver();
-    SerializerFactory factory = resolver.getSerializerFactory();
-    if (factory instanceof ScalaDispatcher) {
-      return (ScalaDispatcher) factory;
-    }
-    ScalaDispatcher dispatcher = new ScalaDispatcher(factory);
-    resolver.setSerializerFactory(dispatcher);
-    return dispatcher;
-  }
 }

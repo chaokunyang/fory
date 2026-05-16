@@ -266,12 +266,12 @@ generated/
             ├── User.java
             ├── Order.java
             ├── Status.java
-            └── ExampleForyRegistration.java
+            └── ExampleForyModule.java
 ```
 
 - One file per type (enum or message)
 - Package structure matches Fory IDL package
-- Registration helper class generated
+- Schema module class generated
 
 ### Python
 
@@ -391,7 +391,7 @@ generated/
         ├── User.scala
         ├── Status.scala
         ├── Animal.scala
-        └── ExampleForyRegistration.scala
+        └── ExampleForyModule.scala
 ```
 
 - One Scala 3 source file per generated type
@@ -400,7 +400,7 @@ generated/
 - `optional T` fields use `Option[T]`
 - Enums use Scala 3 `enum`
 - Unions use Scala 3 ADT `enum` with `@ForyUnion`, `@ForyCase`, and an `UnknownCase`
-- Registration helper object included
+- Schema module object included
 
 ### C# IDL Matrix Verification
 

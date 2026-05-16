@@ -19,53 +19,53 @@
 
 package org.apache.fory.idl_tests
 
-import addressbook.AddressbookForyRegistration
-import auto_id.AutoIdForyRegistration
-import collection.CollectionForyRegistration
-import complex_fbs.ComplexFbsForyRegistration
-import complex_pb.ComplexPbForyRegistration
-import example.ExampleForyRegistration
-import graph.GraphForyRegistration
-import monster.MonsterForyRegistration
-import nested_name.NestedNameForyRegistration
-import optional_types.OptionalTypesForyRegistration
+import addressbook.AddressbookForyModule
+import auto_id.AutoIdForyModule
+import collection.CollectionForyModule
+import complex_fbs.ComplexFbsForyModule
+import complex_pb.ComplexPbForyModule
+import example.ExampleForyModule
+import graph.GraphForyModule
+import monster.MonsterForyModule
+import nested_name.NestedNameForyModule
+import optional_types.OptionalTypesForyModule
 import org.apache.fory.Fory
-import org.apache.fory.serializer.scala.ScalaSerializers
-import tree.TreeForyRegistration
+import org.apache.fory.scala.ForyScala
+import tree.TreeForyModule
 
 import java.nio.file.{Files, Path}
 
 object ScalaIdlRoundTripPeer {
   def main(args: Array[String]): Unit = {
     val compatible = sys.env.get("IDL_COMPATIBLE").forall(_.toBoolean)
-    roundTrip("DATA_FILE", compatible, refTracking = false)(AddressbookForyRegistration.register)
-    roundTrip("DATA_FILE_AUTO_ID", compatible, refTracking = false)(AutoIdForyRegistration.register)
-    roundTrip("DATA_FILE_NESTED_NAME", compatible, refTracking = true)(
-      NestedNameForyRegistration.register)
+    roundTrip("DATA_FILE", compatible, refTracking = false)(fory => fory.register(AddressbookForyModule))
+    roundTrip("DATA_FILE_AUTO_ID", compatible, refTracking = false)(fory => fory.register(AutoIdForyModule))
+    roundTrip("DATA_FILE_NESTED_NAME", compatible, refTracking = true)(fory =>
+      fory.register(NestedNameForyModule))
     roundTrip("DATA_FILE_PRIMITIVES", compatible, refTracking = false) { fory =>
-      AddressbookForyRegistration.register(fory)
-      ComplexPbForyRegistration.register(fory)
+      fory.register(AddressbookForyModule)
+      fory.register(ComplexPbForyModule)
     }
-    roundTrip("DATA_FILE_COLLECTION", compatible, refTracking = false)(
-      CollectionForyRegistration.register)
-    roundTrip("DATA_FILE_COLLECTION_UNION", compatible, refTracking = false)(
-      CollectionForyRegistration.register)
-    roundTrip("DATA_FILE_COLLECTION_ARRAY", compatible, refTracking = false)(
-      CollectionForyRegistration.register)
-    roundTrip("DATA_FILE_COLLECTION_ARRAY_UNION", compatible, refTracking = false)(
-      CollectionForyRegistration.register)
-    roundTrip("DATA_FILE_EXAMPLE", compatible, refTracking = false)(ExampleForyRegistration.register)
-    roundTrip("DATA_FILE_EXAMPLE_UNION", compatible, refTracking = false)(
-      ExampleForyRegistration.register)
-    roundTrip("DATA_FILE_OPTIONAL_TYPES", compatible, refTracking = false)(
-      OptionalTypesForyRegistration.register)
-    roundTrip("DATA_FILE_TREE", compatible, refTracking = true)(TreeForyRegistration.register)
-    roundTrip("DATA_FILE_GRAPH", compatible, refTracking = true)(GraphForyRegistration.register)
-    roundTrip("DATA_FILE_FLATBUFFERS_MONSTER", compatible, refTracking = false)(
-      MonsterForyRegistration.register)
+    roundTrip("DATA_FILE_COLLECTION", compatible, refTracking = false)(fory =>
+      fory.register(CollectionForyModule))
+    roundTrip("DATA_FILE_COLLECTION_UNION", compatible, refTracking = false)(fory =>
+      fory.register(CollectionForyModule))
+    roundTrip("DATA_FILE_COLLECTION_ARRAY", compatible, refTracking = false)(fory =>
+      fory.register(CollectionForyModule))
+    roundTrip("DATA_FILE_COLLECTION_ARRAY_UNION", compatible, refTracking = false)(fory =>
+      fory.register(CollectionForyModule))
+    roundTrip("DATA_FILE_EXAMPLE", compatible, refTracking = false)(fory => fory.register(ExampleForyModule))
+    roundTrip("DATA_FILE_EXAMPLE_UNION", compatible, refTracking = false)(fory =>
+      fory.register(ExampleForyModule))
+    roundTrip("DATA_FILE_OPTIONAL_TYPES", compatible, refTracking = false)(fory =>
+      fory.register(OptionalTypesForyModule))
+    roundTrip("DATA_FILE_TREE", compatible, refTracking = true)(fory => fory.register(TreeForyModule))
+    roundTrip("DATA_FILE_GRAPH", compatible, refTracking = true)(fory => fory.register(GraphForyModule))
+    roundTrip("DATA_FILE_FLATBUFFERS_MONSTER", compatible, refTracking = false)(fory =>
+      fory.register(MonsterForyModule))
     roundTrip("DATA_FILE_FLATBUFFERS_TEST2", compatible, refTracking = false) { fory =>
-      MonsterForyRegistration.register(fory)
-      ComplexFbsForyRegistration.register(fory)
+      fory.register(MonsterForyModule)
+      fory.register(ComplexFbsForyModule)
     }
   }
 
@@ -74,14 +74,12 @@ object ScalaIdlRoundTripPeer {
       compatible: Boolean,
       refTracking: Boolean)(register: Fory => Unit): Unit = {
     sys.env.get(envName).foreach { file =>
-      val fory = Fory.builder()
+      val fory = ForyScala.builder()
         .withXlang(true)
         .withCompatible(compatible)
         .withRefTracking(refTracking)
-        .withScalaOptimizationEnabled(true)
         .requireClassRegistration(true)
         .build()
-      ScalaSerializers.registerSerializers(fory)
       register(fory)
       val path = Path.of(file)
       val value = fory.deserialize(Files.readAllBytes(path))

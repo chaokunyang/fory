@@ -20,8 +20,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Set, Tuple
 
+from fory_compiler.frontend.utils import parse_idl_file, resolve_import_path
 from fory_compiler.ir.ast import (
     Schema,
     FieldType,
@@ -177,6 +178,77 @@ class BaseGenerator(ABC):
             path = self.options.output_dir / file.path
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(file.content)
+
+    def _load_schema(self, file_path: Optional[str]) -> Optional[Schema]:
+        if not file_path:
+            return None
+        if not hasattr(self, "_schema_cache"):
+            self._schema_cache = {}
+        cache: Dict[Path, Schema] = self._schema_cache
+        path = Path(file_path).resolve()
+        if path in cache:
+            return cache[path]
+        try:
+            schema = parse_idl_file(path)
+        except Exception:
+            return None
+        cache[path] = schema
+        return schema
+
+    def _collect_import_schemas(
+        self, schema: Schema, seen: Set[Path]
+    ) -> List[Tuple[Path, Schema]]:
+        resolved_files = getattr(schema, "resolved_import_files", None)
+        if resolved_files:
+            imported_schemas: List[Tuple[Path, Schema]] = []
+            for file_path in resolved_files:
+                path = Path(file_path).resolve()
+                if path in seen:
+                    continue
+                seen.add(path)
+                imported_schema = self._load_schema(str(path))
+                if imported_schema is None:
+                    continue
+                imported_schemas.append((path, imported_schema))
+            return imported_schemas
+
+        source_file = schema.source_file
+        if not source_file or source_file.startswith("<"):
+            return []
+        source_path = Path(source_file).resolve()
+        imported_schemas = []
+        for imp in schema.imports:
+            resolved_path = getattr(imp, "resolved_path", None)
+            path = (
+                Path(resolved_path).resolve()
+                if resolved_path
+                else resolve_import_path(imp.path, source_path, [])
+            )
+            if path is None:
+                raise ValueError(
+                    f"{self.language_name} generator cannot resolve import "
+                    f"{imp.path!r} from {source_file}"
+                )
+            if path in seen:
+                continue
+            seen.add(path)
+            imported_schema = self._load_schema(str(path))
+            if imported_schema is None:
+                continue
+            imported_schemas.append((path, imported_schema))
+            imported_schemas.extend(self._collect_import_schemas(imported_schema, seen))
+        return imported_schemas
+
+    def _schema_graph(self) -> List[Tuple[str, Schema]]:
+        seen: Set[Path] = set()
+        if self.schema.source_file and not self.schema.source_file.startswith("<"):
+            seen.add(Path(self.schema.source_file).resolve())
+        schemas = [(self.schema.source_file or "<input>", self.schema)]
+        schemas.extend(
+            (str(path), schema)
+            for path, schema in self._collect_import_schemas(self.schema, seen)
+        )
+        return schemas
 
     def strip_enum_prefix(self, enum_name: str, value_name: str) -> str:
         """Strip the enum name prefix from an enum value name.

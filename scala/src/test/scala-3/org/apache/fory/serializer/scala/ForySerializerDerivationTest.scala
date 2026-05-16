@@ -32,6 +32,7 @@ import org.apache.fory.annotation.{
 import org.apache.fory.config.Int64Encoding
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.scala.ForySerializer
+import org.apache.fory.scala.ForyScala
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.`type`.{Types, TypeUtils}
 import org.scalatest.matchers.should.Matchers
@@ -145,15 +146,13 @@ object ForySerializerDerivationTest {
   }
 
   def xlangFory(): Fory = {
-    val fory = Fory.builder()
+    val fory = ForyScala.builder()
       .withXlang(true)
       .withRefTracking(true)
       .withRefCopy(true)
-      .withScalaOptimizationEnabled(true)
       .requireClassRegistration(true)
       .suppressClassRegistrationWarnings(false)
       .build()
-    ScalaSerializers.registerSerializers(fory)
     ForySerializer.register(fory, classOf[Person], "scala_test", "Person")
     ForySerializer.register(fory, classOf[SearchUser], "scala_test", "SearchUser")
     ForySerializer.register(fory, classOf[CollectionBox], "scala_test", "CollectionBox")
@@ -173,16 +172,14 @@ object ForySerializerDerivationTest {
   }
 
   def compatibleXlangFory(): Fory = {
-    val fory = Fory.builder()
+    val fory = ForyScala.builder()
       .withXlang(true)
       .withCompatible(true)
       .withRefTracking(true)
       .withRefCopy(true)
-      .withScalaOptimizationEnabled(true)
       .requireClassRegistration(true)
       .suppressClassRegistrationWarnings(false)
       .build()
-    ScalaSerializers.registerSerializers(fory)
     fory
   }
 }
@@ -370,6 +367,7 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
       val errors = typeCheckErrors("""
         import org.apache.fory.annotation.{ForyCase, ForyStruct, ForyUnion}
         import org.apache.fory.scala.ForySerializer
+import org.apache.fory.scala.ForyScala
 
         @ForyStruct
         final case class MissingCaseUser(name: String) derives ForySerializer

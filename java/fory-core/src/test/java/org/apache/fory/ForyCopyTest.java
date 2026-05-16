@@ -149,7 +149,7 @@ public class ForyCopyTest extends ForyTestBase {
     ThreadSafeFory threadSafeFory =
         builder().withCodegen(false).withRefCopy(true).buildThreadSafeFory();
     threadSafeFory.setTypeChecker((classResolver, className1) -> true);
-    threadSafeFory.setSerializerFactory((fory1, cls) -> null);
+    threadSafeFory.registerSerializerFactory((fory1, cls) -> null);
     threadSafeFory.register(BeanA.class);
     assetEqualsButNotSame(threadSafeFory.copy(beanA));
     executor.execute(

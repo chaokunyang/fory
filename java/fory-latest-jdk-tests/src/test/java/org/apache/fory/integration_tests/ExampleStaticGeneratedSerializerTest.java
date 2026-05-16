@@ -358,12 +358,11 @@ public class ExampleStaticGeneratedSerializerTest {
   }
 
   private static void assertStaticSerializer(ThreadSafeFory fory, Class<?> type) {
-    Serializer<?> serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
-    if (serializer instanceof DeferedLazySerializer) {
-      serializer = ((DeferedLazySerializer) serializer).resolveSerializer();
-    }
-    Assert.assertTrue(
-        serializer instanceof StaticGeneratedStructSerializer, serializer.getClass().getName());
+    fory.execute(
+        runtime -> {
+          assertStaticSerializer(runtime, type);
+          return null;
+        });
   }
 
   private static void assertStaticSerializer(Fory fory, Class<?> type) {

@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.kotlin
 
 import org.apache.fory.Fory
+import org.apache.fory.kotlin.ForyKotlin
 import org.testng.Assert.assertEquals
 import org.testng.annotations.Test
 
@@ -31,8 +32,7 @@ class ArraySerializerTest {
 
   @Test
   fun testSimpleArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = arrayOf("Apple", "Banana", "Orange", "Pineapple")
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -40,8 +40,7 @@ class ArraySerializerTest {
 
   @Test
   fun testMultidimensional() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = Array(2) { Array<Int>(2) { 0 } }
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -49,8 +48,7 @@ class ArraySerializerTest {
 
   @Test
   fun testAnyArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = arrayOf<Any?>("Apple", 1, null, 3.141, 1.2f)
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -58,8 +56,7 @@ class ArraySerializerTest {
 
   @Test
   fun testEmptyArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = emptyArray<Any?>()
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -67,8 +64,7 @@ class ArraySerializerTest {
 
   @Test
   fun testBooleanArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = booleanArrayOf(true, false)
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -76,8 +72,7 @@ class ArraySerializerTest {
 
   @Test
   fun testByteArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = byteArrayOf(0xFF.toByte(), 0xCA.toByte(), 0xFF.toByte())
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -85,8 +80,7 @@ class ArraySerializerTest {
 
   @Test
   fun testCharArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = charArrayOf('a', 'b', 'c')
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -94,8 +88,7 @@ class ArraySerializerTest {
 
   @Test
   fun testDoubleArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = doubleArrayOf(1.0, 2.0, 3.0)
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -103,8 +96,7 @@ class ArraySerializerTest {
 
   @Test
   fun testFloatArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = floatArrayOf(1.0f, 2.0f)
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -112,8 +104,7 @@ class ArraySerializerTest {
 
   @Test
   fun testIntArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = intArrayOf(1, 2, 3)
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -121,8 +112,7 @@ class ArraySerializerTest {
 
   @Test
   fun testLongArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = longArrayOf(1L, 2L, 3L)
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -130,8 +120,7 @@ class ArraySerializerTest {
 
   @Test
   fun testShortArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = shortArrayOf(1, 2, 3)
     assertEquals(array, fory.deserialize(fory.serialize(array)))
@@ -139,8 +128,7 @@ class ArraySerializerTest {
 
   @Test
   fun testUByteArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = ubyteArrayOf(0xFFu, 0xEFu, 0x00u)
     assert(array.contentEquals(fory.deserialize(fory.serialize(array)) as UByteArray))
@@ -148,8 +136,7 @@ class ArraySerializerTest {
 
   @Test
   fun testUShortArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = ushortArrayOf(1u, 2u)
     assert(array.contentEquals(fory.deserialize(fory.serialize(array)) as UShortArray))
@@ -157,8 +144,7 @@ class ArraySerializerTest {
 
   @Test
   fun testUIntArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = uintArrayOf(1u, 2u)
     assert(array.contentEquals(fory.deserialize(fory.serialize(array)) as UIntArray))
@@ -166,8 +152,7 @@ class ArraySerializerTest {
 
   @Test
   fun testULongArray() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = ulongArrayOf(1u, 2u, 3u)
     assert(array.contentEquals(fory.deserialize(fory.serialize(array)) as ULongArray))
@@ -176,8 +161,7 @@ class ArraySerializerTest {
   @Suppress("UNCHECKED_CAST")
   @Test
   fun testUnsignedArrayAsCollectionField() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
     fory.register(RawCollectionHolder::class.java)
 
     val array = ubyteArrayOf(0xFFu, 0xEFu, 0x00u)

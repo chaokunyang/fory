@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
+import org.apache.fory.scala.ForyScala
 import org.apache.fory.annotation.ForyEnumId
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
@@ -47,10 +48,9 @@ object ScalaEnumTest {
 class ScalaEnumTest extends AnyWordSpec with Matchers {
   import ScalaEnumTest._
 
-  val fory: Fory = Fory.builder()
+  val fory: Fory = ForyScala.builder()
     .withXlang(false)
     .withRefTracking(true)
-    .withScalaOptimizationEnabled(true)
     .requireClassRegistration(false).build()
 
   "fory scala enum support" should {
@@ -64,17 +64,15 @@ class ScalaEnumTest extends AnyWordSpec with Matchers {
       fory.deserialize(bytes) shouldEqual colors
     }
     "use case-level ForyEnumId metadata for stable xlang enum tags" in {
-      val writer = Fory.builder()
+      val writer = ForyScala.builder()
         .withXlang(true)
         .withRefTracking(false)
-        .withScalaOptimizationEnabled(true)
-        .requireClassRegistration(true)
+          .requireClassRegistration(true)
         .build()
-      val reader = Fory.builder()
+      val reader = ForyScala.builder()
         .withXlang(true)
         .withRefTracking(false)
-        .withScalaOptimizationEnabled(true)
-        .requireClassRegistration(true)
+          .requireClassRegistration(true)
         .build()
       ScalaSerializers.registerEnum(writer, classOf[StableColorV1], "scala_test", "StableColor")
       ScalaSerializers.registerEnum(reader, classOf[StableColorV2], "scala_test", "StableColor")

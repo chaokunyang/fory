@@ -1503,7 +1503,7 @@ public abstract class TypeResolver {
     if (Collection.class.isAssignableFrom(cls)) {
       return true;
     }
-    if (config.isScalaOptimizationEnabled()) {
+    if (ScalaTypes.SCALA_AVAILABLE) {
       // Scala map is scala iterable too.
       if (ScalaTypes.getScalaMapType().isAssignableFrom(cls)) {
         return false;
@@ -1518,7 +1518,7 @@ public abstract class TypeResolver {
     if (Set.class.isAssignableFrom(cls)) {
       return true;
     }
-    if (config.isScalaOptimizationEnabled()) {
+    if (ScalaTypes.SCALA_AVAILABLE) {
       // Scala map is scala iterable too.
       if (ScalaTypes.getScalaMapType().isAssignableFrom(cls)) {
         return false;
@@ -1534,8 +1534,7 @@ public abstract class TypeResolver {
       return false;
     }
     return Map.class.isAssignableFrom(cls)
-        || (config.isScalaOptimizationEnabled()
-            && ScalaTypes.getScalaMapType().isAssignableFrom(cls));
+        || (ScalaTypes.SCALA_AVAILABLE && ScalaTypes.getScalaMapType().isAssignableFrom(cls));
   }
 
   @Internal
@@ -2043,8 +2042,8 @@ public abstract class TypeResolver {
     }
   }
 
-  public void setSerializerFactory(SerializerFactory serializerFactory) {
-    extRegistry.serializerFactory = serializerFactory;
+  public void registerSerializerFactory(SerializerFactory serializerFactory) {
+    extRegistry.serializerFactories.add(Preconditions.checkNotNull(serializerFactory));
   }
 
   public CodeGenerator getCodeGenerator(ClassLoader... loaders) {
@@ -2067,8 +2066,15 @@ public abstract class TypeResolver {
         Arrays.asList(Arrays.copyOf(loaders, loaders.length)), codeGenerator);
   }
 
-  public SerializerFactory getSerializerFactory() {
-    return extRegistry.serializerFactory;
+  protected final Serializer<?> createSerializerFromFactory(Class<?> cls) {
+    ArrayList<SerializerFactory> serializerFactories = extRegistry.serializerFactories;
+    for (int i = 0; i < serializerFactories.size(); i++) {
+      Serializer<?> serializer = serializerFactories.get(i).createSerializer(this, cls);
+      if (serializer != null) {
+        return serializer;
+      }
+    }
+    return null;
   }
 
   public void resetRead() {}
@@ -2192,7 +2198,7 @@ public abstract class TypeResolver {
     // Here we set it to 1 to avoid calculating it again in `register(Class<?> cls)`.
     int classIdGenerator = 1;
     int userIdGenerator = 0;
-    SerializerFactory serializerFactory;
+    final ArrayList<SerializerFactory> serializerFactories = new ArrayList<>();
     final LongMap<TypeInfo> typeInfoByTypeDefId = new LongMap<>(2, 0.5f);
     // cache absTypeInfo, support customized serializer for abstract or interface.
     // IdentityHashMap is more memory efficient than fory IdentityMap, and this is not in hotpath

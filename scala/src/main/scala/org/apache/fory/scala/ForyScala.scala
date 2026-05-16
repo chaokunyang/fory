@@ -17,25 +17,15 @@
  * under the License.
  */
 
-package org.apache.fory.serializer.scala
-
-import scala.concurrent.duration.DurationInt
+package org.apache.fory.scala
 
 import org.apache.fory.Fory
-import org.apache.fory.scala.ForyScala
-import org.scalatest.matchers.should.Matchers
-import org.scalatest.wordspec.AnyWordSpec
+import org.apache.fory.ForyModule
+import org.apache.fory.config.ForyBuilder
+import org.apache.fory.serializer.scala.ScalaSerializers
 
-class DurationTest extends AnyWordSpec with Matchers {
-  val fory: Fory = ForyScala.builder()
-    .withXlang(false)
-    .withRefTracking(true)
-    .requireClassRegistration(false).build()
+object ForyScala extends ForyModule {
+  def builder(): ForyBuilder = Fory.builder().withModule(this)
 
-  "fory scala duration support" should {
-    "serialize/deserialize DurationInt" in {
-      val d = 100.millis
-      fory.deserialize(fory.serialize(d)) shouldEqual d
-    }
-  }
+  override def install(fory: Fory): Unit = ScalaSerializers.registerSerializers(fory)
 }

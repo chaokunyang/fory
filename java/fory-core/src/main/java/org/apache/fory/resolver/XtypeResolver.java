@@ -89,7 +89,6 @@ import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.PrimitiveArraySerializers;
 import org.apache.fory.serializer.PrimitiveSerializers;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.serializer.SerializerFactory;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
 import org.apache.fory.serializer.SqlTimeSerializers;
@@ -914,11 +913,6 @@ public class XtypeResolver extends TypeResolver {
       return serializer;
     }
     return new MapSerializer(this, cls);
-  }
-
-  private Serializer<?> createSerializerFromFactory(Class<?> cls) {
-    SerializerFactory serializerFactory = getSerializerFactory();
-    return serializerFactory == null ? null : serializerFactory.createSerializer(this, cls);
   }
 
   private void registerDefaultTypes() {

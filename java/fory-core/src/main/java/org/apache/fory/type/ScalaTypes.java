@@ -29,6 +29,7 @@ import org.apache.fory.reflect.TypeRef;
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ScalaTypes {
   private static final String SCALA_ENUM_TYPE_NAME = "scala.reflect.Enum";
+  public static final boolean SCALA_AVAILABLE = detectScalaAvailable();
   private static volatile Class<?> SCALA_MAP_TYPE;
   private static volatile Class<?> SCALA_SEQ_TYPE;
   private static volatile Class<?> SCALA_SET_TYPE;
@@ -36,6 +37,23 @@ public class ScalaTypes {
   private static volatile java.lang.reflect.Type SCALA_ITERATOR_RETURN_TYPE;
   private static volatile java.lang.reflect.Type SCALA_NEXT_RETURN_TYPE;
   private static volatile Class<?> SCALA_PRODUCT_TYPE;
+
+  private static boolean detectScalaAvailable() {
+    return canLoad("scala.Product", ScalaTypes.class.getClassLoader())
+        || canLoad("scala.Product", Thread.currentThread().getContextClassLoader());
+  }
+
+  private static boolean canLoad(String className, ClassLoader loader) {
+    if (loader == null) {
+      return false;
+    }
+    try {
+      Class.forName(className, false, loader);
+      return true;
+    } catch (ClassNotFoundException e) {
+      return false;
+    }
+  }
 
   public static Class<?> getScalaMapType() {
     if (SCALA_MAP_TYPE == null) {

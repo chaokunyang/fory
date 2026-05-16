@@ -20,24 +20,23 @@
 package org.apache.fory.serializer.kotlin
 
 import org.apache.fory.Fory
+import org.apache.fory.kotlin.ForyKotlin
 import org.testng.Assert
 import org.testng.annotations.Test
 
 class StringsSerializerTest {
   @Test
   fun testSerializeStringValue() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
-    KotlinSerializers.registerSerializers(fory)
     val value: String = "Hello World!"
     Assert.assertEquals(value, fory.deserialize(fory.serialize(value)))
   }
 
   @Test
   fun testSerializeNullableStringValue() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
-    KotlinSerializers.registerSerializers(fory)
     val value: String? = null
     Assert.assertEquals(value, fory.deserialize(fory.serialize(value)))
   }

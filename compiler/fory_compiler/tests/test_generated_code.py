@@ -21,6 +21,9 @@ from pathlib import Path
 from textwrap import dedent
 from typing import Dict, Tuple, Type
 
+import pytest
+
+from fory_compiler.cli import resolve_imports
 from fory_compiler.frontend.fbs import FBSFrontend
 from fory_compiler.frontend.fdl.lexer import Lexer
 from fory_compiler.frontend.fdl.parser import Parser
@@ -36,6 +39,7 @@ from fory_compiler.generators.javascript import JavaScriptGenerator
 from fory_compiler.generators.swift import SwiftGenerator
 from fory_compiler.generators.dart import DartGenerator
 from fory_compiler.ir.ast import Schema
+from fory_compiler.ir.validator import SchemaValidator
 
 
 GENERATOR_CLASSES: Tuple[Type[BaseGenerator], ...] = (
@@ -491,6 +495,92 @@ def test_java_nested_name_registration_uses_owner_namespace():
         'resolver.registerUnion(Envelope.Choice.class, "demo.Envelope", "Choice"'
         in output
     )
+
+
+def test_java_default_package_import_registers_dependency(tmp_path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        """
+        message Common [id=200] {
+            string name = 1;
+        }
+        """
+    )
+    main = tmp_path / "main.fdl"
+    main.write_text(
+        """
+        import "common.fdl";
+
+        message Holder [id=201] {
+            Common common = 1;
+        }
+        """
+    )
+
+    schema = resolve_imports(main)
+    validator = SchemaValidator(schema)
+    assert validator.validate(), validator.errors
+    files = generate_files(schema, JavaGenerator)
+
+    module = files["MainForyModule.java"]
+    assert "public final class MainForyModule" in module
+    assert "fory.register(CommonForyModule.INSTANCE);" in module
+    assert "CommonForyModule.register(fory)" not in module
+
+
+def test_java_rejects_mixed_default_and_named_imports(tmp_path):
+    default_dir = tmp_path / "default_in_named"
+    default_dir.mkdir()
+    (default_dir / "common.fdl").write_text(
+        """
+        message Common [id=200] {
+            string name = 1;
+        }
+        """
+    )
+    default_main = default_dir / "main.fdl"
+    default_main.write_text(
+        """
+        package app;
+        import "common.fdl";
+
+        message Holder [id=201] {
+            Common common = 1;
+        }
+        """
+    )
+
+    with pytest.raises(ValueError, match="default-package"):
+        JavaGenerator(
+            resolve_imports(default_main), GeneratorOptions(output_dir=tmp_path)
+        )
+
+    named_dir = tmp_path / "named_in_default"
+    named_dir.mkdir()
+    (named_dir / "common.fdl").write_text(
+        """
+        package shared;
+
+        message Common [id=200] {
+            string name = 1;
+        }
+        """
+    )
+    named_main = named_dir / "main.fdl"
+    named_main.write_text(
+        """
+        import "common.fdl";
+
+        message Holder [id=201] {
+            optional Common common = 1;
+        }
+        """
+    )
+
+    with pytest.raises(ValueError, match="default-package"):
+        JavaGenerator(
+            resolve_imports(named_main), GeneratorOptions(output_dir=tmp_path)
+        )
 
 
 def test_java_nested_enum_shadowing_does_not_emit_ref_annotations():

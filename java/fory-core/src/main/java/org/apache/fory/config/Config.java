@@ -59,7 +59,6 @@ public class Config implements Serializable {
   private final MetaCompressor metaCompressor;
   private final boolean asyncCompilationEnabled;
   private final boolean deserializeUnknownClass;
-  private final boolean scalaOptimizationEnabled;
   private transient int configHash;
   private final UnknownEnumValueStrategy unknownEnumValueStrategy;
   private final boolean serializeEnumByName;
@@ -105,7 +104,6 @@ public class Config implements Serializable {
               + "to automatically resolve class schemas.");
     }
     asyncCompilationEnabled = builder.asyncCompilationEnabled;
-    scalaOptimizationEnabled = builder.scalaOptimizationEnabled;
     unknownEnumValueStrategy = builder.unknownEnumValueStrategy;
     serializeEnumByName = builder.serializeEnumByName;
     bufferSizeLimitBytes = builder.bufferSizeLimitBytes;
@@ -293,11 +291,6 @@ public class Config implements Serializable {
     return asyncCompilationEnabled;
   }
 
-  /** Whether enable scala-specific serialization optimization. */
-  public boolean isScalaOptimizationEnabled() {
-    return scalaOptimizationEnabled;
-  }
-
   /** Returns max depth for deserialization, when depth exceeds, an exception will be thrown. */
   public int maxDepth() {
     return maxDepth;
@@ -357,7 +350,6 @@ public class Config implements Serializable {
         && Objects.equals(metaCompressor, config.metaCompressor)
         && asyncCompilationEnabled == config.asyncCompilationEnabled
         && deserializeUnknownClass == config.deserializeUnknownClass
-        && scalaOptimizationEnabled == config.scalaOptimizationEnabled
         && xlang == config.xlang
         && compatible == config.compatible
         && Objects.equals(defaultJDKStreamSerializerType, config.defaultJDKStreamSerializerType)
@@ -398,7 +390,6 @@ public class Config implements Serializable {
         metaCompressor,
         asyncCompilationEnabled,
         deserializeUnknownClass,
-        scalaOptimizationEnabled,
         forVirtualThread);
   }
 

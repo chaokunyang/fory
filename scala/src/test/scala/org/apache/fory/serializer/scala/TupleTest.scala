@@ -20,16 +20,16 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
+import org.apache.fory.scala.ForyScala
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
 case class Struct(tuple2: (String, String), tuple4: (String, String, String, String))
 
 class TupleTest extends AnyWordSpec with Matchers {
-  val fory: Fory = Fory.builder()
+  val fory: Fory = ForyScala.builder()
     .withXlang(false)
     .withRefTracking(true)
-    .withScalaOptimizationEnabled(true)
     .requireClassRegistration(false).build()
 
   "fory scala tuple support" should {

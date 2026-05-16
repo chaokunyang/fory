@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.scala
 
 import org.apache.fory.Fory
+import org.apache.fory.scala.ForyScala
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -80,10 +81,9 @@ class ScalaDefaultValueTest extends AnyWordSpec with Matchers {
     ("Codegen Mode", true)
   )
 
-  def createFory(codegen: Boolean): Fory = Fory.builder()
+  def createFory(codegen: Boolean): Fory = ForyScala.builder()
     .withXlang(false)
     .withRefTracking(true)
-    .withScalaOptimizationEnabled(true)
     .requireClassRegistration(false)
     .suppressClassRegistrationWarnings(false)
     .withCodegen(codegen)

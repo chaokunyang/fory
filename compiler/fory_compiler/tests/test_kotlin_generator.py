@@ -93,7 +93,19 @@ def test_emits_models():
         "public data class BytesCase(public val value: @ArrayType ByteArray)" in union
     )
 
-    registration = files["org/example/demo/DemoForyRegistration.kt"]
+    assert (
+        "public fun toBytes(): ByteArray = DemoForyModule.getFory().serialize(this)"
+        in user
+    )
+    assert "public fun fromBytes(bytes: ByteArray): User" in user
+    assert "DemoForyModule.getFory().deserialize(bytes, User::class.java)" in user
+
+    registration = files["org/example/demo/DemoForyModule.kt"]
+    assert "public object DemoForyModule : ForyModule" in registration
+    assert "internal fun getFory(): ThreadSafeFory = fory" in registration
+    assert "ForyKotlin.builder()" in registration
+    assert ".withModule(this)" in registration
+    assert "override fun install(fory: Fory)" in registration
     assert (
         "KotlinSerializers.registerType(fory, User::class.java, 102L)" in registration
     )
@@ -189,7 +201,7 @@ def test_registration_type_path_collision_rejected(tmp_path, capsys):
         """
         package app;
 
-        message DemoForyRegistration [id=200] {
+        message DemoForyModule [id=200] {
             string name = 1;
         }
         """
@@ -217,7 +229,7 @@ def test_registration_type_path_collision_rejected(tmp_path, capsys):
     assert not out.exists()
 
 
-def test_registration_name_sanitizes_source_stem(tmp_path):
+def test_module_name_sanitizes_source_stem(tmp_path):
     schema = tmp_path / "123-my-schema.fdl"
     schema.write_text(
         """
@@ -243,9 +255,11 @@ def test_registration_name_sanitizes_source_stem(tmp_path):
         == 0
     )
 
-    registration = out / "app/Schema123MySchemaForyRegistration.kt"
-    assert registration.is_file()
-    assert "public object Schema123MySchemaForyRegistration" in registration.read_text()
+    module = out / "app/Schema123MySchemaForyModule.kt"
+    assert module.is_file()
+    assert (
+        "public object Schema123MySchemaForyModule : ForyModule" in module.read_text()
+    )
 
 
 def test_rejects_mixed_default_and_named_imports(tmp_path, capsys):
@@ -318,9 +332,9 @@ def test_default_package_import_registers_dependency(tmp_path):
     generator = KotlinGenerator(schema, GeneratorOptions(output_dir=tmp_path))
     files = {item.path: item.content for item in generator.generate()}
 
-    registration = files["MainForyRegistration.kt"]
-    assert "CommonForyRegistration.register(fory)" in registration
-    assert ".CommonForyRegistration.register(fory)" not in registration
+    registration = files["MainForyModule.kt"]
+    assert "fory.register(CommonForyModule)" in registration
+    assert ".CommonForyModule.register(fory)" not in registration
 
 
 def test_imported_nested_int8_array_does_not_block_local_generation(tmp_path):
@@ -399,7 +413,12 @@ def test_cycle_class_fields():
     assert "@ForyField(id = 2)\n    public var parent: Node? = null" in node
     assert "@ForyField(id = 3)\n    public lateinit var status: Status" in node
     assert "public var ttl: Duration = Duration.ZERO" in node
-    registration = files["graph/GraphForyRegistration.kt"]
+    assert (
+        "public fun toBytes(): ByteArray = GraphForyModule.getFory().serialize(this)"
+        in node
+    )
+    assert "public fun fromBytes(bytes: ByteArray): Node" in node
+    registration = files["graph/GraphForyModule.kt"]
     assert (
         "KotlinSerializers.registerSerializer(fory, Node::class.java)" in registration
     )

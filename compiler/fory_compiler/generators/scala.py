@@ -23,7 +23,6 @@ from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple
 
 from fory_compiler.generators.base import BaseGenerator, GeneratedFile
-from fory_compiler.frontend.utils import parse_idl_file
 from fory_compiler.ir.ast import (
     ArrayType,
     Enum,
@@ -133,6 +132,7 @@ class ScalaGenerator(BaseGenerator):
 
     def __init__(self, schema, options):
         super().__init__(schema, options)
+        self._validate_import_packages()
         self._construction_shapes = analyze_shapes(schema)
 
     def get_scala_package(self) -> Optional[str]:
@@ -142,11 +142,8 @@ class ScalaGenerator(BaseGenerator):
         package = self.get_scala_package()
         return package.replace(".", "/") if package else ""
 
-    def get_registration_class_name(self) -> str:
-        package = self.get_scala_package()
-        if package:
-            return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
-        return "ForyRegistration"
+    def get_module_name(self) -> str:
+        return self._module_name(self.schema)
 
     def is_imported_type(self, type_def: object) -> bool:
         if not self.schema.source_file:
@@ -169,30 +166,43 @@ class ScalaGenerator(BaseGenerator):
         except Exception:
             return path_str
 
-    def _load_schema(self, file_path: str) -> Optional[Schema]:
-        if not file_path:
-            return None
-        if not hasattr(self, "_schema_cache"):
-            self._schema_cache = {}
-        cache = self._schema_cache
-        path = Path(file_path).resolve()
-        if path in cache:
-            return cache[path]
-        try:
-            schema = parse_idl_file(path)
-        except Exception:
-            return None
-        cache[path] = schema
-        return schema
-
     def _scala_package_for_schema(self, schema: Schema) -> Optional[str]:
         return schema.package
 
-    def _registration_name(self, schema: Schema) -> str:
+    def _validate_import_packages(self) -> None:
+        schemas = self._schema_graph()
+        packages = {self._scala_package_for_schema(schema) for _, schema in schemas}
+        if None not in packages or len(packages) <= 1:
+            return
+        details = ", ".join(
+            f"{source} uses {self._scala_package_for_schema(schema) or '<default>'}"
+            for source, schema in schemas
+        )
+        raise ValueError(
+            "Scala imports cannot mix default-package schemas with named "
+            f"Scala packages; {details}"
+        )
+
+    def _module_name(self, schema: Schema) -> str:
         package = self._scala_package_for_schema(schema)
         if package:
-            return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
-        return "ForyRegistration"
+            return self.to_pascal_case(package.split(".")[-1]) + "ForyModule"
+        prefix = self._module_prefix_from_source(schema)
+        if prefix:
+            return prefix + "ForyModule"
+        return "ForyModule"
+
+    def _module_prefix_from_source(self, schema: Schema) -> str:
+        if not schema.source_file or schema.source_file.startswith("<"):
+            return ""
+        cleaned = "".join(
+            char if char.isascii() and (char.isalnum() or char == "_") else "_"
+            for char in Path(schema.source_file).stem
+        )
+        prefix = self.to_pascal_case(cleaned) if cleaned else "Schema"
+        if not prefix or not (prefix[0].isalpha() or prefix[0] == "_"):
+            prefix = f"Schema{prefix}"
+        return prefix
 
     def _scala_package_for_type(self, type_def: object) -> Optional[str]:
         location = getattr(type_def, "location", None)
@@ -203,22 +213,21 @@ class ScalaGenerator(BaseGenerator):
         return self._scala_package_for_schema(schema)
 
     def _imported_regs(self) -> List[tuple[str, str]]:
-        packages: dict[str, str] = {}
+        registrations: dict[tuple[str, str], tuple[str, str]] = {}
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
                 continue
             package = self._scala_package_for_type(type_def)
-            if not package or package in packages:
-                continue
             schema = self._load_schema(
                 getattr(getattr(type_def, "location", None), "file", None)
             )
             if schema is None:
                 continue
-            packages[package] = self._registration_name(schema)
+            registration = (package or "", self._module_name(schema))
+            registrations.setdefault(registration, registration)
 
         ordered: List[tuple[str, str]] = []
-        used: Set[str] = set()
+        used: Set[tuple[str, str]] = set()
         if self.schema.source_file:
             base_dir = Path(self.schema.source_file).resolve().parent
             for imp in self.schema.imports:
@@ -229,13 +238,14 @@ class ScalaGenerator(BaseGenerator):
                 if schema is None:
                     continue
                 package = self._scala_package_for_schema(schema)
-                if not package or package in used:
+                registration = (package or "", self._module_name(schema))
+                if registration in used:
                     continue
-                ordered.append((package, self._registration_name(schema)))
-                used.add(package)
-        for package, registration in sorted(packages.items()):
-            if package not in used:
-                ordered.append((package, registration))
+                ordered.append(registration)
+                used.add(registration)
+        for registration in sorted(registrations):
+            if registration not in used:
+                ordered.append(registration)
         return ordered
 
     def generate(self) -> List[GeneratedFile]:
@@ -252,7 +262,7 @@ class ScalaGenerator(BaseGenerator):
             if self.is_imported_type(message):
                 continue
             files.append(self.generate_message_file(message))
-        files.append(self.generate_registration_file())
+        files.append(self.generate_module_file())
         return files
 
     def generate_enum_file(self, enum: Enum) -> GeneratedFile:
@@ -377,9 +387,11 @@ class ScalaGenerator(BaseGenerator):
             lines.append(
                 f"{ind}    {self.generate_parameter(field, current_stack)}{suffix}"
             )
-        lines.append(f"{ind}) derives ForySerializer")
+        lines.append(f"{ind}) derives ForySerializer {{")
+        lines.extend(self.generate_to_bytes(message, indent + 1))
+        lines.append(f"{ind}}}")
         lines.append("")
-        lines.extend(self.generate_nested_types(message, indent, current_stack))
+        lines.extend(self.generate_companion(message, indent, current_stack))
         return lines
 
     def generate_normal_class(
@@ -414,20 +426,32 @@ class ScalaGenerator(BaseGenerator):
                 f"{ind}    var {self.safe_identifier(self.to_camel_case(field.name))}: {field_type} = {self.default_value(field)}"
             )
             lines.append("")
+        lines.extend(self.generate_to_bytes(message, indent + 1))
         lines.append(f"{ind}}}")
         lines.append("")
-        lines.extend(self.generate_nested_types(message, indent, current_stack))
+        lines.extend(self.generate_companion(message, indent, current_stack))
         return lines
 
-    def generate_nested_types(
+    def generate_to_bytes(self, message: Message, indent: int) -> List[str]:
+        ind = self.indent_str * indent
+        module = self.get_module_name()
+        return [
+            f"{ind}def toBytes(): Array[Byte] =",
+            f"{ind}    {module}.getFory.serialize(this)",
+        ]
+
+    def generate_companion(
         self, message: Message, indent: int, parent_stack: List[Message]
     ) -> List[str]:
-        if not (
-            message.nested_enums or message.nested_unions or message.nested_messages
-        ):
-            return []
         ind = self.indent_str * indent
+        module = self.get_module_name()
         lines = [f"{ind}object {message.name} {{"]
+        lines.append(f"{ind}    def fromBytes(bytes: Array[Byte]): {message.name} =")
+        lines.append(
+            f"{ind}        {module}.getFory.deserialize(bytes).asInstanceOf[{message.name}]"
+        )
+        if message.nested_enums or message.nested_unions or message.nested_messages:
+            lines.append("")
         for enum in message.nested_enums:
             lines.extend(self.generate_enum(enum, indent + 1))
         for union in message.nested_unions:
@@ -762,39 +786,37 @@ class ScalaGenerator(BaseGenerator):
                 return isinstance(resolved, (Message, Union))
         return isinstance(self.schema.get_type(field_type.name), (Message, Union))
 
-    def generate_registration_file(self) -> GeneratedFile:
+    def generate_module_file(self) -> GeneratedFile:
         imports = {
             "org.apache.fory.{Fory, ThreadSafeFory}",
-            "org.apache.fory.scala.ForySerializer",
+            "org.apache.fory.scala.{ForyScala, ForySerializer}",
             "org.apache.fory.serializer.scala.ScalaSerializers",
         }
         lines = self.source_header(imports)
-        class_name = self.get_registration_class_name()
-        lines.append(f"object {class_name} {{")
-        lines.append("    private lazy val fory: ThreadSafeFory = createFory()")
-        lines.append("")
-        lines.append("    def getFory: ThreadSafeFory = fory")
-        lines.append("")
-        lines.append("    private def createFory(): ThreadSafeFory = {")
-        lines.append(
-            "        val runtime = Fory.builder().withXlang(true).withCompatible(true).withRefTracking(true).withScalaOptimizationEnabled(true).buildThreadSafeFory()"
-        )
-        imported_registrations = self._imported_regs()
-        if imported_registrations:
-            lines.append("        runtime.registerCallback((fory: Fory) => {")
-            for package, registration in imported_registrations:
-                lines.append(f"            {package}.{registration}.register(fory)")
-            lines.append("            register(fory)")
-            lines.append("        })")
+        class_name = self.get_module_name()
+        package_name = self.get_scala_package()
+        if package_name:
+            access = f"private[{package_name.split('.')[-1]}] "
         else:
-            lines.append(
-                "        runtime.registerCallback((fory: Fory) => register(fory))"
-            )
-        lines.append("        runtime")
-        lines.append("    }")
+            access = ""
+        lines.append(f"object {class_name} extends org.apache.fory.ForyModule {{")
+        lines.append("    private lazy val fory: ThreadSafeFory =")
+        lines.append("        ForyScala.builder()")
+        lines.append("            .withXlang(true)")
+        lines.append("            .withCompatible(true)")
+        lines.append("            .withRefTracking(true)")
+        lines.append("            .withModule(this)")
+        lines.append("            .buildThreadSafeFory()")
         lines.append("")
-        lines.append("    def register(fory: Fory): Unit = {")
-        lines.append("        ScalaSerializers.registerSerializers(fory)")
+        lines.append(f"    {access}def getFory: ThreadSafeFory = fory")
+        lines.append("")
+        lines.append("    override def install(fory: Fory): Unit = {")
+        imported_modules = self._imported_regs()
+        for package, module in imported_modules:
+            if package:
+                lines.append(f"        fory.register({package}.{module})")
+            else:
+                lines.append(f"        fory.register({module})")
         registrations = self.registration_order()
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):

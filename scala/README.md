@@ -29,21 +29,15 @@ Apache Fory™ Scala is tested and works with the following types:
 
 ```scala
 import org.apache.fory.Fory
-import org.apache.fory.serializer.scala.ScalaSerializers
+import org.apache.fory.scala.ForyScala
 
 case class Person(name: String, id: Long, github: String)
 case class Point(x: Int, y: Int, z: Int)
 
 object ScalaExample {
-  // Create Fory with Scala optimization enabled
-  val fory: Fory = Fory.builder()
-    .withScalaOptimizationEnabled(true)
+  val fory: Fory = ForyScala.builder()
     .build()
 
-  // Register optimized Fory serializers for Scala
-  ScalaSerializers.registerSerializers(fory)
-
-  // Register your classes
   fory.register(classOf[Person])
   fory.register(classOf[Point])
 
@@ -67,7 +61,7 @@ When a Scala class has default parameters, the Scala compiler generates methods 
 
 ```scala
 import org.apache.fory.Fory
-import org.apache.fory.serializer.scala.ScalaSerializers
+import org.apache.fory.scala.ForyScala
 
 // Original case class
 case class User(name: String, age: Int)
@@ -76,12 +70,9 @@ case class User(name: String, age: Int)
 case class UserV2(name: String, age: Int, email: String = "unknown", active: Boolean = true)
 
 object DefaultValueExample {
-  val fory: Fory = Fory.builder()
-    .withScalaOptimizationEnabled(true)
+  val fory: Fory = ForyScala.builder()
     .withCompatible(true)
     .build()
-
-  ScalaSerializers.registerSerializers(fory)
 
   def main(args: Array[String]): Unit = {
     // Serialize with old schema
@@ -109,14 +100,12 @@ For multi-threaded applications, use `ThreadSafeFory`:
 
 ```scala
 import org.apache.fory.{Fory, ThreadSafeFory}
-import org.apache.fory.serializer.scala.ScalaSerializers
+import org.apache.fory.scala.ForyScala
 
 object ForyHolder {
-  val fory: ThreadSafeFory = Fory.builder()
-    .withScalaOptimizationEnabled(true)
+  val fory: ThreadSafeFory = ForyScala.builder()
     .buildThreadSafeFory()
 
-  ScalaSerializers.registerSerializers(fory)
   fory.register(classOf[Person])
 }
 
@@ -131,11 +120,9 @@ Fory Scala is built on Fory Java, so all Java configuration options are availabl
 
 ```scala
 import org.apache.fory.Fory
-import org.apache.fory.serializer.scala.ScalaSerializers
+import org.apache.fory.scala.ForyScala
 
-val fory = Fory.builder()
-  // Required for Scala
-  .withScalaOptimizationEnabled(true)
+val fory = ForyScala.builder()
   // Enable reference tracking for circular references
   .withRefTracking(true)
   // Enable schema evolution support
@@ -146,8 +133,6 @@ val fory = Fory.builder()
   .withIntCompressed(true)
   .withLongCompressed(true)
   .build()
-
-ScalaSerializers.registerSerializers(fory)
 ```
 
 ## Documentation

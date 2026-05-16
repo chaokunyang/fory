@@ -17,19 +17,17 @@ Add `fory-kotlin` when application code serializes Kotlin values:
 implementation("org.apache.fory:fory-kotlin:<fory-version>")
 ```
 
-Register the Kotlin runtime serializers once for each Fory instance:
+Create Fory through the Kotlin module builder:
 
 ```kotlin
-import org.apache.fory.Fory
-import org.apache.fory.serializer.kotlin.KotlinSerializers
+import org.apache.fory.kotlin.ForyKotlin
 
 data class User(val name: String, val id: UInt)
 
-val fory = Fory.builder()
+val fory = ForyKotlin.builder()
   .requireClassRegistration(true)
   .build()
 
-KotlinSerializers.registerSerializers(fory)
 fory.register(User::class.java)
 ```
 

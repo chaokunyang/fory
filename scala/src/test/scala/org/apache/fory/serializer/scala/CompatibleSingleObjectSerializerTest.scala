@@ -40,7 +40,6 @@ class CompatibleSingleObjectSerializerTest extends AnyWordSpec with Matchers {
   def fory: Fory = {
     org.apache.fory.Fory
       .builder()
-      .withScalaOptimizationEnabled(true)
       .requireClassRegistration(false)
       .withRefTracking(true)
       .withCompatible(true)

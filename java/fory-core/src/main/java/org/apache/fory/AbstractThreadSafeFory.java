@@ -108,13 +108,13 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   }
 
   @Override
-  public void setSerializerFactory(SerializerFactory serializerFactory) {
-    registerCallback(fory -> fory.setSerializerFactory(serializerFactory));
+  public void register(ForyModule module) {
+    registerCallback(fory -> fory.register(module));
   }
 
   @Override
-  public TypeResolver getTypeResolver() {
-    return execute(Fory::getTypeResolver);
+  public void registerSerializerFactory(SerializerFactory serializerFactory) {
+    registerCallback(fory -> fory.registerSerializerFactory(serializerFactory));
   }
 
   @Override

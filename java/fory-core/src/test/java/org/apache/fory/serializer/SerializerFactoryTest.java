@@ -24,8 +24,13 @@ import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.ByteBufferInput;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 import lombok.Data;
 import org.apache.fory.Fory;
+import org.apache.fory.ForyModule;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
@@ -82,21 +87,89 @@ public class SerializerFactoryTest {
   }
 
   @Test
-  public void testSerializerFactory() {
+  public void testBuilderFactory() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(false)
+            .requireClassRegistration(false)
+            .withSerializerFactory(SerializerFactoryTest::createSerializer)
+            .build();
+    assertKryoSerializer(fory);
+  }
+
+  @Test
+  public void testRuntimeFactory() {
     Fory fory =
         Fory.builder()
             .withXlang(false)
             .withRefTracking(false)
             .requireClassRegistration(false)
             .build();
-    fory.setSerializerFactory(
-        (f, cls) -> {
-          if (KryoSerializable.class.isAssignableFrom(cls)) {
-            return new KryoSerializer(f, cls);
-          } else {
-            return null;
-          }
-        });
+    fory.registerSerializerFactory(SerializerFactoryTest::createSerializer);
+    assertKryoSerializer(fory);
+  }
+
+  @Test
+  public void testModuleFactory() {
+    AtomicInteger installs = new AtomicInteger();
+    ForyModule module =
+        fory -> {
+          installs.incrementAndGet();
+          fory.registerSerializerFactory(SerializerFactoryTest::createSerializer);
+        };
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(false)
+            .requireClassRegistration(false)
+            .withModule(module)
+            .withModule(module)
+            .build();
+    assertKryoSerializer(fory);
+    Assert.assertEquals(installs.get(), 1);
+  }
+
+  @Test
+  public void testFactoryOrder() {
+    List<String> calls = new ArrayList<>();
+    ForyModule module =
+        fory ->
+            fory.registerSerializerFactory(
+                (resolver, cls) -> {
+                  calls.add("module");
+                  return null;
+                });
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(false)
+            .requireClassRegistration(false)
+            .withSerializerFactory(
+                (resolver, cls) -> {
+                  calls.add("custom");
+                  return createSerializer(resolver, cls);
+                })
+            .withModule(module)
+            .build();
+    Assert.assertEquals(fory.getTypeResolver().getSerializerClass(A.class), KryoSerializer.class);
+    Assert.assertEquals(calls, Collections.singletonList("custom"));
+    calls.clear();
+    A a = new A();
+    a.f1 = "f1";
+    Object a2 = fory.deserialize(fory.serialize(a));
+    Assert.assertEquals(a, a2);
+    Assert.assertEquals(calls, Collections.singletonList("custom"));
+  }
+
+  private static Serializer<?> createSerializer(TypeResolver resolver, Class<?> cls) {
+    if (KryoSerializable.class.isAssignableFrom(cls)) {
+      return new KryoSerializer(resolver, cls);
+    }
+    return null;
+  }
+
+  private static void assertKryoSerializer(Fory fory) {
     Assert.assertEquals(fory.getTypeResolver().getSerializerClass(A.class), KryoSerializer.class);
     A a = new A();
     a.f1 = "f1";

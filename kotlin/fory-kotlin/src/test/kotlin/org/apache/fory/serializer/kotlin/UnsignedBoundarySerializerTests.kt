@@ -20,6 +20,7 @@
 package org.apache.fory.serializer.kotlin
 
 import org.apache.fory.Fory
+import org.apache.fory.kotlin.ForyKotlin
 import org.testng.Assert
 import org.testng.annotations.Test
 
@@ -27,9 +28,7 @@ import org.testng.annotations.Test
 class UnsignedBoundarySerializerTests {
   @Test
   fun testUByteBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val boundaryMin = UByte.MIN_VALUE
     val boundaryMax = UByte.MAX_VALUE
@@ -40,9 +39,7 @@ class UnsignedBoundarySerializerTests {
 
   @Test
   fun testUShortBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val boundaryMin = UShort.MIN_VALUE
     val boundaryMax = UShort.MAX_VALUE
@@ -53,9 +50,7 @@ class UnsignedBoundarySerializerTests {
 
   @Test
   fun testUIntBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val boundaryMin = UInt.MIN_VALUE
     val boundaryMax = UInt.MAX_VALUE
@@ -66,9 +61,7 @@ class UnsignedBoundarySerializerTests {
 
   @Test
   fun testULongBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val boundaryMin = ULong.MIN_VALUE
     val boundaryMax = ULong.MAX_VALUE
@@ -79,9 +72,7 @@ class UnsignedBoundarySerializerTests {
 
   @Test
   fun testUByteArrayBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = ubyteArrayOf(UByte.MIN_VALUE, UByte.MAX_VALUE)
 
@@ -90,9 +81,7 @@ class UnsignedBoundarySerializerTests {
 
   @Test
   fun testUShortArrayBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = ushortArrayOf(UShort.MIN_VALUE, UShort.MAX_VALUE)
 
@@ -101,9 +90,7 @@ class UnsignedBoundarySerializerTests {
 
   @Test
   fun testUIntArrayBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = uintArrayOf(UInt.MIN_VALUE, UInt.MAX_VALUE)
 
@@ -112,9 +99,7 @@ class UnsignedBoundarySerializerTests {
 
   @Test
   fun testULongArrayBoundarySerialization() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
     val array = ulongArrayOf(ULong.MIN_VALUE, ULong.MAX_VALUE)
 

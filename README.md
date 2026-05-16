@@ -552,16 +552,14 @@ print(person.name)
 **Scala**
 
 ```scala
-import org.apache.fory.Fory
-import org.apache.fory.serializer.scala.ScalaSerializers
+import org.apache.fory.scala.ForyScala
 
 case class Person(name: String, age: Int)
 
-val fory = Fory.builder()
+val fory = ForyScala.builder()
   .withXlang(true)
   .withCompatible(true)
   .build()
-ScalaSerializers.registerSerializers(fory)
 fory.register(classOf[Person], "example.Person")
 
 val bytes = fory.serialize(Person("Alice", 30))
@@ -572,17 +570,15 @@ println(person.name)
 **Kotlin**
 
 ```kotlin
-import org.apache.fory.Fory
-import org.apache.fory.serializer.kotlin.KotlinSerializers
+import org.apache.fory.kotlin.ForyKotlin
 
 data class Person(val name: String, val age: Int)
 
 fun main() {
-    val fory = Fory.builder()
+    val fory = ForyKotlin.builder()
         .withXlang(true)
         .withCompatible(true)
         .build()
-    KotlinSerializers.registerSerializers(fory)
     fory.register(Person::class.java, "example.Person")
 
     val bytes = fory.serialize(Person("Alice", 30))
@@ -646,22 +642,24 @@ auto fory = Fory::builder().xlang(false).build();
 **Scala**
 
 ```scala
-val fory = Fory.builder()
+import org.apache.fory.scala.ForyScala
+
+val fory = ForyScala.builder()
   .withXlang(false)
   .requireClassRegistration(true)
   .build()
-ScalaSerializers.registerSerializers(fory)
 // Register, serialize, and deserialize as in the xlang example above.
 ```
 
 **Kotlin**
 
 ```kotlin
-val fory = Fory.builder()
+import org.apache.fory.kotlin.ForyKotlin
+
+val fory = ForyKotlin.builder()
     .withXlang(false)
     .requireClassRegistration(true)
     .build()
-KotlinSerializers.registerSerializers(fory)
 // Register, serialize, and deserialize as in the xlang example above.
 ```
 

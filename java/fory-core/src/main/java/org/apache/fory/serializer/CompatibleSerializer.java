@@ -42,6 +42,7 @@ import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.type.Generics;
+import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.DefaultValueUtils;
 import org.apache.fory.util.Preconditions;
@@ -119,7 +120,7 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     DefaultValueUtils.DefaultValueField[] defaultValueFields =
         new DefaultValueUtils.DefaultValueField[0];
     DefaultValueUtils.DefaultValueSupport defaultValueSupport;
-    if (config.isScalaOptimizationEnabled()) {
+    if (ScalaTypes.SCALA_AVAILABLE) {
       defaultValueSupport = DefaultValueUtils.getScalaDefaultValueSupport();
       hasDefaultValues = defaultValueSupport.hasDefaultValues(type);
       defaultValueFields =

@@ -593,7 +593,8 @@ public class TypeUtils {
         }
       }
     }
-    if (typeRef.getType().getTypeName().startsWith("scala.collection")) {
+    if (ScalaTypes.SCALA_AVAILABLE
+        && typeRef.getType().getTypeName().startsWith("scala.collection")) {
       return ScalaTypes.getElementType(typeRef);
     }
     TypeRef<?> supertype = ((TypeRef<? extends Iterable<?>>) typeRef).getSupertype(Iterable.class);
@@ -631,7 +632,8 @@ public class TypeUtils {
         }
       }
     }
-    if (typeRef.getType().getTypeName().startsWith("scala.collection")) {
+    if (ScalaTypes.SCALA_AVAILABLE
+        && typeRef.getType().getTypeName().startsWith("scala.collection")) {
       return ScalaTypes.getMapKeyValueType(typeRef);
     }
     @SuppressWarnings("unchecked")
@@ -642,7 +644,7 @@ public class TypeUtils {
   }
 
   private static boolean isScalaCollectionClass(Class<?> rawType) {
-    return rawType.getName().startsWith("scala.collection");
+    return ScalaTypes.SCALA_AVAILABLE && rawType.getName().startsWith("scala.collection");
   }
 
   public static void applyRefTrackingOverride(

@@ -34,23 +34,22 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 import org.apache.fory.Fory
+import org.apache.fory.kotlin.ForyKotlin
 import org.testng.Assert
 
 class BuiltinClassSerializerTests {
   @Test
   fun testSerializePair() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
-    KotlinSerializers.registerSerializers(fory)
     val value = Pair(1, "one")
     Assert.assertEquals(value, fory.deserialize(fory.serialize(value)))
   }
 
   @Test
   fun testSerializeTriple() {
-    val fory: Fory = Fory.builder().withXlang(false).requireClassRegistration(true).build()
+    val fory: Fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(true).build()
 
-    KotlinSerializers.registerSerializers(fory)
     val value = Triple(1, "one", null)
     Assert.assertEquals(value, fory.deserialize(fory.serialize(value)))
   }
@@ -59,9 +58,12 @@ class BuiltinClassSerializerTests {
   @Test
   fun testSerializeResult() {
     val fory: Fory =
-      Fory.builder().withXlang(false).requireClassRegistration(true).withRefTracking(true).build()
+      ForyKotlin.builder()
+        .withXlang(false)
+        .requireClassRegistration(true)
+        .withRefTracking(true)
+        .build()
 
-    KotlinSerializers.registerSerializers(fory)
     val value1 = Result.success(5)
     Assert.assertEquals(value1, fory.deserialize(fory.serialize(value1)))
 
@@ -74,9 +76,12 @@ class BuiltinClassSerializerTests {
   @Test
   fun testSerializeRanges() {
     val fory: Fory =
-      Fory.builder().withXlang(false).requireClassRegistration(true).withRefTracking(true).build()
+      ForyKotlin.builder()
+        .withXlang(false)
+        .requireClassRegistration(true)
+        .withRefTracking(true)
+        .build()
 
-    KotlinSerializers.registerSerializers(fory)
     val value1 = 1..4
     Assert.assertEquals(value1, fory.deserialize(fory.serialize(value1)))
 
@@ -114,9 +119,12 @@ class BuiltinClassSerializerTests {
   @Test
   fun testSerializeRandom() {
     val fory: Fory =
-      Fory.builder().withXlang(false).requireClassRegistration(true).withRefTracking(true).build()
+      ForyKotlin.builder()
+        .withXlang(false)
+        .requireClassRegistration(true)
+        .withRefTracking(true)
+        .build()
 
-    KotlinSerializers.registerSerializers(fory)
     val value1 = Random(123)
     val roundtrip1 = fory.deserialize(fory.serialize(value1)) as Random
 
@@ -133,9 +141,11 @@ class BuiltinClassSerializerTests {
   @Test
   fun testSerializeDuration() {
     val fory: Fory =
-      Fory.builder().withXlang(false).requireClassRegistration(true).withRefTracking(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+      ForyKotlin.builder()
+        .withXlang(false)
+        .requireClassRegistration(true)
+        .withRefTracking(true)
+        .build()
 
     val value1 = Duration.ZERO
     Assert.assertEquals(value1, fory.deserialize(fory.serialize(value1)))
@@ -184,9 +194,11 @@ class BuiltinClassSerializerTests {
   @Test
   fun testSerializeUuid() {
     val fory: Fory =
-      Fory.builder().withXlang(false).requireClassRegistration(true).withRefTracking(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+      ForyKotlin.builder()
+        .withXlang(false)
+        .requireClassRegistration(true)
+        .withRefTracking(true)
+        .build()
 
     val value = Uuid.fromLongs(1234L, 56789L)
     Assert.assertEquals(value, fory.deserialize(fory.serialize(value)))
@@ -195,9 +207,11 @@ class BuiltinClassSerializerTests {
   @Test
   fun testSerializeRegex() {
     val fory: Fory =
-      Fory.builder().withXlang(false).requireClassRegistration(true).withRefTracking(true).build()
-
-    KotlinSerializers.registerSerializers(fory)
+      ForyKotlin.builder()
+        .withXlang(false)
+        .requireClassRegistration(true)
+        .withRefTracking(true)
+        .build()
 
     val value = Regex("12345")
     Assert.assertEquals(value.pattern, fory.deserialize(fory.serialize(value.pattern)))
@@ -221,7 +235,11 @@ class BuiltinClassSerializerTests {
       )
     for (xlang in listOf(false, true)) {
       val fory =
-        Fory.builder().withXlang(xlang).requireClassRegistration(true).withRefTracking(true).build()
+        ForyKotlin.builder()
+          .withXlang(xlang)
+          .requireClassRegistration(true)
+          .withRefTracking(true)
+          .build()
       for (value in values) {
         Assert.assertEquals(value, fory.deserialize(fory.serialize(value)))
       }

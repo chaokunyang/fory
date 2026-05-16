@@ -23,19 +23,18 @@ dependencies {
 }
 ```
 
-Register target classes with the normal Fory Java registration APIs:
+Register target classes with the Kotlin `register<T>` extension:
 
 ```kotlin
-import org.apache.fory.Fory
-import org.apache.fory.serializer.kotlin.KotlinSerializers
+import org.apache.fory.kotlin.ForyKotlin
+import org.apache.fory.kotlin.register
 
-val fory = Fory.builder()
+val fory = ForyKotlin.builder()
   .withXlang(true)
   .requireClassRegistration(true)
   .build()
 
-KotlinSerializers.registerSerializers(fory)
-fory.register(User::class.java, "example", "User")
+fory.register<User>("example", "User")
 ```
 
 Application code should not reference generated serializer classes directly.

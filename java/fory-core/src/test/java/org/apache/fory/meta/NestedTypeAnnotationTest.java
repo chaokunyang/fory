@@ -106,6 +106,8 @@ public class NestedTypeAnnotationTest extends ForyTestBase {
 
     public @Int8Type byte[] signedValues;
 
+    public @ArrayType byte[] denseSignedValues;
+
     public @UInt8Type byte[] unsignedValues;
   }
 
@@ -113,7 +115,11 @@ public class NestedTypeAnnotationTest extends ForyTestBase {
   public static class NestedPrimitiveArrayAnnotations {
     public List<@Int8Type byte[]> int8ArrayList;
 
+    public List<@ArrayType byte[]> arrayTypeByteArrayList;
+
     public List<@UInt8Type byte[]> uint8ArrayList;
+
+    public Map<String, @ArrayType byte[]> arrayTypeByteArrayValuesByName;
 
     public Map<String, @UInt8Type byte[]> uint8ArrayValuesByName;
 
@@ -298,11 +304,13 @@ public class NestedTypeAnnotationTest extends ForyTestBase {
 
     assertRegistered(fieldType(typeDef, "payload"), Types.BINARY);
     assertRegistered(fieldType(typeDef, "signedValues"), Types.INT8_ARRAY);
+    assertRegistered(fieldType(typeDef, "denseSignedValues"), Types.INT8_ARRAY);
     assertRegistered(fieldType(typeDef, "unsignedValues"), Types.UINT8_ARRAY);
 
     ByteArraySchemaKinds value = new ByteArraySchemaKinds();
     value.payload = new byte[] {1, 2, 3};
     value.signedValues = new byte[] {-1, 0, 1};
+    value.denseSignedValues = new byte[] {-2, 0, 2};
     value.unsignedValues = new byte[] {(byte) 0xff, 0, 1};
     serDeCheck(fory, value);
   }
@@ -318,8 +326,15 @@ public class NestedTypeAnnotationTest extends ForyTestBase {
         assertCollection(fieldType(typeDef, "int8ArrayList"), Types.LIST).getElementType(),
         Types.INT8_ARRAY);
     assertRegistered(
+        assertCollection(fieldType(typeDef, "arrayTypeByteArrayList"), Types.LIST)
+            .getElementType(),
+        Types.INT8_ARRAY);
+    assertRegistered(
         assertCollection(fieldType(typeDef, "uint8ArrayList"), Types.LIST).getElementType(),
         Types.UINT8_ARRAY);
+    assertRegistered(
+        assertMap(fieldType(typeDef, "arrayTypeByteArrayValuesByName"), Types.MAP).getValueType(),
+        Types.INT8_ARRAY);
     assertRegistered(
         assertMap(fieldType(typeDef, "uint8ArrayValuesByName"), Types.MAP).getValueType(),
         Types.UINT8_ARRAY);

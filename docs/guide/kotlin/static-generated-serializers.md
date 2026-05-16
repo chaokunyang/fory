@@ -142,8 +142,7 @@ elements, and map values. Constructor-owned reads construct Kotlin values
 through primary constructors. Schema IDL classes that need reference
 publication are emitted as mutable no-arg classes, and their KSP-generated
 serializers publish the instance before reading fields. In both shapes, KSP owns
-field descriptors, nested nullability, and `@Ref` metadata. Generated Kotlin IDL
-does not require `-Xemit-jvm-type-annotations` for Fory schema metadata.
+field descriptors, nested nullability, and `@Ref` metadata.
 
 ## Collections
 
@@ -183,14 +182,14 @@ Kotlin dense primitive and unsigned array fields are supported:
 - `UIntArray`
 - `ULongArray`
 
-Dense arrays are supported in fields, collection elements, map values, and union
-cases. `array<float16>` and `array<bfloat16>` use the Java core
-`Float16Array` and `BFloat16Array` carriers.
+Dense arrays with unambiguous Kotlin carriers are supported in fields,
+collection elements, map values, and union cases. `array<float16>` and
+`array<bfloat16>` use the Java core `Float16Array` and `BFloat16Array` carriers.
 
-`ByteArray` is encoded as Fory `binary` unless you explicitly annotate the
-top-level field with Java `@ArrayType`. Generated Kotlin IDL uses Java core
-`Int8List` for `array<int8>` so nested positions do not depend on a field
-annotation to distinguish dense signed bytes from `binary`.
+`ByteArray` is encoded as Fory `binary` unless the `ByteArray` type use is
+annotated with Java `@ArrayType`. Generated Kotlin IDL uses
+`@ArrayType ByteArray` for `array<int8>`, including nested collection and map
+positions.
 
 `@ArrayType` is also supported on top-level `List<T>` fields when `T` is a
 non-null boolean or numeric dense-array element type. In that case the field is
@@ -264,9 +263,7 @@ The runtime resolves them from the registered target class.
 
 Generated Schema IDL registration helpers use the same path. They call
 `KotlinSerializers.registerType`, `registerSerializer`, `registerEnum`, and
-`registerUnion` as appropriate and never emit Java files. They do not call the
-general `KotlinSerializers.registerSerializers(fory)` helper, so IDL schema type
-IDs remain owned only by the generated schema registration.
+`registerUnion` as appropriate and never emit Java files.
 
 ## Generated Names
 
@@ -278,11 +275,8 @@ These names are an implementation detail. They matter for diagnostics and
 Android shrinking, but user code should only register target classes.
 
 If a constructor-owned Kotlin xlang struct is registered but its KSP generated
-serializer is missing, Fory fails with a configuration error. Constructor-owned
-structs do not fall back to runtime reflection for Kotlin schema metadata.
-Mutable no-arg schema structs emitted for generated IDL cycle classes also use
-generated descriptor metadata and do not require JVM-visible `@Nullable`
-annotations.
+serializer is missing, Fory fails with a configuration error. Compile generated
+IDL sources with KSP before registering generated Kotlin classes.
 
 ## Android And R8
 

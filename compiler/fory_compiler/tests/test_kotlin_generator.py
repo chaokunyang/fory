@@ -25,11 +25,14 @@ from fory_compiler.generators.kotlin import KotlinGenerator
 from fory_compiler.ir.validator import SchemaValidator
 
 
-def generate_kotlin(source: str):
+def generate_kotlin(source: str, package_override=None):
     schema = Parser(Lexer(source).tokenize()).parse()
     validator = SchemaValidator(schema)
     assert validator.validate(), validator.errors
-    generator = KotlinGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
+    generator = KotlinGenerator(
+        schema,
+        GeneratorOptions(output_dir=Path("/tmp"), package_override=package_override),
+    )
     return {item.path: item.content for item in generator.generate()}
 
 
@@ -66,9 +69,9 @@ def test_emits_models():
     assert "public val age: Int?" in user
     assert "public val fixedId: @Fixed Long" in user
     assert "@VarInt" not in user
-    assert "@field:ArrayType" in user
-    assert "import org.apache.fory.collection.Int8List" in user
-    assert "public val bytes: Int8List" in user
+    assert "@ArrayType" in user
+    assert "import org.apache.fory.collection.Int8List" not in user
+    assert "public val bytes: @ArrayType ByteArray" in user
 
     status = files["org/example/demo/Status.kt"]
     assert "public enum class Status" in status
@@ -85,8 +88,7 @@ def test_emits_models():
     assert "public data class UserCase(public val value: User)" in union
     assert "import org.apache.fory.annotation.ArrayType" in union
     assert (
-        "public data class BytesCase(@field:ArrayType public val value: Int8List)"
-        in union
+        "public data class BytesCase(public val value: @ArrayType ByteArray)" in union
     )
 
     registration = files["org/example/demo/DemoForyRegistration.kt"]
@@ -152,10 +154,61 @@ def test_package_override_imports(tmp_path):
     )
     files = {item.path: item.content for item in generator.generate()}
 
-    holder = files["org/override/app/Holder.kt"]
-    assert "public val common: org.override.shared.Common" in holder
-    registration = files["org/override/app/AppForyRegistration.kt"]
-    assert "org.override.shared.SharedForyRegistration.register(fory)" in registration
+    holder = files["org/override/Holder.kt"]
+    assert "package org.override" in holder
+    assert "public val common: Common" in holder
+    registration = files["org/override/AppForyRegistration.kt"]
+    assert "org.override.SharedForyRegistration.register(fory)" in registration
+
+
+def test_package_override_wins_over_kotlin_package():
+    files = generate_kotlin(
+        """
+        package demo;
+        option kotlin_package = "org.example.demo";
+
+        message User {
+            string name = 1;
+        }
+        """,
+        package_override="org.override",
+    )
+
+    assert "org/override/User.kt" in files
+    assert "package org.override" in files["org/override/User.kt"]
+    assert "org/example/demo/User.kt" not in files
+
+
+def test_imported_nested_int8_array_does_not_block_local_generation(tmp_path):
+    common = tmp_path / "common.fdl"
+    common.write_text(
+        """
+        package shared;
+
+        message Imported {
+            list<array<int8>> chunks = 1;
+        }
+        """
+    )
+    main = tmp_path / "main.fdl"
+    main.write_text(
+        """
+        package app;
+        import "common.fdl";
+
+        message Holder {
+            string name = 1;
+        }
+        """
+    )
+
+    schema = resolve_imports(main)
+    validator = SchemaValidator(schema)
+    assert validator.validate(), validator.errors
+    generator = KotlinGenerator(schema, GeneratorOptions(output_dir=tmp_path))
+    files = {item.path: item.content for item in generator.generate()}
+
+    assert "app/Holder.kt" in files
 
 
 def test_container_refs():
@@ -223,8 +276,26 @@ def test_cycle_defaults():
     )
 
     node = files["graph/Node.kt"]
-    assert "public var payload: Int8List = Int8List(0)" in node
+    assert "public var payload: @ArrayType ByteArray = ByteArray(0)" in node
     assert "import org.apache.fory.annotation.Nullable" not in node
     assert "public var metadata: Any? = null" in node
     assert "public lateinit var metadata" not in node
-    assert "public var payload: Int8List = null" not in node
+    assert "public var payload: ByteArray = null" not in node
+
+
+def test_nested_int8_array_uses_type_annotation():
+    files = generate_kotlin(
+        """
+        package demo;
+
+        message Holder {
+            list<array<int8>> chunks = 1;
+            map<string, array<int8>> chunks_by_name = 2;
+        }
+        """
+    )
+
+    holder = files["demo/Holder.kt"]
+    assert "import org.apache.fory.annotation.ArrayType" in holder
+    assert "public val chunks: List<@ArrayType ByteArray>" in holder
+    assert "public val chunksByName: Map<String, @ArrayType ByteArray>" in holder

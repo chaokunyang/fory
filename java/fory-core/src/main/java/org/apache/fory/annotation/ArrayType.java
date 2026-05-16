@@ -25,9 +25,9 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a Java primitive-list carrier or ordered {@link java.util.List} field as dense {@code
- * array<T>} schema in xlang mode.
+ * Marks a Java primitive array, primitive-list carrier, ordered {@link java.util.List}, or type use
+ * as dense {@code array<T>} schema in xlang mode.
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.FIELD, ElementType.METHOD})
+@Target({ElementType.FIELD, ElementType.METHOD, ElementType.TYPE_USE})
 public @interface ArrayType {}

@@ -85,13 +85,15 @@ public data class KotlinSchemaSurface(
   @ForyField(id = 1) val nullableNames: List<String?>?,
   @ForyField(id = 2) val dynamicList: List<*>,
   @ForyField(id = 3) val dynamicValues: Map<String, *>,
-  @field:ArrayType @ForyField(id = 4) val bytesAsArray: ByteArray,
+  @ForyField(id = 4) val bytesAsArray: @ArrayType ByteArray,
   @ForyField(id = 5) val bits: BooleanArray,
   @ForyField(id = 6) val unsignedLongs: ULongArray,
   @field:ForyField(id = 7) val fieldSiteId: Int,
-  @field:ArrayType @ForyField(id = 8) val denseIds: List<Int>,
-  @Ref(enable = false) @ForyField(id = 9) val noRefUser: KotlinUser?,
-  @ForyField(id = 10) val noRefUsers: List<@Ref(enable = false) KotlinUser>,
+  @ForyField(id = 8) val denseIds: @ArrayType List<Int>,
+  @ForyField(id = 9) val noRefUser: KotlinUser?,
+  @ForyField(id = 10) val noRefUsers: List<KotlinUser>,
+  @ForyField(id = 11) val chunks: List<@ArrayType ByteArray>,
+  @ForyField(id = 12) val chunksByName: Map<String, @ArrayType ByteArray>,
 )
 
 @ForyStruct
@@ -208,6 +210,8 @@ private fun staticSerializerRoundTrip(dataFile: String) {
       denseIds = listOf(1, 2, 3),
       noRefUser = null,
       noRefUsers = emptyList(),
+      chunks = listOf(byteArrayOf(1, 2), byteArrayOf(3, 4)),
+      chunksByName = mapOf("left" to byteArrayOf(5, 6)),
     )
   val decodedSchemaSurface =
     fory.deserialize(fory.serialize(schemaSurface), KotlinSchemaSurface::class.java)
@@ -221,6 +225,14 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(decodedSchemaSurface.denseIds == schemaSurface.denseIds) {
     "denseIds round trip mismatch: expected=${schemaSurface.denseIds}, actual=${decodedSchemaSurface.denseIds}"
   }
+  check(decodedSchemaSurface.chunks.size == schemaSurface.chunks.size)
+  for (index in schemaSurface.chunks.indices) {
+    check(decodedSchemaSurface.chunks[index] contentEquals schemaSurface.chunks[index])
+  }
+  check(
+    checkNotNull(decodedSchemaSurface.chunksByName["left"]) contentEquals
+      schemaSurface.chunksByName["left"]!!
+  )
   val schemaDescriptors =
     checkNotNull(
         fory.getSerializer(KotlinSchemaSurface::class.java) as? StaticGeneratedStructSerializer<*>
@@ -235,6 +247,8 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(schemaDescriptors[7].typeRef.typeExtMeta.typeId() == Types.INT32_ARRAY)
   check(!schemaDescriptors[8].isTrackingRef)
   check(schemaDescriptors[9].typeRef.componentType.getTypeExtMeta()?.trackingRef() != true)
+  check(schemaDescriptors[10].typeRef.typeArguments[0].typeExtMeta.typeId() == Types.INT8_ARRAY)
+  check(schemaDescriptors[11].typeRef.typeArguments[1].typeExtMeta.typeId() == Types.INT8_ARRAY)
 
   val collections =
     KotlinConcreteCollections(

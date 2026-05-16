@@ -1044,9 +1044,8 @@ void main() {
 
 ## Kotlin
 
-The Kotlin target emits Kotlin source only. Generated serializers are owned by
-`fory-kotlin-ksp`; the compiler does not generate Java files or serializer
-sidecars.
+The Kotlin target emits Kotlin source only. The compiler does not generate Java
+files.
 
 ### Output Layout
 
@@ -1057,10 +1056,10 @@ For `package addressbook`, Kotlin output is generated under:
 - Registration helper: `AddressbookForyRegistration.kt`
 
 If `option kotlin_package = "...";` is present, the output path and Kotlin
-package use that option. Otherwise Kotlin uses the FDL package. When compiler
-`--package` is supplied, Kotlin treats it as a base package and appends the FDL
-package so imported schemas keep distinct generated packages. Registration
-still uses the FDL package so cross-language type names stay stable.
+package use that option. Otherwise Kotlin uses the FDL package. A compiler
+`--package` override replaces both the FDL package and `kotlin_package` for
+generated source placement. Registration still uses the FDL package so
+cross-language type names stay stable.
 
 ### Type Generation
 
@@ -1081,8 +1080,8 @@ public data class Person(
 ```
 
 Messages that participate in compiler-detected construction cycles generate
-normal mutable classes so a runtime serializer can publish the instance before
-reading back-references:
+normal mutable classes so the generated serializer can publish the instance
+before reading back-references:
 
 ```kotlin
 @ForyStruct
@@ -1096,10 +1095,9 @@ public class Node() {
 }
 ```
 
-Generated Kotlin IDL sources express nullability with Kotlin `?`, never with
-Fory `@Nullable`. KSP-generated serializers own the descriptor metadata for
-fields, nested nullability, and `@Ref` positions, including mutable classes
-emitted for compiler-detected construction cycles.
+Generated Kotlin IDL sources express nullability with Kotlin `?`, not Fory
+`@Nullable`, including mutable classes emitted for compiler-detected
+construction cycles.
 
 Enums generate Kotlin enum classes with stable Fory enum IDs. Unions generate
 sealed classes with `@ForyUnion`; case ID `0` is the unknown-case carrier and
@@ -1122,10 +1120,8 @@ default case. It emits `@Fixed` or `@Tagged` only when the schema requests that
 non-default encoding. `duration` maps to `kotlin.time.Duration`, and infinite
 durations are rejected when encoded. Dense `array<float16>` and
 `array<bfloat16>` use the Java core `Float16Array` and `BFloat16Array`
-carriers. Generated Kotlin IDL uses Java core `Int8List` for `array<int8>` so
-the carrier stays unambiguous in fields, collection elements, map values, and
-union cases; handwritten Kotlin may still use `ByteArray` with `@ArrayType` for
-top-level `array<int8>` fields.
+carriers. Generated Kotlin IDL uses `@ArrayType ByteArray` for `array<int8>`,
+including nested positions.
 
 ### Registration
 
@@ -1143,11 +1139,7 @@ public object AddressbookForyRegistration {
 ```
 
 `registerUnion` discovers the generated `<Target>_ForySerializer`; callers do
-not pass a serializer instance. Generated Schema IDL registration does not
-install the general Kotlin runtime serializers because those serializers may
-register non-schema Kotlin stdlib classes in the user type-id space. Ref/cycle-
-owned generated classes still use generated descriptor metadata; they do not
-depend on JVM-visible `@Nullable` annotations in generated source.
+not pass a serializer instance.
 
 ## Scala
 

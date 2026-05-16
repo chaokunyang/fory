@@ -106,9 +106,6 @@
                                 <sourceDir>${project.basedir}/src/main/kotlin</sourceDir>
                                 <sourceDir>${project.build.directory}/generated-sources/ksp</sourceDir>
                             </sourceDirs>
-                            <args>
-                                <arg>-Xemit-jvm-type-annotations</arg>
-                            </args>
                         </configuration>
                     </execution>
                 </executions>

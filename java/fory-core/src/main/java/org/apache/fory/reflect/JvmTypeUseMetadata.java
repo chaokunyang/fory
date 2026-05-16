@@ -30,6 +30,7 @@ import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.apache.fory.annotation.ArrayType;
 import org.apache.fory.annotation.Nullable;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.meta.TypeExtMeta;
@@ -102,7 +103,12 @@ final class JvmTypeUseMetadata implements TypeUseMetadata.Support {
       Annotation typeAnnotation = includeTypeAnnotation ? getTypeAnnotation(annotatedType) : null;
       boolean nullable = annotatedType.isAnnotationPresent(Nullable.class);
       Ref ref = annotatedType.getAnnotation(Ref.class);
-      if (typeAnnotation != null) {
+      int arrayTypeId = arrayTypeId(annotatedType);
+      if (arrayTypeId != Types.UNKNOWN) {
+        meta =
+            TypeExtMeta.of(
+                arrayTypeId, nullable || defaultNullable, ref != null && ref.enable());
+      } else if (typeAnnotation != null) {
         int typeId = TypeAnnotationUtils.getTypeId(typeAnnotation, TypeUtils.getRawType(type));
         meta = TypeExtMeta.of(typeId, nullable || defaultNullable, ref != null && ref.enable());
       } else if (ref != null || nullable) {
@@ -111,6 +117,17 @@ final class JvmTypeUseMetadata implements TypeUseMetadata.Support {
       }
     }
     return TypeRef.of(type, meta, typeArguments, componentType);
+  }
+
+  private static int arrayTypeId(AnnotatedType annotatedType) {
+    if (!hasArrayType(annotatedType)) {
+      return Types.UNKNOWN;
+    }
+    Class<?> rawType = TypeUtils.getRawType(annotatedType.getType());
+    if (!rawType.isArray() || !rawType.getComponentType().isPrimitive()) {
+      return Types.UNKNOWN;
+    }
+    return TypeAnnotationUtils.getArrayTypeIdFromElementType(TypeRef.of(rawType.getComponentType()));
   }
 
   @Override
@@ -182,5 +199,19 @@ final class JvmTypeUseMetadata implements TypeUseMetadata.Support {
       return null;
     }
     return Descriptor.getAnnotation(annotatedComponent.getAnnotations(), name);
+  }
+
+  private static boolean hasArrayType(AnnotatedType annotatedType) {
+    if (annotatedType.getAnnotation(ArrayType.class) != null) {
+      return true;
+    }
+    if (!(annotatedType instanceof AnnotatedArrayType)) {
+      return false;
+    }
+    AnnotatedType annotatedComponent =
+        ((AnnotatedArrayType) annotatedType).getAnnotatedGenericComponentType();
+    Class<?> componentRawType = TypeUtils.getRawType(annotatedComponent.getType());
+    return componentRawType.isPrimitive()
+        && annotatedComponent.getAnnotation(ArrayType.class) != null;
   }
 }

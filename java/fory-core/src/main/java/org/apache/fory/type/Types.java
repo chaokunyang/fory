@@ -21,7 +21,6 @@ package org.apache.fory.type;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
-import org.apache.fory.annotation.ArrayType;
 import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
@@ -389,10 +388,16 @@ public class Types {
     Annotation annotation = Descriptor.getAnnotation(field);
     Class<?> rawType = field.getType();
     if (TypeUtils.isPrimitiveListClass(rawType)) {
-      if (field.isAnnotationPresent(ArrayType.class)) {
+      if (TypeAnnotationUtils.isArrayType(field)) {
         return TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType);
       }
       return TypeAnnotationUtils.getPrimitiveListTypeId(annotation, rawType);
+    }
+    if (rawType.isArray()
+        && rawType.getComponentType().isPrimitive()
+        && TypeAnnotationUtils.isArrayType(field)) {
+      return TypeAnnotationUtils.getArrayTypeIdFromElementType(
+          TypeRef.of(rawType.getComponentType()));
     }
     if (annotation != null) {
       int primitiveListTypeId = TypeAnnotationUtils.getPrimitiveListTypeId(annotation, rawType);
@@ -420,6 +425,12 @@ public class Types {
         return TypeAnnotationUtils.getPrimitiveListArrayTypeId(rawType);
       }
       return TypeAnnotationUtils.getPrimitiveListTypeId(d.getTypeAnnotation(), rawType);
+    }
+    if (rawType.isArray()
+        && rawType.getComponentType().isPrimitive()
+        && TypeAnnotationUtils.isArrayType(d)) {
+      return TypeAnnotationUtils.getArrayTypeIdFromElementType(
+          TypeRef.of(rawType.getComponentType()));
     }
     TypeExtMeta extMeta = typeRef.getTypeExtMeta();
     if (extMeta != null && extMeta.typeId() != Types.UNKNOWN) {

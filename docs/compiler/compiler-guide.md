@@ -52,27 +52,27 @@ foryc --scan-generated [OPTIONS]
 
 Compile options:
 
-| Option                                | Description                                                                                                                          | Default       |
-| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------- |
-| `--lang`                              | Comma-separated target languages                                                                                                     | `all`         |
-| `--output`, `-o`                      | Output directory                                                                                                                     | `./generated` |
-| `--package`                           | Override package name from Fory IDL file; Kotlin treats this as a base package before the FDL package unless `kotlin_package` is set | (from file)   |
-| `-I`, `--proto_path`, `--import_path` | Add directory to import search path (can be repeated)                                                                                | (none)        |
-| `--java_out=DST_DIR`                  | Generate Java code in DST_DIR                                                                                                        | (none)        |
-| `--python_out=DST_DIR`                | Generate Python code in DST_DIR                                                                                                      | (none)        |
-| `--cpp_out=DST_DIR`                   | Generate C++ code in DST_DIR                                                                                                         | (none)        |
-| `--go_out=DST_DIR`                    | Generate Go code in DST_DIR                                                                                                          | (none)        |
-| `--rust_out=DST_DIR`                  | Generate Rust code in DST_DIR                                                                                                        | (none)        |
-| `--csharp_out=DST_DIR`                | Generate C# code in DST_DIR                                                                                                          | (none)        |
-| `--javascript_out=DST_DIR`            | Generate JavaScript code in DST_DIR                                                                                                  | (none)        |
-| `--swift_out=DST_DIR`                 | Generate Swift code in DST_DIR                                                                                                       | (none)        |
-| `--dart_out=DST_DIR`                  | Generate Dart code in DST_DIR                                                                                                        | (none)        |
-| `--scala_out=DST_DIR`                 | Generate Scala 3 code in DST_DIR                                                                                                     | (none)        |
-| `--kotlin_out=DST_DIR`                | Generate Kotlin code in DST_DIR                                                                                                      | (none)        |
-| `--go_nested_type_style`              | Go nested type naming: `camelcase` or `underscore`                                                                                   | `underscore`  |
-| `--swift_namespace_style`             | Swift namespace style: `enum` or `flatten`                                                                                           | `enum`        |
-| `--emit-fdl`                          | Emit translated FDL (for non-FDL inputs)                                                                                             | `false`       |
-| `--emit-fdl-path`                     | Write translated FDL to this path (file or directory)                                                                                | (stdout)      |
+| Option                                | Description                                               | Default       |
+| ------------------------------------- | --------------------------------------------------------- | ------------- |
+| `--lang`                              | Comma-separated target languages                          | `all`         |
+| `--output`, `-o`                      | Output directory                                          | `./generated` |
+| `--package`                           | Override package or namespace name from the Fory IDL file | (from file)   |
+| `-I`, `--proto_path`, `--import_path` | Add directory to import search path (can be repeated)     | (none)        |
+| `--java_out=DST_DIR`                  | Generate Java code in DST_DIR                             | (none)        |
+| `--python_out=DST_DIR`                | Generate Python code in DST_DIR                           | (none)        |
+| `--cpp_out=DST_DIR`                   | Generate C++ code in DST_DIR                              | (none)        |
+| `--go_out=DST_DIR`                    | Generate Go code in DST_DIR                               | (none)        |
+| `--rust_out=DST_DIR`                  | Generate Rust code in DST_DIR                             | (none)        |
+| `--csharp_out=DST_DIR`                | Generate C# code in DST_DIR                               | (none)        |
+| `--javascript_out=DST_DIR`            | Generate JavaScript code in DST_DIR                       | (none)        |
+| `--swift_out=DST_DIR`                 | Generate Swift code in DST_DIR                            | (none)        |
+| `--dart_out=DST_DIR`                  | Generate Dart code in DST_DIR                             | (none)        |
+| `--scala_out=DST_DIR`                 | Generate Scala 3 code in DST_DIR                          | (none)        |
+| `--kotlin_out=DST_DIR`                | Generate Kotlin code in DST_DIR                           | (none)        |
+| `--go_nested_type_style`              | Go nested type naming: `camelcase` or `underscore`        | `underscore`  |
+| `--swift_namespace_style`             | Swift namespace style: `enum` or `flatten`                | `enum`        |
+| `--emit-fdl`                          | Emit translated FDL (for non-FDL inputs)                  | `false`       |
+| `--emit-fdl-path`                     | Write translated FDL to this path (file or directory)     | (stdout)      |
 
 For both `go_nested_type_style` and `swift_namespace_style`, schema-level file options are supported (`option ... = ...;`) and the CLI flag overrides the schema option when both are present.
 
@@ -133,10 +133,6 @@ foryc schema.fdl --output ./src/generated
 ```bash
 foryc schema.fdl --package com.myapp.models
 ```
-
-For Kotlin output, `--package` is a base package. If `schema.fdl` declares
-`package events;`, this command generates Kotlin in `com.myapp.models.events`
-unless the schema also sets `option kotlin_package`.
 
 **Compile multiple files:**
 

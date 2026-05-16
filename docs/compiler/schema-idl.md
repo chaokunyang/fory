@@ -193,9 +193,9 @@ message Payment {
 - Kotlin source uses `package com.mycorp.payment.v1`
 - Type registration still uses the Fory IDL package (`payment`) for cross-language compatibility
 
-If `kotlin_package` is absent, Kotlin uses the FDL package. When compiler
-`--package` is provided, Kotlin treats it as a base package and appends the FDL
-package so imported schemas keep distinct generated packages.
+If `kotlin_package` is absent, Kotlin uses the FDL package. A compiler
+`--package` override replaces both the FDL package and `kotlin_package` for
+generated source placement.
 
 ### Go Nested Type Style Option
 
@@ -378,13 +378,9 @@ For protobuf extension options, see
 For language-specific packages/namespaces:
 
 1. Command-line package override (highest priority)
-2. Language-specific option (`java_package`, `go_package`, `csharp_namespace`)
+2. Language-specific option (`java_package`, `go_package`, `csharp_namespace`,
+   `kotlin_package`)
 3. Fory IDL package declaration (fallback)
-
-Kotlin is intentionally different: `option kotlin_package` is the highest
-priority. If it is absent, compiler `--package` is treated as a base package
-that is prepended to the FDL package, so `--package=org.example` with
-`package model;` generates `org.example.model`.
 
 **Example:**
 
@@ -1324,6 +1320,8 @@ For handwritten Dart models, `array<bool>` requires `BoolList` plus
 `list<bool>`. For handwritten Java models, unsigned primitive arrays use
 type-use annotations on the element type, for example
 `private @UInt32Type int[] ids;`.
+For generated Kotlin models, `array<int8>` uses `@ArrayType ByteArray`,
+including nested collection and map positions.
 
 #### Map
 

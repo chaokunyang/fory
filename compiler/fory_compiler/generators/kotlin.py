@@ -72,7 +72,7 @@ class KotlinGenerator(BaseGenerator):
 
     ARRAY_MAP = {
         PrimitiveKind.BOOL: "BooleanArray",
-        PrimitiveKind.INT8: "Int8List",
+        PrimitiveKind.INT8: "ByteArray",
         PrimitiveKind.INT16: "ShortArray",
         PrimitiveKind.INT32: "IntArray",
         PrimitiveKind.INT64: "LongArray",
@@ -137,21 +137,23 @@ class KotlinGenerator(BaseGenerator):
 
     @property
     def kotlin_package(self) -> Optional[str]:
+        if self.options.package_override:
+            return self.options.package_override
         kotlin_package = self.schema.get_option("kotlin_package")
         if kotlin_package:
             return kotlin_package
-        return self.package_with_override(self.schema.package)
-
-    def package_with_override(self, schema_package: Optional[str]) -> Optional[str]:
-        if self.options.package_override and schema_package:
-            return f"{self.options.package_override}.{schema_package}"
-        return self.options.package_override or schema_package
+        return self.schema.package
 
     def get_kotlin_package_path(self) -> str:
         package = self.kotlin_package
         return package.replace(".", "/") if package else ""
 
     def get_registration_class_name(self) -> str:
+        if self.schema.package:
+            return (
+                self.to_pascal_case(self.schema.package.split(".")[-1])
+                + "ForyRegistration"
+            )
         package = self.kotlin_package
         if package:
             return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
@@ -262,11 +264,8 @@ class KotlinGenerator(BaseGenerator):
                 top_level_ref=field.ref,
                 parent_stack=parent_stack,
             )
-            value_prefix = (
-                "@field:ArrayType " if self.is_array_type_field(field) else ""
-            )
             lines.append(
-                f"    public data class {case_name}Case({value_prefix}public val value: {field_type}) : {union_name}()"
+                f"    public data class {case_name}Case(public val value: {field_type}) : {union_name}()"
             )
         lines.append("}")
         return lines
@@ -308,8 +307,6 @@ class KotlinGenerator(BaseGenerator):
         )
         if field.ref and self.is_ref_target_type(field.field_type, parent_stack):
             lines.append("    @Ref")
-        if self.is_array_type_field(field):
-            lines.append("    @field:ArrayType")
         lines.append(f"    @field:ForyField(id = {field.number})")
         lines.append(
             f"    public val {self.safe_identifier(self.to_camel_case(field.name))}: {field_type},"
@@ -336,8 +333,6 @@ class KotlinGenerator(BaseGenerator):
             )
             if field.ref and self.is_ref_target_type(field.field_type, current_stack):
                 lines.append("    @Ref")
-            if self.is_array_type_field(field):
-                lines.append("    @field:ArrayType")
             lines.append(f"    @ForyField(id = {field.number})")
             field_name = self.safe_identifier(self.to_camel_case(field.name))
             default_value = self.default_value(field)
@@ -436,6 +431,15 @@ class KotlinGenerator(BaseGenerator):
         return None
 
     def generate_array_type(self, field_type: FieldType) -> str:
+        generated = self.array_carrier_type(field_type)
+        if (
+            isinstance(field_type, PrimitiveType)
+            and field_type.kind == PrimitiveKind.INT8
+        ):
+            return f"@ArrayType {generated}"
+        return generated
+
+    def array_carrier_type(self, field_type: FieldType) -> str:
         if not isinstance(field_type, PrimitiveType):
             return f"List<{self._generate_non_optional_type(field_type)}>"
         return self.ARRAY_MAP[field_type.kind]
@@ -686,27 +690,34 @@ class KotlinGenerator(BaseGenerator):
         if isinstance(field_type, ListType):
             return "emptyList()"
         if isinstance(field_type, ArrayType):
-            generated = self.generate_array_type(field_type.element_type)
-            if generated.endswith("Array") or generated == "Int8List":
+            generated = self.array_carrier_type(field_type.element_type)
+            if generated.endswith("Array"):
                 return f"{generated}(0)"
             return "null"
         if isinstance(field_type, MapType):
             return "emptyMap()"
         return None
 
-    def is_array_type_field(self, field: Field) -> bool:
-        return (
-            isinstance(field.field_type, ArrayType)
-            and isinstance(field.field_type.element_type, PrimitiveType)
-            and field.field_type.element_type.kind == PrimitiveKind.INT8
-        )
+    def has_int8_array(self, field_type: FieldType) -> bool:
+        if isinstance(field_type, ArrayType):
+            return (
+                isinstance(field_type.element_type, PrimitiveType)
+                and field_type.element_type.kind == PrimitiveKind.INT8
+            ) or self.has_int8_array(field_type.element_type)
+        if isinstance(field_type, ListType):
+            return self.has_int8_array(field_type.element_type)
+        if isinstance(field_type, MapType):
+            return self.has_int8_array(field_type.key_type) or self.has_int8_array(
+                field_type.value_type
+            )
+        return False
 
     def collect_message_imports(self, message: Message, imports: Set[str]) -> None:
         for field in message.fields:
             self.collect_type_imports(field.field_type, imports)
             if field.ref or self.field_type_has_ref(field.field_type):
                 imports.add("org.apache.fory.annotation.Ref")
-            if self.is_array_type_field(field):
+            if self.has_int8_array(field.field_type):
                 imports.add("org.apache.fory.annotation.ArrayType")
 
     def collect_union_imports(self, union: Union, imports: Set[str]) -> None:
@@ -714,7 +725,7 @@ class KotlinGenerator(BaseGenerator):
             self.collect_type_imports(field.field_type, imports)
             if field.ref or self.field_type_has_ref(field.field_type):
                 imports.add("org.apache.fory.annotation.Ref")
-            if self.is_array_type_field(field):
+            if self.has_int8_array(field.field_type):
                 imports.add("org.apache.fory.annotation.ArrayType")
 
     def collect_type_imports(self, field_type: FieldType, imports: Set[str]) -> None:
@@ -742,8 +753,6 @@ class KotlinGenerator(BaseGenerator):
                     imports.add("org.apache.fory.type.Float16Array")
                 elif field_type.element_type.kind == PrimitiveKind.BFLOAT16:
                     imports.add("org.apache.fory.type.BFloat16Array")
-                elif field_type.element_type.kind == PrimitiveKind.INT8:
-                    imports.add("org.apache.fory.collection.Int8List")
             else:
                 self.collect_type_imports(field_type.element_type, imports)
             return
@@ -846,11 +855,15 @@ class KotlinGenerator(BaseGenerator):
         return schema
 
     def _kotlin_package_for_schema(self, schema: Schema) -> Optional[str]:
-        return schema.get_option("kotlin_package") or self.package_with_override(
-            schema.package
-        )
+        if self.options.package_override:
+            return self.options.package_override
+        return schema.get_option("kotlin_package") or schema.package
 
     def _registration_name(self, schema: Schema) -> str:
+        if schema.package:
+            return (
+                self.to_pascal_case(schema.package.split(".")[-1]) + "ForyRegistration"
+            )
         package = self._kotlin_package_for_schema(schema)
         if package:
             return self.to_pascal_case(package.split(".")[-1]) + "ForyRegistration"
@@ -865,20 +878,20 @@ class KotlinGenerator(BaseGenerator):
         return self._kotlin_package_for_schema(schema)
 
     def _imported_regs(self) -> List[tuple[str, str]]:
-        packages: dict[str, str] = {}
+        registrations: set[tuple[str, str]] = set()
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
                 continue
             package = self._kotlin_package_for_type(type_def)
-            if not package or package in packages:
+            if not package:
                 continue
             schema = self._load_schema(
                 getattr(getattr(type_def, "location", None), "file", None)
             )
             if schema is None:
                 continue
-            packages[package] = self._registration_name(schema)
-        return sorted(packages.items())
+            registrations.add((package, self._registration_name(schema)))
+        return sorted(registrations)
 
     def safe_identifier(self, name: str) -> str:
         return f"`{name}`" if name in self.RESERVED else name

@@ -394,7 +394,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       foryFieldId = fieldMeta.id,
       trackingRef = hasFieldRef || typeNode.trackingRef,
       dynamic = fieldMeta.dynamic,
-      arrayType = arrayType,
+      arrayType = arrayType || typeNode.arrayType,
       hasDefault = hasDefault,
       nullable = type.nullability == Nullability.NULLABLE,
       propertyTypeName = kotlinSourceTypeName(type),
@@ -820,12 +820,18 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     }
     val nullable = type.nullability == Nullability.NULLABLE
     val hasTypeRef = hasRefAnnotation(type, owner) ?: return null
+    val hasTypeArray = hasArrayTypeAnnotation(type, owner) ?: return null
+    val denseArray = arrayType || hasTypeArray
     val encoding = encodingAnnotation(type, owner)
     if (encoding == Encoding.Invalid) {
       return null
     }
     val scalar = scalarType(qualifiedName, encoding, owner, arrayComponent) ?: return null
     if (scalar != UnsupportedScalar) {
+      if (denseArray) {
+        logger.error("@ArrayType is only valid on ByteArray or List<T> Kotlin xlang fields", owner)
+        return null
+      }
       return KotlinSourceTypeNode(
         rawClassExpression = scalarRawClassExpression(scalar, nullable),
         kotlinTypeName = scalar.kotlinTypeName,
@@ -845,7 +851,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       )
       return null
     }
-    if (qualifiedName == "kotlin.ByteArray" && !arrayType) {
+    if (qualifiedName == "kotlin.ByteArray" && !denseArray) {
       return KotlinSourceTypeNode(
         rawClassExpression = "ByteArray::class.java",
         kotlinTypeName = "ByteArray",
@@ -870,6 +876,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         trackingRef = hasTypeRef,
         primitive = false,
         unsigned = denseArrayElement.unsigned,
+        arrayType = denseArray,
         componentType =
           KotlinSourceTypeNode(
             rawClassExpression = denseArrayElement.rawClassExpression,
@@ -884,7 +891,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
           ),
       )
     }
-    if (arrayType && !isList(qualifiedName)) {
+    if (denseArray && !isList(qualifiedName)) {
       logger.error(
         "@ArrayType is only valid on ByteArray or List<T> Kotlin xlang fields",
         owner,
@@ -892,7 +899,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       return null
     }
     if (isList(qualifiedName) || isSet(qualifiedName)) {
-      if (arrayType && isSet(qualifiedName)) {
+      if (denseArray && isSet(qualifiedName)) {
         logger.error("@ArrayType is not valid on Set<T> Kotlin xlang fields", owner)
         return null
       }
@@ -909,13 +916,13 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
           }
           dynamicAnyNode(nullable = true)
         } else {
-          parseType(argumentType, owner, arrayType = false, arrayComponent = arrayType)
+          parseType(argumentType, owner, arrayType = false, arrayComponent = denseArray)
             ?: return null
         }
-      if (arrayType && denseListArrayTypeId(element, owner) == null) {
+      if (denseArray && denseListArrayTypeId(element, owner) == null) {
         return null
       }
-      val arrayTypeId = if (arrayType) denseListArrayTypeId(element, owner) else null
+      val arrayTypeId = if (denseArray) denseListArrayTypeId(element, owner) else null
       val isList = isList(qualifiedName)
       val factory = collectionFactory(qualifiedName)
       if (!validateCollectionFactory(factory, element, owner)) {
@@ -940,12 +947,13 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         trackingRef = hasTypeRef,
         primitive = false,
         unsigned = false,
+        arrayType = denseArray,
         collectionFactory = factory,
         typeArguments = listOf(element),
       )
     }
     if (isMap(qualifiedName)) {
-      if (arrayType) {
+      if (denseArray) {
         logger.error("@ArrayType is not valid on Map<K, V> Kotlin xlang fields", owner)
         return null
       }
@@ -1106,6 +1114,15 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       return null
     }
     return refs.firstOrNull()?.let { refAnnotationEnabled(it) } ?: false
+  }
+
+  private fun hasArrayTypeAnnotation(type: KSType, owner: KSAnnotated): Boolean? {
+    val annotations = type.annotations.filter { isAnnotation(it, ARRAY_TYPE) }.toList()
+    if (annotations.size > 1) {
+      logger.error("Kotlin xlang field types must not repeat @ArrayType", owner)
+      return null
+    }
+    return annotations.isNotEmpty()
   }
 
   private fun refAnnotationEnabled(annotation: KSAnnotation): Boolean {
@@ -1426,9 +1443,6 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       "kotlin.ByteArray" ->
         scalar("Byte::class.javaPrimitiveType!!", "Byte", "byte", "Types.INT8", true)
           .copy(arrayTypeId = "Types.INT8_ARRAY")
-      "org.apache.fory.collection.Int8List" ->
-        scalar("Byte::class.javaPrimitiveType!!", "Byte", "byte", "Types.INT8", false)
-          .copy(arrayTypeId = "Types.INT8_ARRAY")
       "kotlin.ShortArray" ->
         scalar("Short::class.javaPrimitiveType!!", "Short", "short", "Types.INT16", true)
           .copy(arrayTypeId = "Types.INT16_ARRAY")
@@ -1556,7 +1570,6 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     when (qualifiedName) {
       "kotlin.BooleanArray" -> "BooleanArray::class.java"
       "kotlin.ByteArray" -> "ByteArray::class.java"
-      "org.apache.fory.collection.Int8List" -> "org.apache.fory.collection.Int8List::class.java"
       "kotlin.ShortArray" -> "ShortArray::class.java"
       "kotlin.IntArray" -> "IntArray::class.java"
       "kotlin.LongArray" -> "LongArray::class.java"
@@ -1578,7 +1591,6 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     when (qualifiedName) {
       "kotlin.BooleanArray" -> "boolean[]"
       "kotlin.ByteArray" -> "byte[]"
-      "org.apache.fory.collection.Int8List" -> "org.apache.fory.collection.Int8List"
       "kotlin.ShortArray" -> "short[]"
       "kotlin.IntArray" -> "int[]"
       "kotlin.LongArray" -> "long[]"

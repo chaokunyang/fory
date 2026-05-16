@@ -21,6 +21,7 @@ package org.apache.fory.type;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.List;
 import org.apache.fory.annotation.ArrayType;
@@ -48,6 +49,7 @@ import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
 import org.apache.fory.config.Int32Encoding;
 import org.apache.fory.config.Int64Encoding;
+import org.apache.fory.reflect.TypeUseMetadata;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.reflect.TypeRef;
 
@@ -286,11 +288,14 @@ public class TypeAnnotationUtils {
   }
 
   public static boolean isBoxedListArrayType(Field field) {
-    if (field == null || !field.isAnnotationPresent(ArrayType.class)) {
+    if (field == null || !isArrayType(field)) {
       return false;
     }
     Class<?> rawType = field.getType();
     if (TypeUtils.isPrimitiveListClass(rawType)) {
+      return false;
+    }
+    if (rawType.isArray() && rawType.getComponentType().isPrimitive()) {
       return false;
     }
     validateBoxedListArrayType(field);
@@ -455,10 +460,7 @@ public class TypeAnnotationUtils {
         throw new IllegalArgumentException(
             "@ArrayType can only be applied to " + allowed + ", but got " + rawType.getName());
       }
-      throw new IllegalArgumentException(
-          "@ArrayType can only be applied to "
-              + allowed
-              + "; primitive arrays already use array<T> schema");
+      throw new IllegalArgumentException("@ArrayType can only be applied to " + allowed);
     }
   }
 
@@ -587,12 +589,36 @@ public class TypeAnnotationUtils {
     if (descriptor.isArrayType()) {
       return true;
     }
-    if (descriptor.getField() != null
-        && descriptor.getField().isAnnotationPresent(ArrayType.class)) {
+    if (isArrayType(descriptor.getField())) {
       return true;
     }
-    return descriptor.getReadMethod() != null
-        && descriptor.getReadMethod().isAnnotationPresent(ArrayType.class);
+    return isArrayType(descriptor.getReadMethod());
+  }
+
+  public static boolean isArrayType(Field field) {
+    if (field == null) {
+      return false;
+    }
+    if (field.isAnnotationPresent(ArrayType.class)) {
+      return true;
+    }
+    return hasArrayTypeTypeUse(field);
+  }
+
+  private static boolean hasArrayTypeTypeUse(Field field) {
+    Object typeUse = TypeUseMetadata.fieldTypeUse(field);
+    return typeUse != null && TypeUseMetadata.typeUseAnnotation(typeUse, ArrayType.class) != null;
+  }
+
+  public static boolean isArrayType(Method method) {
+    if (method == null) {
+      return false;
+    }
+    if (method.isAnnotationPresent(ArrayType.class)) {
+      return true;
+    }
+    Object typeUse = TypeUseMetadata.methodReturnTypeUse(method);
+    return typeUse != null && TypeUseMetadata.typeUseAnnotation(typeUse, ArrayType.class) != null;
   }
 
   public static Annotation getTypeAnnotation(Annotation[] annotations) {

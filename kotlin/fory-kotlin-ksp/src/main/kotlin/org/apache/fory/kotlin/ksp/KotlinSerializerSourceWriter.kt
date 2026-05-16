@@ -72,7 +72,6 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("import org.apache.fory.serializer.FieldGroups\n")
     builder.append("import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo\n")
     builder.append("import org.apache.fory.serializer.StaticGeneratedStructSerializer\n")
-    builder.append("import org.apache.fory.collection.Int8List\n")
     builder.append("import org.apache.fory.type.Descriptor\n")
     builder.append("import org.apache.fory.type.BFloat16Array\n")
     builder.append("import org.apache.fory.type.Float16Array\n")

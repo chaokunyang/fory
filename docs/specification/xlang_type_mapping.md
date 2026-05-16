@@ -126,32 +126,11 @@ Notes:
 - Current xlang uses `*_ARRAY` for one-dimensional primitive arrays and nested `list` for
   multi-dimensional arrays.
 - Kotlin KSP xlang maps `UByte`, `UShort`, `UInt`, and `ULong` to `uint8`,
-  `uint16`, `uint32`, and `uint64` respectively. The generated descriptor uses
-  the JVM primitive carrier plus explicit Fory type metadata; it does not add
-  unsigned wrapper wire types. `ByteArray` maps to `binary` by default and to
-  `array<int8>` only when a top-level handwritten field is explicitly marked
-  with Fory `ArrayType`. Generated Kotlin IDL uses Java core `Int8List` for
-  `array<int8>` so nested collection, map, and union positions cannot be
-  confused with `binary`. `UByteArray`, `UShortArray`, `UIntArray`, and
-  `ULongArray` map to the dense unsigned array schema types. Dense Kotlin
-  numeric array component metadata uses the fixed-width element type (`int32`,
-  `int64`, `uint32`, or `uint64`);
-  scalar field defaults such as varint do not apply to dense Kotlin array
-  components. For `@ArrayType List<Int>`, `@ArrayType List<Long>`,
-  `@ArrayType List<UInt>`, and `@ArrayType List<ULong>`, Kotlin KSP records a
-  dense array schema on the list field and fixed-width dense element domain
-  metadata on the list element type. Generated Kotlin reads must restore the
-  declared Kotlin element carrier after decoding the erased JVM list.
-- Kotlin collection declarations in KSP xlang mode carry schema shape, not JVM
-  implementation identity. `List<T>`, mutable list declarations, and supported
-  concrete list declarations encode as `list<T>`; `Set<T>` encodes as `set<T>`;
-  `Map<K, V>` encodes as `map<K, V>`. Deserialization may construct a different
-  concrete implementation if it is assignable to the declared field type.
-  Sorted JVM collections reconstructed with natural ordering require non-null
-  scalar or string elements or keys. JVM concurrent map declarations require
-  non-null values. `@ArrayType List<T>` maps to dense `array<T>` only for
-  non-null bool or numeric element domains; unsupported element domains are KSP
-  errors.
+  `uint16`, `uint32`, and `uint64`. Kotlin primitive and unsigned array
+  carriers map to dense arrays. `ByteArray` maps to `binary` by default and to
+  `array<int8>` when its type use is marked with Fory `ArrayType`.
+  `array<float16>` and `array<bfloat16>` use Java core `Float16Array` and
+  `BFloat16Array`.
 - Kotlin xlang `duration` uses `kotlin.time.Duration`. Infinite values are not
   representable by the xlang duration payload and must raise a serialization
   error.
@@ -163,84 +142,6 @@ Notes:
   not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>`
   payload that declares nullable or ref-tracked elements must raise a compatible-read error when the
   local matched field is `array<T>`.
-
-### Kotlin IDL Mapping
-
-The Kotlin schema IDL target emits Kotlin source only. The generated model
-source is compiled with `fory-kotlin-ksp`, which owns static serializer
-generation and descriptor metadata for generated structs and sealed unions.
-
-| Fory schema kind                      | Kotlin generated carrier                                                          |
-| ------------------------------------- | --------------------------------------------------------------------------------- |
-| `optional T`                          | `T?`                                                                              |
-| `bool`                                | `Boolean`                                                                         |
-| `int8`, `int16`, `int32`, `int64`     | `Byte`, `Short`, `Int`, `Long`                                                    |
-| `uint8`, `uint16`, `uint32`, `uint64` | `UByte`, `UShort`, `UInt`, `ULong` plus unsigned Fory type metadata               |
-| `float16`, `bfloat16`                 | `org.apache.fory.type.Float16`, `org.apache.fory.type.BFloat16`                   |
-| `float32`, `float64`                  | `Float`, `Double`                                                                 |
-| `string`                              | `String`                                                                          |
-| `binary`                              | `ByteArray`                                                                       |
-| `list<T>`, `set<T>`, `map<K, V>`      | `List<T>`, `Set<T>`, `Map<K, V>`                                                  |
-| `array<bool>`                         | `BooleanArray`                                                                    |
-| `array<int8>`, `array<uint8>`         | Java core `Int8List`, `UByteArray`                                                |
-| `array<int16>`, `array<uint16>`       | `ShortArray`, `UShortArray`                                                       |
-| `array<int32>`, `array<uint32>`       | `IntArray`, `UIntArray`                                                           |
-| `array<int64>`, `array<uint64>`       | `LongArray`, `ULongArray`                                                         |
-| `array<float16>`, `array<bfloat16>`   | Java core `Float16Array`, `BFloat16Array`                                         |
-| `array<float32>`, `array<float64>`    | `FloatArray`, `DoubleArray`                                                       |
-| `date`, `timestamp`, `duration`       | `java.time.LocalDate`, `java.time.Instant`, `kotlin.time.Duration`                |
-| `decimal`                             | `java.math.BigDecimal`                                                            |
-| `message`                             | Kotlin `data class` by default; normal mutable class for compiler-detected cycles |
-| `enum`                                | Kotlin `enum class` with `@ForyEnumId` on enum entries                            |
-| `union`                               | Kotlin sealed class with `@ForyUnion` and KSP-generated serializer                |
-| `any`                                 | `Any?`                                                                            |
-
-Kotlin IDL uses `option kotlin_package` for generated source when present.
-Otherwise it uses the FDL package. When compiler `--package` is provided,
-Kotlin treats it as a base package and appends the FDL package so imported
-schemas keep distinct generated packages. Registration still uses the FDL
-package so cross-language type names remain stable. Default Kotlin `Int`,
-`Long`, `UInt`, and `ULong` fields use the xlang varint encodings; generated
-source emits `@Fixed` or `@Tagged` only for non-default encodings. Generated
-Kotlin nullability is represented with Kotlin `?`, not Fory `@Nullable`; KSP
-descriptors carry the schema nullability and reference metadata.
-
-### Scala IDL Mapping
-
-The Scala schema IDL target emits Scala 3 source only. The `fory-scala` runtime
-artifact remains cross-built for Scala 2.13 and Scala 3.
-
-| Fory schema kind                      | Scala generated carrier                                                                  |
-| ------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `optional T`                          | `Option[T]`                                                                              |
-| `bool`                                | `Boolean`                                                                                |
-| `int8`, `int16`, `int32`, `int64`     | `Byte`, `Short`, `Int`, `Long`                                                           |
-| `uint8`, `uint16`, `uint32`, `uint64` | `Int`, `Int`, `Long`, `Long` plus unsigned Fory type metadata                            |
-| `float16`, `bfloat16`                 | JVM half-float and bfloat16 carriers                                                     |
-| `float32`, `float64`                  | `Float`, `Double`                                                                        |
-| `string`                              | `String`                                                                                 |
-| `binary`                              | `Array[Byte]`                                                                            |
-| `list<T>`, `set<T>`, `map<K, V>`      | `List[T]`, `Set[T]`, `Map[K, V]`                                                         |
-| `array<bool>`                         | `Array[Boolean]`                                                                         |
-| `array<int8>`, `array<uint8>`         | `Array[Byte]` with signed/unsigned descriptor metadata                                   |
-| `array<int16>`, `array<uint16>`       | `Array[Short]` with signed/unsigned descriptor metadata                                  |
-| `array<int32>`, `array<uint32>`       | `Array[Int]` with signed/unsigned descriptor metadata                                    |
-| `array<int64>`, `array<uint64>`       | `Array[Long]` with signed/unsigned descriptor metadata                                   |
-| `array<float16>`, `array<bfloat16>`   | `Array[Short]` with reduced-precision descriptor metadata                                |
-| `array<float32>`, `array<float64>`    | `Array[Float]`, `Array[Double]`                                                          |
-| `date`, `timestamp`, `duration`       | `java.time.LocalDate`, `java.time.Instant`, `java.time.Duration`                         |
-| `decimal`                             | `java.math.BigDecimal`                                                                   |
-| `message`                             | Scala 3 `case class` by default; normal class only for message/union construction cycles |
-| `enum`                                | Scala 3 `enum` with stable Fory enum IDs on case-level `@ForyEnumId` annotations         |
-| `union`                               | Scala 3 ADT `enum derives ForySerializer`                                                |
-| `any`                                 | `AnyRef`                                                                                 |
-
-Generated Scala descriptor metadata is produced by Scala 3 macro derivation
-from Scala compile-time types, including nested generics, `Option`, arrays,
-scalar encoding annotations, nullability, and `@Ref`. Java reflection is not the
-source of truth for generated Scala TypeDef metadata. Scala `@Ref` metadata is
-represented by the shared `org.apache.fory.annotation.Ref` annotation; `@Ref`
-is the JVM owner for reference tracking metadata.
 
 ## Type info
 

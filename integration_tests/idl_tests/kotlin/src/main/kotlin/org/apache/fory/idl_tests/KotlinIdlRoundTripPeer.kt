@@ -30,7 +30,6 @@ import graph.Graph
 import graph.GraphForyRegistration
 import java.io.File
 import org.apache.fory.Fory
-import org.apache.fory.collection.Int8List
 import org.apache.fory.config.Language
 import org.apache.fory.type.BFloat16Array
 import org.apache.fory.type.Float16Array
@@ -103,7 +102,7 @@ private fun runGeneratedSurfaceChecks() {
   assertRoundTrip(fory, ExampleMessageUnion.VarintU32ListCase(listOf(1u, UInt.MAX_VALUE)))
   assertRoundTrip(fory, ExampleMessageUnion.DurationListCase(emptyList()))
   assertRoundTrip(fory, ExampleMessageUnion.DurationListCase(listOf(1.seconds, 2.seconds)))
-  assertRoundTrip(fory, ExampleMessageUnion.Int8ArrayCase(Int8List(byteArrayOf(-1, 0, 1))))
+  assertRoundTrip(fory, ExampleMessageUnion.Int8ArrayCase(byteArrayOf(-1, 0, 1)))
   assertRoundTrip(fory, ExampleMessageUnion.Uint32ArrayCase(uintArrayOf(1u, UInt.MAX_VALUE)))
   assertRoundTrip(fory, ExampleMessageUnion.Float16ArrayCase(Float16Array.of(1.0f, -2.0f)))
   assertRoundTrip(fory, ExampleMessageUnion.Bfloat16ArrayCase(BFloat16Array.of(3.0f, -4.0f)))
@@ -118,6 +117,8 @@ private fun assertRoundTrip(fory: Fory, value: ExampleMessageUnion) {
 
 private fun generatedSurfaceEquals(left: ExampleMessageUnion, right: ExampleMessageUnion): Boolean =
   when {
+    left is ExampleMessageUnion.Int8ArrayCase && right is ExampleMessageUnion.Int8ArrayCase ->
+      left.value.contentEquals(right.value)
     left is ExampleMessageUnion.Uint32ArrayCase && right is ExampleMessageUnion.Uint32ArrayCase ->
       left.value.contentEquals(right.value)
     else -> left == right

@@ -92,6 +92,7 @@ internal data class KotlinSourceTypeNode(
   val trackingRef: Boolean,
   val primitive: Boolean,
   val unsigned: Boolean,
+  val arrayType: Boolean = false,
   val enum: Boolean = false,
   val nestedCompatibleStruct: Boolean = false,
   val collectionFactory: CollectionFactory = CollectionFactory.NONE,

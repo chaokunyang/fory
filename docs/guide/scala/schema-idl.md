@@ -108,7 +108,8 @@ the schema IDL surface unless explicitly generated.
 
 ## Generated Enums
 
-IDL enums generate Scala 3 enums only. No Java enum sidecar is emitted.
+IDL enums generate Scala 3 enums only. The compiler does not emit Java enum
+files.
 
 ```scala
 import org.apache.fory.annotation.ForyEnumId

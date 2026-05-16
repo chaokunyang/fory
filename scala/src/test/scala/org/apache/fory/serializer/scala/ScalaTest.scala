@@ -85,6 +85,7 @@ object PkgObjectMain extends App {
 
   val fory = Fory
     .builder()
+    .withXlang(false)
     .requireClassRegistration(false)
     .withRefTracking(true).suppressClassRegistrationWarnings(false)
     .build()
@@ -103,6 +104,7 @@ object PkgObjectMain extends App {
 object PkgObjectMain2 extends App {
   val fory = Fory
     .builder()
+    .withXlang(false)
     .requireClassRegistration(false)
     .withRefTracking(true)
     .suppressClassRegistrationWarnings(false)

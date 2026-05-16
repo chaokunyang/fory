@@ -24,7 +24,6 @@ import static org.apache.fory.type.Types.INVALID_USER_TYPE_ID;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Member;
-import java.lang.reflect.Modifier;
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1785,28 +1784,9 @@ public abstract class TypeResolver {
   }
 
   private boolean requiresStaticGeneratedSerializer(Class<?> cls) {
-    return isCrossLanguage() && isKotlinClass(cls) && !supportsKotlinRuntimeObjectPath(cls);
-  }
-
-  private static boolean supportsKotlinRuntimeObjectPath(Class<?> cls) {
-    // Kotlin IDL emits mutable no-arg classes for schemas that need object publication during
-    // field reads, such as cyclic @Ref graphs. Constructor-owned Kotlin structs still require KSP
-    // serializers so xlang reads can call the primary constructor with complete field values.
-    if (!cls.isAnnotationPresent(ForyStruct.class)) {
-      return false;
-    }
-    try {
-      cls.getConstructor();
-    } catch (NoSuchMethodException e) {
-      return false;
-    }
-    for (Field field : cls.getDeclaredFields()) {
-      int modifiers = field.getModifiers();
-      if (!Modifier.isStatic(modifiers) && !Modifier.isFinal(modifiers)) {
-        return true;
-      }
-    }
-    return false;
+    // Kotlin xlang descriptor metadata is owned by KSP/static serializers. Java reflection cannot
+    // recover Kotlin source nullability or nested @Ref metadata, including mutable IDL classes.
+    return isCrossLanguage() && isKotlinClass(cls);
   }
 
   private ForyException missingStaticGeneratedSerializer(Class<?> cls) {

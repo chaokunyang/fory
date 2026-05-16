@@ -284,6 +284,84 @@ class ProcessorValidationTest {
   }
 
   @Test
+  fun mutableStructPublishesBeforeFields() {
+    val stringType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "String::class.java",
+        kotlinTypeName = "kotlin.String",
+        valueTypeName = "String",
+        typeName = "java.lang.String",
+        typeId = "Types.STRING",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val node =
+      KotlinSourceTypeNode(
+        rawClassExpression = "example.Node::class.java",
+        kotlinTypeName = "example.Node",
+        valueTypeName = "Node?",
+        typeName = "example.Node",
+        typeId = null,
+        nullable = true,
+        trackingRef = true,
+        primitive = false,
+        unsigned = false,
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "Node",
+            qualifiedTypeName = "example.Node",
+            serializerName = "Node_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            construction = KotlinStructConstruction.MUTABLE,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "id",
+                  type = stringType,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "String",
+                ),
+                KotlinSourceField(
+                  id = 1,
+                  name = "parent",
+                  type = node,
+                  hasForyField = true,
+                  foryFieldId = 2,
+                  trackingRef = true,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = true,
+                  propertyTypeName = "Node?",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("val value = Node()"))
+    assertTrue(source.contains("readContext.reference(value)"))
+    assertTrue(source.contains("value.parent = (readFieldValue(readContext, fieldInfo) as Node?)"))
+    assertTrue(source.contains("presentMask0 = presentMask0 or (1L shl 0)"))
+    assertTrue(source.contains("Required Kotlin field example.Node.id is missing"))
+    assertTrue(source.contains("copyContext.reference(value, copy)"))
+    assertTrue(!source.contains("return Node(parent ="))
+  }
+
+  @Test
   fun internalStructSerializer() {
     val source =
       KotlinSerializerSourceWriter(

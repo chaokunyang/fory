@@ -1149,17 +1149,6 @@ register non-schema Kotlin stdlib classes in the user type-id space. Ref/cycle-
 owned generated classes still use generated descriptor metadata; they do not
 depend on JVM-visible `@Nullable` annotations in generated source.
 
-Run the Kotlin IDL peer test with:
-
-```bash
-cd integration_tests/idl_tests
-./run_kotlin_tests.sh
-```
-
-The runner regenerates Kotlin fixtures, compiles them through KSP, builds the
-Kotlin peer jar, and then runs Java peer round trips for addressbook, ref/cycle,
-and example schemas with `IDL_PEER_LANG=kotlin`.
-
 ## Scala
 
 The Scala target emits Scala 3 source only. The `fory-scala` runtime artifact
@@ -1266,16 +1255,6 @@ object AddressbookForyRegistration {
   }
 }
 ```
-
-Run the end-to-end Scala IDL matrix with:
-
-```bash
-cd integration_tests/idl_tests
-./run_scala_tests.sh
-```
-
-The runner regenerates Scala fixtures, runs Scala 3 IDL tests, and then runs the
-Java peer matrix with `IDL_PEER_LANG=scala`.
 
 ## Cross-Language Notes
 

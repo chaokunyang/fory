@@ -202,6 +202,10 @@ def test_cycle_class_fields():
     assert "@ForyField(id = 2)\n    public var parent: Node? = null" in node
     assert "@ForyField(id = 3)\n    public lateinit var status: Status" in node
     assert "public var ttl: Duration = Duration.ZERO" in node
+    registration = files["graph/GraphForyRegistration.kt"]
+    assert (
+        "KotlinSerializers.registerSerializer(fory, Node::class.java)" in registration
+    )
 
 
 def test_cycle_defaults():

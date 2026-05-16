@@ -25,6 +25,7 @@ internal data class KotlinSourceStruct(
   val qualifiedTypeName: String,
   val serializerName: String,
   val serializerVisibility: KotlinSerializerVisibility,
+  val construction: KotlinStructConstruction = KotlinStructConstruction.CONSTRUCTOR,
   val fields: List<KotlinSourceField>,
   val originatingFiles: List<com.google.devtools.ksp.symbol.KSFile>,
 ) {
@@ -58,6 +59,11 @@ internal data class KotlinSourceUnionCase(
 internal enum class KotlinSerializerVisibility(val keyword: String) {
   PUBLIC("public"),
   INTERNAL("internal"),
+}
+
+internal enum class KotlinStructConstruction {
+  CONSTRUCTOR,
+  MUTABLE,
 }
 
 internal data class KotlinSourceField(

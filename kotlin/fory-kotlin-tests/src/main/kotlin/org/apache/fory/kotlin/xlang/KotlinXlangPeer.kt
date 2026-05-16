@@ -129,6 +129,13 @@ public data class KotlinDurationAndHalfArrays(
   @ForyField(id = 3) val bfloat16s: BFloat16Array,
 )
 
+@ForyStruct
+public class KotlinMutableNode() {
+  @ForyField(id = 1) public var id: String = ""
+
+  @Ref @ForyField(id = 2) public var parent: KotlinMutableNode? = null
+}
+
 @ForyUnion
 public sealed class KotlinPet {
   @ForyCase(id = 0) public data class UnknownCase(val caseId: Int, val value: Any?) : KotlinPet()
@@ -346,6 +353,21 @@ private fun staticSerializerRoundTrip(dataFile: String) {
     error("Infinite Kotlin xlang duration was serialized")
   } catch (_: ForyException) {}
 
+  val refFory = newRefFory()
+  refFory.register(KotlinMutableNode::class.java, "kotlin", "KotlinMutableNode")
+  val node = KotlinMutableNode()
+  node.id = "root"
+  node.parent = node
+  val decodedNode = refFory.deserialize(refFory.serialize(node), KotlinMutableNode::class.java)
+  check(decodedNode.parent === decodedNode)
+  val copiedNode = refFory.copy(node)
+  check(copiedNode.parent === copiedNode)
+  check(
+    refFory.getSerializer(KotlinMutableNode::class.java) is StaticGeneratedStructSerializer<*>
+  ) {
+    "KotlinMutableNode did not load a static generated serializer"
+  }
+
   val pet: KotlinPet = KotlinPet.UserCase(response)
   val decodedPet = fory.deserialize(fory.serialize(pet), KotlinPet::class.java)
   check(decodedPet == pet)
@@ -430,5 +452,14 @@ private fun newCompatibleFory(): Fory =
     .withCompatible(true)
     .requireClassRegistration(true)
     .withRefTracking(false)
+    .build()
+    .also { KotlinSerializers.registerSerializers(it) }
+
+private fun newRefFory(): Fory =
+  Fory.builder()
+    .withLanguage(Language.XLANG)
+    .requireClassRegistration(true)
+    .withRefTracking(true)
+    .withRefCopy(true)
     .build()
     .also { KotlinSerializers.registerSerializers(it) }

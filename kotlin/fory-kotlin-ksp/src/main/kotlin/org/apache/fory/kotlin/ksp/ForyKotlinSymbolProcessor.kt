@@ -31,6 +31,7 @@ import com.google.devtools.ksp.symbol.KSAnnotated
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSClassDeclaration
 import com.google.devtools.ksp.symbol.KSDeclaration
+import com.google.devtools.ksp.symbol.KSFunctionDeclaration
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
 import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.KSTypeArgument
@@ -41,6 +42,11 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 private const val MAX_DEFAULT_FIELDS = 12
+
+private data class ParsedStructFields(
+  val construction: KotlinStructConstruction,
+  val fields: List<KotlinSourceField>,
+)
 
 internal fun fieldLimitError(defaultFieldCount: Int): String? =
   if (defaultFieldCount > MAX_DEFAULT_FIELDS) {
@@ -221,77 +227,11 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       logger.error(ctorError, primaryConstructor)
       return null
     }
-    val propertiesByName = declaration.getAllProperties().associateBy { it.simpleName.asString() }
-    val fields = mutableListOf<KotlinSourceField>()
-    val foryIds = hashSetOf<Int>()
-    var nextId = 0
-    for (parameter in primaryConstructor.parameters) {
-      val parameterName = parameter.name?.asString() ?: continue
-      val property = propertiesByName[parameterName]
-      if (property == null || (!parameter.isVal && !parameter.isVar)) {
-        logger.error(
-          "Constructor parameter $parameterName is not a field-backed property",
-          parameter
-        )
-        return null
-      }
-      if (Modifier.PRIVATE in property.modifiers) {
-        logger.error(
-          "Private Fory field $parameterName is inaccessible to generated code",
-          property
-        )
-        return null
-      }
-      val fieldMeta = resolveForyField(property, parameter) ?: return null
-      if (fieldMeta.id < -1) {
-        logger.error("@ForyField id must be -1 or a non-negative value", property)
-        return null
-      }
-      if (fieldMeta.id >= 0 && !foryIds.add(fieldMeta.id)) {
-        logger.error(
-          "Duplicate @ForyField id ${fieldMeta.id} in ${declaration.qualifiedName!!.asString()}",
-          property
-        )
-        return null
-      }
-      if (hasDeclarationAnnotation(property, NULLABLE)) {
-        logger.error(
-          "Kotlin Fory fields must use '?' for nullable schema types, not @Nullable",
-          property
-        )
-        return null
-      }
-      val hasFieldRef = resolveFieldRef(property, parameter) ?: return null
-      val type = parameter.type.resolve()
-      val typeNode =
-        parseType(type, property, arrayType = hasFieldAnnotation(property, ARRAY_TYPE))
-          ?: return null
-      val id = nextId++
-      fields.add(
-        KotlinSourceField(
-          id = id,
-          name = parameterName,
-          type = typeNode,
-          hasForyField = fieldMeta.hasAnnotation,
-          foryFieldId = fieldMeta.id,
-          trackingRef = hasFieldRef || typeNode.trackingRef,
-          dynamic = fieldMeta.dynamic,
-          arrayType = hasFieldAnnotation(property, ARRAY_TYPE),
-          hasDefault = parameter.hasDefault,
-          nullable = type.nullability == Nullability.NULLABLE,
-          propertyTypeName = kotlinSourceTypeName(type),
-        )
-      )
-    }
+    val parsed = parseStructFields(declaration, primaryConstructor) ?: return null
+    val fields = parsed.fields
     if (fields.isEmpty()) {
-      if (
-        primaryConstructor.parameters.isEmpty() &&
-          declaration.getAllProperties().any { hasDeclarationAnnotation(it, FORY_FIELD) }
-      ) {
-        return null
-      }
       logger.error(
-        "Kotlin KSP xlang serializers require at least one primary-constructor field",
+        "Kotlin KSP xlang serializers require at least one primary-constructor field or mutable @ForyField property",
         declaration
       )
       return null
@@ -315,8 +255,149 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         } else {
           KotlinSerializerVisibility.PUBLIC
         },
+      construction = parsed.construction,
       fields = fields,
       originatingFiles = listOfNotNull(declaration.containingFile),
+    )
+  }
+
+  private fun parseStructFields(
+    declaration: KSClassDeclaration,
+    primaryConstructor: KSFunctionDeclaration,
+  ): ParsedStructFields? {
+    if (primaryConstructor.parameters.isEmpty()) {
+      return ParsedStructFields(
+        KotlinStructConstruction.MUTABLE,
+        parseVarFields(declaration) ?: return null,
+      )
+    }
+    val propertiesByName = declaration.getAllProperties().associateBy { it.simpleName.asString() }
+    val fields = parseCtorFields(declaration, primaryConstructor, propertiesByName) ?: return null
+    return ParsedStructFields(KotlinStructConstruction.CONSTRUCTOR, fields)
+  }
+
+  private fun parseCtorFields(
+    declaration: KSClassDeclaration,
+    primaryConstructor: KSFunctionDeclaration,
+    propertiesByName: Map<String, KSPropertyDeclaration>,
+  ): List<KotlinSourceField>? {
+    val fields = mutableListOf<KotlinSourceField>()
+    val foryIds = hashSetOf<Int>()
+    var nextId = 0
+    for (parameter in primaryConstructor.parameters) {
+      val parameterName = parameter.name?.asString() ?: continue
+      val property = propertiesByName[parameterName]
+      if (property == null || (!parameter.isVal && !parameter.isVar)) {
+        logger.error(
+          "Constructor parameter $parameterName is not a field-backed property",
+          parameter
+        )
+        return null
+      }
+      val field =
+        parseField(
+          declaration,
+          property,
+          parameterName,
+          parameter.type.resolve(),
+          parameter,
+          nextId,
+          parameter.hasDefault,
+          foryIds,
+          requireForyId = false,
+        ) ?: return null
+      fields.add(field)
+      nextId++
+    }
+    return fields
+  }
+
+  private fun parseVarFields(declaration: KSClassDeclaration): List<KotlinSourceField>? {
+    val entries = mutableListOf<Pair<KSPropertyDeclaration, ForyFieldMeta>>()
+    for (property in declaration.getAllProperties()) {
+      if (!hasDeclarationAnnotation(property, FORY_FIELD)) {
+        continue
+      }
+      val fieldMeta = resolveForyField(property, null) ?: return null
+      if (fieldMeta.id < 0) {
+        logger.error("Mutable Kotlin Fory fields require an explicit @ForyField id", property)
+        return null
+      }
+      entries.add(property to fieldMeta)
+    }
+    val fields = mutableListOf<KotlinSourceField>()
+    val foryIds = hashSetOf<Int>()
+    for ((property, _) in entries.sortedBy { it.second.id }) {
+      if (!property.isMutable) {
+        logger.error("Mutable Kotlin Fory fields must be declared as var", property)
+        return null
+      }
+      val field =
+        parseField(
+          declaration,
+          property,
+          property.simpleName.asString(),
+          property.type.resolve(),
+          null,
+          fields.size,
+          hasDefault = false,
+          foryIds,
+          requireForyId = true,
+        ) ?: return null
+      fields.add(field)
+    }
+    return fields
+  }
+
+  private fun parseField(
+    declaration: KSClassDeclaration,
+    property: KSPropertyDeclaration,
+    fieldName: String,
+    type: KSType,
+    parameter: KSValueParameter?,
+    id: Int,
+    hasDefault: Boolean,
+    foryIds: MutableSet<Int>,
+    requireForyId: Boolean,
+  ): KotlinSourceField? {
+    if (Modifier.PRIVATE in property.modifiers) {
+      logger.error("Private Fory field $fieldName is inaccessible to generated code", property)
+      return null
+    }
+    val fieldMeta = resolveForyField(property, parameter) ?: return null
+    if (fieldMeta.id < -1 || (requireForyId && fieldMeta.id < 0)) {
+      logger.error("@ForyField id must be a non-negative value", property)
+      return null
+    }
+    if (fieldMeta.id >= 0 && !foryIds.add(fieldMeta.id)) {
+      logger.error(
+        "Duplicate @ForyField id ${fieldMeta.id} in ${declaration.qualifiedName!!.asString()}",
+        property
+      )
+      return null
+    }
+    if (hasDeclarationAnnotation(property, NULLABLE)) {
+      logger.error(
+        "Kotlin Fory fields must use '?' for nullable schema types, not @Nullable",
+        property
+      )
+      return null
+    }
+    val hasFieldRef = resolveFieldRef(property, parameter) ?: return null
+    val arrayType = hasFieldAnnotation(property, ARRAY_TYPE)
+    val typeNode = parseType(type, property, arrayType = arrayType) ?: return null
+    return KotlinSourceField(
+      id = id,
+      name = fieldName,
+      type = typeNode,
+      hasForyField = fieldMeta.hasAnnotation,
+      foryFieldId = fieldMeta.id,
+      trackingRef = hasFieldRef || typeNode.trackingRef,
+      dynamic = fieldMeta.dynamic,
+      arrayType = arrayType,
+      hasDefault = hasDefault,
+      nullable = type.nullability == Nullability.NULLABLE,
+      propertyTypeName = kotlinSourceTypeName(type),
     )
   }
 
@@ -586,10 +667,10 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
 
   private fun resolveForyField(
     property: KSPropertyDeclaration,
-    parameter: KSValueParameter,
+    parameter: KSValueParameter?,
   ): ForyFieldMeta? {
     val propertyMeta = foryFieldMeta(property.annotations)
-    val parameterMeta = foryFieldMeta(parameter.annotations)
+    val parameterMeta = parameter?.let { foryFieldMeta(it.annotations) }
     val getterHasFory = property.getter?.annotations?.any { isAnnotation(it, FORY_FIELD) } == true
     val setterHasFory = property.setter?.annotations?.any { isAnnotation(it, FORY_FIELD) } == true
     if (getterHasFory || setterHasFory) {
@@ -626,7 +707,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
 
   private fun resolveFieldRef(
     property: KSPropertyDeclaration,
-    parameter: KSValueParameter,
+    parameter: KSValueParameter?,
   ): Boolean? {
     val getterHasRef = property.getter?.annotations?.any { isAnnotation(it, REF) } == true
     val setterHasRef = property.setter?.annotations?.any { isAnnotation(it, REF) } == true
@@ -638,7 +719,9 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     if (!appendFieldRefAnnotations(refs, property.annotations, property)) {
       return null
     }
-    if (!appendParameterRefAnnotations(refs, parameter.annotations, property)) {
+    if (
+      parameter != null && !appendParameterRefAnnotations(refs, parameter.annotations, property)
+    ) {
       return null
     }
     return refs.any { refAnnotationEnabled(it) }

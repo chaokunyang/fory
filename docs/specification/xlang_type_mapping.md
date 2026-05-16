@@ -168,7 +168,7 @@ Notes:
 
 The Kotlin schema IDL target emits Kotlin source only. The generated model
 source is compiled with `fory-kotlin-ksp`, which owns static serializer
-generation for constructor-based structs and sealed unions.
+generation and descriptor metadata for generated structs and sealed unions.
 
 | Fory schema kind                      | Kotlin generated carrier                                                          |
 | ------------------------------------- | --------------------------------------------------------------------------------- |
@@ -201,7 +201,9 @@ Kotlin treats it as a base package and appends the FDL package so imported
 schemas keep distinct generated packages. Registration still uses the FDL
 package so cross-language type names remain stable. Default Kotlin `Int`,
 `Long`, `UInt`, and `ULong` fields use the xlang varint encodings; generated
-source emits `@Fixed` or `@Tagged` only for non-default encodings.
+source emits `@Fixed` or `@Tagged` only for non-default encodings. Generated
+Kotlin nullability is represented with Kotlin `?`, not Fory `@Nullable`; KSP
+descriptors carry the schema nullability and reference metadata.
 
 ### Scala IDL Mapping
 

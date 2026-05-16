@@ -460,8 +460,7 @@ class KotlinGenerator(BaseGenerator):
                 )
         for type_def, owner_path in registrations:
             if isinstance(type_def, Message):
-                if not self.uses_dynamic_registration(type_def, owner_path):
-                    self.serializer_registration(lines, type_def, owner_path)
+                self.serializer_registration(lines, type_def, owner_path)
             else:
                 self.generate_type_registration(lines, type_def, owner_path)
         lines.append("    }")
@@ -504,19 +503,6 @@ class KotlinGenerator(BaseGenerator):
         lines.append(
             f"        KotlinSerializers.registerSerializer(fory, {class_ref}::class.java)"
         )
-
-    def is_cycle_owned_message(
-        self, message: Message, owner_path: Optional[str] = None
-    ) -> bool:
-        shape = self._construction_shapes.get(
-            self.construction_key(self.owner_path_stack(owner_path), message)
-        )
-        return bool(shape is not None and shape.cycle_owned)
-
-    def uses_dynamic_registration(
-        self, message: Message, owner_path: Optional[str] = None
-    ) -> bool:
-        return self.is_cycle_owned_message(message, owner_path)
 
     def registration_order(self) -> List[Tuple[object, Optional[str]]]:
         entries: List[Tuple[object, Optional[str], List[Message]]] = []

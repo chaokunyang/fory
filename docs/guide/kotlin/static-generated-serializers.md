@@ -137,13 +137,13 @@ Kotlin `?` for nullable fields.
 
 ## References
 
-Kotlin constructor-based generated serializers preserve `@Ref` metadata for
-fields, list elements, and map values. Generated reads construct Kotlin values
-through primary constructors, so they do not own cyclic object publication.
-Schema IDL classes that need reference publication are emitted as mutable no-arg
-classes, while their KSP-generated serializers still own field descriptors,
-nested nullability, and `@Ref` metadata. Generated Kotlin IDL does not require
-`-Xemit-jvm-type-annotations` for Fory schema metadata.
+Kotlin generated serializers preserve `@Ref` metadata for fields, list
+elements, and map values. Constructor-owned reads construct Kotlin values
+through primary constructors. Schema IDL classes that need reference
+publication are emitted as mutable no-arg classes, and their KSP-generated
+serializers publish the instance before reading fields. In both shapes, KSP owns
+field descriptors, nested nullability, and `@Ref` metadata. Generated Kotlin IDL
+does not require `-Xemit-jvm-type-annotations` for Fory schema metadata.
 
 ## Collections
 

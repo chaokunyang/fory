@@ -80,6 +80,15 @@ public interface BaseFory {
    */
   void register(String className, String namespace, String typeName);
 
+  /**
+   * Register a runtime module. Direct {@link Fory} instances install the module immediately;
+   * thread-safe runtimes install it into every underlying runtime instance.
+   *
+   * <p>For thread-safe runtimes, call this during setup before concurrent serialization,
+   * deserialization, or copy operations start.
+   */
+  void register(ForyModule module);
+
   void registerUnion(Class<?> cls, int id, Serializer<?> serializer);
 
   void registerUnion(Class<?> cls, String namespace, String typeName, Serializer<?> serializer);
@@ -150,15 +159,6 @@ public interface BaseFory {
    */
   void registerSerializerAndType(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator);
-
-  /**
-   * Register a runtime module. Direct {@link Fory} instances install the module immediately;
-   * thread-safe runtimes install it into every underlying runtime instance.
-   *
-   * <p>For thread-safe runtimes, call this during setup before concurrent serialization,
-   * deserialization, or copy operations start.
-   */
-  void register(ForyModule module);
 
   /**
    * Registers an additional serializer factory.

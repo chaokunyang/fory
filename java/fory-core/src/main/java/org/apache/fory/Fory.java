@@ -199,6 +199,21 @@ public final class Fory implements BaseFory {
   }
 
   @Override
+  public void register(ForyModule module) {
+    Preconditions.checkNotNull(module);
+    if (installedModules.containsKey(module)) {
+      return;
+    }
+    installedModules.put(module, Boolean.TRUE);
+    try {
+      module.install(this);
+    } catch (RuntimeException | Error e) {
+      installedModules.remove(module);
+      throw e;
+    }
+  }
+
+  @Override
   public void registerUnion(Class<?> cls, int id, Serializer<?> serializer) {
     getTypeResolver().registerUnion(cls, Integer.toUnsignedLong(id), serializer);
   }
@@ -240,21 +255,6 @@ public final class Fory implements BaseFory {
   public void registerSerializerAndType(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
     getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(typeResolver));
-  }
-
-  @Override
-  public void register(ForyModule module) {
-    Preconditions.checkNotNull(module);
-    if (installedModules.containsKey(module)) {
-      return;
-    }
-    installedModules.put(module, Boolean.TRUE);
-    try {
-      module.install(this);
-    } catch (RuntimeException | Error e) {
-      installedModules.remove(module);
-      throw e;
-    }
   }
 
   @Override

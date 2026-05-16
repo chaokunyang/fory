@@ -30,7 +30,7 @@ public class ForyTest {
   @Test
   public void testMediaContent() {
     Sample object = new Sample().populate(false);
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     byte[] data = fory.serialize(object);
     Sample sample = (Sample) fory.deserialize(data);
     Assert.assertEquals(sample, object);
@@ -39,7 +39,7 @@ public class ForyTest {
   @Test
   public void testSample() {
     MediaContent object = new MediaContent().populate(false);
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     byte[] data = fory.serialize(object);
     MediaContent mediaContent = (MediaContent) fory.deserialize(data);
     Assert.assertEquals(mediaContent, object);

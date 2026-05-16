@@ -44,7 +44,11 @@ public class TypeDefEncoderTest {
   @Test
   public void testBasicTypeDefZstdMetaCompressor() throws Exception {
     Fory fory =
-        Fory.builder().withMetaShare(true).withMetaCompressor(new ZstdMetaCompressor()).build();
+        Fory.builder()
+            .withXlang(false)
+            .withMetaShare(true)
+            .withMetaCompressor(new ZstdMetaCompressor())
+            .build();
     Class<TestFieldsOrderClass1> type = TestFieldsOrderClass1.class;
     ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
     List<FieldInfo> fieldsInfo = buildFieldsInfo(classResolver, type);

@@ -38,7 +38,7 @@ struct StructWithSkip {
 
 #[test]
 fn test_skip_field() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithSkip>(1).unwrap();
 
     let original = StructWithSkip {
@@ -66,7 +66,7 @@ struct StructWithNullable {
 
 #[test]
 fn test_nullable_attribute() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithNullable>(2).unwrap();
 
     // Test with Some value
@@ -104,7 +104,7 @@ struct StructWithRefTracking {
 
 #[test]
 fn test_ref_tracking_disabled() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<InnerData>(3).unwrap();
     fory.register::<StructWithRefTracking>(4).unwrap();
 
@@ -125,7 +125,7 @@ struct StructWithExplicitNotNull {
 
 #[test]
 fn test_explicit_not_nullable() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithExplicitNotNull>(5).unwrap();
 
     let original = StructWithExplicitNotNull {
@@ -144,7 +144,7 @@ struct StructWithArc {
 
 #[test]
 fn test_arc_default_ref_tracking() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<InnerData>(6).unwrap();
     fory.register::<StructWithArc>(7).unwrap();
 
@@ -168,7 +168,7 @@ struct StructWithCombinedAttrs {
 
 #[test]
 fn test_combined_attributes() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithCombinedAttrs>(8).unwrap();
 
     let original = StructWithCombinedAttrs {
@@ -195,7 +195,7 @@ struct StructWithPrimitives {
 
 #[test]
 fn test_primitive_defaults() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithPrimitives>(9).unwrap();
 
     let original = StructWithPrimitives {
@@ -612,7 +612,7 @@ fn serializer_backed_container_fields_write_declared_generic_payloads() {
 
 #[test]
 fn test_nested_codec_annotations_roundtrip() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<NestedFixedEncoding>(10).unwrap();
 
     let original = NestedFixedEncoding {
@@ -628,10 +628,10 @@ fn test_nested_codec_annotations_roundtrip() {
 
 #[test]
 fn test_compatible_nested_integer_encoding_mismatch() {
-    let mut writer = Fory::builder().compatible(true).build();
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
     writer.register::<NestedVarEncoding>(11).unwrap();
 
-    let mut reader = Fory::builder().compatible(true).build();
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
     reader.register::<NestedFixedEncoding>(11).unwrap();
 
     let original = NestedVarEncoding {
@@ -660,7 +660,7 @@ struct StructWithFieldIds {
 
 #[test]
 fn test_field_id_attribute() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithFieldIds>(10).unwrap();
 
     let original = StructWithFieldIds {
@@ -686,7 +686,7 @@ struct StructWithMixedIds {
 
 #[test]
 fn test_mixed_field_ids() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithMixedIds>(11).unwrap();
 
     let original = StructWithMixedIds {
@@ -715,7 +715,7 @@ struct StructWithCombinedFieldAttrs {
 
 #[test]
 fn test_field_id_with_other_attrs() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithCombinedFieldAttrs>(12).unwrap();
 
     let original = StructWithCombinedFieldAttrs {
@@ -769,10 +769,10 @@ mod compatible_v2 {
 #[test]
 fn test_compatible_mode_v1_to_v2() {
     // Serialize with V1, deserialize with V2 (forward compatibility)
-    let mut fory_v1 = Fory::builder().compatible(true).build();
+    let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
     fory_v1.register::<compatible_v1::UserV1>(100).unwrap();
 
-    let mut fory_v2 = Fory::builder().compatible(true).build();
+    let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
     fory_v2.register::<compatible_v2::UserV2>(100).unwrap();
 
     let user_v1 = compatible_v1::UserV1 {
@@ -794,10 +794,10 @@ fn test_compatible_mode_v1_to_v2() {
 #[test]
 fn test_compatible_mode_v2_to_v1() {
     // Serialize with V2, deserialize with V1 (backward compatibility)
-    let mut fory_v1 = Fory::builder().compatible(true).build();
+    let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
     fory_v1.register::<compatible_v1::UserV1>(100).unwrap();
 
-    let mut fory_v2 = Fory::builder().compatible(true).build();
+    let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
     fory_v2.register::<compatible_v2::UserV2>(100).unwrap();
 
     let user_v2 = compatible_v2::UserV2 {
@@ -850,12 +850,12 @@ mod compatible_reorder_v2 {
 #[test]
 fn test_compatible_mode_field_reorder() {
     // Test that field IDs allow fields to be reordered between versions
-    let mut fory_v1 = Fory::builder().compatible(true).build();
+    let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
     fory_v1
         .register::<compatible_reorder_v1::DataV1>(200)
         .unwrap();
 
-    let mut fory_v2 = Fory::builder().compatible(true).build();
+    let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
     fory_v2
         .register::<compatible_reorder_v2::DataV2>(200)
         .unwrap();
@@ -909,12 +909,12 @@ mod compatible_remove_field_v2 {
 #[test]
 fn test_compatible_mode_field_removed() {
     // Test that removed fields are handled in compatible mode
-    let mut fory_v1 = Fory::builder().compatible(true).build();
+    let mut fory_v1 = Fory::builder().xlang(false).compatible(true).build();
     fory_v1
         .register::<compatible_remove_field_v1::ConfigV1>(300)
         .unwrap();
 
-    let mut fory_v2 = Fory::builder().compatible(true).build();
+    let mut fory_v2 = Fory::builder().xlang(false).compatible(true).build();
     fory_v2
         .register::<compatible_remove_field_v2::ConfigV2>(300)
         .unwrap();
@@ -948,7 +948,7 @@ struct StructWithSkipAndId {
 
 #[test]
 fn test_skip_with_field_id() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<StructWithSkipAndId>(350).unwrap();
 
     let original = StructWithSkipAndId {
@@ -968,7 +968,7 @@ fn test_skip_with_field_id() {
 #[test]
 fn test_compatible_mode_roundtrip() {
     // Test full roundtrip with compatible mode and field IDs
-    let mut fory = Fory::builder().compatible(true).build();
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
     fory.register::<compatible_v2::UserV2>(400).unwrap();
 
     let original = compatible_v2::UserV2 {
@@ -1025,12 +1025,12 @@ fn test_field_id_payload_compatible_mode() {
     // Test that structs with field IDs produce smaller payloads in compatible mode.
     // Field IDs are encoded as compact 1-2 byte integers instead of full field names,
     // following the xlang serialization spec (TAG_ID encoding with 2-bit marker 0b11).
-    let mut fory_compact = Fory::builder().compatible(true).build();
+    let mut fory_compact = Fory::builder().xlang(false).compatible(true).build();
     fory_compact
         .register::<payload_with_field_ids::CompactUser>(500)
         .unwrap();
 
-    let mut fory_verbose = Fory::builder().compatible(true).build();
+    let mut fory_verbose = Fory::builder().xlang(false).compatible(true).build();
     fory_verbose
         .register::<payload_without_field_ids::VerboseUser>(501)
         .unwrap();

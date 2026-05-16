@@ -35,7 +35,7 @@ struct User {
     age: i32,
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<User>(1)?;
 
 let user = User {
@@ -65,7 +65,7 @@ fory.register_by_name::<MyStruct>("com.example", "MyStruct")?;
 For types that need custom serialization logic:
 
 ```rust
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register_serializer::<CustomType>(100)?;
 ```
 
@@ -75,13 +75,13 @@ Rust registration APIs use explicit IDs or explicit namespace/type names. Keep t
 
 ```rust
 // Serializer side
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<TypeA>(1)?;
 fory.register::<TypeB>(2)?;
 fory.register::<TypeC>(3)?;
 
 // Deserializer side - MUST use the same ID mapping
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<TypeA>(1)?;
 fory.register::<TypeB>(2)?;
 fory.register::<TypeC>(3)?;
@@ -95,7 +95,7 @@ Perform all registrations before spawning threads:
 use std::sync::Arc;
 use std::thread;
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<User>(1)?;
 fory.register::<Order>(2)?;
 

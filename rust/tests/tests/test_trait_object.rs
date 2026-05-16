@@ -22,7 +22,7 @@ use fory_derive::ForyStruct;
 use std::collections::{HashMap, HashSet};
 
 fn fory_compatible() -> Fory {
-    Fory::builder().compatible(true).build()
+    Fory::builder().xlang(false).compatible(true).build()
 }
 
 #[test]

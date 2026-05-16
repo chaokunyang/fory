@@ -28,7 +28,7 @@ All examples assume the following setup:
 ```kotlin
 import org.apache.fory.kotlin.ForyKotlin
 
-val fory = ForyKotlin.builder()
+val fory = ForyKotlin.builder().withXlang(false)
     .requireClassRegistration(false)
     .build()
 ```

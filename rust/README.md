@@ -50,7 +50,7 @@ struct User {
 }
 
 fn main() -> Result<(), Error> {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<User>(1)?;
 
     let user = User {
@@ -111,7 +111,7 @@ struct Address {
     country: String,
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Address>(100);
 fory.register::<Person>(200);
 
@@ -148,7 +148,7 @@ Apache Fory™ automatically tracks and preserves reference identity for shared 
 use fory::Fory;
 use std::rc::Rc;
 
-let fory = Fory::default();
+let fory = Fory::builder().xlang(false).build();
 
 // Create a shared value
 let shared = Rc::new(String::from("shared_value"));
@@ -196,7 +196,7 @@ struct Node {
     children: Vec<Rc<RefCell<Node>>>,
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Node>(2000);
 
 // Build a parent-child tree
@@ -281,7 +281,7 @@ struct Zoo {
     star_animal: Box<dyn Animal>,
 }
 
-let mut fory = Fory::builder().compatible(true).build();
+let mut fory = Fory::builder().xlang(false).compatible(true).build();
 fory.register::<Dog>(100);
 fory.register::<Cat>(101);
 fory.register::<Zoo>(102);
@@ -340,10 +340,10 @@ struct PersonV2 {
     metadata: HashMap<String, String>,
 }
 
-let mut fory1 = Fory::builder().compatible(true).build();
+let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
 fory1.register::<PersonV1>(1);
 
-let mut fory2 = Fory::builder().compatible(true).build();
+let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
 fory2.register::<PersonV2>(1);
 
 let person_v1 = PersonV1 {
@@ -392,7 +392,7 @@ enum Value {
     Object { name: String, value: i32 },
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Value>(1)?;
 
 let value = Value::Object { name: "score".to_string(), value: 100 };
@@ -432,7 +432,7 @@ Apache Fory™ supports tuples up to 22 elements out of the box with efficient s
 ```rust
 use fory::{Fory, Error};
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 
 // Tuple with heterogeneous types
 let data: (i32, String, bool, Vec<i32>) = (
@@ -495,7 +495,7 @@ impl ForyDefault for CustomType {
     }
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register_serializer::<CustomType>(100);
 
 let custom = CustomType {

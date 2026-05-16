@@ -55,7 +55,7 @@ rules must be packaged with that library artifact.
 
 ## Runtime Setup
 
-Create the runtime with `ForyKotlin.builder()`, then register application
+Create the runtime with `ForyKotlin.builder().withXlang(false)`, then register application
 classes through the Kotlin `register<T>` extension or the normal Fory Java
 registration APIs.
 

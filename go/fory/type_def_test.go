@@ -109,7 +109,7 @@ func TestTypeDefEncodingDecoding(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fory := NewFory(WithRefTracking(false))
+			fory := NewFory(WithXlang(false), WithRefTracking(false))
 
 			if err := fory.RegisterStructByName(tt.testStruct, tt.tagName); err != nil {
 				t.Fatalf("Failed to register tag type: %v", err)
@@ -221,7 +221,7 @@ type Item1 struct {
 // TestTypeDefNullableFields verifies that pointer fields are correctly encoded as nullable
 // and primitive fields are encoded as non-nullable in TypeDef
 func TestTypeDefNullableFields(t *testing.T) {
-	fory := NewFory(WithRefTracking(false))
+	fory := NewFory(WithXlang(false), WithRefTracking(false))
 
 	// Register the type
 	if err := fory.RegisterStructByName(Item1{}, "test.Item1"); err != nil {
@@ -332,7 +332,7 @@ func TestTypeDefNullableFields(t *testing.T) {
 // returning an error instead of performing the unbounded make([]FieldDef, fieldCount)
 // allocation that would OOM-crash the process.
 func TestTypeDefFieldCountOOMPanic(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 
 	buffer := NewByteBuffer(make([]byte, 0, 8))
 	buffer.WriteByte(StructTypeDefFlag | SmallNumFieldsThreshold)
@@ -346,7 +346,7 @@ func TestTypeDefFieldCountOOMPanic(t *testing.T) {
 }
 
 func TestTypeDefRejectsReservedGlobalHeaderBits(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 	buffer := NewByteBuffer(nil)
 	buffer.WriteByte(StructTypeDefFlag)
 	buffer.WriteVarUint32(0)
@@ -359,7 +359,7 @@ func TestTypeDefRejectsReservedGlobalHeaderBits(t *testing.T) {
 }
 
 func TestTypeDefRejectsReservedNonStructKindBits(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 	body := []byte{0b0001_0000}
 	frame, header := typeDefTestFrame(t, body, false)
 
@@ -370,7 +370,7 @@ func TestTypeDefRejectsReservedNonStructKindBits(t *testing.T) {
 }
 
 func TestTypeDefRejectsTrailingMetadataBytes(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 	meta := NewByteBuffer(nil)
 	meta.WriteByte(StructTypeDefFlag)
 	meta.WriteVarUint32(0)
@@ -407,7 +407,7 @@ func TestTypeDefExtendedFieldCountHeaderDoesNotSetRegisterByName(t *testing.T) {
 }
 
 func TestTypeDefRejectsMetadataHashMismatch(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 	body := typeDefTestBodyWithoutFields()
 	buffer := NewByteBuffer(nil)
 	buffer.WriteBinary(body)
@@ -419,7 +419,7 @@ func TestTypeDefRejectsMetadataHashMismatch(t *testing.T) {
 }
 
 func TestTypeDefHeaderHashIncludesHeaderLowBits(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 	body := typeDefTestBodyWithoutFields()
 	_, header := typeDefTestFrame(t, body, false)
 
@@ -438,7 +438,7 @@ func TestTypeDefHeaderHashIncludesHeaderLowBits(t *testing.T) {
 }
 
 func TestTypeDefRejectsEncodedMetadataAboveMaxBinarySize(t *testing.T) {
-	fory := NewFory(WithMaxBinarySize(1))
+	fory := NewFory(WithXlang(false), WithMaxBinarySize(1))
 	body := typeDefTestBodyWithoutFields()
 	frame, header := typeDefTestFrame(t, body, false)
 
@@ -450,7 +450,7 @@ func TestTypeDefRejectsEncodedMetadataAboveMaxBinarySize(t *testing.T) {
 func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
 	decoded := typeDefTestBodyWithoutFields()
 	compressed := deflateTypeDefTestBody(t, decoded)
-	fory := NewFory(WithMaxBinarySize(4096))
+	fory := NewFory(WithXlang(false), WithMaxBinarySize(4096))
 	frame, header := typeDefTestFrame(t, compressed, true)
 
 	_, err := decodeTypeDef(fory, frame, header)
@@ -459,7 +459,7 @@ func TestTypeDefRejectsCompressedMetadata(t *testing.T) {
 }
 
 func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
-	fory := NewFory(WithCompatible(true))
+	fory := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
 	require.NoError(t, err)
@@ -485,7 +485,7 @@ func TestReadSharedTypeMetaCapsParsedTypeDefCache(t *testing.T) {
 }
 
 func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {
-	fory := NewFory(WithCompatible(true))
+	fory := NewFory(WithXlang(false), WithCompatible(true))
 	require.NoError(t, fory.RegisterStructByName(SimpleStruct{}, "example.SimpleStruct"))
 	typeDef, err := buildTypeDef(fory, reflect.ValueOf(SimpleStruct{}))
 	require.NoError(t, err)
@@ -515,7 +515,7 @@ func TestDecodeTypeDefFallbackNamedTypeCacheRespectsCap(t *testing.T) {
 }
 
 func TestTypeDefRejectsNamespaceLengthBeyondMetadata(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 	meta := NewByteBuffer(nil)
 	meta.WriteByte(StructTypeDefFlag | RegisterByNameFlag)
 	meta.WriteByte(byte(BIG_NAME_THRESHOLD << 2))
@@ -528,7 +528,7 @@ func TestTypeDefRejectsNamespaceLengthBeyondMetadata(t *testing.T) {
 }
 
 func TestTypeDefRejectsFieldNameLengthBeyondMetadata(t *testing.T) {
-	fory := NewFory()
+	fory := NewFory(WithXlang(false))
 	meta := NewByteBuffer(nil)
 	meta.WriteByte(StructTypeDefFlag | 1)
 	meta.WriteVarUint32(0)

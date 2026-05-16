@@ -506,7 +506,7 @@ public class ClassResolverTest extends ForyTestBase {
 
   @Test
   public void testWriteClassNamesInSamePackage() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
     withWriteContext(
         fory,

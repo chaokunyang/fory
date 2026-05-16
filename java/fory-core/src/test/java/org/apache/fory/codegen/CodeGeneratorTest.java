@@ -114,7 +114,8 @@ public class CodeGeneratorTest {
   public ClassLoader tryDuplicateCompile(ClassLoader loader) {
     CodeGenerator codeGenerator = CodeGenerator.getSharedCodeGenerator(loader);
     ObjectCodecBuilder codecBuilder =
-        new ObjectCodecBuilder(Foo.class, Fory.builder().requireClassRegistration(false).build());
+        new ObjectCodecBuilder(
+            Foo.class, Fory.builder().withXlang(false).requireClassRegistration(false).build());
     CompileUnit compileUnit =
         new CompileUnit(
             Foo.class.getPackage().getName(),
@@ -130,7 +131,8 @@ public class CodeGeneratorTest {
   public void tryDefineClassesInClassLoader() {
     ByteArrayClassLoader loader = new ByteArrayClassLoader(new HashMap<>());
     ObjectCodecBuilder codecBuilder =
-        new ObjectCodecBuilder(Foo.class, Fory.builder().requireClassRegistration(false).build());
+        new ObjectCodecBuilder(
+            Foo.class, Fory.builder().withXlang(false).requireClassRegistration(false).build());
     CompileUnit compileUnit =
         new CompileUnit(
             Foo.class.getPackage().getName(),

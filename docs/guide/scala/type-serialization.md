@@ -29,7 +29,7 @@ All examples assume the following setup:
 import org.apache.fory.Fory
 import org.apache.fory.scala.ForyScala
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .build()
 ```
 

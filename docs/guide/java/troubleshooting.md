@@ -91,7 +91,7 @@ public class DeserializeIntoType {
     double f3;
   }
 
-  static ThreadSafeFory fory = Fory.builder()
+  static ThreadSafeFory fory = Fory.builder().withXlang(false)
     .withCompatible(true).buildThreadSafeFory();
 
   public static void main(String[] args) {
@@ -123,7 +123,7 @@ fory.register(MyClass.class, 100);
 **Solution**: Use compatible mode:
 
 ```java
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withCompatible(true)
   .build();
 ```
@@ -135,7 +135,7 @@ Fory fory = Fory.builder()
 **Solution**: Increase max depth if legitimate, or check for malicious data:
 
 ```java
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withMaxDepth(100)  // Increase from default 50
   .build();
 ```
@@ -159,7 +159,7 @@ fory.registerSerializer(MyClass.class, new MyClassSerializer(fory.getTypeResolve
 **Solution**: Enable async compilation:
 
 ```java
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withAsyncCompilation(true)
   .build();
 ```

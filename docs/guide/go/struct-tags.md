@@ -295,7 +295,7 @@ type BadStruct struct {
     Field int `fory:"invalid=option=format"`
 }
 
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 err := f.RegisterStruct(BadStruct{}, 1)
 // Error: ErrKindInvalidTag
 ```

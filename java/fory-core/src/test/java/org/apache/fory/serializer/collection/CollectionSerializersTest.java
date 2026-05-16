@@ -189,6 +189,7 @@ public class CollectionSerializersTest extends ForyTestBase {
   public void testBasicListNestedJIT(boolean referenceTracking) {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withRefTracking(referenceTracking)
             .withCodegen(true)
             .requireClassRegistration(false)
@@ -1090,7 +1091,7 @@ public class CollectionSerializersTest extends ForyTestBase {
 
   @Test
   public void testBitSetReadRejectsNegativeDecodedBinaryPayload() {
-    Fory fory = Fory.builder().build();
+    Fory fory = Fory.builder().withXlang(false).build();
     MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(5);
     writeNegativeDecodedVarUInt32(buffer);
     ReadContext readContext = fory.getReadContext();
@@ -1549,7 +1550,12 @@ public class CollectionSerializersTest extends ForyTestBase {
 
   @Test(dataProvider = "enableCodegen")
   public void testAbstractCollectionElementsSerialization(boolean enableCodegen) {
-    Fory fory = Fory.builder().withCodegen(enableCodegen).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(enableCodegen)
+            .requireClassRegistration(false)
+            .build();
     {
       CollectionAbstractTest test = new CollectionAbstractTest();
       test.fooList = new ArrayList<>(ImmutableList.of(new Foo1(), new Foo1()));
@@ -1580,6 +1586,7 @@ public class CollectionSerializersTest extends ForyTestBase {
   public void testCollectionAllNullElements(boolean enableCodegen) {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withCodegen(true)
             .withRefTracking(true)
             .requireClassRegistration(false)
@@ -1598,6 +1605,7 @@ public class CollectionSerializersTest extends ForyTestBase {
 
     fory =
         Fory.builder()
+            .withXlang(false)
             .withCodegen(enableCodegen)
             .withRefTracking(true)
             .requireClassRegistration(false)

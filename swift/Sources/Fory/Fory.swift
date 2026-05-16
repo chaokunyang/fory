@@ -18,7 +18,6 @@
 import Foundation
 
 public struct Config {
-  public var xlang: Bool
   public var trackRef: Bool
   public var compatible: Bool
   public var checkClassVersion: Bool
@@ -27,7 +26,6 @@ public struct Config {
   public var maxDepth: Int
 
   public init(
-    xlang: Bool = true,
     trackRef: Bool = false,
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
@@ -35,9 +33,8 @@ public struct Config {
     maxBinarySize: Int = 64 * 1024 * 1024,
     maxDepth: Int = 5
   ) {
-    let effectiveCompatible = compatible ?? xlang
-    let effectiveCheckClassVersion = checkClassVersion ?? (xlang && !effectiveCompatible)
-    self.xlang = xlang
+    let effectiveCompatible = compatible ?? true
+    let effectiveCheckClassVersion = checkClassVersion ?? !effectiveCompatible
     self.trackRef = trackRef
     self.compatible = effectiveCompatible
     self.checkClassVersion = effectiveCheckClassVersion
@@ -59,7 +56,6 @@ public final class Fory {
   private let readContext: ReadContext
 
   public convenience init(
-    xlang: Bool = true,
     ref: Bool = false,
     compatible: Bool? = nil,
     checkClassVersion: Bool? = nil,
@@ -69,7 +65,6 @@ public final class Fory {
   ) {
     self.init(
       config: Config(
-        xlang: xlang,
         trackRef: ref,
         compatible: compatible,
         checkClassVersion: checkClassVersion,
@@ -85,7 +80,6 @@ public final class Fory {
     self.writeContext = WriteContext(
       buffer: ByteBuffer(),
       typeResolver: typeResolver,
-      xlang: self.config.xlang,
       trackRef: self.config.trackRef,
       compatible: self.config.compatible,
       checkClassVersion: self.config.checkClassVersion,
@@ -95,7 +89,6 @@ public final class Fory {
     self.readContext = ReadContext(
       buffer: ByteBuffer(),
       typeResolver: typeResolver,
-      xlang: self.config.xlang,
       trackRef: self.config.trackRef,
       compatible: self.config.compatible,
       checkClassVersion: self.config.checkClassVersion,
@@ -408,14 +401,14 @@ public final class Fory {
   @inlinable
   @inline(__always)
   func writeHead(buffer: ByteBuffer) {
-    buffer.writeUInt8(config.xlang ? ForyHeaderFlag.isXlang : 0)
+    buffer.writeUInt8(ForyHeaderFlag.isXlang)
   }
 
   @inlinable
   @inline(__always)
   func readHead(buffer: ByteBuffer) throws {
     let bitmap = try buffer.readUInt8()
-    let expected = config.xlang ? ForyHeaderFlag.isXlang : 0
+    let expected = ForyHeaderFlag.isXlang
     if bitmap != expected {
       try readHeadSlow(bitmap: bitmap, expected: expected)
     }
@@ -441,11 +434,10 @@ public final class Fory {
     _ value: T,
     context: WriteContext
   ) throws {
-    let writeTypeInfo = config.xlang || config.compatible
     try value.foryWrite(
       context,
-      refMode: config.trackRef ? .tracking : (writeTypeInfo ? .nullOnly : .none),
-      writeTypeInfo: writeTypeInfo,
+      refMode: refMode,
+      writeTypeInfo: true,
       hasGenerics: false
     )
   }
@@ -454,11 +446,10 @@ public final class Fory {
   private func readRootTypedValue<T: Serializer>(
     context: ReadContext
   ) throws -> T {
-    let readTypeInfo = config.xlang || config.compatible
     return try T.foryRead(
       context,
-      refMode: config.trackRef ? .tracking : (readTypeInfo ? .nullOnly : .none),
-      readTypeInfo: readTypeInfo
+      refMode: refMode,
+      readTypeInfo: true
     )
   }
 

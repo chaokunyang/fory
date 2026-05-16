@@ -63,7 +63,7 @@ func (e Error) Error() string   { return e.message }
 **Solution**:
 
 ```go
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 
 // Register type before use
 f.RegisterStruct(User{}, 1)
@@ -96,11 +96,11 @@ f.Deserialize(userData, &user)
 
 ```go
 // Serializer
-f1 := fory.New()
+f1 := fory.New(fory.WithXlang(false))
 f1.RegisterStruct(User{}, 1)
 
 // Deserializer - must use same ID
-f2 := fory.New()
+f2 := fory.New(fory.WithXlang(false))
 f2.RegisterStruct(User{}, 1)  // Same ID!
 ```
 
@@ -115,7 +115,7 @@ f2.RegisterStruct(User{}, 1)  // Same ID!
 1. **Enable compatible mode**:
 
 ```go
-f := fory.New(fory.WithCompatible(true))
+f := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
 ```
 
 2. **Ensure struct definitions match**:
@@ -151,13 +151,13 @@ go generate ./...
 1. **Increase max depth** (default is 20):
 
 ```go
-f := fory.New(fory.WithMaxDepth(50))
+f := fory.New(fory.WithXlang(false), fory.WithMaxDepth(50))
 ```
 
 2. **Enable reference tracking** (for circular data):
 
 ```go
-f := fory.New(fory.WithTrackRef(true))
+f := fory.New(fory.WithXlang(false), fory.WithTrackRef(true))
 ```
 
 3. **Check for unintended circular references** in your data.
@@ -197,8 +197,8 @@ f.Deserialize(fullData, &target)
 
 ```go
 // Serializer and deserializer must have same setting
-f1 := fory.New(fory.WithTrackRef(true))
-f2 := fory.New(fory.WithTrackRef(true))  // Must match!
+f1 := fory.New(fory.WithXlang(false), fory.WithTrackRef(true))
+f2 := fory.New(fory.WithXlang(false), fory.WithTrackRef(true))  // Must match!
 ```
 
 2. **Check for data corruption**.
@@ -300,7 +300,7 @@ fory.register(User, typename="example.User")
 2. **Excessive reference tracking**: Disable if not needed:
 
 ```go
-f := fory.New(fory.WithTrackRef(false))
+f := fory.New(fory.WithXlang(false), fory.WithTrackRef(false))
 ```
 
 3. **Deep nesting**: Flatten data structures where possible.
@@ -332,7 +332,7 @@ buf.Reset()  // Reuse for next serialization
 
 ```go
 func worker() {
-    f := fory.New()  // Each worker has own instance
+    f := fory.New(fory.WithXlang(false))  // Each worker has own instance
     for task := range tasks {
         f.Serialize(task)
     }
@@ -363,7 +363,7 @@ fmt.Printf("Header: %x\n", data[:4])  // Magic + flags
 
 ```go
 // Verify type is registered
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 err := f.RegisterStruct(User{}, 1)
 if err != nil {
     fmt.Printf("Registration failed: %v\n", err)
@@ -389,7 +389,7 @@ for i := 0; i < t.NumField(); i++ {
 
 ```go
 func TestRoundTrip(t *testing.T) {
-    f := fory.New()
+    f := fory.New(fory.WithXlang(false))
     f.RegisterStruct(User{}, 1)
 
     original := &User{ID: 1, Name: "Alice"}
@@ -417,12 +417,12 @@ FORY_GO_JAVA_CI=1 mvn test -Dtest=org.apache.fory.xlang.GoXlangTest
 
 ```go
 func TestSchemaEvolution(t *testing.T) {
-    f1 := fory.New(fory.WithCompatible(true))
+    f1 := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
     f1.RegisterStruct(UserV1{}, 1)
 
     data, _ := f1.Serialize(&UserV1{ID: 1, Name: "Alice"})
 
-    f2 := fory.New(fory.WithCompatible(true))
+    f2 := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
     f2.RegisterStruct(UserV2{}, 1)
 
     var result UserV2

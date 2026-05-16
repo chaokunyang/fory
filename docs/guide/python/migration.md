@@ -56,7 +56,7 @@ result = json.loads(data)
 
 # After (Fory - all Python types)
 import pyfory
-f = pyfory.Fory()
+f = pyfory.Fory(xlang=False)
 data = f.dumps({"name": "Alice", "age": 30, "func": lambda x: x})
 result = f.loads(data)
 ```

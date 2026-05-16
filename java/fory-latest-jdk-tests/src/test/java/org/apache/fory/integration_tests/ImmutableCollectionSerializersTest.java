@@ -43,7 +43,7 @@ public class ImmutableCollectionSerializersTest {
 
   @Test(dataProvider = "codegen")
   public void testImmutableCollections(boolean codegen) {
-    Fory fory = Fory.builder().withCodegen(codegen).build();
+    Fory fory = Fory.builder().withXlang(false).withCodegen(codegen).build();
     serDeCheck(fory, List.of());
     serDeCheck(fory, List.of("A"));
     serDeCheck(fory, List.of("A", "B"));
@@ -63,7 +63,7 @@ public class ImmutableCollectionSerializersTest {
 
   @Test(dataProvider = "codegen")
   public void testImmutableCollectionStruct(boolean codegen) {
-    Fory fory = Fory.builder().withCodegen(codegen).build();
+    Fory fory = Fory.builder().withXlang(false).withCodegen(codegen).build();
     fory.register(MapFields.class);
     MapFields mapFields = new MapFields();
     mapFields.map = Map.of();
@@ -77,7 +77,7 @@ public class ImmutableCollectionSerializersTest {
 
   @Test
   public void testImmutableMapStruct() {
-    Fory fory = Fory.builder().build();
+    Fory fory = Fory.builder().withXlang(false).build();
     fory.register(CollectionFields.class);
     CollectionFields collectionFields = new CollectionFields();
     collectionFields.collection = List.of();

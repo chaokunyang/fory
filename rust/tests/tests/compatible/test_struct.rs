@@ -45,8 +45,8 @@ fn simple() {
         f7: i16,
         last: i8,
     }
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Animal1>(999).unwrap();
     fory2.register::<Animal2>(999).unwrap();
     let animal: Animal1 = Animal1 {
@@ -99,8 +99,8 @@ fn compatible_list_array_field_pairs() {
         payload: Vec<Vec<i32>>,
     }
 
-    let mut writer = Fory::builder().compatible(true).build();
-    let mut reader = Fory::builder().compatible(true).build();
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
     writer.register::<ListPayload>(991).unwrap();
     reader.register::<ArrayPayload>(991).unwrap();
     let bytes = writer
@@ -111,8 +111,8 @@ fn compatible_list_array_field_pairs() {
     let decoded: ArrayPayload = reader.deserialize(&bytes).unwrap();
     assert_eq!(decoded.payload, vec![1, 2, 3]);
 
-    let mut writer = Fory::builder().compatible(true).build();
-    let mut reader = Fory::builder().compatible(true).build();
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
     writer.register::<ArrayPayload>(992).unwrap();
     reader.register::<ListPayload>(992).unwrap();
     let bytes = writer
@@ -123,8 +123,8 @@ fn compatible_list_array_field_pairs() {
     let decoded: ListPayload = reader.deserialize(&bytes).unwrap();
     assert_eq!(decoded.payload, vec![1, 2, 3]);
 
-    let mut writer = Fory::builder().compatible(true).build();
-    let mut reader = Fory::builder().compatible(true).build();
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
     writer.register::<NullableListPayload>(993).unwrap();
     reader.register::<ArrayPayload>(993).unwrap();
     let bytes = writer
@@ -149,8 +149,8 @@ fn compatible_list_array_field_pairs() {
         "{err}"
     );
 
-    let mut writer = Fory::builder().compatible(true).build();
-    let mut reader = Fory::builder().compatible(true).build();
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
     writer.register::<NestedListPayload>(994).unwrap();
     reader.register::<NestedArrayPayload>(994).unwrap();
     let bytes = writer
@@ -177,8 +177,8 @@ fn skip_option() {
         f2: i8,
         last: i64,
     }
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Item1>(999).unwrap();
     fory2.register::<Item2>(999).unwrap();
     let item1 = Item1 {
@@ -216,8 +216,8 @@ fn nonexistent_struct() {
         f3: i64,
         last: String,
     }
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Item1>(899).unwrap();
     fory1.register::<Person1>(999).unwrap();
     fory2.register::<Item2>(799).unwrap();
@@ -248,7 +248,7 @@ fn option() {
         f5: Vec<Option<Vec<Option<String>>>>,
         last: i64,
     }
-    let mut fory = Fory::builder().compatible(true).build();
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
     fory.register::<Animal>(999).unwrap();
     let animal: Animal = Animal {
         f1: Some(String::from("f1")),
@@ -292,8 +292,8 @@ fn nullable() {
         last: i64,
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Item1>(999).unwrap();
     fory2.register::<Item2>(999).unwrap();
 
@@ -346,8 +346,8 @@ fn nullable_container() {
         last: i64,
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Item1>(999).unwrap();
     fory2.register::<Item2>(999).unwrap();
 
@@ -398,8 +398,8 @@ fn inner_nullable() {
         f3: HashMap<i8, i8>,
         last: i64,
     }
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Item1>(999).unwrap();
     fory2.register::<Item2>(999).unwrap();
 
@@ -445,8 +445,8 @@ fn nullable_struct() {
         f3: Item,
         last: i64,
     }
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Item>(199).unwrap();
     fory1.register::<Person1>(200).unwrap();
     fory2.register::<Item>(199).unwrap();
@@ -760,8 +760,8 @@ fn test_struct_with_generic() {
         }
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::default(); // Without compatible it works fine.
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).build(); // Without compatible it works fine.
     let mut fory3 = Fory::builder().xlang(true).compatible(false).build();
 
     fn inner_test(fory: &mut Fory) -> Result<(), Error> {

@@ -28,7 +28,7 @@ Create a Fory instance and register your types before serialization:
 ```go
 import "github.com/apache/fory/go/fory"
 
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 
 // Register struct with a type ID
 f.RegisterStruct(User{}, 1)
@@ -201,7 +201,7 @@ type Node struct {
 }
 
 // Use WithTrackRef for pointer fields
-f := fory.New(fory.WithTrackRef(true))
+f := fory.New(fory.WithXlang(false), fory.WithTrackRef(true))
 f.RegisterStruct(Node{}, 1)
 
 root := &Node{
@@ -362,7 +362,7 @@ type Item struct {
 }
 
 func main() {
-    f := fory.New()
+    f := fory.New(fory.WithXlang(false))
     f.RegisterStruct(Order{}, 1)
     f.RegisterStruct(Item{}, 2)
 

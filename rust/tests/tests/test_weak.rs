@@ -25,7 +25,7 @@ use std::sync::Mutex;
 
 #[test]
 fn test_rc_weak_null_serialization() {
-    let fory = Fory::builder().track_ref(true).build();
+    let fory = Fory::builder().xlang(false).track_ref(true).build();
 
     let weak: RcWeak<i32> = RcWeak::new();
 
@@ -37,7 +37,7 @@ fn test_rc_weak_null_serialization() {
 
 #[test]
 fn test_arc_weak_null_serialization() {
-    let fory = Fory::builder().track_ref(true).build();
+    let fory = Fory::builder().xlang(false).track_ref(true).build();
 
     let weak: ArcWeak<i32> = ArcWeak::new();
 
@@ -49,7 +49,7 @@ fn test_arc_weak_null_serialization() {
 
 #[test]
 fn test_rc_weak_dead_pointer_serializes_as_null() {
-    let fory = Fory::builder().track_ref(true).build();
+    let fory = Fory::builder().xlang(false).track_ref(true).build();
 
     let weak = {
         let rc = Rc::new(42i32);
@@ -69,7 +69,7 @@ fn test_rc_weak_dead_pointer_serializes_as_null() {
 
 #[test]
 fn test_arc_weak_dead_pointer_serializes_as_null() {
-    let fory = Fory::builder().track_ref(true).build();
+    let fory = Fory::builder().xlang(false).track_ref(true).build();
 
     let weak = {
         let arc = Arc::new(String::from("test"));
@@ -89,7 +89,7 @@ fn test_arc_weak_dead_pointer_serializes_as_null() {
 
 #[test]
 fn test_rc_weak_in_vec_circular_reference() {
-    let fory = Fory::builder().track_ref(true).build();
+    let fory = Fory::builder().xlang(false).track_ref(true).build();
 
     let data1 = Rc::new(42i32);
     let data2 = Rc::new(100i32);
@@ -107,7 +107,7 @@ fn test_rc_weak_in_vec_circular_reference() {
 
 #[test]
 fn test_arc_weak_in_vec_circular_reference() {
-    let fory = Fory::builder().track_ref(true).build();
+    let fory = Fory::builder().xlang(false).track_ref(true).build();
 
     let data1 = Arc::new(String::from("hello"));
     let data2 = Arc::new(String::from("world"));
@@ -133,7 +133,7 @@ fn test_rc_weak_field_in_struct() {
         weak_ref: RcWeak<i32>,
     }
 
-    let mut fory = Fory::builder().track_ref(true).build();
+    let mut fory = Fory::builder().xlang(false).track_ref(true).build();
     fory.register::<SimpleNode>(1000).unwrap();
 
     let data = Rc::new(42i32);
@@ -160,7 +160,7 @@ struct Node {
 #[test]
 fn test_node_circular_reference_with_parent_children() {
     // Register the Node type with Fory
-    let mut fory = Fory::builder().track_ref(true).build();
+    let mut fory = Fory::builder().xlang(false).track_ref(true).build();
     fory.register::<Node>(2000).unwrap();
 
     // Create parent
@@ -218,7 +218,7 @@ fn test_arc_mutex_circular_reference() {
         children: Vec<Arc<Mutex<Node>>>,
     }
 
-    let mut fory = Fory::builder().track_ref(true).build();
+    let mut fory = Fory::builder().xlang(false).track_ref(true).build();
     fory.register::<Node>(6000).unwrap();
 
     let parent = Arc::new(Mutex::new(Node {

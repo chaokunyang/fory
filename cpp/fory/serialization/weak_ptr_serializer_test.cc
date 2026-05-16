@@ -33,7 +33,7 @@ namespace {
 // ============================================================================
 
 Fory create_serializer(bool track_ref = true) {
-  return Fory::builder().track_ref(track_ref).build();
+  return Fory::builder().xlang(true).track_ref(track_ref).build();
 }
 
 // ============================================================================
@@ -425,7 +425,7 @@ TEST(WeakPtrSerializerTest, RequiresTrackRef) {
   original.weak_ref = SharedWeak<SimpleStruct>::from(target);
 
   // Create serializer WITHOUT track_ref
-  auto fory = Fory::builder().track_ref(false).build();
+  auto fory = Fory::builder().xlang(true).track_ref(false).build();
   fory.register_struct<SimpleStruct>(100);
   fory.register_struct<StructWithWeak>(101);
 

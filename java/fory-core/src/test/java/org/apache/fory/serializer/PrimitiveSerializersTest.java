@@ -262,6 +262,7 @@ public class PrimitiveSerializersTest extends ForyTestBase {
   public void testPrimitiveListReadRejectsMalformedBinaryPayloadSize() {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withMaxBinarySize(4)
             .withIntArrayCompressed(true)
             .withLongArrayCompressed(true)
@@ -278,13 +279,17 @@ public class PrimitiveSerializersTest extends ForyTestBase {
 
   @Test
   public void testPrimitiveListReadRejectsNegativeDecodedBinaryPayload() {
-    Fory fixedWidthFory = Fory.builder().build();
+    Fory fixedWidthFory = Fory.builder().withXlang(false).build();
     assertThrows(
         DeserializationException.class,
         () -> readPrimitiveListRawPayload(fixedWidthFory, Int16List.class));
 
     Fory compressedFory =
-        Fory.builder().withIntArrayCompressed(true).withLongArrayCompressed(true).build();
+        Fory.builder()
+            .withXlang(false)
+            .withIntArrayCompressed(true)
+            .withLongArrayCompressed(true)
+            .build();
     assertThrows(
         DeserializationException.class,
         () -> readPrimitiveListRawPayload(compressedFory, Int32List.class));

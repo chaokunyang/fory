@@ -73,7 +73,7 @@ data class Point(val x: Int, val y: Int, val z: Int)
 
 fun main() {
     // Create Fory instance (should be reused)
-    val fory: ThreadSafeFory = ForyKotlin.builder()
+    val fory: ThreadSafeFory = ForyKotlin.builder().withXlang(false)
         .requireClassRegistration(true)
         .buildThreadSafeFory()
 

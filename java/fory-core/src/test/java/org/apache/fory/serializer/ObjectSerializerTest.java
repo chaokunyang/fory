@@ -232,6 +232,7 @@ public class ObjectSerializerTest extends ForyTestBase {
 
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withCodegen(true)
               .withRefTracking(true)
               .requireClassRegistration(false)

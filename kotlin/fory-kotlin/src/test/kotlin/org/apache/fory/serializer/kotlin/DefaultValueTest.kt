@@ -131,7 +131,7 @@ class DefaultValueTest {
 
   @Test
   fun testDefaultValueDeserialization() {
-    val fory = ForyKotlin.builder().requireClassRegistration(false).withCompatible(true).build()
+    val fory = ForyKotlin.builder().withXlang(false).requireClassRegistration(false).withCompatible(true).build()
     val obj = ClassNoDefaults("test")
     val serialized = fory.serialize(obj)
     val deserialized = fory.deserialize(serialized, ClassWithDefaults::class.java)

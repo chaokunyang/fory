@@ -28,7 +28,7 @@ type User struct {
 
 func main() {
     // Create a Fory instance
-    f := fory.New()
+    f := fory.New(fory.WithXlang(false))
 
     // Register struct with a type ID
     if err := f.RegisterStruct(User{}, 1); err != nil {
@@ -81,16 +81,16 @@ Fory Go supports configuration through functional options:
 
 ```go
 // Enable reference tracking for circular references
-f := fory.New(fory.WithTrackRef(true))
+f := fory.New(fory.WithXlang(false), fory.WithTrackRef(true))
 
 // Enable compatible mode for schema evolution
-f := fory.New(fory.WithCompatible(true))
+f := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
 
 // Set maximum nesting depth
-f := fory.New(fory.WithMaxDepth(20))
+f := fory.New(fory.WithXlang(false), fory.WithMaxDepth(20))
 
 // Combine multiple options
-f := fory.New(
+f := fory.New(fory.WithXlang(false),
     fory.WithTrackRef(true),
     fory.WithCompatible(true),
 )
@@ -102,7 +102,7 @@ Fory Go enables seamless data exchange with Java, Python, C++, Rust, and JavaScr
 
 ```go
 // Go
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 f.RegisterStructByName(User{}, "example.User")
 data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 // 'data' can be deserialized by Java, Python, etc.
@@ -115,7 +115,7 @@ The default Fory instance is not thread-safe. For concurrent use:
 ```go
 import "github.com/apache/fory/go/fory/threadsafe"
 
-f := threadsafe.New()
+f := threadsafe.New(fory.WithXlang(false))
 
 // Safe for concurrent use
 go func() { f.Serialize(value1) }()

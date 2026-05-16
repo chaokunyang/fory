@@ -64,7 +64,7 @@ func defaultConfig() Config {
 	return Config{
 		TrackRef:          false, // Match Java's default: reference tracking disabled
 		MaxDepth:          20,
-		IsXlang:           false,
+		IsXlang:           true,
 		MaxCollectionSize: 1_000_000,
 		MaxBinarySize:     64 * 1024 * 1024,
 		MaxTypeFields:     10000,

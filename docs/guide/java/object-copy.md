@@ -158,7 +158,7 @@ Enabling one does not automatically enable the other. If your application both s
 copies graphs with shared or circular references, configure both options explicitly.
 
 ```java
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withRefTracking(true)
   .withRefCopy(true)
   .build();
@@ -187,7 +187,7 @@ import org.apache.fory.Fory;
 
 public class Example {
   public static void main(String[] args) {
-    Fory fory = Fory.builder()
+    Fory fory = Fory.builder().withXlang(false)
       .requireClassRegistration(true)
       .withRefCopy(true)
       .build();
@@ -331,7 +331,7 @@ Use this approach when copy behavior belongs with a serializer rather than the d
 If copy fails on a cyclic object graph, enable `withRefCopy(true)`:
 
 ```java
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withRefCopy(true)
   .build();
 ```
@@ -344,7 +344,7 @@ If the same source object is copied into multiple distinct target objects, `with
 disabled. Turn it on:
 
 ```java
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withRefCopy(true)
   .build();
 ```

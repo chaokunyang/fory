@@ -57,7 +57,7 @@ private func stringPayloadBytes(for value: String) throws -> [UInt8] {
 
 @Test
 func stringSerializerRoundTripsUnicodeAndLengthBoundaries() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let fory = Fory(config: .init(trackRef: false, compatible: true))
     let values = [
         "",
         "ascii",

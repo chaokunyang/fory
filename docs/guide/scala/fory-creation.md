@@ -25,13 +25,13 @@ This page covers Scala-specific requirements for creating Fory instances.
 
 When using Fory for Scala serialization, you must:
 
-1. Create the runtime with `ForyScala.builder()`, or install `ForyScala` with `Fory.builder().withModule(ForyScala)`.
+1. Create the runtime with `ForyScala.builder().withXlang(false)`, or install `ForyScala` with `Fory.builder().withXlang(false).withModule(ForyScala)`.
 2. Register application classes before serialization.
 
 ```scala
 import org.apache.fory.scala.ForyScala
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .build()
 ```
 
@@ -46,7 +46,7 @@ fory.register(Class.forName("scala.Enumeration.Val"))
 To avoid such registration, you can disable class registration:
 
 ```scala
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .requireClassRegistration(false)
   .build()
 ```
@@ -58,7 +58,7 @@ val fory = ForyScala.builder()
 Circular references are common in Scala. Reference tracking should be enabled with `withRefTracking(true)`:
 
 ```scala
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .withRefTracking(true)
   .build()
 ```
@@ -76,7 +76,7 @@ import org.apache.fory.Fory
 import org.apache.fory.scala.ForyScala
 
 object ForyHolder {
-  val fory: Fory = ForyScala.builder()
+  val fory: Fory = ForyScala.builder().withXlang(false)
     .build()
 }
 ```
@@ -90,7 +90,7 @@ import org.apache.fory.ThreadSafeFory
 import org.apache.fory.scala.ForyScala
 
 object ForyHolder {
-  val fory: ThreadSafeFory = ForyScala.builder()
+  val fory: ThreadSafeFory = ForyScala.builder().withXlang(false)
     .buildThreadSafeFory()
 }
 ```
@@ -104,7 +104,7 @@ Common options for Scala:
 ```scala
 import org.apache.fory.scala.ForyScala
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   // Enable reference tracking for circular references
   .withRefTracking(true)
   // Enable schema evolution support

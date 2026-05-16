@@ -101,7 +101,7 @@
 //! }
 //!
 //! # fn main() {
-//! let mut fory = Fory::builder().compatible(true).build();
+//! let mut fory = Fory::builder().xlang(false).compatible(true).build();
 //! fory.register::<Dog>(100);
 //! fory.register::<Cat>(101);
 //! fory.register::<Zoo>(102);
@@ -149,7 +149,7 @@
 //! use std::collections::HashMap;
 //!
 //! // Create a Fory instance
-//! let mut fory = Fory::builder().compatible(true).build();
+//! let mut fory = Fory::builder().xlang(false).compatible(true).build();
 //!
 //! // Serialize String
 //! let text = String::from("Hello, Fory!");

@@ -23,7 +23,9 @@ from pyfory import Fory
 
 def test_union_basic_types():
     """Test Union with basic types like int and str"""
-    fory = Fory()
+    fory = Fory(
+        xlang=False,
+    )
 
     # Test with int value
     value_int: Union[int, str] = 42
@@ -42,7 +44,9 @@ def test_union_basic_types():
 
 def test_union_multiple_types():
     """Test Union with more than two types"""
-    fory = Fory()
+    fory = Fory(
+        xlang=False,
+    )
 
     # Test with int
     value1: Union[int, str, float] = 123
@@ -68,7 +72,9 @@ def test_union_multiple_types():
 
 def test_union_with_collections():
     """Test Union with collection types"""
-    fory = Fory()
+    fory = Fory(
+        xlang=False,
+    )
 
     # Test with list
     value_list: Union[list, dict] = [1, 2, 3]
@@ -87,7 +93,7 @@ def test_union_with_collections():
 
 def test_union_with_optional():
     """Test Union with Optional (Union[T, None])"""
-    fory = Fory(ref=True)
+    fory = Fory(xlang=False, ref=True)
 
     # Test with non-None value
     value: Union[int, None] = 42
@@ -115,7 +121,9 @@ def test_union_with_dataclass():
         name: str
         employees: int
 
-    fory = Fory()
+    fory = Fory(
+        xlang=False,
+    )
     fory.register(Person)
     fory.register(Company)
 
@@ -144,7 +152,9 @@ def test_union_nested_in_dataclass():
         value: Union[int, str]
         name: str
 
-    fory = Fory()
+    fory = Fory(
+        xlang=False,
+    )
     fory.register(Container)
 
     # Test with int value
@@ -166,7 +176,9 @@ def test_union_nested_in_dataclass():
 
 def test_union_with_bytes():
     """Test Union with bytes type"""
-    fory = Fory()
+    fory = Fory(
+        xlang=False,
+    )
 
     # Test with bytes
     value_bytes: Union[bytes, str] = b"hello"

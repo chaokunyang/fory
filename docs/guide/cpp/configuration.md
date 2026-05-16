@@ -30,7 +30,7 @@ Apache Fory™ supports two serialization modes:
 Type declarations must match exactly between peers:
 
 ```cpp
-auto fory = Fory::builder().build(); // SchemaConsistent by default
+auto fory = Fory::builder().xlang(true).build(); // SchemaConsistent by default
 ```
 
 ### Compatible Mode
@@ -38,7 +38,7 @@ auto fory = Fory::builder().build(); // SchemaConsistent by default
 Allows independent schema evolution:
 
 ```cpp
-auto fory = Fory::builder().compatible(true).build();
+auto fory = Fory::builder().xlang(true).compatible(true).build();
 ```
 
 ## Builder Pattern
@@ -51,10 +51,10 @@ Use `ForyBuilder` to construct Fory instances with custom configuration:
 using namespace fory::serialization;
 
 // Default configuration
-auto fory = Fory::builder().build();
+auto fory = Fory::builder().xlang(true).build();
 
 // Compatible mode for schema evolution
-auto fory = Fory::builder()
+auto fory = Fory::builder().xlang(true)
     .compatible(true)
     .build();
 
@@ -94,7 +94,7 @@ When enabled, includes metadata for cross-language compatibility with Java, Pyth
 Enable/disable compatible mode for schema evolution.
 
 ```cpp
-auto fory = Fory::builder()
+auto fory = Fory::builder().xlang(true)
     .compatible(true)  // Enable schema evolution
     .build();
 ```
@@ -108,7 +108,7 @@ When enabled, supports reading data serialized with different schema versions.
 Enable/disable reference tracking for shared and circular references.
 
 ```cpp
-auto fory = Fory::builder()
+auto fory = Fory::builder().xlang(true)
     .track_ref(true)  // Enable reference tracking
     .build();
 ```
@@ -122,7 +122,7 @@ When enabled, avoids duplicating shared objects and handles cycles.
 Set maximum allowed nesting depth for dynamically-typed objects.
 
 ```cpp
-auto fory = Fory::builder()
+auto fory = Fory::builder().xlang(true)
     .max_dyn_depth(10)  // Allow up to 10 levels
     .build();
 ```
@@ -141,7 +141,7 @@ This limits the maximum depth for nested polymorphic object serialization (e.g.,
 Enable/disable struct version checking.
 
 ```cpp
-auto fory = Fory::builder()
+auto fory = Fory::builder().xlang(true)
     .check_struct_version(true)  // Enable version checking
     .build();
 ```

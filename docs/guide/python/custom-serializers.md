@@ -50,7 +50,7 @@ class FooSerializer(Serializer):
         f2 = read_context.read_string()
         return Foo(f1, f2)
 
-f = pyfory.Fory()
+f = pyfory.Fory(xlang=False)
 f.register(Foo, type_id=100, serializer=FooSerializer(f.type_resolver, Foo))
 
 # Now Foo uses your custom serializer
@@ -122,7 +122,7 @@ value = buffer.read_bool()
 ## Registering Custom Serializers
 
 ```python
-fory = pyfory.Fory()
+fory = pyfory.Fory(xlang=False)
 
 # Register with type_id
 fory.register(MyClass, type_id=100, serializer=MySerializer(fory.type_resolver, MyClass))

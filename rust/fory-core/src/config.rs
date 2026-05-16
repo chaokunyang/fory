@@ -52,7 +52,7 @@ impl Default for Config {
     fn default() -> Self {
         Config {
             compatible: false,
-            xlang: false,
+            xlang: true,
             share_meta: false,
             compress_string: false,
             check_string_read: true,

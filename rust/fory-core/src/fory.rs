@@ -53,6 +53,7 @@ thread_local! {
 /// use fory_core::Fory;
 ///
 /// let fory = Fory::builder()
+///     .xlang(true)
 ///     .compatible(true)
 ///     .compress_string(true)
 ///     .max_dyn_depth(10)
@@ -90,7 +91,7 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder().compatible(true).build();
+    /// let fory = Fory::builder().xlang(false).compatible(true).build();
     /// ```
     pub fn compatible(mut self, compatible: bool) -> Self {
         self.compatible_set = true;
@@ -119,7 +120,7 @@ impl ForyBuilder {
     ///
     /// # Default
     ///
-    /// The default value is `false`.
+    /// The default value is `true`.
     ///
     /// # Examples
     ///
@@ -173,7 +174,7 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder().compress_string(true).build();
+    /// let fory = Fory::builder().xlang(false).compress_string(true).build();
     /// ```
     pub fn compress_string(mut self, compress_string: bool) -> Self {
         self.config.compress_string = compress_string;
@@ -221,7 +222,7 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder()
+    /// let fory = Fory::builder().xlang(false)
     ///     .compatible(false)
     ///     .check_struct_version(true)
     ///     .build();
@@ -256,7 +257,7 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder().track_ref(true).build();
+    /// let fory = Fory::builder().xlang(false).track_ref(true).build();
     /// ```
     pub fn track_ref(mut self, track_ref: bool) -> Self {
         self.config.track_ref = track_ref;
@@ -290,10 +291,10 @@ impl ForyBuilder {
     /// use fory_core::Fory;
     ///
     /// // Allow deeper nesting for complex object graphs
-    /// let fory = Fory::builder().max_dyn_depth(10).build();
+    /// let fory = Fory::builder().xlang(false).max_dyn_depth(10).build();
     ///
     /// // Restrict nesting for safer deserialization
-    /// let fory = Fory::builder().max_dyn_depth(3).build();
+    /// let fory = Fory::builder().xlang(false).max_dyn_depth(3).build();
     /// ```
     pub fn max_dyn_depth(mut self, max_dyn_depth: u32) -> Self {
         self.config.max_dyn_depth = max_dyn_depth;
@@ -322,7 +323,7 @@ impl ForyBuilder {
     /// use fory_core::Fory;
     ///
     /// // Limit binary payloads to 1 MB
-    /// let fory = Fory::builder().max_binary_size(1024 * 1024).build();
+    /// let fory = Fory::builder().xlang(false).max_binary_size(1024 * 1024).build();
     /// ```
     pub fn max_binary_size(mut self, max_binary_size: u32) -> Self {
         self.config.max_binary_size = max_binary_size;
@@ -352,7 +353,7 @@ impl ForyBuilder {
     /// use fory_core::Fory;
     ///
     /// // Limit collections to 10000 elements
-    /// let fory = Fory::builder().max_collection_size(10000).build();
+    /// let fory = Fory::builder().xlang(false).max_collection_size(10000).build();
     /// ```
     pub fn max_collection_size(mut self, max_collection_size: u32) -> Self {
         self.config.max_collection_size = max_collection_size;
@@ -361,7 +362,13 @@ impl ForyBuilder {
 
     /// Builds a [`Fory`] runtime with the current builder configuration.
     pub fn build(self) -> Fory {
-        Fory::from_config(self.config)
+        let mut config = self.config;
+        if config.xlang && !self.compatible_set {
+            config.share_meta = true;
+            config.compatible = true;
+            config.check_struct_version = false;
+        }
+        Fory::from_config(config)
     }
 }
 
@@ -392,7 +399,7 @@ impl ForyBuilder {
 ///     age: u32,
 /// }
 ///
-/// let fory = Fory::default();
+/// let fory = Fory::builder().xlang(false).build();
 /// let user = User { name: "Alice".to_string(), age: 30 };
 /// let bytes = fory.serialize(&user);
 /// let deserialized: User = fory.deserialize(&bytes).unwrap();
@@ -404,6 +411,7 @@ impl ForyBuilder {
 /// use fory_core::Fory;
 ///
 /// let fory = Fory::builder()
+///     .xlang(true)
 ///     .compatible(true)
 ///     .compress_string(true)
 ///     .max_dyn_depth(10)
@@ -553,7 +561,7 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct Point { x: i32, y: i32 }
     ///
-    /// let fory = Fory::default();
+    /// let fory = Fory::builder().xlang(false).build();
     /// let point = Point { x: 10, y: 20 };
     /// let bytes = fory.serialize(&point);
     /// ```
@@ -610,7 +618,7 @@ impl Fory {
     ///     y: i32,
     /// }
     ///
-    /// let fory = Fory::default();
+    /// let fory = Fory::builder().xlang(false).build();
     /// let point = Point { x: 1, y: 2 };
     ///
     /// let mut buf = Vec::new();
@@ -630,7 +638,7 @@ impl Fory {
     ///     y: i32,
     /// }
     ///
-    /// let fory = Fory::default();
+    /// let fory = Fory::builder().xlang(false).build();
     /// let p1 = Point { x: 1, y: 2 };
     /// let p2 = Point { x: -3, y: 4 };
     ///
@@ -671,7 +679,7 @@ impl Fory {
     ///     y: i32,
     /// }
     ///
-    /// let fory = Fory::default();
+    /// let fory = Fory::builder().xlang(false).build();
     /// let point = Point { x: 1, y: 2 };
     ///
     /// let mut buf = Vec::with_capacity(1024);
@@ -805,7 +813,7 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct User { name: String, age: u32 }
     ///
-    /// let mut fory = Fory::default();
+    /// let mut fory = Fory::builder().xlang(false).build();
     /// fory.register::<User>(100);
     /// ```
     pub fn register<T: 'static + StructSerializer + Serializer + ForyDefault>(
@@ -854,7 +862,7 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct User { name: String, age: u32 }
     ///
-    /// let mut fory = Fory::default();
+    /// let mut fory = Fory::builder().xlang(false).build();
     /// fory.register_by_name::<User>("com.example", "User");
     /// ```
     pub fn register_by_name<T: 'static + StructSerializer + Serializer + ForyDefault>(
@@ -904,7 +912,7 @@ impl Fory {
     /// ```rust, ignore
     /// use fory_core::Fory;
     ///
-    /// let mut fory = Fory::default();
+    /// let mut fory = Fory::builder().xlang(false).build();
     /// fory.register_serializer::<MyCustomType>(200);
     /// ```
     pub fn register_serializer<T: Serializer + ForyDefault>(
@@ -993,7 +1001,7 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct Point { x: i32, y: i32 }
     ///
-    /// let fory = Fory::default();
+    /// let fory = Fory::builder().xlang(false).build();
     /// let point = Point { x: 10, y: 20 };
     /// let bytes = fory.serialize(&point);
     /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
@@ -1046,7 +1054,7 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct Point { x: i32, y: i32 }
     ///
-    /// let fory = Fory::default();
+    /// let fory = Fory::builder().xlang(false).build();
     /// let point = Point { x: 10, y: 20 };
     ///
     /// let mut buf = Vec::new();

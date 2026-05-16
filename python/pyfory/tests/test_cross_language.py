@@ -449,7 +449,7 @@ class SomeClass:
 
 
 def test_custom_class_roundtrip():
-    fory = pyfory.Fory(ref=True)
+    fory = pyfory.Fory(xlang=True, compatible=False, ref=True)
     fory.register_type(SomeClass, typename="example.SomeClass")
     obj1 = SomeClass()
     obj1.f2 = {"k1": "v1", "k2": "v2"}

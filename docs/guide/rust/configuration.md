@@ -47,7 +47,7 @@ let fory = Fory::builder().xlang(true).compatible(false).build();
 For native Rust-only payloads, compatible mode is still explicit:
 
 ```rust
-let fory = Fory::builder().compatible(true).build();
+let fory = Fory::builder().xlang(false).compatible(true).build();
 ```
 
 ## Configuration
@@ -59,13 +59,13 @@ Apache Fory™ provides protection against stack overflow from deeply nested dyn
 **Default configuration:**
 
 ```rust
-let fory = Fory::default(); // max_dyn_depth = 5
+let fory = Fory::builder().xlang(false).build(); // max_dyn_depth = 5
 ```
 
 **Custom depth limit:**
 
 ```rust
-let fory = Fory::builder().max_dyn_depth(10).build(); // Allow up to 10 levels
+let fory = Fory::builder().xlang(false).max_dyn_depth(10).build(); // Allow up to 10 levels
 ```
 
 **When to adjust:**
@@ -99,10 +99,10 @@ let fory = Fory::builder()
 use fory::Fory;
 
 // Default configuration
-let fory = Fory::default();
+let fory = Fory::builder().xlang(false).build();
 
 // Compatible mode for schema evolution
-let fory = Fory::builder().compatible(true).build();
+let fory = Fory::builder().xlang(false).compatible(true).build();
 
 // Cross-language mode
 let fory = Fory::builder()
@@ -110,7 +110,7 @@ let fory = Fory::builder()
     .xlang(true).build();
 
 // Custom depth limit
-let fory = Fory::builder().max_dyn_depth(10).build();
+let fory = Fory::builder().xlang(false).max_dyn_depth(10).build();
 
 // Combined configuration
 let fory = Fory::builder()

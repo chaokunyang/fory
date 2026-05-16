@@ -104,7 +104,7 @@ class Fory:
         ...     age: pyfory.Int32
         >>>
         >>> # Python-native mode
-        >>> fory = pyfory.Fory()
+        >>> fory = pyfory.Fory(xlang=False)
         >>> fory.register(Person)
         >>> data = fory.serialize(Person("Alice", 30))
         >>> person = fory.deserialize(data)
@@ -137,7 +137,7 @@ class Fory:
 
     def __init__(
         self,
-        xlang: bool = False,
+        xlang: bool = True,
         ref: bool = False,
         strict: bool = True,
         compatible: Optional[bool] = None,
@@ -152,7 +152,7 @@ class Fory:
         Initialize a Fory serialization instance.
 
         Args:
-            xlang: Enable cross-language serialization mode. When False (default), uses
+            xlang: Enable cross-language serialization mode. When False, uses
                 Python-native mode supporting all Python objects (dataclasses, __reduce__,
                 local functions/classes). With ref=True and strict=False, serves as a
                 drop-in replacement for pickle. When True, uses cross-language format
@@ -198,7 +198,7 @@ class Fory:
 
         Example:
             >>> # Python-native mode with reference tracking
-            >>> fory = Fory(ref=True)
+            >>> fory = Fory(xlang=False, ref=True)
             >>>
             >>> # Cross-language mode with schema evolution
             >>> fory = Fory(xlang=True, compatible=True)
@@ -279,7 +279,7 @@ class Fory:
             >>> fory.register(Person, namespace="com.example", typename="Person")
             >>>
             >>> # Python-native mode (no cross-language matching needed)
-            >>> fory = Fory()
+            >>> fory = Fory(xlang=False)
             >>> fory.register(Person)
         """
         self.register_type(
@@ -330,7 +330,7 @@ class Fory:
             >>> fory.register_type(Person, namespace="com.example", typename="Person")
             >>>
             >>> # Python-native mode (no cross-language matching needed)
-            >>> fory = Fory()
+            >>> fory = Fory(xlang=False)
             >>> fory.register_type(Person)
         """
         return self.type_resolver.register_type(
@@ -373,7 +373,7 @@ class Fory:
             serializer: Custom serializer instance implementing the Serializer protocol
 
         Example:
-            >>> fory = Fory()
+            >>> fory = Fory(xlang=False)
             >>> fory.register_serializer(MyClass, MyCustomSerializer())
         """
         self.type_resolver.register_serializer(cls, serializer)
@@ -455,7 +455,7 @@ class Fory:
             Serialized bytes if buffer is None, otherwise returns the provided buffer
 
         Example:
-            >>> fory = Fory()
+            >>> fory = Fory(xlang=False)
             >>> data = fory.serialize({"key": "value", "num": 42})
             >>> print(type(data))
             <class 'bytes'>
@@ -531,7 +531,7 @@ class Fory:
             The deserialized Python object
 
         Example:
-            >>> fory = Fory()
+            >>> fory = Fory(xlang=False)
             >>> data = fory.serialize({"key": "value"})
             >>> obj = fory.deserialize(data)
             >>> print(obj)
@@ -614,7 +614,7 @@ class ThreadSafeFory:
     serialization will raise a RuntimeError.
 
     Args:
-        xlang (bool): Whether to enable cross-language serialization. Defaults to False.
+        xlang (bool): Whether to enable cross-language serialization. Defaults to True.
         ref (bool): Whether to enable reference tracking. Defaults to False.
         strict (bool): Whether to require type registration. Defaults to True.
         compatible (bool): Whether to enable compatible mode. Defaults to True when
@@ -636,7 +636,7 @@ class ThreadSafeFory:
         ...     age: int
         >>>
         >>> # Create thread-safe instance
-        >>> fory = pyfury.ThreadSafeFory()
+        >>> fory = pyfury.ThreadSafeFory(xlang=False)
         >>> fory.register(Person)
         >>>
         >>> # Use safely from multiple threads

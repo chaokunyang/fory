@@ -32,7 +32,7 @@ This page covers common issues and debugging techniques for Apache Fory™ Rust.
 **Solution**: Register the type before serialization:
 
 ```rust
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<MyStruct>(100)?;  // Register before use
 ```
 
@@ -51,7 +51,7 @@ Confirm that:
 - Ensure field types match across versions
 
 ```rust
-let fory = Fory::builder().compatible(true).build();
+let fory = Fory::builder().xlang(false).compatible(true).build();
 ```
 
 ## Debugging Techniques

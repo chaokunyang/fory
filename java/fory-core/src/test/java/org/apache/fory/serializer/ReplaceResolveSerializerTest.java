@@ -560,7 +560,7 @@ public class ReplaceResolveSerializerTest extends ForyTestBase {
 
   @Test
   public void testInheritance() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     byte[] bytes = fory.serialize(new InheritanceTestClass((byte) 10));
     InheritanceTestClass o = (InheritanceTestClass) fory.deserialize(bytes);
     assertEquals(o.f1, 10);

@@ -52,18 +52,19 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testBuildThreadSafeForyUsesThreadPoolFory() {
-    ThreadSafeFory fory = Fory.builder().requireClassRegistration(false).buildThreadSafeFory();
+    ThreadSafeFory fory =
+        Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeFory();
     assertTrue(fory instanceof ThreadPoolFory);
   }
 
   @Test
   public void testThreadSafeBuildersAssignGeneratedNames() {
     ThreadSafeFory threadSafe =
-        Fory.builder().requireClassRegistration(false).buildThreadSafeFory();
+        Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeFory();
     ThreadSafeFory threadLocal =
-        Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
+        Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadLocalFory();
     ThreadSafeFory threadPool =
-        Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(1);
+        Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeForyPool(1);
 
     String threadSafeName = threadSafe.execute(fory -> fory.getConfig().getName());
     String threadLocalName = threadLocal.execute(fory -> fory.getConfig().getName());
@@ -77,6 +78,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
     ThreadSafeFory named =
         Fory.builder()
+            .withXlang(false)
             .withName("explicit-thread-safe-name")
             .requireClassRegistration(false)
             .buildThreadSafeForyPool(1);
@@ -99,7 +101,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
   @Test
   public void testThreadSafeRuntimesShareRegistryAcrossRawForyInstances() throws Exception {
     ThreadLocalFory threadLocal =
-        Fory.builder().requireClassRegistration(false).buildThreadLocalFory();
+        Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadLocalFory();
     AtomicReference<SharedRegistry> threadLocalRegistry1 = new AtomicReference<>();
     AtomicReference<SharedRegistry> threadLocalRegistry2 = new AtomicReference<>();
     Thread thread1 =
@@ -113,7 +115,11 @@ public class ThreadSafeForyTest extends ForyTestBase {
     assertSame(threadLocalRegistry1.get(), threadLocalRegistry2.get());
 
     ThreadPoolFory threadPool =
-        (ThreadPoolFory) Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2);
+        (ThreadPoolFory)
+            Fory.builder()
+                .withXlang(false)
+                .requireClassRegistration(false)
+                .buildThreadSafeForyPool(2);
     CountDownLatch acquired = new CountDownLatch(2);
     CountDownLatch release = new CountDownLatch(1);
     AtomicReference<SharedRegistry> threadPoolRegistry1 = new AtomicReference<>();
@@ -203,7 +209,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
     try {
       AtomicReference<Throwable> error = new AtomicReference<>();
       ThreadSafeFory pooled =
-          Fory.builder().requireClassRegistration(true).buildThreadSafeForyPool(4);
+          Fory.builder().withXlang(false).requireClassRegistration(true).buildThreadSafeForyPool(4);
       pooled.register(BeanB.class);
       assertEquals(pooled.deserialize(pooled.serialize(bean)), bean);
       executor.execute(
@@ -224,7 +230,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testThreadPoolReusesForyAcrossThreads() throws InterruptedException {
-    ThreadSafeFory fory = Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(1);
+    ThreadSafeFory fory =
+        Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeForyPool(1);
     AtomicReference<Integer> firstForyId = new AtomicReference<>();
     AtomicReference<Integer> secondForyId = new AtomicReference<>();
     AtomicReference<Throwable> error = new AtomicReference<>();
@@ -361,8 +368,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
   public void testSerializeDeserializeWithType() {
     for (ThreadSafeFory fory :
         new ThreadSafeFory[] {
-          Fory.builder().requireClassRegistration(false).buildThreadSafeFory(),
-          Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2)
+          Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeFory(),
+          Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeForyPool(2)
         }) {
       byte[] bytes = fory.serialize("abc");
       Assert.assertEquals(fory.deserialize(bytes, String.class), "abc");
@@ -374,15 +381,15 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testDeserializeByteBufferPreservesPositionAndLimit() {
-    Fory writer = Fory.builder().requireClassRegistration(false).build();
+    Fory writer = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     String value = "thread-safe-byte-buffer";
     byte[] payload = writer.serialize(value);
     for (BaseFory fory :
         new BaseFory[] {
-          Fory.builder().requireClassRegistration(false).build(),
-          Fory.builder().requireClassRegistration(false).buildThreadSafeFory(),
-          Fory.builder().requireClassRegistration(false).buildThreadLocalFory(),
-          Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2)
+          Fory.builder().withXlang(false).requireClassRegistration(false).build(),
+          Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeFory(),
+          Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadLocalFory(),
+          Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeForyPool(2)
         }) {
       for (ByteBuffer buffer : byteBufferViews(payload)) {
         int position = buffer.position();
@@ -456,16 +463,19 @@ public class ThreadSafeForyTest extends ForyTestBase {
     ClassLoader loader = new CustomClassLoader(ClassLoader.getSystemClassLoader());
     ThreadSafeFory threadSafe =
         Fory.builder()
+            .withXlang(false)
             .withClassLoader(loader)
             .requireClassRegistration(false)
             .buildThreadSafeFory();
     ThreadSafeFory threadLocal =
         Fory.builder()
+            .withXlang(false)
             .withClassLoader(loader)
             .requireClassRegistration(false)
             .buildThreadLocalFory();
     ThreadSafeFory threadPool =
         Fory.builder()
+            .withXlang(false)
             .withClassLoader(loader)
             .requireClassRegistration(false)
             .buildThreadSafeForyPool(2);
@@ -484,7 +494,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
   @Test
   public void testSerializerRegister() {
     ThreadSafeFory threadSafeFory =
-        Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2);
+        Fory.builder().withXlang(false).requireClassRegistration(false).buildThreadSafeForyPool(2);
     threadSafeFory.registerSerializer(Foo.class, FooSerializer.class);
     threadSafeFory.execute(
         fory -> {
@@ -496,7 +506,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testRegisterAfterSerializeThrowsException() {
-    ThreadSafeFory fory = Fory.builder().requireClassRegistration(true).buildThreadLocalFory();
+    ThreadSafeFory fory =
+        Fory.builder().withXlang(false).requireClassRegistration(true).buildThreadLocalFory();
     fory.register(BeanA.class);
     fory.serialize("ok");
     Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
@@ -504,7 +515,7 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testRegisterAfterSerializeThrowsExceptionWithFory() {
-    Fory fory = Fory.builder().requireClassRegistration(true).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(true).build();
     fory.register(BeanA.class);
     fory.serialize("ok");
     Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));
@@ -512,7 +523,8 @@ public class ThreadSafeForyTest extends ForyTestBase {
 
   @Test
   public void testRegisterAfterSerializeThrowsExceptionWithForyPool() {
-    ThreadSafeFory fory = Fory.builder().requireClassRegistration(true).buildThreadSafeForyPool(2);
+    ThreadSafeFory fory =
+        Fory.builder().withXlang(false).requireClassRegistration(true).buildThreadSafeForyPool(2);
     fory.register(BeanA.class);
     fory.serialize("ok");
     Assert.assertThrows(ForyException.class, () -> fory.register(BeanB.class));

@@ -58,7 +58,7 @@ Fory provides efficient deep copy functionality:
 ### With Reference Tracking
 
 ```java
-Fory fory = Fory.builder().withRefCopy(true).build();
+Fory fory = Fory.builder().withXlang(false).withRefCopy(true).build();
 SomeClass a = xxx;
 SomeClass copied = fory.copy(a);
 ```
@@ -68,7 +68,7 @@ SomeClass copied = fory.copy(a);
 When disabled, deep copy will ignore circular and shared references. Same reference of an object graph will be copied into different objects in one `Fory#copy`:
 
 ```java
-Fory fory = Fory.builder().withRefCopy(false).build();
+Fory fory = Fory.builder().withXlang(false).withRefCopy(false).build();
 SomeClass a = xxx;
 SomeClass copied = fory.copy(a);
 ```
@@ -178,7 +178,7 @@ public static final ThreadSafeFory FORY;
 
 static {
   LoggerFactory.useSlf4jLogging(true);
-  FORY = Fory.builder()
+  FORY = Fory.builder().withXlang(false)
     .buildThreadSafeFory();
 }
 ```

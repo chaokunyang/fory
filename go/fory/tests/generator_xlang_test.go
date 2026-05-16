@@ -62,10 +62,12 @@ func TestValidationDemoXlang(t *testing.T) {
 	}
 
 	// Codegen mode (automatically uses full name)
-	foryForCodegen := forygo.NewFory(forygo.WithRefTracking(true))
+	foryForCodegen := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
 
 	// Reflect mode (register with full name)
-	foryForReflect := forygo.NewFory(forygo.WithRefTracking(true))
+	foryForReflect := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
 	err := foryForReflect.RegisterStructByName(ReflectStruct{}, expectedTypeTag)
 	require.NoError(t, err, "Should be able to register ReflectStruct with full name")
 
@@ -127,10 +129,12 @@ func TestSliceDemoXlang(t *testing.T) {
 	}
 
 	// Codegen mode - enable reference tracking
-	foryForCodegen := forygo.NewFory(forygo.WithRefTracking(true))
+	foryForCodegen := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
 
 	// Reflect mode - enable reference tracking
-	foryForReflect := forygo.NewFory(forygo.WithRefTracking(true))
+	foryForReflect := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
 	err := foryForReflect.RegisterStructByName(ReflectSliceStruct{}, expectedTypeTag)
 	require.NoError(t, err, "Should be able to register ReflectSliceStruct with full name")
 
@@ -201,10 +205,12 @@ func TestDynamicSliceDemoXlang(t *testing.T) {
 	}
 
 	// Codegen mode - enable reference tracking
-	foryForCodegen := forygo.NewFory(forygo.WithRefTracking(true))
+	foryForCodegen := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
 
 	// Reflect mode - enable reference tracking
-	foryForReflect := forygo.NewFory(forygo.WithRefTracking(true))
+	foryForReflect := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
 	err := foryForReflect.RegisterStructByName(ReflectDynamicStruct{}, expectedTypeTag)
 	require.NoError(t, err, "Should be able to register ReflectDynamicStruct with full name")
 
@@ -258,8 +264,10 @@ func TestMapDemoXlang(t *testing.T) {
 	reflectInstance := codegenInstance
 
 	// Create Fory instances with reference tracking enabled
-	foryForCodegen := forygo.NewFory(forygo.WithRefTracking(true))
-	foryForReflect := forygo.NewFory(forygo.WithRefTracking(true))
+	foryForCodegen := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
+	foryForReflect := forygo.NewFory(
+		forygo.WithXlang(true), forygo.WithCompatible(false), forygo.WithRefTracking(true))
 
 	// No need to register MapDemo - it has codegen serializer automatically
 

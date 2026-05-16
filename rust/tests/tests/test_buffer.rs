@@ -131,7 +131,7 @@ fn test_utf8_string_read_rejects_invalid_payload() {
 
 #[test]
 fn test_fory_rejects_invalid_utf8_string_by_default() {
-    let fory = Fory::builder().build();
+    let fory = Fory::builder().xlang(false).build();
     assert!(fory.is_check_string_read());
     let mut bytes = fory.serialize(&"a".to_string()).unwrap();
     *bytes.last_mut().unwrap() = 0xff;
@@ -145,7 +145,10 @@ fn test_fory_rejects_invalid_utf8_string_by_default() {
 
 #[test]
 fn test_fory_can_disable_checked_string_read_for_trusted_data() {
-    let fory = Fory::builder().check_string_read(false).build();
+    let fory = Fory::builder()
+        .xlang(false)
+        .check_string_read(false)
+        .build();
     assert!(!fory.is_check_string_read());
 
     let bytes = fory.serialize(&"valid".to_string()).unwrap();

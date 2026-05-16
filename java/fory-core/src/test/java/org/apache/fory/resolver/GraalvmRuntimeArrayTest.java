@@ -62,6 +62,7 @@ public class GraalvmRuntimeArrayTest {
     public static void main(String[] args) {
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withCodegen(false)
               .requireClassRegistration(true)
               .suppressClassRegistrationWarnings(true)

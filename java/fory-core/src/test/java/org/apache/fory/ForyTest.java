@@ -90,7 +90,7 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void typedDeserializeRejectsOutOfBandRootHeaderWithoutBuffers() {
-    Fory fory = Fory.builder().build();
+    Fory fory = Fory.builder().withXlang(false).build();
     byte[] bytes = fory.serialize(7);
     bytes[0] |= 0x02;
     assertThrows(IllegalArgumentException.class, () -> fory.deserialize(bytes, Integer.class));
@@ -122,7 +122,10 @@ public class ForyTest extends ForyTestBase {
   @Test(dataProvider = "referenceTrackingConfig")
   public void basicTest(boolean referenceTracking) {
     ForyBuilder builder =
-        Fory.builder().withRefTracking(referenceTracking).requireClassRegistration(false);
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(referenceTracking)
+            .requireClassRegistration(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     assertEquals("str", serDe(fory1, fory2, "str"));
@@ -423,10 +426,10 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testClassRegistration() {
-    Fory fory = Fory.builder().requireClassRegistration(true).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(true).build();
     class A {}
     assertThrows(InsecureException.class, () -> fory.serialize(new A()));
-    Fory fory1 = Fory.builder().requireClassRegistration(false).build();
+    Fory fory1 = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     serDe(fory1, new A());
   }
 
@@ -440,7 +443,7 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testIgnoreFields() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     IgnoreFields o = serDe(fory, new IgnoreFields(1, 2, 3));
     assertEquals(0, o.f1);
     assertEquals(0, o.f2);
@@ -459,7 +462,7 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testExposeFields() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     ImmutableMap<String, Integer> map1 = ImmutableMap.of("1", 1);
     ImmutableMap<String, Integer> map2 = ImmutableMap.of("2", 2);
     ExposeFields o = serDe(fory, new ExposeFields(1, 2, 3, map1, map2));
@@ -480,7 +483,7 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testExposeFields2() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     assertThrowsCause(RuntimeException.class, () -> serDe(fory, new ExposeFields2(1, 2, 3)));
   }
 
@@ -499,7 +502,7 @@ public class ForyTest extends ForyTestBase {
   }
 
   private void foryGC(WeakHashMap<Object, Boolean> map) {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     Class<?> structClass1 = Struct.createStructClass("TestClassGC", 1, false);
     System.out.println(structClass1.hashCode());
     Object struct1 = Struct.createPOJO(structClass1);
@@ -549,7 +552,12 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testRegisterPrivateSerializer() {
-    Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
     fory.registerSerializer(UUID.class, new UUIDSerializer(fory.getTypeResolver()));
     DomainObject obj = new DomainObject();
     obj.id = UUID.randomUUID();
@@ -563,7 +571,12 @@ public class ForyTest extends ForyTestBase {
     }
     A a = new A();
     a.f = a;
-    Fory fory = Fory.builder().withRefTracking(false).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(false)
+            .requireClassRegistration(false)
+            .build();
     try {
       fory.serialize(a);
       throw new IllegalStateException("SerializationException not raised.");
@@ -575,7 +588,12 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testPkgAccessLevelParentClass() {
-    Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
     HashBasedTable<Object, Object, Object> table = HashBasedTable.create(2, 4);
     table.put("r", "c", 100);
     serDeCheckSerializer(fory, table, "Codec");
@@ -594,6 +612,7 @@ public class ForyTest extends ForyTestBase {
   public void testPrintReadObjectsWhenFailed() {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withRefTracking(true)
             .withCodegen(false)
             .requireClassRegistration(false)
@@ -611,6 +630,7 @@ public class ForyTest extends ForyTestBase {
   public void testNullObjSerAndDe() {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withRefTracking(true)
             .requireClassRegistration(false)
             .withMetaShare(true)
@@ -628,7 +648,7 @@ public class ForyTest extends ForyTestBase {
   public void testResetBufferToSizeLimit() {
     final int minBufferBytes = 64;
     final int limitInBytes = 1024;
-    Fory fory = Fory.builder().withBufferSizeLimitBytes(limitInBytes).build();
+    Fory fory = Fory.builder().withXlang(false).withBufferSizeLimitBytes(limitInBytes).build();
 
     final byte[] smallPayload = new byte[0];
     final byte[] serializedSmall = fory.serialize(smallPayload);
@@ -668,8 +688,10 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testStructMapping() {
-    ThreadSafeFory fory1 = Fory.builder().withCompatible(true).buildThreadSafeFory();
-    ThreadSafeFory fory2 = Fory.builder().withCompatible(true).buildThreadSafeFory();
+    ThreadSafeFory fory1 =
+        Fory.builder().withXlang(false).withCompatible(true).buildThreadSafeFory();
+    ThreadSafeFory fory2 =
+        Fory.builder().withXlang(false).withCompatible(true).buildThreadSafeFory();
     fory1.register(Struct1.class);
     fory2.register(Struct2.class);
     Struct1 struct1 = new Struct1(10, "abc");
@@ -694,9 +716,19 @@ public class ForyTest extends ForyTestBase {
 
   @Test
   public void testMaxDepth() {
-    byte[] bytes = Fory.builder().requireClassRegistration(false).build().serialize(maxDepthData());
+    byte[] bytes =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .build()
+            .serialize(maxDepthData());
     Fory fory =
-        Fory.builder().requireClassRegistration(false).withName("fory1").withMaxDepth(3).build();
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withName("fory1")
+            .withMaxDepth(3)
+            .build();
     assertThrows(InsecureException.class, () -> fory.deserialize(bytes));
   }
 
@@ -712,9 +744,15 @@ public class ForyTest extends ForyTestBase {
     MaxDepth maxDepth =
         new MaxDepth(
             1, new MaxDepth(2, new MaxDepth(3, new MaxDepth(4, new MaxDepth(5, maxDepthData())))));
-    byte[] bytes = Fory.builder().requireClassRegistration(false).build().serialize(maxDepth);
+    byte[] bytes =
+        Fory.builder().withXlang(false).requireClassRegistration(false).build().serialize(maxDepth);
     Fory fory =
-        Fory.builder().requireClassRegistration(false).withName("fory2").withMaxDepth(3).build();
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withName("fory2")
+            .withMaxDepth(3)
+            .build();
     assertThrows(InsecureException.class, () -> fory.deserialize(bytes));
   }
 }

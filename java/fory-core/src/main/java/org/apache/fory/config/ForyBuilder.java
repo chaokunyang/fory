@@ -70,7 +70,7 @@ public final class ForyBuilder {
 
   String name;
   boolean checkClassVersion = false;
-  boolean xlang = false;
+  boolean xlang = true;
   boolean trackingRef = false;
   boolean copyRef = false;
   boolean stringRefIgnored = true;
@@ -113,8 +113,8 @@ public final class ForyBuilder {
   public ForyBuilder() {}
 
   /**
-   * Whether cross-language serialize the object. If you used fory for java only, please keep it in
-   * java mode, which will have much better performance.
+   * Whether cross-language serialize the object. If you use Fory for Java only, set {@link
+   * Language#JAVA} explicitly for Java native mode.
    */
   public ForyBuilder withLanguage(Language language) {
     this.xlang = language == Language.XLANG;

@@ -215,10 +215,10 @@ private final class CompatibleGraphContainer {
 
 @Test
 func compatibleModeSupportsAddedAndRemovedFields() throws {
-    let writerV1 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writerV1 = Fory(config: .init(trackRef: false, compatible: true))
     writerV1.register(CompatibleProfileV1.self, id: 9901)
 
-    let readerV2 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let readerV2 = Fory(config: .init(trackRef: false, compatible: true))
     readerV2.register(CompatibleProfileV2.self, id: 9901)
 
     let sourceV1 = CompatibleProfileV1(id: 7, name: "swift")
@@ -229,10 +229,10 @@ func compatibleModeSupportsAddedAndRemovedFields() throws {
     #expect(decodedAsV2.nickname == "")
     #expect(decodedAsV2.scores.isEmpty)
 
-    let writerV2 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writerV2 = Fory(config: .init(trackRef: false, compatible: true))
     writerV2.register(CompatibleProfileV2.self, id: 9901)
 
-    let readerV1 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let readerV1 = Fory(config: .init(trackRef: false, compatible: true))
     readerV1.register(CompatibleProfileV1.self, id: 9901)
 
     let sourceV2 = CompatibleProfileV2(id: 9, name: "fory", nickname: "macro", scores: [1, 2, 3])
@@ -243,10 +243,10 @@ func compatibleModeSupportsAddedAndRemovedFields() throws {
 
 @Test
 func schemaConsistentModeRejectsVersionHashMismatch() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: false, checkClassVersion: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: false, checkClassVersion: true))
     writer.register(SchemaVersionV1.self, id: 9902)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: false, checkClassVersion: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: false, checkClassVersion: true))
     reader.register(SchemaVersionV2.self, id: 9902)
 
     let bytes = try writer.serialize(SchemaVersionV1(id: 1, name: "shape"))
@@ -260,7 +260,7 @@ func schemaConsistentModeRejectsVersionHashMismatch() throws {
 
 @Test
 func compatibleModePreservesSharedAndCircularReferencesForMacroObjects() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: true))
+    let fory = Fory(config: .init(trackRef: true, compatible: true))
     fory.register(CompatibleGraphNode.self, id: 9903)
     fory.register(CompatibleGraphContainer.self, id: 9904)
 
@@ -297,7 +297,7 @@ func schemaHashMatchesJavaFingerprintForTaggedUnsignedFields() {
 
 @Test
 func schemaHashUsesNestedAnnotatedContainerTypeIDs() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false, checkClassVersion: true))
+    let fory = Fory(config: .init(trackRef: false, compatible: false, checkClassVersion: true))
     fory.register(SchemaHashNestedAnnotatedContainer.self, id: 9912)
 
     let bytes = try fory.serialize(
@@ -322,11 +322,11 @@ func schemaHashUsesNestedAnnotatedContainerTypeIDs() throws {
 
 @Test
 func compatibleNestedArrayEvolves() throws {
-    let writerV1 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writerV1 = Fory(config: .init(trackRef: false, compatible: true))
     writerV1.register(CompatibleNestedProfileV1.self, id: 9910)
     writerV1.register(CompatibleNestedArrayV1.self, id: 9911)
 
-    let readerV2 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let readerV2 = Fory(config: .init(trackRef: false, compatible: true))
     readerV2.register(CompatibleNestedProfileV2.self, id: 9910)
     readerV2.register(CompatibleNestedArrayV2.self, id: 9911)
 
@@ -342,11 +342,11 @@ func compatibleNestedArrayEvolves() throws {
     #expect(decodedAsV2.items.allSatisfy { $0.alias.isEmpty })
     #expect(decodedAsV2.items.allSatisfy { $0.scores.isEmpty })
 
-    let writerV2 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writerV2 = Fory(config: .init(trackRef: false, compatible: true))
     writerV2.register(CompatibleNestedProfileV2.self, id: 9910)
     writerV2.register(CompatibleNestedArrayV2.self, id: 9911)
 
-    let readerV1 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let readerV1 = Fory(config: .init(trackRef: false, compatible: true))
     readerV1.register(CompatibleNestedProfileV1.self, id: 9910)
     readerV1.register(CompatibleNestedArrayV1.self, id: 9911)
 
@@ -365,10 +365,10 @@ func compatibleNestedArrayEvolves() throws {
 
 @Test
 func compatibleSkipUsesRemoteMetadataForFixedIntegerMismatch() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
     writer.register(RemoteFixedUInt32V1.self, id: 9920)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
     reader.register(LocalVarUInt32V2.self, id: 9920)
 
     let source = RemoteFixedUInt32V1(id: UInt32.max, keep: 42)
@@ -379,10 +379,10 @@ func compatibleSkipUsesRemoteMetadataForFixedIntegerMismatch() throws {
 
 @Test
 func compatibleSkipUsesRemoteMetadataForNestedMapListSetFields() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
     writer.register(RemoteNestedFixedMapV1.self, id: 9921)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
     reader.register(LocalNestedVarintMapV2.self, id: 9921)
 
     let source = RemoteNestedFixedMapV1(
@@ -401,10 +401,10 @@ func compatibleSkipUsesRemoteMetadataForNestedMapListSetFields() throws {
 
 @Test
 func compatibleReadAdaptsImmediateListAndArrayFieldPair() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
     writer.register(CompatibleListFieldV1.self, id: 9922)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
     reader.register(CompatibleArrayFieldV2.self, id: 9922)
 
     let decoded: CompatibleArrayFieldV2 = try reader.deserialize(
@@ -415,10 +415,10 @@ func compatibleReadAdaptsImmediateListAndArrayFieldPair() throws {
 
 @Test
 func compatibleReadAdaptsDefaultVarintListAndArrayFieldPair() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
     writer.register(CompatibleVarintListFieldV1.self, id: 9924)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
     reader.register(CompatibleArrayFieldV2.self, id: 9924)
 
     let decoded: CompatibleArrayFieldV2 = try reader.deserialize(
@@ -429,10 +429,10 @@ func compatibleReadAdaptsDefaultVarintListAndArrayFieldPair() throws {
 
 @Test
 func compatibleReadAdaptsArrayFieldToDefaultVarintListField() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
     writer.register(CompatibleArrayFieldV2.self, id: 9925)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
     reader.register(CompatibleVarintListFieldV1.self, id: 9925)
 
     let decoded: CompatibleVarintListFieldV1 = try reader.deserialize(
@@ -443,10 +443,10 @@ func compatibleReadAdaptsArrayFieldToDefaultVarintListField() throws {
 
 @Test
 func compatibleReadRejectsNullableListElementsForArrayField() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
     writer.register(CompatibleNullableListFieldV1.self, id: 9923)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
     reader.register(CompatibleArrayFieldV2.self, id: 9923)
 
     let bytes = try writer.serialize(CompatibleNullableListFieldV1(values: [1, 2, 3], extra: 9))
@@ -461,10 +461,10 @@ func compatibleReadRejectsNullableListElementsForArrayField() throws {
 
 @Test
 func compatibleReadSkipsNestedListArrayFieldPair() throws {
-    let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writer = Fory(config: .init(trackRef: false, compatible: true))
     writer.register(CompatibleNestedListArrayFieldV1.self, id: 9926)
 
-    let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let reader = Fory(config: .init(trackRef: false, compatible: true))
     reader.register(CompatibleNestedArrayListFieldV2.self, id: 9926)
 
     let decoded: CompatibleNestedArrayListFieldV2 = try reader.deserialize(
@@ -476,11 +476,11 @@ func compatibleReadSkipsNestedListArrayFieldPair() throws {
 
 @Test
 func compatibleNestedMapEvolves() throws {
-    let writerV1 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writerV1 = Fory(config: .init(trackRef: false, compatible: true))
     writerV1.register(CompatibleNestedProfileV1.self, id: 9910)
     writerV1.register(CompatibleNestedMapV1.self, id: 9912)
 
-    let readerV2 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let readerV2 = Fory(config: .init(trackRef: false, compatible: true))
     readerV2.register(CompatibleNestedProfileV2.self, id: 9910)
     readerV2.register(CompatibleNestedMapV2.self, id: 9912)
 
@@ -503,11 +503,11 @@ func compatibleNestedMapEvolves() throws {
 
 @Test
 func compatibleNestedReadsReuseTypeMeta() throws {
-    let writerV1 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let writerV1 = Fory(config: .init(trackRef: false, compatible: true))
     writerV1.register(CompatibleNestedProfileV1.self, id: 9910)
     writerV1.register(CompatibleNestedArrayV1.self, id: 9911)
 
-    let readerV2 = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let readerV2 = Fory(config: .init(trackRef: false, compatible: true))
     readerV2.register(CompatibleNestedProfileV2.self, id: 9910)
     readerV2.register(CompatibleNestedArrayV2.self, id: 9911)
 

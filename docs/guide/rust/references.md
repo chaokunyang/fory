@@ -35,7 +35,7 @@ When the same object is referenced multiple times, Fory serializes it only once 
 use fory::Fory;
 use std::rc::Rc;
 
-let fory = Fory::default();
+let fory = Fory::builder().xlang(false).build();
 
 // Create a shared value
 let shared = Rc::new(String::from("shared_value"));
@@ -64,7 +64,7 @@ For thread-safe shared references, use `Arc<T>`:
 use fory::Fory;
 use std::sync::Arc;
 
-let fory = Fory::default();
+let fory = Fory::builder().xlang(false).build();
 
 let shared = Arc::new(String::from("shared_value"));
 let data = vec![shared.clone(), shared.clone()];
@@ -102,7 +102,7 @@ struct Node {
     children: Vec<Rc<RefCell<Node>>>,
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Node>(2000);
 
 // Build a parent-child tree
@@ -154,7 +154,7 @@ struct Node {
     children: Vec<Arc<Mutex<Node>>>,
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Node>(6000);
 
 let parent = Arc::new(Mutex::new(Node {

@@ -541,7 +541,7 @@ struct Person {
     var age: Int32 = 0
 }
 
-let fory = Fory(xlang: true, compatible: true)
+let fory = Fory(compatible: true)
 try fory.register(Person.self, namespace: "example", name: "Person")
 
 let bytes = try fory.serialize(Person(name: "Alice", age: 30))

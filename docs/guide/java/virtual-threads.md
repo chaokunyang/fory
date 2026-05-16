@@ -33,7 +33,7 @@ When you use virtual threads, always use Fory's binary input/output APIs:
 Typical usage:
 
 ```java
-ThreadSafeFory fory = Fory.builder()
+ThreadSafeFory fory = Fory.builder().withXlang(false)
     .requireClassRegistration(false)
     .buildThreadSafeFory();
 

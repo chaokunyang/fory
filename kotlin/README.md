@@ -24,7 +24,7 @@ import org.apache.fory.kotlin.ForyKotlin
 
 data class User(val name: String, val id: UInt)
 
-val fory = ForyKotlin.builder()
+val fory = ForyKotlin.builder().withXlang(false)
   .requireClassRegistration(true)
   .build()
 

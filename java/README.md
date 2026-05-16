@@ -109,7 +109,7 @@ import org.apache.fory.*;
 import org.apache.fory.config.*;
 
 // Create Fory instance (should be reused)
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .requireClassRegistration(true)
   .build();
 
@@ -133,7 +133,7 @@ import org.apache.fory.*;
 import org.apache.fory.config.*;
 
 // Create thread-safe Fory instance
-private static final ThreadSafeFory fory = Fory.builder().buildThreadSafeFory();
+private static final ThreadSafeFory fory = Fory.builder().withXlang(false).buildThreadSafeFory();
 
 static {
     fory.register(MyClass.class);
@@ -150,7 +150,7 @@ Enable schema compatibility mode to support forward and backward compatibility w
 
 ```java
 // Enable forward/backward compatibility
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withCompatible(true)
   .build();
 
@@ -164,7 +164,7 @@ Enable reference tracking to properly handle shared references and circular depe
 
 ```java
 // Enable reference tracking for circular/shared references
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withRefTracking(true)
   .build();
 
@@ -323,7 +323,7 @@ Use SIMD-accelerated compression for integer and long arrays to reduce memory us
 ```java
 import org.apache.fory.simd.*;
 
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withIntArrayCompressed(true)
   .withLongArrayCompressed(true)
   .build();

@@ -101,7 +101,12 @@ class TestCollectionSizeLimit:
             assert roundtrip(data, limit, xlang=False, ref=ref) == data
 
     def test_default_limit_is_one_million(self):
-        assert Fory().max_collection_size == 1_000_000
+        assert (
+            Fory(
+                xlang=False,
+            ).max_collection_size
+            == 1_000_000
+        )
 
     def test_dataclass_list_field_exceeds_limit(self):
         @dataclass
@@ -119,8 +124,8 @@ class TestCollectionSizeLimit:
     def test_object_field_count_exceeds_limit(self):
         obj = ObjectPayload()
         obj.value = 1
-        writer = Fory(ref=True, strict=False)
-        reader = Fory(ref=True, strict=False, max_collection_size=0)
+        writer = Fory(xlang=False, ref=True, strict=False)
+        reader = Fory(xlang=False, ref=True, strict=False, max_collection_size=0)
         writer.register(ObjectPayload)
         reader.register(ObjectPayload)
 
@@ -134,8 +139,8 @@ class TestCollectionSizeLimit:
 
             return LocalPayload
 
-        writer = Fory(ref=True, strict=False)
-        reader = Fory(ref=True, strict=False, max_collection_size=0)
+        writer = Fory(xlang=False, ref=True, strict=False)
+        reader = Fory(xlang=False, ref=True, strict=False, max_collection_size=0)
 
         with pytest.raises(ValueError, match="local class base size 1 exceeds"):
             reader.deserialize(writer.serialize(make_local_class()))
@@ -144,8 +149,8 @@ class TestCollectionSizeLimit:
         def local_function(value=1):
             return value
 
-        writer = Fory(ref=True, strict=False)
-        reader = Fory(ref=True, strict=False, max_collection_size=0)
+        writer = Fory(xlang=False, ref=True, strict=False)
+        reader = Fory(xlang=False, ref=True, strict=False, max_collection_size=0)
 
         with pytest.raises(ValueError, match="function default size 1 exceeds"):
             reader.deserialize(writer.serialize(local_function))
@@ -153,8 +158,8 @@ class TestCollectionSizeLimit:
     def test_object_ndarray_length_exceeds_limit(self):
         np = pytest.importorskip("numpy")
         arr = np.array([object(), object()], dtype=object)
-        writer = Fory(ref=True, strict=False)
-        reader = Fory(ref=True, strict=False, max_collection_size=1)
+        writer = Fory(xlang=False, ref=True, strict=False)
+        reader = Fory(xlang=False, ref=True, strict=False, max_collection_size=1)
 
         with pytest.raises(ValueError, match="ndarray object size 2 exceeds"):
             reader.deserialize(writer.serialize(arr))
@@ -164,7 +169,12 @@ class TestBinarySizeLimit:
     """Binary reads are guarded by max_binary_size on the Buffer."""
 
     def test_default_limit_is_64mib(self):
-        assert Fory().max_binary_size == 64 * 1024 * 1024
+        assert (
+            Fory(
+                xlang=False,
+            ).max_binary_size
+            == 64 * 1024 * 1024
+        )
 
     @pytest.mark.parametrize("xlang", [False, True])
     def test_within_limit_succeeds(self, xlang):
@@ -185,17 +195,19 @@ class TestBinarySizeLimit:
     def test_from_stream_respects_limit(self):
         import io
 
-        payload = Fory().serialize(b"x" * 200)
+        payload = Fory(
+            xlang=False,
+        ).serialize(b"x" * 200)
         buf = Buffer.from_stream(io.BytesIO(payload), max_binary_size=100)
         with pytest.raises(ValueError, match="exceeds the configured limit"):
-            Fory(max_binary_size=100).deserialize(buf)
+            Fory(xlang=False, max_binary_size=100).deserialize(buf)
 
     def test_in_band_buffer_object_respects_limit(self):
         payload = b"x" * 200
-        data = Fory(ref=True).serialize(payload, buffer_callback=lambda _buffer: True)
+        data = Fory(xlang=False, ref=True).serialize(payload, buffer_callback=lambda _buffer: True)
 
         with pytest.raises(ValueError, match="exceeds the configured limit"):
-            Fory(ref=True, max_binary_size=100).deserialize(data, buffers=[])
+            Fory(xlang=False, ref=True, max_binary_size=100).deserialize(data, buffers=[])
 
     def test_malformed_metastring_ref_raises_value_error(self):
         payload = bytes([1, 255, TypeId.NAMED_STRUCT, 3])

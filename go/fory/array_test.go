@@ -39,7 +39,7 @@ func TestArrayDynSerializer(t *testing.T) {
 }
 
 func TestArrayDynSerializerRoundTrip(t *testing.T) {
-	f := NewFory()
+	f := NewFory(WithXlang(false))
 
 	t.Run("array of interfaces with strings", func(t *testing.T) {
 		arr := [3]any{"hello", "world", "test"}

@@ -30,7 +30,7 @@ type User struct {
 
 func main() {
     // Create a Fory instance
-    f := fory.New()
+    f := fory.New(fory.WithXlang(false))
 
     // Register struct with a type ID
     if err := f.RegisterStruct(User{}, 1); err != nil {

@@ -27,7 +27,7 @@ import (
 )
 
 func TestPrimitiveArraySerializer(t *testing.T) {
-	f := NewFory()
+	f := NewFory(WithXlang(false))
 
 	// Test uint16 array
 	t.Run("uint16_array", func(t *testing.T) {
@@ -93,7 +93,7 @@ func TestPrimitiveArraySerializer(t *testing.T) {
 }
 
 func TestArraySliceInteroperability(t *testing.T) {
-	f := NewFory()
+	f := NewFory(WithXlang(false))
 
 	t.Run("array_to_slice", func(t *testing.T) {
 		// Serialize Array [3]int32
@@ -149,7 +149,7 @@ func TestArraySliceInteroperability(t *testing.T) {
 }
 
 func TestFloat16Array(t *testing.T) {
-	f := NewFory()
+	f := NewFory(WithXlang(false))
 
 	t.Run("float16_array", func(t *testing.T) {
 		arr := [3]float16.Float16{

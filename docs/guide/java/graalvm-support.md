@@ -66,7 +66,7 @@ public class Example {
   static Fory fory;
 
   static {
-    fory = Fory.builder().build();
+    fory = Fory.builder().withXlang(false).build();
     fory.register(MyClass.class);
     fory.register(AnotherClass.class);
     // Compile all serializers at build time
@@ -122,7 +122,7 @@ public class Example {
   static Fory fory;
 
   static {
-    fory = Fory.builder().build();
+    fory = Fory.builder().withXlang(false).build();
     fory.register(PrivateRecord.class);
     fory.ensureSerializersCompiled();
   }
@@ -146,7 +146,7 @@ public class ProxyExample {
   static Fory fory;
 
   static {
-    fory = Fory.builder().build();
+    fory = Fory.builder().withXlang(false).build();
     // Register the exact interface list used by Proxy.newProxyInstance(...)
     GraalvmSupport.registerProxySupport(MyService.class, Audited.class);
     fory.ensureSerializersCompiled();

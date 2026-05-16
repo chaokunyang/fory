@@ -281,7 +281,7 @@ struct Document {
 }
 
 fn main() {
-    let fory = fory::Fory::default();
+    let fory = fory::Fory::builder().xlang(false).build();
 
     let doc = Document {
         title: "My Document".to_string(),

@@ -146,7 +146,12 @@ public class StringSerializerTest extends ForyTestBase {
 
   @Test
   public void testJavaStringSimple() {
-    Fory fory = Fory.builder().withStringCompressed(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withStringCompressed(true)
+            .requireClassRegistration(false)
+            .build();
     MemoryBuffer buffer = MemoryUtils.buffer(32);
     StringSerializer serializer = new StringSerializer(fory.getConfig());
     {
@@ -209,6 +214,7 @@ public class StringSerializerTest extends ForyTestBase {
   public void testJavaString(boolean stringCompress, boolean writeNumUtf16BytesForUtf8Encoding) {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withStringCompressed(stringCompress)
             .withWriteNumUtf16BytesForUtf8Encoding(writeNumUtf16BytesForUtf8Encoding)
             .requireClassRegistration(false)
@@ -235,6 +241,7 @@ public class StringSerializerTest extends ForyTestBase {
       boolean stringCompress, boolean writeNumUtf16BytesForUtf8Encoding) {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withStringCompressed(stringCompress)
             .withWriteNumUtf16BytesForUtf8Encoding(writeNumUtf16BytesForUtf8Encoding)
             .requireClassRegistration(false)
@@ -332,7 +339,12 @@ public class StringSerializerTest extends ForyTestBase {
     if (JdkVersion.MAJOR_VERSION != 8) {
       throw new SkipException("Java 8 only");
     }
-    Fory fory = Fory.builder().withStringCompressed(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withStringCompressed(true)
+            .requireClassRegistration(false)
+            .build();
     StringSerializer stringSerializer =
         (StringSerializer) fory.getTypeResolver().getSerializer(String.class);
 
@@ -357,6 +369,7 @@ public class StringSerializerTest extends ForyTestBase {
   public void testReadUtf8String(boolean writeNumUtf16BytesForUtf8Encoding) {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withStringCompressed(true)
             .withWriteNumUtf16BytesForUtf8Encoding(writeNumUtf16BytesForUtf8Encoding)
             .requireClassRegistration(false)

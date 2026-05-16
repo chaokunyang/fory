@@ -35,7 +35,9 @@ class Address:
 
 
 def test_thread_safe_fory_basic_serialization():
-    fory = ThreadSafeFory()
+    fory = ThreadSafeFory(
+        xlang=False,
+    )
     fory.register(Person)
 
     person = Person(name="Alice", age=30)
@@ -47,7 +49,9 @@ def test_thread_safe_fory_basic_serialization():
 
 
 def test_thread_safe_fory_multiple_threads():
-    fory = ThreadSafeFory()
+    fory = ThreadSafeFory(
+        xlang=False,
+    )
     fory.register(Person)
 
     results = []
@@ -80,7 +84,9 @@ def test_thread_safe_fory_multiple_threads():
 
 
 def test_thread_safe_fory_registration():
-    fory = ThreadSafeFory()
+    fory = ThreadSafeFory(
+        xlang=False,
+    )
     fory.register(Person, type_id=100)
     fory.register(Address, namespace="test", typename="Address")
 
@@ -108,7 +114,9 @@ def test_thread_safe_fory_xlang_mode():
 
 
 def test_thread_safe_fory_dumps_loads():
-    fory = ThreadSafeFory()
+    fory = ThreadSafeFory(
+        xlang=False,
+    )
     fory.register(Person)
 
     person = Person(name="Dave", age=40)
@@ -120,7 +128,7 @@ def test_thread_safe_fory_dumps_loads():
 
 
 def test_thread_safe_fory_ref_tracking():
-    fory = ThreadSafeFory(ref=True)
+    fory = ThreadSafeFory(xlang=False, ref=True)
     fory.register(Person)
 
     person = Person(name="Eve", age=28)
@@ -134,7 +142,9 @@ def test_thread_safe_fory_ref_tracking():
 
 
 def test_thread_safe_fory_cross_thread_registration():
-    fory = ThreadSafeFory()
+    fory = ThreadSafeFory(
+        xlang=False,
+    )
     fory.register(Person)
     fory.register(Address)
 
@@ -164,7 +174,9 @@ def test_thread_safe_fory_cross_thread_registration():
 
 
 def test_thread_safe_fory_register_after_use():
-    fory = ThreadSafeFory()
+    fory = ThreadSafeFory(
+        xlang=False,
+    )
     fory.register(Person)
 
     person = Person(name="Alice", age=30)

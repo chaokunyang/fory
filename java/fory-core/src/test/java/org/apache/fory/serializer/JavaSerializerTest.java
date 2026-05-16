@@ -74,7 +74,7 @@ public class JavaSerializerTest extends ForyTestBase {
     Assert.assertEquals(BigEndian.getShortB(bytes, 0), ObjectStreamConstants.STREAM_MAGIC);
     Assert.assertTrue(JavaSerializer.serializedByJDK(bytes));
     Assert.assertTrue(JavaSerializer.serializedByJDK(ByteBuffer.wrap(bytes), 0));
-    Fory fory = Fory.builder().build();
+    Fory fory = Fory.builder().withXlang(false).build();
     bytes = fory.serialize(1.1);
     Assert.assertFalse(JavaSerializer.serializedByJDK(bytes));
   }

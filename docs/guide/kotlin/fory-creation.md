@@ -23,12 +23,12 @@ This page covers Kotlin-specific requirements for creating Fory instances.
 
 ## Basic Setup
 
-When using Fory for Kotlin serialization, create the runtime with `ForyKotlin.builder()`:
+When using Fory for Kotlin serialization, create the runtime with `ForyKotlin.builder().withXlang(false)`:
 
 ```kotlin
 import org.apache.fory.kotlin.ForyKotlin
 
-val fory = ForyKotlin.builder()
+val fory = ForyKotlin.builder().withXlang(false)
     .requireClassRegistration(true)
     .build()
 ```
@@ -44,7 +44,7 @@ import org.apache.fory.Fory
 import org.apache.fory.kotlin.ForyKotlin
 
 object ForyHolder {
-    val fory: Fory = ForyKotlin.builder()
+    val fory: Fory = ForyKotlin.builder().withXlang(false)
         .requireClassRegistration(true)
         .build()
 }
@@ -59,7 +59,7 @@ import org.apache.fory.ThreadSafeFory
 import org.apache.fory.kotlin.ForyKotlin
 
 object ForyHolder {
-    val fory: ThreadSafeFory = ForyKotlin.builder()
+    val fory: ThreadSafeFory = ForyKotlin.builder().withXlang(false)
         .requireClassRegistration(true)
         .buildThreadSafeFory()
 }
@@ -69,7 +69,7 @@ object ForyHolder {
 
 ```kotlin
 // Thread-safe Fory
-val fory: ThreadSafeFory = ForyKotlin.builder()
+val fory: ThreadSafeFory = ForyKotlin.builder().withXlang(false)
     .requireClassRegistration(true)
     .buildThreadSafeFory()
 ```
@@ -83,7 +83,7 @@ Common options for Kotlin:
 ```kotlin
 import org.apache.fory.kotlin.ForyKotlin
 
-val fory = ForyKotlin.builder()
+val fory = ForyKotlin.builder().withXlang(false)
     // Enable reference tracking for circular references
     .withRefTracking(true)
     // Enable schema evolution support

@@ -65,7 +65,7 @@ public class JpmsOptionalClassLoadingTest {
 
   public static final class NoJavaSqlMain {
     public static void main(String[] args) {
-      Fory fory = Fory.builder().requireClassRegistration(false).build();
+      Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
       byte[] bytes = fory.serialize(new SampleValue("fory"));
       SampleValue value = (SampleValue) fory.deserialize(bytes);
       if (!"fory".equals(value.value)) {

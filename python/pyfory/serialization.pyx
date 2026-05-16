@@ -834,7 +834,7 @@ cdef class Fory:
 
     def __init__(
         self,
-        xlang=False,
+        xlang=True,
         ref=False,
         strict=True,
         compatible=None,

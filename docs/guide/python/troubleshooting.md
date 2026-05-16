@@ -56,7 +56,7 @@ f.register(MyClass, typename="com.package.MyClass")  # Use same name in all lang
 
 ```python
 # Enable reference tracking
-f = pyfory.Fory(ref=True)  # Required for circular references
+f = pyfory.Fory(xlang=False, ref=True)  # Required for circular references
 
 # Example with circular reference
 class Node:
@@ -105,14 +105,14 @@ print(user.email)  # "unknown@example.com"
 
 ```python
 # Register all custom types before serialization
-f = pyfory.Fory(strict=True)
+f = pyfory.Fory(xlang=False, strict=True)
 
 # Must register before use
 f.register(MyClass, type_id=100)
 f.register(AnotherClass, type_id=101)
 
 # Or disable strict mode (NOT recommended for production)
-f = pyfory.Fory(strict=False)  # Use only in trusted environments
+f = pyfory.Fory(xlang=False, strict=False)  # Use only in trusted environments
 ```
 
 ## Debug Mode
@@ -138,7 +138,7 @@ Handle common serialization errors gracefully:
 import pyfory
 from pyfory.error import TypeUnregisteredError, TypeNotCompatibleError
 
-fory = pyfory.Fory(strict=True)
+fory = pyfory.Fory(xlang=False, strict=True)
 
 try:
     data = fory.dumps(my_object)

@@ -68,7 +68,7 @@ case class PersonV1(name: String)
 // Class WITH default values (for deserialization)
 case class PersonV2(name: String, age: Int = 25, city: String = "Unknown")
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .withCompatible(true)
   .build()
 
@@ -97,7 +97,7 @@ class EmployeeV2(
   val department: String = "Engineering"
 )
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .withCompatible(true)
   .build()
 
@@ -128,7 +128,7 @@ case class ConfigV2(
   enabled: Boolean = true
 )
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .withCompatible(true)
   .build()
 
@@ -154,7 +154,7 @@ object Models {
   case class PersonV2(name: String, address: Address = Address("DefaultStreet"))
 }
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   .withCompatible(true)
   .build()
 

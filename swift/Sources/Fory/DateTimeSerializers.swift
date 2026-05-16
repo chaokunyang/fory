@@ -258,11 +258,7 @@ public extension WriteContext {
 
     @inline(__always)
     func writeLocalDate(_ value: LocalDate) throws {
-        if xlang {
-            buffer.writeVarInt64(Int64(value.epochDay))
-        } else {
-            buffer.writeInt32(value.epochDay)
-        }
+        buffer.writeVarInt64(Int64(value.epochDay))
     }
 
     @inline(__always)
@@ -304,13 +300,10 @@ public extension ReadContext {
 
     @inline(__always)
     func readLocalDate() throws -> LocalDate {
-        if xlang {
-            guard let epochDay = Int32(exactly: try buffer.readVarInt64()) else {
-                throw ForyError.invalidData("date epochDay is out of Int32 range")
-            }
-            return .init(epochDay: epochDay)
+        guard let epochDay = Int32(exactly: try buffer.readVarInt64()) else {
+            throw ForyError.invalidData("date epochDay is out of Int32 range")
         }
-        return .init(epochDay: try buffer.readInt32())
+        return .init(epochDay: epochDay)
     }
 
     @inline(__always)

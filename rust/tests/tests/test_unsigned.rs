@@ -23,7 +23,7 @@ use test_helpers::{test_arc_any, test_box_any, test_rc_any, test_roundtrip};
 
 #[test]
 fn test_unsigned_numbers() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
     test_roundtrip(&fory, u8::MAX);
     test_roundtrip(&fory, u16::MAX);
     test_roundtrip(&fory, u32::MAX);
@@ -34,7 +34,7 @@ fn test_unsigned_numbers() {
 
 #[test]
 fn test_unsigned_arrays() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
     test_roundtrip(&fory, vec![0u8, 1, 2, u8::MAX]);
     test_roundtrip(&fory, vec![0u16, 100, 1000, u16::MAX]);
     test_roundtrip(&fory, vec![0u32, 1000, 1000000, u32::MAX]);
@@ -74,11 +74,11 @@ fn test_binary_when_xlang() {
 
 #[test]
 fn test_binary_max_size_guardrail_for_vec_u8() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
     let original = vec![1_u8, 2, 3, 4, 5];
     let serialized = fory.serialize(&original).unwrap();
 
-    let limited_fory = Fory::builder().max_binary_size(4).build();
+    let limited_fory = Fory::builder().xlang(false).max_binary_size(4).build();
     let err = limited_fory
         .deserialize::<Vec<u8>>(&serialized)
         .expect_err("expected binary size guardrail to reject the payload");
@@ -95,11 +95,11 @@ fn test_binary_max_size_guardrail_for_vec_u8() {
 
 #[test]
 fn test_binary_max_size_guardrail_for_vec_u32() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
     let original = vec![10_u32, 20, 30];
     let serialized = fory.serialize(&original).unwrap();
 
-    let limited_fory = Fory::builder().max_binary_size(8).build();
+    let limited_fory = Fory::builder().xlang(false).max_binary_size(8).build();
     let err = limited_fory
         .deserialize::<Vec<u32>>(&serialized)
         .expect_err("expected primitive array size guardrail to reject the payload");
@@ -132,7 +132,7 @@ fn test_unsigned_struct_non_compatible() {
         vec_u128: Vec<u128>,
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<UnsignedData>(100).unwrap();
 
     let data = UnsignedData {
@@ -173,7 +173,7 @@ fn test_unsigned_struct_compatible() {
         vec_u128: Vec<u128>,
     }
 
-    let mut fory = Fory::builder().compatible(true).build();
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
     fory.register::<UnsignedData>(100).unwrap();
 
     let data = UnsignedData {
@@ -211,8 +211,8 @@ fn test_unsigned_struct_compatible_add_field() {
         c: u32,
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<UnsignedDataV1>(101).unwrap();
     fory2.register::<UnsignedDataV2>(101).unwrap();
 
@@ -239,8 +239,8 @@ fn test_unsigned_struct_compatible_remove_field() {
         b: u16,
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<UnsignedDataV1>(102).unwrap();
     fory2.register::<UnsignedDataV2>(102).unwrap();
 
@@ -258,7 +258,7 @@ fn test_unsigned_struct_compatible_remove_field() {
 
 #[test]
 fn test_unsigned_edge_cases() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
 
     // Test minimum values
     test_roundtrip(&fory, 0u8);
@@ -297,7 +297,7 @@ fn test_unsigned_with_option_non_compatible() {
         opt_u128: Option<u128>,
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<OptionalUnsigned>(103).unwrap();
 
     // Test with Some values
@@ -341,7 +341,7 @@ fn test_unsigned_with_option_compatible() {
         opt_u128: Option<u128>,
     }
 
-    let mut fory = Fory::builder().compatible(true).build();
+    let mut fory = Fory::builder().xlang(false).compatible(true).build();
     fory.register::<OptionalUnsigned>(104).unwrap();
 
     // Test with Some values
@@ -393,8 +393,8 @@ fn test_unsigned_mixed_fields_compatible() {
         new_u128: u128,
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<MixedDataV1>(105).unwrap();
     fory2.register::<MixedDataV2>(105).unwrap();
 
@@ -417,7 +417,7 @@ fn test_unsigned_mixed_fields_compatible() {
 
 #[test]
 fn test_unsigned_with_smart_pointers() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
 
     // Test Box<dyn Any> with unsigned types
     test_box_any(&fory, u8::MAX);

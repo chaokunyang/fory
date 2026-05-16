@@ -67,7 +67,10 @@ public class SerializersTest extends ForyTestBase {
   @Test(dataProvider = "referenceTrackingConfig")
   public void testBigInt(boolean referenceTracking) {
     ForyBuilder builder =
-        Fory.builder().withRefTracking(referenceTracking).requireClassRegistration(false);
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(referenceTracking)
+            .requireClassRegistration(false);
     Fory fory1 = builder.build();
     Fory fory2 = builder.build();
     assertEquals(BigInteger.valueOf(100), serDe(fory1, fory2, BigInteger.valueOf(100)));
@@ -81,7 +84,12 @@ public class SerializersTest extends ForyTestBase {
 
   @Test
   public void testBigNumberReadsRejectOversizedBinaryPayload() {
-    Fory fory = Fory.builder().withMaxBinarySize(1).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withMaxBinarySize(1)
+            .requireClassRegistration(false)
+            .build();
 
     assertThrows(
         DeserializationException.class,
@@ -277,7 +285,7 @@ public class SerializersTest extends ForyTestBase {
 
   @Test
   public void testSerializeClass() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     // serialize both TestReplaceClassSerialization object and class.
     // Scala `object` native serialization will return ModuleSerializationProxy will write original
     // class.
@@ -294,7 +302,7 @@ public class SerializersTest extends ForyTestBase {
 
   @Test
   public void testEmptyObject() {
-    Fory fory = Fory.builder().requireClassRegistration(true).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(true).build();
     assertSame(serDe(fory, new Object()).getClass(), Object.class);
   }
 }

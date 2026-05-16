@@ -69,7 +69,7 @@ public final class CompressedArraySerializers {
    * <p>Example usage:
    *
    * <pre>{@code
-   * Fory fory = Fory.builder()
+   * Fory fory = Fory.builder().withXlang(false)
    *     .withConfig(Config.compressIntArray(true).compressLongArray(true))
    *     .build();
    * CompressedArraySerializers.registerSerializers(fory);
@@ -107,7 +107,7 @@ public final class CompressedArraySerializers {
    * <p>Example usage:
    *
    * <pre>{@code
-   * ThreadSafeFory fory = Fory.builder()
+   * ThreadSafeFory fory = Fory.builder().withXlang(false)
    *     .withConfig(Config.compressIntArray(true).compressLongArray(true))
    *     .buildThreadSafeFory();
    * CompressedArraySerializers.registerSerializers(fory);

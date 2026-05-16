@@ -46,6 +46,7 @@ public class VirtualThreadSafeForyTest {
     ClassLoader classLoader = new CustomClassLoader(ClassLoader.getSystemClassLoader());
     ThreadSafeFory fory =
         Fory.builder()
+            .withXlang(false)
             .withClassLoader(classLoader)
             .requireClassRegistration(false)
             .buildThreadSafeFory();
@@ -71,7 +72,11 @@ public class VirtualThreadSafeForyTest {
   @Test
   public void testVirtualThreadsUseFixedSizeThreadPoolFory() throws Exception {
     ThreadPoolFory fory =
-        (ThreadPoolFory) Fory.builder().requireClassRegistration(false).buildThreadSafeForyPool(2);
+        (ThreadPoolFory)
+            Fory.builder()
+                .withXlang(false)
+                .requireClassRegistration(false)
+                .buildThreadSafeForyPool(2);
     int threadCount = 8;
     CountDownLatch acquired = new CountDownLatch(2);
     CountDownLatch release = new CountDownLatch(1);

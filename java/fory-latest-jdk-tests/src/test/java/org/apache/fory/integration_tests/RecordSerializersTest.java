@@ -82,7 +82,12 @@ public class RecordSerializersTest {
 
   @Test(dataProvider = "codegen")
   public void testSimpleRecord(boolean codegen) {
-    Fory fory = Fory.builder().requireClassRegistration(false).withCodegen(codegen).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCodegen(codegen)
+            .build();
     Foo foo = new Foo(10, "abc", new ArrayList<>(Arrays.asList("a", "b")), 'x');
     Assert.assertEquals(fory.deserialize(fory.serialize(foo)), foo);
   }
@@ -141,6 +146,7 @@ public class RecordSerializersTest {
   public void testSimpleRecordMetaShare(boolean codegen) {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(false)
             .withCodegen(codegen)
             .withMetaShare(true)
@@ -168,6 +174,7 @@ public class RecordSerializersTest {
             .invoke(1, "abc", ofArrayList("a", "b"), 'a', ofHashMap("a", 1));
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(false)
             .withCodegen(codegen)
             .withClassLoader(cls1.getClassLoader())
@@ -186,6 +193,7 @@ public class RecordSerializersTest {
         RecordUtils.getRecordConstructor(cls2).f1.invoke(1, "abc", 'a', ofHashMap("a", 1));
     Fory fory2 =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(false)
             .withCodegen(codegen)
             .withClassLoader(cls2.getClassLoader())
@@ -211,6 +219,7 @@ public class RecordSerializersTest {
             .invoke(1, "abc", ofArrayList("a", "b"), 'a', ofHashMap("a", 1));
     Fory fory1 =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(false)
             .withCodegen(codegen)
             .withCompatible(true)
@@ -227,6 +236,7 @@ public class RecordSerializersTest {
         RecordUtils.getRecordConstructor(cls2).f1.invoke("abc", 'a', ofHashMap("a", 1));
     Fory fory2 =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(false)
             .withCodegen(codegen)
             .withCompatible(true)
@@ -251,7 +261,12 @@ public class RecordSerializersTest {
   @Test(dataProvider = "codegen")
   public void testPrivateRecords(boolean codegen) {
     {
-      Fory fory = Fory.builder().requireClassRegistration(false).withCodegen(codegen).build();
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .requireClassRegistration(false)
+              .withCodegen(codegen)
+              .build();
       Object o1 = Records.createPrivateRecord(11);
       Assert.assertEquals(fory.deserialize(fory.serialize(o1)), o1);
       Object o2 = Records.createPublicRecord(11, o1);
@@ -260,6 +275,7 @@ public class RecordSerializersTest {
     {
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .requireClassRegistration(false)
               .withCodegen(codegen)
               .withCompatible(true)
@@ -272,6 +288,7 @@ public class RecordSerializersTest {
     {
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .requireClassRegistration(false)
               .withCodegen(codegen)
               .withMetaShare(true)
@@ -289,7 +306,7 @@ public class RecordSerializersTest {
 
   @Test(dataProvider = "codegen")
   public void testPrivateRecord(boolean codegen) {
-    Fory fory = Fory.builder().withCodegen(codegen).build();
+    Fory fory = Fory.builder().withXlang(false).withCodegen(codegen).build();
     fory.register(PrivateRecord.class);
     byte[] serialized = fory.serialize(new PrivateRecord("foo")); // fails
     Object deserialized = fory.deserialize(serialized);
@@ -300,7 +317,7 @@ public class RecordSerializersTest {
 
   @Test(dataProvider = "codegen")
   public void testCopy(boolean codegen) {
-    Fory fory = Fory.builder().withCodegen(codegen).build();
+    Fory fory = Fory.builder().withXlang(false).withCodegen(codegen).build();
     fory.register(Foo.class);
     fory.register(PrivateRecord.class);
     Assert.assertEquals(fory.copy(new PrivateRecord("foo")), new PrivateRecord("foo"));

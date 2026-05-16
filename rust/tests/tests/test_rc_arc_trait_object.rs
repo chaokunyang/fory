@@ -25,7 +25,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 fn fory_compatible() -> Fory {
-    Fory::builder().compatible(true).build()
+    Fory::builder().xlang(false).compatible(true).build()
 }
 
 trait Animal: Serializer + Send + Sync {

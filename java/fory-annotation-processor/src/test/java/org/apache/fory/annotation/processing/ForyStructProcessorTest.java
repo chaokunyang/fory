@@ -76,6 +76,7 @@ public class ForyStructProcessorTest {
 
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
@@ -177,6 +178,7 @@ public class ForyStructProcessorTest {
       invoke(type, value, "setName", String.class, "static");
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
@@ -344,6 +346,7 @@ public class ForyStructProcessorTest {
       Class<?> serializerType = loader.loadClass("test.MetadataStruct_ForySerializer");
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
@@ -391,6 +394,7 @@ public class ForyStructProcessorTest {
       Class<?> serializerType = loader.loadClass("test.RefMetadataStruct_ForyNativeSerializer");
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(false)
               .withRefTracking(true)
@@ -435,6 +439,7 @@ public class ForyStructProcessorTest {
       Class<?> type = loader.loadClass("test.UnsignedStruct");
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
@@ -482,6 +487,7 @@ public class ForyStructProcessorTest {
               .newInstance(5, "skip", "record");
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(false)
               .requireClassRegistration(false)
@@ -540,6 +546,7 @@ public class ForyStructProcessorTest {
       setField(writerType, value, "name", "old");
       Fory writer =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(writerLoader)
               .withCodegen(false)
               .withMetaShare(true)
@@ -553,6 +560,7 @@ public class ForyStructProcessorTest {
       Class<?> readerType = readerLoader.loadClass("test.EvolvingStruct");
       Fory reader =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(readerLoader)
               .withCodegen(false)
               .withMetaShare(true)
@@ -608,6 +616,7 @@ public class ForyStructProcessorTest {
 
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(false)
               .withRefTracking(true)
@@ -639,6 +648,7 @@ public class ForyStructProcessorTest {
       Class<?> type = loader.loadClass("test.DescriptorStruct");
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withClassLoader(loader)
               .withCodegen(true)
               .requireClassRegistration(false)
@@ -747,6 +757,7 @@ public class ForyStructProcessorTest {
   private static ThreadSafeFory threadSafeFory(
       ClassLoader classLoader, boolean codegen, boolean compatible) {
     return Fory.builder()
+        .withXlang(false)
         .withClassLoader(classLoader)
         .withCodegen(codegen)
         .withCompatible(compatible)

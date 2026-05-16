@@ -62,7 +62,7 @@ case class Person(name: String, id: Long, github: String)
 case class Point(x: Int, y: Int, z: Int)
 
 object ScalaExample {
-  val fory: Fory = ForyScala.builder()
+  val fory: Fory = ForyScala.builder().withXlang(false)
     .build()
 
   fory.register(classOf[Person])

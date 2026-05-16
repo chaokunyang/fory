@@ -50,7 +50,7 @@ Create a Fory instance, register your types, and serialize:
 
 	func main() {
 		// Create a Fory instance
-		f := fory.New()
+		f := fory.New(fory.WithXlang(false))
 
 		// Register struct with a type ID
 		if err := f.RegisterStruct(User{}, 1); err != nil {
@@ -92,8 +92,8 @@ Configuration defaults:
 
   - TrackRef: false (reference tracking disabled)
   - MaxDepth: 20 (maximum nesting depth)
-  - IsXlang: false (cross-language mode disabled)
-  - Compatible: false (schema evolution disabled)
+  - IsXlang: true (cross-language mode enabled)
+  - Compatible: true (schema evolution enabled when not explicitly configured)
 
 # Type Registration
 
@@ -163,7 +163,7 @@ Available tags:
 
 Enable reference tracking to handle circular references and shared objects:
 
-	f := fory.New(fory.WithTrackRef(true))
+	f := fory.New(fory.WithXlang(false), fory.WithTrackRef(true))
 
 	type Node struct {
 		Value int32
@@ -187,7 +187,7 @@ When reference tracking is enabled:
 
 Enable compatible mode for forward/backward compatibility:
 
-	f := fory.New(fory.WithCompatible(true))
+	f := fory.New(fory.WithXlang(false), fory.WithCompatible(true))
 
 	// V1: original struct
 	type UserV1 struct {
@@ -232,6 +232,7 @@ threadsafe package:
 
 	// Create thread-safe instance
 	f := threadsafe.New(
+		fory.WithXlang(false),
 		fory.WithTrackRef(true),
 		fory.WithCompatible(true),
 	)
@@ -247,13 +248,13 @@ threadsafe package:
 The thread-safe wrapper:
   - Uses sync.Pool for efficient instance reuse
   - Automatically copies serialized data before returning
-  - Accepts the same configuration options as fory.New()
+  - Accepts the same configuration options as fory.New(fory.WithXlang(false))
 
 # Buffer Management
 
 The default Fory instance reuses its internal buffer for zero-copy performance:
 
-	f := fory.New()
+	f := fory.New(fory.WithXlang(false))
 	data1, _ := f.Serialize(value1)
 	// WARNING: data1 becomes invalid after next Serialize call!
 	data2, _ := f.Serialize(value2)

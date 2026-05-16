@@ -157,7 +157,12 @@ public class ResolverValidateSerializerTest {
 
   @Test
   public void testListAndMapSerializerRegistration() {
-    Fory fory = Fory.builder().withRefTracking(true).requireClassRegistration(false).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .requireClassRegistration(false)
+            .build();
     assertThrows(
         IllegalArgumentException.class,
         () -> fory.registerSerializer(InvalidList.class, InvalidList.InvalidListSerializer.class));

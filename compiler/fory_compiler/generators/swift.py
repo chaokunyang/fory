@@ -1230,7 +1230,7 @@ class SwiftGenerator(BaseGenerator):
             f"{ind}{self.indent_str * 2}nonisolated(unsafe) static let fory: Fory = {{"
         )
         lines.append(
-            f"{ind}{self.indent_str * 3}let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: true))"
+            f"{ind}{self.indent_str * 3}let fory = Fory(config: .init(trackRef: true, compatible: true))"
         )
         lines.append(f"{ind}{self.indent_str * 3}do {{")
         lines.append(f"{ind}{self.indent_str * 4}try register(fory)")

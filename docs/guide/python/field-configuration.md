@@ -162,7 +162,7 @@ class CircularRef:
 
 **Notes**:
 
-- Reference tracking only takes effect when `Fory(ref=True)` is set globally
+- Reference tracking only takes effect when `Fory(xlang=False, ref=True)` is set globally
 - Field-level `ref=True` AND global `ref=True` must both be enabled
 
 ## Skipping Fields (`ignore`)

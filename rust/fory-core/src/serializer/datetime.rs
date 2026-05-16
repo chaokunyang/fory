@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_temporal_carrier_serialization() {
-        let fory = Fory::default();
+        let fory = Fory::builder().xlang(false).build();
 
         let timestamps = [
             Timestamp::UNIX_EPOCH,
@@ -438,7 +438,7 @@ mod tests {
     fn test_chrono_temporal_feature_serialization() {
         use chrono::{DateTime, Duration as ChronoDuration, NaiveDate, NaiveDateTime};
 
-        let fory = Fory::default();
+        let fory = Fory::builder().xlang(false).build();
         let date = NaiveDate::from_ymd_opt(2024, 2, 3).unwrap();
         let timestamp = DateTime::from_timestamp(100, 1).unwrap().naive_utc();
         let duration = ChronoDuration::nanoseconds(-1);

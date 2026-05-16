@@ -35,7 +35,7 @@ case class Person(name: String, id: Long, github: String)
 case class Point(x: Int, y: Int, z: Int)
 
 object ScalaExample {
-  val fory: Fory = ForyScala.builder()
+  val fory: Fory = ForyScala.builder().withXlang(false)
     .build()
 
   fory.register(classOf[Person])
@@ -70,7 +70,7 @@ case class User(name: String, age: Int)
 case class UserV2(name: String, age: Int, email: String = "unknown", active: Boolean = true)
 
 object DefaultValueExample {
-  val fory: Fory = ForyScala.builder()
+  val fory: Fory = ForyScala.builder().withXlang(false)
     .withCompatible(true)
     .build()
 
@@ -103,7 +103,7 @@ import org.apache.fory.{Fory, ThreadSafeFory}
 import org.apache.fory.scala.ForyScala
 
 object ForyHolder {
-  val fory: ThreadSafeFory = ForyScala.builder()
+  val fory: ThreadSafeFory = ForyScala.builder().withXlang(false)
     .buildThreadSafeFory()
 
   fory.register(classOf[Person])
@@ -122,7 +122,7 @@ Fory Scala is built on Fory Java, so all Java configuration options are availabl
 import org.apache.fory.Fory
 import org.apache.fory.scala.ForyScala
 
-val fory = ForyScala.builder()
+val fory = ForyScala.builder().withXlang(false)
   // Enable reference tracking for circular references
   .withRefTracking(true)
   // Enable schema evolution support

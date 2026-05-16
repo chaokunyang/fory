@@ -25,7 +25,7 @@ use std::vec;
 
 #[test]
 fn test_box_dyn_any() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
 
     let value: Box<dyn Any> = Box::new("hello".to_string());
     let bytes = fory.serialize(&value).unwrap();
@@ -53,7 +53,7 @@ fn test_box_dyn_any() {
 
 #[test]
 fn test_rc_dyn_any() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
     let value: Rc<dyn Any> = Rc::new("world".to_string());
     let bytes = fory.serialize(&value).unwrap();
     let deserialized: Rc<dyn Any> = fory.deserialize(&bytes).unwrap();
@@ -75,7 +75,7 @@ fn test_rc_dyn_any() {
 
 #[test]
 fn test_arc_dyn_any() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
 
     let value: Arc<dyn Any> = Arc::new("arc test".to_string());
     let bytes = fory.serialize(&value).unwrap();
@@ -101,7 +101,7 @@ fn test_arc_dyn_any() {
 
 #[test]
 fn test_rc_dyn_any_shared_reference() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
 
     let shared_str: Rc<dyn Any> = Rc::new("shared".to_string());
 
@@ -120,7 +120,7 @@ fn test_rc_dyn_any_shared_reference() {
 
 #[test]
 fn test_arc_dyn_any_shared_reference() {
-    let fory = Fory::default();
+    let fory = Fory::builder().xlang(false).build();
 
     let shared_vec: Arc<dyn Any> = Arc::new(vec![1, 2, 3]);
 
@@ -146,7 +146,7 @@ fn test_any_registered_by_name() {
         age: i32,
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register_by_name::<Person>("test", "Person").unwrap();
 
     let person = Person {
@@ -173,7 +173,7 @@ fn test_mixed_any_types() {
         value: String,
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register_by_name::<Item>("", "Item").unwrap();
 
     let item = Item {
@@ -221,10 +221,10 @@ struct AnyMapFixedKey {
 
 #[test]
 fn test_hashmap_fixed_key_rc_any_field_compatible() {
-    let mut writer = Fory::builder().compatible(true).build();
+    let mut writer = Fory::builder().xlang(false).compatible(true).build();
     writer.register::<AnyMapFixedKey>(700).unwrap();
 
-    let mut reader = Fory::builder().compatible(true).build();
+    let mut reader = Fory::builder().xlang(false).compatible(true).build();
     reader.register::<AnyMapVarKey>(700).unwrap();
 
     let original = AnyMapFixedKey {
@@ -249,7 +249,7 @@ fn test_hashmap_fixed_key_rc_any_field_compatible() {
 
 #[test]
 fn test_arc_by_name() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register_by_name::<Container>("", "Container").unwrap();
 
     let container = Container {
@@ -280,7 +280,7 @@ fn test_arc_by_name() {
 
 #[test]
 fn test_rc_by_name() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register_by_name::<Container>("", "Container").unwrap();
 
     let container = Container {
@@ -330,7 +330,7 @@ struct StructB {
 /// Previously this caused non-deterministic failures. Now it returns a clear error message.
 #[test]
 fn test_vec_of_different_struct_types_in_box_any_returns_error() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     // Register both struct types
     fory.register_by_name::<StructA>("", "StructA").unwrap();
     fory.register_generic_trait::<Vec<StructA>>().unwrap();

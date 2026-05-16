@@ -84,7 +84,7 @@ public class LambdaSerializerTest extends ForyTestBase {
 
   @Test
   public void testLambdaUnserializableMsg() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     Function<Object, String> function = String::valueOf;
     assertThrowsCause(UnsupportedOperationException.class, () -> fory.serialize(function));
     try {

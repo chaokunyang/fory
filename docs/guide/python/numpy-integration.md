@@ -29,7 +29,7 @@ Large arrays use zero-copy when possible:
 import pyfory
 import numpy as np
 
-f = pyfory.Fory()
+f = pyfory.Fory(xlang=False)
 
 # Numpy arrays are supported natively
 arrays = {

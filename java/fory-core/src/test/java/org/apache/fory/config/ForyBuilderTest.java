@@ -84,9 +84,9 @@ public class ForyBuilderTest {
 
   @Test
   public void testCompatibleStateIsBooleanBacked() {
-    Fory compatible = new ForyBuilder().withCompatible(true).build();
-    Fory compatibleFromBoolean = new ForyBuilder().withCompatible(true).build();
-    Fory schemaConsistent = new ForyBuilder().withCompatible(false).build();
+    Fory compatible = new ForyBuilder().withXlang(false).withCompatible(true).build();
+    Fory compatibleFromBoolean = new ForyBuilder().withXlang(false).withCompatible(true).build();
+    Fory schemaConsistent = new ForyBuilder().withXlang(false).withCompatible(false).build();
 
     assertTrue(compatible.getConfig().isCompatible());
     assertEquals(compatible.getConfig(), compatibleFromBoolean.getConfig());
@@ -96,6 +96,7 @@ public class ForyBuilderTest {
 
   @Test
   public void testXlangDefaultsToCompatibleUnlessExplicitlySet() {
+    assertTrue(new ForyBuilder().xlang);
     Fory defaultXlang = new ForyBuilder().withXlang(true).build();
     Fory explicitSchemaConsistent =
         new ForyBuilder().withCompatible(false).withXlang(true).withClassVersionCheck(true).build();
@@ -140,11 +141,11 @@ public class ForyBuilderTest {
 
   @Test
   public void testCodegenDefaultsOnOrdinaryJvm() {
-    Fory defaultFory = new ForyBuilder().build();
-    Fory explicitCodegen = new ForyBuilder().withCodegen(true).build();
-    Fory interpreter = new ForyBuilder().withCodegen(false).build();
+    Fory defaultFory = new ForyBuilder().withXlang(false).build();
+    Fory explicitCodegen = new ForyBuilder().withXlang(false).withCodegen(true).build();
+    Fory interpreter = new ForyBuilder().withXlang(false).withCodegen(false).build();
     ThreadSafeFory threadSafeInterpreter =
-        new ForyBuilder().withCodegen(false).buildThreadSafeForyPool(1);
+        new ForyBuilder().withXlang(false).withCodegen(false).buildThreadSafeForyPool(1);
 
     assertTrue(defaultFory.getConfig().isCodeGenEnabled());
     assertTrue(explicitCodegen.getConfig().isCodeGenEnabled());
@@ -181,10 +182,11 @@ public class ForyBuilderTest {
 
   public static final class GraalvmCodegenConfigMain {
     public static void main(String[] args) {
-      Fory defaultFory = new ForyBuilder().build();
-      Fory explicitCodegen = new ForyBuilder().withCodegen(true).build();
-      Fory interpreter = new ForyBuilder().withCodegen(false).build();
-      Fory asyncRequested = new ForyBuilder().withCodegen(true).withAsyncCompilation(true).build();
+      Fory defaultFory = new ForyBuilder().withXlang(false).build();
+      Fory explicitCodegen = new ForyBuilder().withXlang(false).withCodegen(true).build();
+      Fory interpreter = new ForyBuilder().withXlang(false).withCodegen(false).build();
+      Fory asyncRequested =
+          new ForyBuilder().withXlang(false).withCodegen(true).withAsyncCompilation(true).build();
 
       assertDisabled(defaultFory, "default");
       assertDisabled(explicitCodegen, "explicit codegen");

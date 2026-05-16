@@ -47,10 +47,10 @@ struct PersonV2 {
     metadata: HashMap<String, String>,
 }
 
-let mut fory1 = Fory::builder().compatible(true).build();
+let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
 fory1.register::<PersonV1>(1);
 
-let mut fory2 = Fory::builder().compatible(true).build();
+let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
 fory2.register::<PersonV2>(1);
 
 let person_v1 = PersonV1 {
@@ -120,7 +120,7 @@ enum Value {
     Object { name: String, value: i32 },
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Value>(1)?;
 
 let value = Value::Object { name: "score".to_string(), value: 100 };
@@ -155,7 +155,7 @@ enum NewEvent {
     KeyPress(String),  // New variant
 }
 
-let mut fory = Fory::builder().compatible(true).build();
+let mut fory = Fory::builder().xlang(false).compatible(true).build();
 
 // Serialize with old schema
 let old_bytes = fory.serialize(&OldEvent::Click { x: 100, y: 200 })?;
@@ -196,7 +196,7 @@ Apache Fory™ supports tuples up to 22 elements out of the box with efficient s
 ```rust
 use fory::{Fory, Error};
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 
 // Tuple with heterogeneous types
 let data: (i32, String, bool, Vec<i32>) = (

@@ -54,7 +54,7 @@ struct Address {
     country: String,
 }
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<Address>(100);
 fory.register::<Person>(200);
 
@@ -162,7 +162,7 @@ fory = { version = "0.13", features = ["chrono"] }
 ```rust
 use fory::{Fory, Reader};
 
-let mut fory = Fory::default();
+let mut fory = Fory::builder().xlang(false).build();
 fory.register::<MyStruct>(1)?;
 
 let obj = MyStruct { /* ... */ };

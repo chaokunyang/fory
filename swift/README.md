@@ -137,7 +137,7 @@ assert(decoded == person)
 Enable reference tracking for class/reference graphs:
 
 ```swift
-let fory = Fory(xlang: true, ref: true, compatible: false)
+let fory = Fory(ref: true, compatible: false)
 ```
 
 Shared reference identity is preserved:
@@ -169,7 +169,7 @@ final class AnimalPair {
     }
 }
 
-let fory = Fory(xlang: true, ref: true, compatible: true)
+let fory = Fory(ref: true, compatible: true)
 fory.register(Animal.self, id: 200)
 fory.register(AnimalPair.self, id: 201)
 
@@ -257,10 +257,10 @@ struct PersonV2 {
     var phone: String? = nil
 }
 
-let writer = Fory(xlang: true, compatible: true)
+let writer = Fory(compatible: true)
 writer.register(PersonV1.self, id: 1)
 
-let reader = Fory(xlang: true, compatible: true)
+let reader = Fory(compatible: true)
 reader.register(PersonV2.self, id: 1)
 
 let v1 = PersonV1(name: "alice", age: 30, address: "main st")
@@ -351,7 +351,7 @@ enum StringOrLong: Equatable {
     case number(Int64)
 }
 
-let fory = Fory(xlang: true, compatible: false)
+let fory = Fory(compatible: false)
 fory.register(Color.self, id: 300)
 fory.register(StringOrLong.self, id: 301)
 
@@ -372,10 +372,10 @@ See `../docs/guide/swift/custom-serializers.md` for a complete example.
 
 ## 🌍 Cross-Language Serialization
 
-Recommended xlang preset:
+Recommended preset:
 
 ```swift
-let fory = Fory(xlang: true, ref: false, compatible: true)
+let fory = Fory(ref: false, compatible: true)
 ```
 
 Type registration can be ID-based or name-based:

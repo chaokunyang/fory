@@ -666,7 +666,7 @@ The main serialization interface:
 class Fory:
     def __init__(
         self,
-        xlang: bool = False,
+        xlang: bool = True,
         ref: bool = False,
         strict: bool = True,
         compatible: bool = False,
@@ -682,7 +682,7 @@ Thread-safe serialization interface using thread-local storage:
 class ThreadSafeFory:
     def __init__(
         self,
-        xlang: bool = False,
+        xlang: bool = True,
         ref: bool = False,
         strict: bool = True,
         compatible: bool = False,
@@ -735,7 +735,7 @@ for t in threads: t.join()
 
 **Parameters:**
 
-- **`xlang`** (`bool`, default=`False`): Enable cross-language serialization. When `False`, enables Python-native mode supporting all Python objects. When `True`, enables cross-language mode compatible with Java, Go, Rust, etc.
+- **`xlang`** (`bool`, default=`True`): Enable cross-language serialization. When `False`, enables Python-native mode supporting all Python objects. When `True`, enables cross-language mode compatible with Java, Go, Rust, etc.
 - **`ref`** (`bool`, default=`False`): Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.
 - **`strict`** (`bool`, default=`True`): Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.
 - **`compatible`** (`bool`, default follows `xlang`): Enable schema evolution in cross-language mode, allowing fields to be added/removed while maintaining compatibility. Cross-language mode defaults to `compatible=True`; set `compatible=False` only for schema-consistent deployments.
@@ -831,7 +831,7 @@ Handle shared references and circular dependencies safely. Set `ref=True` to ded
 ```python
 import pyfory
 
-f = pyfory.Fory(ref=True)  # Enable reference tracking
+f = pyfory.Fory(xlang=False, ref=True)  # Enable reference tracking
 
 # Handle circular references safely
 class Node:
@@ -859,7 +859,7 @@ In strict mode, only registered types can be deserialized. This prevents arbitra
 import pyfory
 
 # Strict mode (recommended for production)
-f = pyfory.Fory(strict=True)
+f = pyfory.Fory(xlang=False, strict=True)
 
 class SafeClass:
     def __init__(self, data):
@@ -913,7 +913,7 @@ class FooSerializer(Serializer):
         f2 = buffer.read_string()
         return Foo(f1, f2)
 
-f = pyfory.Fory()
+f = pyfory.Fory(xlang=False)
 f.register(Foo, type_id=100, serializer=FooSerializer(f, Foo))
 
 # Now Foo uses your custom serializer
@@ -930,7 +930,7 @@ Fory natively supports numpy arrays with optimized serialization. Large arrays u
 import pyfory
 import numpy as np
 
-f = pyfory.Fory()
+f = pyfory.Fory(xlang=False)
 
 # Numpy arrays are supported natively
 arrays = {
@@ -982,13 +982,13 @@ Optimize serialization speed and memory usage with these guidelines:
 
 ```python
 # Good: Reuse instance
-fory = pyfory.Fory()
+fory = pyfory.Fory(xlang=False)
 for obj in objects:
     data = fory.dumps(obj)
 
 # Bad: Create new instance each time
 for obj in objects:
-    fory = pyfory.Fory()  # Wasteful!
+    fory = pyfory.Fory(xlang=False)  # Wasteful!
     data = fory.dumps(obj)
 ```
 
@@ -1021,7 +1021,7 @@ Handle common serialization errors gracefully. Catch specific exceptions for bet
 import pyfory
 from pyfory.error import TypeUnregisteredError, TypeNotCompatibleError
 
-fory = pyfory.Fory(strict=True)
+fory = pyfory.Fory(xlang=False, strict=True)
 
 try:
     data = fory.dumps(my_object)
@@ -1079,7 +1079,7 @@ result = json.loads(data)
 
 # After (Fory - all Python types)
 import pyfory
-f = pyfory.Fory()
+f = pyfory.Fory(xlang=False)
 data = f.dumps({"name": "Alice", "age": 30, "func": lambda x: x})
 result = f.loads(data)
 ```
@@ -1239,7 +1239,7 @@ f.register(MyClass, typename="com.package.MyClass")  # Use same name in all lang
 
 ```python
 # A: Enable reference tracking
-f = pyfory.Fory(ref=True)  # Required for circular references
+f = pyfory.Fory(xlang=False, ref=True)  # Required for circular references
 
 # Example with circular reference
 class Node:
@@ -1302,14 +1302,14 @@ print(user.email)  # "unknown@example.com"
 
 ```python
 # A: Register all custom types before serialization
-f = pyfory.Fory(strict=True)
+f = pyfory.Fory(xlang=False, strict=True)
 
 # Must register before use
 f.register(MyClass, type_id=100)
 f.register(AnotherClass, type_id=101)
 
 # Or disable strict mode (NOT recommended for production)
-f = pyfory.Fory(strict=False)  # Use only in trusted environments
+f = pyfory.Fory(xlang=False, strict=False)  # Use only in trusted environments
 ```
 
 ## 🤝 Contributing

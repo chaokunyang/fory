@@ -1007,7 +1007,7 @@ public class MapSerializersTest extends ForyTestBase {
   @Test
   public void testStringKeyMapSerializer() {
     // see https://github.com/apache/fory/issues/1170
-    Fory fory = Fory.builder().withRefTracking(true).build();
+    Fory fory = Fory.builder().withXlang(false).withRefTracking(true).build();
     fory.registerSerializer(StringKeyMap.class, MapSerializers.StringKeyMapSerializer.class);
     {
       StringKeyMap<List<String>> map = new StringKeyMap<>();
@@ -1212,7 +1212,7 @@ public class MapSerializersTest extends ForyTestBase {
 
   @Test(dataProvider = "referenceTrackingConfig")
   public void testObjectKeyValueChunk(boolean referenceTrackingConfig) {
-    Fory fory = Fory.builder().withRefTracking(referenceTrackingConfig).build();
+    Fory fory = Fory.builder().withXlang(false).withRefTracking(referenceTrackingConfig).build();
     final Map<Object, Object> differentKeyAndValueTypeMap = createDifferentKeyAndValueTypeMap();
     final Serializer<? extends Map> serializer =
         fory.getSerializer(differentKeyAndValueTypeMap.getClass());
@@ -1222,7 +1222,7 @@ public class MapSerializersTest extends ForyTestBase {
 
   @Test(dataProvider = "referenceTrackingConfig")
   public void testObjectKeyValueBigChunk(boolean referenceTrackingConfig) {
-    Fory fory = Fory.builder().withRefTracking(referenceTrackingConfig).build();
+    Fory fory = Fory.builder().withXlang(false).withRefTracking(referenceTrackingConfig).build();
     final Map<Object, Object> differentKeyAndValueTypeMap = createDifferentKeyAndValueTypeMap();
     for (int i = 0; i < 3000; i++) {
       differentKeyAndValueTypeMap.put("k" + i, i);

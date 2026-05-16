@@ -44,9 +44,9 @@ Fix:
 
 ### `Invalid data: xlang bitmap mismatch`
 
-Cause: serializer and deserializer use different `xlang` settings.
+Cause: the input is not a Swift-supported xlang payload.
 
-Fix: configure both sides with matching `xlang` mode.
+Fix: serialize the value with a Fory runtime that writes the xlang wire format.
 
 ### `Invalid data: class version hash mismatch`
 

@@ -42,7 +42,7 @@ struct Single(i32);
 
 #[test]
 fn test_basic_tuple_struct() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Point>(100).unwrap();
 
     let point = Point(3.15, 2.72);
@@ -53,7 +53,7 @@ fn test_basic_tuple_struct() {
 
 #[test]
 fn test_single_field_tuple_struct() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Single>(101).unwrap();
 
     let single = Single(42);
@@ -64,7 +64,7 @@ fn test_single_field_tuple_struct() {
 
 #[test]
 fn test_string_wrapper_tuple_struct() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Wrapper>(102).unwrap();
 
     let wrapper = Wrapper("hello world".to_string());
@@ -75,7 +75,7 @@ fn test_string_wrapper_tuple_struct() {
 
 #[test]
 fn test_triple_tuple_struct() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Triple>(103).unwrap();
 
     let triple = Triple(1, 2, 3);
@@ -97,7 +97,7 @@ struct WithMap(HashMap<String, i32>);
 
 #[test]
 fn test_tuple_struct_with_vec() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<WithVec>(104).unwrap();
 
     let data = WithVec(vec![1, 2, 3, 4, 5], "test".to_string());
@@ -108,7 +108,7 @@ fn test_tuple_struct_with_vec() {
 
 #[test]
 fn test_tuple_struct_with_option() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<WithOption>(105).unwrap();
 
     // Test with Some values
@@ -132,7 +132,7 @@ fn test_tuple_struct_with_option() {
 
 #[test]
 fn test_tuple_struct_with_map() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<WithMap>(106).unwrap();
 
     let mut map = HashMap::new();
@@ -156,7 +156,7 @@ struct Outer(Inner, Vec<Inner>);
 
 #[test]
 fn test_nested_tuple_structs() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Inner>(107).unwrap();
     fory.register::<Outer>(108).unwrap();
 
@@ -177,7 +177,7 @@ struct WithRc(Rc<String>, Rc<i32>);
 
 #[test]
 fn test_tuple_struct_with_rc() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<WithRc>(109).unwrap();
 
     let data = WithRc(Rc::new("shared".to_string()), Rc::new(42));
@@ -198,7 +198,7 @@ struct NamedWithTupleStruct {
 
 #[test]
 fn test_named_struct_with_tuple_struct_fields() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Point>(100).unwrap();
     fory.register::<Wrapper>(102).unwrap();
     fory.register::<NamedWithTupleStruct>(110).unwrap();
@@ -221,7 +221,7 @@ struct TupleStructWithTuple(i32, (String, f64));
 
 #[test]
 fn test_tuple_struct_with_tuple_field() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<TupleStructWithTuple>(111).unwrap();
 
     let data = TupleStructWithTuple(42, ("hello".to_string(), 3.15));
@@ -262,7 +262,7 @@ struct EmptyVecTuple(Vec<i32>);
 
 #[test]
 fn test_tuple_struct_with_empty_vec() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<EmptyVecTuple>(112).unwrap();
 
     let data = EmptyVecTuple(vec![]);
@@ -276,7 +276,7 @@ struct LargeTupleStruct(i8, i16, i32, i64, u8, u16, u32, u64, f32, f64, bool, St
 
 #[test]
 fn test_large_tuple_struct() {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<LargeTupleStruct>(113).unwrap();
 
     let data = LargeTupleStruct(
@@ -328,13 +328,13 @@ mod remote_v3 {
 /// Test schema evolution: remote has fewer fields than local.
 #[test]
 fn test_tuple_struct_schema_evolution_add_field() {
-    let mut fory_writer = Fory::builder().compatible(true).build();
+    let mut fory_writer = Fory::builder().xlang(false).compatible(true).build();
     fory_writer.register::<remote_v1::Point>(100).unwrap();
 
     let remote_data = remote_v1::Point(1.0, 2.0);
     let bytes = fory_writer.serialize(&remote_data).unwrap();
 
-    let mut fory_reader = Fory::builder().compatible(true).build();
+    let mut fory_reader = Fory::builder().xlang(false).compatible(true).build();
     fory_reader.register::<local_v2::Point>(100).unwrap();
 
     let local_data: local_v2::Point = fory_reader.deserialize(&bytes).unwrap();
@@ -347,13 +347,13 @@ fn test_tuple_struct_schema_evolution_add_field() {
 /// Test schema evolution: remote has more fields than local.
 #[test]
 fn test_tuple_struct_schema_evolution_remove_field() {
-    let mut fory_writer = Fory::builder().compatible(true).build();
+    let mut fory_writer = Fory::builder().xlang(false).compatible(true).build();
     fory_writer.register::<remote_v3::Point>(100).unwrap();
 
     let remote_data = remote_v3::Point(1.0, 2.0, 3.0, 4.0);
     let bytes = fory_writer.serialize(&remote_data).unwrap();
 
-    let mut fory_reader = Fory::builder().compatible(true).build();
+    let mut fory_reader = Fory::builder().xlang(false).compatible(true).build();
     fory_reader.register::<remote_v1::Point>(100).unwrap();
 
     let local_data: remote_v1::Point = fory_reader.deserialize(&bytes).unwrap();
@@ -388,7 +388,7 @@ mod local_mixed_v3 {
 /// Test that adding an i64 field doesn't break schema evolution
 #[test]
 fn test_tuple_struct_schema_evolution_add_i64() {
-    let mut fory_writer = Fory::builder().compatible(true).build();
+    let mut fory_writer = Fory::builder().xlang(false).compatible(true).build();
     fory_writer
         .register::<remote_mixed_v1::MixedPoint>(100)
         .unwrap();
@@ -396,7 +396,7 @@ fn test_tuple_struct_schema_evolution_add_i64() {
     let remote_data = remote_mixed_v1::MixedPoint(1.0, 2.0);
     let bytes = fory_writer.serialize(&remote_data).unwrap();
 
-    let mut fory_reader = Fory::builder().compatible(true).build();
+    let mut fory_reader = Fory::builder().xlang(false).compatible(true).build();
     fory_reader
         .register::<local_mixed_v2::MixedPoint>(100)
         .unwrap();
@@ -411,7 +411,7 @@ fn test_tuple_struct_schema_evolution_add_i64() {
 /// Test that adding u8 (smaller size) doesn't break schema evolution
 #[test]
 fn test_tuple_struct_schema_evolution_add_u8() {
-    let mut fory_writer = Fory::builder().compatible(true).build();
+    let mut fory_writer = Fory::builder().xlang(false).compatible(true).build();
     fory_writer
         .register::<remote_mixed_v1::MixedPoint>(100)
         .unwrap();
@@ -419,7 +419,7 @@ fn test_tuple_struct_schema_evolution_add_u8() {
     let remote_data = remote_mixed_v1::MixedPoint(1.0, 2.0);
     let bytes = fory_writer.serialize(&remote_data).unwrap();
 
-    let mut fory_reader = Fory::builder().compatible(true).build();
+    let mut fory_reader = Fory::builder().xlang(false).compatible(true).build();
     fory_reader
         .register::<local_mixed_v3::MixedPoint>(100)
         .unwrap();

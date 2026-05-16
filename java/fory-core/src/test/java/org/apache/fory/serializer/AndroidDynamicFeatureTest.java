@@ -108,6 +108,7 @@ public class AndroidDynamicFeatureTest {
     private static void verifyFory(boolean compressString) {
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withCodegen(true)
               .withStringCompressed(compressString)
               .withRefTracking(true)

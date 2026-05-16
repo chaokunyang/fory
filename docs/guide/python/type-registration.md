@@ -29,7 +29,7 @@ In strict mode, only registered types can be deserialized. This prevents arbitra
 import pyfory
 
 # Strict mode (recommended for production)
-f = pyfory.Fory(strict=True)
+f = pyfory.Fory(xlang=False, strict=True)
 
 class SafeClass:
     def __init__(self, data):
@@ -89,7 +89,7 @@ for model_class in [User, Order, Product, Invoice]:
 
 ```python
 # Always use strict=True in production
-fory = pyfory.Fory(strict=True)
+fory = pyfory.Fory(xlang=False, strict=True)
 
 # Explicitly register allowed types
 fory.register(UserModel, type_id=100)
@@ -125,7 +125,7 @@ fory = pyfory.Fory(xlang=False, strict=False, policy=SafePolicy())
 Limit deserialization depth to prevent stack overflow attacks:
 
 ```python
-fory = pyfory.Fory(
+fory = pyfory.Fory(xlang=False,
     strict=True,
     max_depth=100  # Adjust based on your data structure depth
 )

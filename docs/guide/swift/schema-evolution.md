@@ -24,7 +24,7 @@ Fory supports schema evolution through compatible mode.
 ## Enable Compatible Mode
 
 ```swift
-let fory = Fory(xlang: true, ref: false, compatible: true)
+let fory = Fory(ref: false, compatible: true)
 ```
 
 ## Example: Evolving a Struct
@@ -46,10 +46,10 @@ struct PersonV2 {
     var phone: String? = nil // added field
 }
 
-let writer = Fory(xlang: true, compatible: true)
+let writer = Fory(compatible: true)
 writer.register(PersonV1.self, id: 1)
 
-let reader = Fory(xlang: true, compatible: true)
+let reader = Fory(compatible: true)
 reader.register(PersonV2.self, id: 1)
 
 let v1 = PersonV1(name: "alice", age: 30, address: "main st")

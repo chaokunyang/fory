@@ -176,7 +176,7 @@ public class EnumSerializerTest extends ForyTestBase {
 
   @Test
   public void testEnumSerializationUsesOrdinalArrayByDefault() throws Exception {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     EnumSerializer serializer = getEnumSerializer(fory, EnumFoo.class);
 
     assertEquals(writeEnumTag(fory, serializer, EnumFoo.B), 1);
@@ -186,7 +186,7 @@ public class EnumSerializerTest extends ForyTestBase {
 
   @Test
   public void testEnumSerializationUsesAnnotatedFieldId() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     EnumSerializer serializer = getEnumSerializer(fory, EnumWithIdField.class);
 
     assertEquals(writeEnumTag(fory, serializer, EnumWithIdField.B), 20);
@@ -195,7 +195,7 @@ public class EnumSerializerTest extends ForyTestBase {
 
   @Test
   public void testEnumSerializationUsesAnnotatedMethodId() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     EnumSerializer serializer = getEnumSerializer(fory, EnumWithIdMethod.class);
 
     assertEquals(writeEnumTag(fory, serializer, EnumWithIdMethod.B), 200);
@@ -204,7 +204,7 @@ public class EnumSerializerTest extends ForyTestBase {
 
   @Test
   public void testEnumSerializationUsesAnnotatedConstantId() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     EnumSerializer serializer = getEnumSerializer(fory, EnumWithConstantIds.class);
 
     assertEquals(writeEnumTag(fory, serializer, EnumWithConstantIds.B), 7);
@@ -213,7 +213,7 @@ public class EnumSerializerTest extends ForyTestBase {
 
   @Test
   public void testEnumSerializationUsesSparseMapForLargeIds() throws Exception {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     EnumSerializer serializer = getEnumSerializer(fory, EnumWithLargeIds.class);
 
     assertEquals(writeEnumTag(fory, serializer, EnumWithLargeIds.B), 8192);
@@ -223,7 +223,7 @@ public class EnumSerializerTest extends ForyTestBase {
 
   @Test
   public void testEnumSerializationRejectsPartialConstantIds() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     assertThrows(
         IllegalArgumentException.class,
         () -> getEnumSerializer(fory, EnumWithPartialConstantIds.class));
@@ -231,14 +231,14 @@ public class EnumSerializerTest extends ForyTestBase {
 
   @Test
   public void testEnumSerializationRejectsDuplicateIds() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     assertThrows(
         IllegalArgumentException.class, () -> getEnumSerializer(fory, EnumWithDuplicateIds.class));
   }
 
   @Test
   public void testEnumSerializationRejectsConflictingIdStrategies() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     assertThrows(
         IllegalArgumentException.class,
         () -> getEnumSerializer(fory, EnumWithConflictingIdStrategies.class));

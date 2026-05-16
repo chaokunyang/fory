@@ -41,7 +41,7 @@ def test_local_class_serialization():
     LocalClass = create_local_class()
 
     # Test basic serialization of the class type itself
-    fory = Fory(ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False)
 
     # Serialize the class type
     serialized = fory.serialize(LocalClass)
@@ -78,7 +78,7 @@ def test_local_class_with_closure():
     # Create a local class with closure
     LocalClassWithClosure = create_local_class_with_closure(3)
 
-    fory = Fory(ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False)
 
     # Serialize the class type
     serialized = fory.serialize(LocalClassWithClosure)
@@ -115,7 +115,7 @@ def test_local_class_with_inheritance():
         return LocalDerivedClass
 
     LocalClass = create_local_class_with_inheritance()
-    fory = Fory(ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False)
 
     # Serialize and deserialize the class
     serialized = fory.serialize(LocalClass)
@@ -156,7 +156,7 @@ def test_local_class_with_class_variables():
         return LocalClassWithVars
 
     LocalClass = create_class_with_vars()
-    fory = Fory(ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False)
 
     # Create some instances to modify class state
     LocalClass(1)  # This increments the counter
@@ -201,7 +201,7 @@ def test_nested_global_classes():
         def create_inner(self, inner_val):
             return self.InnerGlobalClass(inner_val)
 
-    fory = Fory(ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False)
 
     # Test serializing the outer class
     serialized_outer = fory.serialize(OuterGlobalClass)
@@ -259,7 +259,7 @@ def test_complex_local_class_scenarios():
 
         return OuterLocalClass
 
-    fory = Fory(ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False)
 
     # Create complex local class with nested closures
     ComplexLocalClass = create_complex_local_scenario(5)
@@ -304,7 +304,7 @@ def test_local_class_with_multiple_inheritance():
 
         return LocalMultipleInheritanceClass
 
-    fory = Fory(ref=True, strict=False)
+    fory = Fory(xlang=False, ref=True, strict=False)
 
     LocalClass = create_local_class_with_multiple_inheritance()
 

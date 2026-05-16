@@ -224,11 +224,11 @@ func floatingPointArraysPreserveBits() throws {
 func plainUInt8ArrayUsesListWireType() throws {
     let payload: [UInt8] = [0x00, 0x01, 0x7F, 0xFF]
 
-    let schemaConsistent = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+    let schemaConsistent = Fory(config: .init(trackRef: false, compatible: false))
     let schemaBytes = try schemaConsistent.serialize(payload)
     #expect(Array(schemaBytes)[2] == UInt8(TypeId.list.rawValue))
 
-    let compatible = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let compatible = Fory(config: .init(trackRef: false, compatible: true))
     let compatibleBytes = try compatible.serialize(payload)
     #expect(Array(compatibleBytes)[2] == UInt8(TypeId.list.rawValue))
 
@@ -238,7 +238,7 @@ func plainUInt8ArrayUsesListWireType() throws {
 
 @Test
 func nestedCollectionsAndNullabilityRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: true))
+    let fory = Fory(config: .init(trackRef: true, compatible: true))
 
     let nested: [[String?]] = [
         ["alpha", nil],
@@ -263,7 +263,7 @@ func nestedCollectionsAndNullabilityRoundTrip() throws {
 
 @Test
 func annotatedNestedFieldCodecsRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let fory = Fory(config: .init(trackRef: false, compatible: true))
     fory.register(AnnotatedFieldCodecHolder.self, id: 9601)
     fory.register(DeepAnnotatedFieldCodecHolder.self, id: 9602)
     fory.register(AliasAnnotatedFieldCodecHolder.self, id: 9603)
@@ -382,7 +382,7 @@ func annotatedNestedFieldCodecsEmitRecursiveMetadata() {
 
 @Test
 func mapRefKeysTrackIdentity() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: true))
+    let fory = Fory(config: .init(trackRef: true, compatible: true))
     fory.register(RefKeyNode.self, id: 9501)
     fory.register(RefKeyHolder.self, id: 9502)
 
@@ -401,7 +401,7 @@ func mapRefKeysTrackIdentity() throws {
 
 @Test
 func mapRefKeyAndValueShareIdentity() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: true))
+    let fory = Fory(config: .init(trackRef: true, compatible: true))
     fory.register(RefKeyNode.self, id: 9501)
     fory.register(RefKeyValueHolder.self, id: 9503)
 
@@ -419,7 +419,7 @@ func mapRefKeyAndValueShareIdentity() throws {
 
 @Test
 func mapRefKeysChunkAcross255Entries() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: true))
+    let fory = Fory(config: .init(trackRef: true, compatible: true))
     fory.register(RefKeyNode.self, id: 9501)
     fory.register(RefKeyChunkHolder.self, id: 9504)
 

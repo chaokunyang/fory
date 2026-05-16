@@ -33,6 +33,7 @@ fn test_max_dyn_depth_exceeded_box_dyn_any() {
     }
     for compatible in [false, true] {
         let mut fory = Fory::builder()
+            .xlang(false)
             .max_dyn_depth(2)
             .compatible(compatible)
             .build();
@@ -69,7 +70,7 @@ fn test_max_dyn_depth_within_limit_box_dyn_any() {
     if fory_core::error::should_panic_on_error() {
         return;
     }
-    let mut fory = Fory::builder().max_dyn_depth(3).build();
+    let mut fory = Fory::builder().xlang(false).max_dyn_depth(3).build();
     fory.register::<Container>(100).unwrap();
 
     let level3 = Container {
@@ -96,7 +97,7 @@ fn test_max_dyn_depth_default_exceeded() {
     if fory_core::error::should_panic_on_error() {
         return;
     }
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Container>(100).unwrap();
 
     let mut current = Container {
@@ -127,7 +128,7 @@ fn test_max_dyn_depth_default_within_limit() {
     if fory_core::error::should_panic_on_error() {
         return;
     }
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Container>(100).unwrap();
 
     let mut current = Container {

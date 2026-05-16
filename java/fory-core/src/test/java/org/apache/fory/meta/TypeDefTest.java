@@ -98,7 +98,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testTypeDefSerialization() throws NoSuchFieldException {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     {
       TypeDef typeDef =
           TypeDef.buildTypeDef(
@@ -147,7 +147,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testDuplicateFieldsClass() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     {
       TypeDef typeDef =
           TypeDef.buildTypeDef(
@@ -168,7 +168,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testContainerClass() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     List<Field> fields = ReflectionUtils.getFields(ContainerClass.class, true);
     TypeDef typeDef =
         TypeDef.buildTypeDef((ClassResolver) fory.getTypeResolver(), ContainerClass.class, fields);
@@ -183,7 +183,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testInterface() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     TypeDef typeDef = TypeDef.buildTypeDef(fory.getTypeResolver(), Map.class);
     assertTrue(typeDef.getFieldsInfo().isEmpty());
     assertFalse(typeDef.isStructSchemaKind());
@@ -191,7 +191,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testTypeExtInfo() {
-    Fory fory = Fory.builder().withRefTracking(true).withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withRefTracking(true).withMetaShare(true).build();
     ClassResolver classResolver = (ClassResolver) fory.getTypeResolver();
     assertTrue(
         classResolver.needToWriteRef(
@@ -237,7 +237,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testDuplicateTagIdsThrowsException() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     List<Field> fields = ReflectionUtils.getFields(ClassWithDuplicateTagIds.class, true);
 
     Assert.assertThrows(
@@ -249,7 +249,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testDuplicateTagIdsMultipleThrowsException() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     List<Field> fields = ReflectionUtils.getFields(ClassWithDuplicateTagIdsMultiple.class, true);
 
     Assert.assertThrows(
@@ -263,7 +263,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testValidTagIdsSucceeds() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     List<Field> fields = ReflectionUtils.getFields(ClassWithValidTagIds.class, true);
 
     // Should not throw any exception
@@ -308,7 +308,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsWithDuplicateTagIds() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef with valid fields (no duplicates in TypeDef itself)
     List<Field> sourceFields = ReflectionUtils.getFields(ClassWithValidTagIds.class, true);
@@ -324,7 +324,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsWithValidTags() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef with tagged fields
     List<Field> sourceFields = ReflectionUtils.getFields(TargetClassWithValidTags.class, true);
@@ -341,7 +341,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsWithMixedTags() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef with mixed tagged and non-tagged fields
     List<Field> sourceFields = ReflectionUtils.getFields(TargetClassWithMixedTags.class, true);
@@ -393,7 +393,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsMatchesByTagNotName() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef from source class with specific tag IDs
     List<Field> sourceFields = ReflectionUtils.getFields(SourceClassWithTags.class, true);
@@ -428,7 +428,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsWithDuplicateZeroTagIds() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef with some fields
     List<Field> sourceFields = ReflectionUtils.getFields(ClassWithValidTagIds.class, true);
@@ -448,7 +448,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsWithEmptyClass() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef with no fields
     List<Field> sourceFields = ReflectionUtils.getFields(EmptyClass.class, true);
@@ -479,7 +479,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsWithInheritance() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef with inherited fields
     List<Field> sourceFields = ReflectionUtils.getFields(InheritedChildClass.class, true);
@@ -497,7 +497,7 @@ public class TypeDefTest extends ForyTestBase {
 
   @Test
   public void testGetDescriptorsWithInheritedDuplicateTag() {
-    Fory fory = Fory.builder().withMetaShare(true).build();
+    Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
 
     // Build a TypeDef with some fields
     List<Field> sourceFields = ReflectionUtils.getFields(InheritedBaseClass.class, true);

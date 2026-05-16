@@ -187,6 +187,7 @@ public class AndroidJvmRoundTripTest {
   private static Fory newFory(RoundTripKind kind) {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withCodegen(true)
             .withRefTracking(true)
             .requireClassRegistration(false)

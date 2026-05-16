@@ -140,6 +140,7 @@ public class AndroidCollectionFeatureTest {
 
   private static Fory newCompatibleChildContainerFory() {
     return Fory.builder()
+        .withXlang(false)
         .withCodegen(true)
         .withRefTracking(true)
         .requireClassRegistration(false)
@@ -179,6 +180,7 @@ public class AndroidCollectionFeatureTest {
 
       Fory fory =
           Fory.builder()
+              .withXlang(false)
               .withCodegen(true)
               .withRefTracking(true)
               .requireClassRegistration(false)

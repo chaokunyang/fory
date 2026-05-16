@@ -98,7 +98,7 @@ public class ArraySerializersTest extends ForyTestBase {
 
   @Test
   public void testDedicatedObjectArraySerializersAreRetained() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     assertTrue(
         (Object) fory.getSerializer(Object[].class)
             instanceof ArraySerializers.ObjectArraySerializer);
@@ -304,6 +304,7 @@ public class ArraySerializersTest extends ForyTestBase {
   public void testPrimitiveArrayReadRejectsOversizedBinaryPayload() {
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .withMaxBinarySize(4)
             .withIntArrayCompressed(true)
             .withLongArrayCompressed(true)
@@ -330,7 +331,7 @@ public class ArraySerializersTest extends ForyTestBase {
 
   @Test
   public void testPrimitiveArrayReadRejectsUnalignedBinaryPayload() {
-    Fory fory = Fory.builder().withMaxBinarySize(64).build();
+    Fory fory = Fory.builder().withXlang(false).withMaxBinarySize(64).build();
     for (Class<?> arrayType :
         new Class<?>[] {
           char[].class, short[].class, int[].class, long[].class, float[].class, double[].class
@@ -343,7 +344,7 @@ public class ArraySerializersTest extends ForyTestBase {
 
   @Test
   public void testPrimitiveArrayReadRejectsTruncatedPayload() {
-    Fory fory = Fory.builder().withMaxBinarySize(64).build();
+    Fory fory = Fory.builder().withXlang(false).withMaxBinarySize(64).build();
     Class<?>[] arrayTypes =
         new Class<?>[] {
           boolean[].class,
@@ -367,13 +368,17 @@ public class ArraySerializersTest extends ForyTestBase {
 
   @Test
   public void testPrimitiveArrayReadRejectsNegativeDecodedBinaryPayload() {
-    Fory fixedWidthFory = Fory.builder().build();
+    Fory fixedWidthFory = Fory.builder().withXlang(false).build();
     assertThrows(
         DeserializationException.class,
         () -> readPrimitiveArrayRawPayload(fixedWidthFory, char[].class));
 
     Fory compressedFory =
-        Fory.builder().withIntArrayCompressed(true).withLongArrayCompressed(true).build();
+        Fory.builder()
+            .withXlang(false)
+            .withIntArrayCompressed(true)
+            .withLongArrayCompressed(true)
+            .build();
     assertThrows(
         DeserializationException.class,
         () -> readPrimitiveArrayRawPayload(compressedFory, int[].class));
@@ -517,7 +522,12 @@ public class ArraySerializersTest extends ForyTestBase {
   @SuppressWarnings("unchecked")
   @Test(dataProvider = "enableCodegen")
   public void testArrayPolyMorphic(boolean enableCodegen) {
-    Fory fory = Fory.builder().requireClassRegistration(false).withCodegen(enableCodegen).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withCodegen(enableCodegen)
+            .build();
     Object[] arr = new String[] {"a", "b"};
     serDeCheck(fory, arr);
 
@@ -572,6 +582,7 @@ public class ArraySerializersTest extends ForyTestBase {
     // Create Fory instance with variable-length encoding enabled for long arrays
     Fory fory =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(false)
             .withLongArrayCompressed(true)
             .withLongCompressed(Int64Encoding.VARINT)
@@ -620,11 +631,16 @@ public class ArraySerializersTest extends ForyTestBase {
   public void testVariableLengthEncodingEfficiencyForSmallValues() {
     // Create a Fory instance with fixed-length encoding (compressLongArray disabled)
     Fory foryFixed =
-        Fory.builder().requireClassRegistration(false).withLongArrayCompressed(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withLongArrayCompressed(false)
+            .build();
 
     // Create a Fory instance with variable-length encoding (compressLongArray enabled)
     Fory foryVariable =
         Fory.builder()
+            .withXlang(false)
             .requireClassRegistration(false)
             .withLongArrayCompressed(true)
             .withLongCompressed(Int64Encoding.VARINT)
@@ -735,7 +751,12 @@ public class ArraySerializersTest extends ForyTestBase {
   @Test
   public void testVariableLengthIntArray() {
     // Create Fory instance with variable-length encoding enabled for int arrays
-    Fory fory = Fory.builder().requireClassRegistration(false).withIntArrayCompressed(true).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withIntArrayCompressed(true)
+            .build();
 
     // Test empty array
     int[] emptyArray = new int[0];
@@ -828,11 +849,19 @@ public class ArraySerializersTest extends ForyTestBase {
   public void testVariableLengthIntArrayEncodingEfficiencyForSmallValues() {
     // Create a Fory instance with fixed-length encoding (compressIntArray disabled)
     Fory foryFixed =
-        Fory.builder().requireClassRegistration(false).withIntArrayCompressed(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withIntArrayCompressed(false)
+            .build();
 
     // Create a Fory instance with variable-length encoding (compressIntArray enabled)
     Fory foryVariable =
-        Fory.builder().requireClassRegistration(false).withIntArrayCompressed(true).build();
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withIntArrayCompressed(true)
+            .build();
 
     // Create an array with many small values (0-127, which can be encoded in 1-2 bytes with varint)
     int arraySize = 10000;

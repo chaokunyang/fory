@@ -35,7 +35,12 @@ public class ReadResolveCircularTest {
     c.addItem(new Item("Item 1"));
     c.addItem(new Item("Item 2"));
 
-    Fory fory = Fory.builder().requireClassRegistration(false).withRefTracking(true).build();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .requireClassRegistration(false)
+            .withRefTracking(true)
+            .build();
     byte[] bytes = fory.serialize(c);
     System.out.println(fory.deserialize(bytes));
     System.out.println(

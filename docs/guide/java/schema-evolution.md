@@ -38,7 +38,7 @@ If the schema is expected to change, to make deserialization succeed (i.e., sche
 In this compatible mode, deserialization can handle schema changes such as missing or extra fields, allowing it to succeed even when the serialization and deserialization processes have different class schemas.
 
 ```java
-Fory fory = Fory.builder()
+Fory fory = Fory.builder().withXlang(false)
   .withCompatible(true)
   .build();
 
@@ -163,9 +163,9 @@ public class StructMappingExample {
     double f3;
   }
 
-  static ThreadSafeFory fory1 = Fory.builder()
+  static ThreadSafeFory fory1 = Fory.builder().withXlang(false)
     .withCompatible(true).buildThreadSafeFory();
-  static ThreadSafeFory fory2 = Fory.builder()
+  static ThreadSafeFory fory2 = Fory.builder().withXlang(false)
     .withCompatible(true).buildThreadSafeFory();
 
   static {
@@ -207,7 +207,7 @@ public class DeserializeIntoType {
     double f3;
   }
 
-  static ThreadSafeFory fory = Fory.builder()
+  static ThreadSafeFory fory = Fory.builder().withXlang(false)
     .withCompatible(true).buildThreadSafeFory();
 
   public static void main(String[] args) {

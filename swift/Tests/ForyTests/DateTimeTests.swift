@@ -46,7 +46,7 @@ func dateAndTimestampTypeIds() {
 
 @Test
 func dateAndTimestampRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let fory = Fory(config: .init(trackRef: false, compatible: true))
 
     let day = localDate(18_745)
     let dayData = try fory.serialize(day)
@@ -90,7 +90,6 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
     let xlangWriteContext = WriteContext(
         buffer: xlangWriteBuffer,
         typeResolver: xlangTypeResolver,
-        xlang: true,
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
@@ -110,7 +109,6 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
     let xlangReadContext = ReadContext(
         buffer: ByteBuffer(data: xlangWriteBuffer.copyToData()),
         typeResolver: xlangTypeResolver,
-        xlang: true,
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
@@ -121,51 +119,10 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
     let xlangLocalDateDecoded = try xlangReadContext.readLocalDate(refMode: RefMode.nullOnly, readTypeInfo: true)
     #expect(xlangLocalDateDecoded == xlangLocalDate)
 
-    let writeBuffer = ByteBuffer()
-    let typeResolver = TypeResolver(trackRef: false)
-    let writeContext = WriteContext(
-        buffer: writeBuffer,
-        typeResolver: typeResolver,
-        xlang: false,
-        trackRef: false,
-        compatible: true,
-        checkClassVersion: true,
-        maxDepth: 5
-    )
-
-    let localDate = localDate(-1)
-
-    try writeContext.writeLocalDate(localDate, refMode: .nullOnly, writeTypeInfo: true)
-
-    let readContext = ReadContext(
-        buffer: ByteBuffer(data: writeBuffer.copyToData()),
-        typeResolver: typeResolver,
-        xlang: false,
-        trackRef: false,
-        compatible: true,
-        checkClassVersion: true,
-        maxCollectionSize: 1_000_000,
-        maxBinarySize: 64 * 1024 * 1024,
-        maxDepth: 5
-    )
-
-    let localDateDecoded = try readContext.readLocalDate(refMode: RefMode.nullOnly, readTypeInfo: true)
-
-    #expect(localDateDecoded == localDate)
-    #expect(Array(writeBuffer.copyToData()) == [
-        UInt8(bitPattern: RefFlag.notNullValue.rawValue),
-        UInt8(LocalDate.staticTypeId.rawValue),
-        0xFF,
-        0xFF,
-        0xFF,
-        0xFF
-    ])
-
     let timestampBuffer = ByteBuffer()
     let timestampWriteContext = WriteContext(
         buffer: timestampBuffer,
-        typeResolver: typeResolver,
-        xlang: false,
+        typeResolver: xlangTypeResolver,
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
@@ -176,8 +133,7 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
 
     let timestampReadContext = ReadContext(
         buffer: ByteBuffer(data: timestampBuffer.copyToData()),
-        typeResolver: typeResolver,
-        xlang: false,
+        typeResolver: xlangTypeResolver,
         trackRef: false,
         compatible: true,
         checkClassVersion: true,
@@ -191,7 +147,7 @@ func dateAndTimestampContextHelpersUseExpectedWireProtocols() throws {
 
 @Test
 func dateAndTimestampMacroFieldRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let fory = Fory(config: .init(trackRef: false, compatible: true))
     fory.register(DateMacroHolder.self, id: 901)
 
     let value = DateMacroHolder(

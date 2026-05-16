@@ -64,7 +64,7 @@ struct User {
 }
 
 fn main() -> Result<(), Error> {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<User>(1)?;
 
     let user = User {
@@ -106,7 +106,7 @@ struct Item {
 }
 
 fn main() -> Result<(), Error> {
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Item>(1000)?;
 
     let fory = Arc::new(fory);

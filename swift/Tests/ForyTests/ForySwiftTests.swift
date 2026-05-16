@@ -347,30 +347,27 @@ func floatingSpecialsRoundTrip() throws {
 @Test
 func namedInitializerBuildsConfig() {
   let defaultConfig = Fory()
-  #expect(defaultConfig.config.xlang == true)
   #expect(defaultConfig.config.trackRef == false)
   #expect(defaultConfig.config.compatible == true)
   #expect(defaultConfig.config.checkClassVersion == false)
   #expect(defaultConfig.config.maxDepth == 5)
 
-  let explicitConfig = Fory(xlang: false, ref: true, compatible: true, maxDepth: 7)
-  #expect(explicitConfig.config.xlang == false)
+  let explicitConfig = Fory(ref: true, compatible: true, maxDepth: 7)
   #expect(explicitConfig.config.trackRef == true)
   #expect(explicitConfig.config.compatible == true)
   #expect(explicitConfig.config.checkClassVersion == false)
   #expect(explicitConfig.config.maxDepth == 7)
 
-  let configInit = Fory(config: .init(xlang: false, trackRef: false, compatible: true, maxDepth: 9))
-  #expect(configInit.config.xlang == false)
+  let configInit = Fory(config: .init(trackRef: false, compatible: true, maxDepth: 9))
   #expect(configInit.config.trackRef == false)
   #expect(configInit.config.compatible == true)
   #expect(configInit.config.checkClassVersion == false)
   #expect(configInit.config.maxDepth == 9)
 
-  let nativeDirect = Fory(xlang: false, ref: true, compatible: false)
-  let nativeViaConfig = Fory(config: Config(xlang: false, trackRef: true, compatible: false))
-  #expect(nativeDirect.config.checkClassVersion == false)
-  #expect(nativeViaConfig.config.checkClassVersion == false)
+  let schemaConsistentDirect = Fory(ref: true, compatible: false)
+  let schemaConsistentViaConfig = Fory(config: Config(trackRef: true, compatible: false))
+  #expect(schemaConsistentDirect.config.checkClassVersion == true)
+  #expect(schemaConsistentViaConfig.config.checkClassVersion == true)
 }
 
 @Test
@@ -551,7 +548,7 @@ func macroStructRoundTrip() throws {
 
 @Test
 func macroClassRefTracking() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
+  let fory = Fory(config: .init(trackRef: true, compatible: false))
   fory.register(Node.self, id: 200)
 
   let node = Node(value: 7)
@@ -566,7 +563,7 @@ func macroClassRefTracking() throws {
 
 @Test
 func macroClassWeakRefTracking() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
+  let fory = Fory(config: .init(trackRef: true, compatible: false))
   fory.register(WeakNode.self, id: 201)
 
   let node = WeakNode(value: 13)
@@ -691,7 +688,7 @@ func rootBufferHonorsCursor() throws {
 
 @Test
 func topLevelAnyObjectRoundTrip() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
+  let fory = Fory(config: .init(trackRef: true, compatible: false))
   fory.register(Node.self, id: 210)
 
   let value: AnyObject = Node(value: 123)
@@ -728,7 +725,7 @@ func topLevelAnySerializerRoundTrip() throws {
 
 @Test
 func macroDynamicAnyObjectAndAnySerializerFieldsRoundTrip() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
+  let fory = Fory(config: .init(trackRef: true, compatible: false))
   fory.register(Node.self, id: 220)
   fory.register(Address.self, id: 221)
   fory.register(AnyObjectHolder.self, id: 222)
@@ -769,7 +766,7 @@ func macroDynamicAnyObjectAndAnySerializerFieldsRoundTrip() throws {
 
 @Test
 func dynamicAnySerializerTracksRefs() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
+  let fory = Fory(config: .init(trackRef: true, compatible: false))
   fory.register(Node.self, id: 226)
   fory.register(AnySerializerHolder.self, id: 227)
 
@@ -837,7 +834,7 @@ func macroAnyFieldsRoundTrip() throws {
 
 @Test
 func collectionAndMapRefTracking() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: true, compatible: false))
+  let fory = Fory(config: .init(trackRef: true, compatible: false))
   fory.register(Node.self, id: 200)
 
   let shared = Node(value: 11)
@@ -959,7 +956,7 @@ func macroFieldEncodingOverridesForUnsignedTypes() throws {
 
 @Test
 func macroEnumUsesExplicitIntegerRawValue() throws {
-  let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+  let fory = Fory(config: .init(trackRef: false, compatible: false))
   fory.register(SparseStatus.self, id: 302)
 
   let data = try fory.serialize(SparseStatus.ok)
@@ -1019,10 +1016,10 @@ func macroFieldIDsPopulateCompatibleTypeMeta() {
 
 @Test
 func macroFieldIDsDriveCompatibleStructDecodeAcrossRenames() throws {
-  let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let writer = Fory(config: .init(trackRef: false, compatible: true))
   writer.register(FieldIdSource.self, id: 9101)
 
-  let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let reader = Fory(config: .init(trackRef: false, compatible: true))
   reader.register(FieldIdTarget.self, id: 9101)
 
   let source = FieldIdSource(value: 42, label: "alpha")
@@ -1039,10 +1036,10 @@ func macroFieldIDsDriveCompatibleStructDecodeAcrossRenames() throws {
 
 @Test
 func macroFieldIDsDriveTaggedUnionDecodeAcrossRenames() throws {
-  let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let writer = Fory(config: .init(trackRef: false, compatible: true))
   writer.register(FieldIdUnionSource.self, id: 9102)
 
-  let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let reader = Fory(config: .init(trackRef: false, compatible: true))
   reader.register(FieldIdUnionTarget.self, id: 9102)
 
   let source = FieldIdUnionSource.number(123)
@@ -1059,11 +1056,11 @@ func macroFieldIDsDriveTaggedUnionDecodeAcrossRenames() throws {
 
 @Test
 func compatibleNestedStructArrayRoundTrip() throws {
-  let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let writer = Fory(config: .init(trackRef: false, compatible: true))
   writer.register(CompatibleNestedItem.self, id: 9103)
   writer.register(CompatibleNestedArrayHolder.self, id: 9104)
 
-  let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let reader = Fory(config: .init(trackRef: false, compatible: true))
   reader.register(CompatibleNestedItem.self, id: 9103)
   reader.register(CompatibleNestedArrayHolder.self, id: 9104)
 
@@ -1080,11 +1077,11 @@ func compatibleNestedStructArrayRoundTrip() throws {
 
 @Test
 func compatibleNestedStructOptionalArrayRoundTrip() throws {
-  let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let writer = Fory(config: .init(trackRef: false, compatible: true))
   writer.register(CompatibleNestedItem.self, id: 9103)
   writer.register(CompatibleNestedOptionalArrayHolder.self, id: 9105)
 
-  let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let reader = Fory(config: .init(trackRef: false, compatible: true))
   reader.register(CompatibleNestedItem.self, id: 9103)
   reader.register(CompatibleNestedOptionalArrayHolder.self, id: 9105)
 
@@ -1102,11 +1099,11 @@ func compatibleNestedStructOptionalArrayRoundTrip() throws {
 
 @Test
 func compatibleNestedStructMapRoundTrip() throws {
-  let writer = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let writer = Fory(config: .init(trackRef: false, compatible: true))
   writer.register(CompatibleNestedItem.self, id: 9103)
   writer.register(CompatibleNestedMapHolder.self, id: 9106)
 
-  let reader = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+  let reader = Fory(config: .init(trackRef: false, compatible: true))
   reader.register(CompatibleNestedItem.self, id: 9103)
   reader.register(CompatibleNestedMapHolder.self, id: 9106)
 

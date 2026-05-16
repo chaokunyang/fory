@@ -34,7 +34,7 @@ const PI_F64: f64 = std::f64::consts::PI;
 /// Test 1: Direct tuple size mismatch - bidirectional serialization
 #[test]
 fn test_tuple_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Test 1a: Long tuple serialized, short tuple deserialized
     let long = (42i32, "hello".to_string(), PI_F64, true);
@@ -57,7 +57,7 @@ fn test_tuple_size_mismatch() {
 /// Test 2: Tuples containing list/set/map elements
 #[test]
 fn test_tuple_with_collections_compatible() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
     // Tuple with Vec
     let tuple_vec = (vec![1, 2, 3], vec!["a".to_string(), "b".to_string()]);
     let bin = fory.serialize(&tuple_vec).unwrap();
@@ -104,7 +104,7 @@ fn test_tuple_with_collections_compatible() {
 /// Test 2b: Tuple with collections - length mismatch
 #[test]
 fn test_tuple_collections_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Serialize tuple with 3 collections
     let tuple_long = (vec![1, 2, 3], vec!["a".to_string()], vec![1.0, 2.0]);
@@ -129,7 +129,7 @@ fn test_tuple_collections_size_mismatch() {
 /// Test 3: Nested tuples
 #[test]
 fn test_nested_tuples() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     let obj = ((42i32, "hello".to_string()), (PI_F64, true));
     let bin = fory.serialize(&obj).unwrap();
@@ -140,7 +140,7 @@ fn test_nested_tuples() {
 /// Test 3b: Nested tuple size mismatch
 #[test]
 fn test_nested_tuple_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Long to short
     let long = ((42i32, "test".to_string(), PI_F64), (true, 100i32));
@@ -164,7 +164,7 @@ fn test_nested_tuple_size_mismatch() {
 /// Test 3c: Deeply nested tuples with size mismatch
 #[test]
 fn test_deeply_nested_tuple_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Serialize deeply nested tuple
     let deep = (1i32, (2i32, (3i32, 4i32, 5i32)));
@@ -191,7 +191,7 @@ fn test_deeply_nested_tuple_size_mismatch() {
 /// Test 4: Tuples with Option/Arc elements
 #[test]
 fn test_tuple_with_option_arc_compatible() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Tuple with Options
     let tuple_opt = (Some(42i32), None::<String>, Some(PI_F64));
@@ -225,7 +225,7 @@ fn test_tuple_with_option_arc_compatible() {
 /// Test 4b: Tuple with Option size mismatch
 #[test]
 fn test_tuple_option_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Serialize longer tuple
     let long = (
@@ -257,7 +257,7 @@ fn test_tuple_option_size_mismatch() {
 /// Test 4c: Tuple with Arc size mismatch
 #[test]
 fn test_tuple_arc_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Serialize longer tuple
     let long = (Arc::new(1i32), Arc::new(2i32), Arc::new(3i32));
@@ -282,7 +282,7 @@ fn test_tuple_arc_size_mismatch() {
 /// Test 5: Schema evolution from homogeneous to heterogeneous tuple
 #[test]
 fn test_tuple_homogeneous_to_heterogeneous() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Serialize as homogeneous (all i32)
     let homogeneous = (1i32, 2i32, 3i32);
@@ -306,7 +306,7 @@ fn test_tuple_homogeneous_to_heterogeneous() {
 /// Test 6: Schema evolution with different element counts
 #[test]
 fn test_tuple_element_count_evolution() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Test growing from 2 to 5 elements
     let small = (42i32, "hello".to_string());
@@ -343,7 +343,7 @@ fn test_tuple_element_count_evolution() {
 /// Test 6b: Complex element count evolution
 #[test]
 fn test_tuple_element_count_evolution_complex() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // v1: simple 2-element tuple
     let v1 = (42i32, "hello".to_string());
@@ -369,7 +369,7 @@ fn test_tuple_element_count_evolution_complex() {
 /// Test 7: Edge case - empty tuple behavior
 #[test]
 fn test_empty_to_non_empty_tuple() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Simulate deserializing to tuple when data is missing
     // This is tested implicitly through struct field defaults
@@ -382,7 +382,7 @@ fn test_empty_to_non_empty_tuple() {
 /// Test 8: Very large tuple with size mismatch
 #[test]
 fn test_large_tuple_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Serialize a large tuple (10 elements)
     let large = (1i32, 2i32, 3i32, 4i32, 5i32, 6i32, 7i32, 8i32, 9i32, 10i32);
@@ -414,7 +414,7 @@ fn test_large_tuple_size_mismatch() {
 /// Test 9: Mixed complex types with size mismatch
 #[test]
 fn test_mixed_complex_types_size_mismatch() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
 
     // Complex tuple with many different types
     let complex = (
@@ -445,7 +445,7 @@ fn test_mixed_complex_types_size_mismatch() {
 /// Test compatible mode with tuples
 #[test]
 fn test_tuple_xlang_compatible_mode() {
-    let fory = Fory::builder().compatible(true).build();
+    let fory = Fory::builder().xlang(false).compatible(true).build();
     // Test basic tuple
     let basic = (42i32, "hello".to_string(), vec![1, 2, 3]);
     let bin = fory.serialize(&basic).unwrap();
@@ -1035,10 +1035,10 @@ fn test_tuple_alias() {
     }
 
     // Use separate Fory instances with the same type ID
-    let mut fory1 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<DataRecordV1>(100).unwrap();
 
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory2.register::<DataRecordV2>(100).unwrap();
 
     // Test record1 serialized by fory1, deserialized by fory2

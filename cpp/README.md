@@ -115,7 +115,7 @@ public:
   FORY_STRUCT(Person, name, age, address, hobbies, metadata);
 };
 
-auto fory = apache::fory::ForyBuilder().build();
+auto fory = apache::fory::ForyBuilder().xlang(true).build();
 fory->register_struct<Address>(100);
 fory->register_struct<Person>(200);
 
@@ -146,7 +146,7 @@ struct Foo {
 FORY_STRUCT(Foo, id, name);
 } // namespace thirdparty
 
-auto fory = apache::fory::ForyBuilder().build();
+auto fory = apache::fory::ForyBuilder().xlang(true).build();
 fory->register_struct<thirdparty::Foo>(1);
 ```
 
@@ -173,7 +173,7 @@ struct Derived : Base {
 Apache Fory™ automatically tracks and preserves reference identity for shared objects using `std::shared_ptr<T>`. When the same object is referenced multiple times, Fory serializes it only once and uses reference IDs for subsequent occurrences.
 
 ```cpp
-auto fory = apache::fory::ForyBuilder()
+auto fory = apache::fory::ForyBuilder().xlang(true)
     .track_ref(true)
     .build();
 
@@ -213,12 +213,12 @@ struct PersonV2 {
   FORY_STRUCT(PersonV2, name, age, phone);
 };
 
-auto fory1 = apache::fory::ForyBuilder()
+auto fory1 = apache::fory::ForyBuilder().xlang(true)
     .compatible(true)
     .build();
 fory1->register_struct<PersonV1>(1);
 
-auto fory2 = apache::fory::ForyBuilder()
+auto fory2 = apache::fory::ForyBuilder().xlang(true)
     .compatible(true)
     .build();
 fory2->register_struct<PersonV2>(1);
@@ -322,10 +322,10 @@ See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_typ
 
 ```cpp
 // Single-threaded (fastest performance)
-auto fory = apache::fory::ForyBuilder().build();
+auto fory = apache::fory::ForyBuilder().xlang(true).build();
 
 // Thread-safe with internal Fory pool
-auto fory = apache::fory::ForyBuilder().build_thread_safe();
+auto fory = apache::fory::ForyBuilder().xlang(true).build_thread_safe();
 ```
 
 ## Architecture

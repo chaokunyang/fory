@@ -29,7 +29,7 @@ fn test_one_field_primitive_non_compatible() {
         value: i32,
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Data>(100).unwrap();
     let data = Data { value: 42 };
     let bytes = fory.serialize(&data).unwrap();
@@ -45,7 +45,7 @@ fn test_one_field_string_non_compatible() {
         name: String,
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Data>(101).unwrap();
     let data = Data {
         name: String::from("hello"),
@@ -68,8 +68,8 @@ fn test_compatible_field_type_change() {
         value: Option<i32>,
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<Data1>(100).unwrap();
     fory2.register::<Data2>(100).unwrap();
 
@@ -130,8 +130,8 @@ fn test_compatible_to_empty_struct() {
     #[derive(ForyStruct, Debug)]
     struct EmptyData {}
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<DataWithField>(101).unwrap();
     fory2.register::<EmptyData>(101).unwrap();
 
@@ -156,8 +156,8 @@ fn test_compatible_from_empty_struct() {
         name: String,
     }
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<EmptyData>(102).unwrap();
     fory2.register::<DataWithField>(102).unwrap();
 
@@ -179,8 +179,8 @@ fn test_compatible_vec_to_empty_struct() {
     #[derive(ForyStruct, Debug)]
     struct EmptyData {}
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<DataWithField>(101).unwrap();
     fory2.register::<EmptyData>(101).unwrap();
 
@@ -204,8 +204,8 @@ fn test_compatible_map_to_empty_struct() {
     #[derive(ForyStruct, Debug)]
     struct EmptyData {}
 
-    let mut fory1 = Fory::builder().compatible(true).build();
-    let mut fory2 = Fory::builder().compatible(true).build();
+    let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
+    let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
     fory1.register::<DataWithField>(101).unwrap();
     fory2.register::<EmptyData>(101).unwrap();
 
@@ -229,7 +229,7 @@ fn test_struct_with_float16_fields() {
         arr_field: [float16; 3],
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<Float16Data>(200).unwrap();
 
     let obj = Float16Data {
@@ -271,7 +271,7 @@ fn test_struct_with_bfloat16_fields() {
         arr_field: [bfloat16; 3],
     }
 
-    let mut fory = Fory::default();
+    let mut fory = Fory::builder().xlang(false).build();
     fory.register::<BFloat16Data>(201).unwrap();
 
     let obj = BFloat16Data {

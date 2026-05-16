@@ -30,7 +30,7 @@ type StreamTestStruct struct {
 }
 
 func TestStreamDeserialization(t *testing.T) {
-	f := New()
+	f := New(WithXlang(false))
 	f.RegisterStruct(&StreamTestStruct{}, 100)
 
 	original := &StreamTestStruct{
@@ -76,7 +76,7 @@ func (r *slowReader) Read(p []byte) (n int, err error) {
 }
 
 func TestStreamDeserializationSlow(t *testing.T) {
-	f := New()
+	f := New(WithXlang(false))
 	f.RegisterStruct(&StreamTestStruct{}, 100)
 
 	original := &StreamTestStruct{
@@ -107,7 +107,7 @@ func TestStreamDeserializationSlow(t *testing.T) {
 }
 
 func TestStreamDeserializationEOF(t *testing.T) {
-	f := New()
+	f := New(WithXlang(false))
 	f.RegisterStruct(&StreamTestStruct{}, 100)
 
 	original := &StreamTestStruct{
@@ -136,7 +136,7 @@ func TestStreamDeserializationEOF(t *testing.T) {
 }
 
 func TestDeserializeFromStreamClearsReadMetadataOnError(t *testing.T) {
-	f := New(WithCompatible(true))
+	f := New(WithXlang(false), WithCompatible(true))
 	f.typeResolver.metaStringResolver.dynamicIDToEnumString =
 		append(f.typeResolver.metaStringResolver.dynamicIDToEnumString, emptyMetaStringBytes)
 	f.metaContext.readTypeInfos = append(f.metaContext.readTypeInfos, &TypeInfo{})
@@ -159,7 +159,7 @@ func TestDeserializeFromStreamClearsReadMetadataOnError(t *testing.T) {
 }
 
 func TestInputStreamSequential(t *testing.T) {
-	f := New()
+	f := New(WithXlang(false))
 	// Register type in compatible mode to test Meta Sharing across sequential reads
 	f.config.Compatible = true
 	f.RegisterStruct(&StreamTestStruct{}, 100)
@@ -178,7 +178,7 @@ func TestInputStreamSequential(t *testing.T) {
 	data3, _ := f.Serialize(msg3)
 	buf.Write(data3)
 
-	fDec := New()
+	fDec := New(WithXlang(false))
 	fDec.config.Compatible = true
 	fDec.RegisterStruct(&StreamTestStruct{}, 100)
 

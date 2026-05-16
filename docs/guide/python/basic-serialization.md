@@ -73,7 +73,7 @@ Handle shared references and circular dependencies safely:
 ```python
 import pyfory
 
-f = pyfory.Fory(ref=True)  # Enable reference tracking
+f = pyfory.Fory(xlang=False, ref=True)  # Enable reference tracking
 
 # Handle circular references safely
 class Node:
@@ -128,13 +128,13 @@ obj = fory.deserialize(data, buffers=buffers)
 
 ```python
 # Good: Reuse instance
-fory = pyfory.Fory()
+fory = pyfory.Fory(xlang=False)
 for obj in objects:
     data = fory.dumps(obj)
 
 # Bad: Create new instance each time
 for obj in objects:
-    fory = pyfory.Fory()  # Wasteful!
+    fory = pyfory.Fory(xlang=False)  # Wasteful!
     data = fory.dumps(obj)
 ```
 

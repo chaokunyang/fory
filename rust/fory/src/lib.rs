@@ -67,7 +67,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register::<User>(1)?;
 //!
 //! let user = User {
@@ -139,7 +139,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register::<Address>(100);
 //! fory.register::<Person>(200);
 //!
@@ -193,7 +193,7 @@
 //! use std::rc::Rc;
 //!
 //! # fn main() -> Result<(), Error> {
-//! let fory = Fory::default();
+//! let fory = Fory::builder().xlang(false).build();
 //!
 //! let shared = Rc::new(String::from("shared_value"));
 //! let data = vec![shared.clone(), shared.clone(), shared.clone()];
@@ -216,7 +216,7 @@
 //! use std::sync::Arc;
 //!
 //! # fn main() -> Result<(), Error> {
-//! let fory = Fory::default();
+//! let fory = Fory::builder().xlang(false).build();
 //! let shared = Arc::new(String::from("shared_value"));
 //! let data = vec![shared.clone(), shared.clone()];
 //!
@@ -251,7 +251,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::builder().track_ref(true).build();
+//! let mut fory = Fory::builder().xlang(false).track_ref(true).build();
 //! fory.register::<Node>(2000);
 //!
 //! let parent = Rc::new(RefCell::new(Node {
@@ -293,7 +293,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::builder().track_ref(true).build();
+//! let mut fory = Fory::builder().xlang(false).track_ref(true).build();
 //! fory.register::<Node>(6000);
 //!
 //! let parent = Arc::new(Mutex::new(Node {
@@ -374,7 +374,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::builder().compatible(true).build();
+//! let mut fory = Fory::builder().xlang(false).compatible(true).build();
 //! fory.register::<Dog>(100);
 //! fory.register::<Cat>(101);
 //! fory.register::<Zoo>(102);
@@ -420,7 +420,7 @@
 //! struct Dog { name: String }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register::<Dog>(100);
 //!
 //! let dog: Rc<dyn Any> = Rc::new(Dog {
@@ -449,7 +449,7 @@
 //! struct Cat { name: String }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register::<Cat>(101);
 //!
 //! let cat: Arc<dyn Any> = Arc::new(Cat {
@@ -501,7 +501,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::builder().compatible(true).build();
+//! let mut fory = Fory::builder().xlang(false).compatible(true).build();
 //! fory.register::<Dog>(100);
 //! fory.register::<Cat>(101);
 //! fory.register::<AnimalShelter>(102);
@@ -555,7 +555,7 @@
 //! register_trait_type!(Animal, Dog);
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::builder().compatible(true).build();
+//! let mut fory = Fory::builder().xlang(false).compatible(true).build();
 //! fory.register::<Dog>(100);
 //!
 //! // For Rc<dyn Trait>
@@ -630,10 +630,10 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory1 = Fory::builder().compatible(true).build();
+//! let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
 //! fory1.register::<PersonV1>(1);
 //!
-//! let mut fory2 = Fory::builder().compatible(true).build();
+//! let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
 //! fory2.register::<PersonV2>(1);
 //!
 //! let person_v1 = PersonV1 {
@@ -694,7 +694,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register::<Value>(1)?;
 //!
 //! let value = Value::Object { name: "score".to_string(), value: 100 };
@@ -727,10 +727,10 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory_old = Fory::builder().compatible(true).build();
+//! let mut fory_old = Fory::builder().xlang(false).compatible(true).build();
 //! fory_old.register::<OldEvent>(5)?;
 //!
-//! let mut fory_new = Fory::builder().compatible(true).build();
+//! let mut fory_new = Fory::builder().xlang(false).compatible(true).build();
 //! fory_new.register::<NewEvent>(5)?;
 //!
 //! // Serialize with old schema (2 fields)
@@ -780,7 +780,7 @@
 //! use fory::Error;
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //!
 //! // Tuple with heterogeneous types
 //! let data: (i32, String, bool, Vec<i32>) = (
@@ -855,7 +855,7 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register_serializer::<CustomType>(100);
 //!
 //! let custom = CustomType {
@@ -1019,7 +1019,7 @@
 //! ```rust
 //! use fory::Fory;
 //!
-//! let fory = Fory::default();
+//! let fory = Fory::builder().xlang(false).build();
 //! ```
 //!
 //! ### Compatible Mode
@@ -1036,7 +1036,7 @@
 //! ```rust
 //! use fory::Fory;
 //!
-//! let fory = Fory::builder().compatible(true).build();
+//! let fory = Fory::builder().xlang(false).compatible(true).build();
 //! ```
 //!
 //! ## Cross-Language Serialization
@@ -1110,7 +1110,7 @@
 //! }
 //!
 //! fn process_data(bytes: &[u8]) -> Result<Data, Error> {
-//!     let mut fory = Fory::default();
+//!     let mut fory = Fory::builder().xlang(false).build();
 //!     fory.register::<Data>(100);
 //!
 //!     let data: Data = fory.deserialize(bytes)?;
@@ -1136,7 +1136,7 @@
 //!     value: i32,
 //! }
 //!
-//! let mut fory = Fory::default();
+//! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register::<Item>(1000).unwrap();
 //! let fory = Arc::new(fory);
 //! let handles: Vec<_> = (0..8)

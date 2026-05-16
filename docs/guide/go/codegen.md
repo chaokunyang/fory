@@ -284,7 +284,7 @@ steps:
 Generated code integrates transparently:
 
 ```go
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 
 // Fory automatically uses generated serializer if available
 user := &User{ID: 1, Name: "Alice"}

@@ -179,10 +179,10 @@ func unsignedMacroFieldsRoundTripAcrossSchemaModes() throws {
         )
     ]
 
-    let schemaConsistent = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+    let schemaConsistent = Fory(config: .init(trackRef: false, compatible: false))
     schemaConsistent.register(UnsignedFieldBundle.self, id: 9801)
 
-    let compatible = Fory(config: .init(xlang: true, trackRef: false, compatible: true))
+    let compatible = Fory(config: .init(trackRef: false, compatible: true))
     compatible.register(UnsignedFieldBundle.self, id: 9801)
 
     for value in cases {

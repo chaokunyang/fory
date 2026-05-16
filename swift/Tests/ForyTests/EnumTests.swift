@@ -72,7 +72,7 @@ func enumTypeIdClassification() {
 
 @Test
 func structWithEnumFieldRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+    let fory = Fory(config: .init(trackRef: false, compatible: false))
     fory.register(Color.self, id: 100)
     fory.register(StructWithEnum.self, id: 101)
 
@@ -84,7 +84,7 @@ func structWithEnumFieldRoundTrip() throws {
 
 @Test
 func taggedUnionXlangRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+    let fory = Fory(config: .init(trackRef: false, compatible: false))
     fory.register(StringOrLong.self, id: 300)
     fory.register(StructWithUnion.self, id: 301)
 
@@ -103,7 +103,7 @@ func taggedUnionXlangRoundTrip() throws {
 
 @Test
 func taggedUnionPayloadFieldCodecsRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: true, trackRef: false, compatible: false))
+    let fory = Fory(config: .init(trackRef: false, compatible: false))
     fory.register(FixedPayloadEvent.self, id: 302)
 
     let values: [FixedPayloadEvent] = [
@@ -118,7 +118,7 @@ func taggedUnionPayloadFieldCodecsRoundTrip() throws {
 
 @Test
 func mixedEnumShapesRoundTrip() throws {
-    let fory = Fory(config: .init(xlang: false, trackRef: true, compatible: false))
+    let fory = Fory(config: .init(trackRef: true, compatible: false))
     fory.register(Token.self, id: 1000)
 
     let nestedMap: [String: Token] = [

@@ -59,7 +59,7 @@ type User struct {
 
 func main() {
     // Create a Fory instance
-    f := fory.New()
+    f := fory.New(fory.WithXlang(false))
 
     // Register struct with a type ID
     if err := f.RegisterStruct(User{}, 1); err != nil {
@@ -91,7 +91,7 @@ metadata and keeps hot serialization paths optimized, so most applications can u
 without any extra build step:
 
 ```go
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 data, _ := f.Serialize(myStruct)
 ```
 
@@ -100,7 +100,7 @@ data, _ := f.Serialize(myStruct)
 Fory Go uses a functional options pattern for configuration:
 
 ```go
-f := fory.New(
+f := fory.New(fory.WithXlang(false),
     fory.WithTrackRef(true),      // Enable reference tracking
     fory.WithCompatible(true),    // Enable schema evolution
     fory.WithMaxDepth(20),       // Set max nesting depth
@@ -127,7 +127,7 @@ Fory Go is fully compatible with other Fory implementations. Data serialized in 
 
 ```go
 // Go serialization
-f := fory.New()
+f := fory.New(fory.WithXlang(false))
 f.RegisterStruct(User{}, 1)
 data, _ := f.Serialize(&User{ID: 1, Name: "Alice"})
 // 'data' can be deserialized by Java, Python, etc.

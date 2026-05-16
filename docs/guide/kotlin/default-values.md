@@ -34,7 +34,7 @@ When a Kotlin data class has parameters with default values, Fory can:
 This feature is automatically enabled when:
 
 - Compatible mode is enabled (`withCompatible(true)`)
-- The runtime is built with `ForyKotlin.builder()` or `Fory.builder().withModule(ForyKotlin)`
+- The runtime is built with `ForyKotlin.builder().withXlang(false)` or `Fory.builder().withXlang(false).withModule(ForyKotlin)`
 - A field is missing from the serialized data but exists in the target class with a default value
 
 ## Example
@@ -49,7 +49,7 @@ data class User(val name: String, val age: Int)
 data class UserV2(val name: String, val age: Int, val email: String = "default@example.com")
 
 fun main() {
-    val fory = ForyKotlin.builder()
+    val fory = ForyKotlin.builder().withXlang(false)
         .withCompatible(true)
         .build()
     fory.register(User::class.java)
@@ -90,7 +90,7 @@ data class ConfigV2(
     val retryCount: Int = 3
 )
 
-val fory = ForyKotlin.builder()
+val fory = ForyKotlin.builder().withXlang(false)
     .withCompatible(true)
     .build()
 

@@ -160,7 +160,11 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
   @Test(dataProvider = "compressNumber")
   public void testSmallStructInlinesFieldGroups(boolean compressNumber) {
     Fory fory =
-        Fory.builder().withNumberCompressed(compressNumber).requireClassRegistration(false).build();
+        Fory.builder()
+            .withXlang(false)
+            .withNumberCompressed(compressNumber)
+            .requireClassRegistration(false)
+            .build();
     ObjectCodecBuilder codecBuilder = new ObjectCodecBuilder(SmallInlineFields.class, fory);
     CompileUnit compileUnit =
         new CompileUnit(
@@ -212,7 +216,7 @@ public class ObjectCodecBuilderTest extends ForyTestBase {
 
   @Test
   public void testAccessLevel() {
-    Fory fory = Fory.builder().requireClassRegistration(false).build();
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     AccessBeans.PublicClass object = AccessBeans.createPublicClassObject();
     serDeCheckSerializer(fory, object, "Codec");
   }

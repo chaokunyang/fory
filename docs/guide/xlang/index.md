@@ -156,7 +156,7 @@ This generates native language types with consistent field/type mappings across 
 
 For language-specific details and API reference:
 
-- [Java Cross-Language Guide](../java/cross-language.md)
+- [Java Xlang Serialization Guide](../java/xlang-serialization.md)
 - [Python Cross-Language Guide](../python/cross-language.md)
 - [C++ Cross-Language Guide](../cpp/cross-language.md)
 - [Rust Cross-Language Guide](../rust/cross-language.md)

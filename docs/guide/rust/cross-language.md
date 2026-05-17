@@ -179,7 +179,7 @@ explicit array field attribute when the schema is dense `array<T>`.
 
 - [Cross-Language Serialization Specification](../../specification/xlang_serialization_spec.md)
 - [Type Mapping Reference](../../specification/xlang_type_mapping.md)
-- [Java Cross-Language Guide](../java/cross-language.md)
+- [Java Xlang Serialization Guide](../java/xlang-serialization.md)
 - [Python Cross-Language Guide](../python/cross-language.md)
 
 ## Related Topics

@@ -198,7 +198,7 @@ The binary protocol and API are similar to `pyfory`'s Python native mode, but Py
 
 - [Cross-Language Serialization Specification](../../specification/xlang_serialization_spec.md)
 - [Type Mapping Reference](../../specification/xlang_type_mapping.md)
-- [Java Cross-Language Guide](../java/cross-language.md)
+- [Java Xlang Serialization Guide](../java/xlang-serialization.md)
 - [Rust Cross-Language Guide](../rust/cross-language.md)
 
 ## Related Topics

@@ -1,6 +1,6 @@
 ---
 title: Configuration
-sidebar_position: 3
+sidebar_position: 4
 id: configuration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more

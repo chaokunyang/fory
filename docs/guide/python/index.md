@@ -155,11 +155,10 @@ See [Native Serialization](native-serialization.md) for Python-only serializatio
 - [Basic Serialization](basic-serialization.md) - Basic usage patterns
 - [Xlang Serialization](xlang-serialization.md) - xlang mode
 - [Native Serialization](native-serialization.md) - Python-only serialization
-- [Configuration](configuration.md) - Fory parameters and modes
+- [Configuration](configuration.md) - Fory parameters, modes, and security
 - [Type Registration](type-registration.md) - User-defined type registration
 - [Custom Serializers](custom-serializers.md) - Extend serialization behavior
 - [Row Format](row-format.md) - Zero-copy row format
-- [Security](security.md) - Security best practices
 
 ## Links
 

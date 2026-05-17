@@ -170,6 +170,16 @@ auto fory = Fory::builder().xlang(true).build_thread_safe();  // Returns ThreadS
 | `max_dyn_depth(uint32_t)`    | Maximum nesting depth for dynamic types | `5`                            |
 | `check_struct_version(bool)` | Enable struct version checking          | `false`                        |
 
+## Security
+
+Security-related configuration:
+
+- Register all structs and polymorphic implementations before deserializing untrusted payloads.
+- Use `check_struct_version(true)` with `compatible(false)` when exact schema matching is required.
+- Keep `max_dyn_depth(...)` as low as your model permits to reject unexpectedly deep polymorphic
+  graphs.
+- Prefer concrete fields over broad polymorphic fields for untrusted input.
+
 ## Related Topics
 
 - [Basic Serialization](basic-serialization.md) - Using configured Fory

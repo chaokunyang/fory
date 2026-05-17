@@ -128,6 +128,15 @@ let fory = Fory::builder()
 | `xlang(bool)`        | Use xlang mode                          | `true`                         |
 | `max_dyn_depth(u32)` | Maximum nesting depth for dynamic types | `5`                            |
 
+## Security
+
+Security-related configuration:
+
+- Register application structs and trait-object implementations before deserializing untrusted
+  payloads.
+- Use `max_dyn_depth(...)` to reject unexpectedly deep dynamic object graphs.
+- Prefer concrete typed fields over `dyn Any` or broad trait-object fields for untrusted input.
+
 ## Related Topics
 
 - [Basic Serialization](basic-serialization.md) - Using configured Fory

@@ -88,8 +88,8 @@ bytes.
 - Use `strict=False` only for trusted payloads that require dynamic Python classes or functions.
 - Provide a `policy=` deserialization policy when dynamic types are required but the accepted type
   surface should still be restricted.
-- Prefer xlang mode for external service boundaries because it uses portable schemas instead of
-  Python execution semantics.
+- Do not use xlang/native mode choice as a security control. Apply strict mode, policies,
+  registration, and resource limits based on the payload source.
 
 ## References And Cycles
 
@@ -116,8 +116,8 @@ Native mode is the Python mode to choose when the existing boundary uses `pickle
 `cloudpickle`. It supports richer Python values than JSON and xlang mode, including Python
 functions, local classes, closures, and reduction hooks.
 
-Use xlang mode instead when the payload crosses language boundaries or when the data should be
-restricted to a portable schema.
+Use xlang mode instead when the payload crosses language boundaries or the data model should be a
+portable schema shared with other Fory runtimes.
 
 ## Serialize Global Functions
 
@@ -338,4 +338,4 @@ Keep the payload in native mode. Xlang mode does not execute Python `__reduce__`
 - [Xlang Serialization](xlang-serialization.md) - Cross-runtime Python payloads
 - [Configuration](configuration.md) - Python runtime options
 - [Out-of-Band Serialization](out-of-band.md) - Zero-copy buffer support
-- [Security](security.md) - Deserialization policies
+- [Configuration](configuration.md#security) - Deserialization policies

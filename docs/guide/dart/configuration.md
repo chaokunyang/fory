@@ -115,6 +115,15 @@ When Fory is used to communicate between services written in different languages
 - Use the same numeric IDs or `namespace + typeName` pairs on every side.
 - Match the `compatible` setting on both the writing and reading side — mismatching modes will fail.
 
+## Security
+
+Security-related configuration:
+
+- Register only the expected generated models before deserializing untrusted payloads.
+- Use `checkStructVersion: true` with `compatible: false` when exact schema matching is required.
+- Set `maxDepth`, `maxCollectionSize`, and `maxBinarySize` to reject unexpectedly large payloads.
+- Prefer generated schemas and explicit field metadata over broad dynamic fields for untrusted input.
+
 ## Related Topics
 
 - [Basic Serialization](basic-serialization.md)

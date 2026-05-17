@@ -206,8 +206,7 @@ ThreadSafeFory threadLocalFory = Fory.builder()
 ## Next Steps
 
 - [Configuration](configuration.md) - Learn about ForyBuilder options
-- [Schema Metadata](schema-metadata.md) - `@ForyField`, `@Ignore`, and integer encoding annotations
-- [Schema Metadata](schema-metadata.md#enum-metadata) - `serializeEnumByName` and `@ForyEnumId`
+- [Schema Metadata](schema-metadata.md) - `@ForyField`, `@Ignore`, integer encoding annotations, `serializeEnumByName`, and `@ForyEnumId`
 - [Basic Serialization](basic-serialization.md) - Detailed serialization patterns
 - [Object Copy](object-copy.md) - Deep-copy Java object graphs in memory
 - [Compression](compression.md) - Integer, long, and array compression options

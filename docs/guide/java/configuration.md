@@ -71,8 +71,7 @@ Fory fory = Fory.builder()
 
 ## Related Topics
 
-- [Schema Metadata](schema-metadata.md) - `@ForyField`, `@Ignore`, and integer encoding annotations
-- [Schema Metadata](schema-metadata.md#enum-metadata) - `serializeEnumByName` and `@ForyEnumId`
+- [Schema Metadata](schema-metadata.md) - `@ForyField`, `@Ignore`, integer encoding annotations, `serializeEnumByName`, and `@ForyEnumId`
 - [Schema Evolution](schema-evolution.md) - Compatible mode and meta sharing
 - [Compression](compression.md) - Int, long, and array compression details
 - [Type Registration](type-registration.md) - Class registration options

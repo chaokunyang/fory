@@ -27,12 +27,12 @@ This page covers `Config` and recommended runtime presets.
 
 ```swift
 public struct Config {
-  public var trackRef: Bool
-  public var compatible: Bool
-  public var checkClassVersion: Bool
-  public var maxCollectionSize: Int
-  public var maxBinarySize: Int
-  public var maxDepth: Int
+  public let trackRef: Bool
+  public let compatible: Bool
+  public let checkClassVersion: Bool
+  public let maxCollectionSize: Int
+  public let maxBinarySize: Int
+  public let maxDepth: Int
 }
 ```
 

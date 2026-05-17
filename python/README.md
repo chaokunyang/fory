@@ -851,7 +851,7 @@ result = f.deserialize(data)
 assert result.children[0].parent is result  # Reference preserved
 ```
 
-### Type Registration & Security
+### Type Registration
 
 In strict mode, only registered types can be deserialized. This prevents arbitrary code execution:
 

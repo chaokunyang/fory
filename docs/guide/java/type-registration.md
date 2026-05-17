@@ -1,5 +1,5 @@
 ---
-title: Type Registration & Security
+title: Type Registration
 sidebar_position: 3
 id: type_registration
 license: |

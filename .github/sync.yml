@@ -20,9 +20,13 @@ apache/fory-site@main:
     dest: docs/community/DEVELOPMENT.md
   - source: docs/guide/
     dest: docs/guide/
+    deleteOrphaned: true
   - source: docs/specification/
     dest: docs/specification/
+    deleteOrphaned: true
   - source: docs/compiler/
     dest: docs/compiler/
+    deleteOrphaned: true
   - source: docs/benchmarks/
     dest: docs/benchmarks/
+    deleteOrphaned: true

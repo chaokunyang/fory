@@ -165,12 +165,7 @@ def bump_version(**kwargs):
                 _update_scala_version,
             )
         elif lang == "kotlin":
-            _bump_version(
-                "kotlin",
-                "pom.xml",
-                _normalize_java_version(new_version),
-                _update_kotlin_version,
-            )
+            bump_kotlin_version(_normalize_java_version(new_version))
         elif lang == "rust":
             bump_rust_version(new_version)
         elif lang == "python":
@@ -267,6 +262,16 @@ def bump_rust_version(new_version):
         rust_version,
         _update_cargo_package_version,
     )
+
+
+def bump_kotlin_version(new_version):
+    _bump_version("kotlin", "pom.xml", new_version, _update_kotlin_version)
+    for p in [
+        "kotlin/fory-kotlin",
+        "kotlin/fory-kotlin-ksp",
+        "kotlin/fory-kotlin-tests",
+    ]:
+        _bump_version(p, "pom.xml", new_version, _update_pom_parent_version)
 
 
 def bump_cpp_version(new_version):
@@ -371,7 +376,7 @@ def _update_scala_version(lines, v):
 
 def _update_kotlin_version(lines, v):
     v = _normalize_java_version(v)
-    return _update_pom_version(lines, v, "<artifactId>fory-kotlin</artifactId>")
+    return _update_pom_version(lines, v, "<artifactId>fory-kotlin-parent</artifactId>")
 
 
 def _update_parent_pom_version(lines, v):
@@ -384,6 +389,8 @@ def _update_pom_version(lines, v, prev):
         if prev in line:
             target_index = index + 1
             break
+    if target_index == -1:
+        raise ValueError(f"Could not find POM version marker: {prev}")
     current_version_line = lines[target_index]
     # Find the start and end of the version number
     start = current_version_line.index("<version>") + len("<version>")

@@ -54,7 +54,6 @@ thread_local! {
 ///
 /// let fory = Fory::builder()
 ///     .xlang(true)
-///     .compatible(true)
 ///     .compress_string(true)
 ///     .max_dyn_depth(10)
 ///     .build();
@@ -73,7 +72,7 @@ impl ForyBuilder {
     /// * `compatible` - The serialization compatible mode to use. Options are:
     ///   - `false`: Schema must be consistent between serialization and deserialization.
     ///     No metadata is shared. This is the fastest mode.
-    ///   - true`: Supports schema evolution and type metadata sharing for better
+    ///   - `true`: Supports schema evolution and type metadata sharing for better
     ///     cross-version compatibility.
     ///
     /// # Returns
@@ -84,14 +83,14 @@ impl ForyBuilder {
     ///
     /// Setting the compatible mode also automatically configures the `share_meta` flag:
     /// - `false` → `share_meta = false`
-    /// - true` → `share_meta = true`
+    /// - `true` → `share_meta = true`
     ///
     /// # Examples
     ///
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder().xlang(false).compatible(true).build();
+    /// let fory = Fory::builder().xlang(true).compatible(true).build();
     /// ```
     pub fn compatible(mut self, compatible: bool) -> Self {
         self.compatible_set = true;
@@ -106,13 +105,12 @@ impl ForyBuilder {
         self
     }
 
-    /// Enables or disables cross-language serialization protocol.
+    /// Enables or disables xlang mode.
     ///
     /// # Arguments
     ///
-    /// * `xlang` - If `true`, uses the cross-language serialization format compatible with
-    ///   other Fory implementations (Java, Python, C++, etc.). If `false`, uses a Rust-only
-    ///   optimized format.
+    /// * `xlang` - If `true`, uses the xlang wire format compatible with other Fory
+    ///   implementations (Java, Python, C++, etc.). If `false`, uses Rust native mode.
     ///
     /// # Returns
     ///
@@ -127,11 +125,10 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// // For cross-language use (default)
-    /// let fory = Fory::builder().xlang(true).compatible(true).build();
+    /// // Xlang mode, the default cross-language wire format
+    /// let fory = Fory::builder().xlang(true).build();
     ///
-    /// // For Rust-only optimization, this mode is faster and more compact since it avoids
-    /// // cross-language metadata and type system costs.
+    /// // Native mode for Rust-only traffic
     /// let fory = Fory::builder().xlang(false).build();
     /// ```
     pub fn xlang(mut self, xlang: bool) -> Self {
@@ -174,7 +171,7 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder().xlang(false).compress_string(true).build();
+    /// let fory = Fory::builder().xlang(true).compress_string(true).build();
     /// ```
     pub fn compress_string(mut self, compress_string: bool) -> Self {
         self.config.compress_string = compress_string;
@@ -257,7 +254,7 @@ impl ForyBuilder {
     /// ```rust
     /// use fory_core::Fory;
     ///
-    /// let fory = Fory::builder().track_ref(true).build();
+    /// let fory = Fory::builder().xlang(true).track_ref(true).build();
     /// ```
     pub fn track_ref(mut self, track_ref: bool) -> Self {
         self.config.track_ref = track_ref;
@@ -291,10 +288,10 @@ impl ForyBuilder {
     /// use fory_core::Fory;
     ///
     /// // Allow deeper nesting for complex object graphs
-    /// let fory = Fory::builder().xlang(false).max_dyn_depth(10).build();
+    /// let fory = Fory::builder().xlang(true).max_dyn_depth(10).build();
     ///
     /// // Restrict nesting for safer deserialization
-    /// let fory = Fory::builder().xlang(false).max_dyn_depth(3).build();
+    /// let fory = Fory::builder().xlang(true).max_dyn_depth(3).build();
     /// ```
     pub fn max_dyn_depth(mut self, max_dyn_depth: u32) -> Self {
         self.config.max_dyn_depth = max_dyn_depth;
@@ -323,7 +320,7 @@ impl ForyBuilder {
     /// use fory_core::Fory;
     ///
     /// // Limit binary payloads to 1 MB
-    /// let fory = Fory::builder().xlang(false).max_binary_size(1024 * 1024).build();
+    /// let fory = Fory::builder().xlang(true).max_binary_size(1024 * 1024).build();
     /// ```
     pub fn max_binary_size(mut self, max_binary_size: u32) -> Self {
         self.config.max_binary_size = max_binary_size;
@@ -353,7 +350,7 @@ impl ForyBuilder {
     /// use fory_core::Fory;
     ///
     /// // Limit collections to 10000 elements
-    /// let fory = Fory::builder().xlang(false).max_collection_size(10000).build();
+    /// let fory = Fory::builder().xlang(true).max_collection_size(10000).build();
     /// ```
     pub fn max_collection_size(mut self, max_collection_size: u32) -> Self {
         self.config.max_collection_size = max_collection_size;
@@ -374,13 +371,14 @@ impl ForyBuilder {
 
 /// The main Fory serialization framework instance.
 ///
-/// `Fory` provides high-performance cross-language serialization and deserialization
-/// capabilities with support for multiple modes, reference tracking, and trait object serialization.
+/// `Fory` provides high-performance serialization and deserialization with xlang mode,
+/// native mode, reference tracking, and trait object serialization.
 ///
 /// # Features
 ///
-/// - **Cross-language serialization**: Serialize data in Rust and deserialize in other languages
-/// - **Multiple modes**: Schema-consistent and compatible serialization modes
+/// - **Xlang mode**: Default wire format for cross-language payloads
+/// - **Native mode**: Rust-only wire format selected with `.xlang(false)`
+/// - **Schema evolution**: Compatible and schema-consistent payload choices
 /// - **Reference tracking**: Handles shared and circular references
 /// - **Trait object serialization**: Supports serializing polymorphic trait objects
 /// - **Dynamic depth limiting**: Configurable limit for nested dynamic object serialization
@@ -399,9 +397,10 @@ impl ForyBuilder {
 ///     age: u32,
 /// }
 ///
-/// let fory = Fory::builder().xlang(false).build();
+/// let mut fory = Fory::builder().xlang(true).build();
+/// fory.register_by_name::<User>("example", "User").unwrap();
 /// let user = User { name: "Alice".to_string(), age: 30 };
-/// let bytes = fory.serialize(&user);
+/// let bytes = fory.serialize(&user).unwrap();
 /// let deserialized: User = fory.deserialize(&bytes).unwrap();
 /// ```
 ///
@@ -412,7 +411,6 @@ impl ForyBuilder {
 ///
 /// let fory = Fory::builder()
 ///     .xlang(true)
-///     .compatible(true)
 ///     .compress_string(true)
 ///     .max_dyn_depth(10)
 ///     .build();
@@ -451,16 +449,16 @@ impl Fory {
         }
     }
 
-    /// Returns whether cross-language serialization is enabled.
+    /// Returns whether xlang mode is enabled.
     pub fn is_xlang(&self) -> bool {
         self.config.xlang
     }
 
-    /// Returns the current serialization mode.
+    /// Returns whether compatible schema evolution is enabled.
     ///
     /// # Returns
     ///
-    /// `true` if the serialization mode is compatible, `false` otherwise`.
+    /// `true` if compatible schema evolution is enabled, `false` otherwise.
     pub fn is_compatible(&self) -> bool {
         self.config.compatible
     }
@@ -483,7 +481,7 @@ impl Fory {
     ///
     /// # Returns
     ///
-    /// `true` if metadata sharing is enabled (automatically set based on mode), `false` otherwise.
+    /// `true` if metadata sharing is enabled, `false` otherwise.
     pub fn is_share_meta(&self) -> bool {
         self.config.share_meta
     }
@@ -561,9 +559,10 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct Point { x: i32, y: i32 }
     ///
-    /// let fory = Fory::builder().xlang(false).build();
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register_by_name::<Point>("example", "Point").unwrap();
     /// let point = Point { x: 10, y: 20 };
-    /// let bytes = fory.serialize(&point);
+    /// let bytes = fory.serialize(&point).unwrap();
     /// ```
     pub fn serialize<T: Serializer>(&self, record: &T) -> Result<Vec<u8>, Error> {
         self.with_write_context(
@@ -618,7 +617,8 @@ impl Fory {
     ///     y: i32,
     /// }
     ///
-    /// let fory = Fory::builder().xlang(false).build();
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register_by_name::<Point>("example", "Point").unwrap();
     /// let point = Point { x: 1, y: 2 };
     ///
     /// let mut buf = Vec::new();
@@ -638,7 +638,8 @@ impl Fory {
     ///     y: i32,
     /// }
     ///
-    /// let fory = Fory::builder().xlang(false).build();
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register_by_name::<Point>("example", "Point").unwrap();
     /// let p1 = Point { x: 1, y: 2 };
     /// let p2 = Point { x: -3, y: 4 };
     ///
@@ -679,7 +680,8 @@ impl Fory {
     ///     y: i32,
     /// }
     ///
-    /// let fory = Fory::builder().xlang(false).build();
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register_by_name::<Point>("example", "Point").unwrap();
     /// let point = Point { x: 1, y: 2 };
     ///
     /// let mut buf = Vec::with_capacity(1024);
@@ -813,8 +815,8 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct User { name: String, age: u32 }
     ///
-    /// let mut fory = Fory::builder().xlang(false).build();
-    /// fory.register::<User>(100);
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register::<User>(100).unwrap();
     /// ```
     pub fn register<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
@@ -835,7 +837,7 @@ impl Fory {
         self.type_resolver.register_union::<T>(id)
     }
 
-    /// Registers a struct type with a namespace and type name for cross-language serialization.
+    /// Registers a struct type with a namespace and type name for xlang serialization.
     ///
     /// # Type Parameters
     ///
@@ -849,11 +851,14 @@ impl Fory {
     ///
     /// # Notes
     ///
-    /// This registration method is preferred for cross-language serialization as it uses
+    /// This registration method is preferred for xlang serialization because it uses
     /// human-readable type identifiers instead of numeric IDs, which improves compatibility
     /// across different language implementations.
     ///
     /// # Examples
+    ///
+    /// The example uses xlang mode because name-based registration is the preferred
+    /// registration style for cross-language payloads.
     ///
     /// ```rust, ignore
     /// use fory::Fory;
@@ -862,8 +867,8 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct User { name: String, age: u32 }
     ///
-    /// let mut fory = Fory::builder().xlang(false).build();
-    /// fory.register_by_name::<User>("com.example", "User");
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register_by_name::<User>("com.example", "User").unwrap();
     /// ```
     pub fn register_by_name<T: 'static + StructSerializer + Serializer + ForyDefault>(
         &mut self,
@@ -913,7 +918,7 @@ impl Fory {
     /// use fory_core::Fory;
     ///
     /// let mut fory = Fory::builder().xlang(false).build();
-    /// fory.register_serializer::<MyCustomType>(200);
+    /// fory.register_serializer::<MyCustomType>(200).unwrap();
     /// ```
     pub fn register_serializer<T: Serializer + ForyDefault>(
         &mut self,
@@ -937,7 +942,7 @@ impl Fory {
     /// # Notes
     ///
     /// This is the named equivalent of `register_serializer()`, preferred for
-    /// cross-language serialization scenarios.
+    /// xlang serialization scenarios.
     ///
     pub fn register_serializer_by_name<T: Serializer + ForyDefault>(
         &mut self,
@@ -1001,9 +1006,10 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct Point { x: i32, y: i32 }
     ///
-    /// let fory = Fory::builder().xlang(false).build();
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register_by_name::<Point>("example", "Point").unwrap();
     /// let point = Point { x: 10, y: 20 };
-    /// let bytes = fory.serialize(&point);
+    /// let bytes = fory.serialize(&point).unwrap();
     /// let deserialized: Point = fory.deserialize(&bytes).unwrap();
     /// ```
     pub fn deserialize<T: Serializer + ForyDefault>(&self, bf: &[u8]) -> Result<T, Error> {
@@ -1054,11 +1060,12 @@ impl Fory {
     /// #[derive(ForyStruct)]
     /// struct Point { x: i32, y: i32 }
     ///
-    /// let fory = Fory::builder().xlang(false).build();
+    /// let mut fory = Fory::builder().xlang(true).build();
+    /// fory.register_by_name::<Point>("example", "Point").unwrap();
     /// let point = Point { x: 10, y: 20 };
     ///
     /// let mut buf = Vec::new();
-    /// fory.serialize_to(&point, &mut buf).unwrap();
+    /// fory.serialize_to(&mut buf, &point).unwrap();
     ///
     /// let mut reader = Reader::new(&buf);
     /// let deserialized: Point = fory.deserialize_from(&mut reader).unwrap();

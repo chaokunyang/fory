@@ -91,11 +91,11 @@ macro_rules! downcast_and_serialize {
 ///
 /// # fn main() {
 /// let mut fory = Fory::builder().xlang(false).compatible(true).build();
-/// fory.register::<Dog>(100);
-/// fory.register::<Cat>(101);
+/// fory.register::<Dog>(100).unwrap();
+/// fory.register::<Cat>(101).unwrap();
 ///
 /// let dog: Box<dyn Animal> = Box::new(Dog { name: "Rex".to_string() });
-/// let bytes = fory.serialize(&dog);
+/// let bytes = fory.serialize(&dog).unwrap();
 /// let decoded: Box<dyn Animal> = fory.deserialize(&bytes).unwrap();
 /// assert_eq!(decoded.name(), "Rex");
 /// # }

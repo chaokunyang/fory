@@ -6,20 +6,20 @@
 
 **Apache Fory™** is a blazing fast multi-language serialization framework powered by **JIT compilation** and **zero-copy** techniques, providing up to **ultra-fast performance** while maintaining ease of use and safety.
 
-The Rust implementation provides versatile and high-performance serialization with automatic memory management and compile-time type safety.
+The Rust implementation provides versatile and high-performance serialization with automatic memory management and compile-time type safety. It defaults to xlang mode for cross-language payloads; use native mode with `.xlang(false)` for Rust-only traffic when you need Rust-specific object features such as trait objects and shared-reference patterns.
 
-## 🚀 Why Apache Fory™ Rust?
+## Why Apache Fory™ Rust?
 
-- **🔥 Blazingly Fast**: Zero-copy deserialization and optimized binary protocols
-- **🌍 Cross-Language**: Seamlessly serialize/deserialize data across Java, Python, C++, Go, JavaScript, and Rust
-- **🎯 Type-Safe**: Compile-time type checking with derive macros
-- **🔄 Circular References**: Automatic tracking of shared and circular references with `Rc`/`Arc` and weak pointers
-- **🧬 Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
-- **📦 Schema Evolution**: Compatible mode for independent schema changes
-- **🔢 Reduced-Precision Types**: `Float16` and `BFloat16` scalars with `Vec<Float16>` / `Vec<BFloat16>` arrays
-- **⚡ Two Formats**: Object graph serialization and zero-copy row-based format
+- **Blazingly Fast**: Zero-copy deserialization and optimized binary protocols
+- **Cross-Language**: Seamlessly serialize/deserialize data across Java, Python, C++, Go, JavaScript, and Rust
+- **Type-Safe**: Compile-time type checking with derive macros
+- **Circular References**: Automatic tracking of shared and circular references with `Rc`/`Arc` and weak pointers
+- **Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
+- **Schema Evolution**: Compatible mode for independent schema changes
+- **Reduced-Precision Types**: `Float16` and `BFloat16` scalars with `Vec<Float16>` / `Vec<BFloat16>` arrays
+- **Two Formats**: Object graph serialization and zero-copy row-based format
 
-## 📦 Crates
+## Crates
 
 | Crate                                                                       | Description                       | Version                                                                                               |
 | --------------------------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------- |
@@ -27,7 +27,7 @@ The Rust implementation provides versatile and high-performance serialization wi
 | [`fory-core`](https://github.com/apache/fory/blob/main/rust/fory-core/)     | Core serialization engine         | [![crates.io](https://img.shields.io/crates/v/fory-core.svg)](https://crates.io/crates/fory-core)     |
 | [`fory-derive`](https://github.com/apache/fory/blob/main/rust/fory-derive/) | Procedural macros                 | [![crates.io](https://img.shields.io/crates/v/fory-derive.svg)](https://crates.io/crates/fory-derive) |
 
-## 🏃 Quick Start
+## Quick Start
 
 Add Apache Fory™ to your `Cargo.toml`:
 
@@ -50,7 +50,7 @@ struct User {
 }
 
 fn main() -> Result<(), Error> {
-    let mut fory = Fory::builder().xlang(false).build();
+    let mut fory = Fory::builder().xlang(true).build();
     fory.register::<User>(1)?;
 
     let user = User {
@@ -76,7 +76,7 @@ fn main() -> Result<(), Error> {
 }
 ```
 
-## 📚 Core Features
+## Core Features
 
 ### 1. Object Graph Serialization
 
@@ -111,9 +111,9 @@ struct Address {
     country: String,
 }
 
-let mut fory = Fory::builder().xlang(false).build();
-fory.register::<Address>(100);
-fory.register::<Person>(200);
+let mut fory = Fory::builder().xlang(true).build();
+fory.register_by_name::<Address>("example", "Address").unwrap();
+fory.register_by_name::<Person>("example", "Person").unwrap();
 
 let person = Person {
     name: "John Doe".to_string(),
@@ -129,18 +129,22 @@ let person = Person {
     ]),
 };
 
-let bytes = fory.serialize(&person);
+let bytes = fory.serialize(&person).unwrap();
 let decoded: Person = fory.deserialize(&bytes)?;
 assert_eq!(person, decoded);
 ```
 
-### 2. Shared and Circular References
+### 2. Native-Mode Shared and Circular References
 
 Apache Fory™ automatically tracks and preserves reference identity for shared objects using `Rc<T>` and `Arc<T>`. When the same object is referenced multiple times, Fory serializes it only once and uses reference IDs for subsequent occurrences. This ensures:
 
 - **Space efficiency**: No data duplication in serialized output
 - **Reference identity preservation**: Deserialized objects maintain the same sharing relationships
 - **Circular reference support**: Use `RcWeak<T>` and `ArcWeak<T>` to break cycles
+
+The examples in this section use native mode because `Rc`, `Arc`, and weak-pointer identity are
+Rust object-graph features. Native mode stays on Rust's native type system instead of limiting the
+payload to portable xlang mappings.
 
 #### Shared References with Rc/Arc
 
@@ -157,7 +161,7 @@ let shared = Rc::new(String::from("shared_value"));
 let data = vec![shared.clone(), shared.clone(), shared.clone()];
 
 // The shared value is serialized only once
-let bytes = fory.serialize(&data);
+let bytes = fory.serialize(&data)?;
 let decoded: Vec<Rc<String>> = fory.deserialize(&bytes)?;
 
 // Verify reference identity is preserved
@@ -197,7 +201,7 @@ struct Node {
 }
 
 let mut fory = Fory::builder().xlang(false).build();
-fory.register::<Node>(2000);
+fory.register::<Node>(2000)?;
 
 // Build a parent-child tree
 let parent = Rc::new(RefCell::new(Node {
@@ -222,7 +226,7 @@ parent.borrow_mut().children.push(child1.clone());
 parent.borrow_mut().children.push(child2.clone());
 
 // Serialize and deserialize the circular structure
-let bytes = fory.serialize(&parent);
+let bytes = fory.serialize(&parent)?;
 let decoded: Rc<RefCell<Node>> = fory.deserialize(&bytes)?;
 
 // Verify the circular relationship
@@ -233,9 +237,11 @@ for child in &decoded.borrow().children {
 }
 ```
 
-### 3. Trait Object Serialization
+### 3. Native-Mode Trait Object Serialization
 
 Apache Fory™ supports polymorphic serialization through trait objects, enabling dynamic dispatch and type flexibility. This is essential for plugin systems, heterogeneous collections, and extensible architectures.
+
+The examples in this section use native mode because Rust trait objects and `dyn Any` dispatch are Rust runtime features.
 
 **Supported trait object types:**
 
@@ -282,9 +288,9 @@ struct Zoo {
 }
 
 let mut fory = Fory::builder().xlang(false).compatible(true).build();
-fory.register::<Dog>(100);
-fory.register::<Cat>(101);
-fory.register::<Zoo>(102);
+fory.register::<Dog>(100)?;
+fory.register::<Cat>(101)?;
+fory.register::<Zoo>(102)?;
 
 let zoo = Zoo {
     star_animal: Box::new(Dog {
@@ -293,7 +299,7 @@ let zoo = Zoo {
     }),
 };
 
-let bytes = fory.serialize(&zoo);
+let bytes = fory.serialize(&zoo)?;
 let decoded: Zoo = fory.deserialize(&bytes)?;
 
 assert_eq!(decoded.star_animal.name(), "Buddy");
@@ -302,7 +308,7 @@ assert_eq!(decoded.star_animal.speak(), "Woof!");
 
 ### 4. Schema Evolution
 
-Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. This enables independent evolution of services in distributed systems without breaking compatibility.
+Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Xlang mode uses compatible schema evolution by default. In native mode, add `.compatible(true)` when Rust-only payloads need independent schema evolution.
 
 **Features:**
 
@@ -340,11 +346,11 @@ struct PersonV2 {
     metadata: HashMap<String, String>,
 }
 
-let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
-fory1.register::<PersonV1>(1);
+let mut fory1 = Fory::builder().xlang(true).compatible(true).build();
+fory1.register_by_name::<PersonV1>("example", "Person").unwrap();
 
-let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
-fory2.register::<PersonV2>(1);
+let mut fory2 = Fory::builder().xlang(true).compatible(true).build();
+fory2.register_by_name::<PersonV2>("example", "Person").unwrap();
 
 let person_v1 = PersonV1 {
     name: "Alice".to_string(),
@@ -353,7 +359,7 @@ let person_v1 = PersonV1 {
 };
 
 // Serialize with V1
-let bytes = fory1.serialize(&person_v1);
+let bytes = fory1.serialize(&person_v1).unwrap();
 
 // Deserialize with V2 - missing fields get default values
 let person_v2: PersonV2 = fory2.deserialize(&bytes)?;
@@ -362,7 +368,7 @@ assert_eq!(person_v2.age, 30);
 assert_eq!(person_v2.phone, None);
 ```
 
-### 5. Enum Support
+### 5. Native-Mode Enum Support
 
 Apache Fory™ supports three types of enum variants with full schema evolution in Compatible mode:
 
@@ -414,9 +420,9 @@ assert_eq!(value, decoded);
 - Named variants provide better evolution than unnamed
 - Use compatible mode for cross-version communication
 
-### 6. Tuple Support
+### 6. Native-Mode Tuple Support
 
-Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible and non-compatible modes.
+Apache Fory™ supports tuples up to 22 elements out of the box with efficient serialization in both compatible and schema-consistent modes.
 
 **Features:**
 
@@ -424,9 +430,9 @@ Apache Fory™ supports tuples up to 22 elements out of the box with efficient s
 - Heterogeneous type support (each element can be a different type)
 - Schema evolution in Compatible mode (handles missing/extra elements)
 
-**Serialization modes:**
+**Schema modes:**
 
-1. **Non-compatible mode**: Serializes elements sequentially without collection headers for minimal overhead
+1. **Schema-consistent mode**: Serializes elements sequentially without collection headers for minimal overhead
 2. **Compatible mode**: Uses collection protocol with type metadata for schema evolution
 
 ```rust
@@ -447,13 +453,13 @@ let decoded: (i32, String, bool, Vec<i32>) = fory.deserialize(&bytes)?;
 assert_eq!(data, decoded);
 ```
 
-### 7. Custom Serializers
+### 7. Native-Mode Custom Serializers
 
 For types that don't support `#[derive(ForyStruct)]`, implement the `Serializer` trait manually. This is useful for:
 
 - External types from other crates
 - Types with special serialization requirements
-- Legacy data format compatibility
+- Existing data format compatibility
 - Performance-critical custom encoding
 
 ```rust
@@ -496,13 +502,13 @@ impl ForyDefault for CustomType {
 }
 
 let mut fory = Fory::builder().xlang(false).build();
-fory.register_serializer::<CustomType>(100);
+fory.register_serializer::<CustomType>(100)?;
 
 let custom = CustomType {
     value: 42,
     name: "test".to_string(),
 };
-let bytes = fory.serialize(&custom);
+let bytes = fory.serialize(&custom)?;
 let decoded: CustomType = fory.deserialize(&bytes)?;
 assert_eq!(custom, decoded);
 ```
@@ -562,7 +568,7 @@ let profile = UserProfile {
 };
 
 // Serialize to row format
-let row_data = to_row(&profile);
+let row_data = to_row(&profile).unwrap();
 
 // Zero-copy deserialization - no object allocation!
 let row = from_row::<UserProfile>(&row_data);
@@ -576,13 +582,13 @@ assert_eq!(row.is_active(), true);
 // Access collections efficiently
 let scores = row.scores();
 assert_eq!(scores.size(), 4);
-assert_eq!(scores.get(0), 95);
-assert_eq!(scores.get(1), 87);
+assert_eq!(scores.get(0).unwrap(), 95);
+assert_eq!(scores.get(1).unwrap(), 87);
 
 let prefs = row.preferences();
 assert_eq!(prefs.keys().size(), 2);
-assert_eq!(prefs.keys().get(0), "language");
-assert_eq!(prefs.values().get(0), "en");
+assert_eq!(prefs.keys().get(0).unwrap(), "language");
+assert_eq!(prefs.values().get(0).unwrap(), "en");
 ```
 
 **Performance comparison:**
@@ -594,28 +600,26 @@ assert_eq!(prefs.values().get(0), "en");
 | Memory usage         | Full object graph in memory   | Only accessed fields in memory  |
 | Suitable for         | Small objects, full access    | Large objects, selective access |
 
-## 🌍 Cross-Language Serialization
+## Cross-Language Serialization
 
 Apache Fory™ supports seamless data exchange across multiple languages:
 
 ```rust
 use fory::Fory;
 
-// Enable cross-language mode
-let mut fory = Fory::builder()
-    .compatible(true)
-    .xlang(true).build();
+// Use xlang mode, the Rust default.
+let mut fory = Fory::builder().xlang(true).build();
 
 // Register types with consistent IDs across languages
-fory.register::<MyStruct>(100);
+fory.register::<MyStruct>(100)?;
 
 // Or use name-based registration
-fory.register_by_name::<MyStruct>("com.example", "MyStruct");
+fory.register_by_name::<MyStruct>("com.example", "MyStruct")?;
 ```
 
 See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_type_mapping) for type mapping across languages.
 
-## ⚡ Performance
+## Performance
 
 Apache Fory™ Rust is designed for maximum performance:
 
@@ -632,15 +636,15 @@ cd benchmarks/rust
 cargo bench
 ```
 
-## 📖 Documentation
+## Documentation
 
-- **[User Guide](https://fory.apache.org/docs/next/docs/guide/rust)** - Comprehensive User documents
+- **[User Guide](https://fory.apache.org/docs/guide/rust/)** - Comprehensive user documentation
 - **[API Documentation](https://docs.rs/fory)** - Complete API reference
-- **[Protocol Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec)** - Serialization protocol details
+- **[Protocol Specification](https://fory.apache.org/docs/specification/xlang_serialization_spec)** - Serialization protocol details
 - **[Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping)** - Cross-language type mappings
 - **[Source](https://github.com/apache/fory/tree/main/docs/guide/rust)** - Source code for doc
 
-## 🎯 Use Cases
+## Use Cases
 
 ### Object Serialization
 
@@ -658,7 +662,7 @@ cargo bench
 - Real-time data streaming applications
 - Zero-copy scenarios
 
-## 🛠️ Development
+## Development
 
 ### Building
 
@@ -690,15 +694,15 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-## 📄 License
+## License
 
 Licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/apache/fory/blob/main/LICENSE) for details.
 
-## 🤝 Contributing
+## Contributing
 
 We welcome contributions! Please see our [Contributing Guide](https://github.com/apache/fory/blob/main/CONTRIBUTING.md) for details.
 
-## 📞 Support
+## Support
 
 - **Documentation**: [docs.rs/fory](https://docs.rs/fory)
 - **Issues**: [GitHub Issues](https://github.com/apache/fory/issues)

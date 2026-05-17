@@ -40,17 +40,17 @@ class DeserializationPolicy:
     +---------------------------+----------------------+----------------------------+
     | Security Feature          | pickle.Unpickler     | Fory DeserializationPolicy           |
     +---------------------------+----------------------+----------------------------+
-    | Class import control      | ✓ find_class()       | ✓ validate_class()         |
-    | Function import control   | ✗ (via find_class)   | ✓ validate_function()      |
-    | Method validation         | ✗                    | ✓ validate_method()        |
-    | Module import control     | ✗                    | ✓ validate_module()        |
-    | Instantiation control     | ✗                    | ✓ authorize_instantiation()|
-    | __reduce__ interception   | ✗                    | ✓ intercept_reduce_call()  |
-    | Post-reduce inspection    | ✗                    | ✓ inspect_reduced_object() |
-    | __setstate__ interception | ✗                    | ✓ intercept_setstate()     |
-    | Object replacement        | ✗                    | ✓ (return from validators) |
-    | State sanitization        | ✗                    | ✓ (modify in-place)        |
-    | Local class/function      | ✗                    | ✓ (is_local flag)          |
+    | Class import control      | find_class()         | validate_class()           |
+    | Function import control   | no (via find_class)  | validate_function()        |
+    | Method validation         | no                   | validate_method()          |
+    | Module import control     | no                   | validate_module()          |
+    | Instantiation control     | no                   | authorize_instantiation()  |
+    | __reduce__ interception   | no                   | intercept_reduce_call()    |
+    | Post-reduce inspection    | no                   | inspect_reduced_object()   |
+    | __setstate__ interception | no                   | intercept_setstate()       |
+    | Object replacement        | no                   | return from validators     |
+    | State sanitization        | no                   | modify in-place            |
+    | Local class/function      | no                   | is_local flag              |
     +---------------------------+----------------------+----------------------------+
 
     Example: Blocking subprocess.Popen with pickle vs Fory:
@@ -126,7 +126,7 @@ class DeserializationPolicy:
     ...         print(f"Reducing with {callable_obj.__name__}({args})")
     ...         return None  # Proceed normally
     ...
-    >>> fory = Fory(checker=SafeDeserializationPolicy())
+    >>> fory = Fory(xlang=False, strict=False, policy=SafeDeserializationPolicy())
 
     Thread Safety
     -------------
@@ -143,7 +143,7 @@ class DeserializationPolicy:
     See Also
     --------
     - Python's pickle module security warnings: https://docs.python.org/3/library/pickle.html
-    - Fory documentation on secure deserialization: docs/guide/security.md
+    - Fory Python security guide: https://fory.apache.org/docs/guide/python/security
     """
 
     # ============================================================================
@@ -188,8 +188,7 @@ class DeserializationPolicy:
             ...             raise ValueError(f"Class {cls.__name__} not whitelisted")
 
         Note:
-            This method was previously named check_read_allowed and check_create_object.
-            Those names are kept as aliases for backward compatibility.
+            `check_read_allowed` and `check_create_object` are aliases for this hook.
         """
         pass
 
@@ -215,7 +214,7 @@ class DeserializationPolicy:
         - Block dangerous classes (subprocess.Popen, os.system, etc.)
         - Replace untrusted classes with safe alternatives
         - Validate that local classes match expected signatures
-        - Implement class versioning/migration logic
+        - Implement class versioning or adaptation logic
 
         Args:
             cls (type): The deserialized class object.
@@ -233,10 +232,10 @@ class DeserializationPolicy:
             Exception: Raise any exception to reject the class and abort deserialization.
 
         Example:
-            >>> class MigrationChecker(DeserializationPolicy):
+            >>> class ClassAdapter(DeserializationPolicy):
             ...     def validate_class(self, cls, is_local, **kwargs):
-            ...         # Migrate old class to new class
-            ...         if cls.__name__ == 'OldUserClass':
+            ...         # Map a serialized class name to the current class.
+            ...         if cls.__name__ == 'ArchivedUserClass':
             ...             return NewUserClass
             ...         # Block dangerous classes
             ...         if cls.__module__ == 'subprocess':
@@ -244,8 +243,7 @@ class DeserializationPolicy:
             ...         return None  # Accept
 
         Note:
-            This method was previously named check_class. That name is kept as an
-            alias for backward compatibility.
+            `check_class` is an alias for this hook.
         """
         pass
 
@@ -265,7 +263,7 @@ class DeserializationPolicy:
         ------------------
         - Block dangerous built-in functions (eval, exec, compile, __import__)
         - Validate that reconstructed functions have expected signatures
-        - Replace untrusted functions with safe stubs
+        - Replace untrusted functions with safe alternatives
         - Audit function imports for security logging
 
         Args:
@@ -291,8 +289,7 @@ class DeserializationPolicy:
             ...         return None
 
         Note:
-            This method was previously named check_function. That name is kept as an
-            alias for backward compatibility.
+            `check_function` is an alias for this hook.
         """
         pass
 
@@ -335,8 +332,7 @@ class DeserializationPolicy:
             ...         return None
 
         Note:
-            This method was previously named check_method. That name is kept as an
-            alias for backward compatibility.
+            `check_method` is an alias for this hook.
         """
         pass
 
@@ -380,8 +376,7 @@ class DeserializationPolicy:
             ...         return None
 
         Note:
-            This method was previously named check_module. That name is kept as an
-            alias for backward compatibility.
+            `check_module` is an alias for this hook.
         """
         pass
 
@@ -441,18 +436,13 @@ class DeserializationPolicy:
             This is one of the most critical security hooks, as __reduce__ is the primary
             vector for arbitrary code execution in pickle-based attacks.
 
-            This method was previously named check_reduce_callable. That name is kept
-            as an alias for backward compatibility.
+            `check_reduce_callable` is an alias for this hook.
         """
         pass
 
-    # Backward compatibility aliases
+    # Hook aliases
     def check_reduce_callable(self, callable_obj, args, **kwargs):
-        """Deprecated: Use intercept_reduce_call instead.
-
-        This method is kept for backward compatibility. New code should use
-        intercept_reduce_call for clarity.
-        """
+        """Alias for intercept_reduce_call."""
         return self.intercept_reduce_call(callable_obj, args, **kwargs)
 
     def inspect_reduced_object(self, obj, **kwargs):
@@ -497,18 +487,13 @@ class DeserializationPolicy:
         Note:
             This hook provides a last line of defense after reduce reconstruction.
 
-            This method was previously named check_restored_reduced_object. That name
-            is kept as an alias for backward compatibility.
+            `check_restored_reduced_object` is an alias for this hook.
         """
         pass
 
-    # Backward compatibility aliases
+    # Hook aliases
     def check_restored_reduced_object(self, obj, **kwargs):
-        """Deprecated: Use inspect_reduced_object instead.
-
-        This method is kept for backward compatibility. New code should use
-        inspect_reduced_object for clarity.
-        """
+        """Alias for inspect_reduced_object."""
         return self.inspect_reduced_object(obj, **kwargs)
 
     def intercept_setstate(self, obj, state, **kwargs):
@@ -562,18 +547,13 @@ class DeserializationPolicy:
             This hook can modify the state dict in-place. Changes will be reflected
             when __setstate__ is called.
 
-            This method was previously named check_setstate. That name is kept as an
-            alias for backward compatibility.
+            `check_setstate` is an alias for this hook.
         """
         pass
 
-    # Backward compatibility alias
+    # Hook alias
     def check_setstate(self, obj, state, **kwargs):
-        """Deprecated: Use intercept_setstate instead.
-
-        This method is kept for backward compatibility. New code should use
-        intercept_setstate for clarity.
-        """
+        """Alias for intercept_setstate."""
         return self.intercept_setstate(obj, state, **kwargs)
 
 

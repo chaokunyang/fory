@@ -1242,7 +1242,7 @@ pub trait Serializer: 'static {
 /// including field metadata, schema evolution, and compatibility features. This trait is used
 /// internally by Fory and automatically implemented by the derive macro.
 ///
-/// # ⚠️ Important: Do NOT Implement This for Custom User Types
+/// # Important: Do NOT Implement This for Custom User Types
 ///
 /// **User types with custom serialization should NOT implement this trait.** This trait is:
 ///
@@ -1356,7 +1356,7 @@ pub trait StructSerializer: Serializer + 'static {
     /// * `type_id` - The base type ID
     /// * `register_by_name` - Whether type was registered by name (vs by hash)
     /// * `compatible` - Whether compatibility mode is enabled
-    /// * `xlang` - Whether cross-language mode is enabled
+    /// * `xlang` - Whether xlang mode is enabled
     ///
     /// # Returns
     ///

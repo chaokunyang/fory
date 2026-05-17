@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting
-sidebar_position: 10
+sidebar_position: 11
 id: troubleshooting
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -32,7 +32,7 @@ This page covers common issues and debugging techniques for Apache Fory™ Rust.
 **Solution**: Register the type before serialization:
 
 ```rust
-let mut fory = Fory::builder().xlang(false).build();
+let mut fory = Fory::default();
 fory.register::<MyStruct>(100)?;  // Register before use
 ```
 
@@ -51,7 +51,11 @@ Confirm that:
 - Ensure field types match across versions
 
 ```rust
-let fory = Fory::builder().xlang(false).compatible(true).build();
+// Add compatible(true) to the same builder configuration on every peer.
+let fory = Fory::builder()
+    // existing options
+    .compatible(true)
+    .build();
 ```
 
 ## Debugging Techniques

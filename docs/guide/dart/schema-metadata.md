@@ -1,7 +1,7 @@
 ---
-title: Field Configuration
-sidebar_position: 6
-id: dart_field_configuration
+title: Schema Metadata
+sidebar_position: 5
+id: schema_metadata
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -25,7 +25,7 @@ Add `@ForyField(...)` to a field inside a `@ForyStruct()` class to change how th
 
 ```dart
 @ForyField(
-  skip: false,      // exclude the field from serialization
+  skip: false,      // include the field; set true to exclude it
   id: 10,           // stable field ID for schema evolution
   nullable: true,   // override nullability detection
   ref: true,        // enable reference tracking for this field

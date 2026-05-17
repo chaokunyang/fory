@@ -1,7 +1,7 @@
 ---
 title: Web Platform Support
 sidebar_position: 10
-id: dart_web_platform_support
+id: web_platform_support
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -214,6 +214,6 @@ JS-safe non-negative range.
 ## Related Topics
 
 - [Supported Types](supported-types.md)
-- [Field Configuration](field-configuration.md)
+- [Schema Metadata](schema-metadata.md)
 - [Code Generation](code-generation.md)
 - [Troubleshooting](troubleshooting.md)

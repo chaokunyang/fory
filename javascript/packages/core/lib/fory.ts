@@ -92,6 +92,7 @@ export default class Fory {
       maxCollectionSize: config?.maxCollectionSize,
       hooks: config?.hooks || {},
       compatible: config?.compatible ?? true,
+      hps: config?.hps,
     };
   }
 

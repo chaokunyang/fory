@@ -17,12 +17,6 @@ idiomatic domain objects, schema IDL, and cross-language data exchange.
 
 <https://fory.apache.org>
 
-> [!IMPORTANT]
-> Apache Fory™ was previously named Apache Fury. For versions before 0.11, use
-> `fury` instead of `fory` in package names, imports, and dependencies. See the
-> [Fury docs](https://fory.apache.org/docs/0.10/docs/introduction/) for older
-> releases.
-
 ## Why Fory
 
 Fory is built for fast, compact serialization across languages and runtimes. It
@@ -285,16 +279,23 @@ Snapshots for Java, Scala, and Kotlin are available from
 
 ## Choose Serialization Mode
 
-| Mode                 | Use it when                                                   | Start here                                               |
-| -------------------- | ------------------------------------------------------------- | -------------------------------------------------------- |
-| Xlang serialization  | Data crosses language boundaries                              | [Cross-language guide](docs/guide/xlang)                 |
-| Native serialization | Producer and consumer are in the same language                | Language guide for your runtime                          |
-| Row format           | You need random field access or analytics-style partial reads | [Row format spec](docs/specification/row_format_spec.md) |
+| Mode        | Use it when                                                   | Start here                                               |
+| ----------- | ------------------------------------------------------------- | -------------------------------------------------------- |
+| Xlang mode  | Data crosses language boundaries                              | [Cross-language guide](docs/guide/xlang)                 |
+| Native mode | Producer and consumer are in the same language                | Language guide for your runtime                          |
+| Row format  | You need random field access or analytics-style partial reads | [Row format spec](docs/specification/row_format_spec.md) |
 
-Use native mode for same-language traffic. It avoids xlang's cross-language
-type mapping and metadata constraints, so it can serialize broader
-language-specific object graphs and is the fastest path for same-language
-payloads.
+For Java, Scala, Kotlin, Python, C++, Go, and Rust, use native mode for
+same-language traffic. It avoids xlang's cross-language type mapping and
+metadata constraints, stays closer to each runtime's native type system, and
+supports broader language-specific object graphs. Use it when both producer and
+consumer are in the same runtime family and you want the native object model
+rather than a portable cross-language schema.
+
+For Java/JVM-only systems, native mode is the replacement path for JDK
+serialization, Kryo, FST, Hessian, and Java-only Protocol Buffers payloads. For
+Python-only systems, native mode is the replacement path for pickle and
+cloudpickle.
 
 Compatible mode is Fory's schema-evolution mode. It writes the metadata readers
 and writers need to tolerate schema differences. Xlang mode enables compatible
@@ -327,7 +328,7 @@ public class Example {
   }
 
   public static void main(String[] args) {
-    Fory fory = Fory.builder().withXlang(true).withCompatible(true).build();
+    Fory fory = Fory.builder().withXlang(true).build();
     fory.register(Person.class, "example.Person");
 
     Person person = new Person();
@@ -353,7 +354,7 @@ class Person:
     name: str
     age: pyfory.Int32
 
-fory = pyfory.Fory(xlang=True, compatible=True)
+fory = pyfory.Fory(xlang=True)
 fory.register_type(Person, typename="example.Person")
 
 data = fory.serialize(Person("Alice", 30))
@@ -378,7 +379,7 @@ type Person struct {
 }
 
 func main() {
-    f := fory.New(fory.WithXlang(true), fory.WithCompatible(true))
+    f := fory.New(fory.WithXlang(true))
     if err := f.RegisterStructByName(Person{}, "example.Person"); err != nil {
         panic(err)
     }
@@ -404,7 +405,7 @@ struct Person {
 }
 
 fn main() -> Result<(), Error> {
-    let mut fory = Fory::builder().xlang(true).compatible(true).build();
+    let mut fory = Fory::builder().xlang(true).build();
     fory.register_by_name::<Person>("example", "Person")?;
 
     let bytes = fory.serialize(&Person {
@@ -434,8 +435,8 @@ struct Person {
 FORY_STRUCT(Person, name, age);
 
 int main() {
-  auto fory = Fory::builder().xlang(true).compatible(true).build();
-  fory.register_struct<Person>("example.Person");
+  auto fory = Fory::builder().xlang(true).build();
+  fory.register_struct<Person>("example", "Person");
 
   auto bytes = fory.serialize(Person{"Alice", 30}).value();
   Person person = fory.deserialize<Person>(bytes).value();
@@ -456,7 +457,7 @@ const personType = Type.struct(
   },
 );
 
-const fory = new Fory({ compatible: true });
+const fory = new Fory();
 const { serialize, deserialize } = fory.register(personType);
 
 const bytes = serialize({ name: "Alice", age: 30 });
@@ -476,9 +477,7 @@ public sealed class Person
     public int Age { get; set; }
 }
 
-Fory fory = Fory.Builder()
-    .Compatible(true)
-    .Build();
+Fory fory = Fory.Builder().Build();
 fory.Register<Person>("example", "Person");
 
 byte[] bytes = fory.Serialize(new Person { Name = "Alice", Age = 30 });
@@ -507,7 +506,7 @@ class Person {
 }
 
 void main() {
-  final fory = Fory(compatible: true);
+  final fory = Fory();
   PersonFory.register(
     fory,
     Person,
@@ -541,7 +540,7 @@ struct Person {
     var age: Int32 = 0
 }
 
-let fory = Fory(compatible: true)
+let fory = Fory()
 try fory.register(Person.self, namespace: "example", name: "Person")
 
 let bytes = try fory.serialize(Person(name: "Alice", age: 30))
@@ -556,10 +555,7 @@ import org.apache.fory.scala.ForyScala
 
 case class Person(name: String, age: Int)
 
-val fory = ForyScala.builder()
-  .withXlang(true)
-  .withCompatible(true)
-  .build()
+val fory = ForyScala.builder().withXlang(true).build()
 fory.register(classOf[Person], "example.Person")
 
 val bytes = fory.serialize(Person("Alice", 30))
@@ -575,10 +571,7 @@ import org.apache.fory.kotlin.ForyKotlin
 data class Person(val name: String, val age: Int)
 
 fun main() {
-    val fory = ForyKotlin.builder()
-        .withXlang(true)
-        .withCompatible(true)
-        .build()
+    val fory = ForyKotlin.builder().withXlang(true).build()
     fory.register(Person::class.java, "example.Person")
 
     val bytes = fory.serialize(Person("Alice", 30))
@@ -593,10 +586,16 @@ type-mapping rules, see the [cross-language guide](docs/guide/xlang) and
 
 ## Native Serialization
 
-Use native mode when the writer and reader are in the same language. Java and
-Python can serialize broader language-specific object graphs this way. The
-languages below expose an explicit `xlang=false` or native-mode setting; runtimes
-without that switch stay on their documented default path.
+Use native mode when the writer and reader are in the same language. It is
+optimized for each runtime's native type system and can cover language-specific
+types, object graphs, and framework-replacement cases that xlang mode keeps out
+of the portable wire format. The languages below expose an explicit
+`xlang=false` or native-mode setting; runtimes without that switch stay on their
+documented default path.
+
+Choose Java native mode for Java/JVM-only replacements of JDK serialization,
+Kryo, FST, Hessian, or Java-only Protocol Buffers payloads. Choose Python native
+mode when replacing pickle or cloudpickle for Python-only payloads.
 
 Keep class/type registration enabled for untrusted input. See the language guides
 for runtime-specific security and compatibility settings.
@@ -769,12 +768,12 @@ deserialization, see the
 
 **Specifications**
 
-| Specification          | Source                                                                        | Website                                                                          |
-| ---------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Xlang serialization    | [xlang_serialization_spec.md](docs/specification/xlang_serialization_spec.md) | [View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
-| Java serialization     | [java_serialization_spec.md](docs/specification/java_serialization_spec.md)   | [View](https://fory.apache.org/docs/specification/fory_java_serialization_spec)  |
-| Row format             | [row_format_spec.md](docs/specification/row_format_spec.md)                   | [View](https://fory.apache.org/docs/specification/fory_row_format_spec)          |
-| Cross-language mapping | [xlang_type_mapping.md](docs/specification/xlang_type_mapping.md)             | [View](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec) |
+| Specification          | Source                                                                        | Website                                                                     |
+| ---------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Xlang serialization    | [xlang_serialization_spec.md](docs/specification/xlang_serialization_spec.md) | [View](https://fory.apache.org/docs/specification/xlang_serialization_spec) |
+| Java serialization     | [java_serialization_spec.md](docs/specification/java_serialization_spec.md)   | [View](https://fory.apache.org/docs/specification/java_serialization_spec)  |
+| Row format             | [row_format_spec.md](docs/specification/row_format_spec.md)                   | [View](https://fory.apache.org/docs/specification/row_format_spec)          |
+| Cross-language mapping | [xlang_type_mapping.md](docs/specification/xlang_type_mapping.md)             | [View](https://fory.apache.org/docs/specification/xlang_type_mapping)       |
 
 ## Community
 

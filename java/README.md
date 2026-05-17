@@ -8,7 +8,7 @@ Apache Fory™ Java provides blazingly-fast serialization for the Java ecosystem
 
 ## Features
 
-### 🚀 High Performance
+### High Performance
 
 - **JIT Code Generation**: Highly-extensible JIT framework generates serializer code at runtime using async multi-threaded compilation, delivering 20-170x speedup through:
   - Inlining variables to reduce memory access
@@ -20,13 +20,13 @@ Apache Fory™ Java provides blazingly-fast serialization for the Java ecosystem
 - **Meta Sharing**: Cached class metadata reduces redundant type information
 - **SIMD Acceleration**: Java Vector API support for array operations (Java 16+)
 
-### 🔧 Drop-in Replacement
+### Drop-in Replacement
 
 - **100% JDK Serialization Compatible**: Supports `writeObject`/`readObject`/`writeReplace`/`readResolve`/`readObjectNoData`/`Externalizable`
 - **Java 8-24 Support**: Works across all modern Java versions including Java 17+ records
 - **GraalVM Native Image**: AOT compilation support without reflection configuration
 
-### 🔄 Advanced Features
+### Advanced Features
 
 - **Reference Tracking**: Automatic handling of shared and circular references
 - **Schema Evolution**: Forward/backward compatibility for class schema changes
@@ -36,12 +36,12 @@ Apache Fory™ Java provides blazingly-fast serialization for the Java ecosystem
 
 ## Documentation
 
-| Topic                       | Description                | Source Doc Link                                                                | Website Doc Link                                                                                   |
-| --------------------------- | -------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| **Java Serialization**      | Comprehensive usage guide  | [java_serialization_guide.md](../docs/guide/java_serialization_guide.md)       | [Java Serialization Guide](https://fory.apache.org/docs/docs/guide/java_serialization)             |
-| **GraalVM Native Image**    | Native image support       | [graalvm-support.md](../docs/guide/java/graalvm-support.md)                    | [GraalVM Support](https://fory.apache.org/docs/guide/java/graalvm_support)                         |
-| **Java Serialization Spec** | Protocol specification     | [java_serialization_spec.md](../docs/specification/java_serialization_spec.md) | [Java Serialization Spec](https://fory.apache.org/docs/specification/fory_java_serialization_spec) |
-| **Java Benchmarks**         | Performance data and plots | [java/README.md](../docs/benchmarks/java/README.md)                            | [Java Benchmarks](https://fory.apache.org/docs/benchmarks/java)                                    |
+| Topic                       | Description                      | Source Doc Link                                                                | Website Doc Link                                                                              |
+| --------------------------- | -------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| **Java Guide**              | Java xlang and native mode usage | [docs/guide/java](../docs/guide/java)                                          | [Java Guide](https://fory.apache.org/docs/guide/java/)                                        |
+| **GraalVM Native Image**    | Native image support             | [graalvm-support.md](../docs/guide/java/graalvm-support.md)                    | [GraalVM Support](https://fory.apache.org/docs/guide/java/graalvm_support)                    |
+| **Java Serialization Spec** | Protocol specification           | [java_serialization_spec.md](../docs/specification/java_serialization_spec.md) | [Java Serialization Spec](https://fory.apache.org/docs/specification/java_serialization_spec) |
+| **Java Benchmarks**         | Performance data and plots       | [java/README.md](../docs/benchmarks/java/README.md)                            | [Java Benchmarks](https://fory.apache.org/docs/benchmarks/java)                               |
 
 ## Modules
 
@@ -108,8 +108,10 @@ Create a Fory instance, register your classes, and start serializing objects. Re
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
-// Create Fory instance (should be reused)
-Fory fory = Fory.builder().withXlang(false)
+// Create Fory instance (should be reused). Java defaults to xlang mode with
+// compatible schema evolution.
+Fory fory = Fory.builder()
+  .withXlang(true)
   .requireClassRegistration(true)
   .build();
 
@@ -132,8 +134,8 @@ For multi-threaded environments, use `ThreadSafeFory` which maintains a pool of 
 import org.apache.fory.*;
 import org.apache.fory.config.*;
 
-// Create thread-safe Fory instance
-private static final ThreadSafeFory fory = Fory.builder().withXlang(false).buildThreadSafeFory();
+// Create thread-safe xlang Fory instance
+private static final ThreadSafeFory fory = Fory.builder().withXlang(true).buildThreadSafeFory();
 
 static {
     fory.register(MyClass.class);
@@ -144,12 +146,25 @@ byte[] bytes = fory.serialize(object);
 Object result = fory.deserialize(bytes);
 ```
 
-### Schema Evolution
+### Native Mode
 
-Enable schema compatibility mode to support forward and backward compatibility when your class definitions change over time:
+Use native mode for Java-only payloads when you need JVM-specific object behavior such as JDK
+serialization hooks, `Externalizable`, broader object graph support, or a replacement for JDK
+serialization, Kryo, FST, Hessian, or Java-only Protocol Buffers payloads:
 
 ```java
-// Enable forward/backward compatibility
+Fory fory = Fory.builder()
+  .withXlang(false)
+  .requireClassRegistration(true)
+  .build();
+```
+
+### Schema Evolution
+
+Xlang mode enables compatible schema evolution by default. In native mode, enable compatible mode
+when your class definitions change over time:
+
+```java
 Fory fory = Fory.builder().withXlang(false)
   .withCompatible(true)
   .build();
@@ -176,10 +191,10 @@ byte[] bytes = fory.serialize(node);
 
 ### Cross-Language Serialization
 
-Use XLANG mode to serialize data that can be deserialized by other languages (Python, Rust, Go, etc.):
+Use xlang mode, the Java default, to serialize data that can be deserialized by other languages
+(Python, Rust, Go, etc.):
 
 ```java
-// Use XLANG mode for cross-language compatibility
 Fory fory = Fory.builder()
   .withXlang(true)
   .withRefTracking(true)
@@ -201,11 +216,11 @@ Configure Fory with various options to suit your specific use case:
 
 ```java
 Fory fory = Fory.builder()
-  // Language mode: JAVA (fastest) or XLANG (cross-language)
+  // Native mode for Java-only payloads. Omit this for xlang payloads.
   .withXlang(false)
   // Reference tracking for circular/shared references
   .withRefTracking(true)
-  // Schema evolution mode
+  // Schema evolution mode. Xlang already enables compatible mode by default.
   .withCompatible(true)
   // Compression options
   .withIntCompressed(true)
@@ -222,13 +237,14 @@ Fory fory = Fory.builder()
   .build();
 ```
 
-See [Java Serialization Guide](../docs/guide/java_serialization_guide.md) for detailed configuration options.
+See the [Java guide](../docs/guide/java/) for detailed configuration options.
 
 ## Advanced Features
 
 ### JDK Serialization Compatibility
 
-Fory fully supports JDK serialization APIs with 100x better performance. You can use standard Java serialization methods and Fory will handle them automatically:
+In native mode, Fory supports JDK serialization APIs with much better performance. Use native mode
+when replacing Java-only JDK serialization, Kryo, FST, Hessian, or Protocol Buffers payloads:
 
 ```java
 public class MyClass implements Serializable {
@@ -314,7 +330,7 @@ Bar partialBar = barEncoder.fromRow(barStruct);  // Deserialize only one Bar obj
 Foo deserializedFoo = encoder.fromRow(binaryRow);
 ```
 
-See [Row Format Guide](../docs/guide/row_format_guide.md) for more details.
+See the [Java row-format guide](../docs/guide/java/row-format.md) for more details.
 
 ### Array Compression (Java 16+)
 
@@ -401,7 +417,7 @@ mvn -T16 checkstyle:check
 1. **Reuse Fory Instances**: Creating Fory is expensive; reuse instances across serializations
 2. **Enable Compression**: For numeric-heavy data, enable int/long compression
 3. **Disable Reference Tracking**: If no circular references exist, disable tracking for better performance
-4. **Use Java Mode**: Leave xlang disabled when cross-language support isn't needed. Java mode reduces type metadata overhead and supports more Java-native types not available in xlang mode
+4. **Use native mode**: For Java-only payloads, use `withXlang(false)`. Native mode reduces type metadata overhead and supports more Java-native types not available in xlang mode
 5. **Warm Up**: Allow JIT compilation to complete before benchmarking
 6. **Register Classes**: Class registration reduces metadata overhead
 7. **Use SIMD**: Enable array compression on Java 16+ for numeric arrays

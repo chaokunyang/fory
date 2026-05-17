@@ -24,7 +24,8 @@ import org.apache.fory.kotlin.ForyKotlin
 
 data class User(val name: String, val id: UInt)
 
-val fory = ForyKotlin.builder().withXlang(false)
+val fory = ForyKotlin.builder()
+  .withXlang(true)
   .requireClassRegistration(true)
   .build()
 
@@ -34,6 +35,9 @@ fory.register(User::class.java)
 `fory-kotlin` supports Kotlin-specific runtime types such as unsigned
 primitives, unsigned arrays, Kotlin collection carriers, default constructor
 values, `kotlin.time.Duration`, `kotlin.text.Regex`, and `kotlin.uuid.Uuid`.
+Use `.withXlang(false)` for same-language Kotlin/JVM native-mode payloads when
+you need JVM-native object behavior and Kotlin-specific type support without
+portable xlang type-mapping constraints.
 
 ## KSP Xlang Serializers
 

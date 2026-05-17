@@ -24,7 +24,7 @@
 pub struct Config {
     /// Whether compatible mode is enabled for schema evolution support.
     pub compatible: bool,
-    /// Whether cross-language serialization is enabled.
+    /// Whether xlang mode is enabled.
     pub xlang: bool,
     /// Whether metadata sharing is enabled.
     pub share_meta: bool,
@@ -77,7 +77,7 @@ impl Config {
         self.compatible
     }
 
-    /// Check if cross-language mode is enabled.
+    /// Check if xlang mode is enabled.
     #[inline(always)]
     pub fn is_xlang(&self) -> bool {
         self.xlang

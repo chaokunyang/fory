@@ -58,7 +58,7 @@ final class AnimalPair {
     }
 }
 
-let fory = Fory(ref: true, compatible: true)
+let fory = Fory(ref: true)
 fory.register(Animal.self, id: 200)
 fory.register(AnimalPair.self, id: 201)
 
@@ -92,7 +92,7 @@ final class Node {
     }
 }
 
-let fory = Fory(ref: true, compatible: true)
+let fory = Fory(ref: true)
 fory.register(Node.self, id: 300)
 
 let node = Node(value: 7)

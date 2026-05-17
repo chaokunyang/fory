@@ -1,4 +1,4 @@
-# C#
+# C\#
 
 Load this file when changing `csharp/` or C# xlang behavior.
 

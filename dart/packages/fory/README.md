@@ -123,7 +123,6 @@ Keep the same registration identity on all runtimes that exchange the type.
 
 ```dart
 final fory = Fory(
-  compatible: true,
   maxDepth: 256,
   maxCollectionSize: 1 << 20,
   maxBinarySize: 64 * 1024 * 1024,
@@ -132,8 +131,8 @@ final fory = Fory(
 
 | Option               | Default    | Description                                             |
 | -------------------- | ---------- | ------------------------------------------------------- |
-| `compatible`         | `false`    | Enables compatible struct encoding for schema evolution |
-| `checkStructVersion` | `true`     | Validates struct version in schema-consistent mode      |
+| `compatible`         | `true`     | Enables compatible struct encoding for schema evolution |
+| `checkStructVersion` | `false`    | Validates struct version in schema-consistent mode      |
 | `maxDepth`           | `256`      | Maximum nesting depth per operation                     |
 | `maxCollectionSize`  | `1 << 20`  | Maximum collection and map payload size                 |
 | `maxBinarySize`      | `64 << 20` | Maximum binary payload size                             |

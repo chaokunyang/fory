@@ -43,7 +43,7 @@ console.log(result);
 // { foo: 'hello fory' }
 ```
 
-If `hps` is unavailable, omit it or pass `null`:
+If `hps` is unavailable, omit it:
 
 ```ts
 const fory = new Fory(); // works without hps

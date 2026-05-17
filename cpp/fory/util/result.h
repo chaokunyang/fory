@@ -699,17 +699,17 @@ template <typename T, typename E> class Result<T &&, E> {
 
 /// Declare and assign value from Result<T, E> or return error
 ///
-/// ⚠️  IMPORTANT: This macro expands to multiple statements.
+/// IMPORTANT: This macro expands to multiple statements.
 /// Always use braces with control flow statements!
 ///
-/// ✅ CORRECT:
+/// CORRECT:
 /// ```cpp
 /// if (condition) {
 ///     FORY_TRY(data, load_data());
 /// }
 /// ```
 ///
-/// ❌ WRONG:
+/// WRONG:
 /// ```cpp
 /// if (condition)
 ///     FORY_TRY(data, load_data());  // BREAKS!

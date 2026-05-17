@@ -1,6 +1,6 @@
 ---
 title: Schema IDL And Xlang
-sidebar_position: 4
+sidebar_position: 5
 id: schema_idl
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -35,7 +35,6 @@ import example.ExampleForyModule
 
 val fory = ForyScala.builder()
   .withXlang(true)
-  .withCompatible(true)
   .withRefTracking(true)
   .withModule(ExampleForyModule)
   .build()
@@ -47,7 +46,7 @@ creating a custom runtime, or use the generated no-argument `toBytes` and
 
 Generated helpers register message type identities before installing message
 serializers. This two-phase order lets mutually recursive message graphs build
-descriptor metadata through the normal `TypeResolver` path without placeholder
+descriptor metadata through the normal `TypeResolver` path without temporary
 serializers or Scala-specific registration state in Java core. Enums and unions
 are registered with their serializers directly because their derived serializers
 own case dispatch.

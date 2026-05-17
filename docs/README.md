@@ -1,9 +1,9 @@
 # User Guide
 
-- For Cross Language Object Graph Guide, see [xlang serialization guide](guide/xlang_serialization_guide.md) doc.
-- For Java Object Graph Guide, see [java serialization guide](guide/java_serialization_guide.md) doc.
-- For Row Format Guide, see [row format guide](guide/row_format_guide.md) doc.
-- For Scala Guide, see [scala guide](guide/scala_guide.md) doc.
+- For xlang serialization, see the [xlang guide](guide/xlang/index.md).
+- For Java serialization, see the [Java guide](guide/java/index.md).
+- For row format, see the [row format spec](specification/row_format_spec.md).
+- For Scala serialization, see the [Scala guide](guide/scala/index.md).
 - For using Apache Fory™ with GraalVM native image, see [graalvm support](guide/java/graalvm-support.md) doc.
 
 ## Fory IDL Schema
@@ -15,7 +15,7 @@ Define cross-language data structures with Fory IDL and generate native code for
 - [Type System](compiler/schema-idl.md#type-system) - Primitive types, collections, and mappings
 - [Compiler Guide](compiler/compiler-guide.md) - CLI usage and build integration
 - [Generated Code](compiler/generated-code.md) - Output format for each language
-- [Protocol Buffers vs Fory IDL](compiler/protobuf-idl.md) - Feature comparison and migration
+- [Protocol Buffers vs Fory IDL](compiler/protobuf-idl.md) - Feature comparison and porting
 
 ## Serialization Format
 

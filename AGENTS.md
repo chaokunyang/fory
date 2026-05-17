@@ -61,6 +61,9 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - Do not replace existing C, C++, Cython, unsafe, or other low-level optimized paths with simpler high-level implementations just to make a refactor easier.
 - If a refactor accidentally changes logic or implementation strategy, revert that part and re-implement the refactor around the existing logic.
 - Use English only in code, comments, and documentation.
+- Do not use emoji in documentation, including headings, feature lists, status
+  tables, callouts, or READMEs. Use plain words such as "Supported" or
+  "Unsupported" instead.
 - After editing Markdown files outside `tasks/`, run `prettier --write <file>` on each changed Markdown file before finishing. Do not format Markdown under `tasks/`.
 - User guide docs must explain user-visible behavior, commands, and examples.
   Do not add implementation details, internal ownership rationale, build flags,

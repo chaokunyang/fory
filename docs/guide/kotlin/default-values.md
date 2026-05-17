@@ -1,6 +1,6 @@
 ---
 title: Default Values
-sidebar_position: 3
+sidebar_position: 4
 id: default_values
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Fory supports Kotlin data class default values during deserialization when using compatible mode. This feature enables forward/backward compatibility when data class schemas evolve.
+Fory supports Kotlin data class default values during native-mode deserialization when compatible mode is enabled. This feature enables forward/backward compatibility when data class schemas evolve.
 
 ## Overview
 
@@ -31,10 +31,12 @@ When a Kotlin data class has parameters with default values, Fory can:
 
 ## Usage
 
-This feature is automatically enabled when:
+This feature is available when:
 
-- Compatible mode is enabled (`withCompatible(true)`)
-- The runtime is built with `ForyKotlin.builder().withXlang(false)` or `Fory.builder().withXlang(false).withModule(ForyKotlin)`
+- Native mode is explicitly configured with compatible mode
+  (`withXlang(false).withCompatible(true)`)
+- The runtime is built through `ForyKotlin.builder()` or `Fory.builder().withModule(ForyKotlin)`
+  with native mode enabled
 - A field is missing from the serialized data but exists in the target class with a default value
 
 ## Example
@@ -130,4 +132,4 @@ val deserialized = fory.deserialize(serialized) as PersonV2
 ## Related Topics
 
 - [Schema Evolution](../java/schema-evolution.md) - Forward/backward compatibility in Java
-- [Fory Creation](fory-creation.md) - Setting up Fory with compatible mode
+- [Configuration](configuration.md) - Setting up Fory with compatible mode

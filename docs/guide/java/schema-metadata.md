@@ -1,7 +1,7 @@
 ---
-title: Field Configuration
-sidebar_position: 5
-id: field_configuration
+title: Schema Metadata
+sidebar_position: 7
+id: schema_metadata
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -551,6 +551,68 @@ public class Data {
 }
 ```
 
+## Enum Metadata
+
+Java enums are serialized by numeric tag in xlang mode. The default tag is the declaration ordinal.
+When an enum needs stable ids that do not depend on declaration order, annotate exactly one id
+source with `@ForyEnumId`, or annotate every enum constant with explicit tag values.
+
+```java
+import org.apache.fory.annotation.ForyEnumId;
+
+enum Status {
+    Unknown(10),
+    Running(20),
+    Finished(30);
+
+    private final int id;
+
+    Status(int id) {
+        this.id = id;
+    }
+
+    @ForyEnumId
+    public int getId() {
+        return id;
+    }
+}
+```
+
+Java also supports annotating one enum instance field with `@ForyEnumId`, or annotating every enum
+constant directly, such as `@ForyEnumId(10) Unknown`.
+
+`@ForyEnumId` supports exactly three configuration styles:
+
+1. Annotate one enum instance field and store the numeric id there.
+2. Annotate one zero-argument public instance method such as `getId()`.
+3. Annotate every enum constant directly with an explicit value such as `@ForyEnumId(10) Unknown`.
+
+Validation rules:
+
+1. Use exactly one of those three styles for a given enum.
+2. Field and method annotations must leave `value()` at its default `-1`.
+3. Enum-constant annotations must appear on every constant once any constant uses `@ForyEnumId`.
+4. All ids must be non-negative, unique, and fit in Java `int`.
+
+Lookup behavior:
+
+1. Without `@ForyEnumId`, Fory writes the declaration ordinal.
+2. With `@ForyEnumId`, Fory writes the configured stable numeric tag instead.
+3. Small dense tags use an array lookup internally; sparse larger tags fall back to a map.
+
+Use `serializeEnumByName(true)` only for Java native-mode peers that should match enum constants by
+name instead of numeric tag:
+
+```java
+Fory fory = Fory.builder()
+    .withXlang(false)
+    .serializeEnumByName(true)
+    .build();
+```
+
+This runtime option does not change xlang enum encoding; xlang uses numeric enum tags. Prefer
+`@ForyEnumId` for cross-language payloads or any schema where numeric wire ids must stay stable.
+
 ## Native Mode vs Xlang Mode
 
 Field configuration behaves differently depending on the serialization mode:
@@ -651,6 +713,5 @@ public class User {
 
 - [Basic Serialization](basic-serialization.md) - Getting started with Fory serialization
 - [Configuration](configuration.md) - Runtime builder options
-- [Enum Configuration](enum-configuration.md) - `@ForyEnumId` and enum name/tag behavior
 - [Schema Evolution](schema-evolution.md) - Compatible mode and schema evolution
 - [Cross-Language](cross-language.md) - Interoperability with Python, Rust, C++, Go

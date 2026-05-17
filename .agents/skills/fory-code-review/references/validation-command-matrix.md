@@ -18,7 +18,7 @@ Canonical runtime-specific rules now live under `../../../languages/*.md` and `.
   - `mvn -T16 test`
   - targeted: `mvn -T16 test -Dtest=<Class>#<method>`
 
-## C#
+## C\#
 
 - Build/test from `csharp/`
 - Typical checks:

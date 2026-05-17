@@ -455,8 +455,8 @@ def test_timestamp_serializer(xlang):
 def test_ref_tracking(xlang):
     fory = Fory(xlang=xlang, ref=True)
 
-    # Circular reference test - only works for Python language mode
-    # XLANG mode doesn't support true circular references during deserialization
+    # Circular reference test - only works for Python native mode.
+    # Xlang mode doesn't support true circular references during deserialization
     # because the object must be registered after it's fully constructed
     if not xlang:
         simple_list = []
@@ -477,7 +477,7 @@ def test_ref_tracking(xlang):
         "dict2_0": dict2,
         "dict2_1": dict2,
     }
-    # Circular reference in dict3 - only works for Python language mode
+    # Circular reference in dict3 - only works for Python native mode
     if not xlang:
         dict3["dict3_0"] = dict3
         dict3["dict3_1"] = dict3

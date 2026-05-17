@@ -1,6 +1,6 @@
 ---
 title: Type Registration
-sidebar_position: 3
+sidebar_position: 4
 id: type_registration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -52,9 +52,7 @@ let decoded: User = fory.deserialize(&bytes)?;
 For cross-language compatibility, register with namespace and type name:
 
 ```rust
-let mut fory = Fory::builder()
-    .compatible(true)
-    .xlang(true).build();
+let mut fory = Fory::builder().xlang(true).build();
 
 // Register with symbolic type identity
 fory.register_by_name::<MyStruct>("com.example", "MyStruct")?;
@@ -122,5 +120,5 @@ let handles: Vec<_> = (0..4)
 ## Related Topics
 
 - [Configuration](configuration.md) - Fory builder options
-- [Cross-Language](cross-language.md) - XLANG mode registration
+- [Cross-Language](cross-language.md) - xlang mode registration
 - [Custom Serializers](custom-serializers.md) - Custom serialization

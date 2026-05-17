@@ -114,7 +114,7 @@ struct Point {
 
 ```cpp
 auto fory = fory::serialization::Fory::builder()
-                .xlang(true)      // Enable cross-language serialization
+                .xlang(true)
                 .track_ref(false) // Disable reference tracking
                 .build();
 

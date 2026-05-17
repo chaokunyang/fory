@@ -35,13 +35,13 @@
 //!
 //! **Key differentiators:**
 //!
-//! - **🔥 Blazingly Fast**: Zero-copy deserialization and optimized binary protocols
-//! - **🌍 Cross-Language**: Seamlessly serialize/deserialize data across Java, Python, C++, Go, JavaScript, and Rust
-//! - **🎯 Type-Safe**: Compile-time type checking with derive macros
-//! - **🔄 Circular References**: Automatic tracking of shared and circular references with `Rc`/`Arc` and weak pointers
-//! - **🧬 Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
-//! - **📦 Schema Evolution**: Compatible mode for independent schema changes
-//! - **⚡ Two Formats**: Object graph serialization and zero-copy row-based format
+//! - **Fast**: Zero-copy deserialization and optimized binary protocols
+//! - **Cross-Language**: Seamlessly serialize/deserialize data across Java, Python, C++, Go, JavaScript, and Rust
+//! - **Type-Safe**: Compile-time type checking with derive macros
+//! - **Circular References**: Automatic tracking of shared and circular references with `Rc`/`Arc` and weak pointers
+//! - **Polymorphic**: Serialize trait objects with `Box<dyn Trait>`, `Rc<dyn Trait>`, and `Arc<dyn Trait>`
+//! - **Schema Evolution**: Compatible mode for independent schema changes
+//! - **Two Formats**: Object graph serialization and zero-copy row-based format
 //!
 //! ## Quick Start
 //!
@@ -67,8 +67,8 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::builder().xlang(false).build();
-//! fory.register::<User>(1)?;
+//! let mut fory = Fory::builder().xlang(true).build();
+//! fory.register_by_name::<User>("example", "User")?;
 //!
 //! let user = User {
 //!     name: "Alice".to_string(),
@@ -139,9 +139,9 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory = Fory::builder().xlang(false).build();
-//! fory.register::<Address>(100);
-//! fory.register::<Person>(200);
+//! let mut fory = Fory::builder().xlang(true).build();
+//! fory.register_by_name::<Address>("example", "Address")?;
+//! fory.register_by_name::<Person>("example", "Person")?;
 //!
 //! let person = Person {
 //!     name: "John Doe".to_string(),
@@ -164,10 +164,12 @@
 //! # }
 //! ```
 //!
-//! ### 2. Shared and Circular References
+//! ### 2. Native-Mode Shared and Circular References
 //!
 //! **What it does:** Automatically tracks and preserves reference identity for shared
 //! objects using `Rc<T>` and `Arc<T>`, and handles circular references using weak pointers.
+//! The examples in this section use native mode because `Rc`, `Arc`, and weak-pointer
+//! identity are Rust object-graph features.
 //!
 //! **Why it matters:** Graph-like data structures (trees, linked lists, object-relational
 //! models) are common in real applications but notoriously difficult to serialize. Most
@@ -252,7 +254,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).track_ref(true).build();
-//! fory.register::<Node>(2000);
+//! fory.register::<Node>(2000)?;
 //!
 //! let parent = Rc::new(RefCell::new(Node {
 //!     value: 1,
@@ -294,7 +296,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).track_ref(true).build();
-//! fory.register::<Node>(6000);
+//! fory.register::<Node>(6000)?;
 //!
 //! let parent = Arc::new(Mutex::new(Node {
 //!     val: 10,
@@ -318,10 +320,12 @@
 //! # }
 //! ```
 //!
-//! ### 3. Trait Object Serialization
+//! ### 3. Native-Mode Trait Object Serialization
 //!
 //! **What it does:** Enables polymorphic serialization through trait objects, supporting
 //! dynamic dispatch and type flexibility.
+//! The examples in this section use native mode because Rust trait objects and `dyn Any`
+//! dispatch are Rust runtime features.
 //!
 //! **Why it matters:** Rust's trait system is powerful for abstraction, but serializing
 //! `Box<dyn Trait>` is notoriously difficult. This feature is essential for plugin systems,
@@ -375,9 +379,9 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).compatible(true).build();
-//! fory.register::<Dog>(100);
-//! fory.register::<Cat>(101);
-//! fory.register::<Zoo>(102);
+//! fory.register::<Dog>(100)?;
+//! fory.register::<Cat>(101)?;
+//! fory.register::<Zoo>(102)?;
 //!
 //! let zoo = Zoo {
 //!     star_animal: Box::new(Dog {
@@ -421,7 +425,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).build();
-//! fory.register::<Dog>(100);
+//! fory.register::<Dog>(100)?;
 //!
 //! let dog: Rc<dyn Any> = Rc::new(Dog {
 //!     name: "Rex".to_string()
@@ -450,7 +454,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).build();
-//! fory.register::<Cat>(101);
+//! fory.register::<Cat>(101)?;
 //!
 //! let cat: Arc<dyn Any> = Arc::new(Cat {
 //!     name: "Whiskers".to_string()
@@ -502,9 +506,9 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).compatible(true).build();
-//! fory.register::<Dog>(100);
-//! fory.register::<Cat>(101);
-//! fory.register::<AnimalShelter>(102);
+//! fory.register::<Dog>(100)?;
+//! fory.register::<Cat>(101)?;
+//! fory.register::<AnimalShelter>(102)?;
 //!
 //! let shelter = AnimalShelter {
 //!     animals_rc: vec![
@@ -556,7 +560,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).compatible(true).build();
-//! fory.register::<Dog>(100);
+//! fory.register::<Dog>(100)?;
 //!
 //! // For Rc<dyn Trait>
 //! let dog_rc: Rc<dyn Animal> = Rc::new(Dog { name: "Rex".to_string() });
@@ -630,11 +634,11 @@
 //! }
 //!
 //! # fn main() -> Result<(), Error> {
-//! let mut fory1 = Fory::builder().xlang(false).compatible(true).build();
-//! fory1.register::<PersonV1>(1);
+//! let mut fory1 = Fory::builder().xlang(true).compatible(true).build();
+//! fory1.register_by_name::<PersonV1>("example", "Person")?;
 //!
-//! let mut fory2 = Fory::builder().xlang(false).compatible(true).build();
-//! fory2.register::<PersonV2>(1);
+//! let mut fory2 = Fory::builder().xlang(true).compatible(true).build();
+//! fory2.register_by_name::<PersonV2>("example", "Person")?;
 //!
 //! let person_v1 = PersonV1 {
 //!     name: "Alice".to_string(),
@@ -652,7 +656,7 @@
 //! # }
 //! ```
 //!
-//! ### 5. Enum Support
+//! ### 5. Native-Mode Enum Support
 //!
 //! **What it does:** Comprehensive enum support with three variant types (unit, unnamed, named)
 //! and full schema evolution in Compatible mode.
@@ -756,7 +760,7 @@
 //! - Unnamed variant elements: add/remove elements (extras skipped, missing use defaults)
 //! - Variant type mismatches automatically use default value of current variant
 //!
-//! ### 6. Tuple Support
+//! ### 6. Native-Mode Tuple Support
 //!
 //! **What it does:** Supports tuples up to 22 elements with automatic heterogeneous type
 //! handling and schema evolution in compatible mode.
@@ -765,7 +769,7 @@
 //! useful for temporary groupings, function return values, and ad-hoc data structures.
 //!
 //! **Technical approach:** Each tuple size (1-22) has a specialized `Serializer` implementation.
-//! In non-compatible mode, elements are serialized sequentially without overhead. In compatible
+//! In schema-consistent mode, elements are serialized sequentially without overhead. In compatible
 //! mode, the tuple is serialized as a heterogeneous collection with type metadata for each element.
 //!
 //! **Features:**
@@ -797,7 +801,7 @@
 //! # }
 //! ```
 //!
-//! ### 7. Custom Serializers
+//! ### 7. Native-Mode Custom Serializers
 //!
 //! **What it does:** Allows manual implementation of the `Serializer` trait for types
 //! that don't support `#[derive(ForyStruct)]`.
@@ -856,7 +860,7 @@
 //!
 //! # fn main() -> Result<(), Error> {
 //! let mut fory = Fory::builder().xlang(false).build();
-//! fory.register_serializer::<CustomType>(100);
+//! fory.register_serializer::<CustomType>(100)?;
 //!
 //! let custom = CustomType {
 //!     value: 42,
@@ -1001,42 +1005,29 @@
 //! - `Rc<dyn Any>` - Runtime type dispatch without custom traits
 //! - `Arc<dyn Any>` - Thread-safe runtime type dispatch
 //!
-//! ## Serialization Modes
+//! ## Wire Modes And Schema Evolution
 //!
-//! Apache Fory™ supports two serialization modes to balance between performance
-//! and flexibility:
+//! Apache Fory™ Rust supports two wire modes:
 //!
-//! ### SchemaConsistent Mode (Default)
-//!
-//! **When to use:** Maximum performance when schemas are guaranteed to match.
-//!
-//! **Characteristics:**
-//! - Type declarations must match exactly between serialization and deserialization
-//! - Smaller payload size (no field names or metadata)
-//! - Faster serialization and deserialization
-//! - Suitable for monolithic applications or tightly coupled services
+//! - **Xlang mode** is selected with `.xlang(true)`. It is the default wire
+//!   mode and is used for cross-language payloads. When `compatible` is omitted,
+//!   xlang mode uses compatible schema evolution so independently deployed
+//!   peers can add, remove, or reorder fields.
+//! - **Native mode** is selected with `.xlang(false)`. Use it for Rust-only
+//!   payloads. When `compatible` is omitted, native mode uses
+//!   schema-consistent payloads for the smaller same-schema format.
 //!
 //! ```rust
 //! use fory::Fory;
 //!
-//! let fory = Fory::builder().xlang(false).build();
-//! ```
+//! // Xlang mode with compatible schema evolution.
+//! let xlang = Fory::builder().xlang(true).build();
 //!
-//! ### Compatible Mode
+//! // Native mode with schema-consistent payloads.
+//! let native = Fory::builder().xlang(false).build();
 //!
-//! **When to use:** Schema evolution in distributed systems or microservices.
-//!
-//! **Characteristics:**
-//! - Type declarations can differ between peers
-//! - Allows field additions, deletions, and reordering
-//! - Larger payload size (includes field names and metadata)
-//! - Slightly slower due to metadata processing
-//! - Essential for zero-downtime deployments
-//!
-//! ```rust
-//! use fory::Fory;
-//!
-//! let fory = Fory::builder().xlang(false).compatible(true).build();
+//! // Native mode with compatible schema evolution.
+//! let native_compatible = Fory::builder().xlang(false).compatible(true).build();
 //! ```
 //!
 //! ## Cross-Language Serialization
@@ -1053,9 +1044,7 @@
 //! use fory::Fory;
 //! use fory::{ForyEnum, ForyStruct, ForyUnion};
 //!
-//! let mut fory = Fory::builder()
-//!     .compatible(true)
-//!     .xlang(true).build();
+//! let mut fory = Fory::builder().xlang(true).build();
 //!
 //! #[derive(ForyStruct)]
 //! struct MyStruct {
@@ -1063,7 +1052,7 @@
 //!     field2: String,
 //! }
 //!
-//! fory.register_by_name::<MyStruct>("com.example", "MyStruct");
+//! fory.register_by_name::<MyStruct>("com.example", "MyStruct").unwrap();
 //! ```
 //!
 //! **Type registration strategies:**
@@ -1110,8 +1099,8 @@
 //! }
 //!
 //! fn process_data(bytes: &[u8]) -> Result<Data, Error> {
-//!     let mut fory = Fory::builder().xlang(false).build();
-//!     fory.register::<Data>(100);
+//!     let mut fory = Fory::builder().xlang(true).build();
+//!     fory.register_by_name::<Data>("example", "Data")?;
 //!
 //!     let data: Data = fory.deserialize(bytes)?;
 //!     Ok(data)
@@ -1136,8 +1125,8 @@
 //!     value: i32,
 //! }
 //!
-//! let mut fory = Fory::builder().xlang(false).build();
-//! fory.register::<Item>(1000).unwrap();
+//! let mut fory = Fory::builder().xlang(true).build();
+//! fory.register_by_name::<Item>("example", "Item").unwrap();
 //! let fory = Arc::new(fory);
 //! let handles: Vec<_> = (0..8)
 //!     .map(|i| {
@@ -1196,9 +1185,9 @@
 //!
 //! ## Documentation
 //!
-//! - **[Protocol Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec)** - Binary protocol details
-//! - **[Row Format Specification](https://fory.apache.org/docs/specification/fory_row_format_spec)** - Row format internals
-//! - **[Type Mapping](https://fory.apache.org/docs/guide/xlang_type_mapping)** - Cross-language type mappings
+//! - **[Protocol Specification](https://fory.apache.org/docs/specification/xlang_serialization_spec)** - Binary protocol details
+//! - **[Row Format Specification](https://fory.apache.org/docs/specification/row_format_spec)** - Row format internals
+//! - **[Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping)** - Cross-language type mappings
 //! - **[API Documentation](https://docs.rs/fory)** - Complete API reference
 //! - **[GitHub Repository](https://github.com/apache/fory)** - Source code and issue tracking
 

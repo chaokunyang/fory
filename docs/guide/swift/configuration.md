@@ -60,7 +60,7 @@ Enables shared/circular reference tracking for reference-trackable types.
 - `true`: Preserve object identity for class/reference graphs
 
 ```swift
-let fory = Fory(ref: true, compatible: true)
+let fory = Fory(ref: true)
 ```
 
 ### `compatible`
@@ -71,7 +71,7 @@ Enables compatible schema mode for evolution across versions.
 - `true`: Compatible mode (supports add/remove/reorder fields)
 
 ```swift
-let fory = Fory(ref: false, compatible: true)
+let fory = Fory()
 ```
 
 ### `checkClassVersion`
@@ -103,11 +103,11 @@ let fory = Fory(ref: false, compatible: false)
 ### Cross-language service payloads
 
 ```swift
-let fory = Fory(ref: false, compatible: true)
+let fory = Fory()
 ```
 
 ### Graph/object identity workloads
 
 ```swift
-let fory = Fory(ref: true, compatible: true)
+let fory = Fory(ref: true)
 ```

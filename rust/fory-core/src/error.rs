@@ -75,12 +75,12 @@ pub const fn should_panic_on_error() -> bool {
 /// ```rust
 /// use fory_core::error::Error;
 ///
-/// // ✅ CORRECT: Use static functions
+/// // CORRECT: Use static functions
 /// let err = Error::type_error("Expected string type");
 /// let err = Error::invalid_data(format!("Invalid value: {}", 42));
 /// let err = Error::type_mismatch(1, 2);
 ///
-/// // ❌ WRONG: Do not construct directly
+/// // WRONG: Do not construct directly
 /// // let err = Error::TypeError("Expected string type".into());
 /// // let err = Error::InvalidData(format!("Invalid value: {}", 42).into());
 /// ```

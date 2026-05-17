@@ -48,15 +48,24 @@ print(pyfory.ENABLE_FORY_CYTHON_SERIALIZATION)  # Should be True
 
 ```python
 # Use explicit type registration with consistent naming
-f = pyfory.Fory(xlang=True, compatible=True)
+f = pyfory.Fory(xlang=True)
 f.register(MyClass, typename="com.package.MyClass")  # Use same name in all languages
 ```
 
 ### Circular Reference Errors or Duplicate Data
 
+Registered xlang schema objects and Python native objects both require reference tracking when
+object identity or cycles matter:
+
 ```python
-# Enable reference tracking
-f = pyfory.Fory(xlang=False, ref=True)  # Required for circular references
+# Enable reference tracking for registered schema objects.
+f = pyfory.Fory(ref=True)
+```
+
+For arbitrary Python object graphs with circular references, use Python native mode:
+
+```python
+f = pyfory.Fory(xlang=False, ref=True, strict=False)
 
 # Example with circular reference
 class Node:
@@ -77,14 +86,14 @@ assert result.next.next is result  # Circular reference preserved
 ### Schema Evolution Not Working
 
 ```python
-# Enable compatible mode for schema evolution
-f = pyfory.Fory(xlang=True, compatible=True)
+# Keep your existing wire mode and enable compatible schema evolution.
+f = pyfory.Fory(compatible=True)
 
 # Version 1: Original class
 @dataclass
 class User:
     name: str
-    age: int
+    age: pyfory.Int32
 
 f.register(User, typename="User")
 data = f.dumps(User("Alice", 30))
@@ -93,7 +102,7 @@ data = f.dumps(User("Alice", 30))
 @dataclass
 class User:
     name: str
-    age: int
+    age: pyfory.Int32
     email: str = "unknown@example.com"  # New field with default
 
 # Can still deserialize old data
@@ -105,14 +114,14 @@ print(user.email)  # "unknown@example.com"
 
 ```python
 # Register all custom types before serialization
-f = pyfory.Fory(xlang=False, strict=True)
+f = pyfory.Fory(strict=True)
 
 # Must register before use
 f.register(MyClass, type_id=100)
 f.register(AnotherClass, type_id=101)
 
 # Or disable strict mode (NOT recommended for production)
-f = pyfory.Fory(xlang=False, strict=False)  # Use only in trusted environments
+f = pyfory.Fory(strict=False)  # Use only in trusted environments
 ```
 
 ## Debug Mode
@@ -138,7 +147,7 @@ Handle common serialization errors gracefully:
 import pyfory
 from pyfory.error import TypeUnregisteredError, TypeNotCompatibleError
 
-fory = pyfory.Fory(xlang=False, strict=True)
+fory = pyfory.Fory(strict=True)
 
 try:
     data = fory.dumps(my_object)

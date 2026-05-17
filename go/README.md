@@ -4,6 +4,11 @@ Fory is a blazingly fast multi-language serialization framework powered by just-
 
 For comprehensive documentation, see the [Fory Go Guide](https://fory.apache.org/docs/guide/go/).
 
+Fory Go defaults to xlang mode for cross-language payloads. Use native mode
+with `fory.WithXlang(false)` for Go-only traffic when you want Go struct,
+pointer, interface, and runtime-type behavior without portable xlang
+type-mapping constraints.
+
 ## Installation
 
 **Requirements**: Go 1.24 or later
@@ -29,8 +34,8 @@ type User struct {
 }
 
 func main() {
-    // Create a Fory instance
-    f := fory.New(fory.WithXlang(false))
+    // Create an xlang Fory instance.
+    f := fory.New(fory.WithXlang(true))
 
     // Register struct with a type ID
     if err := f.RegisterStruct(User{}, 1); err != nil {

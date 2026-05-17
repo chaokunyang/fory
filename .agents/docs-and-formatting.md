@@ -18,6 +18,9 @@ Load this file when changing documentation, public APIs, protocol specs, benchma
 - Update the relevant docs under `docs/` when important public APIs change.
 - Update `docs/specification/**` when protocol behavior changes.
 - Keep examples working and aligned with the current API and protocol behavior.
+- Do not use emoji in documentation, including headings, feature lists, status
+  tables, callouts, or READMEs. Use plain words such as "Supported" or
+  "Unsupported" instead.
 - Provide or update working examples when adding new features or materially changing workflows.
 - Add migration guidance when a change is breaking or materially changes workflow.
 - `docs/DEVELOPMENT.md` plus updates under `docs/guide/` and `docs/benchmarks/` are synced to `apache/fory-site`; other website content should be changed there instead of this repo.

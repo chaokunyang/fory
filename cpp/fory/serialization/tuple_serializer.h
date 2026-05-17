@@ -65,7 +65,7 @@ using tuple_first_type_t = typename tuple_first_type<Tuple>::type;
 // Tuple Serialization Helpers
 // ============================================================================
 
-/// write tuple elements directly (non-xlang mode)
+/// write tuple elements directly (native mode)
 template <typename Tuple, size_t... Is>
 inline void write_tuple_elements_direct(const Tuple &tuple, WriteContext &ctx,
                                         std::index_sequence<Is...>) {
@@ -121,7 +121,7 @@ inline void write_tuple_elements_homogeneous(const Tuple &tuple,
       ...);
 }
 
-/// Read tuple elements directly (non-xlang mode)
+/// Read tuple elements directly (native mode)
 template <typename Tuple, size_t... Is>
 inline Tuple read_tuple_elements_direct(ReadContext &ctx,
                                         std::index_sequence<Is...>) {

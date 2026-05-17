@@ -32,7 +32,7 @@ namespace fory {
 namespace serialization {
 
 // ============================================================================
-// Unsigned Integer Type Serializers (xlang=false mode only)
+// Unsigned Integer Type Serializers (native mode only)
 // These serializers use distinct TypeIds for unsigned types.
 // Unsigned types are NOT supported in xlang mode per the xlang spec.
 // ============================================================================

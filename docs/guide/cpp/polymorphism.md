@@ -1,6 +1,6 @@
 ---
 title: Polymorphic Serialization
-sidebar_position: 5
+sidebar_position: 7
 id: polymorphism
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -167,7 +167,7 @@ FORY_STRUCT(Pet, animal1, (animal2, fory::F().dynamic(true)),
 - Performance is critical and you don't need subtype support
 - Working with monomorphic data despite having a polymorphic base class
 
-### Field Configuration
+### Schema Metadata
 
 Configure field metadata directly in `FORY_STRUCT`:
 
@@ -182,7 +182,7 @@ FORY_STRUCT(Zoo, (star, fory::F(0)),
             (mascot, fory::F(2).dynamic(false)));
 ```
 
-See [Field Configuration](field-configuration.md) for complete details on
+See [Schema Metadata](schema-metadata.md) for complete details on
 `nullable()`, `ref()`, and other field-level options.
 
 ## std::unique_ptr Polymorphism
@@ -320,7 +320,7 @@ struct Pet {
 FORY_STRUCT(Pet, primary, (optional, fory::F().nullable()));
 ```
 
-See [Field Configuration](field-configuration.md) for more details.
+See [Schema Metadata](schema-metadata.md) for more details.
 
 ## Combining Polymorphism with Other Features
 
@@ -364,7 +364,8 @@ auto decoded = fory.deserialize<std::shared_ptr<GraphNode>>(bytes).value();
 Use compatible mode for schema evolution with polymorphic types:
 
 ```cpp
-auto fory = Fory::builder().xlang(true)
+auto fory = Fory::builder()
+    .xlang(true)
     .compatible(true)  // Enable schema evolution
     .track_ref(true)
     .build();
@@ -473,7 +474,7 @@ if (!decoded_result.ok()) {
 ## Related Topics
 
 - [Type Registration](type-registration.md) - Registering types for serialization
-- [Field Configuration](field-configuration.md) - Field-level metadata and options
+- [Schema Metadata](schema-metadata.md) - Field-level metadata and options
 - [Supported Types](supported-types.md) - Smart pointers and collections
 - [Configuration](configuration.md) - `max_dyn_depth` and other settings
 - [Basic Serialization](basic-serialization.md) - Core serialization concepts

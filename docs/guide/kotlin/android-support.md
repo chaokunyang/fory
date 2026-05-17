@@ -1,6 +1,6 @@
 ---
 title: Android Support
-sidebar_position: 5
+sidebar_position: 6
 id: android_support
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -55,18 +55,18 @@ rules must be packaged with that library artifact.
 
 ## Runtime Setup
 
-Create the runtime with `ForyKotlin.builder().withXlang(false)`, then register application
-classes through the Kotlin `register<T>` extension or the normal Fory Java
-registration APIs.
+Create the runtime with `ForyKotlin.builder().withXlang(true)`, then register application classes
+through the Kotlin `register<T>` extension or the normal Fory Java registration
+APIs.
 
 ```kotlin
 import org.apache.fory.kotlin.ForyKotlin
 import org.apache.fory.kotlin.register
 
 val fory = ForyKotlin.builder()
-  .withXlang(true)
-  .requireClassRegistration(true)
-  .build()
+    .withXlang(true)
+    .requireClassRegistration(true)
+    .build()
 
 fory.register<User>("example", "User")
 ```

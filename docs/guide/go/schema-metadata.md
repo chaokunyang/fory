@@ -1,7 +1,7 @@
 ---
-title: Field Configuration
-sidebar_position: 60
-id: struct_tags
+title: Schema Metadata
+sidebar_position: 30
+id: schema_metadata
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -75,7 +75,7 @@ The `Password` field will not be included in serialized output and will remain a
 
 ### Nullable
 
-Use `nullable` to control whether null flags are written for pointer fields:
+Use `nullable` to control whether null flags are written for pointer, slice, map, or interface fields:
 
 ```go
 type Record struct {
@@ -89,9 +89,10 @@ type Record struct {
 
 **Notes**:
 
-- Only applies to pointer, slice, and map fields
+- Only applies to pointer, slice, map, and interface fields
 - When `nullable=false`, serializing a nil value will cause an error
-- Default is `false` (no null flag written)
+- Xlang mode defaults top-level struct fields to nullable only for pointer and `optional` carrier
+  fields. Native mode defaults pointer, slice, map, and interface fields to nullable.
 
 ### Reference Tracking
 
@@ -295,7 +296,7 @@ type BadStruct struct {
     Field int `fory:"invalid=option=format"`
 }
 
-f := fory.New(fory.WithXlang(false))
+f := fory.New(fory.WithXlang(true))
 err := f.RegisterStruct(BadStruct{}, 1)
 // Error: ErrKindInvalidTag
 ```
@@ -311,7 +312,8 @@ Field configuration behaves differently depending on the serialization mode:
 
 **Xlang Mode**:
 
-- **Nullable**: Only pointer types are nullable by default (slices and maps are NOT nullable)
+- **Nullable**: Pointer and `optional.Optional[T]` fields are nullable by default (slices,
+  maps, and interfaces are NOT nullable unless tagged)
 - **Ref tracking**: Disabled by default (`ref` tag not set)
 
 You **need to configure fields** when:
@@ -332,11 +334,11 @@ type User struct {
 
 ### Default Values Summary
 
-| Option     | Default | How to Enable            |
-| ---------- | ------- | ------------------------ |
-| `nullable` | `false` | Use pointer types (`*T`) |
-| `ref`      | `false` | Add `fory:"ref"` tag     |
-| `id`       | omitted | Add `fory:"id=N"` tag    |
+| Option     | Default                                                                                                           | How to Enable                                    |
+| ---------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `nullable` | Pointer and `optional.Optional[T]` fields in xlang mode; pointer, slice, map, and interface fields in native mode | Use `fory:"nullable"` or `fory:"nullable=false"` |
+| `ref`      | `false`                                                                                                           | Add `fory:"ref"` tag                             |
+| `id`       | omitted                                                                                                           | Add `fory:"id=N"` tag                            |
 
 ## Best Practices
 

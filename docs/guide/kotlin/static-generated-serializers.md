@@ -1,6 +1,6 @@
 ---
 title: Static Generated Serializers
-sidebar_position: 4
+sidebar_position: 5
 id: static_generated_serializers
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -249,9 +249,9 @@ import org.apache.fory.kotlin.ForyKotlin
 import org.apache.fory.kotlin.register
 
 val fory = ForyKotlin.builder()
-  .withXlang(true)
-  .requireClassRegistration(true)
-  .build()
+    .withXlang(true)
+    .requireClassRegistration(true)
+    .build()
 
 fory.register<User>("example", "User")
 ```

@@ -1,6 +1,6 @@
 ---
 title: Custom Serializers
-sidebar_position: 4
+sidebar_position: 12
 id: custom_serializers
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -23,7 +23,7 @@ Implement custom serialization logic for specialized types.
 
 ## Implementing Custom Serializers
 
-Implement `write/read` once for both Python and cross-language modes:
+Implement `write/read` once for both Python native and xlang modes:
 
 ```python
 import pyfory
@@ -115,7 +115,7 @@ value = buffer.read_bool()
 
 - External types from other packages
 - Types with special serialization requirements
-- Legacy data format compatibility
+- Existing data format compatibility
 - Performance-critical custom encoding
 - Types that don't work well with automatic serialization
 

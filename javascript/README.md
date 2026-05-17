@@ -101,10 +101,10 @@ Register the same `example.message` type on the other side using the peer runtim
 
 ## Schema Evolution
 
-Enable compatible mode for independent service deployments:
+Compatible mode is enabled by default for independent service deployments:
 
 ```ts
-const fory = new Fory({ compatible: true });
+const fory = new Fory();
 ```
 
 Readers can skip unknown fields and tolerate missing ones, supporting rolling upgrades and schema changes across services.

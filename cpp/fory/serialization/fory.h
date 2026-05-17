@@ -61,17 +61,11 @@ class ThreadSafeFory;
 ///
 /// Example:
 /// ```cpp
-/// // Single-threaded Fory (fastest, not thread-safe)
-/// auto fory = Fory::builder()
-///     .xlang(true)
-///     .compatible(true)
-///     .build();
+/// // Single-threaded xlang Fory (not thread-safe)
+/// auto fory = Fory::builder().xlang(true).build();
 ///
 /// // Thread-safe Fory (uses context pools)
-/// auto fory = Fory::builder()
-///     .xlang(true)
-///     .compatible(true)
-///     .build_thread_safe();
+/// auto fory = Fory::builder().xlang(true).build_thread_safe();
 /// ```
 class ForyBuilder {
 public:
@@ -502,7 +496,7 @@ protected:
 ///
 /// Example:
 /// ```cpp
-/// auto fory = Fory::builder().xlang(true).compatible(true).build();
+/// auto fory = Fory::builder().xlang(true).build();
 /// fory.register_struct<MyStruct>(1);
 ///
 /// MyStruct obj{...};
@@ -893,10 +887,7 @@ private:
 ///
 /// Example:
 /// ```cpp
-/// auto fory = Fory::builder()
-///                 .xlang(true)
-///                 .compatible(true)
-///                 .build_thread_safe();
+/// auto fory = Fory::builder().xlang(true).build_thread_safe();
 /// fory.register_struct<MyStruct>(1);
 ///
 /// // Can be used from multiple threads safely

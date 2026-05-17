@@ -60,7 +60,7 @@ enum class ErrorCode : char {
 /// ## Pattern 1: Static Factory Functions (General Use)
 ///
 /// ```cpp
-/// // ✅ CORRECT: Use static factory functions
+/// // CORRECT: Use static factory functions
 /// auto err = Error::type_error("Expected string type");
 /// auto err = Error::invalid_data("Invalid value: " + std::to_string(42));
 /// auto err = Error::type_mismatch(1, 2);

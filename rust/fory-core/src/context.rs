@@ -197,7 +197,7 @@ impl<'a> WriteContext<'a> {
         self.compress_string
     }
 
-    /// Check if cross-language mode is enabled
+    /// Check if xlang mode is enabled
     #[inline(always)]
     pub fn is_xlang(&self) -> bool {
         self.xlang
@@ -416,7 +416,7 @@ impl<'a> ReadContext<'a> {
         self.share_meta
     }
 
-    /// Check if cross-language mode is enabled
+    /// Check if xlang mode is enabled
     #[inline(always)]
     pub fn is_xlang(&self) -> bool {
         self.xlang

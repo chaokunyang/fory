@@ -4,7 +4,7 @@
 
 **Apache Fory™** is a blazing fast multi-language serialization framework powered by **JIT compilation** and **zero-copy** techniques, providing up to **ultra-fast performance** while maintaining ease of use and type safety.
 
-The C++ implementation provides high-performance serialization with compile-time type safety through template metaprogramming and zero-copy row format for analytics workloads.
+The C++ implementation provides high-performance serialization with compile-time type safety through template metaprogramming and zero-copy row format for analytics workloads. It defaults to xlang mode for cross-language payloads; use native mode with `.xlang(false)` for C++-only traffic when you want the C++ runtime type system without portable xlang type-mapping constraints.
 
 ## Why Apache Fory™ C++?
 
@@ -45,20 +45,17 @@ struct Person {
 };
 
 int main() {
-  // Create Fory instance
-  auto fory = fory::ForyBuilder()
-      .xlang(true).compatible(true)
-      .track_ref(true)
-      .build();
+  // Create an xlang Fory instance.
+  auto fory = fory::serialization::Fory::builder().xlang(true).build();
 
   // Register type
-  fory->register_struct<Person>(1);
+  fory.register_struct<Person>(1);
 
   // Create object
   Person person{"Alice", 30, "alice@example.com"};
 
   // Serialize
-  auto result = fory->serialize(person);
+  auto result = fory.serialize(person);
   if (!result.ok()) {
     std::cerr << "Serialization failed: " << result.error().message() << std::endl;
     return 1;
@@ -66,7 +63,7 @@ int main() {
   std::vector<uint8_t> bytes = std::move(result.value());
 
   // Deserialize
-  auto decoded = fory->deserialize<Person>(bytes);
+  auto decoded = fory.deserialize<Person>(bytes);
   if (!decoded.ok()) {
     std::cerr << "Deserialization failed: " << decoded.error().message() << std::endl;
     return 1;
@@ -115,9 +112,9 @@ public:
   FORY_STRUCT(Person, name, age, address, hobbies, metadata);
 };
 
-auto fory = fory::ForyBuilder().xlang(true).build();
-fory->register_struct<Address>(100);
-fory->register_struct<Person>(200);
+auto fory = fory::serialization::Fory::builder().xlang(true).build();
+fory.register_struct<Address>(100);
+fory.register_struct<Person>(200);
 
 Person person{
     "John Doe",
@@ -127,8 +124,8 @@ Person person{
     {{"role", "developer"}}
 };
 
-auto bytes = fory->serialize(person).value();
-auto decoded = fory->deserialize<Person>(bytes).value();
+auto bytes = fory.serialize(person).value();
+auto decoded = fory.deserialize<Person>(bytes).value();
 ```
 
 ### 1.1 External/Third-Party Types
@@ -146,8 +143,8 @@ struct Foo {
 FORY_STRUCT(Foo, id, name);
 } // namespace thirdparty
 
-auto fory = fory::ForyBuilder().xlang(true).build();
-fory->register_struct<thirdparty::Foo>(1);
+auto fory = fory::serialization::Fory::builder().xlang(true).build();
+fory.register_struct<thirdparty::Foo>(1);
 ```
 
 ### 1.2 Inherited Fields
@@ -173,7 +170,8 @@ struct Derived : Base {
 Apache Fory™ automatically tracks and preserves reference identity for shared objects using `std::shared_ptr<T>`. When the same object is referenced multiple times, Fory serializes it only once and uses reference IDs for subsequent occurrences.
 
 ```cpp
-auto fory = fory::ForyBuilder().xlang(true)
+auto fory = fory::serialization::Fory::builder()
+    .xlang(true)
     .track_ref(true)
     .build();
 
@@ -184,8 +182,8 @@ auto shared = std::make_shared<std::string>("shared_value");
 std::vector<std::shared_ptr<std::string>> data = {shared, shared, shared};
 
 // The shared value is serialized only once
-auto bytes = fory->serialize(data).value();
-auto decoded = fory->deserialize<std::vector<std::shared_ptr<std::string>>>(bytes).value();
+auto bytes = fory.serialize(data).value();
+auto decoded = fory.deserialize<std::vector<std::shared_ptr<std::string>>>(bytes).value();
 
 // Verify reference identity is preserved
 assert(decoded[0].get() == decoded[1].get());
@@ -194,7 +192,7 @@ assert(decoded[1].get() == decoded[2].get());
 
 ### 3. Schema Evolution
 
-Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions.
+Apache Fory™ supports schema evolution in **Compatible mode**, allowing serialization and deserialization peers to have different type definitions. Xlang mode uses compatible schema evolution by default; in native mode, add `.xlang(false).compatible(true)` when C++-only payloads need schema evolution.
 
 ```cpp
 // Version 1
@@ -213,21 +211,17 @@ struct PersonV2 {
   FORY_STRUCT(PersonV2, name, age, phone);
 };
 
-auto fory1 = fory::ForyBuilder().xlang(true)
-    .compatible(true)
-    .build();
-fory1->register_struct<PersonV1>(1);
+auto fory1 = fory::serialization::Fory::builder().xlang(true).build();
+fory1.register_struct<PersonV1>(1);
 
-auto fory2 = fory::ForyBuilder().xlang(true)
-    .compatible(true)
-    .build();
-fory2->register_struct<PersonV2>(1);
+auto fory2 = fory::serialization::Fory::builder().xlang(true).build();
+fory2.register_struct<PersonV2>(1);
 
 PersonV1 v1{"Alice", 30, "123 Main St"};
-auto bytes = fory1->serialize(v1).value();
+auto bytes = fory1.serialize(v1).value();
 
 // Deserialize with V2 - missing fields get default values
-auto v2 = fory2->deserialize<PersonV2>(bytes).value();
+auto v2 = fory2.deserialize<PersonV2>(bytes).value();
 assert(v2.name == "Alice");
 assert(v2.phone == std::nullopt);
 ```
@@ -241,14 +235,14 @@ Apache Fory™ supports enum serialization with automatic ordinal mapping:
 enum class Color { Red, Green, Blue };
 
 // Non-continuous enum - needs FORY_ENUM
-enum class LegacyStatus { Active = 1, Inactive = 5, Pending = 10 };
-FORY_ENUM(LegacyStatus, Active, Inactive, Pending);
+enum class SparseStatus { Active = 1, Inactive = 5, Pending = 10 };
+FORY_ENUM(SparseStatus, Active, Inactive, Pending);
 // FORY_ENUM must be defined at namespace scope.
 
 struct Item {
   std::string name;
   Color color;
-  LegacyStatus status;
+  SparseStatus status;
   FORY_STRUCT(Item, name, color, status);
 };
 ```
@@ -267,7 +261,7 @@ struct Config {
 };
 
 Config config{"timeout", 30};
-auto bytes = fory->serialize(config).value();
+auto bytes = fory.serialize(config).value();
 ```
 
 ### 6. Row-Based Serialization
@@ -306,14 +300,10 @@ assert(row.get_bool(4) == true);              // is_active
 Apache Fory™ supports seamless data exchange across multiple languages:
 
 ```cpp
-// Enable cross-language mode
-auto fory = fory::ForyBuilder()
-    .xlang(true)
-    .compatible(true)
-    .build();
+auto fory = fory::serialization::Fory::builder().xlang(true).build();
 
 // Register types with consistent IDs across languages
-fory->register_struct<MyStruct>(1);
+fory.register_struct<MyStruct>(1);
 ```
 
 See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_type_mapping) for type mapping across languages.
@@ -322,10 +312,10 @@ See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_typ
 
 ```cpp
 // Single-threaded (fastest performance)
-auto fory = fory::ForyBuilder().xlang(true).build();
+auto fory = fory::serialization::Fory::builder().xlang(true).build();
 
 // Thread-safe with internal Fory pool
-auto fory = fory::ForyBuilder().xlang(true).build_thread_safe();
+auto fory = fory::serialization::Fory::builder().xlang(true).build_thread_safe();
 ```
 
 ## Architecture
@@ -406,7 +396,7 @@ bash ci/format.sh --cpp
 ## Documentation
 
 - **[User Guide](https://fory.apache.org/docs/guide/cpp)** - Comprehensive user documentation
-- **[Protocol Specification](https://fory.apache.org/docs/specification/fory_xlang_serialization_spec)** - Serialization protocol details
+- **[Protocol Specification](https://fory.apache.org/docs/specification/xlang_serialization_spec)** - Serialization protocol details
 - **[Type Mapping](https://fory.apache.org/docs/specification/xlang_type_mapping)** - Cross-language type mappings
 - **[Source](https://github.com/apache/fory/tree/main/docs/guide/cpp)** - Documentation source
 

@@ -84,15 +84,16 @@ class Fory:
     High-performance cross-language serialization framework.
 
     Fory provides blazingly-fast serialization for Python objects with support for
-    both Python-native mode and cross-language mode. It handles complex object graphs,
-    reference tracking, and circular references automatically.
+    both Python native mode and xlang mode. Xlang mode handles registered schema
+    objects and cross-language reference metadata; Python native mode handles the
+    broader Python object graph surface, including circular Python objects.
 
-    In Python-native mode (xlang=False), Fory can serialize all Python objects
+    In Python native mode (xlang=False), Fory can serialize all Python objects
     including dataclasses, classes with custom serialization methods, and local
     functions/classes, making it a drop-in replacement for pickle.
 
-    In cross-language mode (xlang=True, compatible=True), Fory serializes objects in a format that
-    can be deserialized by other Fory-supported languages (Java, Go, Rust, C++, etc).
+    In xlang mode, the default, Fory serializes objects in a format that can be
+    deserialized by other Fory-supported languages (Java, Go, Rust, C++, etc.).
 
     Examples:
         >>> import pyfory
@@ -103,16 +104,10 @@ class Fory:
         ...     name: str
         ...     age: pyfory.Int32
         >>>
-        >>> # Python-native mode
-        >>> fory = pyfory.Fory(xlang=False)
-        >>> fory.register(Person)
+        >>> fory = pyfory.Fory(xlang=True)
+        >>> fory.register(Person, typename="example.Person")
         >>> data = fory.serialize(Person("Alice", 30))
         >>> person = fory.deserialize(data)
-        >>>
-        >>> # Cross-language mode
-        >>> fory_xlang = pyfory.Fory(xlang=True, compatible=True)
-        >>> fory_xlang.register(Person)
-        >>> data = fory_xlang.serialize(Person("Bob", 25))
 
     See Also:
         ThreadSafeFory: Thread-safe wrapper for concurrent usage
@@ -152,15 +147,15 @@ class Fory:
         Initialize a Fory serialization instance.
 
         Args:
-            xlang: Enable cross-language serialization mode. When False, uses
-                Python-native mode supporting all Python objects (dataclasses, __reduce__,
+            xlang: Enable xlang mode. When False, uses
+                Python native mode supporting all Python objects (dataclasses, __reduce__,
                 local functions/classes). With ref=True and strict=False, serves as a
-                drop-in replacement for pickle. When True, uses cross-language format
+                drop-in replacement for pickle. When True, uses the xlang wire format
                 compatible with other Fory languages (Java, Go, Rust, etc), but Python-
                 specific features like functions and __reduce__ methods are not supported.
 
-            ref: Enable reference tracking for shared and circular references. When enabled,
-                duplicate objects are stored once and circular references are supported.
+            ref: Enable reference tracking for shared references and Python native-mode
+                circular references. When enabled, duplicate objects are stored once.
                 Disabled by default for better performance.
 
             strict: Require type registration before serialization (default: True). When
@@ -171,9 +166,10 @@ class Fory:
                 are allowed. We are not responsible for security risks when this option
                 is disabled without proper policy controls.
 
-            compatible: Enable schema evolution for cross-language serialization. Defaults
-                to True when xlang=True and False otherwise. When enabled, supports
-                forward/backward compatibility for dataclass field additions and removals.
+            compatible: Enable schema evolution. When omitted, xlang mode defaults to
+                compatible mode and Python native mode defaults to schema-consistent mode.
+                When enabled, supports forward/backward compatibility for dataclass field
+                additions and removals.
 
             max_depth: Maximum nesting depth for deserialization (default: 50). Raises
                 an exception if exceeded to prevent malicious deeply-nested data attacks.
@@ -197,11 +193,11 @@ class Fory:
                 payloads that claim extremely large binary sizes.
 
         Example:
-            >>> # Python-native mode with reference tracking
+            >>> # Python native mode with reference tracking
             >>> fory = Fory(xlang=False, ref=True)
             >>>
-            >>> # Cross-language mode with schema evolution
-            >>> fory = Fory(xlang=True, compatible=True)
+            >>> # Xlang mode with compatible schema evolution
+            >>> fory = Fory(xlang=True)
         """
         compatible = xlang if compatible is None else compatible
         self.xlang = xlang
@@ -272,13 +268,13 @@ class Fory:
 
         Example:
             >>> # Register with type_id (recommended for performance)
-            >>> fory = Fory(xlang=True, compatible=True)
+            >>> fory = Fory(xlang=True)
             >>> fory.register(Person, type_id=100)
             >>>
             >>> # Register with namespace and typename (more flexible)
             >>> fory.register(Person, namespace="com.example", typename="Person")
             >>>
-            >>> # Python-native mode (no cross-language matching needed)
+            >>> # Python native mode (no cross-language matching needed)
             >>> fory = Fory(xlang=False)
             >>> fory.register(Person)
         """
@@ -323,13 +319,13 @@ class Fory:
 
         Example:
             >>> # Register with type_id (recommended for performance)
-            >>> fory = Fory(xlang=True, compatible=True)
+            >>> fory = Fory(xlang=True)
             >>> fory.register_type(Person, type_id=100)
             >>>
             >>> # Register with namespace and typename (more flexible)
             >>> fory.register_type(Person, namespace="com.example", typename="Person")
             >>>
-            >>> # Python-native mode (no cross-language matching needed)
+            >>> # Python native mode (no cross-language matching needed)
             >>> fory = Fory(xlang=False)
             >>> fory.register_type(Person)
         """
@@ -614,11 +610,11 @@ class ThreadSafeFory:
     serialization will raise a RuntimeError.
 
     Args:
-        xlang (bool): Whether to enable cross-language serialization. Defaults to True.
+        xlang (bool): Whether to enable xlang mode. Defaults to True.
         ref (bool): Whether to enable reference tracking. Defaults to False.
         strict (bool): Whether to require type registration. Defaults to True.
-        compatible (bool): Whether to enable compatible mode. Defaults to True when
-            xlang=True and False otherwise.
+        compatible (bool): Whether to enable compatible mode. Defaults to compatible mode
+            in xlang and schema-consistent mode in Python native mode.
         max_depth (int): Maximum depth for deserialization. Defaults to 50.
         max_collection_size (int): Maximum allowed size for collections and maps during
             deserialization. Defaults to 1,000,000.
@@ -626,7 +622,7 @@ class ThreadSafeFory:
             deserialization. Defaults to 64 MB.
 
     Example:
-        >>> import pyfury
+        >>> import pyfory
         >>> import threading
         >>> from dataclasses import dataclass
         >>>
@@ -636,7 +632,7 @@ class ThreadSafeFory:
         ...     age: int
         >>>
         >>> # Create thread-safe instance
-        >>> fory = pyfury.ThreadSafeFory(xlang=False)
+        >>> fory = pyfory.ThreadSafeFory(xlang=False)
         >>> fory.register(Person)
         >>>
         >>> # Use safely from multiple threads

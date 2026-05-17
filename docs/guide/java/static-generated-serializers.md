@@ -1,6 +1,6 @@
 ---
 title: Static Generated Serializers
-sidebar_position: 15
+sidebar_position: 8
 id: static_generated_serializers
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -78,7 +78,7 @@ public class Order {
 The processor generates serializer classes in the same Java package as the annotated class. For
 `Order`, the generated classes are:
 
-- `Order_ForySerializer` for cross-language mode.
+- `Order_ForySerializer` for xlang mode.
 - `Order_ForyNativeSerializer` for Java native mode.
 
 For a static nested type such as `Outer.Inner`, the generated top-level classes are

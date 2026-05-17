@@ -1,6 +1,6 @@
 ---
 title: GraalVM Support
-sidebar_position: 13
+sidebar_position: 14
 id: graalvm_support
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -105,12 +105,12 @@ class, for example:
 Args = --initialize-at-build-time=com.example.Example
 ```
 
-| Scenario                        | Without Feature              | With Feature       |
-| ------------------------------- | ---------------------------- | ------------------ |
-| Public classes with no-arg ctor | ✅ Works                     | ✅ Works           |
-| Private constructors            | ❌ Needs reflect-config.json | ✅ Auto-registered |
-| Private inner records           | ❌ Needs reflect-config.json | ✅ Auto-registered |
-| Dynamic proxies                 | ❌ Needs manual config       | ✅ Auto-registered |
+| Scenario                        | Without Feature           | With Feature    |
+| ------------------------------- | ------------------------- | --------------- |
+| Public classes with no-arg ctor | Works                     | Works           |
+| Private constructors            | Needs reflect-config.json | Auto-registered |
+| Private inner records           | Needs reflect-config.json | Auto-registered |
+| Dynamic proxies                 | Needs manual config       | Auto-registered |
 
 ### Example with Private Record
 

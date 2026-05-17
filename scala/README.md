@@ -4,6 +4,11 @@ Apache Fory™ Scala provides optimized serializers for Scala types, built on to
 
 Both Scala 2 and Scala 3 are supported.
 
+Scala uses xlang mode for cross-language payloads by default. Use native mode
+with `.withXlang(false)` for Scala/JVM-only traffic when you want the JVM native
+object serialization path plus Scala-specific types such as case classes,
+collections, tuples, options, and enumerations.
+
 ## Features
 
 ### Supported Types
@@ -35,7 +40,8 @@ case class Person(name: String, id: Long, github: String)
 case class Point(x: Int, y: Int, z: Int)
 
 object ScalaExample {
-  val fory: Fory = ForyScala.builder().withXlang(false)
+  val fory: Fory = ForyScala.builder()
+    .withXlang(true)
     .build()
 
   fory.register(classOf[Person])
@@ -57,7 +63,7 @@ Apache Fory™ Scala provides support for Scala class default values during dese
 
 When a Scala class has default parameters, the Scala compiler generates methods in the companion object (for case classes) or in the class itself that return default values. Fory detects these methods and uses them when deserializing objects where certain fields are missing from the serialized data.
 
-### Example Usage
+### Native-Mode Example
 
 ```scala
 import org.apache.fory.Fory
@@ -103,7 +109,8 @@ import org.apache.fory.{Fory, ThreadSafeFory}
 import org.apache.fory.scala.ForyScala
 
 object ForyHolder {
-  val fory: ThreadSafeFory = ForyScala.builder().withXlang(false)
+  val fory: ThreadSafeFory = ForyScala.builder()
+    .withXlang(true)
     .buildThreadSafeFory()
 
   fory.register(classOf[Person])
@@ -116,7 +123,16 @@ val result = ForyHolder.fory.deserialize(bytes)
 
 ## Configuration
 
-Fory Scala is built on Fory Java, so all Java configuration options are available:
+Fory Scala is built on Fory Java, so all Java configuration options are available. The default
+builder uses xlang mode with compatible schema evolution:
+
+```scala
+val fory = ForyScala.builder()
+  .withXlang(true)
+  .build()
+```
+
+Native-mode payloads can opt into JVM schema evolution explicitly:
 
 ```scala
 import org.apache.fory.Fory
@@ -125,7 +141,7 @@ import org.apache.fory.scala.ForyScala
 val fory = ForyScala.builder().withXlang(false)
   // Enable reference tracking for circular references
   .withRefTracking(true)
-  // Enable schema evolution support
+  // Enable schema evolution support for native-mode payloads
   .withCompatible(true)
   // Enable async compilation for better startup performance
   .withAsyncCompilation(true)

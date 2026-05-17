@@ -19,7 +19,9 @@ license: |
   limitations under the License.
 ---
 
-This page covers serialization of Kotlin-specific types.
+This page covers serialization of Kotlin-specific JVM types in native mode. For
+cross-language Kotlin models, use the xlang path described in
+[Static Generated Serializers](static-generated-serializers.md).
 
 ## Setup
 

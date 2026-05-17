@@ -126,7 +126,7 @@ cdef class Config:
     config instance instead of mirroring them onto other owners.
 
     Attributes:
-        xlang: Enables cross-language wire format instead of Python-native mode.
+        xlang: Selects xlang wire format instead of Python native mode.
         track_ref: Enables reference tracking for shared and circular object graphs.
         strict: Requires type registration before serialization/deserialization.
         compatible: Enables compatible mode and schema-evolution metadata paths.
@@ -173,7 +173,7 @@ cdef class Config:
         Build a runtime config object for one Python or Cython Fory instance.
 
         Args:
-            xlang: Enable cross-language serialization mode.
+            xlang: Select xlang wire format.
             track_ref: Enable reference tracking for object graphs.
             strict: Require registered types on dynamic resolution paths.
             compatible: Enable compatible mode and meta-share flows.
@@ -849,11 +849,11 @@ cdef class Fory:
         Initialize a Cython-backed Fory runtime instance.
 
         Args:
-            xlang: Enable cross-language serialization mode.
+            xlang: Select xlang wire format.
             ref: Enable reference tracking for shared and circular references.
             strict: Require registered types on dynamic resolution paths.
             compatible: Enable compatible mode and meta-share type exchange. Defaults to
-                True when xlang=True and False otherwise.
+                compatible mode in xlang and schema-consistent mode in Python native mode.
             max_depth: Maximum allowed read depth before rejecting payloads.
             policy: Optional deserialization policy implementation.
             field_nullable: Treat struct fields as nullable by default.

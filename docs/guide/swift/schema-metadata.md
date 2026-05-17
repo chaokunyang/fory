@@ -1,7 +1,7 @@
 ---
-title: Field Configuration
-sidebar_position: 5
-id: field_configuration
+title: Schema Metadata
+sidebar_position: 4
+id: schema_metadata
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-This page covers macro-level field configuration in Swift.
+This page covers macro-level schema metadata in Swift.
 
 ## Available Macro Attributes
 
@@ -27,7 +27,7 @@ This page covers macro-level field configuration in Swift.
 - `@ForyEnum` on C-style enum models
 - `@ForyUnion` and `@ForyCase` on associated-value enum models
 - `@ForyField(encoding: ...)` on numeric fields
-- `@ListField`, `@SetField`, and `@MapField` for nested collection field metadata
+- `@ListField`, `@ArrayField`, `@SetField`, and `@MapField` for collection field metadata
 
 ## `@ForyField(encoding:)`
 
@@ -59,14 +59,18 @@ Compile-time validation rejects unsupported combinations (for example, `Int32` w
 
 ## Nested Collection Field Metadata
 
-Use `@ListField`, `@SetField`, and `@MapField` when a nested field needs type-specific
-wire metadata, such as fixed or tagged integer encoding inside a container.
+Use `@ListField`, `@ArrayField`, `@SetField`, and `@MapField` when a collection field
+needs type-specific wire metadata, such as fixed or tagged integer encoding inside a
+container. Use `@ArrayField` for dense non-null bool, integer, and floating-point arrays.
 
 ```swift
 @ForyStruct
 struct NestedMetrics: Equatable {
     @ListField(element: .encoding(.fixed))
     var values: [Int32?] = []
+
+    @ArrayField(element: .int32())
+    var denseValues: [Int32] = []
 
     @SetField(element: .encoding(.fixed))
     var ids: Set<UInt32?> = []

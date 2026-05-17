@@ -1,7 +1,7 @@
 ---
-title: Field Configuration
+title: Schema Metadata
 sidebar_position: 5
-id: field_configuration
+id: schema_metadata
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -294,7 +294,7 @@ fn main() {
         internal_state: "secret".to_string(), // Will be skipped
     };
 
-    let bytes = fory.serialize(&doc);
+    let bytes = fory.serialize(&doc).unwrap();
     let decoded: Document = fory.deserialize(&bytes).unwrap();
 }
 ```
@@ -331,7 +331,7 @@ struct Bad3 {
 
 ## Cross-Language Compatibility
 
-When serializing data to be read by other languages (Java, C++, Go, Python), use field configuration to match encoding expectations:
+When serializing data to be read by other languages (Java, C++, Go, Python), use schema metadata to match encoding expectations:
 
 ```rust
 #[derive(ForyStruct)]
@@ -449,8 +449,8 @@ struct User {
 | `nullable` | `nullable` or `nullable = bool`  | Control null flag writing            | All fields                 |
 | `ref`      | `ref` or `ref = bool`            | Control reference tracking           | `Rc`, `Arc`, weak types    |
 | `encoding` | `encoding = varint/fixed/tagged` | Integer encoding method              | `i32`, `u32`, `i64`, `u64` |
-| `list`     | `list(element(...))`             | Element field configuration          | `Vec<T>`                   |
-| `map`      | `map(key(...), value(...))`      | Key/value field configuration        | `HashMap<K, V>`            |
+| `list`     | `list(element(...))`             | Element schema metadata              | `Vec<T>`                   |
+| `map`      | `map(key(...), value(...))`      | Key/value schema metadata            | `HashMap<K, V>`            |
 
 ## Related Topics
 

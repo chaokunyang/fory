@@ -11,38 +11,38 @@
 
 `pyfory` provides the Python implementation of Apache Fory™, offering both high-performance object serialization and advanced row-format capabilities for data processing tasks.
 
-## 🚀 Key Features
+## Key Features
 
-### 🔧 **Flexible Serialization Modes**
+### **Flexible Serialization Modes**
 
-- **Python native Mode**: Full Python compatibility, drop-in replacement for pickle/cloudpickle
-- **Cross-Language Mode**: Optimized for multi-language data exchange
+- **Xlang mode**: Default cross-language wire format with compatible schema evolution
+- **Python native mode**: Same-language mode and drop-in replacement for pickle/cloudpickle
 - **Row Format**: Zero-copy row format for analytics workloads
 
-### 🎯 Versatile Serialization Features
+### Versatile Serialization Features
 
-- **Shared/circular reference support** for complex object graphs in both Python-native and cross-language modes
+- **Shared/circular reference support** for complex object graphs in both Python native and xlang modes
 - **Polymorphism support** for customized types with automatic type dispatching
-- **Schema evolution** support for backward/forward compatibility when using dataclasses in cross-language mode
+- **Schema evolution** support for backward/forward compatibility when using dataclasses in xlang mode
 - **Out-of-band buffer support** for zero-copy serialization of large data structures like NumPy arrays and Pandas DataFrames, compatible with pickle protocol 5
 - **Reduced-precision xlang types** use reserved `pyfory.Float16` and `pyfory.BFloat16` annotations and native Python `float` values; dense array payloads use public wrappers such as `Float16Array` and `BFloat16Array`
 
-### ⚡ **Blazing Fast Performance**
+### Blazing Fast Performance
 
 - **Extremely fast performance** compared to other serialization frameworks
 - **Runtime code generation** and **Cython-accelerated** core implementation for optimal performance
 
-### 📦 Compact Data Size
+### Compact Data Size
 
 - **Compact object graph protocol** with minimal space overhead—up to 3× size reduction compared to pickle/cloudpickle
 - **Meta packing and sharing** to minimize type forward/backward compatibility space overhead
 
-### 🛡️ **Security & Safety**
+### **Security & Safety**
 
 - **Strict mode** prevents deserialization of untrusted types by type registration and checks.
 - **Reference tracking** for handling circular references safely
 
-## 📦 Installation
+## Installation
 
 ### Basic Installation
 
@@ -69,18 +69,23 @@ pip install -e ".[dev,format]"
 - **Python**: 3.8 or higher
 - **OS**: Linux, macOS, Windows
 
-## 🐍 Python Native Serialization
+## Python Native Serialization
 
-`pyfory` provides a Python-native serialization mode that offers the same functionality as pickle/cloudpickle, but with **significantly better performance, smaller data size, and enhanced security features**.
+`pyfory` provides a Python native mode for Python-only payloads. It is optimized for Python's type
+system and offers the same object surface as pickle/cloudpickle, but with **significantly better
+performance, smaller data size, and enhanced security features**.
 
-The binary protocol and API are similar to Fory's xlang mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, local classes and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
+The binary protocol and API are similar to Fory's xlang mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
-To use Python-native mode, create `Fory` with `xlang=False`. This mode is optimized for pure Python applications:
+To use Python native mode, create `Fory` with `xlang=False`. Use this mode when replacing pickle or
+cloudpickle for pure Python applications:
 
 ```python
 import pyfory
 fory = pyfory.Fory(xlang=False, ref=False, strict=True)
 ```
+
+## Xlang Object Serialization
 
 ### Basic Object Serialization
 
@@ -89,10 +94,10 @@ Serialize and deserialize Python objects with a simple API. This example shows s
 ```python
 import pyfory
 
-# Create Fory instance
-fory = pyfory.Fory(xlang=True, compatible=True)
+# Create an xlang Fory instance.
+fory = pyfory.Fory(xlang=True)
 
-# Serialize any Python object
+# Serialize xlang-compatible values
 data = fory.dumps({"name": "Alice", "age": 30, "scores": [95, 87, 92]})
 
 # Deserialize back to Python object
@@ -114,29 +119,28 @@ from typing import List, Dict
 @dataclass
 class Person:
     name: str
-    age: int
-    scores: List[int]
+    age: pyfory.Int32
+    scores: List[pyfory.Int32]
     metadata: Dict[str, str]
 
-# Python mode - supports all Python types including dataclasses
-fory = pyfory.Fory(xlang=False, ref=True)
-fory.register(Person)
+fory = pyfory.Fory(xlang=True, ref=True)
+fory.register(Person, typename="example.Person")
 person = Person("Bob", 25, [88, 92, 85], {"team": "engineering"})
 data = fory.serialize(person)
 result = fory.deserialize(data)
 print(result)  # Person(name='Bob', age=25, ...)
 ```
 
-### Drop-in Replacement for Pickle/Cloudpickle
+## Drop-in Replacement for Pickle/Cloudpickle
 
 `pyfory` can serialize any Python object with the following configuration:
 
 - **For circular references**: Set `ref=True` to enable reference tracking
 - **For functions/classes**: Set `strict=False` to allow deserialization of dynamic types
 
-**⚠️ Security Warning**: When `strict=False`, Fory will deserialize arbitrary types, which can pose security risks if data comes from untrusted sources. Only use `strict=False` in controlled environments where you trust the data source completely. If you do need to use `strict=False`, please configure a `DeserializationPolicy` when creating fory using `policy=your_policy` to controlling deserialization behavior.
+**Security Warning**: When `strict=False`, Fory will deserialize arbitrary types, which can pose security risks if data comes from untrusted sources. Only use `strict=False` in controlled environments where you trust the data source completely. If you do need to use `strict=False`, please configure a `DeserializationPolicy` when creating fory using `policy=your_policy` to controlling deserialization behavior.
 
-#### Common Usage
+### Common Usage
 
 Serialize common Python objects including dicts, lists, and custom classes without any registration:
 
@@ -163,7 +167,7 @@ data = fory.dumps(person)
 print(fory.loads(data))  # Person(name='Bob', age=25)
 ```
 
-#### Serialize Global Functions
+### Serialize Global Functions
 
 Capture and get functions defined at module level. Fory deserialize and return same function object:
 
@@ -434,20 +438,20 @@ for buffer_obj in buffer_objects:
 
 **Note**: For contiguous memory buffers (like bytes, numpy arrays), `getbuffer()` returns a zero-copy `memoryview`. For non-contiguous data, a copy may be created to ensure contiguity.
 
-## 🏃‍♂️ Cross-Language Object Graph Serialization
+## Cross-Language Object Graph Serialization
 
 `pyfory` supports cross-language object graph serialization, allowing you to serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages.
 
-The binary protocol and API are similar to `pyfory`'s python-native mode, but Python-native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
+The binary protocol and API are similar to `pyfory`'s Python native mode, but Python native mode can serialize any Python object—including global functions, local functions, lambdas, local classes, and types with customized serialization using `__getstate__/__reduce__/__reduce_ex__`, which are not allowed in xlang mode.
 
-To use xlang mode, create `Fory` with `xlang=True, compatible=True`. This mode is for xlang serialization applications:
+Xlang mode is the default. Set `xlang=True` explicitly in cross-language examples so the mode choice is visible:
 
 ```python
 import pyfory
-fory = pyfory.Fory(xlang=True, compatible=True, ref=False, strict=True)
+fory = pyfory.Fory(xlang=True, ref=False, strict=True)
 ```
 
-### Cross-Language Sserialization
+### Cross-Language Serialization
 
 Serialize data in Python and deserialize it in Java, Go, Rust, or other supported languages. Both sides must register the same type with matching names:
 
@@ -457,8 +461,8 @@ Serialize data in Python and deserialize it in Java, Go, Rust, or other supporte
 from dataclasses import dataclass
 import pyfory
 
-# Cross-language mode for interoperability
-f = pyfory.Fory(xlang=True, compatible=True, ref=True)
+# Xlang mode for interoperability
+f = pyfory.Fory(xlang=True, ref=True)
 
 # Register type for cross-language compatibility
 @dataclass
@@ -487,7 +491,7 @@ public class Person {
 }
 
 Fory fory = Fory.builder()
-    .withXlang(true).withCompatible(true)
+    .withXlang(true)
     .withRefTracking(true)
     .build();
 
@@ -495,9 +499,9 @@ fory.register(Person.class, "example.Person");
 Person person = (Person) fory.deserialize(binaryData);
 ```
 
-## 📊 Row Format - Zero-Copy Processing
+## Row Format - Zero-Copy Processing
 
-Apache Fury™ provides a random-access row format that enables reading nested fields from binary data without full deserialization. This drastically reduces overhead when working with large objects where only partial data access is needed. The format also supports memory-mapped files for ultra-low memory footprint.
+Apache Fory™ provides a random-access row format that enables reading nested fields from binary data without full deserialization. This drastically reduces overhead when working with large objects where only partial data access is needed. The format also supports memory-mapped files for ultra-low memory footprint.
 
 ### Basic Row Format Usage
 
@@ -636,27 +640,27 @@ for (int i = 0; i < 1000000; i++) {
 }
 
 // Encode to row format (cross-language compatible with Python/Java)
-fory::encoder::RowEncoder<Foo> encoder;
-encoder.Encode(foo);
-auto row = encoder.GetWriter().ToRow();
+fory::row::encoder::RowEncoder<Foo> encoder;
+encoder.encode(foo);
+auto row = encoder.get_writer().to_row();
 
 // Zero-copy random access without full deserialization
-auto f2_array = row->GetArray(1);                    // Access f2 list
-auto f4_array = row->GetArray(3);                    // Access f4 list
-auto bar10 = f4_array->GetStruct(10);                // Access 11th Bar
-int64_t value = bar10->GetArray(1)->GetInt64(5);    // Access 6th element of bar.f2
-std::string str = bar10->GetString(0);               // Access bar.f1
+auto f2_array = row->get_array(1);                   // Access f2 list
+auto f4_array = row->get_array(3);                   // Access f4 list
+auto bar10 = f4_array->get_struct(10);               // Access 11th Bar
+int64_t value = bar10->get_array(1)->get_int64(5);   // Access 6th element of bar.f2
+std::string str = bar10->get_string(0);              // Access bar.f1
 ```
 
 ### Key Benefits
 
 - **Zero-Copy Access**: Read nested fields without deserializing the entire object
 - **Memory Efficiency**: Memory-map large datasets directly from disk
-- **Cross-Language**: Binary format is compatible between Python, Java, and other Fury implementations
+- **Cross-Language**: Binary format is compatible between Python, Java, and other Fory implementations
 - **Partial Deserialization**: Deserialize only the specific elements you need
 - **High Performance**: Skip unnecessary data parsing for analytics and big data workloads
 
-## 🏗️ Core API Reference
+## Core API Reference
 
 ### Fory Class
 
@@ -669,7 +673,7 @@ class Fory:
         xlang: bool = True,
         ref: bool = False,
         strict: bool = True,
-        compatible: bool = False,
+        compatible: bool | None = None,
         max_depth: int = 50
     )
 ```
@@ -685,7 +689,7 @@ class ThreadSafeFory:
         xlang: bool = True,
         ref: bool = False,
         strict: bool = True,
-        compatible: bool = False,
+        compatible: bool | None = None,
         max_depth: int = 50
     )
 ```
@@ -735,10 +739,10 @@ for t in threads: t.join()
 
 **Parameters:**
 
-- **`xlang`** (`bool`, default=`True`): Enable cross-language serialization. When `False`, enables Python-native mode supporting all Python objects. When `True`, enables cross-language mode compatible with Java, Go, Rust, etc.
+- **`xlang`** (`bool`, default=`True`): Use xlang mode. Set `False` for Python native mode supporting Python-specific objects.
 - **`ref`** (`bool`, default=`False`): Enable reference tracking for shared/circular references. Disable for better performance if your data has no shared references.
 - **`strict`** (`bool`, default=`True`): Require type registration for security. **Highly recommended** for production. Only disable in trusted environments.
-- **`compatible`** (`bool`, default follows `xlang`): Enable schema evolution in cross-language mode, allowing fields to be added/removed while maintaining compatibility. Cross-language mode defaults to `compatible=True`; set `compatible=False` only for schema-consistent deployments.
+- **`compatible`** (`bool`, default follows `xlang`): Enable schema evolution. Xlang mode defaults to compatible mode; native mode defaults to schema-consistent mode.
 - **`max_depth`** (`int`, default=`50`): Maximum deserialization depth for security, preventing stack overflow attacks.
 
 **Key Methods:**
@@ -752,37 +756,35 @@ obj = fory.deserialize(data)
 data: bytes = fory.dumps(obj)
 obj = fory.loads(data)
 
-# Type registration by id (for Python mode)
+# Type registration by id
 fory.register(MyClass, type_id=123)
 fory.register(MyClass, type_id=123, serializer=custom_serializer)
 
-# Type registration by name (for cross-language mode)
+# Type registration by name
 fory.register(MyClass, typename="my.package.MyClass")
 fory.register(MyClass, typename="my.package.MyClass", serializer=custom_serializer)
 ```
 
-### Language Modes Comparison
+### Xlang And Native Mode Comparison
 
-| Feature               | Python Mode (`xlang=False`)          | Cross-Language Mode (`xlang=True, compatible=True`) |
-| --------------------- | ------------------------------------ | --------------------------------------------------- |
-| **Use Case**          | Pure Python applications             | Multi-language systems                              |
-| **Compatibility**     | Python only                          | Java, Go, Rust, C++, JavaScript, etc.               |
-| **Supported Types**   | All Python types                     | Cross-language compatible types only                |
-| **Functions/Lambdas** | ✓ Supported                          | ✗ Not allowed                                       |
-| **Local Classes**     | ✓ Supported                          | ✗ Not allowed                                       |
-| **Dynamic Classes**   | ✓ Supported                          | ✗ Not allowed                                       |
-| **Schema Evolution**  | ✓ Supported (with `compatible=True`) | ✓ Supported (with `compatible=True`)                |
-| **Performance**       | Extremely fast                       | Very fast                                           |
-| **Data Size**         | Compact                              | Compact with type metadata                          |
+| Feature             | Native mode (`xlang=False`)                    | Xlang mode (default)                  |
+| ------------------- | ---------------------------------------------- | ------------------------------------- |
+| Use case            | Pure Python applications                       | Multi-language systems                |
+| Compatibility       | Python only                                    | Java, Go, Rust, C++, JavaScript, etc. |
+| Supported types     | Python object surface                          | Cross-language compatible types       |
+| Functions/lambdas   | Supported with trusted dynamic deserialization | Not allowed                           |
+| Local classes       | Supported with trusted dynamic deserialization | Not allowed                           |
+| Dynamic classes     | Supported with trusted dynamic deserialization | Not allowed                           |
+| Schema mode default | Schema-consistent                              | Compatible                            |
 
-#### Python Mode (`xlang=False`)
+#### Native Mode (`xlang=False`)
 
-Python mode supports all Python types including functions, classes, and closures. Perfect for pure Python applications:
+Python native mode supports Python-specific objects including functions, classes, and closures. Use it for Python-only applications:
 
 ```python
 import pyfory
 
-# Full Python compatibility mode
+# Python native mode
 fory = pyfory.Fory(xlang=False, ref=True, strict=False)
 
 # Supports ALL Python objects:
@@ -805,15 +807,14 @@ print(f"Fory: {timeit.timeit(lambda: fory.dumps(obj), number=1000):.3f}s")
 print(f"Pickle: {timeit.timeit(lambda: pickle.dumps(obj), number=1000):.3f}s")
 ```
 
-#### Cross-Language Mode (`xlang=True, compatible=True`)
+#### Xlang Mode
 
-Cross-language mode restricts types to those compatible across all Fory implementations. Use for multi-language systems:
+Xlang mode restricts types to those compatible across all Fory implementations. Use it for multi-language systems:
 
 ```python
 import pyfory
 
-# Cross-language compatibility mode
-f = pyfory.Fory(xlang=True, compatible=True, ref=True)
+f = pyfory.Fory(xlang=True, ref=True)
 
 # Only supports cross-language compatible types
 f.register(MyDataClass, typename="com.example.MyDataClass")
@@ -822,7 +823,7 @@ f.register(MyDataClass, typename="com.example.MyDataClass")
 data = f.serialize(MyDataClass(field1="value", field2=42))
 ```
 
-## 🔧 Advanced Features
+## Advanced Features
 
 ### Reference Tracking & Circular References
 
@@ -946,7 +947,7 @@ result = f.deserialize(data)
 assert np.array_equal(arrays['matrix'], result['matrix'])
 ```
 
-## 💡 Best Practices
+## Best Practices
 
 ### Production Configuration
 
@@ -957,10 +958,10 @@ import pyfory
 
 # Recommended settings for production
 fory = pyfory.Fory(
-    xlang=False,        # Use True if you need cross-language support
+    xlang=False,        # Native mode for Python-only traffic
     ref=False,           # Enable if you have shared/circular references
     strict=True,        # CRITICAL: Always True in production
-    compatible=False,   # Native mode; xlang=True defaults to compatible=True
+    compatible=False,   # Native mode defaults to schema-consistent payloads
     max_depth=20       # Adjust based on your data structure depth
 )
 
@@ -1021,7 +1022,7 @@ Handle common serialization errors gracefully. Catch specific exceptions for bet
 import pyfory
 from pyfory.error import TypeUnregisteredError, TypeNotCompatibleError
 
-fory = pyfory.Fory(xlang=False, strict=True)
+fory = pyfory.Fory(strict=True)
 
 try:
     data = fory.dumps(my_object)
@@ -1042,49 +1043,7 @@ except Exception as e:
     print(f"Deserialization failed: {e}")
 ```
 
-## 🛠️ Migration Guide
-
-### From Pickle
-
-Replace pickle with Fory for better performance while keeping the same API:
-
-```python
-# Before (pickle)
-import pickle
-data = pickle.dumps(obj)
-result = pickle.loads(data)
-
-# After (Fory - drop-in replacement with better performance)
-import pyfory
-f = pyfory.Fory(xlang=False, ref=True, strict=False)
-data = f.dumps(obj)      # Faster and more compact
-result = f.loads(data)   # Faster deserialization
-
-# Benefits:
-# - 2-10x faster serialization
-# - 2-5x faster deserialization
-# - Up to 3x smaller data size
-# - Same API, better performance
-```
-
-### From JSON
-
-Unlike JSON, Fory supports arbitrary Python types including functions:
-
-```python
-# Before (JSON - limited types)
-import json
-data = json.dumps({"name": "Alice", "age": 30})
-result = json.loads(data)
-
-# After (Fory - all Python types)
-import pyfory
-f = pyfory.Fory(xlang=False)
-data = f.dumps({"name": "Alice", "age": 30, "func": lambda x: x})
-result = f.loads(data)
-```
-
-## 🚨 Security Best Practices
+## Security Best Practices
 
 ### Production Configuration
 
@@ -1095,7 +1054,6 @@ import pyfory
 
 # Recommended production settings
 f = pyfory.Fory(
-    xlang=False,   # or True for cross-language
     ref=True,      # Handle circular references
     strict=True,   # IMPORTANT: Prevent malicious data
     max_depth=100  # Prevent deep recursion attacks
@@ -1126,7 +1084,6 @@ if os.getenv('ENV') == 'development':
 else:
     # Production configuration (security hardened)
     fory = pyfory.Fory(
-        xlang=False,
         ref=True,
         strict=True,     # CRITICAL: Require registration
         max_depth=100    # Reasonable limit
@@ -1197,7 +1154,7 @@ result = fory.deserialize(data)  # Policy hooks will be invoked
 
 **See also:** `pyfory/policy.py` contains detailed documentation and examples for each hook.
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Common Issues
 
@@ -1221,25 +1178,34 @@ print(pyfory.ENABLE_FORY_CYTHON_SERIALIZATION)  # Should be True
 # If False, Cython extension may not be compiled correctly
 # Reinstall with: pip install --force-reinstall --no-cache-dir pyfory
 
-# For debugging, you can disable Cython mode before importing
+# For debugging, you can disable the Cython implementation before importing
 import os
 os.environ['ENABLE_FORY_CYTHON_SERIALIZATION'] = '0'
-import pyfory  # Now uses pure Python mode
+import pyfory  # Now uses the pure Python implementation
 ```
 
 **Q: Cross-language compatibility issues**
 
 ```python
 # A: Use explicit type registration with consistent naming
-f = pyfory.Fory(xlang=True, compatible=True)
+f = pyfory.Fory(xlang=True)
 f.register(MyClass, typename="com.package.MyClass")  # Use same name in all languages
 ```
 
 **Q: Circular reference errors or duplicate data**
 
+Registered xlang schema objects and Python native objects both require reference tracking when
+object identity or cycles matter:
+
 ```python
-# A: Enable reference tracking
-f = pyfory.Fory(xlang=False, ref=True)  # Required for circular references
+# A: Enable reference tracking for registered schema objects
+f = pyfory.Fory(ref=True)
+```
+
+For arbitrary Python object graphs with circular references, use Python native mode:
+
+```python
+f = pyfory.Fory(xlang=False, ref=True, strict=False)
 
 # Example with circular reference
 class Node:
@@ -1274,8 +1240,8 @@ import pyfory  # Now uses pure Python implementation
 **Q: Schema evolution not working**
 
 ```python
-# A: Enable compatible mode for schema evolution
-f = pyfory.Fory(xlang=True, compatible=True)
+# A: Xlang mode defaults to compatible schema evolution.
+f = pyfory.Fory(xlang=True)
 
 # Version 1: Original class
 @dataclass
@@ -1302,17 +1268,17 @@ print(user.email)  # "unknown@example.com"
 
 ```python
 # A: Register all custom types before serialization
-f = pyfory.Fory(xlang=False, strict=True)
+f = pyfory.Fory(strict=True)
 
 # Must register before use
 f.register(MyClass, type_id=100)
 f.register(AnotherClass, type_id=101)
 
 # Or disable strict mode (NOT recommended for production)
-f = pyfory.Fory(xlang=False, strict=False)  # Use only in trusted environments
+f = pyfory.Fory(strict=False)  # Use only in trusted environments
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Apache Fory™ is an open-source project under the Apache Software Foundation. We welcome all forms of contributions:
 
@@ -1325,7 +1291,7 @@ Apache Fory™ is an open-source project under the Apache Software Foundation. W
 
 > **For Contributors**: See [CONTRIBUTING.md](CONTRIBUTING.md) for comprehensive development setup instructions
 
-## 📄 License
+## License
 
 Apache License 2.0. See [LICENSE](https://github.com/apache/fory/blob/main/LICENSE) for details.
 
@@ -1333,19 +1299,19 @@ Apache License 2.0. See [LICENSE](https://github.com/apache/fory/blob/main/LICEN
 
 **Apache Fory™** - Blazing fast, secure, and versatile serialization for modern applications.
 
-## 🔗 Links
+## Links
 
-- **Documentation**: https://fory.apache.org/docs/latest/python_guide/
+- **Documentation**: https://fory.apache.org/docs/guide/python/
 - **GitHub**: https://github.com/apache/fory
 - **PyPI**: https://pypi.org/project/pyfory/
 - **Issues**: https://github.com/apache/fory/issues
 - **Slack**: https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw
-- **Benchmarks**: https://fory.apache.org/docs/latest/benchmarks/
+- **Benchmarks**: https://fory.apache.org/docs/benchmarks/
 
-## 🌟 Community
+## Community
 
 We welcome contributions! Whether it's bug reports, feature requests, documentation improvements, or code contributions, we appreciate your help.
 
-- Star the project on [GitHub](https://github.com/apache/fory) ⭐
-- Join our [Slack community](https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw) 💬
-- Follow us on [X/Twitter](https://x.com/ApacheFory) 🐦
+- Star the project on [GitHub](https://github.com/apache/fory)
+- Join our [Slack community](https://join.slack.com/t/fory-project/shared_invite/zt-36g0qouzm-kcQSvV_dtfbtBKHRwT5gsw)
+- Follow us on [X/Twitter](https://x.com/ApacheFory)

@@ -1,6 +1,6 @@
 ---
 title: Default Values
-sidebar_position: 3
+sidebar_position: 4
 id: default_values
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Fory supports Scala class default values during deserialization when using compatible mode. This feature enables forward/backward compatibility when case classes or regular Scala classes have default parameters.
+Fory supports Scala class default values during native-mode deserialization when compatible mode is enabled. This feature enables forward/backward compatibility when case classes or regular Scala classes have default parameters.
 
 ## Overview
 
@@ -47,9 +47,10 @@ Fory supports default values for:
 
 ## Usage
 
-This feature is automatically enabled when:
+This feature is available when:
 
-- Compatible mode is enabled (`withCompatible(true)`)
+- Native mode is explicitly configured with compatible mode
+  (`withXlang(false).withCompatible(true)`)
 - The target class is detected as a Scala class with default values
 - A field is missing from the serialized data but exists in the target class
 
@@ -169,4 +170,4 @@ val deserialized = fory.deserialize(serialized).asInstanceOf[Models.PersonV2]
 ## Related Topics
 
 - [Schema Evolution](../java/schema-evolution.md) - Forward/backward compatibility in Java
-- [Fory Creation](fory-creation.md) - Setting up Fory with compatible mode
+- [Configuration](configuration.md) - Setting up Fory with compatible mode

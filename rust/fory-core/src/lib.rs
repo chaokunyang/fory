@@ -39,12 +39,16 @@
 //!
 //! ## Key Concepts
 //!
-//! ### Serialization Modes
+//! ### Wire Modes And Schema Evolution
 //!
-//! Fory supports two serialization modes:
+//! Fory supports two wire modes:
 //!
-//! - **SchemaConsistent**: Requires exact type matching between peers
-//! - **Compatible**: Allows schema evolution with field additions/deletions
+//! - **Xlang mode**: the default cross-language wire format, selected with
+//!   `.xlang(true)` and compatible schema evolution when `compatible` is
+//!   omitted.
+//! - **Native mode**: the Rust-only wire format, selected with `.xlang(false)`
+//!   and schema-consistent payloads when `compatible` is omitted. Add
+//!   `.compatible(true)` only when Rust-only deployments need schema evolution.
 //!
 //! ### Type System
 //!
@@ -102,15 +106,15 @@
 //!
 //! # fn main() {
 //! let mut fory = Fory::builder().xlang(false).compatible(true).build();
-//! fory.register::<Dog>(100);
-//! fory.register::<Cat>(101);
-//! fory.register::<Zoo>(102);
+//! fory.register::<Dog>(100).unwrap();
+//! fory.register::<Cat>(101).unwrap();
+//! fory.register::<Zoo>(102).unwrap();
 //!
 //! let zoo = Zoo {
 //!     star_animal: Box::new(Dog { name: "Buddy".to_string() }),
 //! };
 //!
-//! let bytes = fory.serialize(&zoo);
+//! let bytes = fory.serialize(&zoo).unwrap();
 //! let decoded: Zoo = fory.deserialize(&bytes).unwrap();
 //! assert_eq!(decoded.star_animal.speak(), "Woof!");
 //! # }

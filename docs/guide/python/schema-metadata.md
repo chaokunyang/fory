@@ -1,7 +1,7 @@
 ---
-title: Field Configuration
-sidebar_position: 5
-id: field_configuration
+title: Schema Metadata
+sidebar_position: 7
+id: schema_metadata
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -138,7 +138,8 @@ class Record:
 
 ## Reference Tracking (`ref`)
 
-Enable reference tracking for fields that may be shared or circular:
+Enable reference tracking for fields that may be shared. Circular Python object
+graphs require Python native mode with global reference tracking enabled.
 
 ```python
 @dataclass
@@ -162,8 +163,9 @@ class CircularRef:
 
 **Notes**:
 
-- Reference tracking only takes effect when `Fory(xlang=False, ref=True)` is set globally
-- Field-level `ref=True` AND global `ref=True` must both be enabled
+- Global `Fory(ref=True)` must be enabled.
+- Field-level `ref=True` and global `ref=True` must both be enabled for schema
+  fields.
 
 ## Skipping Fields (`ignore`)
 
@@ -357,7 +359,7 @@ class Document:
 
 
 def main():
-    fory = pyfory.Fory(xlang=True, compatible=True, ref=True)
+    fory = pyfory.Fory(xlang=True, ref=True)
     fory.register_type(Document, type_id=100)
 
     doc = Document(
@@ -448,7 +450,7 @@ In native mode, you typically **don't need to configure field annotations** unle
 - Optimize performance by disabling unnecessary ref tracking
 
 ```python
-# Native mode: works without field configuration
+# Native mode: works without schema metadata
 @dataclass
 class User:
     id: int = 0

@@ -49,7 +49,7 @@ Canonical runtime-specific rules now live under `../../../languages/*.md` and `.
 - Format: `go fmt ./...`
 - Profile: `pprof` (`go test -bench` + cpu/mem profiles)
 
-## C#
+## C\#
 
 - Build: `dotnet build Fory.sln -c Release --no-restore`
 - Tests: `dotnet test Fory.sln -c Release`

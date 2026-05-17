@@ -1,7 +1,7 @@
 ---
-title: Fory Creation
+title: Configuration
 sidebar_position: 1
-id: fory_creation
+id: configuration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -19,11 +19,27 @@ license: |
   limitations under the License.
 ---
 
-This page covers Kotlin-specific requirements for creating Fory instances.
+This page covers Kotlin-specific runtime configuration and Fory instance creation.
 
-## Basic Setup
+## Xlang Setup
 
-When using Fory for Kotlin serialization, create the runtime with `ForyKotlin.builder().withXlang(false)`:
+Fory Kotlin follows the Java builder default: xlang mode with compatible schema
+evolution. Use this path for cross-language Kotlin payloads, schema IDL
+generated Kotlin models, and KSP-generated xlang serializers.
+
+```kotlin
+import org.apache.fory.kotlin.ForyKotlin
+
+val fory = ForyKotlin.builder()
+    .withXlang(true)
+    .requireClassRegistration(true)
+    .build()
+```
+
+## Native Mode Setup
+
+For same-language Kotlin/JVM payloads that need native JVM object behavior, use
+native mode explicitly:
 
 ```kotlin
 import org.apache.fory.kotlin.ForyKotlin
@@ -44,7 +60,8 @@ import org.apache.fory.Fory
 import org.apache.fory.kotlin.ForyKotlin
 
 object ForyHolder {
-    val fory: Fory = ForyKotlin.builder().withXlang(false)
+    val fory: Fory = ForyKotlin.builder()
+        .withXlang(true)
         .requireClassRegistration(true)
         .build()
 }
@@ -59,7 +76,8 @@ import org.apache.fory.ThreadSafeFory
 import org.apache.fory.kotlin.ForyKotlin
 
 object ForyHolder {
-    val fory: ThreadSafeFory = ForyKotlin.builder().withXlang(false)
+    val fory: ThreadSafeFory = ForyKotlin.builder()
+        .withXlang(true)
         .requireClassRegistration(true)
         .buildThreadSafeFory()
 }
@@ -69,7 +87,8 @@ object ForyHolder {
 
 ```kotlin
 // Thread-safe Fory
-val fory: ThreadSafeFory = ForyKotlin.builder().withXlang(false)
+val fory: ThreadSafeFory = ForyKotlin.builder()
+    .withXlang(true)
     .requireClassRegistration(true)
     .buildThreadSafeFory()
 ```
@@ -78,7 +97,7 @@ val fory: ThreadSafeFory = ForyKotlin.builder().withXlang(false)
 
 All configuration options from Fory Java are available. See [Java Configuration](../java/configuration.md) for the complete list.
 
-Common options for Kotlin:
+Common options for Kotlin native-mode payloads:
 
 ```kotlin
 import org.apache.fory.kotlin.ForyKotlin
@@ -86,7 +105,7 @@ import org.apache.fory.kotlin.ForyKotlin
 val fory = ForyKotlin.builder().withXlang(false)
     // Enable reference tracking for circular references
     .withRefTracking(true)
-    // Enable schema evolution support
+    // Enable schema evolution support for native-mode payloads
     .withCompatible(true)
     // Enable async compilation for better startup performance
     .withAsyncCompilation(true)

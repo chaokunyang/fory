@@ -111,10 +111,10 @@ const inventoryType = Type.struct("example.inventory", {
 
 ## Schema Evolution
 
-Enable compatible mode for independent service deployments:
+Compatible mode is the default and supports independent service deployments:
 
 ```ts
-const fory = new Fory({ compatible: true });
+const fory = new Fory();
 ```
 
 Readers skip unknown fields and tolerate missing ones, supporting rolling upgrades.

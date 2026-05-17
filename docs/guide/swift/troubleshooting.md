@@ -44,9 +44,11 @@ Fix:
 
 ### `Invalid data: xlang bitmap mismatch`
 
-Cause: the input is not a Swift-supported xlang payload.
+Cause: the input was produced by a peer runtime that did not write the xlang
+wire format Swift expects.
 
-Fix: serialize the value with a Fory runtime that writes the xlang wire format.
+Fix: configure the peer serializer to write xlang format. Swift already uses
+xlang format and has no native-mode switch.
 
 ### `Invalid data: class version hash mismatch`
 

@@ -19,7 +19,7 @@ license: |
   limitations under the License.
 ---
 
-Swift reference tracking is controlled by `ForyConfig.trackRef`.
+Swift reference tracking is controlled by `Config.trackRef`.
 
 ## Enable Reference Tracking
 

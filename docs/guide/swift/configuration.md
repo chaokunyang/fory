@@ -19,16 +19,20 @@ license: |
   limitations under the License.
 ---
 
-This page covers `ForyConfig` and recommended runtime presets.
+This page covers `Config` and recommended runtime presets.
 
-## ForyConfig
+## Config
 
 `Fory` is configured with:
 
 ```swift
-public struct ForyConfig {
-    public var trackRef: Bool
-    public var compatible: Bool
+public struct Config {
+  public var trackRef: Bool
+  public var compatible: Bool
+  public var checkClassVersion: Bool
+  public var maxCollectionSize: Int
+  public var maxBinarySize: Int
+  public var maxDepth: Int
 }
 ```
 
@@ -37,6 +41,9 @@ Default configuration:
 ```swift
 let fory = Fory() // ref=false, compatible=true
 ```
+
+Swift supports the xlang wire format only, so there is no `xlang` option in
+`Config` or the `Fory` initializer.
 
 ## Threading
 
@@ -65,6 +72,24 @@ Enables compatible schema mode for evolution across versions.
 
 ```swift
 let fory = Fory(ref: false, compatible: true)
+```
+
+### `checkClassVersion`
+
+Controls class-version validation in schema-consistent mode. When omitted, it
+defaults to `true` when `compatible=false` and `false` when `compatible=true`.
+
+```swift
+let fory = Fory(compatible: false, checkClassVersion: true)
+```
+
+### Size and Depth Limits
+
+`maxCollectionSize`, `maxBinarySize`, and `maxDepth` bound decoded payload size
+and nesting depth.
+
+```swift
+let fory = Fory(maxCollectionSize: 1_000_000, maxBinarySize: 64 * 1024 * 1024, maxDepth: 5)
 ```
 
 ## Recommended Presets

@@ -431,8 +431,11 @@ TEST(WeakPtrSerializerTest, RequiresTrackRef) {
 
   auto bytes_result = fory.serialize(original);
   EXPECT_FALSE(bytes_result.ok()) << "Should fail when track_ref is disabled";
-  EXPECT_TRUE(bytes_result.error().to_string().find("track_ref") !=
-              std::string::npos);
+  auto error = bytes_result.error().to_string();
+  EXPECT_EQ(error,
+            "Invalid ref: SharedWeak requires track_ref to be enabled. Use "
+            "Fory::builder().track_ref(true).build()");
+  EXPECT_EQ(error.find("xlang("), std::string::npos);
 }
 
 // ============================================================================

@@ -243,9 +243,9 @@ template <typename T> struct Serializer<SharedWeak<T>> {
                            bool has_generics = false) {
     // SharedWeak requires track_ref to be enabled
     if (FORY_PREDICT_FALSE(!ctx.track_ref())) {
-      ctx.set_error(Error::invalid_ref(
-          "SharedWeak requires track_ref to be enabled. Use "
-          "Fory::builder().xlang(true).track_ref(true).build()"));
+      ctx.set_error(
+          Error::invalid_ref("SharedWeak requires track_ref to be enabled. Use "
+                             "Fory::builder().track_ref(true).build()"));
       return;
     }
 

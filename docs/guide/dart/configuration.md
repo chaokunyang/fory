@@ -107,7 +107,7 @@ final fory = Fory(maxBinarySize: 8 * 1024 * 1024);
 | `maxCollectionSize`  | 1 048 576 |
 | `maxBinarySize`      | 64 MiB    |
 
-## Cross-Language Notes
+## Xlang Notes
 
 When Fory is used to communicate between services written in different languages:
 
@@ -119,4 +119,4 @@ When Fory is used to communicate between services written in different languages
 
 - [Basic Serialization](basic-serialization.md)
 - [Schema Evolution](schema-evolution.md)
-- [Cross-Language](cross-language.md)
+- [Xlang Serialization](xlang-serialization.md)

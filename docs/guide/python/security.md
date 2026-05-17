@@ -145,4 +145,4 @@ result = fory.deserialize(data)  # Policy hooks will be invoked
 
 - [Type Registration](type-registration.md) - Registration and strict mode
 - [Configuration](configuration.md) - Fory parameters
-- [Python Native Mode](python-native.md) - Functions and lambdas
+- [Native Serialization](native-serialization.md) - Functions and lambdas

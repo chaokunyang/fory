@@ -1,6 +1,6 @@
 ---
 title: Configuration
-sidebar_position: 2
+sidebar_position: 4
 id: configuration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -132,4 +132,4 @@ let fory = Fory::builder()
 
 - [Basic Serialization](basic-serialization.md) - Using configured Fory
 - [Schema Evolution](schema-evolution.md) - Compatible mode details
-- [Cross-Language](cross-language.md) - xlang mode
+- [Xlang Serialization](xlang-serialization.md) - xlang mode

@@ -1,6 +1,6 @@
 ---
 title: Configuration
-sidebar_position: 3
+sidebar_position: 4
 id: configuration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -162,5 +162,5 @@ Use `strict=False` only for trusted data, preferably with a `policy=` deserializ
 
 - [Basic Serialization](basic-serialization.md) - Using configured Fory
 - [Type Registration](type-registration.md) - Registration patterns
-- [Python Native Mode](python-native.md) - Python-only object serialization
+- [Native Serialization](native-serialization.md) - Python-only object serialization
 - [Security](security.md) - Security best practices

@@ -1,6 +1,6 @@
 ---
 title: Configuration
-sidebar_position: 2
+sidebar_position: 4
 id: configuration
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
@@ -173,5 +173,5 @@ auto fory = Fory::builder().xlang(true).build_thread_safe();  // Returns ThreadS
 ## Related Topics
 
 - [Basic Serialization](basic-serialization.md) - Using configured Fory
-- [Cross-Language](cross-language.md) - xlang mode details
+- [Xlang Serialization](xlang-serialization.md) - xlang mode details
 - [Type Registration](type-registration.md) - Registering types

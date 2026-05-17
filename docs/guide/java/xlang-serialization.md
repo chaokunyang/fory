@@ -272,8 +272,8 @@ Xlang mode has additional overhead compared to Java native mode:
 
 - [Xlang Serialization Specification](../../specification/xlang_serialization_spec.md)
 - [Type Mapping Reference](../../specification/xlang_type_mapping.md)
-- [Python Cross-Language Guide](../python/cross-language.md)
-- [Rust Cross-Language Guide](../rust/cross-language.md)
+- [Python Xlang Serialization Guide](../python/xlang-serialization.md)
+- [Rust Xlang Serialization Guide](../rust/xlang-serialization.md)
 
 ## Related Topics
 

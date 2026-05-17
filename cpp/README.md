@@ -46,7 +46,7 @@ struct Person {
 
 int main() {
   // Create Fory instance
-  auto fory = apache::fory::ForyBuilder()
+  auto fory = fory::ForyBuilder()
       .xlang(true).compatible(true)
       .track_ref(true)
       .build();
@@ -115,7 +115,7 @@ public:
   FORY_STRUCT(Person, name, age, address, hobbies, metadata);
 };
 
-auto fory = apache::fory::ForyBuilder().xlang(true).build();
+auto fory = fory::ForyBuilder().xlang(true).build();
 fory->register_struct<Address>(100);
 fory->register_struct<Person>(200);
 
@@ -146,7 +146,7 @@ struct Foo {
 FORY_STRUCT(Foo, id, name);
 } // namespace thirdparty
 
-auto fory = apache::fory::ForyBuilder().xlang(true).build();
+auto fory = fory::ForyBuilder().xlang(true).build();
 fory->register_struct<thirdparty::Foo>(1);
 ```
 
@@ -173,7 +173,7 @@ struct Derived : Base {
 Apache Fory™ automatically tracks and preserves reference identity for shared objects using `std::shared_ptr<T>`. When the same object is referenced multiple times, Fory serializes it only once and uses reference IDs for subsequent occurrences.
 
 ```cpp
-auto fory = apache::fory::ForyBuilder().xlang(true)
+auto fory = fory::ForyBuilder().xlang(true)
     .track_ref(true)
     .build();
 
@@ -213,12 +213,12 @@ struct PersonV2 {
   FORY_STRUCT(PersonV2, name, age, phone);
 };
 
-auto fory1 = apache::fory::ForyBuilder().xlang(true)
+auto fory1 = fory::ForyBuilder().xlang(true)
     .compatible(true)
     .build();
 fory1->register_struct<PersonV1>(1);
 
-auto fory2 = apache::fory::ForyBuilder().xlang(true)
+auto fory2 = fory::ForyBuilder().xlang(true)
     .compatible(true)
     .build();
 fory2->register_struct<PersonV2>(1);
@@ -286,7 +286,7 @@ struct UserProfile {
   FORY_STRUCT(UserProfile, id, username, email, scores, is_active);
 };
 
-apache::fory::RowEncoder<UserProfile> encoder;
+fory::row::encoder::RowEncoder<UserProfile> encoder;
 
 UserProfile profile{12345, "alice", "alice@example.com", {95, 87, 92}, true};
 
@@ -307,7 +307,7 @@ Apache Fory™ supports seamless data exchange across multiple languages:
 
 ```cpp
 // Enable cross-language mode
-auto fory = apache::fory::ForyBuilder()
+auto fory = fory::ForyBuilder()
     .xlang(true)
     .compatible(true)
     .build();
@@ -322,10 +322,10 @@ See [xlang_type_mapping.md](https://fory.apache.org/docs/specification/xlang_typ
 
 ```cpp
 // Single-threaded (fastest performance)
-auto fory = apache::fory::ForyBuilder().xlang(true).build();
+auto fory = fory::ForyBuilder().xlang(true).build();
 
 // Thread-safe with internal Fory pool
-auto fory = apache::fory::ForyBuilder().xlang(true).build_thread_safe();
+auto fory = fory::ForyBuilder().xlang(true).build_thread_safe();
 ```
 
 ## Architecture

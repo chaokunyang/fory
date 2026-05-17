@@ -225,8 +225,16 @@ def bump_java_version(new_version):
         "java/fory-test-core",
         "java/fory-testsuite",
         "java/fory-latest-jdk-tests",
+        "java/fory-annotation-processor",
     ]:
         _bump_version(p, "pom.xml", new_version, _update_pom_parent_version)
+    for file in ["build.gradle", "README.md"]:
+        _bump_version(
+            "integration_tests/android_tests",
+            file,
+            new_version,
+            _update_android_tests_dependency_version,
+        )
     # mvn versions:set too slow
     # os.chdir(os.path.join(PROJECT_ROOT_DIR, "java"))
     # subprocess.check_output(
@@ -363,6 +371,16 @@ def _update_pom_parent_version(lines, new_version):
                 r"(<version>)[^<>]+(</version>)", r"\g<1>" + new_version + r"\2", line
             )
             lines[line_number] = line
+
+
+def _update_android_tests_dependency_version(lines, new_version):
+    for index, line in enumerate(lines):
+        lines[index] = re.sub(
+            r"(org\.apache\.fory:fory-(?:core|annotation-processor):)[^'`)\s]+",
+            r"\g<1>" + new_version,
+            line,
+        )
+    return lines
 
 
 def _update_scala_version(lines, v):

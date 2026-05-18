@@ -277,7 +277,7 @@ inline bool is_ascii(const char *data, size_t length) {
   constexpr size_t VECTOR_SIZE = 32;
   const auto *ptr = reinterpret_cast<const __m256i *>(data);
   const auto *end = ptr + length / VECTOR_SIZE;
-  const __m256i mask = _mm256_set1_epi8(0x80);
+  const __m256i mask = _mm256_set1_epi8(static_cast<char>(0x80));
 
   for (; ptr < end; ++ptr) {
     __m256i vec = _mm256_loadu_si256(ptr);

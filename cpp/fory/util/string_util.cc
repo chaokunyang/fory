@@ -159,10 +159,14 @@ FORY_TARGET_AVX2_ATTR std::string utf16_to_utf8(const std::u16string &utf16,
 
   const __m256i limit1 = _mm256_set1_epi16(0x80);
   const __m256i limit2 = _mm256_set1_epi16(0x800);
-  const __m256i surrogate_high_start = _mm256_set1_epi16(0xD800);
-  const __m256i surrogate_high_end = _mm256_set1_epi16(0xDBFF);
-  const __m256i surrogate_low_start = _mm256_set1_epi16(0xDC00);
-  const __m256i surrogate_low_end = _mm256_set1_epi16(0xDFFF);
+  const __m256i surrogate_high_start =
+      _mm256_set1_epi16(static_cast<int16_t>(0xD800));
+  const __m256i surrogate_high_end =
+      _mm256_set1_epi16(static_cast<int16_t>(0xDBFF));
+  const __m256i surrogate_low_start =
+      _mm256_set1_epi16(static_cast<int16_t>(0xDC00));
+  const __m256i surrogate_low_end =
+      _mm256_set1_epi16(static_cast<int16_t>(0xDFFF));
 
   char buffer[64]; // Buffer to hold temporary UTF-8 bytes
   char *output = buffer;

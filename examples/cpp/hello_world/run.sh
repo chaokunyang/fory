@@ -41,7 +41,7 @@ cd "${BUILD_DIR}"
 
 # Configure
 echo "Configuring with CMake..."
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake .. -DCMAKE_BUILD_TYPE=Release -DFORY_WARNINGS_AS_ERRORS=ON
 
 # Build
 echo ""

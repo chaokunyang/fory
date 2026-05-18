@@ -42,6 +42,12 @@ SCHEMAS = [
     IDL_DIR / "idl" / "example.fdl",
 ]
 
+GRPC_SCHEMAS = [
+    IDL_DIR / "idl" / "grpc_fdl.fdl",
+    IDL_DIR / "idl" / "grpc_pb.proto",
+    IDL_DIR / "idl" / "grpc_fbs.fbs",
+]
+
 LANG_EXTRA_SCHEMAS = {
     "java": [IDL_DIR / "idl" / "nested_name.fdl"],
     "scala": [IDL_DIR / "idl" / "nested_name.fdl"],
@@ -90,6 +96,11 @@ def parse_args() -> argparse.Namespace:
         default="all",
         help="Comma-separated list of languages to generate (default: all)",
     )
+    parser.add_argument(
+        "--grpc",
+        action="store_true",
+        help="Generate Java/Python gRPC service companions for gRPC IDL schemas",
+    )
     return parser.parse_args()
 
 
@@ -137,6 +148,10 @@ def main() -> int:
     schemas_by_lang = {
         lang: [*SCHEMAS, *LANG_EXTRA_SCHEMAS.get(lang, [])] for lang in langs
     }
+    if args.grpc:
+        for lang in ("java", "python"):
+            if lang in schemas_by_lang:
+                schemas_by_lang[lang] = [*schemas_by_lang[lang], *GRPC_SCHEMAS]
     schemas = []
     seen_schemas = set()
     for lang in langs:
@@ -162,6 +177,9 @@ def main() -> int:
                 out_dir = GO_OUTPUT_OVERRIDES.get(schema.name, out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
             cmd.append(f"--{lang}_out={out_dir}")
+
+        if schema in GRPC_SCHEMAS:
+            cmd.append("--grpc")
 
         subprocess.check_call(cmd, env=env)
 

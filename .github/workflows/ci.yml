@@ -394,6 +394,10 @@ jobs:
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.CSharpXlangTest
       - name: Run C# IDL Tests
         run: ./integration_tests/idl_tests/run_csharp_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   swift:
     name: Swift CI
@@ -505,6 +509,10 @@ jobs:
         env:
           IDL_PEER_LANG: "swift"
         run: ./integration_tests/idl_tests/run_java_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   graalvm:
     name: GraalVM CI
@@ -659,6 +667,10 @@ jobs:
           mvn -T16 --no-transfer-progress clean install -DskipTests -Dmaven.javadoc.skip=true -Dmaven.source.skip=true
       - name: Run Scala IDL Tests
         run: ./integration_tests/idl_tests/run_scala_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   integration_tests:
     name: Integration Tests
@@ -759,6 +771,10 @@ jobs:
           mvn --no-transfer-progress test -Dtest=org.apache.fory.xlang.JavaScriptXlangTest -DforkCount=0
       - name: Run JavaScript IDL Tests
         run: ./integration_tests/idl_tests/run_javascript_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   rust:
     name: Rust CI
@@ -832,6 +848,10 @@ jobs:
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.RustXlangTest
       - name: Run Rust IDL Tests
         run: ./integration_tests/idl_tests/run_rust_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   cpp:
     name: C++ CI
@@ -1084,6 +1104,10 @@ jobs:
         env:
           FORY_CPP_IDL_SKIP_BUILD: ${{ steps.cpp-idl-cmake-cache.outputs.cache-hit == 'true' && '1' || '' }}
         run: ./integration_tests/idl_tests/run_cpp_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   cpp_examples:
     name: C++ Examples
@@ -1234,6 +1258,10 @@ jobs:
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.format.CrossLanguageTest
       - name: Run Python IDL Tests
         run: ./integration_tests/idl_tests/run_python_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   go:
     name: Golang CI
@@ -1299,6 +1327,10 @@ jobs:
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.GoXlangTest
       - name: Run Go IDL Tests
         run: ./integration_tests/idl_tests/run_go_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
 
   kotlin_xlang:
     name: Kotlin Xlang Test
@@ -1364,6 +1396,10 @@ jobs:
           mvn -T16 --no-transfer-progress test -Dtest=org.apache.fory.xlang.GoXlangTest
           cd ../..
           ./integration_tests/idl_tests/run_go_tests.sh
+      - name: Run Java/Python gRPC IDL Tests
+        run: |
+          python -m pip install "grpcio>=1.62.2,<1.71"
+          ./integration_tests/idl_tests/run_grpc_tests.sh
       - name: Run Android Go Xlang And IDL Tests With Static Generated Serializers
         env:
           FORY_ANDROID_ENABLED: "1"

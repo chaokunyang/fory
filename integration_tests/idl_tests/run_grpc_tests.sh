@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,19 +17,16 @@
 # specific language governing permissions and limitations
 # under the License.
 
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+set -euo pipefail
 
-[project]
-name = "fory-idl-tests"
-version = "0.18.0.dev0"
-description = "IDL compiler integration tests for Apache Fory"
-readme = "README.md"
-requires-python = ">=3.8"
-license = {text = "Apache-2.0"}
-dependencies = ["grpcio>=1.62.2,<1.71", "pyfory"]
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["idl_tests"]
+python "${SCRIPT_DIR}/generate_idl.py" --lang java,python --grpc
+
+cd "${ROOT_DIR}/java"
+ENABLE_FORY_DEBUG_OUTPUT=1 mvn -T16 --no-transfer-progress \
+  -DgrpcTests=true \
+  -Dtest=GrpcInteropTest \
+  test \
+  -f "${ROOT_DIR}/integration_tests/idl_tests/java/pom.xml"

@@ -42,11 +42,11 @@ from typing import List
 CONTAINER_SCRIPT_PATH = "ci/tasks/python_container_build_script.sh"
 
 DEFAULT_X86_IMAGES = [
-    "quay.io/pypa/manylinux2014_x86_64:latest",
+    "quay.io/pypa/manylinux2014_x86_64@sha256:a6ccaa6194d55e9e8564ba7b70f396934e72e383c241ef711358e2ef96e9e635",
 ]
 
 DEFAULT_AARCH64_IMAGES = [
-    "quay.io/pypa/manylinux2014_aarch64:latest",
+    "quay.io/pypa/manylinux2014_aarch64@sha256:9ec54d4892c8f5cf6ce6888582adecb108a27147a4f0f02696cfbb4baa8ab496",
 ]
 
 ARCH_ALIASES = {

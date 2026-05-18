@@ -51,17 +51,13 @@ jobs:
           set -euo pipefail
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
-          DART_VERSION="$VERSION"
-          if [[ "$VERSION" =~ ^(.+)-rc([0-9]+)$ ]]; then
-            DART_VERSION="${BASH_REMATCH[1]}-rc.${BASH_REMATCH[2]}"
-          fi
-          python ci/release.py bump_version -l dart -version "$DART_VERSION"
+          python ci/release.py bump_version -l dart -version "$VERSION"
           if [[ "$VERSION" == *-rc* ]]; then
             echo "PUB_PUBLISH_VALIDATION_FLAGS=--skip-validation" >> "$GITHUB_ENV"
           else
             echo "PUB_PUBLISH_VALIDATION_FLAGS=" >> "$GITHUB_ENV"
           fi
-          VERSION="$DART_VERSION" ruby <<'RUBY'
+          VERSION="$VERSION" ruby <<'RUBY'
           require "yaml"
 
           expected = ENV.fetch("VERSION")

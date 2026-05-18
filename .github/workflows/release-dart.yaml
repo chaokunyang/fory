@@ -52,6 +52,11 @@ jobs:
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           python ci/release.py bump_version -l dart -version "$VERSION"
+          if [[ "$VERSION" == *-rc* ]]; then
+            echo "PUB_PUBLISH_VALIDATION_FLAGS=--skip-validation" >> "$GITHUB_ENV"
+          else
+            echo "PUB_PUBLISH_VALIDATION_FLAGS=" >> "$GITHUB_ENV"
+          fi
           VERSION="$VERSION" ruby <<'RUBY'
           require "yaml"
 
@@ -86,11 +91,11 @@ jobs:
         working-directory: dart/packages/fory
         run: |
           set -euo pipefail
-          dart pub publish --dry-run --skip-validation
+          dart pub publish --dry-run ${PUB_PUBLISH_VALIDATION_FLAGS}
 
       - name: Publish to pub.dev
         shell: bash
         working-directory: dart/packages/fory
         run: |
           set -euo pipefail
-          dart pub publish --force --skip-validation
+          dart pub publish --force ${PUB_PUBLISH_VALIDATION_FLAGS}

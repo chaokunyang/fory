@@ -53,8 +53,18 @@ verify_version() {
 # use the python interpreters preinstalled in manylinux
 OLD_PATH=$PATH
 for PY in $PYTHON_VERSIONS; do
-    export PYTHON_PATH="/opt/python/$PY/bin/python"
-    export PATH="/opt/python/$PY/bin:$OLD_PATH"
+    PYTHON_BIN_DIR="/opt/python/$PY/bin"
+    if [ -x "$PYTHON_BIN_DIR/python" ]; then
+        export PYTHON_PATH="$PYTHON_BIN_DIR/python"
+    elif [ -x "$PYTHON_BIN_DIR/python3" ]; then
+        export PYTHON_PATH="$PYTHON_BIN_DIR/python3"
+    else
+        echo "No Python executable found under $PYTHON_BIN_DIR" >&2
+        ls -l "$PYTHON_BIN_DIR" >&2 || true
+        exit 1
+    fi
+    export PATH="$PYTHON_BIN_DIR:$OLD_PATH"
+    hash -r
     echo "Using $PYTHON_PATH"
     ARCH=$(uname -m)
     if [ "$ARCH" = "aarch64" ]; then
@@ -62,7 +72,7 @@ for PY in $PYTHON_VERSIONS; do
     else
         export PLAT="manylinux2014_x86_64"
     fi
-    python -m pip install cython wheel pytest auditwheel
+    "$PYTHON_PATH" -m pip install cython wheel pytest auditwheel
     ci/deploy.sh build_pyfory
 
     latest_wheel=$(find dist -maxdepth 1 -type f -name '*.whl' -print0 | xargs -0 ls -t | head -n1)
@@ -72,10 +82,10 @@ for PY in $PYTHON_VERSIONS; do
     fi
 
     echo "Attempting to install $latest_wheel"
-    python -m pip install "$latest_wheel"
+    "$PYTHON_PATH" -m pip install "$latest_wheel"
 
     # Verify the installed version matches the expected version
-    INSTALLED_VERSION=$(python -c "import pyfory; print(pyfory.__version__)")
+    INSTALLED_VERSION=$("$PYTHON_PATH" -c "import pyfory; print(pyfory.__version__)")
 
     # Only run version verification for release builds
     if [ "${RELEASE_BUILD:-0}" = "1" ]; then

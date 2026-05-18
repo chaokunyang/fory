@@ -22,6 +22,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+python -m pip install "grpcio>=1.62.2,<1.71"
+python -m pip install -v -e "${ROOT_DIR}/python"
+
 python "${SCRIPT_DIR}/generate_idl.py" --lang java,python --grpc
 
 cd "${ROOT_DIR}/java"

@@ -20,14 +20,13 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fory-idl-tests"
+name = "fory-grpc-tests"
 version = "0.18.0.dev0"
-description = "IDL compiler integration tests for Apache Fory"
-readme = "README.md"
+description = "gRPC compiler integration tests for Apache Fory"
 requires-python = ">=3.8"
 license = {text = "Apache-2.0"}
-dependencies = ["pyfory"]
+dependencies = ["grpcio>=1.62.2,<1.71", "pyfory"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["idl_tests"]
+include = ["grpc_tests"]

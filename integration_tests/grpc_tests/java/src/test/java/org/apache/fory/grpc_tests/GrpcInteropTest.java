@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.idl_tests;
+package org.apache.fory.grpc_tests;
 
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
@@ -268,10 +268,10 @@ public class GrpcInteropTest {
 
   private PeerCommand pythonCommand(String... args) {
     Path repoRoot = repoRoot();
-    Path idlRoot = repoRoot.resolve("integration_tests").resolve("idl_tests");
-    Path pythonRoot = idlRoot.resolve("python");
+    Path grpcRoot = repoRoot.resolve("integration_tests").resolve("grpc_tests");
+    Path pythonRoot = grpcRoot.resolve("python");
     String pythonPath =
-        pythonRoot.resolve("idl_tests").resolve("generated")
+        pythonRoot.resolve("grpc_tests").resolve("generated")
             + File.pathSeparator
             + pythonRoot
             + File.pathSeparator
@@ -283,11 +283,11 @@ public class GrpcInteropTest {
     List<String> command = new ArrayList<>();
     command.add("python");
     command.add("-m");
-    command.add("idl_tests.grpc_interop");
+    command.add("grpc_tests.grpc_interop");
     command.addAll(Arrays.asList(args));
     PeerCommand peerCommand = new PeerCommand();
     peerCommand.command = command;
-    peerCommand.workDir = idlRoot;
+    peerCommand.workDir = grpcRoot;
     peerCommand.environment.put("PYTHONPATH", pythonPath);
     peerCommand.environment.put("ENABLE_FORY_CYTHON_SERIALIZATION", "0");
     peerCommand.environment.put("ENABLE_FORY_DEBUG_OUTPUT", "1");

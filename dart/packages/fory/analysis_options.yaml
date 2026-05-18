@@ -21,5 +21,7 @@ analyzer:
   exclude:
     - .dart_tool/**
     - example/**/*.fory.dart
+    - test/**/*.fory.dart
   errors:
+    deprecated_member_use: ignore
     unintended_html_in_doc_comment: ignore

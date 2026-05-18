@@ -48,29 +48,37 @@ class DebugGeneratedFieldTypeSpec {
 }
 
 final class ForyGenerator extends Generator {
-  static final TypeChecker _foryStructChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _foryStructChecker = TypeChecker.typeNamed(
     ForyStruct,
+    inPackage: 'fory',
   );
-  static final TypeChecker _foryFieldChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _foryFieldChecker = TypeChecker.typeNamed(
     ForyField,
+    inPackage: 'fory',
   );
-  static final TypeChecker _listFieldChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _listFieldChecker = TypeChecker.typeNamed(
     ListField,
+    inPackage: 'fory',
   );
-  static final TypeChecker _arrayFieldChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _arrayFieldChecker = TypeChecker.typeNamed(
     ArrayField,
+    inPackage: 'fory',
   );
-  static final TypeChecker _setFieldChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _setFieldChecker = TypeChecker.typeNamed(
     SetField,
+    inPackage: 'fory',
   );
-  static final TypeChecker _mapFieldChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _mapFieldChecker = TypeChecker.typeNamed(
     MapField,
+    inPackage: 'fory',
   );
-  static final TypeChecker _typeSpecChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _typeSpecChecker = TypeChecker.typeNamed(
     TypeSpec,
+    inPackage: 'fory',
   );
-  static final TypeChecker _foryUnionChecker = TypeChecker.fromRuntime(
+  static const TypeChecker _foryUnionChecker = TypeChecker.typeNamed(
     ForyUnion,
+    inPackage: 'fory',
   );
 
   final Map<String, String> _importPrefixByLibraryIdentifier =
@@ -93,8 +101,9 @@ final class ForyGenerator extends Generator {
     final generatedApiName = '${helperBaseName}Fory';
 
     final enumSpecs = enumElements.map(_analyzeEnum).toList(growable: false);
-    final structSpecs =
-        annotatedClasses.map(_analyzeStruct).toList(growable: false);
+    final structSpecs = annotatedClasses
+        .map(_analyzeStruct)
+        .toList(growable: false);
     final output = StringBuffer()
       ..writeln(
         '// ignore_for_file: implementation_imports, invalid_use_of_internal_member, no_leading_underscores_for_local_identifiers, unreachable_switch_case, unused_element, unused_element_parameter, unnecessary_null_comparison',
@@ -142,8 +151,7 @@ final class ForyGenerator extends Generator {
 
   void _buildImportPrefixMap(LibraryReader library) {
     _importPrefixByLibraryIdentifier.clear();
-    for (final import
-        in library.element.definingCompilationUnit.libraryImports) {
+    for (final import in library.element.firstFragment.libraryImports) {
       final importedLibrary = import.importedLibrary;
       final prefix = import.prefix?.element.displayName;
       if (importedLibrary == null || prefix == null || prefix.isEmpty) {
@@ -166,8 +174,9 @@ final class ForyGenerator extends Generator {
     final idValue = reader?.peek('id');
     final nullableValue = reader?.peek('nullable');
     final dynamicValue = reader?.peek('dynamic');
-    final rawFieldId =
-        idValue == null || idValue.isNull ? null : idValue.intValue;
+    final rawFieldId = idValue == null || idValue.isNull
+        ? null
+        : idValue.intValue;
     if (rawFieldId != null && rawFieldId < 0) {
       throw InvalidGenerationSourceError(
         'Fory field id must be non-negative.',
@@ -188,8 +197,9 @@ final class ForyGenerator extends Generator {
       name: field.displayName,
       type: field.type,
       displayType: _typeCodeString(field.type),
-      identifier:
-          fieldId != null ? '$fieldId' : _toSnakeCase(field.displayName),
+      identifier: fieldId != null
+          ? '$fieldId'
+          : _toSnakeCase(field.displayName),
       id: fieldId,
       nullable: nullable,
       ref: ref,
@@ -264,9 +274,7 @@ final class ForyGenerator extends Generator {
       if (_isList(type) &&
           typeSpec?.typeId != null &&
           _isDenseArrayTypeId(typeSpec!.typeId!)) {
-        return _fieldTypeForArrayListCarrier(
-          errorElement,
-        );
+        return _fieldTypeForArrayListCarrier(errorElement);
       }
       if (typeSpec?.typeId != null && typeSpec!.typeId != expectedTypeId) {
         throw InvalidGenerationSourceError(
@@ -334,13 +342,7 @@ final class ForyGenerator extends Generator {
       );
     }
     final typeId = typeSpec?.typeId ?? _typeIdFor(type);
-    _validateScalarTypeOverride(
-      type,
-      typeId,
-      dynamic,
-      typeSpec,
-      errorElement,
-    );
+    _validateScalarTypeOverride(type, typeId, dynamic, typeSpec, errorElement);
     return _GeneratedFieldTypeSpec(
       typeLiteral: _typeReferenceLiteral(type),
       declaredTypeName: _typeReferenceLiteral(type),
@@ -357,9 +359,10 @@ final class ForyGenerator extends Generator {
     List<_GeneratedFieldSpec> fields,
   ) {
     final unnamedConstructor = element.unnamedConstructor;
-    final hasZeroArgConstructor = unnamedConstructor != null &&
+    final hasZeroArgConstructor =
+        unnamedConstructor != null &&
         !unnamedConstructor.isFactory &&
-        unnamedConstructor.parameters.every(
+        unnamedConstructor.formalParameters.every(
           (parameter) => parameter.isOptional,
         );
     if (hasZeroArgConstructor && fields.every((field) => field.writable)) {
@@ -379,7 +382,7 @@ final class ForyGenerator extends Generator {
     };
     final arguments = <_ConstructorArgumentSpec>[];
     final constructorFieldNames = <String>{};
-    for (final parameter in unnamedConstructor.parameters) {
+    for (final parameter in unnamedConstructor.formalParameters) {
       final parameterName = parameter.displayName;
       final field = fieldByName[parameterName];
       if (field == null) {
@@ -1039,8 +1042,9 @@ GeneratedFieldType(
       nullable: fieldType.nullable,
       ref: fieldType.ref,
       dynamic: fieldType.dynamic,
-      arguments:
-          fieldType.arguments.map(_fromDebugFieldType).toList(growable: false),
+      arguments: fieldType.arguments
+          .map(_fromDebugFieldType)
+          .toList(growable: false),
     );
   }
 
@@ -1373,9 +1377,7 @@ GeneratedFieldType(
       );
       if (fieldBytes == null) {
         if (start != null) {
-          runs.add(
-            _DirectGeneratedPrimitiveRun(start, index - 1, bytes),
-          );
+          runs.add(_DirectGeneratedPrimitiveRun(start, index - 1, bytes));
           start = null;
           bytes = 0;
         }
@@ -1385,9 +1387,7 @@ GeneratedFieldType(
       bytes += fieldBytes;
     }
     if (start != null) {
-      runs.add(
-        _DirectGeneratedPrimitiveRun(start, fields.length - 1, bytes),
-      );
+      runs.add(_DirectGeneratedPrimitiveRun(start, fields.length - 1, bytes));
     }
     return runs;
   }
@@ -1469,8 +1469,9 @@ GeneratedFieldType(
       output.writeln('${indent}final bytes${run.start} = bufferBytes(buffer);');
     }
     if (_directGeneratedRunUsesView(fields, run)) {
-      output
-          .writeln('${indent}final view${run.start} = bufferByteData(buffer);');
+      output.writeln(
+        '${indent}final view${run.start} = bufferByteData(buffer);',
+      );
     }
   }
 
@@ -1487,8 +1488,9 @@ GeneratedFieldType(
       output.writeln('${indent}final bytes${run.start} = bufferBytes(buffer);');
     }
     if (_directGeneratedRunUsesView(fields, run)) {
-      output
-          .writeln('${indent}final view${run.start} = bufferByteData(buffer);');
+      output.writeln(
+        '${indent}final view${run.start} = bufferByteData(buffer);',
+      );
     }
   }
 
@@ -1696,14 +1698,24 @@ GeneratedFieldType(
       case TypeIds.varInt32:
         final result = 'result$fieldIndex';
         _writeDirectGeneratedVarUint32Read(
-            output, result, bytes, offset, indent);
+          output,
+          result,
+          bytes,
+          offset,
+          indent,
+        );
         output.writeln(
           '$indent$target = (($result >>> 1) ^ -($result & 1)).toSigned(32);',
         );
       case TypeIds.varUint32:
         final result = 'result$fieldIndex';
         _writeDirectGeneratedVarUint32Read(
-            output, result, bytes, offset, indent);
+          output,
+          result,
+          bytes,
+          offset,
+          indent,
+        );
         output.writeln('$indent$target = $result;');
       default:
         throw StateError(
@@ -1966,7 +1978,9 @@ GeneratedFieldType(
           return 'generatedCheckedUint64Int($valueExpression)';
         default:
           return _checkedGeneratedScalarExpression(
-              field.fieldType.typeId, valueExpression);
+            field.fieldType.typeId,
+            valueExpression,
+          );
       }
     }
     if (field.type.isDartCoreDouble ||
@@ -1992,8 +2006,7 @@ GeneratedFieldType(
   String _generatedFieldInfoWriteValueExpression(
     _GeneratedFieldSpec field,
     String valueExpression,
-  ) =>
-      valueExpression;
+  ) => valueExpression;
 
   String _nullExpression(
     DartType type, {
@@ -2152,7 +2165,8 @@ GeneratedFieldType(
     if (leftCompressed != rightCompressed) {
       return leftCompressed ? 1 : -1;
     }
-    final sizeCompare = _primitiveSize(right.fieldType.typeId) -
+    final sizeCompare =
+        _primitiveSize(right.fieldType.typeId) -
         _primitiveSize(left.fieldType.typeId);
     if (sizeCompare != 0) {
       return sizeCompare;
@@ -2300,7 +2314,7 @@ GeneratedFieldType(
   }
 
   DartObject? _fieldAnnotationOf(FieldElement field) {
-    for (final metadata in field.metadata) {
+    for (final metadata in field.metadata.annotations) {
       final annotation = metadata.computeConstantValue();
       final annotationType = annotation?.type;
       if (annotationType != null &&
@@ -2357,9 +2371,7 @@ GeneratedFieldType(
     if (annotationType != null &&
         _arrayFieldChecker.isExactlyType(annotationType)) {
       final element = _readRequiredTypeSpec(reader.peek('element'), field);
-      return _TypeSpecInfo(
-        typeId: _arrayTypeIdForElementSpec(element, field),
-      );
+      return _TypeSpecInfo(typeId: _arrayTypeIdForElementSpec(element, field));
     }
     if (annotationType != null &&
         _setFieldChecker.isExactlyType(annotationType)) {
@@ -2404,11 +2416,7 @@ GeneratedFieldType(
     final dynamic = _readBoolOverride(reader.peek('dynamic'));
     switch (typeName) {
       case 'DeclaredType':
-        return _TypeSpecInfo(
-          nullable: nullable,
-          ref: ref,
-          dynamic: dynamic,
-        );
+        return _TypeSpecInfo(nullable: nullable, ref: ref, dynamic: dynamic);
       case 'ListType':
         return _TypeSpecInfo(
           typeId: TypeIds.list,
@@ -2637,9 +2645,9 @@ GeneratedFieldType(
       'varint' => varint,
       'tagged' when tagged != null => tagged,
       _ => throw InvalidGenerationSourceError(
-          'Unsupported encoding $encodingValue for type spec.',
-          element: field,
-        ),
+        'Unsupported encoding $encodingValue for type spec.',
+        element: field,
+      ),
     };
   }
 
@@ -2714,9 +2722,9 @@ GeneratedFieldType(
       TypeIds.float32 => TypeIds.float32Array,
       TypeIds.float64 => TypeIds.float64Array,
       _ => throw InvalidGenerationSourceError(
-          'ArrayType requires a numeric or bool scalar element type without fixed/tagged encoding.',
-          element: field,
-        ),
+        'ArrayType requires a numeric or bool scalar element type without fixed/tagged encoding.',
+        element: field,
+      ),
     };
   }
 
@@ -2754,10 +2762,11 @@ GeneratedFieldType(
     final valid = switch (_typeLiteral(nonNullable)) {
       'bool' => typeId == TypeIds.boolType,
       'int' => _isSupportedIntTypeId(typeId),
-      'double' => typeId == TypeIds.float16 ||
-          typeId == TypeIds.bfloat16 ||
-          typeId == TypeIds.float32 ||
-          typeId == TypeIds.float64,
+      'double' =>
+        typeId == TypeIds.float16 ||
+            typeId == TypeIds.bfloat16 ||
+            typeId == TypeIds.float32 ||
+            typeId == TypeIds.float64,
       'String' => typeId == TypeIds.string,
       'Int64' => _isSigned64TypeId(typeId),
       'Uint64' => _isUnsigned64TypeId(typeId),
@@ -3021,8 +3030,8 @@ GeneratedFieldType(
     final method = element.getMethod('fromRawValue');
     if (method == null ||
         !method.isStatic ||
-        method.parameters.length != 1 ||
-        !method.parameters.single.type.isDartCoreInt) {
+        method.formalParameters.length != 1 ||
+        !method.formalParameters.single.type.isDartCoreInt) {
       return false;
     }
     return method.returnType.element == element;
@@ -3133,8 +3142,9 @@ GeneratedFieldType(
       if (nonNullable.typeArguments.isEmpty) {
         return baseName;
       }
-      final typeArguments =
-          nonNullable.typeArguments.map(_typeCodeString).join(', ');
+      final typeArguments = nonNullable.typeArguments
+          .map(_typeCodeString)
+          .join(', ');
       return '$baseName<$typeArguments>';
     }
     return nonNullable.getDisplayString();
@@ -3202,9 +3212,7 @@ GeneratedFieldType(
     return false;
   }
 
-  bool _fieldTypeUsesNestedTypeDefinitions(
-    _GeneratedFieldTypeSpec fieldType,
-  ) {
+  bool _fieldTypeUsesNestedTypeDefinitions(_GeneratedFieldTypeSpec fieldType) {
     if (fieldType.dynamic == true || TypeIds.isUserType(fieldType.typeId)) {
       return true;
     }
@@ -3306,9 +3314,9 @@ final class _ConstructorPlan {
   final List<String> postConstructionFieldNames;
 
   const _ConstructorPlan.mutable()
-      : mode = _ConstructorMode.mutable,
-        arguments = const <_ConstructorArgumentSpec>[],
-        postConstructionFieldNames = const <String>[];
+    : mode = _ConstructorMode.mutable,
+      arguments = const <_ConstructorArgumentSpec>[],
+      postConstructionFieldNames = const <String>[];
 
   const _ConstructorPlan.constructor({
     required this.arguments,

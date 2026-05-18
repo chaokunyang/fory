@@ -381,6 +381,7 @@ class RustGenerator(BaseGenerator):
 
         for field in union.fields:
             variant_name = self.to_pascal_case(field.name)
+            pointer_type = self.get_field_pointer_type(field)
             variant_type = self.generate_type(
                 field.field_type,
                 nullable=False,
@@ -388,7 +389,7 @@ class RustGenerator(BaseGenerator):
                 element_optional=field.element_optional,
                 element_ref=field.element_ref,
                 parent_stack=parent_stack,
-                pointer_type="::std::sync::Arc",
+                pointer_type=pointer_type,
             )
             lines.append(f"    #[fory(id = {field.number})]")
             payload_attr = self.get_payload_field_attr(field)
@@ -624,16 +625,7 @@ class RustGenerator(BaseGenerator):
         if attrs:
             lines.append(f"#[fory({', '.join(attrs)})]")
 
-        if isinstance(field.field_type, ListType) and field.element_ref:
-            ref_options = field.element_ref_options
-            weak_ref = ref_options.get("weak_ref") is True
-        elif isinstance(field.field_type, MapType) and field.field_type.value_ref:
-            ref_options = field.field_type.value_ref_options
-            weak_ref = ref_options.get("weak_ref") is True
-        else:
-            ref_options = field.ref_options
-            weak_ref = ref_options.get("weak_ref") is True
-        pointer_type = self.get_pointer_type(ref_options, weak_ref)
+        pointer_type = self.get_field_pointer_type(field)
         rust_type = self.generate_type(
             field.field_type,
             nullable=field.optional,
@@ -739,7 +731,7 @@ class RustGenerator(BaseGenerator):
         element_optional: bool = False,
         element_ref: bool = False,
         parent_stack: Optional[List[Message]] = None,
-        pointer_type: str = "::std::sync::Arc",
+        pointer_type: str = "::std::rc::Rc",
     ) -> str:
         """Generate Rust type string."""
         if isinstance(field_type, PrimitiveType):
@@ -855,12 +847,21 @@ class RustGenerator(BaseGenerator):
             return True
         return False
 
+    def get_field_pointer_type(self, field: Field) -> str:
+        if isinstance(field.field_type, ListType) and field.element_ref:
+            ref_options = field.element_ref_options
+        elif isinstance(field.field_type, MapType) and field.field_type.value_ref:
+            ref_options = field.field_type.value_ref_options
+        else:
+            ref_options = field.ref_options
+        weak_ref = ref_options.get("weak_ref") is True
+        return self.get_pointer_type(ref_options, weak_ref)
+
     def get_pointer_type(self, ref_options: dict, weak_ref: bool = False) -> str:
         """Determine pointer type for ref tracking based on field options."""
-        thread_safe = ref_options.get("thread_safe_pointer")
-        if thread_safe is False:
-            return "::fory::RcWeak" if weak_ref else "::std::rc::Rc"
-        return "::fory::ArcWeak" if weak_ref else "::std::sync::Arc"
+        if ref_options.get("thread_safe_pointer") is True:
+            return "::fory::ArcWeak" if weak_ref else "::std::sync::Arc"
+        return "::fory::RcWeak" if weak_ref else "::std::rc::Rc"
 
     def generate_registration(self) -> List[str]:
         """Generate the Fory registration function."""

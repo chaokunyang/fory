@@ -771,7 +771,7 @@ class Parser:
         return options
 
     def parse_ref_options(self, name: str) -> dict:
-        """Parse ref keyword options: ref(weak=true, thread_safe=false)."""
+        """Parse ref keyword options such as ref(weak=true, thread_safe=false)."""
         if not self.check(TokenType.LPAREN):
             return {}
         self.consume(TokenType.LPAREN, "Expected '(' after ref")

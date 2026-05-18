@@ -460,6 +460,39 @@ def test_generated_code_map_types_equivalent():
     assert "SharedWeak<MapValue>" in cpp_output
 
 
+def test_rust_generated_ref_pointer_default_and_thread_safe_option():
+    schema = parse_fdl(
+        dedent(
+            """
+            package gen;
+
+            message Node {
+                string value = 1;
+            }
+
+            message Holder {
+                ref Node default_ref = 1;
+                ref(thread_safe=true) Node thread_safe_ref = 2;
+                ref(weak=true) Node default_weak_ref = 3;
+                ref(weak=true, thread_safe=true) Node thread_safe_weak_ref = 4;
+                list<ref Node> default_ref_list = 5;
+                list<ref(thread_safe=true) Node> thread_safe_ref_list = 6;
+            }
+            """
+        )
+    )
+    rust_output = render_files(generate_files(schema, RustGenerator))
+    assert "pub default_ref: ::std::rc::Rc<Node>," in rust_output
+    assert "pub thread_safe_ref: ::std::sync::Arc<Node>," in rust_output
+    assert "pub default_weak_ref: ::fory::RcWeak<Node>," in rust_output
+    assert "pub thread_safe_weak_ref: ::fory::ArcWeak<Node>," in rust_output
+    assert "pub default_ref_list: ::std::vec::Vec<::std::rc::Rc<Node>>," in rust_output
+    assert (
+        "pub thread_safe_ref_list: ::std::vec::Vec<::std::sync::Arc<Node>>,"
+        in rust_output
+    )
+
+
 def test_generated_code_nested_messages_equivalent():
     fdl = dedent(
         """
@@ -709,7 +742,7 @@ def test_generated_code_tree_ref_options_equivalent():
     assert_all_languages_equal(schemas)
 
     rust_output = render_files(generate_files(schemas["fdl"], RustGenerator))
-    assert "ArcWeak<TreeNode>" in rust_output
+    assert "RcWeak<TreeNode>" in rust_output
 
     cpp_output = render_files(generate_files(schemas["fdl"], CppGenerator))
     assert "SharedWeak<TreeNode>" in cpp_output
@@ -1079,6 +1112,6 @@ def test_rust_generated_code_uses_absolute_paths():
         in rust_output
     )
     assert "pub payload: ::std::boxed::Box<dyn ::std::any::Any>," in rust_output
-    assert "pub parent: ::fory::ArcWeak<String>," in rust_output
+    assert "pub parent: ::fory::RcWeak<String>," in rust_output
     assert "pub fn register_types(fory: &mut ::fory::Fory)" in rust_output
     assert "static FORY: ::std::sync::OnceLock<::fory::Fory>" in rust_output

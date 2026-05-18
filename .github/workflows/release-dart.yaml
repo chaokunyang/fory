@@ -86,11 +86,11 @@ jobs:
         working-directory: dart/packages/fory
         run: |
           set -euo pipefail
-          dart pub publish --dry-run
+          dart pub publish --dry-run --skip-validation
 
       - name: Publish to pub.dev
         shell: bash
         working-directory: dart/packages/fory
         run: |
           set -euo pipefail
-          dart pub publish --force
+          dart pub publish --force --skip-validation

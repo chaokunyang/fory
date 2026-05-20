@@ -217,6 +217,9 @@ git_override(module_name = "fory", remote = "https://github.com/apache/fory.git"
 deps = ["@fory//cpp/fory/serialization:fory_serialization"]
 ```
 
+When building C++ with MSVC, enable the conforming preprocessor option
+`/Zc:preprocessor`; see the C++ installation guide for setup details.
+
 See the [C++ installation guide](https://fory.apache.org/docs/guide/cpp/#installation)
 for complete CMake, Bazel, and source-build details.
 

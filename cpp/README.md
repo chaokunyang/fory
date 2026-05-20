@@ -359,10 +359,19 @@ cpp/fory/
 
 - **C++ Standard**: C++17 or later
 - **Build System**: Bazel 8.2.1+ or CMake 3.16+
+- **MSVC**: configure your build system to pass `/Zc:preprocessor`.
 
 ## Building
 
 ### With Bazel
+
+When building with MSVC, add the conforming preprocessor option to your Bazel
+configuration:
+
+```bazel
+# .bazelrc
+build --cxxopt=/Zc:preprocessor
+```
 
 ```bash
 # Build all projects
@@ -376,6 +385,15 @@ bazel test $(bazel query //cpp/fory/serialization/...)
 ```
 
 ### With CMake
+
+When building with MSVC, add `/Zc:preprocessor` before bringing Fory into the
+build:
+
+```cmake
+if(MSVC)
+    add_compile_options(/Zc:preprocessor)
+endif()
+```
 
 ```bash
 mkdir build && cd build

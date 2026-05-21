@@ -1,4 +1,4 @@
-## 0.18.0-dev
+## 1.1.0-dev
 
 - Refresh pub.dev package metadata and documentation links.
 - Update code generation dependencies for current stable Dart tooling.

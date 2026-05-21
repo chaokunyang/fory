@@ -133,14 +133,14 @@ Maven:
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-core</artifactId>
-  <version>0.17.0</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```gradle
-implementation "org.apache.fory:fory-core:0.17.0"
+implementation "org.apache.fory:fory-core:1.0.0"
 ```
 
 **Scala**
@@ -148,7 +148,7 @@ implementation "org.apache.fory:fory-core:0.17.0"
 sbt:
 
 ```scala
-libraryDependencies += "org.apache.fory" %% "fory-scala" % "0.17.0"
+libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.0.0"
 ```
 
 **Kotlin**
@@ -156,7 +156,7 @@ libraryDependencies += "org.apache.fory" %% "fory-scala" % "0.17.0"
 Gradle:
 
 ```kotlin
-implementation("org.apache.fory:fory-kotlin:0.17.0")
+implementation("org.apache.fory:fory-kotlin:1.0.0")
 ```
 
 Maven:
@@ -165,7 +165,7 @@ Maven:
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-kotlin</artifactId>
-  <version>0.17.0</version>
+  <version>1.0.0</version>
 </dependency>
 ```
 
@@ -187,7 +187,7 @@ pip install "pyfory[format]"
 
 ```toml
 [dependencies]
-fory = "0.17"
+fory = "1.0.0"
 ```
 
 **C++**
@@ -199,7 +199,7 @@ include(FetchContent)
 FetchContent_Declare(
   fory
   GIT_REPOSITORY https://github.com/apache/fory.git
-  GIT_TAG v0.17.0
+  GIT_TAG v1.0.0
   SOURCE_SUBDIR cpp
 )
 FetchContent_MakeAvailable(fory)
@@ -210,8 +210,8 @@ Bazel:
 
 ```bazel
 # MODULE.bazel
-bazel_dep(name = "fory", version = "0.17.0")
-git_override(module_name = "fory", remote = "https://github.com/apache/fory.git", commit = "v0.17.0")
+bazel_dep(name = "fory", version = "1.0.0")
+git_override(module_name = "fory", remote = "https://github.com/apache/fory.git", commit = "v1.0.0")
 
 # BUILD
 deps = ["@fory//cpp/fory/serialization:fory_serialization"]
@@ -244,13 +244,13 @@ npm install @apache-fory/core @apache-fory/hps
 **C#**
 
 ```bash
-dotnet add package Apache.Fory --version 0.17.0
+dotnet add package Apache.Fory --version 1.0.0
 ```
 
 **Dart**
 
 ```bash
-dart pub add fory:^0.17.0
+dart pub add fory:^1.0.0
 dart pub add dev:build_runner
 ```
 
@@ -260,7 +260,7 @@ Add Fory to `Package.swift`:
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/apache/fory.git", exact: "0.17.0")
+  .package(url: "https://github.com/apache/fory.git", exact: "1.0.0")
 ],
 targets: [
   .target(

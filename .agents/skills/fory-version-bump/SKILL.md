@@ -72,7 +72,7 @@ python ci/release.py bump_version -l all -version <next-dev-version>
 - `integration_tests/idl_tests/kotlin/pom.xml`
 - `integration_tests/idl_tests/dart/pubspec.yaml`
 - `integration_tests/idl_tests/rust/Cargo.lock`
-- `dart/packages/fory/CHANGELOG.md` top development section
+- Package-level changelogs, especially `dart/packages/fory/CHANGELOG.md`
 
 4. Update source docs and examples:
 
@@ -87,6 +87,7 @@ python ci/release.py bump_version -l all -version <next-dev-version>
 - Install snippets for released packages use the release version.
 - Development build files use the next development version.
 - Snapshot-only internal test docs may use the snapshot version when they describe local Maven consumption.
+- Package publishing changelogs must mention the package version being published before the post-release development bump. Dart pub validates `CHANGELOG.md` for the current package version and can fail publication when the release version is missing.
 
 ## Independent Audit Pass
 
@@ -125,6 +126,8 @@ Then inspect every hit. Expected false positives include third-party dependency 
 - [ ] Rust, Go, and JavaScript versions use semver prerelease form such as `-alpha.0`.
 - [ ] Dart and C# development versions use `-dev`.
 - [ ] User-facing install docs use the released version, not the next development version.
+- [ ] Package-level `CHANGELOG.md` files mention the exact released package version before publishing.
+- [ ] Post-release changelogs retain or add a top next-development section only after the released version section exists.
 - [ ] `javascript/package-lock.json` is consistent with changed JS package versions.
 - [ ] Rust lockfiles for touched integration tests are consistent with changed Rust package versions.
 - [ ] Markdown files outside `tasks/` were formatted with Prettier.

@@ -3,6 +3,11 @@
 - Refresh pub.dev package metadata and documentation links.
 - Update code generation dependencies for current stable Dart tooling.
 
+## 1.0.0
+
+- First stable Apache Fory Dart package release.
+- Provide generated serializers, schema evolution support, and xlang object serialization for Dart applications.
+
 ## 0.17.0-dev
 
 - Dart runtime implementation around `Fory`, `Buffer`, `WriteContext`, `ReadContext`, and `TypeResolver`.

@@ -19,7 +19,10 @@
 package org.apache.fory.memory;
 
 import static org.apache.fory.util.Preconditions.checkArgument;
+import static org.apache.fory.util.Preconditions.checkNotNull;
 
+import java.lang.reflect.Field;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import org.apache.fory.annotation.CodegenInvoke;
@@ -67,6 +70,20 @@ public final class MemoryBuffer {
   private static final boolean UNALIGNED = !AndroidSupport.IS_ANDROID && UnsafeOps.unaligned();
   // Global allocator instance that can be customized
   private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();
+
+  private static final class DirectBufferAccess {
+    private static final long BUFFER_ADDRESS_FIELD_OFFSET;
+
+    static {
+      try {
+        Field addressField = Buffer.class.getDeclaredField("address");
+        BUFFER_ADDRESS_FIELD_OFFSET = UnsafeOps.objectFieldOffset(addressField);
+        checkArgument(BUFFER_ADDRESS_FIELD_OFFSET != 0);
+      } catch (NoSuchFieldException e) {
+        throw new IllegalStateException(e);
+      }
+    }
+  }
 
   // If the data in on the heap, `heapMemory` will be non-null, and its' the object relative to
   // which we access the memory.
@@ -187,12 +204,22 @@ public final class MemoryBuffer {
     this.size = size;
   }
 
+  private static long getAddress(ByteBuffer buffer) {
+    checkNotNull(buffer, "buffer is null");
+    checkArgument(buffer.isDirect(), "Can't get address of a non-direct ByteBuffer.");
+    try {
+      return UnsafeOps.getLong(buffer, DirectBufferAccess.BUFFER_ADDRESS_FIELD_OFFSET);
+    } catch (Throwable t) {
+      throw new Error("Could not access direct byte buffer address field.", t);
+    }
+  }
+
   public void initByteBuffer(ByteBuffer buffer, int size) {
     if (buffer.isDirect()) {
       if (AndroidSupport.IS_ANDROID) {
         MemoryOps.throwDirectByteBufferUnsupported();
       } else {
-        initOffHeapBuffer(ByteBufferUtil.getAddress(buffer), size, buffer);
+        initOffHeapBuffer(getAddress(buffer), size, buffer);
       }
     } else if (buffer.hasArray()) {
       initHeapBuffer(buffer.array(), buffer.arrayOffset(), size);
@@ -370,7 +397,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.get(this, offset, target, numBytes);
     } else if (target.isDirect()) {
-      final long targetAddr = ByteBufferUtil.getAddress(target) + targetPos;
+      final long targetAddr = getAddress(target) + targetPos;
       final long sourceAddr = address + offset;
       if (sourceAddr <= addressLimit - numBytes) {
         UnsafeOps.copyMemory(heapMemory, sourceAddr, null, targetAddr, numBytes);
@@ -395,7 +422,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       MemoryOps.put(this, offset, source, numBytes);
     } else if (source.isDirect()) {
-      final long sourceAddr = ByteBufferUtil.getAddress(source) + sourcePos;
+      final long sourceAddr = getAddress(source) + sourcePos;
       final long targetAddr = address + offset;
       if (targetAddr <= addressLimit - numBytes) {
         UnsafeOps.copyMemory(null, sourceAddr, heapMemory, targetAddr, numBytes);
@@ -3678,7 +3705,7 @@ public final class MemoryBuffer {
       ByteBuffer offHeapBuffer = this.offHeapBuffer;
       if (offHeapBuffer != null) {
         ByteBuffer duplicate = offHeapBuffer.duplicate();
-        int start = (int) (address - ByteBufferUtil.getAddress(duplicate));
+        int start = (int) (address - getAddress(duplicate));
         ByteBufferUtil.position(duplicate, start + offset);
         duplicate.limit(start + offset + length);
         return duplicate.slice();
@@ -3878,8 +3905,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.fromByteBuffer(buffer);
     } else if (buffer.isDirect()) {
-      return new MemoryBuffer(
-          ByteBufferUtil.getAddress(buffer) + buffer.position(), buffer.remaining(), buffer);
+      return new MemoryBuffer(getAddress(buffer) + buffer.position(), buffer.remaining(), buffer);
     } else if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
       return new MemoryBuffer(buffer.array(), offset, buffer.remaining());
@@ -3896,7 +3922,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.directByteBufferUnsupported();
     }
-    long offHeapAddress = ByteBufferUtil.getAddress(buffer) + buffer.position();
+    long offHeapAddress = getAddress(buffer) + buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
   }
 

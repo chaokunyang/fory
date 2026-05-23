@@ -19,7 +19,6 @@
 
 package org.apache.fory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -46,13 +45,13 @@ import org.apache.fory.exception.CopyException;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializationException;
+import org.apache.fory.io.ForyByteArrayOutputStream;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeChecker;
@@ -564,12 +563,13 @@ public final class Fory implements BaseFory {
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
     MemoryBuffer buf = getBuffer();
-    if (!AndroidSupport.IS_ANDROID && outputStream.getClass() == ByteArrayOutputStream.class) {
+    if (outputStream instanceof ForyByteArrayOutputStream) {
+      ForyByteArrayOutputStream byteArrayStream = (ForyByteArrayOutputStream) outputStream;
       byte[] oldBytes = buf.getHeapMemory(); // Note: This should not be null.
       assert oldBytes != null;
-      MemoryUtils.wrap((ByteArrayOutputStream) outputStream, buf);
+      MemoryUtils.wrap(byteArrayStream, buf);
       function.accept(buf);
-      MemoryUtils.wrap(buf, (ByteArrayOutputStream) outputStream);
+      MemoryUtils.wrap(buf, byteArrayStream);
       buf.pointTo(oldBytes, 0, oldBytes.length);
       resetBuffer();
     } else {

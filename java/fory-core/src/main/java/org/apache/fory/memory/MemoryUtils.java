@@ -19,11 +19,10 @@
 
 package org.apache.fory.memory;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
+import org.apache.fory.io.ForyByteArrayInputStream;
+import org.apache.fory.io.ForyByteArrayOutputStream;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.Preconditions;
 
 /** Memory utils for fory. */
@@ -71,77 +70,39 @@ public class MemoryUtils {
     }
   }
 
-  // Lazy load offset and also follow graalvm offset auto replace pattern.
-  private static class Offset {
-    private static final long BAS_BUF_BUF;
-    private static final long BAS_BUF_COUNT;
-    private static final long BIS_BUF_BUF;
-    private static final long BIS_BUF_POS;
-    private static final long BIS_BUF_COUNT;
-
-    static {
-      try {
-        BAS_BUF_BUF =
-            UnsafeOps.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("buf"));
-        BAS_BUF_COUNT =
-            UnsafeOps.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("count"));
-        BIS_BUF_BUF =
-            UnsafeOps.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("buf"));
-        BIS_BUF_POS =
-            UnsafeOps.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("pos"));
-        BIS_BUF_COUNT =
-            UnsafeOps.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("count"));
-      } catch (NoSuchFieldException e) {
-        throw new RuntimeException(e);
-      }
-    }
-  }
-
   /**
-   * Wrap a {@link ByteArrayOutputStream} into a {@link MemoryBuffer}. The writerIndex of buffer
-   * will be the count of stream.
+   * Wrap a {@link ForyByteArrayOutputStream} into a {@link MemoryBuffer}. The writerIndex of buffer
+   * will be the count of the stream.
    */
-  public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
-    if (AndroidSupport.IS_ANDROID) {
-      throw new UnsupportedOperationException(
-          "ByteArrayOutputStream direct wrapping is not supported on Android");
-    }
+  public static void wrap(ForyByteArrayOutputStream stream, MemoryBuffer buffer) {
     Preconditions.checkNotNull(stream);
-    byte[] buf = (byte[]) UnsafeOps.getObject(stream, Offset.BAS_BUF_BUF);
-    int count = UnsafeOps.getInt(stream, Offset.BAS_BUF_COUNT);
+    byte[] buf = stream.getBuffer();
+    int count = stream.getCount();
     buffer.pointTo(buf, 0, buf.length);
     buffer.writerIndex(count);
   }
 
   /**
-   * Wrap a @link MemoryBuffer} into a {@link ByteArrayOutputStream}. The count of stream will be
-   * the writerIndex of buffer.
+   * Wrap a {@link MemoryBuffer} into a {@link ForyByteArrayOutputStream}. The count of the stream
+   * will be the writerIndex of buffer.
    */
-  public static void wrap(MemoryBuffer buffer, ByteArrayOutputStream stream) {
-    if (AndroidSupport.IS_ANDROID) {
-      throw new UnsupportedOperationException(
-          "ByteArrayOutputStream direct wrapping is not supported on Android");
-    }
+  public static void wrap(MemoryBuffer buffer, ForyByteArrayOutputStream stream) {
     Preconditions.checkNotNull(stream);
     byte[] bytes = buffer.getHeapMemory();
     Preconditions.checkNotNull(bytes);
-    UnsafeOps.putObject(stream, Offset.BAS_BUF_BUF, bytes);
-    UnsafeOps.putInt(stream, Offset.BAS_BUF_COUNT, buffer.writerIndex());
+    stream.setBuffer(bytes);
+    stream.setCount(buffer.writerIndex());
   }
 
   /**
-   * Wrap a {@link ByteArrayInputStream} into a {@link MemoryBuffer}. The readerIndex of buffer will
-   * be the pos of stream.
+   * Wrap a {@link ForyByteArrayInputStream} into a {@link MemoryBuffer}. The readerIndex of buffer
+   * will be the position of the stream.
    */
-  public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
-    if (AndroidSupport.IS_ANDROID) {
-      throw new UnsupportedOperationException(
-          "ByteArrayInputStream direct wrapping is not supported on Android");
-    }
+  public static void wrap(ForyByteArrayInputStream stream, MemoryBuffer buffer) {
     Preconditions.checkNotNull(stream);
-    byte[] buf = (byte[]) UnsafeOps.getObject(stream, Offset.BIS_BUF_BUF);
-    int count = UnsafeOps.getInt(stream, Offset.BIS_BUF_COUNT);
-    int pos = UnsafeOps.getInt(stream, Offset.BIS_BUF_POS);
+    byte[] buf = stream.getBuffer();
+    int count = stream.getCount();
+    int pos = stream.getPosition();
     buffer.pointTo(buf, 0, count);
     buffer.readerIndex(pos);
   }

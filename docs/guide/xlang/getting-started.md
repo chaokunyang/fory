@@ -72,7 +72,7 @@ For the optional Node.js string fast path:
 npm install @apache-fory/core @apache-fory/hps
 ```
 
-### C#
+### C\#
 
 ```bash
 dotnet add package Apache.Fory --version 1.0.0
@@ -166,7 +166,7 @@ import Fory, { Type } from "@apache-fory/core";
 const fory = new Fory();
 ```
 
-### C#
+### C\#
 
 ```csharp
 using Apache.Fory;

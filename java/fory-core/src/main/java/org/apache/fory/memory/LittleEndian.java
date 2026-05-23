@@ -58,23 +58,6 @@ public class LittleEndian {
     return 5;
   }
 
-  public static void putInt32(Object o, long pos, int value) {
-    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
-      value = Integer.reverseBytes(value);
-    }
-    UnsafeOps.putInt(o, pos, value);
-  }
-
-  public static int getInt32(Object o, long pos) {
-    int i = UnsafeOps.getInt(o, pos);
-    return NativeByteOrder.IS_LITTLE_ENDIAN ? i : Integer.reverseBytes(i);
-  }
-
-  public static long getInt64(Object o, long pos) {
-    long v = UnsafeOps.getLong(o, pos);
-    return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
-  }
-
   public static long getInt64(byte[] o, int index) {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.getInt64(o, index);
@@ -92,21 +75,5 @@ public class LittleEndian {
       value = Long.reverseBytes(value);
     }
     UnsafeOps.putLong(o, UnsafeOps.BYTE_ARRAY_OFFSET + index, value);
-  }
-
-  public static void putFloat32(Object o, long pos, float value) {
-    int v = Float.floatToRawIntBits(value);
-    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
-      v = Integer.reverseBytes(v);
-    }
-    UnsafeOps.putInt(o, pos, v);
-  }
-
-  public static void putFloat64(Object o, long pos, double value) {
-    long v = Double.doubleToRawLongBits(value);
-    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
-      v = Long.reverseBytes(v);
-    }
-    UnsafeOps.putLong(o, pos, v);
   }
 }

@@ -182,37 +182,6 @@ public final class UnsafeOps {
     UNSAFE.putObject(object, offset, value);
   }
 
-  public static Object getObjectVolatile(Object object, long offset) {
-    return UNSAFE.getObjectVolatile(object, offset);
-  }
-
-  public static void putObjectVolatile(Object object, long offset, Object value) {
-    UNSAFE.putObjectVolatile(object, offset, value);
-  }
-
-  public static long allocateMemory(long size) {
-    return UNSAFE.allocateMemory(size);
-  }
-
-  public static void freeMemory(long address) {
-    UNSAFE.freeMemory(address);
-  }
-
-  public static long reallocateMemory(long address, long oldSize, long newSize) {
-    long newMemory = UNSAFE.allocateMemory(newSize);
-    copyMemory(null, address, null, newMemory, oldSize);
-    freeMemory(address);
-    return newMemory;
-  }
-
-  public static void setMemory(Object object, long offset, long size, byte value) {
-    UNSAFE.setMemory(object, offset, size, value);
-  }
-
-  public static void setMemory(long address, byte value, long size) {
-    UNSAFE.setMemory(address, size, value);
-  }
-
   public static void copyMemory(
       Object src, long srcOffset, Object dst, long dstOffset, long length) {
     if (length < UNSAFE_COPY_THRESHOLD) {
@@ -226,12 +195,6 @@ public final class UnsafeOps {
         dstOffset += size;
       }
     }
-  }
-
-  public static Object[] copyObjectArray(Object[] arr) {
-    Object[] objects = new Object[arr.length];
-    System.arraycopy(arr, 0, objects, 0, arr.length);
-    return objects;
   }
 
   /** Create an instance of <code>type</code>. This method don't call constructor. */

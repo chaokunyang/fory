@@ -64,6 +64,7 @@ public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : UnsafeOps.UNSAFE;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
+  private static final boolean UNALIGNED = !AndroidSupport.IS_ANDROID && UnsafeOps.unaligned();
   // Global allocator instance that can be customized
   private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();
 
@@ -3716,7 +3717,7 @@ public final class MemoryBuffer {
     final long pos2 = buf2.address + offset2;
     checkArgument(pos1 < addressLimit);
     checkArgument(pos2 < buf2.addressLimit);
-    return UnsafeOps.arrayEquals(heapMemory, pos1, buf2.heapMemory, pos2, len);
+    return unsafeEqualTo(heapMemory, pos1, buf2.heapMemory, pos2, len);
   }
 
   /**
@@ -3740,8 +3741,37 @@ public final class MemoryBuffer {
       return MemoryOps.equalTo(this, bytes, bytesOffset, offset, len);
     }
     final long pos = address + offset;
-    return UnsafeOps.arrayEquals(
-        heapMemory, pos, bytes, UnsafeOps.BYTE_ARRAY_OFFSET + bytesOffset, len);
+    return unsafeEqualTo(heapMemory, pos, bytes, UnsafeOps.BYTE_ARRAY_OFFSET + bytesOffset, len);
+  }
+
+  private static boolean unsafeEqualTo(
+      Object leftBase, long leftOffset, Object rightBase, long rightOffset, int length) {
+    int i = 0;
+    if ((leftOffset % 8) == (rightOffset % 8)) {
+      while ((leftOffset + i) % 8 != 0 && i < length) {
+        if (UNSAFE.getByte(leftBase, leftOffset + i)
+            != UNSAFE.getByte(rightBase, rightOffset + i)) {
+          return false;
+        }
+        i += 1;
+      }
+    }
+    if (UNALIGNED || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
+      while (i <= length - 8) {
+        if (UNSAFE.getLong(leftBase, leftOffset + i)
+            != UNSAFE.getLong(rightBase, rightOffset + i)) {
+          return false;
+        }
+        i += 8;
+      }
+    }
+    while (i < length) {
+      if (UNSAFE.getByte(leftBase, leftOffset + i) != UNSAFE.getByte(rightBase, rightOffset + i)) {
+        return false;
+      }
+      i += 1;
+    }
+    return true;
   }
 
   @Override

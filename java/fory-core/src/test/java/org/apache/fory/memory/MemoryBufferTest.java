@@ -340,8 +340,11 @@ public class MemoryBufferTest {
     buf1.putByte(9, (byte) 1);
     buf2.putByte(9, (byte) 1);
     Assert.assertTrue(buf1.equalTo(buf2, 0, 0, buf1.size()));
+    Assert.assertTrue(buf1.equalTo(buf2, 1, 1, 9));
+    Assert.assertTrue(buf1.equalTo(new byte[] {0, 0, 0, 0, 0, 0, 0, 0, 1}, 0, 1, 9));
     buf1.putByte(9, (byte) 2);
     Assert.assertFalse(buf1.equalTo(buf2, 0, 0, buf1.size()));
+    Assert.assertFalse(buf1.equalTo(buf2, 1, 1, 9));
   }
 
   @Test

@@ -19,6 +19,7 @@
 
 package org.apache.fory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -45,7 +46,6 @@ import org.apache.fory.exception.CopyException;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializationException;
-import org.apache.fory.io.ForyByteArrayOutputStream;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.logging.Logger;
@@ -563,13 +563,13 @@ public final class Fory implements BaseFory {
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
     MemoryBuffer buf = getBuffer();
-    if (outputStream instanceof ForyByteArrayOutputStream) {
-      ForyByteArrayOutputStream byteArrayStream = (ForyByteArrayOutputStream) outputStream;
+    if (MemoryUtils.BYTE_ARRAY_STREAM_WRAP_SUPPORTED
+        && outputStream.getClass() == ByteArrayOutputStream.class) {
       byte[] oldBytes = buf.getHeapMemory(); // Note: This should not be null.
       assert oldBytes != null;
-      MemoryUtils.wrap(byteArrayStream, buf);
+      MemoryUtils.wrap((ByteArrayOutputStream) outputStream, buf);
       function.accept(buf);
-      MemoryUtils.wrap(buf, byteArrayStream);
+      MemoryUtils.wrap(buf, (ByteArrayOutputStream) outputStream);
       buf.pointTo(oldBytes, 0, oldBytes.length);
       resetBuffer();
     } else {

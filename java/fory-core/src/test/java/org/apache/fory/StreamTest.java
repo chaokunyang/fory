@@ -38,7 +38,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.fory.exception.DeserializationException;
-import org.apache.fory.io.ForyByteArrayOutputStream;
 import org.apache.fory.io.ForyInputStream;
 import org.apache.fory.io.ForyReadableChannel;
 import org.apache.fory.io.ForyStreamReader;
@@ -133,11 +132,6 @@ public class StreamTest extends ForyTestBase {
     Object o = fory.deserialize(of(new ByteArrayInputStream(bas.toByteArray())));
     assertEquals(o, new byte[1000 * 1000]);
     assertEquals(fory.deserialize(bas.toByteArray()), new byte[1000 * 1000]);
-
-    ForyByteArrayOutputStream foryBas = new ForyByteArrayOutputStream();
-    fory.serialize(foryBas, "fory-stream");
-    checkBuffer(fory);
-    assertEquals(fory.deserialize(foryBas.toByteArray()), "fory-stream");
 
     bas.reset();
     fory.serialize(bas, new byte[1000 * 1000]);

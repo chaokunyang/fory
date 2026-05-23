@@ -19,14 +19,16 @@
 
 package org.apache.fory.memory;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
-import org.apache.fory.io.ForyByteArrayInputStream;
-import org.apache.fory.io.ForyByteArrayOutputStream;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.util.Preconditions;
+import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Memory utils for fory. */
 public class MemoryUtils {
+  public static final boolean BYTE_ARRAY_STREAM_WRAP_SUPPORTED =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.BYTE_ARRAY_STREAM_WRAP_SUPPORTED;
 
   public static MemoryBuffer buffer(int size) {
     return wrap(new byte[size]);
@@ -71,40 +73,37 @@ public class MemoryUtils {
   }
 
   /**
-   * Wrap a {@link ForyByteArrayOutputStream} into a {@link MemoryBuffer}. The writerIndex of buffer
-   * will be the count of the stream.
+   * Wrap a {@link ByteArrayOutputStream} into a {@link MemoryBuffer}. The writerIndex of buffer
+   * will be the count of stream.
    */
-  public static void wrap(ForyByteArrayOutputStream stream, MemoryBuffer buffer) {
-    Preconditions.checkNotNull(stream);
-    byte[] buf = stream.getBuffer();
-    int count = stream.getCount();
-    buffer.pointTo(buf, 0, buf.length);
-    buffer.writerIndex(count);
+  public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
+    checkByteArrayStreamWrap("ByteArrayOutputStream");
+    _JDKAccess.wrap(stream, buffer);
   }
 
   /**
-   * Wrap a {@link MemoryBuffer} into a {@link ForyByteArrayOutputStream}. The count of the stream
-   * will be the writerIndex of buffer.
+   * Wrap a @link MemoryBuffer} into a {@link ByteArrayOutputStream}. The count of stream will be
+   * the writerIndex of buffer.
    */
-  public static void wrap(MemoryBuffer buffer, ForyByteArrayOutputStream stream) {
-    Preconditions.checkNotNull(stream);
-    byte[] bytes = buffer.getHeapMemory();
-    Preconditions.checkNotNull(bytes);
-    stream.setBuffer(bytes);
-    stream.setCount(buffer.writerIndex());
+  public static void wrap(MemoryBuffer buffer, ByteArrayOutputStream stream) {
+    checkByteArrayStreamWrap("ByteArrayOutputStream");
+    _JDKAccess.wrap(buffer, stream);
   }
 
   /**
-   * Wrap a {@link ForyByteArrayInputStream} into a {@link MemoryBuffer}. The readerIndex of buffer
-   * will be the position of the stream.
+   * Wrap a {@link ByteArrayInputStream} into a {@link MemoryBuffer}. The readerIndex of buffer will
+   * be the pos of stream.
    */
-  public static void wrap(ForyByteArrayInputStream stream, MemoryBuffer buffer) {
-    Preconditions.checkNotNull(stream);
-    byte[] buf = stream.getBuffer();
-    int count = stream.getCount();
-    int pos = stream.getPosition();
-    buffer.pointTo(buf, 0, count);
-    buffer.readerIndex(pos);
+  public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
+    checkByteArrayStreamWrap("ByteArrayInputStream");
+    _JDKAccess.wrap(stream, buffer);
+  }
+
+  private static void checkByteArrayStreamWrap(String streamType) {
+    if (!BYTE_ARRAY_STREAM_WRAP_SUPPORTED) {
+      throw new UnsupportedOperationException(
+          streamType + " direct wrapping is not supported on this platform");
+    }
   }
 
   private static MemoryBuffer copyToHeapBuffer(ByteBuffer buffer) {

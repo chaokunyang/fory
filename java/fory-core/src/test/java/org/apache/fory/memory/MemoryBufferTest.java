@@ -23,6 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -30,8 +31,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
-import org.apache.fory.io.ForyByteArrayInputStream;
-import org.apache.fory.io.ForyByteArrayOutputStream;
 import org.apache.fory.platform.AndroidSupport;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -84,22 +83,24 @@ public class MemoryBufferTest {
   }
 
   @Test
-  public void testForyByteArrayStreamWrap() {
-    ForyByteArrayOutputStream outputStream = new ForyByteArrayOutputStream(8);
+  public void testByteArrayStreamWrap() {
+    if (!MemoryUtils.BYTE_ARRAY_STREAM_WRAP_SUPPORTED) {
+      return;
+    }
+    ByteArrayOutputStream outputStream = new ByteArrayOutputStream(8);
     outputStream.write(new byte[] {1, 2, 3}, 0, 3);
     MemoryBuffer buffer = MemoryUtils.buffer(1);
     MemoryUtils.wrap(outputStream, buffer);
-    assertEquals(buffer.getHeapMemory(), outputStream.getBuffer());
     assertEquals(buffer.writerIndex(), 3);
+    assertEquals(buffer.getByte(0), (byte) 1);
     buffer.writeByte((byte) 4);
     MemoryUtils.wrap(buffer, outputStream);
-    assertEquals(outputStream.getCount(), 4);
-    assertEquals(outputStream.getBuffer()[3], (byte) 4);
+    assertEquals(outputStream.size(), 4);
+    assertEquals(outputStream.toByteArray(), new byte[] {1, 2, 3, 4});
 
-    ForyByteArrayInputStream inputStream = new ForyByteArrayInputStream(new byte[] {5, 6, 7});
+    ByteArrayInputStream inputStream = new ByteArrayInputStream(new byte[] {5, 6, 7});
     assertEquals(inputStream.read(), 5);
     MemoryUtils.wrap(inputStream, buffer);
-    assertEquals(buffer.getHeapMemory(), inputStream.getBuffer());
     assertEquals(buffer.readerIndex(), 1);
     assertEquals(buffer.readByte(), (byte) 6);
   }

@@ -19,6 +19,8 @@
 
 package org.apache.fory.util.unsafe;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -39,6 +41,7 @@ import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.type.TypeUtils;
@@ -56,6 +59,7 @@ public class _JDKAccess {
   // CHECKSTYLE.ON:TypeName
   public static final boolean IS_OPEN_J9;
   public static final Unsafe UNSAFE;
+  public static final boolean BYTE_ARRAY_STREAM_WRAP_SUPPORTED;
   public static final Class<?> _INNER_UNSAFE_CLASS;
   public static final Object _INNER_UNSAFE;
 
@@ -71,6 +75,7 @@ public class _JDKAccess {
       throw new UnsupportedOperationException("Unsafe is not supported in this platform.");
     }
     UNSAFE = unsafe;
+    BYTE_ARRAY_STREAM_WRAP_SUPPORTED = true;
     if (JdkVersion.MAJOR_VERSION >= 11) {
       try {
         Field theInternalUnsafeField = Unsafe.class.getDeclaredField("theInternalUnsafe");
@@ -98,6 +103,55 @@ public class _JDKAccess {
       return _Lookup._trustedLookup(objectClass);
     }
     return lookupCache.get(objectClass, () -> _Lookup._trustedLookup(objectClass));
+  }
+
+  // Lazy load offsets and keep the access shape in one class so the JDK25 multi-release
+  // replacement can change these methods without touching MemoryUtils callers.
+  private static class ByteArrayStreamFields {
+    private static final long BAS_BUF_BUF;
+    private static final long BAS_BUF_COUNT;
+    private static final long BIS_BUF_BUF;
+    private static final long BIS_BUF_POS;
+    private static final long BIS_BUF_COUNT;
+
+    static {
+      try {
+        BAS_BUF_BUF = UNSAFE.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("buf"));
+        BAS_BUF_COUNT =
+            UNSAFE.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("count"));
+        BIS_BUF_BUF = UNSAFE.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("buf"));
+        BIS_BUF_POS = UNSAFE.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("pos"));
+        BIS_BUF_COUNT =
+            UNSAFE.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("count"));
+      } catch (NoSuchFieldException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
+    Preconditions.checkNotNull(stream);
+    byte[] buf = (byte[]) UNSAFE.getObject(stream, ByteArrayStreamFields.BAS_BUF_BUF);
+    int count = UNSAFE.getInt(stream, ByteArrayStreamFields.BAS_BUF_COUNT);
+    buffer.pointTo(buf, 0, buf.length);
+    buffer.writerIndex(count);
+  }
+
+  public static void wrap(MemoryBuffer buffer, ByteArrayOutputStream stream) {
+    Preconditions.checkNotNull(stream);
+    byte[] bytes = buffer.getHeapMemory();
+    Preconditions.checkNotNull(bytes);
+    UNSAFE.putObject(stream, ByteArrayStreamFields.BAS_BUF_BUF, bytes);
+    UNSAFE.putInt(stream, ByteArrayStreamFields.BAS_BUF_COUNT, buffer.writerIndex());
+  }
+
+  public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
+    Preconditions.checkNotNull(stream);
+    byte[] buf = (byte[]) UNSAFE.getObject(stream, ByteArrayStreamFields.BIS_BUF_BUF);
+    int count = UNSAFE.getInt(stream, ByteArrayStreamFields.BIS_BUF_COUNT);
+    int pos = UNSAFE.getInt(stream, ByteArrayStreamFields.BIS_BUF_POS);
+    buffer.pointTo(buf, 0, count);
+    buffer.readerIndex(pos);
   }
 
   public static <T> T tryMakeFunction(

@@ -132,8 +132,7 @@ public class _JDKAccess {
               boxedMethodType(handle.type()));
       return (Function<T, R>) callSite.getTarget().invokeExact();
     } catch (Throwable e) {
-      UNSAFE.throwException(e);
-      throw new IllegalStateException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 
@@ -153,8 +152,7 @@ public class _JDKAccess {
               boxedMethodType(handle.type()));
       return (Consumer<T>) callSite.getTarget().invokeExact();
     } catch (Throwable e) {
-      UNSAFE.throwException(e);
-      throw new IllegalStateException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 
@@ -174,8 +172,7 @@ public class _JDKAccess {
               boxedMethodType(handle.type()));
       return (BiConsumer<T, U>) callSite.getTarget().invokeExact();
     } catch (Throwable e) {
-      UNSAFE.throwException(e);
-      throw new IllegalStateException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 
@@ -208,8 +205,7 @@ public class _JDKAccess {
               instantiatedMethodType);
       return (T) callSite.getTarget().invokeExact();
     } catch (Throwable e) {
-      UNSAFE.throwException(e);
-      throw new IllegalStateException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 
@@ -243,8 +239,7 @@ public class _JDKAccess {
       // FIXME(chaokunyang) why use invokeExact will fail.
       return (T) callSite.getTarget().invoke();
     } catch (Throwable e) {
-      UNSAFE.throwException(e);
-      throw new IllegalStateException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 
@@ -296,8 +291,7 @@ public class _JDKAccess {
       // represented by handle, then exception will be thrown.
       return makeGetterFunction(lookup, handle, Object.class);
     } catch (Throwable e) {
-      UNSAFE.throwException(e);
-      throw new IllegalStateException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 
@@ -315,7 +309,7 @@ public class _JDKAccess {
     try {
       return getModuleMethod.invoke(cls);
     } catch (IllegalAccessException | InvocationTargetException e) {
-      throw new RuntimeException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 
@@ -332,7 +326,7 @@ public class _JDKAccess {
       }
       return addReadsHandle.invoke(thisModule, otherModule);
     } catch (Throwable e) {
-      throw new RuntimeException(e);
+      throw ExceptionUtils.throwException(e);
     }
   }
 }

@@ -38,6 +38,7 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.Functions;
@@ -46,7 +47,6 @@ import org.apache.fory.util.function.ToCharFunction;
 import org.apache.fory.util.function.ToFloatFunction;
 import org.apache.fory.util.function.ToShortFunction;
 import org.apache.fory.util.record.RecordUtils;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Field accessor for primitive types and object types. */
 @SuppressWarnings({"unchecked", "rawtypes"})

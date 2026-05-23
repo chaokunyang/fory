@@ -42,12 +42,12 @@ import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Serializers for {@link Throwable} and {@link StackTraceElement}. */
 @SuppressWarnings({"rawtypes", "unchecked"})

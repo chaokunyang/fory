@@ -32,10 +32,10 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Shareable;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 public class ProtobufSerializer extends Serializer<Message> implements Shareable {

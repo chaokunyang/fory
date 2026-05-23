@@ -51,6 +51,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -66,7 +67,6 @@ import org.apache.fory.serializer.scala.SingletonMapSerializer;
 import org.apache.fory.serializer.scala.SingletonObjectSerializer;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.StringUtils;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Serialization utils and common serializers. */
 @SuppressWarnings({"rawtypes", "unchecked"})

@@ -37,13 +37,13 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Serializer for class which has jdk `writeReplace`/`readResolve` method defined. This serializer

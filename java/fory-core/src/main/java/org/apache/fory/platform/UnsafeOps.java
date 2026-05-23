@@ -22,8 +22,8 @@ package org.apache.fory.platform;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.unsafe._JDKAccess;
 import sun.misc.Unsafe;
 
 // Derived from Apache Spark's unsafe memory utility.

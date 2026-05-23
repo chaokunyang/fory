@@ -34,9 +34,9 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Serializers for jdk9+ java.util.ImmutableCollections. */
 @SuppressWarnings({"unchecked", "rawtypes"})

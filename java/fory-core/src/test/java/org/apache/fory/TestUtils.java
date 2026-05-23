@@ -32,10 +32,10 @@ import java.util.stream.Collectors;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.util.unsafe._JDKAccess;
 import org.testng.SkipException;
 
 /** Test utils. */

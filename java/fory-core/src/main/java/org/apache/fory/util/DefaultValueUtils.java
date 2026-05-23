@@ -34,12 +34,12 @@ import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.ScalaTypes;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Utility class for detecting Scala classes with default values and their default value methods.

@@ -27,7 +27,7 @@ import org.apache.fory.serializer.Serializer
 import org.apache.fory.serializer.collection.CollectionLikeSerializer
 import org.apache.fory.resolver.TypeResolver
 import java.util
-import org.apache.fory.util.unsafe._JDKAccess
+import org.apache.fory.platform.internal._JDKAccess
 
 import java.lang.invoke.{MethodHandle, MethodHandles}
 import scala.collection.immutable.NumericRange

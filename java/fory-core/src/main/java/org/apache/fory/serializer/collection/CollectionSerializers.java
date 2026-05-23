@@ -60,6 +60,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
@@ -71,7 +72,6 @@ import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.Serializers;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Serializers for classes implements {@link Collection}. All collection serializers should extend

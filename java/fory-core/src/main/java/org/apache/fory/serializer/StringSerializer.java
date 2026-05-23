@@ -45,11 +45,11 @@ import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.MathUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringEncodingUtils;
 import org.apache.fory.util.StringUtils;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * String serializer based on {@link sun.misc.Unsafe} and {@link MethodHandle} for speed.

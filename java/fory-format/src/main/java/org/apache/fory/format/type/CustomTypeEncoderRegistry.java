@@ -32,8 +32,8 @@ import org.apache.fory.codegen.Expression.Reference;
 import org.apache.fory.codegen.JaninoUtils;
 import org.apache.fory.format.encoder.CustomCodec;
 import org.apache.fory.format.encoder.CustomCollectionFactory;
+import org.apache.fory.platform.internal.DefineClass;
 import org.apache.fory.reflect.TypeRef;
-import org.apache.fory.util.unsafe.DefineClass;
 
 /**
  * Keep a registry of custom codecs and collection factories. In order to deliver peak performance,

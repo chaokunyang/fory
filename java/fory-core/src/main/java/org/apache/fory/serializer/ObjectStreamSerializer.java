@@ -62,6 +62,7 @@ import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -74,7 +75,6 @@ import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.ExceptionUtils;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Implement jdk custom serialization only if following conditions are met:

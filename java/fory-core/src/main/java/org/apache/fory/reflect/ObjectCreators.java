@@ -30,8 +30,8 @@ import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.record.RecordUtils;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Factory class for creating and caching {@link ObjectCreator} instances.

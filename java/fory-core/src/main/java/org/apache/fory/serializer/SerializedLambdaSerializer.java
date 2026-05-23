@@ -28,9 +28,9 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.util.Preconditions;
-import org.apache.fory.util.unsafe._JDKAccess;
 
 /**
  * Serializer for {@link SerializedLambda}. It writes the JDK lambda payload through the public

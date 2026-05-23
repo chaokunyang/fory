@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.util.unsafe;
+package org.apache.fory.platform.internal;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

@@ -23,7 +23,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.util.unsafe._JDKAccess;
+import org.apache.fory.platform.internal._JDKAccess;
 
 /** Memory utils for fory. */
 public class MemoryUtils {

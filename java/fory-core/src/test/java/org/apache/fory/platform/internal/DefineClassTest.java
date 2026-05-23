@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.util.unsafe;
+package org.apache.fory.platform.internal;
 
 import java.util.Collections;
 import org.apache.fory.codegen.CompileUnit;

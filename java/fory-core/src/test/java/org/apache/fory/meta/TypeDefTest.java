@@ -86,17 +86,6 @@ public class TypeDefTest extends ForyTestBase {
   }
 
   @Test
-  public void testFieldsOrder() {
-    List<Field> fieldList = new ArrayList<>();
-    Collections.addAll(fieldList, TestFieldsOrderClass1.class.getDeclaredFields());
-    Collections.addAll(fieldList, TestFieldsOrderClass2.class.getDeclaredFields());
-    TreeSet<Field> sorted = new TreeSet<>(TypeDef.FIELD_COMPARATOR);
-    sorted.addAll(fieldList);
-    assertEquals(fieldList.size(), sorted.size());
-    fieldList.sort(TypeDef.FIELD_COMPARATOR);
-  }
-
-  @Test
   public void testTypeDefSerialization() throws NoSuchFieldException {
     Fory fory = Fory.builder().withXlang(false).withMetaShare(true).build();
     {

@@ -174,8 +174,8 @@ public class AndroidDynamicFeatureTest {
 
     private static void verifyMemoryUtilsStreamWrapGuards() {
       check(
-          !MemoryUtils.BYTE_ARRAY_STREAM_WRAP_SUPPORTED,
-          "Android must report byte-array stream wrapping unsupported");
+          !MemoryUtils.JDK_INTERNAL_FIELD_ACCESS,
+          "Android must report JDK internal field access unsupported");
       expectUnsupportedAndroidWrap(
           () -> MemoryUtils.wrap(new ByteArrayOutputStream(), MemoryUtils.buffer(8)),
           "ByteArrayOutputStream direct wrapping");

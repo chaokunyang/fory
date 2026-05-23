@@ -28,7 +28,6 @@ import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.function.BiFunction;
@@ -46,7 +45,6 @@ import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.util.MathUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringEncodingUtils;
@@ -72,68 +70,22 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   private static final byte UTF8 = 2;
   private static final int DEFAULT_BUFFER_SIZE = 1024;
 
-  // Make offset compatible with graalvm native image.
-  private static final long STRING_VALUE_FIELD_OFFSET;
   private static final boolean STRING_HAS_COUNT_OFFSET;
-  private static final long STRING_COUNT_FIELD_OFFSET;
-  private static final long STRING_OFFSET_FIELD_OFFSET;
 
-  private static class Offset {
-    // Make offset compatible with graalvm native image.
-    private static final long STRING_CODER_FIELD_OFFSET;
-
-    static {
-      if (AndroidSupport.IS_ANDROID) {
-        STRING_CODER_FIELD_OFFSET = -1;
-      } else {
-        try {
-          STRING_CODER_FIELD_OFFSET =
-              UnsafeOps.objectFieldOffset(String.class.getDeclaredField("coder"));
-        } catch (NoSuchFieldException e) {
-          throw new RuntimeException(e);
-        }
-      }
+  static {
+    if (!jdkInternalFieldAccess()) {
+      STRING_VALUE_FIELD_IS_CHARS = false;
+      STRING_VALUE_FIELD_IS_BYTES = false;
+      STRING_HAS_COUNT_OFFSET = false;
+    } else {
+      STRING_VALUE_FIELD_IS_CHARS = _JDKAccess.STRING_VALUE_FIELD_IS_CHARS;
+      STRING_VALUE_FIELD_IS_BYTES = _JDKAccess.STRING_VALUE_FIELD_IS_BYTES;
+      STRING_HAS_COUNT_OFFSET = _JDKAccess.STRING_HAS_COUNT_OFFSET;
     }
   }
 
-  static {
-    if (AndroidSupport.IS_ANDROID) {
-      STRING_VALUE_FIELD_IS_CHARS = false;
-      STRING_VALUE_FIELD_IS_BYTES = false;
-      STRING_VALUE_FIELD_OFFSET = -1;
-      STRING_HAS_COUNT_OFFSET = false;
-      STRING_COUNT_FIELD_OFFSET = -1;
-      STRING_OFFSET_FIELD_OFFSET = -1;
-    } else {
-      Field valueField = ReflectionUtils.getFieldNullable(String.class, "value");
-      // Java8 string
-      STRING_VALUE_FIELD_IS_CHARS = valueField != null && valueField.getType() == char[].class;
-      // Java11 string
-      STRING_VALUE_FIELD_IS_BYTES = valueField != null && valueField.getType() == byte[].class;
-      try {
-        // Make offset compatible with graalvm native image.
-        STRING_VALUE_FIELD_OFFSET =
-            UnsafeOps.objectFieldOffset(String.class.getDeclaredField("value"));
-      } catch (NoSuchFieldException e) {
-        throw new RuntimeException(e);
-      }
-      Field countField = ReflectionUtils.getFieldNullable(String.class, "count");
-      Field offsetField = ReflectionUtils.getFieldNullable(String.class, "offset");
-      if (countField != null || offsetField != null) {
-        Preconditions.checkArgument(
-            countField != null && offsetField != null, "Current jdk not supported");
-        Preconditions.checkArgument(
-            countField.getType() == int.class && offsetField.getType() == int.class,
-            "Current jdk not supported");
-        STRING_HAS_COUNT_OFFSET = true;
-        STRING_COUNT_FIELD_OFFSET = UnsafeOps.objectFieldOffset(countField);
-        STRING_OFFSET_FIELD_OFFSET = UnsafeOps.objectFieldOffset(offsetField);
-      } else {
-        STRING_HAS_COUNT_OFFSET = false;
-        STRING_COUNT_FIELD_OFFSET = -1;
-        STRING_OFFSET_FIELD_OFFSET = -1;
-      }
-    }
+  private static boolean jdkInternalFieldAccess() {
+    return !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
   }
 
   private final boolean compressString;
@@ -363,7 +315,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Invoked by fory JIT
   public void writeString(MemoryBuffer buffer, String value) {
-    if (AndroidSupport.IS_ANDROID) {
+    if (!jdkInternalFieldAccess()) {
       writeStringSlow(buffer, value);
       return;
     }
@@ -397,7 +349,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Invoked by fory JIT
   public String readString(MemoryBuffer buffer) {
-    if (AndroidSupport.IS_ANDROID) {
+    if (!jdkInternalFieldAccess()) {
       return readStringSlow(buffer);
     }
     if (STRING_VALUE_FIELD_IS_BYTES) {
@@ -474,10 +426,26 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     return true;
   }
 
+  private static Object getStringValue(String value) {
+    return _JDKAccess.getStringValue(value);
+  }
+
+  private static byte getStringCoder(String value) {
+    return _JDKAccess.getStringCoder(value);
+  }
+
+  private static int getStringOffset(String value) {
+    return _JDKAccess.getStringOffset(value);
+  }
+
+  private static int getStringCount(String value) {
+    return _JDKAccess.getStringCount(value);
+  }
+
   @CodegenInvoke
   public void writeCompressedBytesString(MemoryBuffer buffer, String value) {
-    final byte[] bytes = (byte[]) UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
-    final byte coder = UnsafeOps.getByte(value, Offset.STRING_CODER_FIELD_OFFSET);
+    final byte[] bytes = (byte[]) getStringValue(value);
+    final byte coder = getStringCoder(value);
     if (coder == LATIN1 || bestCoder(bytes) == UTF16) {
       writeBytesString(buffer, coder, bytes);
     } else {
@@ -491,7 +459,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   @CodegenInvoke
   public void writeCompressedCharsString(MemoryBuffer buffer, String value) {
-    final char[] chars = (char[]) UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
+    final char[] chars = (char[]) getStringValue(value);
     final byte coder = bestCoder(chars);
     if (coder == LATIN1) {
       writeCharsLatin1(buffer, chars, chars.length);
@@ -508,9 +476,9 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   @CodegenInvoke
   public void writeCompressedCharsStringWithOffset(MemoryBuffer buffer, String value) {
-    final char[] chars = (char[]) UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
-    final int offset = UnsafeOps.getInt(value, STRING_OFFSET_FIELD_OFFSET);
-    final int count = UnsafeOps.getInt(value, STRING_COUNT_FIELD_OFFSET);
+    final char[] chars = (char[]) getStringValue(value);
+    final int offset = getStringOffset(value);
+    final int count = getStringCount(value);
     final byte coder = SlicedStringUtil.bestCoder(chars, offset, count);
     if (coder == LATIN1) {
       SlicedStringUtil.writeCharsLatin1WithOffset(this, buffer, chars, offset, count);
@@ -527,8 +495,8 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   @CodegenInvoke
   public static void writeBytesString(MemoryBuffer buffer, String value) {
-    byte[] bytes = (byte[]) UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
-    byte coder = UnsafeOps.getByte(value, Offset.STRING_CODER_FIELD_OFFSET);
+    byte[] bytes = (byte[]) getStringValue(value);
+    byte coder = getStringCoder(value);
     writeBytesString(buffer, coder, bytes);
   }
 
@@ -568,7 +536,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   @CodegenInvoke
   public void writeCharsString(MemoryBuffer buffer, String value) {
-    final char[] chars = (char[]) UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
+    final char[] chars = (char[]) getStringValue(value);
     if (StringUtils.isLatin(chars)) {
       writeCharsLatin1(buffer, chars, chars.length);
     } else {
@@ -578,9 +546,9 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   @CodegenInvoke
   public void writeCharsStringWithOffset(MemoryBuffer buffer, String value) {
-    final char[] chars = (char[]) UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
-    final int offset = UnsafeOps.getInt(value, STRING_OFFSET_FIELD_OFFSET);
-    final int count = UnsafeOps.getInt(value, STRING_COUNT_FIELD_OFFSET);
+    final char[] chars = (char[]) getStringValue(value);
+    final int offset = getStringOffset(value);
+    final int count = getStringCount(value);
     if (SlicedStringUtil.isLatin(chars, offset, count)) {
       SlicedStringUtil.writeCharsLatin1WithOffset(this, buffer, chars, offset, count);
     } else {
@@ -918,16 +886,16 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   private static final MethodHandles.Lookup STRING_LOOK_UP =
-      AndroidSupport.IS_ANDROID ? null : _JDKAccess._trustedLookup(String.class);
+      jdkInternalFieldAccess() ? _JDKAccess._trustedLookup(String.class) : null;
   private static final BiFunction<char[], Boolean, String> CHARS_STRING_ZERO_COPY_CTR =
-      AndroidSupport.IS_ANDROID ? null : getCharsStringZeroCopyCtr();
+      jdkInternalFieldAccess() ? getCharsStringZeroCopyCtr() : null;
   private static final BiFunction<byte[], Byte, String> BYTES_STRING_ZERO_COPY_CTR =
-      AndroidSupport.IS_ANDROID ? null : getBytesStringZeroCopyCtr();
+      jdkInternalFieldAccess() ? getBytesStringZeroCopyCtr() : null;
   private static final Function<byte[], String> LATIN_BYTES_STRING_ZERO_COPY_CTR =
-      AndroidSupport.IS_ANDROID ? null : getLatinBytesStringZeroCopyCtr();
+      jdkInternalFieldAccess() ? getLatinBytesStringZeroCopyCtr() : null;
 
   public static String newCharsStringZeroCopy(char[] data) {
-    if (AndroidSupport.IS_ANDROID) {
+    if (!jdkInternalFieldAccess()) {
       return newCharsStringSlow(data);
     }
     if (!STRING_VALUE_FIELD_IS_CHARS) {
@@ -944,7 +912,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   // coder param first to make inline call args
   // `(buffer.readByte(), buffer.readBytesWithSizeEmbedded())` work.
   public static String newBytesStringZeroCopy(byte coder, byte[] data) {
-    if (AndroidSupport.IS_ANDROID) {
+    if (!jdkInternalFieldAccess()) {
       return newBytesStringSlow(coder, data);
     }
     if (coder == LATIN1) {

@@ -38,10 +38,11 @@ import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -69,11 +70,11 @@ public final class ExceptionSerializers {
       this.typeResolver = typeResolver;
       messageConstructor = getOptionalMessageConstructor(type);
       objectCreator =
-          messageConstructor == null && !AndroidSupport.IS_ANDROID
+          messageConstructor == null && MemoryUtils.JDK_INTERNAL_FIELD_ACCESS
               ? createThrowableObjectCreator(type)
               : null;
       slotsSerializers = buildSlotsSerializers(typeResolver, type);
-      if (AndroidSupport.IS_ANDROID
+      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS
           && isJdkThrowable(type)
           && hasSubclassFields(slotsSerializers)) {
         throw new ForyException(
@@ -110,7 +111,7 @@ public final class ExceptionSerializers {
     public T read(ReadContext readContext) {
       Serializer[] slotsSerializers = getSlotsSerializers();
       StackTraceElement[] stackTrace = (StackTraceElement[]) readContext.readRef();
-      if (AndroidSupport.IS_ANDROID) {
+      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
         return readAndroidThrowableWithoutDetailMessageField(
             readContext, stackTrace, slotsSerializers);
       }
@@ -120,7 +121,7 @@ public final class ExceptionSerializers {
       String detailMessage = readContext.readStringRef();
       List<Throwable> suppressedExceptions = readSuppressedExceptions(readContext);
       skipExtraFields(readContext);
-      UnsafeOps.putObject(obj, ThrowableOffsets.DETAIL_MESSAGE_FIELD_OFFSET, detailMessage);
+      ThrowableAccessors.DETAIL_MESSAGE_ACCESSOR.putObject(obj, detailMessage);
       if (stackTrace != null) {
         obj.setStackTrace(stackTrace);
       }
@@ -532,15 +533,13 @@ public final class ExceptionSerializers {
     return false;
   }
 
-  private static final class ThrowableOffsets {
-    // Graalvm unsafe offset substitution support: Make the call followed by a field store
-    // directly or by a sign extend node followed directly by a field store.
-    private static final long DETAIL_MESSAGE_FIELD_OFFSET;
+  private static final class ThrowableAccessors {
+    private static final FieldAccessor DETAIL_MESSAGE_ACCESSOR;
 
     static {
       try {
         Field detailMessageField = Throwable.class.getDeclaredField("detailMessage");
-        DETAIL_MESSAGE_FIELD_OFFSET = UnsafeOps.UNSAFE.objectFieldOffset(detailMessageField);
+        DETAIL_MESSAGE_ACCESSOR = FieldAccessor.createAccessor(detailMessageField);
       } catch (Exception e) {
         throw new RuntimeException(e);
       }

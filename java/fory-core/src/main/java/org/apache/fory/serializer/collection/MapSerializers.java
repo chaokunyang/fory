@@ -39,8 +39,8 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -336,13 +336,12 @@ public class MapSerializers {
     private static final byte NORMAL_ENUM_MAP = 0;
     private static final byte JAVA_SERIALIZED_EMPTY_ENUM_MAP = 1;
 
-    private static final class KeyTypeFieldOffset {
-      // Make offset compatible with graalvm native image.
-      private static final long VALUE;
+    private static final class KeyTypeAccess {
+      private static final FieldAccessor ACCESSOR;
 
       static {
         try {
-          VALUE = UnsafeOps.objectFieldOffset(EnumMap.class.getDeclaredField("keyType"));
+          ACCESSOR = FieldAccessor.createAccessor(EnumMap.class.getDeclaredField("keyType"));
         } catch (final Exception e) {
           throw new RuntimeException(e);
         }
@@ -360,7 +359,7 @@ public class MapSerializers {
     @Override
     public Map onMapWrite(WriteContext writeContext, EnumMap value) {
       MemoryBuffer buffer = writeContext.getBuffer();
-      if (AndroidSupport.IS_ANDROID && value.isEmpty()) {
+      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS && value.isEmpty()) {
         buffer.writeByte(JAVA_SERIALIZED_EMPTY_ENUM_MAP);
         getJavaSerializer().write(writeContext, value);
         return value;
@@ -402,7 +401,7 @@ public class MapSerializers {
         Enum key = (Enum) value.keySet().iterator().next();
         return key.getDeclaringClass();
       }
-      return (Class<?>) UnsafeOps.getObject(value, KeyTypeFieldOffset.VALUE);
+      return (Class<?>) KeyTypeAccess.ACCESSOR.getObject(value);
     }
 
     private JavaSerializer getJavaSerializer() {

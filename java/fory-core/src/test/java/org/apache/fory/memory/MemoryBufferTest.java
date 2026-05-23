@@ -84,7 +84,7 @@ public class MemoryBufferTest {
 
   @Test
   public void testByteArrayStreamWrap() {
-    if (!MemoryUtils.BYTE_ARRAY_STREAM_WRAP_SUPPORTED) {
+    if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
       return;
     }
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream(8);

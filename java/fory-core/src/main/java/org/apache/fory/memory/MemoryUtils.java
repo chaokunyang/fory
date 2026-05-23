@@ -27,8 +27,11 @@ import org.apache.fory.util.unsafe._JDKAccess;
 
 /** Memory utils for fory. */
 public class MemoryUtils {
-  public static final boolean BYTE_ARRAY_STREAM_WRAP_SUPPORTED =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.BYTE_ARRAY_STREAM_WRAP_SUPPORTED;
+  // JDK25+ internal-field access must be backed by supported access in the multi-release classes.
+  // When a JDK25+ path needs java.nio private fields, the JVM must be launched with:
+  // --add-opens=java.base/java.nio=org.apache.fory.core
+  public static final boolean JDK_INTERNAL_FIELD_ACCESS =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
 
   public static MemoryBuffer buffer(int size) {
     return wrap(new byte[size]);
@@ -100,7 +103,7 @@ public class MemoryUtils {
   }
 
   private static void checkByteArrayStreamWrap(String streamType) {
-    if (!BYTE_ARRAY_STREAM_WRAP_SUPPORTED) {
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
       throw new UnsupportedOperationException(
           streamType + " direct wrapping is not supported on this platform");
     }

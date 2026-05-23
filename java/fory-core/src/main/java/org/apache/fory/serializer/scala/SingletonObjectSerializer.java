@@ -25,7 +25,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.util.Preconditions;
@@ -37,8 +37,7 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings("rawtypes")
 public class SingletonObjectSerializer extends Serializer {
   private final Field field;
-  private Object base = null;
-  private long offset = -1;
+  private FieldAccessor accessor;
 
   public SingletonObjectSerializer(TypeResolver typeResolver, Class type) {
     super(typeResolver.getConfig(), type);
@@ -71,12 +70,11 @@ public class SingletonObjectSerializer extends Serializer {
         throw new ForyException("Failed to read Scala singleton field: " + type, e);
       }
     }
-    long offset = this.offset;
-    if (offset == -1) {
+    FieldAccessor accessor = this.accessor;
+    if (accessor == null) {
       Preconditions.checkArgument(!GraalvmSupport.isGraalBuildTime());
-      offset = this.offset = UnsafeOps.UNSAFE.staticFieldOffset(field);
-      base = UnsafeOps.UNSAFE.staticFieldBase(field);
+      accessor = this.accessor = FieldAccessor.createStaticAccessor(field);
     }
-    return UnsafeOps.getObject(base, offset);
+    return accessor.getObject(null);
   }
 }

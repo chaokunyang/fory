@@ -59,7 +59,10 @@ public class _JDKAccess {
   // CHECKSTYLE.ON:TypeName
   public static final boolean IS_OPEN_J9;
   public static final Unsafe UNSAFE;
-  public static final boolean BYTE_ARRAY_STREAM_WRAP_SUPPORTED;
+  // Root classes use Unsafe for JDK internal fields. A JDK25 multi-release _JDKAccess must keep
+  // this API surface and implement supported cases with VarHandle, or set this false so callers
+  // choose public fallbacks.
+  public static final boolean JDK_INTERNAL_FIELD_ACCESS;
   public static final Class<?> _INNER_UNSAFE_CLASS;
   public static final Object _INNER_UNSAFE;
 
@@ -75,7 +78,7 @@ public class _JDKAccess {
       throw new UnsupportedOperationException("Unsafe is not supported in this platform.");
     }
     UNSAFE = unsafe;
-    BYTE_ARRAY_STREAM_WRAP_SUPPORTED = true;
+    JDK_INTERNAL_FIELD_ACCESS = true;
     if (JdkVersion.MAJOR_VERSION >= 11) {
       try {
         Field theInternalUnsafeField = Unsafe.class.getDeclaredField("theInternalUnsafe");
@@ -92,6 +95,76 @@ public class _JDKAccess {
   }
 
   private static final ClassValueCache<Lookup> lookupCache = ClassValueCache.newClassKeyCache(32);
+
+  public static final boolean STRING_VALUE_FIELD_IS_CHARS;
+  public static final boolean STRING_VALUE_FIELD_IS_BYTES;
+  public static final boolean STRING_HAS_COUNT_OFFSET;
+  private static final long STRING_VALUE_FIELD_OFFSET;
+  private static final long STRING_COUNT_FIELD_OFFSET;
+  private static final long STRING_OFFSET_FIELD_OFFSET;
+
+  static {
+    try {
+      Field valueField = String.class.getDeclaredField("value");
+      STRING_VALUE_FIELD_IS_CHARS = valueField.getType() == char[].class;
+      STRING_VALUE_FIELD_IS_BYTES = valueField.getType() == byte[].class;
+      STRING_VALUE_FIELD_OFFSET = UNSAFE.objectFieldOffset(valueField);
+      Field countField = getStringFieldNullable("count");
+      Field offsetField = getStringFieldNullable("offset");
+      if (countField != null || offsetField != null) {
+        Preconditions.checkArgument(
+            countField != null && offsetField != null, "Current jdk not supported");
+        Preconditions.checkArgument(
+            countField.getType() == int.class && offsetField.getType() == int.class,
+            "Current jdk not supported");
+        STRING_HAS_COUNT_OFFSET = true;
+        STRING_COUNT_FIELD_OFFSET = UNSAFE.objectFieldOffset(countField);
+        STRING_OFFSET_FIELD_OFFSET = UNSAFE.objectFieldOffset(offsetField);
+      } else {
+        STRING_HAS_COUNT_OFFSET = false;
+        STRING_COUNT_FIELD_OFFSET = -1;
+        STRING_OFFSET_FIELD_OFFSET = -1;
+      }
+    } catch (NoSuchFieldException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static Field getStringFieldNullable(String fieldName) {
+    try {
+      return String.class.getDeclaredField(fieldName);
+    } catch (NoSuchFieldException e) {
+      return null;
+    }
+  }
+
+  private static class StringCoderField {
+    private static final long OFFSET;
+
+    static {
+      try {
+        OFFSET = UNSAFE.objectFieldOffset(String.class.getDeclaredField("coder"));
+      } catch (NoSuchFieldException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  public static Object getStringValue(String value) {
+    return UNSAFE.getObject(value, STRING_VALUE_FIELD_OFFSET);
+  }
+
+  public static byte getStringCoder(String value) {
+    return UNSAFE.getByte(value, StringCoderField.OFFSET);
+  }
+
+  public static int getStringOffset(String value) {
+    return UNSAFE.getInt(value, STRING_OFFSET_FIELD_OFFSET);
+  }
+
+  public static int getStringCount(String value) {
+    return UNSAFE.getInt(value, STRING_COUNT_FIELD_OFFSET);
+  }
 
   // CHECKSTYLE.OFF:MethodName
 

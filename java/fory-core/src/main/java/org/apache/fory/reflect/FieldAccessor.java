@@ -24,6 +24,7 @@ import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
@@ -191,6 +192,7 @@ public abstract class FieldAccessor {
   }
 
   public static FieldAccessor createAccessor(Field field) {
+    Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
     if (RecordUtils.isRecord(field.getDeclaringClass())) {
       if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         return new ReflectiveRecordFieldAccessor(field);
@@ -249,6 +251,15 @@ public abstract class FieldAccessor {
     } else {
       return new ObjectAccessor(field);
     }
+  }
+
+  public static FieldAccessor createStaticAccessor(Field field) {
+    Preconditions.checkArgument(Modifier.isStatic(field.getModifiers()), field);
+    if (AndroidSupport.IS_ANDROID) {
+      field.setAccessible(true);
+      return new ReflectiveStaticFieldAccessor(field);
+    }
+    return new StaticObjectAccessor(field);
   }
 
   static final class ReflectiveRecordFieldAccessor extends FieldGetter {
@@ -717,6 +728,52 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       return getter.apply(obj);
+    }
+  }
+
+  static final class ReflectiveStaticFieldAccessor extends FieldAccessor {
+    ReflectiveStaticFieldAccessor(Field field) {
+      super(field, -1);
+    }
+
+    @Override
+    public Object get(Object obj) {
+      try {
+        return field.get(null);
+      } catch (IllegalAccessException | IllegalArgumentException e) {
+        throw new ForyException("Failed to read static field reflectively: " + field, e);
+      }
+    }
+
+    @Override
+    public void set(Object obj, Object value) {
+      try {
+        field.set(null, value);
+      } catch (IllegalAccessException | IllegalArgumentException e) {
+        throw new ForyException("Failed to write static field reflectively: " + field, e);
+      }
+    }
+  }
+
+  static final class StaticObjectAccessor extends FieldAccessor {
+    private final Object base;
+    private final long offset;
+
+    StaticObjectAccessor(Field field) {
+      super(field, -1);
+      Preconditions.checkArgument(!TypeUtils.isPrimitive(field.getType()));
+      base = UnsafeOps.UNSAFE.staticFieldBase(field);
+      offset = UnsafeOps.UNSAFE.staticFieldOffset(field);
+    }
+
+    @Override
+    public Object get(Object obj) {
+      return UnsafeOps.getObject(base, offset);
+    }
+
+    @Override
+    public void set(Object obj, Object value) {
+      UnsafeOps.putObject(base, offset, value);
     }
   }
 

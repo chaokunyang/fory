@@ -499,30 +499,13 @@ public class ReflectionUtils {
   public static void setObjectFieldValue(Object obj, Field field, Object value) {
     Preconditions.checkArgument(
         !field.getType().isPrimitive(), "Field %s is primitive type", field);
-    if (AndroidSupport.IS_ANDROID) {
-      try {
-        field.setAccessible(true);
-        field.set(obj, value);
-        return;
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw new ForyException("Failed to write object field reflectively: " + field, e);
-      }
-    }
-    UnsafeOps.putObject(obj, UnsafeOps.objectFieldOffset(field), value);
+    FieldAccessor.createAccessor(field).putObject(obj, value);
   }
 
   public static <T> T getObjectFieldValue(Object obj, Field field) {
     Preconditions.checkArgument(
         !field.getType().isPrimitive(), "Field %s is primitive type", field);
-    if (AndroidSupport.IS_ANDROID) {
-      try {
-        field.setAccessible(true);
-        return (T) field.get(obj);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw new ForyException("Failed to read object field reflectively: " + field, e);
-      }
-    }
-    return (T) UnsafeOps.getObject(obj, UnsafeOps.objectFieldOffset(field));
+    return (T) FieldAccessor.createAccessor(field).getObject(obj);
   }
 
   /**
@@ -538,16 +521,7 @@ public class ReflectionUtils {
         Field field = cls.getDeclaredField(fieldName);
         Preconditions.checkArgument(
             !field.getType().isPrimitive(), "Field %s is primitive type", field);
-        if (AndroidSupport.IS_ANDROID) {
-          try {
-            field.setAccessible(true);
-            return field.get(obj);
-          } catch (IllegalAccessException | IllegalArgumentException e) {
-            throw new ForyException("Failed to read object field reflectively: " + field, e);
-          }
-        }
-        long fieldOffset = UnsafeOps.objectFieldOffset(field);
-        return UnsafeOps.getObject(obj, fieldOffset);
+        return FieldAccessor.createAccessor(field).getObject(obj);
         // CHECKSTYLE.OFF:EmptyCatchBlock
       } catch (NoSuchFieldException ignored) {
       }

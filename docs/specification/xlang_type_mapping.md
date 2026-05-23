@@ -23,7 +23,9 @@ Note:
 
 - For type definition, see [Type Systems in Spec](xlang_serialization_spec.md#type-systems)
 - `int16_t[n]/vector<T>` indicates `int16_t[n]/vector<int16_t>`
-- The cross-language serialization is not stable, do not use it in your production environment.
+- Xlang serialization is the portable wire format shared by Java, Python, C++,
+  Go, Rust, JavaScript/TypeScript, C#, Swift, Dart, Scala, and Kotlin. Keep type
+  IDs, names, schemas, and compatibility settings aligned across every peer.
 
 ## User Type IDs
 
@@ -52,7 +54,7 @@ The first column names the Fory schema expression or canonical wire tag. Scalar
 encoding rows such as `fixed int32` and `tagged int64` are not FDL type names;
 FDL spells them as an encoding modifier plus a semantic integer type.
 
-| Fory schema / wire tag             | Fory Type ID | Java                                      | Python                                    | Javascript                            | C++                                                 | Golang                                         | Rust                              |
+| Fory schema / wire tag             | Fory Type ID | Java                                      | Python                                    | JavaScript/TypeScript                 | C++                                                 | Go                                             | Rust                              |
 | ---------------------------------- | ------------ | ----------------------------------------- | ----------------------------------------- | ------------------------------------- | --------------------------------------------------- | ---------------------------------------------- | --------------------------------- |
 | bool                               | 1            | bool/Boolean                              | bool                                      | Boolean                               | bool                                                | bool                                           | bool                              |
 | int8                               | 2            | byte/Byte                                 | int/pyfory.Int8                           | Type.int8()                           | int8_t                                              | int8                                           | i8                                |
@@ -142,6 +144,29 @@ Notes:
   not apply inside nested collection, map, array, union, or generic positions. A peer `list<T>`
   payload that declares nullable or ref-tracked elements must raise a compatible-read error when the
   local matched field is `array<T>`.
+
+### Additional Supported Language Mapping
+
+The main table above lists per-wire-tag mappings for Java, Python,
+JavaScript/TypeScript, C++, Go, and Rust. Fory 1.0 also supports C#, Swift,
+Dart, Scala, and Kotlin. Their generated carriers follow the same schema kinds:
+
+| Fory schema kind                      | C#                                         | Swift                                 | Dart                                       | Scala                                        | Kotlin                                  |
+| ------------------------------------- | ------------------------------------------ | ------------------------------------- | ------------------------------------------ | -------------------------------------------- | --------------------------------------- |
+| `bool`                                | `bool`                                     | `Bool`                                | `bool`                                     | `Boolean`                                    | `Boolean`                               |
+| `int8`, `int16`, `int32`, `int64`     | `sbyte`, `short`, `int`, `long`            | `Int8`, `Int16`, `Int32`, `Int64`     | `int` with field metadata                  | `Byte`, `Short`, `Int`, `Long`               | `Byte`, `Short`, `Int`, `Long`          |
+| `uint8`, `uint16`, `uint32`, `uint64` | `byte`, `ushort`, `uint`, `ulong`          | `UInt8`, `UInt16`, `UInt32`, `UInt64` | `int`/`Uint64` with field metadata         | `Int`, `Int`, `Long`, `Long` plus metadata   | `UByte`, `UShort`, `UInt`, `ULong`      |
+| `float16`, `bfloat16`                 | `Half`, `BFloat16`                         | `Float16`, `BFloat16`                 | `double` with `Float16Type`/`Bfloat16Type` | JVM `Float16`, `BFloat16`                    | JVM `Float16`, `BFloat16`               |
+| `float32`, `float64`                  | `float`, `double`                          | `Float`, `Double`                     | `Float32`, `double`                        | `Float`, `Double`                            | `Float`, `Double`                       |
+| `string`, `binary`                    | `string`, `byte[]`                         | `String`, `Data`                      | `String`, `Uint8List`                      | `String`, `Array[Byte]`                      | `String`, `ByteArray`                   |
+| `list<T>`, `set<T>`, `map<K, V>`      | `List<T>`, `HashSet<T>`, `Dictionary<K,V>` | `[T]`, `Set<T>`, `[K: V]`             | `List<T>`, `Set<T>`, `Map<K, V>`           | `List[T]`, `Set[T]`, `Map[K, V]`             | `List<T>`, `Set<T>`, `Map<K, V>`        |
+| `array<T>`                            | primitive arrays or schema descriptors     | arrays with `@ArrayField` metadata    | typed-data lists or Fory dense-array lists | primitive arrays with descriptor metadata    | primitive/unsigned arrays with metadata |
+| `date`, `timestamp`, `duration`       | `DateOnly`, `DateTime`, `TimeSpan`         | `LocalDate`, `Date`, `Duration`       | `LocalDate`, `Timestamp`, `Duration`       | `java.time.LocalDate`, `Instant`, `Duration` | Java time / Kotlin duration carriers    |
+| `decimal`                             | `decimal`                                  | `Decimal`                             | `Decimal`                                  | `java.math.BigDecimal`                       | `java.math.BigDecimal`                  |
+| `message`                             | `[ForyObject]` class or struct             | `@ForyStruct` struct or class         | `@ForyStruct` class                        | Scala 3 `case class` or class                | `data class` or class                   |
+| `enum`                                | C# enum                                    | Swift enum                            | Dart enum                                  | Scala 3 enum                                 | Kotlin enum class                       |
+| `union`                               | `Union` subclass                           | tagged associated-value enum          | `@ForyUnion` class                         | Scala 3 ADT enum                             | sealed class                            |
+| `any`                                 | `object?`                                  | `Any`                                 | `Object?`                                  | `AnyRef`                                     | `Any?`                                  |
 
 ### Scala IDL Mapping
 

@@ -34,7 +34,6 @@ import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.ScalaTypes;
@@ -418,35 +417,30 @@ public class DefaultValueUtils {
       FieldAccessor fieldAccessor = defaultField.getFieldAccessor();
       if (fieldAccessor != null) {
         Object defaultValue = defaultField.getDefaultValue();
-        if (AndroidSupport.IS_ANDROID) {
-          fieldAccessor.set(obj, defaultValue);
-          continue;
-        }
-        long fieldOffset = fieldAccessor.getFieldOffset();
         switch (defaultField.dispatchId) {
           case Types.BOOL:
-            UnsafeOps.putBoolean(obj, fieldOffset, (Boolean) defaultValue);
+            fieldAccessor.putBoolean(obj, (Boolean) defaultValue);
             break;
           case Types.INT8:
-            UnsafeOps.putByte(obj, fieldOffset, (Byte) defaultValue);
+            fieldAccessor.putByte(obj, (Byte) defaultValue);
             break;
           case Types.INT16:
-            UnsafeOps.putShort(obj, fieldOffset, (Short) defaultValue);
+            fieldAccessor.putShort(obj, (Short) defaultValue);
             break;
           case Types.INT32:
           case Types.VARINT32:
-            UnsafeOps.putInt(obj, fieldOffset, (Integer) defaultValue);
+            fieldAccessor.putInt(obj, (Integer) defaultValue);
             break;
           case Types.INT64:
           case Types.VARINT64:
           case Types.TAGGED_INT64:
-            UnsafeOps.putLong(obj, fieldOffset, (Long) defaultValue);
+            fieldAccessor.putLong(obj, (Long) defaultValue);
             break;
           case Types.FLOAT32:
-            UnsafeOps.putFloat(obj, fieldOffset, (Float) defaultValue);
+            fieldAccessor.putFloat(obj, (Float) defaultValue);
             break;
           case Types.FLOAT64:
-            UnsafeOps.putDouble(obj, fieldOffset, (Double) defaultValue);
+            fieldAccessor.putDouble(obj, (Double) defaultValue);
             break;
           default:
             // Object type (including String, char, boxed types not covered above)

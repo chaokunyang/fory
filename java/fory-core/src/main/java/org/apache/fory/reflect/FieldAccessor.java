@@ -47,11 +47,7 @@ import org.apache.fory.util.function.ToShortFunction;
 import org.apache.fory.util.record.RecordUtils;
 import org.apache.fory.util.unsafe._JDKAccess;
 
-/**
- * Field accessor for primitive types and object types.
- *
- * <p>Note for primitive types, there will be box/unbox overhead.
- */
+/** Field accessor for primitive types and object types. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class FieldAccessor {
   protected final Field field;
@@ -84,7 +80,71 @@ public abstract class FieldAccessor {
     return field;
   }
 
-  public final void putObject(Object targetObject, Object object) {
+  public boolean getBoolean(Object targetObject) {
+    return (Boolean) get(targetObject);
+  }
+
+  public void putBoolean(Object targetObject, boolean value) {
+    set(targetObject, value);
+  }
+
+  public byte getByte(Object targetObject) {
+    return (Byte) get(targetObject);
+  }
+
+  public void putByte(Object targetObject, byte value) {
+    set(targetObject, value);
+  }
+
+  public char getChar(Object targetObject) {
+    return (Character) get(targetObject);
+  }
+
+  public void putChar(Object targetObject, char value) {
+    set(targetObject, value);
+  }
+
+  public short getShort(Object targetObject) {
+    return (Short) get(targetObject);
+  }
+
+  public void putShort(Object targetObject, short value) {
+    set(targetObject, value);
+  }
+
+  public int getInt(Object targetObject) {
+    return (Integer) get(targetObject);
+  }
+
+  public void putInt(Object targetObject, int value) {
+    set(targetObject, value);
+  }
+
+  public long getLong(Object targetObject) {
+    return (Long) get(targetObject);
+  }
+
+  public void putLong(Object targetObject, long value) {
+    set(targetObject, value);
+  }
+
+  public float getFloat(Object targetObject) {
+    return (Float) get(targetObject);
+  }
+
+  public void putFloat(Object targetObject, float value) {
+    set(targetObject, value);
+  }
+
+  public double getDouble(Object targetObject) {
+    return (Double) get(targetObject);
+  }
+
+  public void putDouble(Object targetObject, double value) {
+    set(targetObject, value);
+  }
+
+  public void putObject(Object targetObject, Object object) {
     // For primitive fields, we must use set() which calls the correct UnsafeOps.putXxx method.
     // UnsafeOps.putObject writes object references, not primitive values.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
@@ -94,7 +154,7 @@ public abstract class FieldAccessor {
     }
   }
 
-  public final Object getObject(Object targetObject) {
+  public Object getObject(Object targetObject) {
     // For primitive fields, we must use get() which calls the correct UnsafeOps.getXxx method
     // and returns the boxed value. UnsafeOps.getObject interprets primitive bytes as object
     // refs.
@@ -103,10 +163,6 @@ public abstract class FieldAccessor {
     } else {
       return get(targetObject);
     }
-  }
-
-  public long getFieldOffset() {
-    return fieldOffset;
   }
 
   void checkObj(Object obj) {
@@ -236,14 +292,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Object get(Object obj) {
+      return getBoolean(obj);
+    }
+
+    @Override
+    public boolean getBoolean(Object obj) {
       checkObj(obj);
       return UnsafeOps.getBoolean(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putBoolean(obj, (Boolean) value);
+    }
+
+    @Override
+    public void putBoolean(Object obj, boolean value) {
       checkObj(obj);
-      UnsafeOps.putBoolean(obj, fieldOffset, (Boolean) value);
+      UnsafeOps.putBoolean(obj, fieldOffset, value);
     }
   }
 
@@ -258,6 +324,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Boolean get(Object obj) {
+      return getBoolean(obj);
+    }
+
+    @Override
+    public boolean getBoolean(Object obj) {
       checkObj(obj);
       return getter.test(obj);
     }
@@ -272,14 +343,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Byte get(Object obj) {
+      return getByte(obj);
+    }
+
+    @Override
+    public byte getByte(Object obj) {
       checkObj(obj);
       return UnsafeOps.getByte(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putByte(obj, (Byte) value);
+    }
+
+    @Override
+    public void putByte(Object obj, byte value) {
       checkObj(obj);
-      UnsafeOps.putByte(obj, fieldOffset, (Byte) value);
+      UnsafeOps.putByte(obj, fieldOffset, value);
     }
   }
 
@@ -295,6 +376,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Byte get(Object obj) {
+      return getByte(obj);
+    }
+
+    @Override
+    public byte getByte(Object obj) {
       return getter.applyAsByte(obj);
     }
   }
@@ -308,14 +394,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Character get(Object obj) {
+      return getChar(obj);
+    }
+
+    @Override
+    public char getChar(Object obj) {
       checkObj(obj);
       return UnsafeOps.getChar(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putChar(obj, (Character) value);
+    }
+
+    @Override
+    public void putChar(Object obj, char value) {
       checkObj(obj);
-      UnsafeOps.putChar(obj, fieldOffset, (Character) value);
+      UnsafeOps.putChar(obj, fieldOffset, value);
     }
   }
 
@@ -330,6 +426,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Character get(Object obj) {
+      return getChar(obj);
+    }
+
+    @Override
+    public char getChar(Object obj) {
       return getter.applyAsChar(obj);
     }
   }
@@ -343,14 +444,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Short get(Object obj) {
+      return getShort(obj);
+    }
+
+    @Override
+    public short getShort(Object obj) {
       checkObj(obj);
       return UnsafeOps.getShort(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putShort(obj, (Short) value);
+    }
+
+    @Override
+    public void putShort(Object obj, short value) {
       checkObj(obj);
-      UnsafeOps.putShort(obj, fieldOffset, (Short) value);
+      UnsafeOps.putShort(obj, fieldOffset, value);
     }
   }
 
@@ -365,6 +476,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Short get(Object obj) {
+      return getShort(obj);
+    }
+
+    @Override
+    public short getShort(Object obj) {
       return getter.applyAsShort(obj);
     }
   }
@@ -378,14 +494,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Integer get(Object obj) {
+      return getInt(obj);
+    }
+
+    @Override
+    public int getInt(Object obj) {
       checkObj(obj);
       return UnsafeOps.getInt(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putInt(obj, (Integer) value);
+    }
+
+    @Override
+    public void putInt(Object obj, int value) {
       checkObj(obj);
-      UnsafeOps.putInt(obj, fieldOffset, (Integer) value);
+      UnsafeOps.putInt(obj, fieldOffset, value);
     }
   }
 
@@ -400,6 +526,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Integer get(Object obj) {
+      return getInt(obj);
+    }
+
+    @Override
+    public int getInt(Object obj) {
       return getter.applyAsInt(obj);
     }
   }
@@ -413,14 +544,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Long get(Object obj) {
+      return getLong(obj);
+    }
+
+    @Override
+    public long getLong(Object obj) {
       checkObj(obj);
       return UnsafeOps.getLong(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putLong(obj, (Long) value);
+    }
+
+    @Override
+    public void putLong(Object obj, long value) {
       checkObj(obj);
-      UnsafeOps.putLong(obj, fieldOffset, (Long) value);
+      UnsafeOps.putLong(obj, fieldOffset, value);
     }
   }
 
@@ -435,6 +576,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Long get(Object obj) {
+      return getLong(obj);
+    }
+
+    @Override
+    public long getLong(Object obj) {
       return getter.applyAsLong(obj);
     }
   }
@@ -448,14 +594,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Object get(Object obj) {
+      return getFloat(obj);
+    }
+
+    @Override
+    public float getFloat(Object obj) {
       checkObj(obj);
       return UnsafeOps.getFloat(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putFloat(obj, (Float) value);
+    }
+
+    @Override
+    public void putFloat(Object obj, float value) {
       checkObj(obj);
-      UnsafeOps.putFloat(obj, fieldOffset, (Float) value);
+      UnsafeOps.putFloat(obj, fieldOffset, value);
     }
   }
 
@@ -470,6 +626,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Float get(Object obj) {
+      return getFloat(obj);
+    }
+
+    @Override
+    public float getFloat(Object obj) {
       return getter.applyAsFloat(obj);
     }
   }
@@ -483,14 +644,24 @@ public abstract class FieldAccessor {
 
     @Override
     public Object get(Object obj) {
+      return getDouble(obj);
+    }
+
+    @Override
+    public double getDouble(Object obj) {
       checkObj(obj);
       return UnsafeOps.getDouble(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
+      putDouble(obj, (Double) value);
+    }
+
+    @Override
+    public void putDouble(Object obj, double value) {
       checkObj(obj);
-      UnsafeOps.putDouble(obj, fieldOffset, (Double) value);
+      UnsafeOps.putDouble(obj, fieldOffset, value);
     }
   }
 
@@ -505,6 +676,11 @@ public abstract class FieldAccessor {
 
     @Override
     public Double get(Object obj) {
+      return getDouble(obj);
+    }
+
+    @Override
+    public double getDouble(Object obj) {
       return getter.applyAsDouble(obj);
     }
   }
@@ -588,6 +764,150 @@ public abstract class FieldAccessor {
 
     @Override
     public void set(Object obj, Object value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public boolean getBoolean(Object obj) {
+      try {
+        return (boolean) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putBoolean(Object obj, boolean value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public byte getByte(Object obj) {
+      try {
+        return (byte) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putByte(Object obj, byte value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public char getChar(Object obj) {
+      try {
+        return (char) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putChar(Object obj, char value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public short getShort(Object obj) {
+      try {
+        return (short) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putShort(Object obj, short value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public int getInt(Object obj) {
+      try {
+        return (int) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putInt(Object obj, int value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public long getLong(Object obj) {
+      try {
+        return (long) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putLong(Object obj, long value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public float getFloat(Object obj) {
+      try {
+        return (float) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putFloat(Object obj, float value) {
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public double getDouble(Object obj) {
+      try {
+        return (double) getter.invoke(obj);
+      } catch (Throwable e) {
+        throw new RuntimeException(e);
+      }
+    }
+
+    @Override
+    public void putDouble(Object obj, double value) {
       try {
         setter.invoke(obj, value);
       } catch (Throwable e) {

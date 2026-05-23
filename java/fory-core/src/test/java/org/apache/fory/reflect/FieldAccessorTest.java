@@ -46,14 +46,23 @@ public class FieldAccessorTest {
     Assert.assertEquals(f1.get(struct), 10);
     f1.set(struct, 20);
     Assert.assertEquals(f1.get(struct), 20);
+    Assert.assertEquals(f1.getInt(struct), 20);
+    f1.putInt(struct, 30);
+    Assert.assertEquals(f1.getInt(struct), 30);
     GeneratedAccessor f2 = new GeneratedAccessor(TestStruct.class.getDeclaredField("f2"));
     Assert.assertEquals(f2.get(struct), true);
     f2.set(struct, false);
     Assert.assertEquals(f2.get(struct), false);
+    Assert.assertFalse(f2.getBoolean(struct));
+    f2.putBoolean(struct, true);
+    Assert.assertTrue(f2.getBoolean(struct));
     GeneratedAccessor f3 = new GeneratedAccessor(TestStruct.class.getDeclaredField("f3"));
     Assert.assertEquals(f3.get(struct), "str");
     f3.set(struct, "a");
     Assert.assertEquals(f3.get(struct), "a");
+    Assert.assertEquals(f3.getObject(struct), "a");
+    f3.putObject(struct, "b");
+    Assert.assertEquals(f3.getObject(struct), "b");
   }
 
   @Test
@@ -107,7 +116,6 @@ public class FieldAccessorTest {
       FieldAccessor accessor = FieldAccessor.createAccessor(field);
       check(
           accessor instanceof ReflectionFieldAccessor, "Expected reflection accessor for " + field);
-      check(accessor.getFieldOffset() == -1, "Android field accessor should not expose offsets");
       checkEquals(accessor.get(fields), expected, "initial " + fieldName);
       accessor.set(fields, replacement);
       checkEquals(accessor.get(fields), replacement, "updated " + fieldName);

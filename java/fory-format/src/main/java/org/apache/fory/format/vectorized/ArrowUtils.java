@@ -150,6 +150,11 @@ public class ArrowUtils {
           }
         }
       }
+      if ("java.lang.reflect.InaccessibleObjectException".equals(cause.getClass().getName())
+          && cause.getMessage() != null
+          && cause.getMessage().contains("java.nio")) {
+        return true;
+      }
       cause = cause.getCause();
     }
     return false;

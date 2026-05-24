@@ -19,7 +19,6 @@
 
 package org.apache.fory.type.unsigned;
 
-import java.beans.ConstructorProperties;
 import java.io.Serializable;
 
 /**
@@ -40,7 +39,6 @@ public final class UInt16 implements Comparable<UInt16>, Serializable {
 
   private final short data;
 
-  @ConstructorProperties("data")
   public UInt16(short data) {
     this.data = data;
   }

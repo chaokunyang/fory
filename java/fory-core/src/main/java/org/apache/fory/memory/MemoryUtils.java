@@ -23,6 +23,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 
 /** Memory utils for fory. */
@@ -31,19 +32,33 @@ public class MemoryUtils {
   // When a JDK25+ path needs JDK private fields, open the needed java.base package to both
   // org.apache.fory.core and org.apache.fory.format.
   public static final boolean JDK_INTERNAL_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
   public static final boolean JDK_LANG_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_LANG_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          && _JDKAccess.JDK_LANG_FIELD_ACCESS;
   public static final boolean JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          && _JDKAccess.JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS;
   public static final boolean JDK_OBJECT_STREAM_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_OBJECT_STREAM_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          && _JDKAccess.JDK_OBJECT_STREAM_FIELD_ACCESS;
   public static final boolean JDK_COLLECTION_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_COLLECTION_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          && _JDKAccess.JDK_COLLECTION_FIELD_ACCESS;
   public static final boolean JDK_CONCURRENT_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_CONCURRENT_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          && _JDKAccess.JDK_CONCURRENT_FIELD_ACCESS;
   public static final boolean JDK_PROXY_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_PROXY_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID
+          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+          && _JDKAccess.JDK_PROXY_FIELD_ACCESS;
 
   public static MemoryBuffer buffer(int size) {
     return wrap(new byte[size]);

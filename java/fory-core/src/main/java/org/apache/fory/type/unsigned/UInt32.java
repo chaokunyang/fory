@@ -19,7 +19,6 @@
 
 package org.apache.fory.type.unsigned;
 
-import java.beans.ConstructorProperties;
 import java.io.Serializable;
 
 /**
@@ -38,7 +37,6 @@ public final class UInt32 implements Comparable<UInt32>, Serializable {
 
   private final int data;
 
-  @ConstructorProperties("data")
   public UInt32(int data) {
     this.data = data;
   }

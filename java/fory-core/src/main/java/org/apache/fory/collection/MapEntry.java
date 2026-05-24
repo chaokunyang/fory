@@ -19,7 +19,6 @@
 
 package org.apache.fory.collection;
 
-import java.beans.ConstructorProperties;
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,7 +27,6 @@ public class MapEntry<K, V> implements Map.Entry<K, V> {
   private final K key;
   private V value;
 
-  @ConstructorProperties({"key", "value"})
   public MapEntry(K key, V value) {
     this.key = key;
     this.value = value;

@@ -153,9 +153,7 @@ def install_jdk25_fory_artifacts():
         )
         logging.info("Verify JDK25 benchmark multi-release jar")
         common.cd_project_subdir("benchmarks/java")
-        common.exec_cmd(
-            "mvn -T10 -B --no-transfer-progress -Pjmh -DskipTests install"
-        )
+        common.exec_cmd("mvn -T10 -B --no-transfer-progress -Pjmh -DskipTests install")
         logging.info("Verify JPMS tests on JDK25")
         common.cd_project_subdir("integration_tests/jpms_tests")
         common.exec_cmd("mvn -T10 -B --no-transfer-progress clean test")

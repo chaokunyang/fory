@@ -167,14 +167,15 @@ public class _JDKAccess {
     }
   }
 
-  public static final long STRING_CODER_FIELD_OFFSET = StringCoderField.OFFSET;
+  public static final long STRING_CODER_FIELD_OFFSET =
+      STRING_VALUE_FIELD_IS_BYTES ? StringCoderField.OFFSET : -1;
 
   public static Object getStringValue(String value) {
     return UNSAFE.getObject(value, STRING_VALUE_FIELD_OFFSET);
   }
 
   public static byte getStringCoder(String value) {
-    return UNSAFE.getByte(value, StringCoderField.OFFSET);
+    return UNSAFE.getByte(value, STRING_CODER_FIELD_OFFSET);
   }
 
   public static int getStringOffset(String value) {

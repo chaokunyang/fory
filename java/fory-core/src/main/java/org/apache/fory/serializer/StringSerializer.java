@@ -127,6 +127,9 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   public static Expression writeStringExpr(
       Expression strSerializer, Expression buffer, Expression str, boolean compressString) {
+    if (!jdkInternalFieldAccess()) {
+      return new Invoke(strSerializer, "writeString", buffer, str);
+    }
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         return new Invoke(strSerializer, "writeCompressedBytesString", buffer, str);
@@ -155,6 +158,9 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   public static Expression readStringExpr(
       Expression strSerializer, Expression buffer, boolean compressString) {
+    if (!jdkInternalFieldAccess()) {
+      return new Invoke(strSerializer, "readString", STRING_TYPE, buffer);
+    }
     if (STRING_VALUE_FIELD_IS_BYTES) {
       if (compressString) {
         return new Invoke(strSerializer, "readCompressedBytesString", STRING_TYPE, buffer);

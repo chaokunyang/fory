@@ -563,7 +563,7 @@ public final class Fory implements BaseFory {
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
     MemoryBuffer buf = getBuffer();
-    if (MemoryUtils.JDK_INTERNAL_FIELD_ACCESS
+    if (MemoryUtils.JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS
         && outputStream.getClass() == ByteArrayOutputStream.class) {
       byte[] oldBytes = buf.getHeapMemory(); // Note: This should not be null.
       assert oldBytes != null;

@@ -53,8 +53,25 @@ import org.apache.fory.resolver.TypeResolver;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class ExceptionSerializers {
   private static final Set<Class<?>> THROWABLE_SUPER_CLASSES = ofHashSet(Throwable.class);
+  private static final ObjectCreator<Object> FIELD_ONLY_CREATOR = new FieldOnlyCreator();
 
   private ExceptionSerializers() {}
+
+  private static final class FieldOnlyCreator extends ObjectCreator<Object> {
+    private FieldOnlyCreator() {
+      super(Object.class);
+    }
+
+    @Override
+    public Object newInstance() {
+      throw new UnsupportedOperationException("Throwable layer serializers do not create objects");
+    }
+
+    @Override
+    public Object newInstanceWithArguments(Object... arguments) {
+      throw new UnsupportedOperationException("Throwable layer serializers do not create objects");
+    }
+  }
 
   public static final class ExceptionSerializer<T extends Throwable> extends Serializer<T> {
     private final Config config;
@@ -70,17 +87,18 @@ public final class ExceptionSerializers {
       this.typeResolver = typeResolver;
       messageConstructor = getOptionalMessageConstructor(type);
       objectCreator =
-          messageConstructor == null && MemoryUtils.JDK_INTERNAL_FIELD_ACCESS
+          messageConstructor == null && MemoryUtils.JDK_LANG_FIELD_ACCESS
               ? createThrowableObjectCreator(type)
               : null;
       slotsSerializers = buildSlotsSerializers(typeResolver, type);
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS
+      if (!MemoryUtils.JDK_LANG_FIELD_ACCESS
           && isJdkThrowable(type)
           && hasSubclassFields(slotsSerializers)) {
         throw new ForyException(
-            "Android doesn't support JDK Throwable type "
+            "Throwable serialization for JDK type "
                 + type.getName()
-                + " with subclass fields because JDK private field layouts aren't stable on Android.");
+                + " with subclass fields requires JDK internal field access. On JDK25+, open "
+                + "java.base/java.lang to org.apache.fory.core,org.apache.fory.format.");
       }
       // Native-image runtime must rebuild slot serializers once so field accessors and
       // descriptors are created against the runtime heap layout instead of reusing
@@ -111,7 +129,7 @@ public final class ExceptionSerializers {
     public T read(ReadContext readContext) {
       Serializer[] slotsSerializers = getSlotsSerializers();
       StackTraceElement[] stackTrace = (StackTraceElement[]) readContext.readRef();
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_LANG_FIELD_ACCESS) {
         return readAndroidThrowableWithoutDetailMessageField(
             readContext, stackTrace, slotsSerializers);
       }
@@ -137,10 +155,11 @@ public final class ExceptionSerializers {
         ReadContext readContext, StackTraceElement[] stackTrace, Serializer[] slotsSerializers) {
       if (messageConstructor == null) {
         throw new ForyException(
-            "Android doesn't support deserializing Throwable type "
+            "Deserializing Throwable type "
                 + type.getName()
-                + " without a String message constructor because private JDK field access is "
-                + "unsupported.");
+                + " without a String message constructor requires JDK internal field access. "
+                + "On JDK25+, open java.base/java.lang to "
+                + "org.apache.fory.core,org.apache.fory.format.");
       }
       int refId = readContext.lastPreservedRefId();
       if (refId >= 0) {
@@ -152,9 +171,10 @@ public final class ExceptionSerializers {
       skipExtraFields(readContext);
       if (containsPendingThrowable(cause) || containsPendingThrowable(suppressedExceptions)) {
         throw new ForyException(
-            "Android doesn't support deserializing cyclic Throwable references for type "
+            "Deserializing cyclic Throwable references for type "
                 + type.getName()
-                + " because private JDK field access is unsupported.");
+                + " requires JDK internal field access. On JDK25+, open java.base/java.lang "
+                + "to org.apache.fory.core,org.apache.fory.format.");
       }
       T obj = newThrowableWithMessage(detailMessage);
       readContext.reference(obj);
@@ -224,16 +244,17 @@ public final class ExceptionSerializers {
 
   public static final class StackTraceElementSerializer extends Serializer<StackTraceElement> {
     private static final MethodHandles.Lookup LOOKUP =
-        AndroidSupport.IS_ANDROID ? null : _JDKAccess._trustedLookup(StackTraceElement.class);
+        AndroidSupport.IS_ANDROID
+            ? null
+            : (MemoryUtils.JDK_LANG_FIELD_ACCESS
+                ? _JDKAccess._trustedLookup(StackTraceElement.class)
+                : MethodHandles.publicLookup());
     private static final MethodHandle CLASS_LOADER_NAME_GETTER =
         AndroidSupport.IS_ANDROID ? null : getOptionalGetter("getClassLoaderName");
     private static final MethodHandle MODULE_NAME_GETTER = getOptionalGetter("getModuleName");
     private static final MethodHandle MODULE_VERSION_GETTER = getOptionalGetter("getModuleVersion");
     private static final MethodHandle STACK_TRACE_ELEMENT_CTR_V1 =
-        AndroidSupport.IS_ANDROID
-            ? null
-            : ReflectionUtils.getCtrHandle(
-                StackTraceElement.class, String.class, String.class, String.class, int.class);
+        getOptionalCtr(String.class, String.class, String.class, int.class);
     private static final MethodHandle STACK_TRACE_ELEMENT_CTR_V2 =
         AndroidSupport.IS_ANDROID
             ? null
@@ -350,8 +371,11 @@ public final class ExceptionSerializers {
                   fileName,
                   lineNumber);
         }
-        return (StackTraceElement)
-            STACK_TRACE_ELEMENT_CTR_V1.invoke(declaringClass, methodName, fileName, lineNumber);
+        if (STACK_TRACE_ELEMENT_CTR_V1 != null) {
+          return (StackTraceElement)
+              STACK_TRACE_ELEMENT_CTR_V1.invoke(declaringClass, methodName, fileName, lineNumber);
+        }
+        return new StackTraceElement(declaringClass, methodName, fileName, lineNumber);
       } catch (Throwable t) {
         throw new RuntimeException(t);
       }
@@ -419,7 +443,7 @@ public final class ExceptionSerializers {
         slotsSerializer =
             new CompatibleLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer = new ObjectSerializer<>(typeResolver, type, false);
+        slotsSerializer = new ObjectSerializer<>(typeResolver, type, false, fieldOnlyCreator());
       }
       serializers.add(slotsSerializer);
       type = (Class<T>) type.getSuperclass();
@@ -427,6 +451,10 @@ public final class ExceptionSerializers {
     }
     Collections.reverse(serializers);
     return serializers.toArray(new Serializer[0]);
+  }
+
+  private static <T> ObjectCreator<T> fieldOnlyCreator() {
+    return (ObjectCreator<T>) FIELD_ONLY_CREATOR;
   }
 
   private static void readAndSetFields(

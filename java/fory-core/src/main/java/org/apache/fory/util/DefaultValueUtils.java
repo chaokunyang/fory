@@ -85,6 +85,10 @@ public class DefaultValueUtils {
       return fieldAccessor;
     }
 
+    public Class<?> getDeclaringClass() {
+      return fieldAccessor == null ? null : fieldAccessor.getField().getDeclaringClass();
+    }
+
     public int getDispatchId() {
       return dispatchId;
     }
@@ -414,39 +418,79 @@ public class DefaultValueUtils {
    */
   public static void setDefaultValues(Object obj, DefaultValueField[] defaultValueFields) {
     for (DefaultValueField defaultField : defaultValueFields) {
-      FieldAccessor fieldAccessor = defaultField.getFieldAccessor();
-      if (fieldAccessor != null) {
-        Object defaultValue = defaultField.getDefaultValue();
-        switch (defaultField.dispatchId) {
-          case Types.BOOL:
-            fieldAccessor.putBoolean(obj, (Boolean) defaultValue);
-            break;
-          case Types.INT8:
-            fieldAccessor.putByte(obj, (Byte) defaultValue);
-            break;
-          case Types.INT16:
-            fieldAccessor.putShort(obj, (Short) defaultValue);
-            break;
-          case Types.INT32:
-          case Types.VARINT32:
-            fieldAccessor.putInt(obj, (Integer) defaultValue);
-            break;
-          case Types.INT64:
-          case Types.VARINT64:
-          case Types.TAGGED_INT64:
-            fieldAccessor.putLong(obj, (Long) defaultValue);
-            break;
-          case Types.FLOAT32:
-            fieldAccessor.putFloat(obj, (Float) defaultValue);
-            break;
-          case Types.FLOAT64:
-            fieldAccessor.putDouble(obj, (Double) defaultValue);
-            break;
-          default:
-            // Object type (including String, char, boxed types not covered above)
-            fieldAccessor.putObject(obj, defaultValue);
-        }
+      setDefaultValue(obj, defaultField);
+    }
+  }
+
+  public static void setDefaultValues(
+      Object obj, DefaultValueField[] defaultValueFields, String[] skippedFieldNames) {
+    setDefaultValues(obj, defaultValueFields, skippedFieldNames, null);
+  }
+
+  public static void setDefaultValues(
+      Object obj,
+      DefaultValueField[] defaultValueFields,
+      String[] skippedFieldNames,
+      Class<?>[] skippedDeclaringClasses) {
+    for (DefaultValueField defaultField : defaultValueFields) {
+      if (!contains(skippedFieldNames, skippedDeclaringClasses, defaultField)) {
+        setDefaultValue(obj, defaultField);
       }
+    }
+  }
+
+  private static boolean contains(
+      String[] values, Class<?>[] declaringClasses, DefaultValueField defaultField) {
+    if (values == null) {
+      return false;
+    }
+    Class<?> declaringClass = defaultField.getDeclaringClass();
+    for (int i = 0; i < values.length; i++) {
+      if (values[i].equals(defaultField.fieldName)
+          && (declaringClasses == null
+              || i >= declaringClasses.length
+              || declaringClasses[i] == null
+              || declaringClasses[i] == declaringClass)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static void setDefaultValue(Object obj, DefaultValueField defaultField) {
+    FieldAccessor fieldAccessor = defaultField.getFieldAccessor();
+    if (fieldAccessor == null) {
+      return;
+    }
+    Object defaultValue = defaultField.getDefaultValue();
+    switch (defaultField.dispatchId) {
+      case Types.BOOL:
+        fieldAccessor.putBoolean(obj, (Boolean) defaultValue);
+        break;
+      case Types.INT8:
+        fieldAccessor.putByte(obj, (Byte) defaultValue);
+        break;
+      case Types.INT16:
+        fieldAccessor.putShort(obj, (Short) defaultValue);
+        break;
+      case Types.INT32:
+      case Types.VARINT32:
+        fieldAccessor.putInt(obj, (Integer) defaultValue);
+        break;
+      case Types.INT64:
+      case Types.VARINT64:
+      case Types.TAGGED_INT64:
+        fieldAccessor.putLong(obj, (Long) defaultValue);
+        break;
+      case Types.FLOAT32:
+        fieldAccessor.putFloat(obj, (Float) defaultValue);
+        break;
+      case Types.FLOAT64:
+        fieldAccessor.putDouble(obj, (Double) defaultValue);
+        break;
+      default:
+        // Object type (including String, char, boxed types not covered above)
+        fieldAccessor.putObject(obj, defaultValue);
     }
   }
 

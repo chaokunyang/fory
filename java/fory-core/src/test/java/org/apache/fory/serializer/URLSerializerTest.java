@@ -31,7 +31,7 @@ public class URLSerializerTest extends ForyTestBase {
   @Test(dataProvider = "javaFory")
   public void testDefaultWrite(Fory fory) throws MalformedURLException {
     Assert.assertEquals(
-        serDeCheckSerializer(fory, new URL("http://test"), "ReplaceResolve"),
+        serDeCheckSerializer(fory, new URL("http://test"), "URLSerializer"),
         new URL("http://test"));
   }
 

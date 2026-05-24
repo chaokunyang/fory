@@ -23,7 +23,6 @@ import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
@@ -37,16 +36,13 @@ public class NewJava11StringSuite {
 
   static {
     if (JdkVersion.MAJOR_VERSION > 8) {
-      strBytes =
-          (byte[]) UnsafeOps.getObject(str, ReflectionUtils.getFieldOffset(String.class, "value"));
-      coder = UnsafeOps.getByte(str, ReflectionUtils.getFieldOffset(String.class, "coder"));
+      strBytes = (byte[]) UnsafeOps.getObject(str, fieldOffset(String.class, "value"));
+      coder = UnsafeOps.getByte(str, fieldOffset(String.class, "coder"));
     }
   }
 
-  private static final long STRING_VALUE_FIELD_OFFSET =
-      ReflectionUtils.getFieldOffset(String.class, "value");
-  private static final long STRING_CODER_FIELD_OFFSET =
-      ReflectionUtils.getFieldOffset(String.class, "coder");
+  private static final long STRING_VALUE_FIELD_OFFSET = fieldOffset(String.class, "value");
+  private static final long STRING_CODER_FIELD_OFFSET = fieldOffset(String.class, "coder");
 
   private static String stubStr = new String(new char[] {Character.MAX_VALUE, Character.MIN_VALUE});
   private static Fory fory =
@@ -56,6 +52,14 @@ public class NewJava11StringSuite {
 
   static {
     stringSerializer.writeString(buffer, str);
+  }
+
+  private static long fieldOffset(Class<?> type, String fieldName) {
+    try {
+      return UnsafeOps.objectFieldOffset(type.getDeclaredField(fieldName));
+    } catch (NoSuchFieldException e) {
+      throw new IllegalStateException(e);
+    }
   }
 
   // @Benchmark

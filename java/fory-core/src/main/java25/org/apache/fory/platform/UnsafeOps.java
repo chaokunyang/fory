@@ -34,6 +34,9 @@ public final class UnsafeOps {
   @SuppressWarnings("restriction")
   public static final Unsafe UNSAFE = _JDKAccess.UNSAFE;
 
+  // JDK25 array operations use Java/VarHandle indexes instead of raw Unsafe byte offsets.
+  // Keep these constants zero so versioned MemoryBuffer code can preserve the root API shape
+  // without mixing Unsafe base-offset domains into the zero-Unsafe runtime.
   public static final int BOOLEAN_ARRAY_OFFSET = 0;
   public static final int BYTE_ARRAY_OFFSET = 0;
   public static final int CHAR_ARRAY_OFFSET = 0;
@@ -234,6 +237,9 @@ public final class UnsafeOps {
       System.arraycopy((byte[]) src, toIntIndex(srcOffset), (byte[]) dst, toIntIndex(dstOffset), len);
       return;
     }
+    if (copySamePrimitiveArray(src, srcOffset, dst, dstOffset, len)) {
+      return;
+    }
     if (!isPrimitiveArray(src) || !isPrimitiveArray(dst)) {
       throw unsupportedObjectMemory();
     }
@@ -248,10 +254,78 @@ public final class UnsafeOps {
     }
   }
 
+  private static boolean copySamePrimitiveArray(
+      Object src, long srcOffset, Object dst, long dstOffset, int len) {
+    if (src.getClass() != dst.getClass()) {
+      return false;
+    }
+    if (src instanceof boolean[]) {
+      System.arraycopy((boolean[]) src, toIntIndex(srcOffset), (boolean[]) dst, toIntIndex(dstOffset), len);
+      return true;
+    } else if (src instanceof char[] && aligned(srcOffset, dstOffset, len, Character.BYTES)) {
+      System.arraycopy(
+          (char[]) src,
+          toIntIndex(srcOffset / Character.BYTES),
+          (char[]) dst,
+          toIntIndex(dstOffset / Character.BYTES),
+          len / Character.BYTES);
+      return true;
+    } else if (src instanceof short[] && aligned(srcOffset, dstOffset, len, Short.BYTES)) {
+      System.arraycopy(
+          (short[]) src,
+          toIntIndex(srcOffset / Short.BYTES),
+          (short[]) dst,
+          toIntIndex(dstOffset / Short.BYTES),
+          len / Short.BYTES);
+      return true;
+    } else if (src instanceof int[] && aligned(srcOffset, dstOffset, len, Integer.BYTES)) {
+      System.arraycopy(
+          (int[]) src,
+          toIntIndex(srcOffset / Integer.BYTES),
+          (int[]) dst,
+          toIntIndex(dstOffset / Integer.BYTES),
+          len / Integer.BYTES);
+      return true;
+    } else if (src instanceof long[] && aligned(srcOffset, dstOffset, len, Long.BYTES)) {
+      System.arraycopy(
+          (long[]) src,
+          toIntIndex(srcOffset / Long.BYTES),
+          (long[]) dst,
+          toIntIndex(dstOffset / Long.BYTES),
+          len / Long.BYTES);
+      return true;
+    } else if (src instanceof float[] && aligned(srcOffset, dstOffset, len, Float.BYTES)) {
+      System.arraycopy(
+          (float[]) src,
+          toIntIndex(srcOffset / Float.BYTES),
+          (float[]) dst,
+          toIntIndex(dstOffset / Float.BYTES),
+          len / Float.BYTES);
+      return true;
+    } else if (src instanceof double[] && aligned(srcOffset, dstOffset, len, Double.BYTES)) {
+      System.arraycopy(
+          (double[]) src,
+          toIntIndex(srcOffset / Double.BYTES),
+          (double[]) dst,
+          toIntIndex(dstOffset / Double.BYTES),
+          len / Double.BYTES);
+      return true;
+    }
+    return false;
+  }
+
+  public static Object[] copyObjectArray(Object[] arr) {
+    Object[] objects = new Object[arr.length];
+    System.arraycopy(arr, 0, objects, 0, arr.length);
+    return objects;
+  }
+
   /** Create an instance of <code>type</code>. This method does not call constructor. */
   public static <T> T newInstance(Class<T> type) {
     throw new UnsupportedOperationException(
-        "Constructor-bypassing allocation is unsupported on JDK25 without sun.misc.Unsafe");
+        "Constructor-bypassing allocation is unsupported on JDK25 without sun.misc.Unsafe; "
+            + "use a constructor-based serializer path for "
+            + type);
   }
 
   private static int getIntFromArray(Object object, long offset) {
@@ -384,6 +458,10 @@ public final class UnsafeOps {
   private static boolean isPrimitiveArray(Object object) {
     Class<?> cls = object.getClass();
     return cls.isArray() && cls.getComponentType().isPrimitive();
+  }
+
+  private static boolean aligned(long srcOffset, long dstOffset, int len, int width) {
+    return srcOffset % width == 0 && dstOffset % width == 0 && len % width == 0;
   }
 
   private static int toIntIndex(long offset) {

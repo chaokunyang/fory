@@ -19,6 +19,7 @@
 
 package org.apache.fory.type;
 
+import java.beans.ConstructorProperties;
 import java.io.Serializable;
 
 public final class Float16 extends Number implements Comparable<Float16>, Serializable {
@@ -61,6 +62,7 @@ public final class Float16 extends Number implements Comparable<Float16>, Serial
 
   private final short bits;
 
+  @ConstructorProperties("bits")
   private Float16(short bits) {
     this.bits = bits;
   }

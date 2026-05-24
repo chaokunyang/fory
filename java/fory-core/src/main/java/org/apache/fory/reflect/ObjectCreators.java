@@ -19,10 +19,22 @@
 
 package org.apache.fory.reflect;
 
+import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
+import java.lang.reflect.Parameter;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import org.apache.fory.annotation.ForyField;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
@@ -31,6 +43,8 @@ import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.record.RecordUtils;
 
 /**
@@ -90,7 +104,14 @@ public class ObjectCreators {
       if (noArgConstructor != null) {
         return new ReflectiveNoArgCtrObjectCreator<>(type, noArgConstructor);
       }
-      return new UnsupportedObjectCreator<>(type);
+      return new UnsupportedObjectCreator<>(
+          type, "Android cannot create " + type + " without an accessible no-arg constructor");
+    }
+    if (JdkVersion.MAJOR_VERSION >= 25 && noArgConstructor == null) {
+      return new ConstructorObjectCreator<>(type);
+    }
+    if (JdkVersion.MAJOR_VERSION >= 25 && hasFinalFields(type)) {
+      return new ConstructorObjectCreator<>(type);
     }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       if (noArgConstructor != null) {
@@ -103,6 +124,328 @@ public class ObjectCreators {
       return new UnsafeObjectCreator<>(type);
     }
     return new DeclaredNoArgCtrObjectCreator<>(type);
+  }
+
+  private static boolean hasFinalFields(Class<?> type) {
+    for (Field field : Descriptor.getFields(type)) {
+      if (Modifier.isFinal(field.getModifiers())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public static boolean supportsJdk25Creation(Class<?> type) {
+    if (JdkVersion.MAJOR_VERSION < 25 || RecordUtils.isRecord(type)) {
+      return true;
+    }
+    try {
+      ObjectCreator<?> creator = creategetObjectCreator(type);
+      return !(creator instanceof UnsupportedObjectCreator);
+    } catch (RuntimeException e) {
+      return false;
+    }
+  }
+
+  private static final class ConstructorMatch<T> {
+    private final Constructor<T> constructor;
+    private final String[] fieldNames;
+    private final Class<?>[] declaringClasses;
+    private final Class<?>[] fieldTypes;
+    private final boolean[] finalFields;
+    private final int score;
+
+    private ConstructorMatch(
+        Constructor<T> constructor,
+        String[] fieldNames,
+        Class<?>[] declaringClasses,
+        Class<?>[] fieldTypes,
+        boolean[] finalFields,
+        int score) {
+      this.constructor = constructor;
+      this.fieldNames = fieldNames;
+      this.declaringClasses = declaringClasses;
+      this.fieldTypes = fieldTypes;
+      this.finalFields = finalFields;
+      this.score = score;
+    }
+  }
+
+  private static <T> ConstructorMatch<T> findConstructor(Class<T> type) {
+    List<Field> fields = new ArrayList<>();
+    fields.addAll(Descriptor.getFields(type));
+    Map<String, Field> fieldsByName = new LinkedHashMap<>();
+    Map<String, List<Field>> fieldsByNameList = new LinkedHashMap<>();
+    Map<Integer, Field> fieldsById = new LinkedHashMap<>();
+    Set<String> duplicateNames = new LinkedHashSet<>();
+    Set<Integer> duplicateIds = new LinkedHashSet<>();
+    Set<Field> finalFields = new LinkedHashSet<>();
+    for (Field field : fields) {
+      fieldsByNameList.computeIfAbsent(field.getName(), name -> new ArrayList<>()).add(field);
+      Field previous = fieldsByName.put(field.getName(), field);
+      if (previous != null) {
+        duplicateNames.add(field.getName());
+      }
+      ForyField foryField = field.getAnnotation(ForyField.class);
+      if (foryField != null && foryField.id() >= 0) {
+        previous = fieldsById.put(foryField.id(), field);
+        if (previous != null) {
+          duplicateIds.add(foryField.id());
+        }
+      }
+      if (Modifier.isFinal(field.getModifiers())) {
+        finalFields.add(field);
+      }
+    }
+    ConstructorMatch<T> best = null;
+    for (Constructor<?> constructor : type.getDeclaredConstructors()) {
+      if (constructor.isSynthetic()) {
+        continue;
+      }
+      ConstructorMatch<T> match =
+          matchConstructor(
+              type,
+              (Constructor<T>) constructor,
+              fieldsByName,
+              fieldsByNameList,
+              fieldsById,
+              duplicateNames,
+              duplicateIds,
+              finalFields);
+      if (match != null && (best == null || match.score > best.score)) {
+        best = match;
+      }
+    }
+    if (best == null) {
+      String requirement =
+          finalFields.isEmpty()
+              ? "a bindable constructor because no no-arg constructor is available"
+              : "a constructor covering final fields " + finalFields;
+      throw new ForyException(
+          "JDK25 zero-Unsafe mode requires "
+              + requirement
+              + " for "
+              + type
+              + ". Annotate the constructor with java.beans.ConstructorProperties or compile "
+              + "the class with -parameters.");
+    }
+    return best;
+  }
+
+  private static <T> ConstructorMatch<T> matchConstructor(
+      Class<T> type,
+      Constructor<T> constructor,
+      Map<String, Field> fieldsByName,
+      Map<String, List<Field>> fieldsByNameList,
+      Map<Integer, Field> fieldsById,
+      Set<String> duplicateNames,
+      Set<Integer> duplicateIds,
+      Set<Field> finalFields) {
+    Field[] fields =
+        constructorFields(
+            constructor, fieldsByName, fieldsByNameList, fieldsById, duplicateNames, duplicateIds);
+    if (fields == null) {
+      return null;
+    }
+    return matchConstructorFields(constructor, finalFields, fields);
+  }
+
+  private static <T> ConstructorMatch<T> matchConstructorFields(
+      Constructor<T> constructor, Set<Field> finalFields, Field[] fields) {
+    if (!containsAllFinalFields(finalFields, fields)) {
+      return null;
+    }
+    Class<?>[] parameterTypes = constructor.getParameterTypes();
+    String[] names = new String[fields.length];
+    Class<?>[] declaringClasses = new Class<?>[fields.length];
+    Class<?>[] fieldTypes = new Class<?>[fields.length];
+    boolean[] finalFieldFlags = new boolean[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      Field field = fields[i];
+      if (!constructorTypeMatches(parameterTypes[i], field)) {
+        return null;
+      }
+      names[i] = field.getName();
+      declaringClasses[i] = field.getDeclaringClass();
+      fieldTypes[i] = field.getType();
+      finalFieldFlags[i] = Modifier.isFinal(field.getModifiers());
+    }
+    return new ConstructorMatch<>(
+        constructor, names, declaringClasses, fieldTypes, finalFieldFlags, 300 - fields.length);
+  }
+
+  private static boolean containsAllFinalFields(Set<Field> finalFields, Field[] fields) {
+    Set<Field> selectedFields = new LinkedHashSet<>(Arrays.asList(fields));
+    for (Field finalField : finalFields) {
+      if (selectedFields.contains(finalField)) {
+        continue;
+      }
+      if (coveredBySyntheticField(finalField, selectedFields)) {
+        continue;
+      }
+      return false;
+    }
+    return true;
+  }
+
+  private static boolean coveredBySyntheticField(Field finalField, Set<Field> selectedFields) {
+    if (!finalField.isSynthetic()) {
+      return false;
+    }
+    for (Field selectedField : selectedFields) {
+      if (selectedField.isSynthetic()
+          && selectedField.getName().equals(finalField.getName())
+          && selectedField.getType() == finalField.getType()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static Field[] constructorFields(
+      Constructor<?> constructor,
+      Map<String, Field> fieldsByName,
+      Map<String, List<Field>> fieldsByNameList,
+      Map<Integer, Field> fieldsById,
+      Set<String> duplicateNames,
+      Set<Integer> duplicateIds) {
+    Field[] fields = fieldsByForyFieldId(constructor, fieldsById, duplicateIds);
+    if (fields != null) {
+      return fields;
+    }
+    String[] names = constructorFieldNames(constructor);
+    if (names != null) {
+      if (names.length != constructor.getParameterCount()) {
+        return null;
+      }
+      return fieldsByName(constructor, fieldsByName, fieldsByNameList, duplicateNames, names);
+    }
+    return null;
+  }
+
+  private static Field[] fieldsByForyFieldId(
+      Constructor<?> constructor, Map<Integer, Field> fieldsById, Set<Integer> duplicateIds) {
+    Parameter[] parameters = constructor.getParameters();
+    Field[] fields = new Field[parameters.length];
+    boolean hasForyFieldId = false;
+    for (int i = 0; i < parameters.length; i++) {
+      ForyField foryField = parameters[i].getAnnotation(ForyField.class);
+      if (foryField == null || foryField.id() < 0) {
+        continue;
+      }
+      hasForyFieldId = true;
+      int id = foryField.id();
+      if (duplicateIds.contains(id)) {
+        throw new ForyException("Constructor parameter id " + id + " is ambiguous");
+      }
+      fields[i] = fieldsById.get(id);
+      if (fields[i] == null) {
+        return null;
+      }
+    }
+    if (!hasForyFieldId) {
+      return null;
+    }
+    for (Field field : fields) {
+      if (field == null) {
+        return null;
+      }
+    }
+    return fields;
+  }
+
+  private static Field[] fieldsByName(
+      Constructor<?> constructor,
+      Map<String, Field> fieldsByName,
+      Map<String, List<Field>> fieldsByNameList,
+      Set<String> duplicateNames,
+      String[] names) {
+    Field[] fields = new Field[names.length];
+    for (int i = 0; i < names.length; i++) {
+      String name = names[i];
+      if (duplicateNames.contains(name)) {
+        Field field = syntheticField(constructor, fieldsByNameList.get(name));
+        if (field == null) {
+          throw new ForyException(
+              "Constructor parameter "
+                  + name
+                  + " is ambiguous because "
+                  + constructor.getDeclaringClass()
+                  + " has duplicate field names");
+        }
+        fields[i] = field;
+        continue;
+      }
+      Field field = fieldsByName.get(name);
+      if (field == null) {
+        return null;
+      }
+      fields[i] = field;
+    }
+    return fields;
+  }
+
+  private static Field syntheticField(Constructor<?> constructor, List<Field> fields) {
+    if (fields == null) {
+      return null;
+    }
+    Class<?> declaringClass = constructor.getDeclaringClass();
+    for (Field field : fields) {
+      if (field.isSynthetic() && field.getDeclaringClass() == declaringClass) {
+        return field;
+      }
+    }
+    return null;
+  }
+
+  private static boolean constructorTypeMatches(Class<?> parameterType, Field field) {
+    Class<?> boxedParameterType = TypeUtils.boxedType(parameterType);
+    Class<?> boxedFieldType = TypeUtils.boxedType(field.getType());
+    return boxedParameterType.isAssignableFrom(boxedFieldType);
+  }
+
+  private static String[] constructorFieldNames(Constructor<?> constructor) {
+    String[] names = constructorProperties(constructor);
+    if (names != null) {
+      return names;
+    }
+    Parameter[] parameters = constructor.getParameters();
+    for (Parameter parameter : parameters) {
+      if (!parameter.isNamePresent()) {
+        return null;
+      }
+    }
+    names = new String[parameters.length];
+    for (int i = 0; i < parameters.length; i++) {
+      names[i] = parameters[i].getName();
+    }
+    return names;
+  }
+
+  private static String[] constructorProperties(Constructor<?> constructor) {
+    for (Annotation annotation : constructor.getDeclaredAnnotations()) {
+      if ("java.beans.ConstructorProperties".equals(annotation.annotationType().getName())) {
+        try {
+          return (String[]) annotation.annotationType().getMethod("value").invoke(annotation);
+        } catch (ReflectiveOperationException e) {
+          throw new ForyException("Failed to read ConstructorProperties for " + constructor, e);
+        }
+      }
+    }
+    return null;
+  }
+
+  private static MethodHandle constructorHandle(Class<?> type, Constructor<?> constructor) {
+    Lookup lookup = _JDKAccess._trustedLookup(type);
+    if (lookup == null) {
+      return null;
+    }
+    try {
+      return lookup.findConstructor(
+          type, MethodType.methodType(void.class, constructor.getParameterTypes()));
+    } catch (NoSuchMethodException | IllegalAccessException e) {
+      return null;
+    }
   }
 
   private static final class ReflectiveNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
@@ -134,20 +477,109 @@ public class ObjectCreators {
   }
 
   private static final class UnsupportedObjectCreator<T> extends ObjectCreator<T> {
-    private UnsupportedObjectCreator(Class<T> type) {
+    private final String message;
+
+    private UnsupportedObjectCreator(Class<T> type, String message) {
       super(type);
+      this.message = message;
+    }
+
+    @Override
+    public T newInstance() {
+      throw new ForyException(message);
+    }
+
+    @Override
+    public T newInstanceWithArguments(Object... arguments) {
+      throw new ForyException(message);
+    }
+  }
+
+  public static final class ConstructorObjectCreator<T> extends ObjectCreator<T> {
+    private final Constructor<T> constructor;
+    private final MethodHandle handle;
+    private final String[] fieldNames;
+    private final Class<?>[] declaringClasses;
+    private final Class<?>[] fieldTypes;
+    private final boolean[] finalFields;
+
+    private ConstructorObjectCreator(Class<T> type) {
+      super(type);
+      ConstructorMatch<T> match = findConstructor(type);
+      constructor = match.constructor;
+      handle = constructorHandle(type, constructor);
+      fieldNames = match.fieldNames;
+      declaringClasses = match.declaringClasses;
+      fieldTypes = match.fieldTypes;
+      finalFields = match.finalFields;
+      try {
+        constructor.setAccessible(true);
+      } catch (RuntimeException e) {
+        throw new ForyException("Failed to make constructor accessible for " + type, e);
+      }
+    }
+
+    @Override
+    public boolean hasConstructorFields() {
+      return true;
+    }
+
+    @Override
+    public String[] getConstructorFieldNames() {
+      return fieldNames;
+    }
+
+    @Override
+    public Class<?>[] getConstructorFieldDeclaringClasses() {
+      return declaringClasses;
+    }
+
+    @Override
+    public Class<?>[] getConstructorFieldTypes() {
+      return fieldTypes;
+    }
+
+    @Override
+    public boolean[] getConstructorFieldFinal() {
+      return finalFields;
+    }
+
+    @Override
+    public boolean isConstructorPublic() {
+      return Modifier.isPublic(type.getModifiers())
+          && Modifier.isPublic(constructor.getModifiers());
+    }
+
+    @Override
+    public boolean isOnlyPublicConstructor() {
+      if (!isConstructorPublic()) {
+        return false;
+      }
+      for (Constructor<?> declaredConstructor : type.getDeclaredConstructors()) {
+        if (Modifier.isPublic(declaredConstructor.getModifiers())
+            && declaredConstructor != constructor) {
+          return false;
+        }
+      }
+      return true;
     }
 
     @Override
     public T newInstance() {
       throw new ForyException(
-          "Android cannot create " + type + " without an accessible no-arg constructor");
+          "JDK25 zero-Unsafe mode requires constructor field values to create " + type);
     }
 
     @Override
     public T newInstanceWithArguments(Object... arguments) {
-      throw new ForyException(
-          "Android cannot create " + type + " without a supported constructor path");
+      try {
+        if (handle == null) {
+          return constructor.newInstance(arguments);
+        }
+        return (T) handle.invokeWithArguments(arguments);
+      } catch (Throwable e) {
+        throw new ForyException("Failed to create instance using constructor: " + type, e);
+      }
     }
   }
 

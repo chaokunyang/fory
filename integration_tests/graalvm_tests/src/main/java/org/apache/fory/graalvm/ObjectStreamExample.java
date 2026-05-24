@@ -19,6 +19,7 @@
 
 package org.apache.fory.graalvm;
 
+import java.beans.ConstructorProperties;
 import java.io.Serializable;
 import java.util.AbstractMap;
 import java.util.Arrays;
@@ -66,7 +67,16 @@ public class ObjectStreamExample extends AbstractMap<Integer, Integer> {
     FORY.ensureSerializersCompiled();
   }
 
-  final int[] ints = new int[10];
+  final int[] ints;
+
+  public ObjectStreamExample() {
+    this(new int[10]);
+  }
+
+  @ConstructorProperties("ints")
+  public ObjectStreamExample(int[] ints) {
+    this.ints = ints;
+  }
 
   public static void main(String[] args) {
     AsyncTreeSetSubclass values = new AsyncTreeSetSubclass();

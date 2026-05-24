@@ -51,30 +51,122 @@ import org.apache.fory.util.record.RecordUtils;
 /** Field accessor for primitive types and object types. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class FieldAccessor {
+  private static final int REFLECTIVE_ACCESS = 0;
+  private static final int BOOLEAN_ACCESS = 1;
+  private static final int BYTE_ACCESS = 2;
+  private static final int CHAR_ACCESS = 3;
+  private static final int SHORT_ACCESS = 4;
+  private static final int INT_ACCESS = 5;
+  private static final int LONG_ACCESS = 6;
+  private static final int FLOAT_ACCESS = 7;
+  private static final int DOUBLE_ACCESS = 8;
+  private static final int OBJECT_ACCESS = 9;
+
   protected final Field field;
   protected final long fieldOffset;
+  private final int accessKind;
 
   public FieldAccessor(Field field) {
     this.field = field;
     Preconditions.checkNotNull(field);
-    long fieldOffset;
-    try {
-      fieldOffset = ReflectionUtils.getFieldOffset(field);
-    } catch (UnsupportedOperationException e) {
-      fieldOffset = -1;
+    this.fieldOffset = fieldOffset(field);
+    this.accessKind = accessKind(field, fieldOffset);
+  }
+
+  private static long fieldOffset(Field field) {
+    if (AndroidSupport.IS_ANDROID) {
+      return -1;
     }
-    this.fieldOffset = fieldOffset;
+    if (GraalvmSupport.isGraalBuildTime()) {
+      // Field offsets are rewritten by GraalVM and are not stable during native-image build time.
+      return -1;
+    }
+    return UnsafeOps.objectFieldOffset(field);
   }
 
   protected FieldAccessor(Field field, long fieldOffset) {
     this.field = field;
     this.fieldOffset = fieldOffset;
+    this.accessKind = accessKind(field, fieldOffset);
+  }
+
+  private static int accessKind(Field field, long fieldOffset) {
+    if (fieldOffset == -1) {
+      return REFLECTIVE_ACCESS;
+    }
+    Class<?> fieldType = field.getType();
+    if (fieldType == boolean.class) {
+      return BOOLEAN_ACCESS;
+    } else if (fieldType == byte.class) {
+      return BYTE_ACCESS;
+    } else if (fieldType == char.class) {
+      return CHAR_ACCESS;
+    } else if (fieldType == short.class) {
+      return SHORT_ACCESS;
+    } else if (fieldType == int.class) {
+      return INT_ACCESS;
+    } else if (fieldType == long.class) {
+      return LONG_ACCESS;
+    } else if (fieldType == float.class) {
+      return FLOAT_ACCESS;
+    } else if (fieldType == double.class) {
+      return DOUBLE_ACCESS;
+    }
+    return OBJECT_ACCESS;
   }
 
   public abstract Object get(Object obj);
 
   public void set(Object obj, Object value) {
     throw new UnsupportedOperationException("Unsupported for field " + field);
+  }
+
+  public final void copy(Object sourceObject, Object targetObject) {
+    switch (accessKind) {
+      case BOOLEAN_ACCESS:
+        UnsafeOps.putBoolean(
+            targetObject, fieldOffset, UnsafeOps.getBoolean(sourceObject, fieldOffset));
+        return;
+      case BYTE_ACCESS:
+        UnsafeOps.putByte(targetObject, fieldOffset, UnsafeOps.getByte(sourceObject, fieldOffset));
+        return;
+      case CHAR_ACCESS:
+        UnsafeOps.putChar(targetObject, fieldOffset, UnsafeOps.getChar(sourceObject, fieldOffset));
+        return;
+      case SHORT_ACCESS:
+        UnsafeOps.putShort(
+            targetObject, fieldOffset, UnsafeOps.getShort(sourceObject, fieldOffset));
+        return;
+      case INT_ACCESS:
+        UnsafeOps.putInt(targetObject, fieldOffset, UnsafeOps.getInt(sourceObject, fieldOffset));
+        return;
+      case LONG_ACCESS:
+        UnsafeOps.putLong(targetObject, fieldOffset, UnsafeOps.getLong(sourceObject, fieldOffset));
+        return;
+      case FLOAT_ACCESS:
+        UnsafeOps.putFloat(
+            targetObject, fieldOffset, UnsafeOps.getFloat(sourceObject, fieldOffset));
+        return;
+      case DOUBLE_ACCESS:
+        UnsafeOps.putDouble(
+            targetObject, fieldOffset, UnsafeOps.getDouble(sourceObject, fieldOffset));
+        return;
+      case OBJECT_ACCESS:
+        UnsafeOps.putObject(
+            targetObject, fieldOffset, UnsafeOps.getObject(sourceObject, fieldOffset));
+        return;
+      default:
+        putObject(targetObject, getObject(sourceObject));
+    }
+  }
+
+  public final void copyObject(Object sourceObject, Object targetObject) {
+    if (accessKind == OBJECT_ACCESS) {
+      UnsafeOps.putObject(
+          targetObject, fieldOffset, UnsafeOps.getObject(sourceObject, fieldOffset));
+    } else {
+      putObject(targetObject, getObject(sourceObject));
+    }
   }
 
   public Field getField() {
@@ -145,7 +237,7 @@ public abstract class FieldAccessor {
     set(targetObject, value);
   }
 
-  public void putObject(Object targetObject, Object object) {
+  public final void putObject(Object targetObject, Object object) {
     // For primitive fields, we must use set() which calls the correct UnsafeOps.putXxx method.
     // UnsafeOps.putObject writes object references, not primitive values.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
@@ -155,7 +247,7 @@ public abstract class FieldAccessor {
     }
   }
 
-  public Object getObject(Object targetObject) {
+  public final Object getObject(Object targetObject) {
     // For primitive fields, we must use get() which calls the correct UnsafeOps.getXxx method
     // and returns the boxed value. UnsafeOps.getObject interprets primitive bytes as object
     // refs.

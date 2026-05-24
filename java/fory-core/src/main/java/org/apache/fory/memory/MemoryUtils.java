@@ -28,10 +28,22 @@ import org.apache.fory.platform.internal._JDKAccess;
 /** Memory utils for fory. */
 public class MemoryUtils {
   // JDK25+ internal-field access must be backed by supported access in the multi-release classes.
-  // When a JDK25+ path needs java.nio private fields, the JVM must be launched with:
-  // --add-opens=java.base/java.nio=org.apache.fory.core
+  // When a JDK25+ path needs JDK private fields, open the needed java.base package to both
+  // org.apache.fory.core and org.apache.fory.format.
   public static final boolean JDK_INTERNAL_FIELD_ACCESS =
       !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
+  public static final boolean JDK_LANG_FIELD_ACCESS =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_LANG_FIELD_ACCESS;
+  public static final boolean JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS;
+  public static final boolean JDK_OBJECT_STREAM_FIELD_ACCESS =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_OBJECT_STREAM_FIELD_ACCESS;
+  public static final boolean JDK_COLLECTION_FIELD_ACCESS =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_COLLECTION_FIELD_ACCESS;
+  public static final boolean JDK_CONCURRENT_FIELD_ACCESS =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_CONCURRENT_FIELD_ACCESS;
+  public static final boolean JDK_PROXY_FIELD_ACCESS =
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_PROXY_FIELD_ACCESS;
 
   public static MemoryBuffer buffer(int size) {
     return wrap(new byte[size]);
@@ -103,9 +115,11 @@ public class MemoryUtils {
   }
 
   private static void checkByteArrayStreamWrap(String streamType) {
-    if (!JDK_INTERNAL_FIELD_ACCESS) {
+    if (!JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS) {
       throw new UnsupportedOperationException(
-          streamType + " direct wrapping is not supported on this platform");
+          streamType
+              + " direct wrapping requires JDK internal field access. On JDK25+, open "
+              + "java.base/java.io to org.apache.fory.core,org.apache.fory.format.");
     }
   }
 

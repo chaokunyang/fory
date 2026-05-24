@@ -36,9 +36,11 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.reflect.ReflectionUtils;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -75,15 +77,13 @@ public class ReplaceResolveSerializer extends Serializer {
       Method writeReplaceMethod, readResolveMethod;
       // In JDK17, set private jdk method accessible will fail by default, use ObjectStreamClass
       // instead, since it set accessible.
-      if (AndroidSupport.IS_ANDROID) {
+      if (AndroidSupport.IS_ANDROID || !MemoryUtils.JDK_OBJECT_STREAM_FIELD_ACCESS) {
         writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
         readResolveMethod = JavaSerializer.getReadResolveMethod(cls);
       } else if (Serializable.class.isAssignableFrom(cls)) {
         ObjectStreamClass objectStreamClass = ObjectStreamClass.lookup(cls);
-        writeReplaceMethod =
-            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "writeReplaceMethod");
-        readResolveMethod =
-            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "readResolveMethod");
+        writeReplaceMethod = _JDKAccess.getObjectStreamClassWriteReplaceMethod(objectStreamClass);
+        readResolveMethod = _JDKAccess.getObjectStreamClassReadResolveMethod(objectStreamClass);
       } else {
         // FIXME class with `writeReplace` method defined should be Serializable,
         //  but hessian ignores this check and many existing system are using hessian,
@@ -113,7 +113,7 @@ public class ReplaceResolveSerializer extends Serializer {
               : (readResolveMethod != null ? readResolveMethod.getDeclaringClass() : null);
       Function writeReplaceFunc = null, readResolveFunc = null;
       if (declaringClass != null) {
-        if (AndroidSupport.IS_ANDROID) {
+        if (AndroidSupport.IS_ANDROID || !MemoryUtils.JDK_OBJECT_STREAM_FIELD_ACCESS) {
           makeAccessible(writeReplaceMethod);
           makeAccessible(readResolveMethod);
         } else {
@@ -184,38 +184,88 @@ public class ReplaceResolveSerializer extends Serializer {
 
   protected static class MethodInfoCache {
     protected final ReplaceResolveInfo info;
+    private final TypeResolver typeResolver;
+    private final Class<?> cls;
+    private Class<? extends Serializer> serializerClass;
 
-    protected Serializer objectSerializer;
+    protected volatile Serializer objectSerializer;
 
-    public MethodInfoCache(ReplaceResolveInfo info) {
+    public MethodInfoCache(ReplaceResolveInfo info, TypeResolver typeResolver, Class<?> cls) {
       this.info = info;
+      this.typeResolver = typeResolver;
+      this.cls = cls;
+    }
+
+    public void setSerializerClass(Class<? extends Serializer> serializerClass) {
+      this.serializerClass = serializerClass;
     }
 
     public void setObjectSerializer(Serializer objectSerializer) {
       this.objectSerializer = objectSerializer;
+    }
+
+    public Serializer objectSerializer() {
+      Serializer serializer = objectSerializer;
+      if (serializer == null) {
+        synchronized (this) {
+          serializer = objectSerializer;
+          if (serializer == null) {
+            Class<? extends Serializer> sc = serializerClass;
+            if (sc == null) {
+              sc = serializerClass = dataSerializerClass(typeResolver, cls, this);
+              serializer = objectSerializer;
+              if (serializer != null) {
+                return serializer;
+              }
+            }
+            serializer = createDataSerializer(typeResolver, cls, sc);
+            objectSerializer = serializer;
+          }
+        }
+      }
+      return serializer;
     }
   }
 
   static MethodInfoCache newJDKMethodInfoCache(TypeResolver typeResolver, Class<?> cls) {
     ReplaceResolveInfo replaceResolveInfo =
         REPLACE_RESOLVE_INFO_CACHE.get(cls, () -> new ReplaceResolveInfo(cls));
-    MethodInfoCache methodInfoCache = new MethodInfoCache(replaceResolveInfo);
+    MethodInfoCache methodInfoCache = new MethodInfoCache(replaceResolveInfo, typeResolver, cls);
+    ClassResolver classResolver = (ClassResolver) typeResolver;
+    Serializer registeredSerializer = classResolver.getSerializer(cls, false);
+    if (registeredSerializer != null
+        && !(registeredSerializer instanceof ReplaceResolveSerializer)) {
+      methodInfoCache.setObjectSerializer(registeredSerializer);
+      return methodInfoCache;
+    }
+    methodInfoCache.setSerializerClass(null);
+    return methodInfoCache;
+  }
+
+  private static Class<? extends Serializer> dataSerializerClass(
+      TypeResolver typeResolver, Class<?> cls, MethodInfoCache methodInfoCache) {
     ClassResolver classResolver = (ClassResolver) typeResolver;
     Class<? extends Serializer> serializerClass;
     if (Externalizable.class.isAssignableFrom(cls)) {
       serializerClass = ExternalizableSerializer.class;
     } else if (JavaSerializer.getReadRefMethod(cls, true) == null
         && JavaSerializer.getWriteObjectMethod(cls, true) == null) {
-      serializerClass =
-          classResolver.getObjectSerializerClass(
-              cls,
-              sc ->
-                  methodInfoCache.setObjectSerializer(createDataSerializer(typeResolver, cls, sc)));
+      if (JdkVersion.MAJOR_VERSION >= 25
+          && Serializable.class.isAssignableFrom(cls)
+          && !ObjectCreators.supportsJdk25Creation(cls)) {
+        serializerClass = typeResolver.getDefaultJDKStreamSerializerType();
+      } else {
+        serializerClass =
+            classResolver.getObjectSerializerClass(
+                cls,
+                sc ->
+                    methodInfoCache.setObjectSerializer(
+                        createDataSerializer(typeResolver, cls, sc)));
+      }
     } else {
       serializerClass = typeResolver.getDefaultJDKStreamSerializerType();
     }
-    methodInfoCache.setObjectSerializer(createDataSerializer(typeResolver, cls, serializerClass));
-    return methodInfoCache;
+    return serializerClass;
   }
 
   /**
@@ -320,7 +370,7 @@ public class ReplaceResolveSerializer extends Serializer {
   protected void writeObject(
       WriteContext writeContext, Object value, MethodInfoCache jdkMethodInfoCache) {
     classResolver.writeClassInternal(writeContext, writeTypeInfo);
-    jdkMethodInfoCache.objectSerializer.write(writeContext, value);
+    jdkMethodInfoCache.objectSerializer().write(writeContext, value);
   }
 
   @Override
@@ -360,7 +410,7 @@ public class ReplaceResolveSerializer extends Serializer {
   protected Object readObject(ReadContext readContext) {
     Class cls = classResolver.readClassInternal(readContext);
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(cls);
-    Object o = jdkMethodInfoCache.objectSerializer.read(readContext);
+    Object o = jdkMethodInfoCache.objectSerializer().read(readContext);
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod == null) {
       return o;
@@ -372,7 +422,7 @@ public class ReplaceResolveSerializer extends Serializer {
   public Object copy(CopyContext copyContext, Object originObj) {
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoWriteCache.info;
     if (replaceResolveInfo.writeReplaceMethod == null) {
-      return jdkMethodInfoWriteCache.objectSerializer.copy(copyContext, originObj);
+      return jdkMethodInfoWriteCache.objectSerializer().copy(copyContext, originObj);
     }
     Object newObj = originObj;
     newObj = replaceResolveInfo.writeReplace(newObj);
@@ -380,7 +430,7 @@ public class ReplaceResolveSerializer extends Serializer {
       copyContext.reference(originObj, newObj);
     }
     MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(newObj.getClass());
-    newObj = jdkMethodInfoCache.objectSerializer.copy(copyContext, newObj);
+    newObj = jdkMethodInfoCache.objectSerializer().copy(copyContext, newObj);
     replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod != null) {
       newObj = replaceResolveInfo.readResolve(newObj);

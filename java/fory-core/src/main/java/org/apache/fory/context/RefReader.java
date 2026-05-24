@@ -49,6 +49,11 @@ public interface RefReader {
   /** Binds the most recently preserved reference id to {@code object}. */
   void reference(Object object);
 
+  /** Binds a specific preserved reference id to {@code object}. */
+  default void reference(int refId, Object object) {
+    reference(object);
+  }
+
   /** Returns the previously materialized object for a specific ref id. */
   Object getReadRef(int id);
 
@@ -57,6 +62,27 @@ public interface RefReader {
 
   /** Replaces the object stored for a previously preserved ref id. */
   void setReadRef(int id, Object object);
+
+  /** Starts tracking unresolved reads of the currently constructed object's ref id. */
+  default void trackUnresolvedRef(int id) {}
+
+  /** Returns whether a constructor-bound object ref id is currently tracked. */
+  default boolean hasTrackedRef() {
+    return false;
+  }
+
+  /** Returns the most recently tracked constructor-bound object ref id. */
+  default int currentTrackedRefId() {
+    return -1;
+  }
+
+  /** Stops tracking unresolved reads for the most recent constructor-bound object. */
+  default void untrackUnresolvedRef() {}
+
+  /** Returns and clears whether {@code id} was read before it was bound to an object. */
+  default boolean consumeUnresolvedRef(int id) {
+    return false;
+  }
 
   /** Clears all per-operation ref-tracking state. */
   void reset();
@@ -95,6 +121,9 @@ public interface RefReader {
 
     @Override
     public void reference(Object object) {}
+
+    @Override
+    public void reference(int refId, Object object) {}
 
     @Override
     public Object getReadRef(int id) {

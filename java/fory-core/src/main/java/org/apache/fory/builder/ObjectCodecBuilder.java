@@ -37,6 +37,7 @@ import static org.apache.fory.type.TypeUtils.getRawType;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -46,6 +47,7 @@ import org.apache.fory.Fory;
 import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.codegen.Expression;
+import org.apache.fory.codegen.Expression.Cast;
 import org.apache.fory.codegen.Expression.Inlineable;
 import org.apache.fory.codegen.Expression.Invoke;
 import org.apache.fory.codegen.Expression.ListExpression;
@@ -59,8 +61,10 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
+import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.type.BFloat16;
 import org.apache.fory.type.Descriptor;
@@ -93,6 +97,10 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   private final Literal classVersionHash;
   protected ObjectCodecOptimizer objectCodecOptimizer;
   protected Map<String, Integer> recordReversedMapping;
+  protected Map<Descriptor, Integer> fieldIndexes;
+  protected int[] constructorFieldIndexes;
+  protected boolean[] constructorFieldMask;
+  protected Class<?>[] constructorFieldTypes;
 
   public ObjectCodecBuilder(Class<?> beanClass, Fory fory) {
     super(TypeRef.of(beanClass), fory, Generated.GeneratedObjectSerializer.class);
@@ -133,6 +141,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         buildRecordComponentDefaultValues();
       }
       recordReversedMapping = RecordUtils.buildFieldToComponentMapping(beanClass);
+    } else {
+      initConstructorFields(grouper.getSortedDescriptors(), true);
     }
   }
 
@@ -145,6 +155,122 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       }
       recordReversedMapping = RecordUtils.buildFieldToComponentMapping(beanClass);
     }
+  }
+
+  protected final void initConstructorFields(
+      List<Descriptor> sortedDescriptors, boolean allowMissingNonFinal) {
+    initConstructorFields(sortedDescriptors, allowMissingNonFinal, null);
+  }
+
+  protected final void initConstructorFields(
+      List<Descriptor> sortedDescriptors, boolean allowMissingNonFinal, String[] defaultFields) {
+    initConstructorFields(sortedDescriptors, allowMissingNonFinal, defaultFields, null);
+  }
+
+  protected final void initConstructorFields(
+      List<Descriptor> sortedDescriptors,
+      boolean allowMissingNonFinal,
+      String[] defaultFields,
+      Class<?>[] defaultDeclaringClasses) {
+    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    if (!objectCreator.hasConstructorFields()) {
+      return;
+    }
+    fieldIndexes = buildFieldIndexes(sortedDescriptors);
+    constructorFieldTypes = objectCreator.getConstructorFieldTypes();
+    constructorFieldIndexes =
+        buildConstructorFieldIndexes(
+            sortedDescriptors,
+            objectCreator,
+            allowMissingNonFinal,
+            defaultFields,
+            defaultDeclaringClasses);
+    constructorFieldMask = buildConstructorFieldMask(sortedDescriptors.size());
+  }
+
+  private static Map<Descriptor, Integer> buildFieldIndexes(List<Descriptor> descriptors) {
+    Map<Descriptor, Integer> indexes = new IdentityHashMap<>();
+    for (int i = 0; i < descriptors.size(); i++) {
+      indexes.put(descriptors.get(i), i);
+    }
+    return indexes;
+  }
+
+  private int[] buildConstructorFieldIndexes(
+      List<Descriptor> descriptors,
+      ObjectCreator<?> objectCreator,
+      boolean allowMissingNonFinal,
+      String[] defaultFields,
+      Class<?>[] defaultDeclaringClasses) {
+    String[] names = objectCreator.getConstructorFieldNames();
+    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
+    boolean[] finalFields = objectCreator.getConstructorFieldFinal();
+    int[] indexes = new int[names.length];
+    for (int i = 0; i < names.length; i++) {
+      Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];
+      boolean allowMissing =
+          (allowMissingNonFinal && !finalFields[i])
+              || contains(defaultFields, defaultDeclaringClasses, names[i], declaringClass);
+      indexes[i] = constructorFieldIndex(descriptors, declaringClass, names[i], allowMissing);
+    }
+    return indexes;
+  }
+
+  private static boolean contains(
+      String[] values, Class<?>[] declaringClasses, String value, Class<?> declaringClass) {
+    if (values == null) {
+      return false;
+    }
+    for (int i = 0; i < values.length; i++) {
+      if (values[i].equals(value)
+          && (declaringClasses == null
+              || i >= declaringClasses.length
+              || declaringClasses[i] == null
+              || declaringClasses[i] == declaringClass)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private int constructorFieldIndex(
+      List<Descriptor> descriptors,
+      Class<?> declaringClass,
+      String fieldName,
+      boolean allowMissing) {
+    int index = -1;
+    for (int i = 0; i < descriptors.size(); i++) {
+      Descriptor descriptor = descriptors.get(i);
+      if (!descriptor.getName().equals(fieldName)
+          || (declaringClass != null
+              && (descriptor.getField() == null
+                  || descriptor.getField().getDeclaringClass() != declaringClass))) {
+        continue;
+      }
+      if (index >= 0) {
+        throw new IllegalStateException(
+            "Constructor field " + fieldName + " is ambiguous for " + beanClass);
+      }
+      index = i;
+    }
+    if (index < 0) {
+      if (allowMissing) {
+        return -1;
+      }
+      throw new IllegalStateException(
+          "Constructor field " + fieldName + " is not serialized for " + beanClass);
+    }
+    return index;
+  }
+
+  private boolean[] buildConstructorFieldMask(int size) {
+    boolean[] mask = new boolean[size];
+    for (int index : constructorFieldIndexes) {
+      if (index >= 0) {
+        mask[index] = true;
+      }
+    }
+    return mask;
   }
 
   @Override
@@ -548,12 +674,20 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     if (typeResolver.checkClassVersion()) {
       expressions.add(checkClassVersion(buffer));
     }
+    if (!isRecord && constructorFieldIndexes != null) {
+      return buildConstructorDecodeExpression(buffer, expressions);
+    }
     Expression bean;
     if (!isRecord) {
-      bean = newBean();
-      Expression referenceObject = invokeReadContext("reference", bean);
-      expressions.add(bean);
-      expressions.add(referenceObject);
+      if (constructorFieldIndexes == null) {
+        bean = newBean();
+        Expression referenceObject = invokeReadContext("reference", bean);
+        expressions.add(bean);
+        expressions.add(referenceObject);
+      } else {
+        bean = new FieldsArray(fieldIndexes.size());
+        expressions.add(bean);
+      }
     } else {
       if (recordCtrAccessible) {
         bean = new FieldsCollector();
@@ -582,6 +716,132 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     return expressions;
   }
 
+  private Expression buildConstructorDecodeExpression(
+      Reference buffer, ListExpression expressions) {
+    FieldsArray fieldsArray = new FieldsArray(fieldIndexes.size());
+    expressions.add(fieldsArray);
+    expressions.add(
+        new StaticInvoke(
+            AbstractObjectSerializer.class,
+            "beginConstructorRef",
+            PRIMITIVE_VOID_TYPE,
+            readContextRef()));
+    List<Descriptor> bufferedNonConstructorFields = new ArrayList<>();
+    int remainingConstructorFields = countConstructorFields();
+    Expression bean = null;
+    if (remainingConstructorFields == 0) {
+      bean = createCtorBean(expressions, fieldsArray);
+    }
+    for (Descriptor descriptor : protocolDescriptors()) {
+      int index = fieldIndexes.get(descriptor);
+      walkPath.add(descriptor.getDeclaringClass() + descriptor.getName());
+      if (constructorFieldMask[index]) {
+        expressions.add(deserializeToFieldsArray(fieldsArray, buffer, descriptor, true));
+        remainingConstructorFields--;
+        if (remainingConstructorFields == 0) {
+          bean = createCtorBean(expressions, fieldsArray);
+          addBufferedFieldSetters(expressions, bean, fieldsArray, bufferedNonConstructorFields);
+        }
+      } else if (bean == null) {
+        expressions.add(deserializeToFieldsArray(fieldsArray, buffer, descriptor, false));
+        bufferedNonConstructorFields.add(descriptor);
+      } else {
+        expressions.add(deserializeToBean(bean, buffer, descriptor));
+      }
+      walkPath.removeLast();
+    }
+    expressions.add(
+        new StaticInvoke(
+            AbstractObjectSerializer.class,
+            "endConstructorRef",
+            PRIMITIVE_VOID_TYPE,
+            readContextRef()));
+    expressions.add(new Expression.Return(bean));
+    return expressions;
+  }
+
+  private int countConstructorFields() {
+    int count = 0;
+    for (boolean constructorField : constructorFieldMask) {
+      if (constructorField) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private List<Descriptor> protocolDescriptors() {
+    List<Descriptor> descriptors = new ArrayList<>();
+    addDescriptors(descriptors, objectCodecOptimizer.primitiveGroups);
+    addDescriptors(descriptors, objectCodecOptimizer.boxedReadGroups);
+    addDescriptors(descriptors, objectCodecOptimizer.nonPrimitiveReadGroups);
+    return descriptors;
+  }
+
+  private void addDescriptors(List<Descriptor> descriptors, List<List<Descriptor>> groups) {
+    for (List<Descriptor> group : groups) {
+      descriptors.addAll(group);
+    }
+  }
+
+  private Expression createCtorBean(ListExpression expressions, FieldsArray fieldsArray) {
+    Expression bean = createConstructorObject(fieldsArray);
+    expressions.add(
+        new StaticInvoke(
+            AbstractObjectSerializer.class,
+            "checkNoUnresolvedReadRef",
+            PRIMITIVE_VOID_TYPE,
+            readContextRef(),
+            staticBeanClassExpr()));
+    expressions.add(bean);
+    expressions.add(
+        new StaticInvoke(
+            AbstractObjectSerializer.class,
+            "referenceConstructorRef",
+            PRIMITIVE_VOID_TYPE,
+            readContextRef(),
+            bean));
+    postCreateConstructorObject(expressions, bean);
+    return bean;
+  }
+
+  private Expression deserializeToFieldsArray(
+      FieldsArray fieldsArray, Reference buffer, Descriptor descriptor, boolean constructorField) {
+    TypeRef<?> castTypeRef =
+        hasCompatibleCollectionArrayRead(descriptor)
+            ? compatibleReadTargetTypeRef(descriptor)
+            : descriptor.getTypeRef();
+    return deserializeField(
+        buffer,
+        descriptor,
+        expr -> {
+          Expression value =
+              constructorField ? tryInlineCast(expr, castTypeRef) : new Cast(expr, OBJECT_TYPE);
+          value =
+              new StaticInvoke(
+                  AbstractObjectSerializer.class,
+                  constructorField ? "ctorFieldValue" : "bufferFieldValue",
+                  OBJECT_TYPE,
+                  readContextRef(),
+                  value,
+                  staticBeanClassExpr());
+          return setFieldValue(fieldsArray, descriptor, value);
+        });
+  }
+
+  private Expression deserializeToBean(Expression bean, Reference buffer, Descriptor descriptor) {
+    TypeRef<?> castTypeRef =
+        hasCompatibleCollectionArrayRead(descriptor)
+            ? compatibleReadTargetTypeRef(descriptor)
+            : descriptor.getTypeRef();
+    return deserializeField(
+        buffer,
+        descriptor,
+        expr -> setFieldValue(bean, descriptor, tryInlineCast(expr, castTypeRef)));
+  }
+
+  protected void postCreateConstructorObject(ListExpression expressions, Expression bean) {}
+
   protected void deserializeReadGroup(
       List<List<Descriptor>> readGroups,
       int numGroups,
@@ -607,6 +867,88 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     return new NewInstance(beanType, params);
   }
 
+  protected Expression createConstructorObject(FieldsArray fieldValues) {
+    Expression[] params = new Expression[constructorFieldIndexes.length];
+    for (int i = 0; i < constructorFieldIndexes.length; i++) {
+      int index = constructorFieldIndexes[i];
+      if (index < 0) {
+        params[i] = defaultConstructorValue(i);
+      } else {
+        params[i] = fieldValue(fieldValues, index);
+      }
+    }
+    Expression args = new Expression.NewArray(OBJECT_ARRAY_TYPE, params);
+    ObjectCreators.getObjectCreator(beanClass); // trigger cache and make error raised early
+    Expression newInstance =
+        new Invoke(getObjectCreator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, args);
+    return sourcePublicAccessible(beanClass) ? new Cast(newInstance, beanType) : newInstance;
+  }
+
+  protected Expression defaultConstructorValue(int constructorParameterIndex) {
+    return new StaticInvoke(
+        AbstractObjectSerializer.class,
+        "defaultConstructorValue",
+        OBJECT_TYPE,
+        staticClassFieldExpr(
+            constructorFieldTypes[constructorParameterIndex],
+            "constructorFieldClass" + constructorParameterIndex + "_"));
+  }
+
+  private void addNonConstructorFieldSetters(
+      ListExpression expressions, Expression bean, FieldsArray fieldValues) {
+    for (Descriptor descriptor : objectCodecOptimizer.descriptorGrouper.getSortedDescriptors()) {
+      int index = fieldIndexes.get(descriptor);
+      if (constructorFieldMask[index]) {
+        continue;
+      }
+      TypeRef<?> castTypeRef =
+          hasCompatibleCollectionArrayRead(descriptor)
+              ? compatibleReadTargetTypeRef(descriptor)
+              : descriptor.getTypeRef();
+      Expression value =
+          new StaticInvoke(
+              AbstractObjectSerializer.class,
+              "resolveBufferedValue",
+              OBJECT_TYPE,
+              fieldValue(fieldValues, index),
+              bean);
+      value = tryInlineCast(value, castTypeRef);
+      expressions.add(setFieldValue(bean, descriptor, value));
+    }
+  }
+
+  private void addBufferedFieldSetters(
+      ListExpression expressions,
+      Expression bean,
+      FieldsArray fieldValues,
+      List<Descriptor> descriptors) {
+    for (Descriptor descriptor : descriptors) {
+      int index = fieldIndexes.get(descriptor);
+      TypeRef<?> castTypeRef =
+          hasCompatibleCollectionArrayRead(descriptor)
+              ? compatibleReadTargetTypeRef(descriptor)
+              : descriptor.getTypeRef();
+      Expression value =
+          new StaticInvoke(
+              AbstractObjectSerializer.class,
+              "resolveBufferedValue",
+              OBJECT_TYPE,
+              fieldValue(fieldValues, index),
+              bean);
+      value = tryInlineCast(value, castTypeRef);
+      expressions.add(setFieldValue(bean, descriptor, value));
+    }
+  }
+
+  private Expression fieldValue(Expression fieldValues, int index) {
+    return new StaticInvoke(
+        AbstractObjectSerializer.class,
+        "fieldValue",
+        OBJECT_TYPE,
+        fieldValues,
+        Literal.ofInt(index));
+  }
+
   private class FieldsCollector extends Expression.AbstractExpression {
     private final TreeMap<Integer, Expression> recordValuesMap = new TreeMap<>();
 
@@ -625,8 +967,38 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     }
   }
 
+  protected class FieldsArray extends Expression.AbstractExpression {
+    private final int size;
+    private final String name;
+
+    protected FieldsArray(int size) {
+      super(new Expression[0]);
+      this.size = size;
+      name = ctx.newName("fieldValues");
+    }
+
+    @Override
+    public TypeRef<?> type() {
+      return OBJECT_ARRAY_TYPE;
+    }
+
+    @Override
+    public Code.ExprCode doGenCode(CodegenContext ctx) {
+      String code = ctx.type(Object[].class) + " " + name + " = new Object[" + size + "];";
+      return new Code.ExprCode(code, FalseLiteral, Code.variable(Object[].class, name));
+    }
+
+    int fieldIndex(Descriptor descriptor) {
+      return fieldIndexes.get(descriptor);
+    }
+  }
+
   @Override
   protected Expression setFieldValue(Expression bean, Descriptor d, Expression value) {
+    if (bean instanceof FieldsArray) {
+      return new Expression.AssignArrayElem(
+          bean, value, Literal.ofInt(((FieldsArray) bean).fieldIndex(d)));
+    }
     if (isRecord) {
       if (recordCtrAccessible) {
         if (value instanceof Inlineable) {

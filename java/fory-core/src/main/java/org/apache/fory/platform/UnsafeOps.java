@@ -197,6 +197,12 @@ public final class UnsafeOps {
     }
   }
 
+  public static Object[] copyObjectArray(Object[] arr) {
+    Object[] objects = new Object[arr.length];
+    System.arraycopy(arr, 0, objects, 0, arr.length);
+    return objects;
+  }
+
   /** Create an instance of <code>type</code>. This method don't call constructor. */
   public static <T> T newInstance(Class<T> type) {
     try {

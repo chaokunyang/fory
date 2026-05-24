@@ -93,7 +93,7 @@ public class SynchronizedSerializers {
     @Override
     public void write(WriteContext writeContext, Collection object) {
       Preconditions.checkArgument(object.getClass() == type);
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         synchronized (object) {
           Collection source;
           if (object instanceof SortedSet) {
@@ -123,7 +123,7 @@ public class SynchronizedSerializers {
 
     @Override
     public Collection copy(CopyContext copyContext, Collection object) {
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         synchronized (object) {
           Collection mutableSource;
           if (object instanceof SortedSet) {
@@ -159,7 +159,7 @@ public class SynchronizedSerializers {
     @Override
     public void write(WriteContext writeContext, Map object) {
       Preconditions.checkArgument(object.getClass() == type);
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         synchronized (object) {
           Map source;
           if (object instanceof SortedMap) {
@@ -181,7 +181,7 @@ public class SynchronizedSerializers {
 
     @Override
     public Map copy(CopyContext copyContext, Map originMap) {
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         synchronized (originMap) {
           Map mutableSource;
           if (originMap instanceof SortedMap) {
@@ -223,7 +223,7 @@ public class SynchronizedSerializers {
           typeResolver,
           factory.f0,
           factory.f1,
-          MemoryUtils.JDK_INTERNAL_FIELD_ACCESS
+          MemoryUtils.JDK_COLLECTION_FIELD_ACCESS
               ? SourceAccessors.SOURCE_COLLECTION_ACCESSOR
               : null);
     } else {
@@ -231,7 +231,7 @@ public class SynchronizedSerializers {
           typeResolver,
           factory.f0,
           factory.f1,
-          MemoryUtils.JDK_INTERNAL_FIELD_ACCESS ? SourceAccessors.SOURCE_MAP_ACCESSOR : null);
+          MemoryUtils.JDK_COLLECTION_FIELD_ACCESS ? SourceAccessors.SOURCE_MAP_ACCESSOR : null);
     }
   }
 

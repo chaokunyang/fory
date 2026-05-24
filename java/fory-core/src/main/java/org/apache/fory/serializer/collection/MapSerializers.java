@@ -359,7 +359,7 @@ public class MapSerializers {
     @Override
     public Map onMapWrite(WriteContext writeContext, EnumMap value) {
       MemoryBuffer buffer = writeContext.getBuffer();
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS && value.isEmpty()) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS && value.isEmpty()) {
         buffer.writeByte(JAVA_SERIALIZED_EMPTY_ENUM_MAP);
         getJavaSerializer().write(writeContext, value);
         return value;
@@ -384,9 +384,10 @@ public class MapSerializers {
       if (payloadMode != NORMAL_ENUM_MAP) {
         throw new IllegalArgumentException("Unknown EnumMap payload mode: " + payloadMode);
       }
-      setNumElements(readMapSize(buffer));
+      int numElements = readMapSize(buffer);
       Class<?> keyType = typeResolver.readTypeInfo(readContext).getType();
       EnumMap map = new EnumMap(keyType);
+      setNumElements(numElements);
       readContext.reference(map);
       return map;
     }

@@ -20,7 +20,6 @@
 package org.apache.fory.benchmark;
 
 import org.apache.fory.platform.UnsafeOps;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.StringUtils;
 import org.openjdk.jmh.Main;
@@ -41,9 +40,16 @@ public class NewStringSuite {
     return new String(strData);
   }
 
-  private static final long STRING_VALUE_FIELD_OFFSET =
-      ReflectionUtils.getFieldOffset(String.class, "value");
+  private static final long STRING_VALUE_FIELD_OFFSET = fieldOffset(String.class, "value");
   private static String stubStr = new String(new char[] {Character.MAX_VALUE, Character.MIN_VALUE});
+
+  private static long fieldOffset(Class<?> type, String fieldName) {
+    try {
+      return UnsafeOps.objectFieldOffset(type.getDeclaredField(fieldName));
+    } catch (NoSuchFieldException e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   // @Benchmark
   public Object createJDK8StringByUnsafe() {

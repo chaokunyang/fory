@@ -360,6 +360,11 @@ public final class ReadContext {
     refReader.reference(object);
   }
 
+  /** Binds a specific preserved read ref id to {@code object}. */
+  public void reference(int refId, Object object) {
+    refReader.reference(refId, object);
+  }
+
   /** Returns a previously read object by ref id. */
   public Object getReadRef(int id) {
     return refReader.getReadRef(id);
@@ -373,6 +378,31 @@ public final class ReadContext {
   /** Stores {@code object} under a previously preserved read ref id. */
   public void setReadRef(int id, Object object) {
     refReader.setReadRef(id, object);
+  }
+
+  /** Starts tracking unresolved reads of {@code id} while a constructor-bound object is read. */
+  public void trackUnresolvedRef(int id) {
+    refReader.trackUnresolvedRef(id);
+  }
+
+  /** Returns whether a constructor-bound object ref id is currently tracked. */
+  public boolean hasTrackedRef() {
+    return refReader.hasTrackedRef();
+  }
+
+  /** Returns the active constructor-bound object ref id. */
+  public int currentTrackedRefId() {
+    return refReader.currentTrackedRefId();
+  }
+
+  /** Stops tracking unresolved reads for the most recent constructor-bound object. */
+  public void untrackUnresolvedRef() {
+    refReader.untrackUnresolvedRef();
+  }
+
+  /** Returns and clears whether {@code id} was read before it was bound to an object. */
+  public boolean consumeUnresolvedRef(int id) {
+    return refReader.consumeUnresolvedRef(id);
   }
 
   /** Returns the read-side meta-string state for the current runtime. */

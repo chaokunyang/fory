@@ -19,7 +19,6 @@
 
 package org.apache.fory.meta;
 
-
 import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.lang.reflect.Field;
@@ -36,7 +35,6 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.SharedRegistry;
 import org.apache.fory.resolver.TypeResolver;
@@ -64,7 +62,6 @@ import org.apache.fory.util.StringUtils;
  * @see ForyBuilder#withCompatible(boolean)
  * @see CompatibleSerializer
  * @see ForyBuilder#withMetaShare
- * @see ReflectionUtils#getFieldOffset
  */
 public class TypeDef implements Serializable {
   private static final Logger LOG = LoggerFactory.getLogger(TypeDef.class);

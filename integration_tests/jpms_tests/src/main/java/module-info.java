@@ -26,4 +26,8 @@ module org.apache.fory.integration_tests {
 
     // we can't really test any classes from this module because it only contains test-classes
     requires org.apache.fory.test.suite;
+
+    exports org.apache.fory.integration_tests.model;
+    exports org.apache.fory.integration_tests.publicserializer;
+    opens org.apache.fory.integration_tests.model to org.apache.fory.core, org.apache.fory.format;
 }

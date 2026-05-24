@@ -621,6 +621,8 @@ public class ReplaceResolveSerializerTest extends ForyTestBase {
     private transient int f1;
     private transient boolean newInstance;
 
+    public ReplaceSelfExternalizable() {}
+
     public ReplaceSelfExternalizable(int f1, boolean newInstance) {
       this.f1 = f1;
       this.newInstance = newInstance;

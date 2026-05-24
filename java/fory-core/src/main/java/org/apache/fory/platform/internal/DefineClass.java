@@ -78,4 +78,9 @@ public class DefineClass {
       throw new RuntimeException(e);
     }
   }
+
+  public static Class<?> defineHiddenNestmate(Class<?> neighbor, byte[] bytecodes) {
+    throw new UnsupportedOperationException(
+        "Hidden nestmate class definition requires the JDK25 multi-release DefineClass");
+  }
 }

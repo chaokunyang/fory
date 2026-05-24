@@ -52,6 +52,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
@@ -73,6 +74,23 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ChildContainerSerializers {
+  private static final ObjectCreator<Object> FIELD_ONLY_CREATOR = new FieldOnlyCreator();
+
+  private static final class FieldOnlyCreator extends ObjectCreator<Object> {
+    private FieldOnlyCreator() {
+      super(Object.class);
+    }
+
+    @Override
+    public Object newInstance() {
+      throw new UnsupportedOperationException("Child-container slots do not create objects");
+    }
+
+    @Override
+    public Object newInstanceWithArguments(Object... arguments) {
+      throw new UnsupportedOperationException("Child-container slots do not create objects");
+    }
+  }
 
   public static Class<? extends Serializer> getCollectionSerializerClass(Class<?> cls) {
     if (ChildCollectionSerializer.superClasses.contains(cls)
@@ -626,7 +644,7 @@ public class ChildContainerSerializers {
         slotsSerializer =
             new CompatibleLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false);
+        slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false, slotCreator());
       }
       serializers.add(slotsSerializer);
       cls = (Class<T>) cls.getSuperclass();
@@ -634,6 +652,10 @@ public class ChildContainerSerializers {
     }
     Collections.reverse(serializers);
     return serializers.toArray(new Serializer[0]);
+  }
+
+  private static <T> ObjectCreator<T> slotCreator() {
+    return (ObjectCreator<T>) FIELD_ONLY_CREATOR;
   }
 
   private static void readAndSetFields(

@@ -19,6 +19,7 @@
 
 package org.apache.fory.graalvm;
 
+import java.beans.ConstructorProperties;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -50,6 +51,7 @@ public class FeatureTestExample {
   public static class TestInvocationHandler implements InvocationHandler {
     private final String value;
 
+    @ConstructorProperties("value")
     public TestInvocationHandler(String value) {
       this.value = value;
     }

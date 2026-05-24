@@ -76,4 +76,37 @@
     </plugins>
   </build>
 
+  <profiles>
+    <profile>
+      <id>jdk25-and-higher</id>
+      <activation>
+        <jdk>[25,)</jdk>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <argLine>
+                --sun-misc-unsafe-memory-access=deny
+                --add-opens=java.base/java.lang=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.lang.invoke=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.lang.reflect=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/jdk.internal.reflect=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.util=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.util.concurrent=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.util.concurrent.atomic=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.io=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.net=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.nio=org.apache.fory.core,org.apache.fory.format
+                --add-opens=java.base/java.math=org.apache.fory.core,org.apache.fory.format
+              </argLine>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+
 </project>

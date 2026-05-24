@@ -494,7 +494,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
         new ObjectStreamSerializer(fory.getTypeResolver(), WriteObjectTestClass4.class));
 
     Assert.assertEquals(
-        serDeCheckSerializer(fory, new URL("http://test"), "ReplaceResolve"),
+        serDeCheckSerializer(fory, new URL("http://test"), "URLSerializer"),
         new URL("http://test"));
     WriteObjectTestClass4 testClassObj4 = new WriteObjectTestClass4(new char[] {'a', 'b'});
     serDeCheckSerializer(fory, testClassObj4, "ObjectStreamSerializer");

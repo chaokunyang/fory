@@ -31,8 +31,10 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.time.Duration;
@@ -57,6 +59,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.StringTokenizer;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -100,6 +103,7 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
@@ -108,11 +112,13 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BufferSerializers;
 import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
+import org.apache.fory.serializer.CompatibleSerializer;
 import org.apache.fory.serializer.CopyOnlyObjectSerializer;
 import org.apache.fory.serializer.EnumSerializer;
 import org.apache.fory.serializer.ExceptionSerializers;
@@ -134,6 +140,7 @@ import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
 import org.apache.fory.serializer.SqlTimeSerializers;
 import org.apache.fory.serializer.TimeSerializers;
+import org.apache.fory.serializer.URLSerializer;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
 import org.apache.fory.serializer.UnknownClass.UnknownStruct;
@@ -997,6 +1004,7 @@ public class ClassResolver extends TypeResolver {
             || isMap(cls)
             || Externalizable.class.isAssignableFrom(cls)
             || requireJavaSerialization(cls)
+            || requiresJavaSerializer(cls)
             || useReplaceResolveSerializer(cls)
             || Functions.isLambda(cls)
             || (ScalaTypes.SCALA_AVAILABLE && ReflectionUtils.isScalaSingletonObject(cls))
@@ -1467,6 +1475,15 @@ public class ClassResolver extends TypeResolver {
         return TimeSerializers.ZoneIdSerializer.class;
       } else if (TimeZone.class.isAssignableFrom(cls)) {
         return TimeSerializers.TimeZoneSerializer.class;
+      } else if (cls == URL.class) {
+        return URLSerializer.class;
+      } else if (cls == StringTokenizer.class) {
+        if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
+          throw new UnsupportedOperationException(
+              "StringTokenizer serialization requires JDK internal field access. On JDK25+, open "
+                  + "java.base/java.util to org.apache.fory.core,org.apache.fory.format.");
+        }
+        return Serializers.StringTokenizerSerializer.class;
       } else if (ByteBuffer.class.isAssignableFrom(cls)) {
         return BufferSerializers.ByteBufferSerializer.class;
       }
@@ -1526,6 +1543,12 @@ public class ClassResolver extends TypeResolver {
           return MapSerializer.class;
         }
       }
+      if (requiresJdkStream(cls)) {
+        return getDefaultJDKStreamSerializerType();
+      }
+      if (requiresJavaSerializer(cls)) {
+        return JavaSerializer.class;
+      }
       if (isCrossLanguage()) {
         LOG.warn("Class {} isn't supported for cross-language serialization.", cls);
       }
@@ -1564,6 +1587,9 @@ public class ClassResolver extends TypeResolver {
   public Class<? extends Serializer> getObjectSerializerClass(
       Class<?> cls, JITContext.SerializerJITCallback<Class<? extends Serializer>> callback) {
     boolean codegen = config.isCodeGenEnabled() && supportCodegenForJavaSerialization(cls);
+    if (JdkVersion.MAJOR_VERSION >= 25 && !Modifier.isPublic(cls.getModifiers())) {
+      codegen = false;
+    }
     return getObjectSerializerClass(cls, false, codegen, callback);
   }
 
@@ -1578,6 +1604,9 @@ public class ClassResolver extends TypeResolver {
       if (serializerClass != null) {
         return serializerClass;
       }
+    }
+    if (ReflectionUtils.isJdkProxy(cls)) {
+      return JdkProxySerializer.class;
     }
     Class<? extends Serializer> staticSerializerClass =
         getStaticGeneratedStructSerializerClass(cls);
@@ -1607,6 +1636,34 @@ public class ClassResolver extends TypeResolver {
         LOG.info("Object of type {} can't be serialized by jit", cls);
       }
       return staticSerializerClass == null ? ObjectSerializer.class : staticSerializerClass;
+    }
+  }
+
+  private static boolean requiresJdkStream(Class<?> cls) {
+    return JdkVersion.MAJOR_VERSION >= 25
+        && cls.getName().startsWith("java.")
+        && Serializable.class.isAssignableFrom(cls)
+        && !hasNoArgConstructor(cls);
+  }
+
+  private static boolean requiresJavaSerializer(Class<?> cls) {
+    if (JdkVersion.MAJOR_VERSION < 25 || !Serializable.class.isAssignableFrom(cls)) {
+      return false;
+    }
+    // Scala products can have final derived fields initialized by the primary constructor but not
+    // represented as constructor parameters. Keep that compatibility in the isolated JDK stream
+    // path instead of teaching the generic JDK25 field serializer to ignore final fields.
+    return ScalaTypes.SCALA_AVAILABLE
+        && ScalaTypes.isScalaProductType(cls)
+        && !ReflectionUtils.isScalaSingletonObject(cls);
+  }
+
+  private static boolean hasNoArgConstructor(Class<?> cls) {
+    try {
+      cls.getDeclaredConstructor();
+      return true;
+    } catch (NoSuchMethodException e) {
+      return false;
     }
   }
 
@@ -1860,7 +1917,21 @@ public class ClassResolver extends TypeResolver {
       RecordUtils.getRecordConstructor(cls);
       RecordUtils.getRecordComponents(cls);
     }
-    ObjectCreators.getObjectCreator(cls);
+    if (needsGraalvmObjectCreator(cls, serializerClass)) {
+      ObjectCreators.getObjectCreator(cls);
+    }
+  }
+
+  private boolean needsGraalvmObjectCreator(
+      Class<?> cls, Class<? extends Serializer> serializerClass) {
+    if (cls.isArray()) {
+      return false;
+    }
+    return serializerClass == ObjectSerializer.class
+        || serializerClass == CompatibleSerializer.class
+        || serializerClass == ReplaceResolveSerializer.class
+        || serializerClass == CollectionSerializers.DefaultJavaCollectionSerializer.class
+        || serializerClass == MapSerializers.DefaultJavaMapSerializer.class;
   }
 
   private void createSerializer0(Class<?> cls) {

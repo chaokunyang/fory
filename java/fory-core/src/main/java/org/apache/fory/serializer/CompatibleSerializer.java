@@ -33,6 +33,7 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassResolver;
@@ -68,6 +69,8 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(CompatibleSerializer.class);
 
   private final SerializationFieldInfo[] allFields;
+  private final int[] constructorFieldIndexes;
+  private final boolean[] constructorFieldMask;
   private final CompatibleCollectionArrayReader.ReadAction[] allCompatibleReadActions;
   private final boolean hasCompatibleCollectionArrayRead;
   private final RecordInfo recordInfo;
@@ -139,6 +142,34 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     }
     this.hasDefaultValues = hasDefaultValues;
     this.defaultValueFields = defaultValueFields;
+    if (!isRecord && objectCreator.hasConstructorFields()) {
+      constructorFieldIndexes =
+          buildConstructorFieldIndexes(
+              allFields,
+              true,
+              defaultFieldNames(defaultValueFields),
+              defaultDeclaringClasses(defaultValueFields));
+      constructorFieldMask = buildConstructorFieldMask(allFields.length, constructorFieldIndexes);
+    } else {
+      constructorFieldIndexes = null;
+      constructorFieldMask = null;
+    }
+  }
+
+  private static String[] defaultFieldNames(DefaultValueUtils.DefaultValueField[] fields) {
+    String[] names = new String[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      names[i] = fields[i].getFieldName();
+    }
+    return names;
+  }
+
+  private static Class<?>[] defaultDeclaringClasses(DefaultValueUtils.DefaultValueField[] fields) {
+    Class<?>[] declaringClasses = new Class[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      declaringClasses[i] = fields[i].getDeclaringClass();
+    }
+    return declaringClasses;
   }
 
   /** Used by generated compatible serializers for top-level list/array compatible field reads. */
@@ -232,12 +263,42 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       return newBean();
     }
     T obj =
-        AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+        AndroidSupport.IS_ANDROID
+                || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+                || JdkVersion.MAJOR_VERSION >= 25
             ? newBean()
             : UnsafeOps.newInstance(type);
     // Set default values for missing fields in Scala case classes
     DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
     return obj;
+  }
+
+  private Object[] compatibleConstructorArgs(Object[] fieldValues) {
+    String[] fieldNames = objectCreator.getConstructorFieldNames();
+    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
+    Class<?>[] fieldTypes = objectCreator.getConstructorFieldTypes();
+    Object[] args = new Object[constructorFieldIndexes.length];
+    for (int i = 0; i < constructorFieldIndexes.length; i++) {
+      int index = constructorFieldIndexes[i];
+      if (index >= 0) {
+        args[i] = fieldValues[index];
+      } else {
+        Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];
+        args[i] = defaultConstructorValue(fieldNames[i], declaringClass, fieldTypes[i]);
+      }
+    }
+    return args;
+  }
+
+  private Object defaultConstructorValue(
+      String fieldName, Class<?> declaringClass, Class<?> fieldType) {
+    for (DefaultValueUtils.DefaultValueField defaultValueField : defaultValueFields) {
+      if (defaultValueField.getFieldName().equals(fieldName)
+          && (declaringClass == null || defaultValueField.getDeclaringClass() == declaringClass)) {
+        return defaultValueField.getDefaultValue();
+      }
+    }
+    return AbstractObjectSerializer.defaultConstructorValue(fieldType);
   }
 
   @Override
@@ -254,6 +315,10 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       Arrays.fill(recordInfo.getRecordComponents(), null);
       return t;
     }
+    if (objectCreator.hasConstructorFields()) {
+      Object[] fieldValues = new Object[allFields.length];
+      return readConstructorObject(readContext, fieldValues);
+    }
     T targetObject = newInstance();
     if (readContext.hasPreservedRefId()) {
       readContext.reference(targetObject);
@@ -266,12 +331,113 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     return targetObject;
   }
 
+  private T readConstructorObject(ReadContext readContext, Object[] fieldValues) {
+    beginConstructorRef(readContext);
+    try {
+      boolean[] bufferedNonConstructorFields = new boolean[allFields.length];
+      int remainingConstructorFields = countConstructorFields();
+      T targetObject = null;
+      if (remainingConstructorFields == 0) {
+        targetObject = createConstructorObject(fieldValues);
+        referenceConstructorRef(readContext, targetObject);
+        setNonConstructorDefaultValues(targetObject);
+      }
+      MemoryBuffer buffer = readContext.getBuffer();
+      RefReader refReader = readContext.getRefReader();
+      Generics generics = readContext.getGenerics();
+      for (int i = 0; i < allFields.length; i++) {
+        SerializationFieldInfo fieldInfo = allFields[i];
+        CompatibleCollectionArrayReader.ReadAction action =
+            compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
+        if (constructorFieldMask[i]) {
+          fieldValues[i] =
+              ctorFieldValue(
+                  readContext,
+                  readFieldValue(readContext, refReader, generics, fieldInfo, buffer, action),
+                  type);
+          remainingConstructorFields--;
+          if (remainingConstructorFields == 0) {
+            checkNoUnresolvedReadRef(readContext);
+            targetObject = createConstructorObject(fieldValues);
+            referenceConstructorRef(readContext, targetObject);
+            setNonConstructorDefaultValues(targetObject);
+            setBufferedNonConstructorFields(
+                targetObject, fieldValues, bufferedNonConstructorFields);
+          }
+        } else if (targetObject == null) {
+          fieldValues[i] =
+              bufferFieldValue(
+                  readContext,
+                  readFieldValue(readContext, refReader, generics, fieldInfo, buffer, action),
+                  type);
+          bufferedNonConstructorFields[i] = true;
+        } else {
+          readField(readContext, targetObject, refReader, generics, fieldInfo, buffer, action);
+        }
+      }
+      return targetObject;
+    } finally {
+      endConstructorRef(readContext);
+    }
+  }
+
+  private int countConstructorFields() {
+    int count = 0;
+    for (boolean constructorField : constructorFieldMask) {
+      if (constructorField) {
+        count++;
+      }
+    }
+    return count;
+  }
+
+  private T createConstructorObject(Object[] fieldValues) {
+    return objectCreator.newInstanceWithArguments(compatibleConstructorArgs(fieldValues));
+  }
+
+  private void setNonConstructorDefaultValues(T targetObject) {
+    DefaultValueUtils.setDefaultValues(
+        targetObject,
+        defaultValueFields,
+        objectCreator.getConstructorFieldNames(),
+        objectCreator.getConstructorFieldDeclaringClasses());
+  }
+
+  private void setBufferedNonConstructorFields(
+      T targetObject, Object[] fieldValues, boolean[] bufferedNonConstructorFields) {
+    for (int i = 0; i < allFields.length; i++) {
+      if (bufferedNonConstructorFields[i]) {
+        setFieldValue(
+            targetObject, allFields[i], resolveBufferedValue(fieldValues[i], targetObject));
+      }
+    }
+  }
+
+  private void setFieldValue(T targetObject, SerializationFieldInfo fieldInfo, Object fieldValue) {
+    if (fieldInfo.fieldAccessor != null) {
+      fieldInfo.fieldAccessor.putObject(targetObject, fieldValue);
+    } else if (fieldInfo.fieldConverter != null) {
+      fieldInfo.fieldConverter.set(targetObject, fieldValue);
+    }
+  }
+
   private void readFields(ReadContext readContext, T targetObject) {
     MemoryBuffer buffer = readContext.getBuffer();
     RefReader refReader = readContext.getRefReader();
     Generics generics = readContext.getGenerics();
     for (SerializationFieldInfo fieldInfo : allFields) {
       readField(readContext, targetObject, refReader, generics, fieldInfo, buffer, null);
+    }
+  }
+
+  private void readFields(ReadContext readContext, T targetObject, boolean constructorFields) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    RefReader refReader = readContext.getRefReader();
+    Generics generics = readContext.getGenerics();
+    for (int i = 0; i < allFields.length; i++) {
+      if (constructorFieldMask[i] == constructorFields) {
+        readField(readContext, targetObject, refReader, generics, allFields[i], buffer, null);
+      }
     }
   }
 
@@ -282,6 +448,17 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     Generics generics = readContext.getGenerics();
     for (SerializationFieldInfo fieldInfo : allFields) {
       fields[counter++] = readField(readContext, refReader, generics, fieldInfo, buffer, null);
+    }
+  }
+
+  private void readFields(ReadContext readContext, Object[] fields, boolean constructorFields) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    RefReader refReader = readContext.getRefReader();
+    Generics generics = readContext.getGenerics();
+    for (int i = 0; i < allFields.length; i++) {
+      if (constructorFieldMask[i] == constructorFields) {
+        fields[i] = readField(readContext, refReader, generics, allFields[i], buffer, null);
+      }
     }
   }
 
@@ -309,6 +486,25 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     }
   }
 
+  private void readFieldsWithCompatibleCollectionArray(
+      ReadContext readContext, T targetObject, boolean constructorFields) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    RefReader refReader = readContext.getRefReader();
+    Generics generics = readContext.getGenerics();
+    for (int i = 0; i < allFields.length; i++) {
+      if (constructorFieldMask[i] != constructorFields) {
+        continue;
+      }
+      SerializationFieldInfo fieldInfo = allFields[i];
+      CompatibleCollectionArrayReader.ReadAction action =
+          compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
+      if (Utils.DEBUG_OUTPUT_VERBOSE) {
+        printFieldDebugInfo(fieldInfo, buffer);
+      }
+      readField(readContext, targetObject, refReader, generics, fieldInfo, buffer, action);
+    }
+  }
+
   private void readFieldsWithCompatibleCollectionArray(ReadContext readContext, Object[] fields) {
     MemoryBuffer buffer = readContext.getBuffer();
     int counter = 0;
@@ -322,6 +518,25 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       fields[counter++] = readField(readContext, refReader, generics, fieldInfo, buffer, action);
+    }
+  }
+
+  private void readFieldsWithCompatibleCollectionArray(
+      ReadContext readContext, Object[] fields, boolean constructorFields) {
+    MemoryBuffer buffer = readContext.getBuffer();
+    RefReader refReader = readContext.getRefReader();
+    Generics generics = readContext.getGenerics();
+    for (int i = 0; i < allFields.length; i++) {
+      if (constructorFieldMask[i] != constructorFields) {
+        continue;
+      }
+      SerializationFieldInfo fieldInfo = allFields[i];
+      CompatibleCollectionArrayReader.ReadAction action =
+          compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
+      if (Utils.DEBUG_OUTPUT_ENABLED) {
+        printFieldDebugInfo(fieldInfo, buffer);
+      }
+      fields[i] = readField(readContext, refReader, generics, fieldInfo, buffer, action);
     }
   }
 
@@ -382,6 +597,23 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       default:
         throw new IllegalStateException("Unknown field codec category " + fieldInfo.codecCategory);
     }
+  }
+
+  private Object readFieldValue(
+      ReadContext readContext,
+      RefReader refReader,
+      Generics generics,
+      SerializationFieldInfo fieldInfo,
+      MemoryBuffer buffer,
+      CompatibleCollectionArrayReader.ReadAction action) {
+    if (fieldInfo.fieldAccessor == null
+        && fieldInfo.fieldConverter != null
+        && fieldInfo.codecCategory == FieldGroups.FieldCodecCategory.BUILD_IN
+        && action == null) {
+      return AbstractObjectSerializer.readBuildInFieldValue(
+          readContext, typeResolver, refReader, fieldInfo, buffer);
+    }
+    return readField(readContext, refReader, generics, fieldInfo, buffer, action);
   }
 
   private void printFieldDebugInfo(SerializationFieldInfo fieldInfo, MemoryBuffer buffer) {

@@ -29,6 +29,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.DescriptorGrouper;
@@ -41,12 +42,34 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
+  private static final ObjectCreator<Object> FIELD_ONLY_CREATOR = new FieldOnlyCreator();
+
+  private static final class FieldOnlyCreator extends ObjectCreator<Object> {
+    private FieldOnlyCreator() {
+      super(Object.class);
+    }
+
+    @Override
+    public Object newInstance() {
+      throw new UnsupportedOperationException("Layer serializers do not create objects");
+    }
+
+    @Override
+    public Object newInstanceWithArguments(Object... arguments) {
+      throw new UnsupportedOperationException("Layer serializers do not create objects");
+    }
+  }
+
   protected TypeDef layerTypeDef;
   protected Class<?> layerMarkerClass;
   protected SerializationFieldInfo[] allFields = new SerializationFieldInfo[0];
 
   public CompatibleLayerSerializerBase(TypeResolver typeResolver, Class<T> type) {
-    super(typeResolver, type);
+    super(typeResolver, type, fieldOnlyCreator());
+  }
+
+  private static <T> ObjectCreator<T> fieldOnlyCreator() {
+    return (ObjectCreator<T>) FIELD_ONLY_CREATOR;
   }
 
   public final void setLayerSerializerMeta(TypeDef layerTypeDef, Class<?> layerMarkerClass) {

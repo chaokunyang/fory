@@ -23,15 +23,8 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_ASCII_MASK;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_LATIN_MASK;
 
-import java.lang.invoke.CallSite;
-import java.lang.invoke.LambdaMetafactory;
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
-import java.util.function.BiFunction;
-import java.util.function.Function;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
@@ -43,7 +36,6 @@ import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.MathUtils;
@@ -52,7 +44,7 @@ import org.apache.fory.util.StringEncodingUtils;
 import org.apache.fory.util.StringUtils;
 
 /**
- * String serializer based on {@link sun.misc.Unsafe} and {@link MethodHandle} for speed.
+ * String serializer based on JDK-internal string access and byte-array accessors for speed.
  *
  * <p>Note that string operations is very common in serialization, and jvm inline and branch
  * elimination is not reliable even in c2 compiler, so we try to inline and avoid checks as we can
@@ -64,28 +56,35 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   private static final boolean STRING_VALUE_FIELD_IS_BYTES;
 
   private static final byte LATIN1 = 0;
-  private static final Byte LATIN1_BOXED = LATIN1;
   private static final byte UTF16 = 1;
-  private static final Byte UTF16_BOXED = UTF16;
   private static final byte UTF8 = 2;
   private static final int DEFAULT_BUFFER_SIZE = 1024;
 
+  private static final long STRING_VALUE_FIELD_OFFSET;
   private static final boolean STRING_HAS_COUNT_OFFSET;
+  private static final long STRING_COUNT_FIELD_OFFSET;
+  private static final long STRING_OFFSET_FIELD_OFFSET;
 
   static {
     if (!jdkInternalFieldAccess()) {
       STRING_VALUE_FIELD_IS_CHARS = false;
       STRING_VALUE_FIELD_IS_BYTES = false;
+      STRING_VALUE_FIELD_OFFSET = -1;
       STRING_HAS_COUNT_OFFSET = false;
+      STRING_COUNT_FIELD_OFFSET = -1;
+      STRING_OFFSET_FIELD_OFFSET = -1;
     } else {
       STRING_VALUE_FIELD_IS_CHARS = _JDKAccess.STRING_VALUE_FIELD_IS_CHARS;
       STRING_VALUE_FIELD_IS_BYTES = _JDKAccess.STRING_VALUE_FIELD_IS_BYTES;
+      STRING_VALUE_FIELD_OFFSET = _JDKAccess.STRING_VALUE_FIELD_OFFSET;
       STRING_HAS_COUNT_OFFSET = _JDKAccess.STRING_HAS_COUNT_OFFSET;
+      STRING_COUNT_FIELD_OFFSET = _JDKAccess.STRING_COUNT_FIELD_OFFSET;
+      STRING_OFFSET_FIELD_OFFSET = _JDKAccess.STRING_OFFSET_FIELD_OFFSET;
     }
   }
 
   private static boolean jdkInternalFieldAccess() {
-    return !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
+    return !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_STRING_FIELD_ACCESS;
   }
 
   private final boolean compressString;
@@ -427,19 +426,19 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   private static Object getStringValue(String value) {
-    return _JDKAccess.getStringValue(value);
+    return UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
   }
 
   private static byte getStringCoder(String value) {
-    return _JDKAccess.getStringCoder(value);
+    return UnsafeOps.getByte(value, _JDKAccess.STRING_CODER_FIELD_OFFSET);
   }
 
   private static int getStringOffset(String value) {
-    return _JDKAccess.getStringOffset(value);
+    return UnsafeOps.getInt(value, STRING_OFFSET_FIELD_OFFSET);
   }
 
   private static int getStringCount(String value) {
-    return _JDKAccess.getStringCount(value);
+    return UnsafeOps.getInt(value, STRING_COUNT_FIELD_OFFSET);
   }
 
   @CodegenInvoke
@@ -885,24 +884,11 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     }
   }
 
-  private static final MethodHandles.Lookup STRING_LOOK_UP =
-      jdkInternalFieldAccess() ? _JDKAccess._trustedLookup(String.class) : null;
-  private static final BiFunction<char[], Boolean, String> CHARS_STRING_ZERO_COPY_CTR =
-      jdkInternalFieldAccess() ? getCharsStringZeroCopyCtr() : null;
-  private static final BiFunction<byte[], Byte, String> BYTES_STRING_ZERO_COPY_CTR =
-      jdkInternalFieldAccess() ? getBytesStringZeroCopyCtr() : null;
-  private static final Function<byte[], String> LATIN_BYTES_STRING_ZERO_COPY_CTR =
-      jdkInternalFieldAccess() ? getLatinBytesStringZeroCopyCtr() : null;
-
   public static String newCharsStringZeroCopy(char[] data) {
     if (!jdkInternalFieldAccess()) {
       return newCharsStringSlow(data);
     }
-    if (!STRING_VALUE_FIELD_IS_CHARS) {
-      throw new IllegalStateException("String value isn't char[], current java isn't supported");
-    }
-    // 25% faster than unsafe put field, only 10% slower than `new String(str)`
-    return CHARS_STRING_ZERO_COPY_CTR.apply(data, Boolean.TRUE);
+    return _JDKAccess.newCharsStringZeroCopy(data);
   }
 
   private static String newCharsStringSlow(char[] data) {
@@ -915,27 +901,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
     if (!jdkInternalFieldAccess()) {
       return newBytesStringSlow(coder, data);
     }
-    if (coder == LATIN1) {
-      // 700% faster than unsafe put field in java11, only 10% slower than `new String(str)` for
-      // string length 230.
-      // 50% faster than unsafe put field in java11 for string length 10.
-      if (LATIN_BYTES_STRING_ZERO_COPY_CTR != null) {
-        return LATIN_BYTES_STRING_ZERO_COPY_CTR.apply(data);
-      } else {
-        // JDK17 removed newStringLatin1
-        return BYTES_STRING_ZERO_COPY_CTR.apply(data, LATIN1_BOXED);
-      }
-    } else if (coder == UTF16) {
-      // avoid byte box cost.
-      return BYTES_STRING_ZERO_COPY_CTR.apply(data, UTF16_BOXED);
-    } else {
-      // 700% faster than unsafe put field in java11, only 10% slower than `new String(str)` for
-      // string length 230.
-      // 50% faster than unsafe put field in java11 for string length 10.
-      // `invokeExact` must pass exact params with exact types:
-      // `(Object) data, coder` will throw WrongMethodTypeException
-      return BYTES_STRING_ZERO_COPY_CTR.apply(data, coder);
-    }
+    return _JDKAccess.newBytesStringZeroCopy(coder, data);
   }
 
   private static String newBytesStringSlow(byte coder, byte[] data) {
@@ -949,95 +915,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       return new String(chars);
     } else {
       return new String(data, StandardCharsets.UTF_8);
-    }
-  }
-
-  private static BiFunction<char[], Boolean, String> getCharsStringZeroCopyCtr() {
-    if (!STRING_VALUE_FIELD_IS_CHARS) {
-      return null;
-    }
-    MethodHandle handle = getJavaStringZeroCopyCtrHandle();
-    if (handle == null) {
-      return null;
-    }
-    try {
-      // Faster than handle.invokeExact(data, boolean)
-      CallSite callSite =
-          LambdaMetafactory.metafactory(
-              STRING_LOOK_UP,
-              "apply",
-              MethodType.methodType(BiFunction.class),
-              handle.type().generic(),
-              handle,
-              handle.type());
-      return (BiFunction) callSite.getTarget().invokeExact();
-    } catch (Throwable e) {
-      return null;
-    }
-  }
-
-  private static BiFunction<byte[], Byte, String> getBytesStringZeroCopyCtr() {
-    if (!STRING_VALUE_FIELD_IS_BYTES) {
-      return null;
-    }
-    MethodHandle handle = getJavaStringZeroCopyCtrHandle();
-    if (handle == null) {
-      return null;
-    }
-    // Faster than handle.invokeExact(data, byte)
-    try {
-      MethodType instantiatedMethodType =
-          MethodType.methodType(handle.type().returnType(), new Class[] {byte[].class, Byte.class});
-      CallSite callSite =
-          LambdaMetafactory.metafactory(
-              STRING_LOOK_UP,
-              "apply",
-              MethodType.methodType(BiFunction.class),
-              handle.type().generic(),
-              handle,
-              instantiatedMethodType);
-      return (BiFunction) callSite.getTarget().invokeExact();
-    } catch (Throwable e) {
-      return null;
-    }
-  }
-
-  private static Function<byte[], String> getLatinBytesStringZeroCopyCtr() {
-    if (!STRING_VALUE_FIELD_IS_BYTES) {
-      return null;
-    }
-    if (STRING_LOOK_UP == null) {
-      return null;
-    }
-    try {
-      Class<?> clazz = Class.forName("java.lang.StringCoding");
-      MethodHandles.Lookup caller = STRING_LOOK_UP.in(clazz);
-      // JDK17 removed this method.
-      MethodHandle handle =
-          caller.findStatic(
-              clazz, "newStringLatin1", MethodType.methodType(String.class, byte[].class));
-      // Faster than handle.invokeExact(data, byte)
-      return _JDKAccess.makeFunction(caller, handle, Function.class);
-    } catch (Throwable e) {
-      return null;
-    }
-  }
-
-  private static MethodHandle getJavaStringZeroCopyCtrHandle() {
-    Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 8);
-    if (STRING_LOOK_UP == null) {
-      return null;
-    }
-    try {
-      if (STRING_VALUE_FIELD_IS_CHARS) {
-        return STRING_LOOK_UP.findConstructor(
-            String.class, MethodType.methodType(void.class, char[].class, boolean.class));
-      } else {
-        return STRING_LOOK_UP.findConstructor(
-            String.class, MethodType.methodType(void.class, byte[].class, byte.class));
-      }
-    } catch (Exception e) {
-      return null;
     }
   }
 

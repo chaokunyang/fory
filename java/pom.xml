@@ -109,6 +109,38 @@
         <module>fory-latest-jdk-tests</module>
       </modules>
     </profile>
+    <!-- Surefire does not apply multi-release class selection to target/classes. JDK25
+         reactor tests opt in to this overlay so dependent modules exercise the
+         versioned fory-core classes without breaking focused module tests that use
+         the installed packaged artifact. -->
+    <profile>
+      <id>jdk25-test-classpath</id>
+      <activation>
+        <jdk>[25,]</jdk>
+        <property>
+          <name>fory.jdk25.test.classpath</name>
+          <value>true</value>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <classpathDependencyExcludes>
+                <classpathDependencyExclude>org.apache.fory:fory-core</classpathDependencyExclude>
+              </classpathDependencyExcludes>
+              <additionalClasspathElements>
+                <additionalClasspathElement>
+                  ${maven.multiModuleProjectDirectory}/fory-core/target/jdk25-test-classes
+                </additionalClasspathElement>
+              </additionalClasspathElements>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 
   <dependencyManagement>

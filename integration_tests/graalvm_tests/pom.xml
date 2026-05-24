@@ -176,6 +176,17 @@
                 <!-- for fast build -->
                 <!-- <buildArg>-Ob</buildArg> -->
                 <buildArg>-H:+UnlockExperimentalVMOptions</buildArg>
+                <buildArg>-J--add-opens=java.base/java.lang=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.util=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.io=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.net=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.nio=ALL-UNNAMED</buildArg>
+                <buildArg>-J--add-opens=java.base/java.math=ALL-UNNAMED</buildArg>
               </buildArgs>
             </configuration>
           </plugin>
@@ -197,6 +208,28 @@
                 </configuration>
               </execution>
             </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>jdk25-native</id>
+      <activation>
+        <jdk>[25,)</jdk>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.graalvm.buildtools</groupId>
+            <artifactId>native-maven-plugin</artifactId>
+            <configuration>
+              <jvmArgs combine.children="append">
+                <jvmArg>--sun-misc-unsafe-memory-access=deny</jvmArg>
+              </jvmArgs>
+              <buildArgs combine.children="append">
+                <buildArg>-J--sun-misc-unsafe-memory-access=deny</buildArg>
+              </buildArgs>
+            </configuration>
           </plugin>
         </plugins>
       </build>

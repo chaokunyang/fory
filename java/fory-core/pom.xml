@@ -77,6 +77,7 @@
         <configuration>
           <archive>
             <manifestEntries>
+              <Multi-Release>true</Multi-Release>
               <Automatic-Module-Name>org.apache.fory.core</Automatic-Module-Name>
             </manifestEntries>
           </archive>
@@ -92,6 +93,7 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+              <createDependencyReducedPom>false</createDependencyReducedPom>
               <minimizeJar>true</minimizeJar>
               <artifactSet>
                 <includes>
@@ -118,6 +120,7 @@
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
                   <manifestEntries>
+                    <Multi-Release>true</Multi-Release>
                     <Automatic-Module-Name>org.apache.fory.core</Automatic-Module-Name>
                   </manifestEntries>
                 </transformer>
@@ -135,6 +138,263 @@
   </build>
 
   <profiles>
+    <profile>
+      <id>jdk25-multi-release</id>
+      <activation>
+        <jdk>[25,]</jdk>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-source-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>attach-sources</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jar</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
+            <executions>
+              <execution>
+                <id>compile-jdk25-multi-release</id>
+                <phase>process-classes</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <property
+                        name="jdk25.classes.dir"
+                        value="${project.build.outputDirectory}/META-INF/versions/25"/>
+                    <mkdir dir="${jdk25.classes.dir}"/>
+                    <path id="jdk25.compile.classpath">
+                      <pathelement location="${project.build.outputDirectory}"/>
+                      <path refid="maven.compile.classpath"/>
+                    </path>
+                    <javac
+                        srcdir="${project.basedir}/src/main/java25"
+                        destdir="${jdk25.classes.dir}"
+                        executable="${java.home}/bin/javac"
+                        fork="true"
+                        includeantruntime="false"
+                        debug="true"
+                        release="22">
+                      <classpath refid="jdk25.compile.classpath"/>
+                    </javac>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>prepare-jdk25-test-classes</id>
+                <phase>process-test-classes</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <property
+                        name="jdk25.test.classes.dir"
+                        value="${project.build.directory}/jdk25-test-classes"/>
+                    <delete dir="${jdk25.test.classes.dir}"/>
+                    <mkdir dir="${jdk25.test.classes.dir}"/>
+                    <copy todir="${jdk25.test.classes.dir}">
+                      <fileset dir="${project.build.outputDirectory}">
+                        <exclude name="META-INF/versions/**"/>
+                      </fileset>
+                    </copy>
+                    <copy todir="${jdk25.test.classes.dir}" overwrite="true">
+                      <fileset dir="${project.build.outputDirectory}/META-INF/versions/25"/>
+                    </copy>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>verify-jdk25-multi-release-jar</id>
+                <phase>verify</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <property
+                        name="jdk25.mrjar.check.dir"
+                        value="${project.build.directory}/jdk25-mrjar-check"/>
+                    <delete dir="${jdk25.mrjar.check.dir}"/>
+                    <mkdir dir="${jdk25.mrjar.check.dir}"/>
+                    <exec executable="${java.home}/bin/jar" failonerror="true">
+                      <arg value="--validate"/>
+                      <arg value="--file"/>
+                      <arg value="${project.build.directory}/${project.build.finalName}.jar"/>
+                    </exec>
+                    <unzip
+                        src="${project.build.directory}/${project.build.finalName}.jar"
+                        dest="${jdk25.mrjar.check.dir}">
+                      <patternset>
+                        <include name="META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
+                        <include
+                            name="META-INF/versions/25/org/apache/fory/platform/internal/_JDKAccess.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/builder/CodecBuilder.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/platform/internal/DefineClass.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/platform/internal/_Lookup.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessor.class"/>
+                        <include
+                            name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/serializer/SerializedLambdaSerializer.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/serializer/Serializers.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/serializer/SlicedStringUtil.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/serializer/StringSerializer.class"/>
+                      </patternset>
+                    </unzip>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"
+                        property="jdk25.unsafeops.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"
+                        property="jdk25.memorybuffer.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_JDKAccess.class"
+                        property="jdk25.jdkaccess.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/builder/CodecBuilder.class"
+                        property="jdk25.codecbuilder.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"
+                        property="jdk25.objectcodecbuilder.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/DefineClass.class"
+                        property="jdk25.defineclass.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_Lookup.class"
+                        property="jdk25.lookup.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessor.class"
+                        property="jdk25.fieldaccessor.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"
+                        property="jdk25.hiddenfieldaccessorfactory.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/SerializedLambdaSerializer.class"
+                        property="jdk25.serializedlambda.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/Serializers.class"
+                        property="jdk25.serializers.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/SlicedStringUtil.class"
+                        property="jdk25.slicedstring.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/StringSerializer.class"
+                        property="jdk25.stringserializer.present"/>
+                    <fail
+                        unless="jdk25.unsafeops.present"
+                        message="JDK25 multi-release UnsafeOps class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.memorybuffer.present"
+                        message="JDK25 multi-release MemoryBuffer class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.jdkaccess.present"
+                        message="JDK25 multi-release _JDKAccess class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.codecbuilder.present"
+                        message="JDK25 multi-release CodecBuilder class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.objectcodecbuilder.present"
+                        message="JDK25 multi-release ObjectCodecBuilder class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.defineclass.present"
+                        message="JDK25 multi-release DefineClass class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.lookup.present"
+                        message="JDK25 multi-release _Lookup class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.fieldaccessor.present"
+                        message="JDK25 multi-release FieldAccessor class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.hiddenfieldaccessorfactory.present"
+                        message="JDK25 multi-release HiddenFieldAccessorFactory class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.serializedlambda.present"
+                        message="JDK25 multi-release SerializedLambdaSerializer class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.serializers.present"
+                        message="JDK25 multi-release Serializers class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.slicedstring.present"
+                        message="JDK25 multi-release SlicedStringUtil class is missing from the packaged fory-core jar."/>
+                    <fail
+                        unless="jdk25.stringserializer.present"
+                        message="JDK25 multi-release StringSerializer class is missing from the packaged fory-core jar."/>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>patch-jdk25-source-jar</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <property
+                        name="jdk25.sources.jar"
+                        value="${project.build.directory}/${project.build.finalName}-sources.jar"/>
+                    <available file="${jdk25.sources.jar}" property="jdk25.sources.jar.present"/>
+                    <fail
+                        unless="jdk25.sources.jar.present"
+                        message="JDK25 source verification requires ${jdk25.sources.jar}; run with source-jar generation enabled."/>
+                    <jar destfile="${jdk25.sources.jar}" update="true">
+                      <zipfileset dir="${project.basedir}/src/main/java25" prefix="META-INF/versions/25">
+                        <include name="**/*.java"/>
+                      </zipfileset>
+                    </jar>
+                    <property
+                        name="jdk25.sources.check.dir"
+                        value="${project.build.directory}/jdk25-source-check"/>
+                    <delete dir="${jdk25.sources.check.dir}"/>
+                    <mkdir dir="${jdk25.sources.check.dir}"/>
+                    <unzip src="${jdk25.sources.jar}" dest="${jdk25.sources.check.dir}">
+                      <patternset>
+                        <include name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.java"/>
+                        <include
+                            name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.java"/>
+                      </patternset>
+                    </unzip>
+                    <available
+                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.java"
+                        property="jdk25.memorybuffer.source.present"/>
+                    <available
+                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.java"
+                        property="jdk25.hiddenfieldaccessorfactory.source.present"/>
+                    <fail
+                        unless="jdk25.memorybuffer.source.present"
+                        message="JDK25 versioned MemoryBuffer source is missing from the source jar."/>
+                    <fail
+                        unless="jdk25.hiddenfieldaccessorfactory.source.present"
+                        message="JDK25 versioned HiddenFieldAccessorFactory source is missing from the source jar."/>
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <classesDirectory>${project.build.directory}/jdk25-test-classes</classesDirectory>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>xlang-parallel</id>
       <activation>

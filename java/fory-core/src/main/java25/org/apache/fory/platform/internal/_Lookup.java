@@ -35,6 +35,11 @@ class _Lookup {
 
   public static Lookup privateLookupIn(Class<?> targetClass, Lookup caller) {
     try {
+      Module foryModule = _Lookup.class.getModule();
+      Module targetModule = targetClass.getModule();
+      if (foryModule != targetModule) {
+        foryModule.addReads(targetModule);
+      }
       return MethodHandles.privateLookupIn(targetClass, caller);
     } catch (IllegalAccessException e) {
       throw new IllegalStateException(privateAccessMessage(targetClass), e);
@@ -64,6 +69,6 @@ class _Lookup {
         + packageName
         + " in module "
         + module.getName()
-        + " to be open to org.apache.fory.core";
+        + " to be open to org.apache.fory.core,org.apache.fory.format";
   }
 }

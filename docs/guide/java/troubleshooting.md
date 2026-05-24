@@ -148,6 +148,50 @@ Fory fory = Fory.builder()
 fory.registerSerializer(MyClass.class, new MyClassSerializer(fory.getTypeResolver()));
 ```
 
+### JDK25+ zero-Unsafe mode and module opens
+
+When running on JDK25+ with Unsafe memory access denied, start the JVM with:
+
+```bash
+--sun-misc-unsafe-memory-access=deny
+```
+
+If Fory needs private fields in your named module, open the target package to both Java modules.
+When any Fory artifact is on the classpath instead of the module path, also include `ALL-UNNAMED`:
+
+```bash
+--add-opens=<user.module>/<user.package>=ALL-UNNAMED,org.apache.fory.core,org.apache.fory.format
+```
+
+Some optimized serializers and direct-buffer helpers also need JDK-private packages. Add only the
+opens needed by the paths used in your process:
+
+| Path                                                                             | Required opens                                                  |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| String fast paths and throwable fields                                           | `java.base/java.lang`                                           |
+| Serialized lambdas                                                               | `java.base/java.lang.invoke`                                    |
+| Reflection-based object construction                                             | `java.base/java.lang.reflect`, `java.base/jdk.internal.reflect` |
+| Collection wrappers, sublists, `EnumMap`, and `StringTokenizer`                  | `java.base/java.util`                                           |
+| Blocking queue capacity serializers                                              | `java.base/java.util.concurrent`                                |
+| `ByteArrayInputStream`, `ByteArrayOutputStream`, and Java object-stream metadata | `java.base/java.io`                                             |
+| Proxy serializers                                                                | `java.base/java.lang.reflect`                                   |
+| Direct `ByteBuffer` wrapping                                                     | `java.base/java.nio`                                            |
+
+For example, direct `ByteBuffer` wrapping on the module path requires:
+
+```bash
+--add-opens=java.base/java.nio=ALL-UNNAMED,org.apache.fory.core,org.apache.fory.format
+```
+
+Normal classes with final instance fields need a constructor that covers those final fields when
+Unsafe allocation is denied. Annotate the constructor with
+`java.beans.ConstructorProperties`, or compile the class with `-parameters` so Fory can bind
+constructor parameters to fields. Non-final fields can still be restored after construction.
+
+The vectorized Arrow APIs in `fory-format` depend on Apache Arrow's memory layer. With the current
+Arrow dependency, those APIs are unavailable when `--sun-misc-unsafe-memory-access=deny` is set
+because Arrow initializes its own `sun.misc.Unsafe` memory access internally.
+
 ## Performance Issues
 
 ### Slow Initial Serialization

@@ -39,6 +39,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -49,6 +50,7 @@ import org.apache.fory.collection.LongMap;
 import org.apache.fory.collection.ObjectArray;
 import org.apache.fory.collection.ObjectIntMap;
 import org.apache.fory.config.Int64Encoding;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
@@ -56,20 +58,22 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.NativeTypeDefEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
-import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
+import org.apache.fory.serializer.collection.ChildContainerSerializers;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
@@ -94,6 +98,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   private static final int MAX_CACHED_TYPE_DEFS = 8192;
 
   private final SlotInfo[] slotsInfos;
+  private final Serializer fallbackSerializer;
   // Instance-level cache: TypeDef ID -> TypeInfo (shared across all slots).
   private final LongMap<TypeInfo> typeDefIdToTypeInfo = new LongMap<>(4, 0.4f);
 
@@ -184,10 +189,16 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   public ObjectStreamSerializer(TypeResolver typeResolver, Class<?> type) {
-    super(typeResolver, type, createObjectCreatorForGraalVM(type));
+    super(typeResolver, type, createObjectStreamCreator(type));
     if (!Serializable.class.isAssignableFrom(type)) {
       throw new IllegalArgumentException(
           String.format("Class %s should implement %s.", type, Serializable.class));
+    }
+    Serializer fallbackSerializer = fallbackSerializer(typeResolver, type);
+    this.fallbackSerializer = fallbackSerializer;
+    if (fallbackSerializer != null) {
+      slotsInfos = new SlotInfo[0];
+      return;
     }
     if (!Throwable.class.isAssignableFrom(type)) {
       LOG.warn(
@@ -213,13 +224,35 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     slotsInfos = slotsInfoList.toArray(new SlotInfo[0]);
   }
 
-  /**
-   * Creates an appropriate ObjectCreator for GraalVM native image environment. In GraalVM, we
-   * prefer UnsafeObjectCreator to avoid serialization constructor issues.
-   */
-  private static <T> ObjectCreator<T> createObjectCreatorForGraalVM(Class<T> type) {
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      // In GraalVM native image, use Unsafe to avoid serialization constructor issues
+  private static Serializer fallbackSerializer(TypeResolver typeResolver, Class<?> type) {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      return null;
+    }
+    Class<? extends Serializer> childSerializerClass = null;
+    if (Collection.class.isAssignableFrom(type)) {
+      childSerializerClass = ChildContainerSerializers.getCollectionSerializerClass(type);
+    } else if (Map.class.isAssignableFrom(type)) {
+      childSerializerClass = ChildContainerSerializers.getMapSerializerClass(type);
+    }
+    if (childSerializerClass != null) {
+      return Serializers.newSerializer(typeResolver, type, childSerializerClass);
+    }
+    if (type.getName().startsWith("java.")) {
+      return new JavaSerializer(typeResolver, type);
+    }
+    return null;
+  }
+
+  /** Creates an ObjectCreator for Java ObjectStream-compatible reconstruction. */
+  private static <T> ObjectCreator<T> createObjectStreamCreator(Class<T> type) {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      if (hasJdk25Fallback(type)) {
+        return new FallbackOnlyObjectCreator<>(type);
+      }
+      // ObjectStreamSerializer must preserve Java serialization construction semantics. On JDK25+
+      // this path cannot fall back to Unsafe, including inside GraalVM native images.
+      return new ObjectCreators.ParentNoArgCtrObjectCreator<>(type);
+    } else if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ObjectCreators.UnsafeObjectCreator<>(type);
     } else {
       // In regular JVM, use the standard object creator
@@ -227,8 +260,44 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
   }
 
+  private static boolean hasJdk25Fallback(Class<?> type) {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      return false;
+    }
+    if (type.getName().startsWith("java.")) {
+      return true;
+    }
+    if (Collection.class.isAssignableFrom(type)) {
+      return ChildContainerSerializers.getCollectionSerializerClass(type) != null;
+    }
+    if (Map.class.isAssignableFrom(type)) {
+      return ChildContainerSerializers.getMapSerializerClass(type) != null;
+    }
+    return false;
+  }
+
+  private static final class FallbackOnlyObjectCreator<T> extends ObjectCreator<T> {
+    private FallbackOnlyObjectCreator(Class<T> type) {
+      super(type);
+    }
+
+    @Override
+    public T newInstance() {
+      throw new ForyException("ObjectStreamSerializer fallback owns construction for " + type);
+    }
+
+    @Override
+    public T newInstanceWithArguments(Object... arguments) {
+      throw new ForyException("ObjectStreamSerializer fallback owns construction for " + type);
+    }
+  }
+
   @Override
   public void write(WriteContext writeContext, Object value) {
+    if (fallbackSerializer != null) {
+      fallbackSerializer.write(writeContext, value);
+      return;
+    }
     MemoryBuffer buffer = writeContext.getBuffer();
     buffer.writeInt16((short) slotsInfos.length);
     try {
@@ -281,6 +350,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
   @Override
   public Object read(ReadContext readContext) {
+    if (fallbackSerializer != null) {
+      return fallbackSerializer.read(readContext);
+    }
     MemoryBuffer buffer = readContext.getBuffer();
     Object obj = objectCreator.newInstance();
     readContext.reference(obj);
@@ -397,6 +469,14 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       throwSerializationException(type, e);
     }
     return obj;
+  }
+
+  @Override
+  public Object copy(CopyContext copyContext, Object value) {
+    if (fallbackSerializer != null) {
+      return fallbackSerializer.copy(copyContext, value);
+    }
+    return super.copy(copyContext, value);
   }
 
   /**
@@ -610,17 +690,14 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       Method writeMethod = null;
       Method readMethod = null;
       Method noDataMethod = null;
-      if (AndroidSupport.IS_ANDROID) {
+      if (AndroidSupport.IS_ANDROID || !MemoryUtils.JDK_OBJECT_STREAM_FIELD_ACCESS) {
         writeMethod = JavaSerializer.getWriteObjectMethod(type, false);
         readMethod = JavaSerializer.getReadRefMethod(type, false);
         noDataMethod = JavaSerializer.getReadRefNoData(type, false);
       } else if (objectStreamClass != null) {
-        writeMethod =
-            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "writeObjectMethod");
-        readMethod =
-            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "readObjectMethod");
-        noDataMethod =
-            (Method) ReflectionUtils.getObjectFieldValue(objectStreamClass, "readObjectNoData");
+        writeMethod = _JDKAccess.getObjectStreamClassWriteObjectMethod(objectStreamClass);
+        readMethod = _JDKAccess.getObjectStreamClassReadObjectMethod(objectStreamClass);
+        noDataMethod = _JDKAccess.getObjectStreamClassReadObjectNoDataMethod(objectStreamClass);
       }
       this.writeObjectMethod = writeMethod;
       this.readObjectMethod = readMethod;

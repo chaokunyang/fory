@@ -105,6 +105,7 @@
         <configuration>
           <archive>
             <manifestEntries>
+              <Multi-Release>true</Multi-Release>
               <Automatic-Module-Name>org.apache.fory.format</Automatic-Module-Name>
             </manifestEntries>
           </archive>
@@ -114,7 +115,10 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <configuration>
-          <argLine>--add-opens=java.base/java.nio=ALL-UNNAMED</argLine>
+          <argLine>
+            --add-opens=java.base/java.nio=ALL-UNNAMED
+            --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED
+          </argLine>
         </configuration>
       </plugin>
     </plugins>
@@ -177,6 +181,15 @@
                       </excludes>
                     </filter>
                   </filters>
+                  <transformers>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                      <manifestEntries>
+                        <Multi-Release>true</Multi-Release>
+                        <Automatic-Module-Name>org.apache.fory.format</Automatic-Module-Name>
+                      </manifestEntries>
+                    </transformer>
+                    <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                  </transformers>
                 </configuration>
               </execution>
             </executions>

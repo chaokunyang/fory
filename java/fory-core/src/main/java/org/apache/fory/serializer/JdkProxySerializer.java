@@ -117,7 +117,7 @@ public class JdkProxySerializer extends Serializer {
       Preconditions.checkNotNull(copyHandler);
       return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, copyHandler);
     }
-    if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+    if (!MemoryUtils.JDK_PROXY_FIELD_ACCESS) {
       DeferredInvocationHandler deferredHandler = new DeferredInvocationHandler();
       Object proxy =
           Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, deferredHandler);
@@ -143,7 +143,7 @@ public class JdkProxySerializer extends Serializer {
           unwrapInvocationHandler((InvocationHandler) readContext.readRef());
       return Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, invocationHandler);
     }
-    if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+    if (!MemoryUtils.JDK_PROXY_FIELD_ACCESS) {
       DeferredInvocationHandler deferredHandler = new DeferredInvocationHandler();
       Object proxy =
           Proxy.newProxyInstance(typeResolver.getClassLoader(), interfaces, deferredHandler);

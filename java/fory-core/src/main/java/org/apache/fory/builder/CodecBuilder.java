@@ -310,7 +310,7 @@ public abstract class CodecBuilder {
   private Expression unsafeAccessField(
       Expression inputObject, Class<?> cls, Descriptor descriptor) {
     String fieldName = descriptor.getName();
-    Expression fieldOffsetExpr = getFieldOffset(cls, descriptor);
+    Expression fieldOffsetExpr = fieldOffsetExpr(cls, descriptor);
     boolean fieldNullable = fieldNullable(descriptor);
     if (descriptor.getTypeRef().isPrimitive()) {
       // ex: UnsafeOps.getFloat(obj, fieldOffset)
@@ -333,7 +333,7 @@ public abstract class CodecBuilder {
     }
   }
 
-  private Expression getFieldOffset(Class<?> cls, Descriptor descriptor) {
+  private Expression fieldOffsetExpr(Class<?> cls, Descriptor descriptor) {
     Field field = descriptor.getField();
     String fieldName = descriptor.getName();
     // Use Field in case the class has duplicate field name as `fieldName`.
@@ -351,9 +351,7 @@ public abstract class CodecBuilder {
                 .inline();
           });
     } else {
-      long fieldOffset = ReflectionUtils.getFieldOffset(field);
-      Preconditions.checkArgument(fieldOffset != -1);
-      return Literal.ofLong(fieldOffset);
+      return Literal.ofLong(UnsafeOps.objectFieldOffset(field));
     }
   }
 
@@ -426,7 +424,7 @@ public abstract class CodecBuilder {
   private Expression unsafeSetField(Expression bean, Descriptor descriptor, Expression value) {
     TypeRef<?> fieldType = descriptor.getTypeRef();
     // Use Field in case the class has duplicate field name as `fieldName`.
-    Expression fieldOffsetExpr = getFieldOffset(beanClass, descriptor);
+    Expression fieldOffsetExpr = fieldOffsetExpr(beanClass, descriptor);
     if (descriptor.getTypeRef().isPrimitive()) {
       Preconditions.checkArgument(getRawType(value.type()) == getRawType(fieldType));
       String funcName = "put" + StringUtils.capitalize(getRawType(fieldType).toString());

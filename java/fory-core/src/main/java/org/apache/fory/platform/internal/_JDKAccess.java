@@ -21,6 +21,7 @@ package org.apache.fory.platform.internal;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.ObjectStreamClass;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -30,9 +31,11 @@ import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -63,6 +66,13 @@ public class _JDKAccess {
   // this API surface and implement supported cases with VarHandle, or set this false so callers
   // choose public fallbacks.
   public static final boolean JDK_INTERNAL_FIELD_ACCESS;
+  public static final boolean JDK_LANG_FIELD_ACCESS;
+  public static final boolean JDK_STRING_FIELD_ACCESS;
+  public static final boolean JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS;
+  public static final boolean JDK_OBJECT_STREAM_FIELD_ACCESS;
+  public static final boolean JDK_COLLECTION_FIELD_ACCESS;
+  public static final boolean JDK_CONCURRENT_FIELD_ACCESS;
+  public static final boolean JDK_PROXY_FIELD_ACCESS;
   public static final Class<?> _INNER_UNSAFE_CLASS;
   public static final Object _INNER_UNSAFE;
 
@@ -79,6 +89,13 @@ public class _JDKAccess {
     }
     UNSAFE = unsafe;
     JDK_INTERNAL_FIELD_ACCESS = true;
+    JDK_LANG_FIELD_ACCESS = true;
+    JDK_STRING_FIELD_ACCESS = true;
+    JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS = true;
+    JDK_OBJECT_STREAM_FIELD_ACCESS = true;
+    JDK_COLLECTION_FIELD_ACCESS = true;
+    JDK_CONCURRENT_FIELD_ACCESS = true;
+    JDK_PROXY_FIELD_ACCESS = true;
     if (JdkVersion.MAJOR_VERSION >= 11) {
       try {
         Field theInternalUnsafeField = Unsafe.class.getDeclaredField("theInternalUnsafe");
@@ -99,9 +116,9 @@ public class _JDKAccess {
   public static final boolean STRING_VALUE_FIELD_IS_CHARS;
   public static final boolean STRING_VALUE_FIELD_IS_BYTES;
   public static final boolean STRING_HAS_COUNT_OFFSET;
-  private static final long STRING_VALUE_FIELD_OFFSET;
-  private static final long STRING_COUNT_FIELD_OFFSET;
-  private static final long STRING_OFFSET_FIELD_OFFSET;
+  public static final long STRING_VALUE_FIELD_OFFSET;
+  public static final long STRING_COUNT_FIELD_OFFSET;
+  public static final long STRING_OFFSET_FIELD_OFFSET;
 
   static {
     try {
@@ -150,6 +167,8 @@ public class _JDKAccess {
     }
   }
 
+  public static final long STRING_CODER_FIELD_OFFSET = StringCoderField.OFFSET;
+
   public static Object getStringValue(String value) {
     return UNSAFE.getObject(value, STRING_VALUE_FIELD_OFFSET);
   }
@@ -176,6 +195,141 @@ public class _JDKAccess {
       return _Lookup._trustedLookup(objectClass);
     }
     return lookupCache.get(objectClass, () -> _Lookup._trustedLookup(objectClass));
+  }
+
+  private static final byte LATIN1 = 0;
+  private static final Byte LATIN1_BOXED = LATIN1;
+  private static final byte UTF16 = 1;
+  private static final Byte UTF16_BOXED = UTF16;
+  private static final MethodHandles.Lookup STRING_LOOK_UP =
+      JDK_INTERNAL_FIELD_ACCESS ? _trustedLookup(String.class) : null;
+  private static final BiFunction<char[], Boolean, String> CHARS_STRING_ZERO_COPY_CTR =
+      JDK_INTERNAL_FIELD_ACCESS ? getCharsStringZeroCopyCtr() : null;
+  private static final BiFunction<byte[], Byte, String> BYTES_STRING_ZERO_COPY_CTR =
+      JDK_INTERNAL_FIELD_ACCESS ? getBytesStringZeroCopyCtr() : null;
+  private static final Function<byte[], String> LATIN_BYTES_STRING_ZERO_COPY_CTR =
+      JDK_INTERNAL_FIELD_ACCESS ? getLatinBytesStringZeroCopyCtr() : null;
+
+  public static String newCharsStringZeroCopy(char[] data) {
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
+      return new String(data);
+    }
+    if (!STRING_VALUE_FIELD_IS_CHARS) {
+      throw new IllegalStateException("String value isn't char[], current java isn't supported");
+    }
+    return CHARS_STRING_ZERO_COPY_CTR.apply(data, Boolean.TRUE);
+  }
+
+  public static String newBytesStringZeroCopy(byte coder, byte[] data) {
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
+      return newBytesStringSlow(coder, data);
+    }
+    if (coder == LATIN1) {
+      if (LATIN_BYTES_STRING_ZERO_COPY_CTR != null) {
+        return LATIN_BYTES_STRING_ZERO_COPY_CTR.apply(data);
+      }
+      return BYTES_STRING_ZERO_COPY_CTR.apply(data, LATIN1_BOXED);
+    } else if (coder == UTF16) {
+      return BYTES_STRING_ZERO_COPY_CTR.apply(data, UTF16_BOXED);
+    } else {
+      return BYTES_STRING_ZERO_COPY_CTR.apply(data, coder);
+    }
+  }
+
+  private static String newBytesStringSlow(byte coder, byte[] data) {
+    if (coder == LATIN1) {
+      return new String(data, StandardCharsets.ISO_8859_1);
+    } else if (coder == UTF16) {
+      char[] chars = new char[data.length >> 1];
+      for (int i = 0, j = 0; i < data.length; i += 2) {
+        chars[j++] = (char) ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8));
+      }
+      return new String(chars);
+    } else {
+      return new String(data, StandardCharsets.UTF_8);
+    }
+  }
+
+  private static BiFunction<char[], Boolean, String> getCharsStringZeroCopyCtr() {
+    if (!STRING_VALUE_FIELD_IS_CHARS) {
+      return null;
+    }
+    MethodHandle handle = getJavaStringZeroCopyCtrHandle();
+    if (handle == null) {
+      return null;
+    }
+    try {
+      CallSite callSite =
+          LambdaMetafactory.metafactory(
+              STRING_LOOK_UP,
+              "apply",
+              MethodType.methodType(BiFunction.class),
+              handle.type().generic(),
+              handle,
+              handle.type());
+      return (BiFunction) callSite.getTarget().invokeExact();
+    } catch (Throwable e) {
+      return null;
+    }
+  }
+
+  private static BiFunction<byte[], Byte, String> getBytesStringZeroCopyCtr() {
+    if (!STRING_VALUE_FIELD_IS_BYTES) {
+      return null;
+    }
+    MethodHandle handle = getJavaStringZeroCopyCtrHandle();
+    if (handle == null) {
+      return null;
+    }
+    try {
+      MethodType instantiatedMethodType =
+          MethodType.methodType(handle.type().returnType(), new Class[] {byte[].class, Byte.class});
+      CallSite callSite =
+          LambdaMetafactory.metafactory(
+              STRING_LOOK_UP,
+              "apply",
+              MethodType.methodType(BiFunction.class),
+              handle.type().generic(),
+              handle,
+              instantiatedMethodType);
+      return (BiFunction) callSite.getTarget().invokeExact();
+    } catch (Throwable e) {
+      return null;
+    }
+  }
+
+  private static Function<byte[], String> getLatinBytesStringZeroCopyCtr() {
+    if (!STRING_VALUE_FIELD_IS_BYTES || STRING_LOOK_UP == null) {
+      return null;
+    }
+    try {
+      Class<?> clazz = Class.forName("java.lang.StringCoding");
+      Lookup caller = STRING_LOOK_UP.in(clazz);
+      MethodHandle handle =
+          caller.findStatic(
+              clazz, "newStringLatin1", MethodType.methodType(String.class, byte[].class));
+      return makeFunction(caller, handle, Function.class);
+    } catch (Throwable e) {
+      return null;
+    }
+  }
+
+  private static MethodHandle getJavaStringZeroCopyCtrHandle() {
+    Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 8);
+    if (STRING_LOOK_UP == null) {
+      return null;
+    }
+    try {
+      if (STRING_VALUE_FIELD_IS_CHARS) {
+        return STRING_LOOK_UP.findConstructor(
+            String.class, MethodType.methodType(void.class, char[].class, boolean.class));
+      } else {
+        return STRING_LOOK_UP.findConstructor(
+            String.class, MethodType.methodType(void.class, byte[].class, byte.class));
+      }
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   // Lazy load offsets and keep the access shape in one class so the JDK25 multi-release
@@ -225,6 +379,58 @@ public class _JDKAccess {
     int pos = UNSAFE.getInt(stream, ByteArrayStreamFields.BIS_BUF_POS);
     buffer.pointTo(buf, 0, count);
     buffer.readerIndex(pos);
+  }
+
+  private static class ObjectStreamClassFields {
+    private static final long WRITE_OBJECT_METHOD;
+    private static final long READ_OBJECT_METHOD;
+    private static final long READ_OBJECT_NO_DATA_METHOD;
+    private static final long WRITE_REPLACE_METHOD;
+    private static final long READ_RESOLVE_METHOD;
+
+    static {
+      try {
+        WRITE_OBJECT_METHOD =
+            UNSAFE.objectFieldOffset(ObjectStreamClass.class.getDeclaredField("writeObjectMethod"));
+        READ_OBJECT_METHOD =
+            UNSAFE.objectFieldOffset(ObjectStreamClass.class.getDeclaredField("readObjectMethod"));
+        READ_OBJECT_NO_DATA_METHOD =
+            UNSAFE.objectFieldOffset(
+                ObjectStreamClass.class.getDeclaredField("readObjectNoDataMethod"));
+        WRITE_REPLACE_METHOD =
+            UNSAFE.objectFieldOffset(
+                ObjectStreamClass.class.getDeclaredField("writeReplaceMethod"));
+        READ_RESOLVE_METHOD =
+            UNSAFE.objectFieldOffset(ObjectStreamClass.class.getDeclaredField("readResolveMethod"));
+      } catch (NoSuchFieldException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  public static Method getObjectStreamClassWriteObjectMethod(ObjectStreamClass objectStreamClass) {
+    return (Method)
+        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.WRITE_OBJECT_METHOD);
+  }
+
+  public static Method getObjectStreamClassReadObjectMethod(ObjectStreamClass objectStreamClass) {
+    return (Method) UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.READ_OBJECT_METHOD);
+  }
+
+  public static Method getObjectStreamClassReadObjectNoDataMethod(
+      ObjectStreamClass objectStreamClass) {
+    return (Method)
+        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.READ_OBJECT_NO_DATA_METHOD);
+  }
+
+  public static Method getObjectStreamClassWriteReplaceMethod(ObjectStreamClass objectStreamClass) {
+    return (Method)
+        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.WRITE_REPLACE_METHOD);
+  }
+
+  public static Method getObjectStreamClassReadResolveMethod(ObjectStreamClass objectStreamClass) {
+    return (Method)
+        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.READ_RESOLVE_METHOD);
   }
 
   public static <T> T tryMakeFunction(
@@ -455,5 +661,9 @@ public class _JDKAccess {
     } catch (Throwable e) {
       throw ExceptionUtils.throwException(e);
     }
+  }
+
+  public static Lookup privateLookupIn(Class<?> targetClass, Lookup caller) {
+    return _Lookup.privateLookupIn(targetClass, caller);
   }
 }

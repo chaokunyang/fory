@@ -222,7 +222,7 @@ public class SubListSerializers {
     }
 
     private static ViewFields create(Class<?> type) {
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS || Stub.class.isAssignableFrom(type)) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS || Stub.class.isAssignableFrom(type)) {
         return null;
       }
       Class<?> cls = type;

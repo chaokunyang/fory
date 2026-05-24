@@ -19,6 +19,7 @@
 
 package org.apache.fory.type;
 
+import java.beans.ConstructorProperties;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Iterator;
@@ -43,6 +44,11 @@ public final class BFloat16Array implements Iterable<BFloat16>, Serializable {
       }
       bits[i] = value.toBits();
     }
+  }
+
+  @ConstructorProperties("bits")
+  private BFloat16Array(short[] bits) {
+    this.bits = bits;
   }
 
   private BFloat16Array(short[] bits, boolean copy) {

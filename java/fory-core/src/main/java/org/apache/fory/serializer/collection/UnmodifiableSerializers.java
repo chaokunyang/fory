@@ -93,7 +93,7 @@ public class UnmodifiableSerializers {
     @Override
     public void write(WriteContext writeContext, Collection value) {
       Preconditions.checkArgument(value.getClass() == type);
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         Collection source;
         if (value instanceof SortedSet) {
           source = new TreeSet(((SortedSet) value).comparator());
@@ -116,7 +116,7 @@ public class UnmodifiableSerializers {
 
     @Override
     public Collection copy(CopyContext copyContext, Collection object) {
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         Collection mutableSource;
         if (object instanceof SortedSet) {
           Object comparator = copyContext.copyObject(((SortedSet) object).comparator());
@@ -149,7 +149,7 @@ public class UnmodifiableSerializers {
     @Override
     public void write(WriteContext writeContext, Map value) {
       Preconditions.checkArgument(value.getClass() == type);
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         Map source;
         if (value instanceof SortedMap) {
           source = new TreeMap(((SortedMap) value).comparator());
@@ -165,7 +165,7 @@ public class UnmodifiableSerializers {
 
     @Override
     public Map copy(CopyContext copyContext, Map originMap) {
-      if (!MemoryUtils.JDK_INTERNAL_FIELD_ACCESS) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         Map mutableSource;
         if (originMap instanceof SortedMap) {
           Object comparator = copyContext.copyObject(((SortedMap) originMap).comparator());
@@ -203,7 +203,7 @@ public class UnmodifiableSerializers {
           typeResolver,
           factory.f0,
           factory.f1,
-          MemoryUtils.JDK_INTERNAL_FIELD_ACCESS
+          MemoryUtils.JDK_COLLECTION_FIELD_ACCESS
               ? SourceAccessors.SOURCE_COLLECTION_ACCESSOR
               : null);
     } else {
@@ -211,7 +211,7 @@ public class UnmodifiableSerializers {
           typeResolver,
           factory.f0,
           factory.f1,
-          MemoryUtils.JDK_INTERNAL_FIELD_ACCESS ? SourceAccessors.SOURCE_MAP_ACCESSOR : null);
+          MemoryUtils.JDK_COLLECTION_FIELD_ACCESS ? SourceAccessors.SOURCE_MAP_ACCESSOR : null);
     }
   }
 

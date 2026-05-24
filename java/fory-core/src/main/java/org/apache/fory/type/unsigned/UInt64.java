@@ -19,6 +19,7 @@
 
 package org.apache.fory.type.unsigned;
 
+import java.beans.ConstructorProperties;
 import java.io.Serializable;
 
 /**
@@ -36,6 +37,7 @@ public final class UInt64 implements Comparable<UInt64>, Serializable {
 
   private final long data;
 
+  @ConstructorProperties("data")
   public UInt64(long data) {
     this.data = data;
   }

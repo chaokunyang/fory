@@ -28,6 +28,7 @@ import static org.testng.Assert.assertSame;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
+import java.beans.ConstructorProperties;
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -881,10 +882,15 @@ public class CollectionSerializersTest extends ForyTestBase {
   }
 
   @Data
-  @AllArgsConstructor
   public static class CollectionViewTestStruct {
     Collection<String> collection;
     Set<String> set;
+
+    @ConstructorProperties({"collection", "set"})
+    public CollectionViewTestStruct(Collection<String> collection, Set<String> set) {
+      this.collection = collection;
+      this.set = set;
+    }
   }
 
   @Test(dataProvider = "javaFory")
@@ -1369,7 +1375,16 @@ public class CollectionSerializersTest extends ForyTestBase {
   }
 
   public static class TestClassForDefaultCollectionSerializer extends AbstractCollection<String> {
-    private final List<String> data = new ArrayList<>();
+    private final List<String> data;
+
+    public TestClassForDefaultCollectionSerializer() {
+      this(new ArrayList<>());
+    }
+
+    @ConstructorProperties({"data"})
+    public TestClassForDefaultCollectionSerializer(List<String> data) {
+      this.data = data;
+    }
 
     @Override
     public Iterator<String> iterator() {

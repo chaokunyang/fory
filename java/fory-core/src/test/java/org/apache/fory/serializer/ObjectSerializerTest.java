@@ -21,7 +21,9 @@ package org.apache.fory.serializer;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotSame;
+import static org.testng.Assert.assertSame;
 
+import java.beans.ConstructorProperties;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -30,9 +32,13 @@ import java.nio.charset.StandardCharsets;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.annotation.ForyField;
+import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.test.bean.Cyclic;
 import org.apache.fory.util.Preconditions;
 import org.testng.Assert;
@@ -169,6 +175,463 @@ public class ObjectSerializerTest extends ForyTestBase {
     Cyclic cyclic1 = withCopyContext(fory, context -> serializer.copy(context, cyclic));
     assertEquals(cyclic1, cyclic);
     assertNotSame(cyclic1, cyclic);
+  }
+
+  public static final class ConstructorCycle {
+    private final String name;
+    private ConstructorCycle next;
+
+    @ConstructorProperties("name")
+    public ConstructorCycle(String name) {
+      this.name = name;
+    }
+  }
+
+  public static final class ConstructorCycleBeforeFinal {
+    @ForyField(id = 0)
+    private ConstructorCycleBeforeFinal next;
+
+    @ForyField(id = 1)
+    private final String name;
+
+    @ConstructorProperties("name")
+    public ConstructorCycleBeforeFinal(String name) {
+      this.name = name;
+    }
+  }
+
+  public static final class ConstructorOrder {
+    private int id;
+    private final String name;
+
+    @ConstructorProperties("name")
+    public ConstructorOrder(String name) {
+      this.name = name;
+    }
+  }
+
+  public static final class ConstructorInterveningRef {
+    @ForyField(id = 0)
+    private Object first;
+
+    @ForyField(id = 1)
+    private final String name;
+
+    @ForyField(id = 2)
+    private Object second;
+
+    @ConstructorProperties("name")
+    public ConstructorInterveningRef(String name) {
+      this.name = name;
+    }
+  }
+
+  public static final class ConstructorBackrefRoot {
+    private final ConstructorBackrefChild child;
+
+    @ConstructorProperties("child")
+    public ConstructorBackrefRoot(ConstructorBackrefChild child) {
+      this.child = child;
+    }
+  }
+
+  public static final class ConstructorBackrefChild {
+    private ConstructorBackrefRoot root;
+  }
+
+  @Test
+  public void testConstructorFieldProtocolOrder() {
+    ConstructorOrder value = new ConstructorOrder("root");
+    value.id = 42;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .withNumberCompressed(false)
+            .requireClassRegistration(false)
+            .build();
+    ObjectSerializer<ConstructorOrder> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), ConstructorOrder.class);
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(fory, buffer, context -> serializer.write(context, value));
+    assertEquals(buffer.readInt32(), 42);
+  }
+
+  @Test
+  public void testConstructorFieldProtocolOrderCodegen() {
+    ConstructorOrder value = new ConstructorOrder("root");
+    value.id = 42;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(true)
+            .withNumberCompressed(false)
+            .requireClassRegistration(false)
+            .build();
+    Serializer<ConstructorOrder> serializer =
+        Serializers.newSerializer(
+            fory,
+            ConstructorOrder.class,
+            CodecUtils.loadOrGenObjectCodecClass(ConstructorOrder.class, fory));
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(fory, buffer, context -> serializer.write(context, value));
+    assertEquals(buffer.readInt32(), 42);
+  }
+
+  @Test
+  public void testCtorInterveningRef() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    ConstructorInterveningRef newValue =
+        roundTripWithSerializer(
+            fory,
+            new ObjectSerializer<>(fory.getTypeResolver(), ConstructorInterveningRef.class),
+            newConstructorInterveningRef());
+    assertInterveningRef(newValue);
+  }
+
+  @Test
+  public void testCtorInterveningRefCodegen() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    Serializer<ConstructorInterveningRef> serializer =
+        Serializers.newSerializer(
+            fory,
+            ConstructorInterveningRef.class,
+            CodecUtils.loadOrGenObjectCodecClass(ConstructorInterveningRef.class, fory));
+    ConstructorInterveningRef newValue =
+        roundTripWithSerializer(fory, serializer, newConstructorInterveningRef());
+    assertInterveningRef(newValue);
+  }
+
+  @Test
+  public void testCtorInterveningRefCompat() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCompatible(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    TypeDef typeDef = fory.getTypeResolver().getTypeDef(ConstructorInterveningRef.class, true);
+    CompatibleSerializer<ConstructorInterveningRef> serializer =
+        new CompatibleSerializer<>(
+            fory.getTypeResolver(), ConstructorInterveningRef.class, typeDef);
+    ConstructorInterveningRef newValue =
+        roundTripWithSerializer(fory, serializer, newConstructorInterveningRef());
+    assertInterveningRef(newValue);
+  }
+
+  @Test
+  public void testCtorInterveningRefCompatGen() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCompatible(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    TypeDef typeDef = fory.getTypeResolver().getTypeDef(ConstructorInterveningRef.class, true);
+    Serializer<ConstructorInterveningRef> serializer =
+        Serializers.newSerializer(
+            fory,
+            ConstructorInterveningRef.class,
+            CodecUtils.loadOrGenCompatibleCodecClass(
+                fory, ConstructorInterveningRef.class, typeDef));
+    ConstructorInterveningRef newValue =
+        roundTripWithSerializer(fory, serializer, newConstructorInterveningRef());
+    assertInterveningRef(newValue);
+  }
+
+  @Test
+  public void testConstructorFieldBackrefRejected() {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      return;
+    }
+    ConstructorBackrefChild child = new ConstructorBackrefChild();
+    ConstructorBackrefRoot value = new ConstructorBackrefRoot(child);
+    child.root = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    ObjectSerializer<ConstructorBackrefRoot> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), ConstructorBackrefRoot.class);
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> {
+          context.writeRefOrNull(value);
+          serializer.write(context, value);
+        });
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () ->
+            withReadContext(
+                fory,
+                buffer,
+                context -> {
+                  byte tag = context.readRefOrNull();
+                  Preconditions.checkArgument(tag == Fory.REF_VALUE_FLAG);
+                  context.preserveRefId();
+                  return serializer.read(context);
+                }));
+  }
+
+  @Test
+  public void testConstructorFieldCycle() {
+    ConstructorCycle value = new ConstructorCycle("root");
+    value.next = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    ConstructorCycle newValue =
+        roundTripWithSerializer(
+            fory, new ObjectSerializer<>(fory.getTypeResolver(), ConstructorCycle.class), value);
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  @Test
+  public void testConstructorFieldCycleBeforeFinal() {
+    ConstructorCycleBeforeFinal value = new ConstructorCycleBeforeFinal("root");
+    value.next = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    ConstructorCycleBeforeFinal newValue =
+        roundTripWithSerializer(
+            fory,
+            new ObjectSerializer<>(fory.getTypeResolver(), ConstructorCycleBeforeFinal.class),
+            value);
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  @Test
+  public void testConstructorFieldCycleCodegen() {
+    ConstructorCycle value = new ConstructorCycle("root");
+    value.next = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    Serializer<ConstructorCycle> serializer =
+        Serializers.newSerializer(
+            fory,
+            ConstructorCycle.class,
+            CodecUtils.loadOrGenObjectCodecClass(ConstructorCycle.class, fory));
+    ConstructorCycle newValue = roundTripWithSerializer(fory, serializer, value);
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  @Test
+  public void testConstructorFieldCycleBeforeFinalCodegen() {
+    ConstructorCycleBeforeFinal value = new ConstructorCycleBeforeFinal("root");
+    value.next = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    Serializer<ConstructorCycleBeforeFinal> serializer =
+        Serializers.newSerializer(
+            fory,
+            ConstructorCycleBeforeFinal.class,
+            CodecUtils.loadOrGenObjectCodecClass(ConstructorCycleBeforeFinal.class, fory));
+    ConstructorCycleBeforeFinal newValue = roundTripWithSerializer(fory, serializer, value);
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  @Test
+  public void testConstructorFieldCycleCompatible() {
+    ConstructorCycle value = new ConstructorCycle("root");
+    value.next = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCompatible(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    TypeDef typeDef = fory.getTypeResolver().getTypeDef(ConstructorCycle.class, true);
+    Serializer<ConstructorCycle> serializer =
+        Serializers.newSerializer(
+            fory,
+            ConstructorCycle.class,
+            CodecUtils.loadOrGenCompatibleCodecClass(fory, ConstructorCycle.class, typeDef));
+    ConstructorCycle newValue = roundTripWithSerializer(fory, serializer, value);
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  @Test
+  public void testConstructorFieldCycleBeforeFinalCompatible() {
+    ConstructorCycleBeforeFinal value = new ConstructorCycleBeforeFinal("root");
+    value.next = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCompatible(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    TypeDef typeDef = fory.getTypeResolver().getTypeDef(ConstructorCycleBeforeFinal.class, true);
+    Serializer<ConstructorCycleBeforeFinal> serializer =
+        Serializers.newSerializer(
+            fory,
+            ConstructorCycleBeforeFinal.class,
+            CodecUtils.loadOrGenCompatibleCodecClass(
+                fory, ConstructorCycleBeforeFinal.class, typeDef));
+    ConstructorCycleBeforeFinal newValue = roundTripWithSerializer(fory, serializer, value);
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  @Test
+  public void testConstructorFieldCycleCompatibleNonCodegen() {
+    ConstructorCycleBeforeFinal value = new ConstructorCycleBeforeFinal("root");
+    value.next = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCompatible(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    TypeDef typeDef = fory.getTypeResolver().getTypeDef(ConstructorCycleBeforeFinal.class, true);
+    CompatibleSerializer<ConstructorCycleBeforeFinal> serializer =
+        new CompatibleSerializer<>(
+            fory.getTypeResolver(), ConstructorCycleBeforeFinal.class, typeDef);
+    ConstructorCycleBeforeFinal newValue = roundTripWithSerializer(fory, serializer, value);
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  @Test
+  public void testConstructorFieldBackrefCompatibleRejected() {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      return;
+    }
+    ConstructorBackrefChild child = new ConstructorBackrefChild();
+    ConstructorBackrefRoot value = new ConstructorBackrefRoot(child);
+    child.root = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCompatible(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    TypeDef typeDef = fory.getTypeResolver().getTypeDef(ConstructorBackrefRoot.class, true);
+    CompatibleSerializer<ConstructorBackrefRoot> serializer =
+        new CompatibleSerializer<>(fory.getTypeResolver(), ConstructorBackrefRoot.class, typeDef);
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> {
+          context.writeRefOrNull(value);
+          serializer.write(context, value);
+        });
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () ->
+            withReadContext(
+                fory,
+                buffer,
+                context -> {
+                  byte tag = context.readRefOrNull();
+                  Preconditions.checkArgument(tag == Fory.REF_VALUE_FLAG);
+                  context.preserveRefId();
+                  return serializer.read(context);
+                }));
+  }
+
+  @Test(dataProvider = "foryCopyConfig")
+  public void testConstructorFieldCycleCopy(Fory fory) {
+    ConstructorCycle value = new ConstructorCycle("root");
+    value.next = value;
+    ObjectSerializer<ConstructorCycle> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), ConstructorCycle.class);
+    ConstructorCycle newValue = withCopyContext(fory, context -> serializer.copy(context, value));
+    assertEquals(newValue.name, value.name);
+    assertSame(newValue.next, newValue);
+  }
+
+  private static <T> T roundTripWithSerializer(Fory fory, Serializer<T> serializer, T value) {
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> {
+          context.writeRefOrNull(value);
+          serializer.write(context, value);
+        });
+    T newValue =
+        withReadContext(
+            fory,
+            buffer,
+            context -> {
+              byte tag = context.readRefOrNull();
+              Preconditions.checkArgument(tag == Fory.REF_VALUE_FLAG);
+              context.preserveRefId();
+              return serializer.read(context);
+            });
+    fory.reset();
+    return newValue;
+  }
+
+  private static ConstructorInterveningRef newConstructorInterveningRef() {
+    ConstructorInterveningRef value = new ConstructorInterveningRef("root");
+    Object shared = new String("shared");
+    value.first = shared;
+    value.second = shared;
+    return value;
+  }
+
+  private static void assertInterveningRef(ConstructorInterveningRef value) {
+    assertEquals(value.name, "root");
+    assertEquals(value.first, "shared");
+    assertSame(value.second, value.first);
+    Assert.assertNotSame(value.second, value);
   }
 
   @Data

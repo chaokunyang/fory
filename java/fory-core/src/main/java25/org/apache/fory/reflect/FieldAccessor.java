@@ -35,6 +35,7 @@ import java.util.function.ToLongFunction;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.function.ToByteFunction;
@@ -46,8 +47,21 @@ import org.apache.fory.util.record.RecordUtils;
 /** Field accessor for primitive types and object types. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class FieldAccessor {
+  private static final int BOOLEAN_ACCESS = 1;
+  private static final int BYTE_ACCESS = 2;
+  private static final int CHAR_ACCESS = 3;
+  private static final int SHORT_ACCESS = 4;
+  private static final int INT_ACCESS = 5;
+  private static final int LONG_ACCESS = 6;
+  private static final int FLOAT_ACCESS = 7;
+  private static final int DOUBLE_ACCESS = 8;
+  private static final int OBJECT_ACCESS = 9;
+
   protected final Field field;
+  // Kept to preserve the root FieldAccessor shape for already compiled internal subclasses.
+  // JDK25 access is field-owned through VarHandle/MethodHandle and intentionally never uses it.
   protected final long fieldOffset;
+  private final int accessKind;
 
   public FieldAccessor(Field field) {
     this(field, -1);
@@ -57,12 +71,70 @@ public abstract class FieldAccessor {
     this.field = field;
     this.fieldOffset = fieldOffset;
     Preconditions.checkNotNull(field);
+    this.accessKind = accessKind(field);
+  }
+
+  private static int accessKind(Field field) {
+    Class<?> fieldType = field.getType();
+    if (fieldType == boolean.class) {
+      return BOOLEAN_ACCESS;
+    } else if (fieldType == byte.class) {
+      return BYTE_ACCESS;
+    } else if (fieldType == char.class) {
+      return CHAR_ACCESS;
+    } else if (fieldType == short.class) {
+      return SHORT_ACCESS;
+    } else if (fieldType == int.class) {
+      return INT_ACCESS;
+    } else if (fieldType == long.class) {
+      return LONG_ACCESS;
+    } else if (fieldType == float.class) {
+      return FLOAT_ACCESS;
+    } else if (fieldType == double.class) {
+      return DOUBLE_ACCESS;
+    }
+    return OBJECT_ACCESS;
   }
 
   public abstract Object get(Object obj);
 
   public void set(Object obj, Object value) {
     throw new UnsupportedOperationException("Unsupported for field " + field);
+  }
+
+  public final void copy(Object sourceObject, Object targetObject) {
+    switch (accessKind) {
+      case BOOLEAN_ACCESS:
+        putBoolean(targetObject, getBoolean(sourceObject));
+        return;
+      case BYTE_ACCESS:
+        putByte(targetObject, getByte(sourceObject));
+        return;
+      case CHAR_ACCESS:
+        putChar(targetObject, getChar(sourceObject));
+        return;
+      case SHORT_ACCESS:
+        putShort(targetObject, getShort(sourceObject));
+        return;
+      case INT_ACCESS:
+        putInt(targetObject, getInt(sourceObject));
+        return;
+      case LONG_ACCESS:
+        putLong(targetObject, getLong(sourceObject));
+        return;
+      case FLOAT_ACCESS:
+        putFloat(targetObject, getFloat(sourceObject));
+        return;
+      case DOUBLE_ACCESS:
+        putDouble(targetObject, getDouble(sourceObject));
+        return;
+      default:
+        putObject(targetObject, getObject(sourceObject));
+    }
+  }
+
+  public final void copyObject(Object sourceObject, Object targetObject) {
+    putObject(targetObject, getObject(sourceObject));
   }
 
   public Field getField() {
@@ -133,11 +205,11 @@ public abstract class FieldAccessor {
     set(targetObject, value);
   }
 
-  public void putObject(Object targetObject, Object object) {
+  public final void putObject(Object targetObject, Object object) {
     set(targetObject, object);
   }
 
-  public Object getObject(Object targetObject) {
+  public final Object getObject(Object targetObject) {
     return get(targetObject);
   }
 
@@ -179,8 +251,12 @@ public abstract class FieldAccessor {
       // generated accessors, or primitive-specific reflection subclasses.
       return new ReflectionFieldAccessor(field);
     }
-    if (GraalvmSupport.isGraalBuildTime()) {
+    if (GraalvmSupport.isGraalBuildTime() || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new GeneratedAccessor(field);
+    }
+    FieldAccessor hiddenAccessor = HiddenFieldAccessorFactory.create(field);
+    if (hiddenAccessor != null) {
+      return hiddenAccessor;
     }
     return createVarHandleAccessor(field);
   }
@@ -240,13 +316,16 @@ public abstract class FieldAccessor {
   }
 
   private static VarHandle fieldHandle(Field field) {
-    MethodHandles.Lookup lookup = privateLookup(field);
     try {
-      if (Modifier.isStatic(field.getModifiers())) {
-        return lookup.findStaticVarHandle(
-            field.getDeclaringClass(), field.getName(), field.getType());
+      if (canUsePublicField(field)) {
+        try {
+          return findFieldHandle(MethodHandles.publicLookup(), field);
+        } catch (IllegalAccessException ignored) {
+          // The package may be opened but not exported. Fall through to privateLookupIn so
+          // --add-opens still enables access for named-module users.
+        }
       }
-      return lookup.findVarHandle(field.getDeclaringClass(), field.getName(), field.getType());
+      return findFieldHandle(privateLookup(field), field);
     } catch (IllegalAccessException e) {
       throw accessFailure(field, e);
     } catch (NoSuchFieldException e) {
@@ -255,10 +334,15 @@ public abstract class FieldAccessor {
   }
 
   private static MethodHandle recordGetter(Field field) {
-    MethodHandles.Lookup lookup = privateLookup(field);
     try {
-      return lookup.findVirtual(
-          field.getDeclaringClass(), field.getName(), MethodType.methodType(field.getType()));
+      if (Modifier.isPublic(field.getDeclaringClass().getModifiers())) {
+        try {
+          return findRecordGetter(MethodHandles.publicLookup(), field);
+        } catch (IllegalAccessException ignored) {
+          // The package may be opened but not exported. Fall through to privateLookupIn.
+        }
+      }
+      return findRecordGetter(privateLookup(field), field);
     } catch (IllegalAccessException e) {
       throw accessFailure(field, e);
     } catch (NoSuchMethodException e) {
@@ -266,13 +350,29 @@ public abstract class FieldAccessor {
     }
   }
 
+  private static VarHandle findFieldHandle(MethodHandles.Lookup lookup, Field field)
+      throws IllegalAccessException, NoSuchFieldException {
+    if (Modifier.isStatic(field.getModifiers())) {
+      return lookup.findStaticVarHandle(
+          field.getDeclaringClass(), field.getName(), field.getType());
+    }
+    return lookup.findVarHandle(field.getDeclaringClass(), field.getName(), field.getType());
+  }
+
+  private static MethodHandle findRecordGetter(MethodHandles.Lookup lookup, Field field)
+      throws IllegalAccessException, NoSuchMethodException {
+    return lookup.findVirtual(
+        field.getDeclaringClass(), field.getName(), MethodType.methodType(field.getType()));
+  }
+
   private static MethodHandles.Lookup privateLookup(Field field) {
     Class<?> declaringClass = field.getDeclaringClass();
-    try {
-      return MethodHandles.privateLookupIn(declaringClass, MethodHandles.lookup());
-    } catch (IllegalAccessException e) {
-      throw accessFailure(field, e);
-    }
+    return _JDKAccess.privateLookupIn(declaringClass, MethodHandles.lookup());
+  }
+
+  private static boolean canUsePublicField(Field field) {
+    return Modifier.isPublic(field.getModifiers())
+        && Modifier.isPublic(field.getDeclaringClass().getModifiers());
   }
 
   private static IllegalStateException accessFailure(Field field, Throwable cause) {
@@ -280,6 +380,8 @@ public abstract class FieldAccessor {
     Module targetModule = declaringClass.getModule();
     Package targetPackage = declaringClass.getPackage();
     String packageName = targetPackage == null ? "" : targetPackage.getName();
+    String openTarget =
+        moduleName(targetModule) + (packageName.isEmpty() ? "" : "/" + packageName);
     return new IllegalStateException(
         "Cannot access field "
             + field
@@ -288,7 +390,10 @@ public abstract class FieldAccessor {
             + " in module "
             + moduleName(targetModule)
             + " is not open to "
-            + moduleName(FieldAccessor.class.getModule()),
+            + moduleName(FieldAccessor.class.getModule())
+            + ". For named modules, open the package with --add-opens="
+            + openTarget
+            + "=org.apache.fory.core,org.apache.fory.format",
         cause);
   }
 
@@ -351,6 +456,98 @@ public abstract class FieldAccessor {
       handle = fieldHandle(field);
       isStatic = Modifier.isStatic(field.getModifiers());
     }
+
+    protected void setReflectively(Object obj, Object value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.set(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    private Object target(Object obj) {
+      return isStatic ? null : obj;
+    }
+
+    private void prepareReflectiveWrite(Throwable cause) {
+      if (field.getDeclaringClass().getName().startsWith("java.")) {
+        throw unsupportedWrite(field, cause);
+      }
+      field.setAccessible(true);
+    }
+
+    protected void setBooleanReflectively(Object obj, boolean value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setBoolean(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    protected void setByteReflectively(Object obj, byte value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setByte(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    protected void setCharReflectively(Object obj, char value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setChar(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    protected void setShortReflectively(Object obj, short value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setShort(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    protected void setIntReflectively(Object obj, int value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setInt(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    protected void setLongReflectively(Object obj, long value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setLong(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    protected void setFloatReflectively(Object obj, float value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setFloat(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
+
+    protected void setDoubleReflectively(Object obj, double value, Throwable cause) {
+      try {
+        prepareReflectiveWrite(cause);
+        field.setDouble(target(obj), value);
+      } catch (IllegalAccessException | RuntimeException e) {
+        throw unsupportedWrite(field, e);
+      }
+    }
   }
 
   /** Primitive boolean accessor. */
@@ -389,7 +586,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setBooleanReflectively(obj, value, e);
       }
     }
   }
@@ -467,7 +664,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setByteReflectively(obj, value, e);
       }
     }
   }
@@ -546,7 +743,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setCharReflectively(obj, value, e);
       }
     }
   }
@@ -624,7 +821,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setShortReflectively(obj, value, e);
       }
     }
   }
@@ -702,7 +899,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setIntReflectively(obj, value, e);
       }
     }
   }
@@ -780,7 +977,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setLongReflectively(obj, value, e);
       }
     }
   }
@@ -858,7 +1055,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setFloatReflectively(obj, value, e);
       }
     }
   }
@@ -936,7 +1133,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setDoubleReflectively(obj, value, e);
       }
     }
   }
@@ -1004,7 +1201,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setReflectively(obj, value, e);
       }
     }
   }
@@ -1100,7 +1297,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1129,7 +1326,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setBooleanReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1158,7 +1355,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setByteReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1187,7 +1384,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setCharReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1216,7 +1413,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setShortReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1245,7 +1442,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setIntReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1274,7 +1471,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setLongReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1303,7 +1500,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setFloatReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1332,7 +1529,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        throw unsupportedWrite(field, e);
+        setDoubleReflectively(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }

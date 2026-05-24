@@ -21,10 +21,10 @@ package org.apache.fory.integration_tests;
 
 import static org.apache.fory.integration_tests.TestUtils.serDeCheck;
 
+import java.beans.ConstructorProperties;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
@@ -94,9 +94,13 @@ public class ImmutableCollectionSerializersTest {
   }
 
   @Data
-  @AllArgsConstructor
   public static class Pojo {
     List<List<Object>> data;
+
+    @ConstructorProperties("data")
+    public Pojo(List<List<Object>> data) {
+      this.data = data;
+    }
   }
 
   @DataProvider

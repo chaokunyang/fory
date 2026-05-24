@@ -42,6 +42,8 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.CodegenSerializer;
@@ -130,6 +132,29 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     }
     this.defaultValueLanguage = defaultValueLanguage;
     this.defaultValueFields = defaultValueFields;
+    if (!isRecord) {
+      initConstructorFields(
+          sortedDescriptors,
+          true,
+          defaultFieldNames(defaultValueFields),
+          defaultDeclaringClasses(defaultValueFields));
+    }
+  }
+
+  private static String[] defaultFieldNames(DefaultValueUtils.DefaultValueField[] fields) {
+    String[] names = new String[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      names[i] = fields[i].getFieldName();
+    }
+    return names;
+  }
+
+  private static Class<?>[] defaultDeclaringClasses(DefaultValueUtils.DefaultValueField[] fields) {
+    Class<?>[] declaringClasses = new Class[fields.length];
+    for (int i = 0; i < fields.length; i++) {
+      declaringClasses[i] = fields[i].getDeclaringClass();
+    }
+    return declaringClasses;
   }
 
   // Must be static to be shared across the whole process life.
@@ -295,10 +320,25 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
 
     Expression.ListExpression setDefaultsExpr = new Expression.ListExpression();
     setDefaultsExpr.add(bean);
+    addDefaultValueSetters(setDefaultsExpr, bean);
+    setDefaultsExpr.add(bean);
+    return setDefaultsExpr;
+  }
+
+  @Override
+  protected void postCreateConstructorObject(
+      Expression.ListExpression expressions, Expression bean) {
+    addDefaultValueSetters(expressions, bean);
+  }
+
+  private void addDefaultValueSetters(Expression.ListExpression expressions, Expression bean) {
     Map<Member, Descriptor> descriptors = Descriptor.getAllDescriptorsMap(beanClass);
     for (DefaultValueUtils.DefaultValueField defaultField : defaultValueFields) {
       Object defaultValue = defaultField.getDefaultValue();
       Member member = defaultField.getFieldAccessor().getField();
+      if (constructorOwnsField(member)) {
+        continue;
+      }
       Descriptor descriptor = descriptors.get(member);
       TypeRef<?> typeRef = descriptor.getTypeRef();
       Expression defaultValueExpr;
@@ -322,9 +362,54 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
                   return new Expression.Cast(expr, typeRef);
                 });
       }
-      setDefaultsExpr.add(super.setFieldValue(bean, descriptor, defaultValueExpr));
+      expressions.add(super.setFieldValue(bean, descriptor, defaultValueExpr));
     }
-    setDefaultsExpr.add(bean);
-    return setDefaultsExpr;
+  }
+
+  private boolean constructorOwnsField(Member member) {
+    if (constructorFieldIndexes == null) {
+      return false;
+    }
+    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    String[] names = objectCreator.getConstructorFieldNames();
+    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
+    for (int i = 0; i < names.length; i++) {
+      Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];
+      if (names[i].equals(member.getName())
+          && (declaringClass == null || declaringClass == member.getDeclaringClass())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  @Override
+  protected Expression defaultConstructorValue(int constructorParameterIndex) {
+    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    String fieldName = objectCreator.getConstructorFieldNames()[constructorParameterIndex];
+    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
+    Class<?> declaringClass =
+        declaringClasses == null ? null : declaringClasses[constructorParameterIndex];
+    for (DefaultValueUtils.DefaultValueField defaultField : defaultValueFields) {
+      if (!defaultField.getFieldName().equals(fieldName)
+          || (declaringClass != null && defaultField.getDeclaringClass() != declaringClass)) {
+        continue;
+      }
+      Object defaultValue = defaultField.getDefaultValue();
+      TypeRef<?> typeRef = TypeRef.of(constructorFieldTypes[constructorParameterIndex]);
+      if (typeRef.unwrap().isPrimitive() || typeRef.equals(STRING_TYPE)) {
+        return new Literal(defaultValue, typeRef);
+      }
+      String funcName = "get" + defaultValueLanguage + "DefaultValue";
+      return new Expression.Cast(
+          new StaticInvoke(
+              DefaultValueUtils.class,
+              funcName,
+              OBJECT_TYPE,
+              staticBeanClassExpr(),
+              Literal.ofString(fieldName)),
+          typeRef);
+    }
+    return super.defaultConstructorValue(constructorParameterIndex);
   }
 }

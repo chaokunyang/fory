@@ -27,6 +27,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import lombok.AllArgsConstructor;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor.GeneratedAccessor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -63,6 +64,34 @@ public class FieldAccessorTest {
     Assert.assertEquals(f3.getObject(struct), "a");
     f3.putObject(struct, "b");
     Assert.assertEquals(f3.getObject(struct), "b");
+  }
+
+  @Test
+  public void testHiddenAccessor() throws Exception {
+    HiddenFields fields = new HiddenFields();
+    FieldAccessor intAccessor =
+        FieldAccessor.createAccessor(HiddenFields.class.getDeclaredField("i"));
+    Assert.assertEquals(intAccessor.getInt(fields), 1);
+    intAccessor.putInt(fields, 2);
+    Assert.assertEquals(intAccessor.getInt(fields), 2);
+
+    FieldAccessor objectAccessor =
+        FieldAccessor.createAccessor(HiddenFields.class.getDeclaredField("text"));
+    Assert.assertEquals(objectAccessor.getObject(fields), "a");
+    objectAccessor.putObject(fields, "b");
+    Assert.assertEquals(objectAccessor.getObject(fields), "b");
+
+    FieldAccessor finalAccessor =
+        FieldAccessor.createAccessor(HiddenFields.class.getDeclaredField("finalValue"));
+    Assert.assertEquals(finalAccessor.getLong(fields), 3L);
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      Assert.assertTrue(isHidden(intAccessor.getClass()));
+      Assert.assertTrue(isHidden(objectAccessor.getClass()));
+    }
+  }
+
+  private static boolean isHidden(Class<?> cls) throws Exception {
+    return (Boolean) Class.class.getMethod("isHidden").invoke(cls);
   }
 
   @Test
@@ -144,5 +173,11 @@ public class FieldAccessorTest {
     private float floatValue = 1.25f;
     private double doubleValue = 3.5d;
     private Object objectValue = "before";
+  }
+
+  private static final class HiddenFields {
+    private int i = 1;
+    private String text = "a";
+    private final long finalValue = 3;
   }
 }

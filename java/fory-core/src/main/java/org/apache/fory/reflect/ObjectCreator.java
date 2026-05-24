@@ -37,6 +37,10 @@ import javax.annotation.concurrent.ThreadSafe;
  */
 @ThreadSafe
 public abstract class ObjectCreator<T> {
+  private static final String[] NO_FIELDS = new String[0];
+  private static final Class<?>[] NO_TYPES = new Class<?>[0];
+  private static final boolean[] NO_FINAL_FIELDS = new boolean[0];
+
   protected final Class<T> type;
 
   protected ObjectCreator(Class<T> type) {
@@ -51,6 +55,34 @@ public abstract class ObjectCreator<T> {
    * @throws UnsupportedOperationException if this creator doesn't support parameterless creation
    */
   public abstract T newInstance();
+
+  public boolean hasConstructorFields() {
+    return false;
+  }
+
+  public String[] getConstructorFieldNames() {
+    return NO_FIELDS;
+  }
+
+  public Class<?>[] getConstructorFieldDeclaringClasses() {
+    return null;
+  }
+
+  public Class<?>[] getConstructorFieldTypes() {
+    return NO_TYPES;
+  }
+
+  public boolean[] getConstructorFieldFinal() {
+    return NO_FINAL_FIELDS;
+  }
+
+  public boolean isConstructorPublic() {
+    return false;
+  }
+
+  public boolean isOnlyPublicConstructor() {
+    return false;
+  }
 
   /**
    * Creates a new instance of type T using the provided arguments.

@@ -26,6 +26,7 @@ import static org.apache.fory.collection.Collections.ofHashMap;
 import static org.testng.Assert.assertEquals;
 
 import com.google.common.collect.ImmutableMap;
+import java.beans.ConstructorProperties;
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -825,7 +826,16 @@ public class MapSerializersTest extends ForyTestBase {
   }
 
   public static class TestClass1ForDefaultMap extends AbstractMap<String, Object> {
-    private final Set<MapEntry> data = new HashSet<>();
+    private final Set<MapEntry> data;
+
+    public TestClass1ForDefaultMap() {
+      this(new HashSet<>());
+    }
+
+    @ConstructorProperties({"data"})
+    public TestClass1ForDefaultMap(Set<MapEntry> data) {
+      this.data = data;
+    }
 
     @Override
     public Set<Entry<String, Object>> entrySet() {
@@ -840,7 +850,16 @@ public class MapSerializersTest extends ForyTestBase {
   }
 
   public static class TestClass2ForDefaultMap extends AbstractMap<String, Object> {
-    private final Set<Entry<String, Object>> data = new HashSet<>();
+    private final Set<Entry<String, Object>> data;
+
+    public TestClass2ForDefaultMap() {
+      this(new HashSet<>());
+    }
+
+    @ConstructorProperties({"data"})
+    public TestClass2ForDefaultMap(Set<Entry<String, Object>> data) {
+      this.data = data;
+    }
 
     @Override
     public Set<Entry<String, Object>> entrySet() {
@@ -1177,10 +1196,16 @@ public class MapSerializersTest extends ForyTestBase {
   }
 
   @Data
-  @AllArgsConstructor
   public static class LazyMapCollectionFieldStruct {
     List<PrivateMap<String, Integer>> mapList;
     PrivateMap<String, Integer> map;
+
+    @ConstructorProperties({"mapList", "map"})
+    LazyMapCollectionFieldStruct(
+        List<PrivateMap<String, Integer>> mapList, PrivateMap<String, Integer> map) {
+      this.mapList = mapList;
+      this.map = map;
+    }
   }
 
   @Data
@@ -1387,8 +1412,19 @@ public class MapSerializersTest extends ForyTestBase {
 
   @Data
   public static class PrivateFinalMapFieldStruct {
-    private final Map<String, PrivateFinalValue> valueMap = new LinkedHashMap<>();
-    private final Map<PrivateFinalKey, String> keyMap = new LinkedHashMap<>();
+    private final Map<String, PrivateFinalValue> valueMap;
+    private final Map<PrivateFinalKey, String> keyMap;
+
+    public PrivateFinalMapFieldStruct() {
+      this(new LinkedHashMap<>(), new LinkedHashMap<>());
+    }
+
+    @ConstructorProperties({"valueMap", "keyMap"})
+    public PrivateFinalMapFieldStruct(
+        Map<String, PrivateFinalValue> valueMap, Map<PrivateFinalKey, String> keyMap) {
+      this.valueMap = valueMap;
+      this.keyMap = keyMap;
+    }
   }
 
   @Data

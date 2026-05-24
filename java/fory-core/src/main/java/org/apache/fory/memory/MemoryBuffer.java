@@ -69,22 +69,39 @@ public final class MemoryBuffer {
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final boolean UNALIGNED = !AndroidSupport.IS_ANDROID && unaligned();
-  private static final int BOOLEAN_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(boolean[].class);
-  private static final int BYTE_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(byte[].class);
-  private static final int CHAR_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(char[].class);
-  private static final int SHORT_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(short[].class);
-  private static final int INT_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(int[].class);
-  private static final int LONG_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(long[].class);
-  private static final int FLOAT_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(float[].class);
-  private static final int DOUBLE_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(double[].class);
+  private static final int BOOLEAN_ARRAY_OFFSET;
+  private static final int BYTE_ARRAY_OFFSET;
+  private static final int CHAR_ARRAY_OFFSET;
+  private static final int SHORT_ARRAY_OFFSET;
+  private static final int INT_ARRAY_OFFSET;
+  private static final int LONG_ARRAY_OFFSET;
+  private static final int FLOAT_ARRAY_OFFSET;
+  private static final int DOUBLE_ARRAY_OFFSET;
+
+  // GraalVM native-image recognizes arrayBaseOffset only when the call stores directly into the
+  // target static field. Keep these assignments in this shape so native images recompute heap array
+  // offsets for the image runtime instead of embedding build-time VM offsets.
+  static {
+    if (AndroidSupport.IS_ANDROID) {
+      BOOLEAN_ARRAY_OFFSET = 0;
+      BYTE_ARRAY_OFFSET = 0;
+      CHAR_ARRAY_OFFSET = 0;
+      SHORT_ARRAY_OFFSET = 0;
+      INT_ARRAY_OFFSET = 0;
+      LONG_ARRAY_OFFSET = 0;
+      FLOAT_ARRAY_OFFSET = 0;
+      DOUBLE_ARRAY_OFFSET = 0;
+    } else {
+      BOOLEAN_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(boolean[].class);
+      BYTE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
+      CHAR_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(char[].class);
+      SHORT_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(short[].class);
+      INT_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(int[].class);
+      LONG_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(long[].class);
+      FLOAT_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(float[].class);
+      DOUBLE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(double[].class);
+    }
+  }
 
   /** Limits each raw Unsafe copy to let large copies hit safepoint polls between chunks. */
   private static final long UNSAFE_COPY_THRESHOLD = 1024L * 1024L;

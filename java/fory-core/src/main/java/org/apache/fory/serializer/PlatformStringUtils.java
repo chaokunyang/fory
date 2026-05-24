@@ -30,10 +30,20 @@ import sun.misc.Unsafe;
 /** Platform-owned string internals used by {@link StringSerializer}. */
 final class PlatformStringUtils {
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
-  private static final int BYTE_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(byte[].class);
-  private static final int CHAR_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(char[].class);
+  private static final int BYTE_ARRAY_OFFSET;
+  private static final int CHAR_ARRAY_OFFSET;
+
+  // GraalVM native-image needs arrayBaseOffset calls to store directly into their static fields so
+  // it can recompute the offsets for the image runtime.
+  static {
+    if (AndroidSupport.IS_ANDROID) {
+      BYTE_ARRAY_OFFSET = 0;
+      CHAR_ARRAY_OFFSET = 0;
+    } else {
+      BYTE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
+      CHAR_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(char[].class);
+    }
+  }
 
   static final boolean JDK_STRING_FIELD_ACCESS =
       !AndroidSupport.IS_ANDROID

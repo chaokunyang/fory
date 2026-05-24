@@ -25,8 +25,16 @@ import sun.misc.Unsafe;
 
 public class LittleEndian {
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
-  private static final int BYTE_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(byte[].class);
+  private static final int BYTE_ARRAY_OFFSET;
+
+  // Keep arrayBaseOffset as a direct static-field store for GraalVM native-image recomputation.
+  static {
+    if (AndroidSupport.IS_ANDROID) {
+      BYTE_ARRAY_OFFSET = 0;
+    } else {
+      BYTE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
+    }
+  }
 
   public static int putVarUint36Small(byte[] arr, int index, long v) {
     if (v >>> 7 == 0) {

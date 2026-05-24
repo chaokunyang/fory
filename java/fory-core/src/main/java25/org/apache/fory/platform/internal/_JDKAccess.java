@@ -29,6 +29,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.SerializedLambda;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -339,6 +340,29 @@ public class _JDKAccess {
       return _Lookup._trustedLookup(objectClass);
     }
     return lookupCache.get(objectClass, () -> _Lookup._trustedLookup(objectClass));
+  }
+
+  public static MethodHandle readResolveHandle(Class<?> cls, Method method)
+      throws IllegalAccessException {
+    try {
+      return _trustedLookup(cls).unreflect(method);
+    } catch (IllegalArgumentException e) {
+      if (cls != SerializedLambda.class) {
+        throw e;
+      }
+      // JDK25 rejects SerializedLambda itself as a privateLookupIn target. Reflective access still
+      // honors the same java.base/java.lang.invoke open requirement and avoids serializer-level
+      // versioning.
+      try {
+        method.setAccessible(true);
+      } catch (RuntimeException inaccessible) {
+        throw new IllegalStateException(
+            "SerializedLambda readResolve requires java.base/java.lang.invoke to be open to "
+                + "org.apache.fory.core,org.apache.fory.format",
+            inaccessible);
+      }
+      return MethodHandles.lookup().unreflect(method);
+    }
   }
 
   private static final byte LATIN1 = 0;

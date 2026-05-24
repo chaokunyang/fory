@@ -250,7 +250,6 @@
                         <include name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessor.class"/>
                         <include
                             name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/serializer/SerializedLambdaSerializer.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/serializer/Serializers.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"/>
                       </patternset>
@@ -282,9 +281,6 @@
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"
                         property="jdk25.hiddenfieldaccessorfactory.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/SerializedLambdaSerializer.class"
-                        property="jdk25.serializedlambda.present"/>
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/Serializers.class"
                         property="jdk25.serializers.present"/>
@@ -318,9 +314,6 @@
                     <fail
                         unless="jdk25.hiddenfieldaccessorfactory.present"
                         message="JDK25 multi-release HiddenFieldAccessorFactory class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.serializedlambda.present"
-                        message="JDK25 multi-release SerializedLambdaSerializer class is missing from the packaged fory-core jar."/>
                     <fail
                         unless="jdk25.serializers.present"
                         message="JDK25 multi-release Serializers class is missing from the packaged fory-core jar."/>

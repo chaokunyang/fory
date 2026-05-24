@@ -220,6 +220,11 @@ public class _JDKAccess {
     return lookupCache.get(objectClass, () -> _Lookup._trustedLookup(objectClass));
   }
 
+  public static MethodHandle readResolveHandle(Class<?> cls, Method method)
+      throws IllegalAccessException {
+    return _trustedLookup(cls).unreflect(method);
+  }
+
   private static final byte LATIN1 = 0;
   private static final Byte LATIN1_BOXED = LATIN1;
   private static final byte UTF16 = 1;

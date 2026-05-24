@@ -132,6 +132,12 @@ public final class MapRefReader implements RefReader {
     return readObjects.get(id);
   }
 
+  /** Returns the object resolved by the last ref header that pointed to an existing instance. */
+  @Override
+  public Object getReadRef() {
+    return readObject;
+  }
+
   private Object readRef(int id) {
     if (trackedRefIds.size == 0) {
       return readObjects.get(id);
@@ -150,12 +156,6 @@ public final class MapRefReader implements RefReader {
       }
     }
     return false;
-  }
-
-  /** Returns the object resolved by the last ref header that pointed to an existing instance. */
-  @Override
-  public Object getReadRef() {
-    return readObject;
   }
 
   /** Stores {@code object} under an already reserved read ref id. */

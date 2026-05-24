@@ -21,6 +21,14 @@ java -jar target/java25-memory-access-benchmarks.jar \
   -f 1 -wi 5 -i 5 -t 1 -w 1s -r 1s
 ```
 
+Run the direct-to-heap copy benchmark:
+
+```bash
+java -jar target/java25-memory-access-benchmarks.jar \
+  'org.apache.fory.benchmark.java25.DirectToHeapCopyBenchmark.*' \
+  -f 1 -wi 5 -i 5 -t 1 -w 1s -r 1s
+```
+
 The benchmark class adds the required fork JVM options for the Unsafe path:
 
 ```text

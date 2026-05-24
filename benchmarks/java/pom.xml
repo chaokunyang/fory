@@ -279,13 +279,7 @@
                         <include
                           name="META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"/>
                         <include
-                          name="META-INF/versions/25/org/apache/fory/serializer/SerializedLambdaSerializer.class"/>
-                        <include
-                          name="META-INF/versions/25/org/apache/fory/serializer/Serializers.class"/>
-                        <include
-                          name="META-INF/versions/25/org/apache/fory/serializer/SlicedStringUtil.class"/>
-                        <include
-                          name="META-INF/versions/25/org/apache/fory/serializer/StringSerializer.class"/>
+                          name="META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"/>
                       </patternset>
                     </unzip>
                     <available
@@ -310,17 +304,8 @@
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"
                       property="jdk25.benchmark.objectcodecbuilder.present"/>
                     <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/SerializedLambdaSerializer.class"
-                      property="jdk25.benchmark.serializedlambda.present"/>
-                    <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/Serializers.class"
-                      property="jdk25.benchmark.serializers.present"/>
-                    <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/SlicedStringUtil.class"
-                      property="jdk25.benchmark.slicedstring.present"/>
-                    <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/StringSerializer.class"
-                      property="jdk25.benchmark.stringserializer.present"/>
+                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"
+                      property="jdk25.benchmark.platformstring.present"/>
                     <fail
                       unless="jdk25.benchmark.unsafeops.present"
                       message="JDK25 benchmark jar is missing the versioned UnsafeOps class."/>
@@ -343,17 +328,8 @@
                       unless="jdk25.benchmark.objectcodecbuilder.present"
                       message="JDK25 benchmark jar is missing the versioned ObjectCodecBuilder class."/>
                     <fail
-                      unless="jdk25.benchmark.serializedlambda.present"
-                      message="JDK25 benchmark jar is missing the versioned SerializedLambdaSerializer class."/>
-                    <fail
-                      unless="jdk25.benchmark.serializers.present"
-                      message="JDK25 benchmark jar is missing the versioned Serializers class."/>
-                    <fail
-                      unless="jdk25.benchmark.slicedstring.present"
-                      message="JDK25 benchmark jar is missing the versioned SlicedStringUtil class."/>
-                    <fail
-                      unless="jdk25.benchmark.stringserializer.present"
-                      message="JDK25 benchmark jar is missing the versioned StringSerializer class."/>
+                      unless="jdk25.benchmark.platformstring.present"
+                      message="JDK25 benchmark jar is missing the versioned PlatformStringUtils class."/>
                     <java
                       classname="org.apache.fory.benchmark.Jdk25MrJarCheck"
                       fork="true"

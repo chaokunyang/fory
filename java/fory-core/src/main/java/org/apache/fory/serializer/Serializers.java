@@ -499,7 +499,7 @@ public class Serializers {
   private static final Function GET_VALUE;
 
   static {
-    if (AndroidSupport.IS_ANDROID) {
+    if (!MemoryUtils.JDK_LANG_FIELD_ACCESS) {
       GET_VALUE = null;
       GET_CODER = null;
     } else {
@@ -532,7 +532,7 @@ public class Serializers {
         stringSerializer.writeString(buffer, value.toString());
         return;
       }
-      if (AndroidSupport.IS_ANDROID) {
+      if (!MemoryUtils.JDK_LANG_FIELD_ACCESS) {
         stringSerializer.writeString(buffer, value.toString());
         return;
       }

@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import java.nio.charset.StandardCharsets;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
@@ -104,19 +105,75 @@ final class PlatformStringUtils {
   }
 
   static long getCharsLong(char[] chars, int charIndex) {
+    if (AndroidSupport.IS_ANDROID) {
+      long c0 = chars[charIndex];
+      long c1 = chars[charIndex + 1];
+      long c2 = chars[charIndex + 2];
+      long c3 = chars[charIndex + 3];
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
+        return c0 | (c1 << 16) | (c2 << 32) | (c3 << 48);
+      } else {
+        return (c0 << 48) | (c1 << 32) | (c2 << 16) | c3;
+      }
+    }
     return UNSAFE.getLong(chars, CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
   }
 
   static long getBytesLong(byte[] bytes, int byteIndex) {
+    if (AndroidSupport.IS_ANDROID) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
+        return ((long) bytes[byteIndex] & 0xff)
+            | (((long) bytes[byteIndex + 1] & 0xff) << 8)
+            | (((long) bytes[byteIndex + 2] & 0xff) << 16)
+            | (((long) bytes[byteIndex + 3] & 0xff) << 24)
+            | (((long) bytes[byteIndex + 4] & 0xff) << 32)
+            | (((long) bytes[byteIndex + 5] & 0xff) << 40)
+            | (((long) bytes[byteIndex + 6] & 0xff) << 48)
+            | (((long) bytes[byteIndex + 7] & 0xff) << 56);
+      } else {
+        return (((long) bytes[byteIndex] & 0xff) << 56)
+            | (((long) bytes[byteIndex + 1] & 0xff) << 48)
+            | (((long) bytes[byteIndex + 2] & 0xff) << 40)
+            | (((long) bytes[byteIndex + 3] & 0xff) << 32)
+            | (((long) bytes[byteIndex + 4] & 0xff) << 24)
+            | (((long) bytes[byteIndex + 5] & 0xff) << 16)
+            | (((long) bytes[byteIndex + 6] & 0xff) << 8)
+            | ((long) bytes[byteIndex + 7] & 0xff);
+      }
+    }
     return UNSAFE.getLong(bytes, BYTE_ARRAY_OFFSET + byteIndex);
   }
 
   static char getBytesChar(byte[] bytes, int byteIndex) {
+    if (AndroidSupport.IS_ANDROID) {
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
+        return (char) ((bytes[byteIndex] & 0xff) | ((bytes[byteIndex + 1] & 0xff) << 8));
+      } else {
+        return (char) (((bytes[byteIndex] & 0xff) << 8) | (bytes[byteIndex + 1] & 0xff));
+      }
+    }
     return UNSAFE.getChar(bytes, BYTE_ARRAY_OFFSET + byteIndex);
   }
 
   static void copyCharsToBytes(
       char[] chars, int charOffset, byte[] target, int byteOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      int charIndex = charOffset;
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
+        for (int i = byteOffset, end = byteOffset + numBytes; i < end; i += 2) {
+          char c = chars[charIndex++];
+          target[i] = (byte) c;
+          target[i + 1] = (byte) (c >>> 8);
+        }
+      } else {
+        for (int i = byteOffset, end = byteOffset + numBytes; i < end; i += 2) {
+          char c = chars[charIndex++];
+          target[i] = (byte) (c >>> 8);
+          target[i + 1] = (byte) c;
+        }
+      }
+      return;
+    }
     UNSAFE.copyMemory(
         chars,
         CHAR_ARRAY_OFFSET + ((long) charOffset << 1),
@@ -126,6 +183,10 @@ final class PlatformStringUtils {
   }
 
   static void putBytes(MemoryBuffer buffer, int writerIndex, byte[] bytes, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      buffer.put(writerIndex, bytes, 0, numBytes);
+      return;
+    }
     long address = buffer._unsafeWriterAddress() + writerIndex - buffer.writerIndex();
     UNSAFE.copyMemory(bytes, BYTE_ARRAY_OFFSET, null, address, numBytes);
   }

@@ -774,14 +774,15 @@ public class ObjectSerializerTest extends ForyTestBase {
   public void testAndroidObjectSerializerReflectionPaths() throws Exception {
     String javaBin =
         System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
-    Process process =
+    ProcessBuilder processBuilder =
         new ProcessBuilder(
                 javaBin,
                 "-cp",
                 System.getProperty("java.class.path"),
                 AndroidObjectSerializerProbe.class.getName())
-            .redirectErrorStream(true)
-            .start();
+            .redirectErrorStream(true);
+    processBuilder.environment().put("FORY_ANDROID_ENABLED", "1");
+    Process process = processBuilder.start();
     String output = readFully(process.getInputStream());
     Assert.assertEquals(process.waitFor(), 0, output);
   }

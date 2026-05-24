@@ -245,6 +245,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
   /** Creates an ObjectCreator for Java ObjectStream-compatible reconstruction. */
   private static <T> ObjectCreator<T> createObjectStreamCreator(Class<T> type) {
+    if (AndroidSupport.IS_ANDROID) {
+      return ObjectCreators.getObjectCreator(type);
+    }
     if (JdkVersion.MAJOR_VERSION >= 25) {
       if (hasJdk25Fallback(type)) {
         return new FallbackOnlyObjectCreator<>(type);

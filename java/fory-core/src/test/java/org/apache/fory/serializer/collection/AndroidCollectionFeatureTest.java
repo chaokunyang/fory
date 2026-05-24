@@ -85,7 +85,9 @@ public class AndroidCollectionFeatureTest {
     command.add(jvmSubListPayload);
     command.add(jvmEnumMapPayload);
     command.add(jvmEmptyEnumMapPayload);
-    Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+    ProcessBuilder processBuilder = new ProcessBuilder(command).redirectErrorStream(true);
+    processBuilder.environment().put("FORY_ANDROID_ENABLED", "1");
+    Process process = processBuilder.start();
     String output = readFully(process.getInputStream());
     Assert.assertEquals(process.waitFor(), 0, output);
 

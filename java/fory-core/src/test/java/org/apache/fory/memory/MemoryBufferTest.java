@@ -307,9 +307,7 @@ public class MemoryBufferTest {
             throw new AssertionError("Unexpected java.nio open: " + inputArg);
           }
         }
-        if (ByteBuffer.class
-            .getModule()
-            .isOpen("java.nio", DirectByteBufferNoNioOpenProbe.class.getModule())) {
+        if (isNioOpenToProbe()) {
           throw new AssertionError("java.base/java.nio must not be open to this test probe");
         }
       }
@@ -342,6 +340,21 @@ public class MemoryBufferTest {
     private static void checkEqual(long actual, long expected) {
       if (actual != expected) {
         throw new AssertionError("Expected " + expected + " but got " + actual);
+      }
+    }
+
+    private static boolean isNioOpenToProbe() {
+      try {
+        Class<?> moduleType = Class.forName("java.lang.Module");
+        java.lang.reflect.Method getModule = Class.class.getMethod("getModule");
+        Object byteBufferModule = getModule.invoke(ByteBuffer.class);
+        Object probeModule = getModule.invoke(DirectByteBufferNoNioOpenProbe.class);
+        java.lang.reflect.Method isOpen = moduleType.getMethod("isOpen", String.class, moduleType);
+        return (Boolean) isOpen.invoke(byteBufferModule, "java.nio", probeModule);
+      } catch (ClassNotFoundException | NoSuchMethodException e) {
+        return false;
+      } catch (ReflectiveOperationException e) {
+        throw new AssertionError("Failed to inspect java.nio module opens", e);
       }
     }
   }

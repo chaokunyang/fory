@@ -54,10 +54,11 @@ import org.testng.annotations.Test;
 public class AndroidDynamicFeatureTest {
   @Test
   public void testAndroidDynamicFeaturePaths() throws Exception {
-    Process process =
+    ProcessBuilder processBuilder =
         new ProcessBuilder(TestUtils.javaCommand(AndroidDynamicFeatureProbe.class))
-            .redirectErrorStream(true)
-            .start();
+            .redirectErrorStream(true);
+    processBuilder.environment().put("FORY_ANDROID_ENABLED", "1");
+    Process process = processBuilder.start();
     String output = readFully(process.getInputStream());
     Assert.assertEquals(process.waitFor(), 0, output);
   }

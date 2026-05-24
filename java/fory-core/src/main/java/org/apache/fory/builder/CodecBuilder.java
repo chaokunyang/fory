@@ -58,6 +58,7 @@ import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -310,6 +311,20 @@ public abstract class CodecBuilder {
   private Expression unsafeAccessField(
       Expression inputObject, Class<?> cls, Descriptor descriptor) {
     String fieldName = descriptor.getName();
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      Reference fieldAccessor = getFieldAccessor(descriptor);
+      boolean fieldNullable = fieldNullable(descriptor);
+      if (descriptor.getTypeRef().isPrimitive()) {
+        Preconditions.checkArgument(!fieldNullable);
+        TypeRef<?> returnType = descriptor.getTypeRef();
+        String funcName = "get" + StringUtils.capitalize(descriptor.getRawType().toString());
+        return new Invoke(fieldAccessor, funcName, returnType, false, inputObject);
+      } else {
+        Invoke getObj =
+            new Invoke(fieldAccessor, "getObject", OBJECT_TYPE, fieldNullable, inputObject);
+        return tryCastIfPublic(getObj, descriptor.getTypeRef(), fieldName);
+      }
+    }
     Expression fieldOffsetExpr = fieldOffsetExpr(cls, descriptor);
     boolean fieldNullable = fieldNullable(descriptor);
     if (descriptor.getTypeRef().isPrimitive()) {
@@ -345,7 +360,7 @@ public abstract class CodecBuilder {
           () -> {
             Expression classExpr = beanClassExpr(field.getDeclaringClass());
             new Invoke(classExpr, "getDeclaredField", TypeRef.of(Field.class));
-            Expression reflectFieldRef = getReflectField(cls, field, false);
+            Expression reflectFieldRef = getReflectField(field.getDeclaringClass(), field, false);
             return new StaticInvoke(
                     UnsafeOps.class, "objectFieldOffset", PRIMITIVE_LONG_TYPE, reflectFieldRef)
                 .inline();
@@ -353,6 +368,27 @@ public abstract class CodecBuilder {
     } else {
       return Literal.ofLong(UnsafeOps.objectFieldOffset(field));
     }
+  }
+
+  private Reference getFieldAccessor(Descriptor descriptor) {
+    Field field = descriptor.getField();
+    String fieldName = descriptor.getName();
+    String fieldAccessorName =
+        (duplicatedFields.contains(fieldName)
+                ? field.getDeclaringClass().getName().replaceAll("\\.|\\$", "_") + "_"
+                : "")
+            + fieldName
+            + "_accessor_";
+    return getOrCreateField(
+        true,
+        FieldAccessor.class,
+        fieldAccessorName,
+        () ->
+            new StaticInvoke(
+                FieldAccessor.class,
+                "createAccessor",
+                TypeRef.of(FieldAccessor.class),
+                getReflectField(field.getDeclaringClass(), field, false)));
   }
 
   /**
@@ -423,6 +459,16 @@ public abstract class CodecBuilder {
    */
   private Expression unsafeSetField(Expression bean, Descriptor descriptor, Expression value) {
     TypeRef<?> fieldType = descriptor.getTypeRef();
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      Reference fieldAccessor = getFieldAccessor(descriptor);
+      if (descriptor.getTypeRef().isPrimitive()) {
+        Preconditions.checkArgument(getRawType(value.type()) == getRawType(fieldType));
+        String funcName = "put" + StringUtils.capitalize(getRawType(fieldType).toString());
+        return new Invoke(fieldAccessor, funcName, bean, value);
+      } else {
+        return new Invoke(fieldAccessor, "putObject", bean, value);
+      }
+    }
     // Use Field in case the class has duplicate field name as `fieldName`.
     Expression fieldOffsetExpr = fieldOffsetExpr(beanClass, descriptor);
     if (descriptor.getTypeRef().isPrimitive()) {
@@ -442,7 +488,11 @@ public abstract class CodecBuilder {
     String fieldName = field.getName();
     String fieldRefName;
     if (duplicatedFields.contains(fieldName)) {
-      fieldRefName = cls.getName().replaceAll("\\.|\\$", "_") + "_" + fieldName + "_Field";
+      fieldRefName =
+          field.getDeclaringClass().getName().replaceAll("\\.|\\$", "_")
+              + "_"
+              + fieldName
+              + "_Field";
     } else {
       fieldRefName = fieldName + "_Field";
     }
@@ -452,7 +502,11 @@ public abstract class CodecBuilder {
         fieldRefName,
         () -> {
           TypeRef<Field> fieldTypeRef = TypeRef.of(Field.class);
-          Expression classExpr = beanClassExpr(field.getDeclaringClass());
+          Class<?> declaringClass = field.getDeclaringClass();
+          Expression classExpr =
+              staticClassFieldExpr(
+                  declaringClass,
+                  declaringClass.getName().replaceAll("\\.|\\$", "_") + "__class__");
           Expression fieldExpr;
           if (GraalvmSupport.isGraalBuildTime()) {
             fieldExpr =
@@ -486,12 +540,15 @@ public abstract class CodecBuilder {
   /** Returns an Expression that create a new java object of type {@link CodecBuilder#beanClass}. */
   protected Expression newBean() {
     // TODO allow default access-level class.
-    if (sourcePublicAccessible(beanClass)) {
+    if (sourcePublicAccessible(beanClass)
+        && (JdkVersion.MAJOR_VERSION < 25
+            || ReflectionUtils.hasPublicNoArgConstructor(beanClass))) {
       return new Expression.NewInstance(beanType);
     } else {
-      if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25) {
+      if (JdkVersion.MAJOR_VERSION >= 25) {
         ObjectCreators.getObjectCreator(beanClass); // trigger cache
-        return new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
+        Invoke newInstance = new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
+        return sourcePublicAccessible(beanClass) ? new Cast(newInstance, beanType) : newInstance;
       }
       return new StaticInvoke(UnsafeOps.class, "newInstance", OBJECT_TYPE, beanClassExpr());
     }

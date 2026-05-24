@@ -187,43 +187,43 @@ public class BinaryArray extends UnsafeTrait implements ArrayData {
 
   public boolean[] toBooleanArray() {
     boolean[] values = new boolean[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.BOOLEAN_ARRAY_OFFSET, numElements);
+    buffer.copyToBooleanArray(elementOffset, values, 0, numElements);
     return values;
   }
 
   public byte[] toByteArray() {
     byte[] values = new byte[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.BYTE_ARRAY_OFFSET, numElements);
+    buffer.copyToByteArray(elementOffset, values, 0, numElements);
     return values;
   }
 
   public short[] toShortArray() {
     short[] values = new short[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.SHORT_ARRAY_OFFSET, numElements * 2);
+    buffer.copyToShortArray(elementOffset, values, 0, numElements * 2);
     return values;
   }
 
   public int[] toIntArray() {
     int[] values = new int[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.INT_ARRAY_OFFSET, numElements * 4);
+    buffer.copyToIntArray(elementOffset, values, 0, numElements * 4);
     return values;
   }
 
   public long[] toLongArray() {
     long[] values = new long[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.LONG_ARRAY_OFFSET, numElements * 8);
+    buffer.copyToLongArray(elementOffset, values, 0, numElements * 8);
     return values;
   }
 
   public float[] toFloatArray() {
     float[] values = new float[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.FLOAT_ARRAY_OFFSET, numElements * 4);
+    buffer.copyToFloatArray(elementOffset, values, 0, numElements * 4);
     return values;
   }
 
   public double[] toDoubleArray() {
     double[] values = new double[numElements];
-    buffer.copyToUnsafe(elementOffset, values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numElements * 8);
+    buffer.copyToDoubleArray(elementOffset, values, 0, numElements * 8);
     return values;
   }
 

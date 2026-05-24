@@ -215,8 +215,9 @@ public class MemoryBufferTest {
       check(source.equalTo(target, 0, 0, 4), true);
       check(source.getBytes(1, 2), new byte[] {2, 3});
 
-      assertThrows(
-          UnsupportedOperationException.class, () -> source.copyToUnsafe(0, new byte[4], 0, 4));
+      byte[] bytes = new byte[4];
+      source.copyToByteArray(0, bytes, 0, 4);
+      check(bytes, new byte[] {1, 2, 3, 4});
       assertThrows(
           UnsupportedOperationException.class, () -> target.copyFromUnsafe(0, new byte[4], 0, 4));
     }
@@ -438,6 +439,70 @@ public class MemoryBufferTest {
     direct.readLongs(readLongs, 0, readLongs.length);
     assertEquals(readInts, ints);
     assertEquals(readLongs, longs);
+  }
+
+  @Test
+  public void testTypedArrayCopies() {
+    assertTypedArrayCopies(MemoryUtils.buffer(256));
+    assertTypedArrayCopies(MemoryUtils.wrap(ByteBuffer.allocateDirect(256)));
+  }
+
+  private void assertTypedArrayCopies(MemoryBuffer buffer) {
+    byte[] bytes = {1, 2, 3, 4};
+    int byteOffset = buffer.writerIndex();
+    buffer.writeBytes(bytes);
+    byte[] byteCopy = new byte[bytes.length];
+    buffer.copyToByteArray(byteOffset, byteCopy, 0, bytes.length);
+    assertEquals(byteCopy, bytes);
+
+    boolean[] booleans = {true, false, true};
+    int booleanOffset = buffer.writerIndex();
+    buffer.writeBooleans(booleans);
+    boolean[] booleanCopy = new boolean[booleans.length];
+    buffer.copyToBooleanArray(booleanOffset, booleanCopy, 0, booleans.length);
+    assertEquals(booleanCopy, booleans);
+
+    char[] chars = {'a', 0x1234, Character.MAX_VALUE};
+    int charOffset = buffer.writerIndex();
+    buffer.writeChars(chars);
+    char[] charCopy = new char[chars.length];
+    buffer.copyToCharArray(charOffset, charCopy, 0, chars.length * Character.BYTES);
+    assertEquals(charCopy, chars);
+
+    short[] shorts = {1, -2, Short.MAX_VALUE};
+    int shortOffset = buffer.writerIndex();
+    buffer.writeShorts(shorts);
+    short[] shortCopy = new short[shorts.length];
+    buffer.copyToShortArray(shortOffset, shortCopy, 0, shorts.length * Short.BYTES);
+    assertEquals(shortCopy, shorts);
+
+    int[] ints = {1, -2, Integer.MIN_VALUE};
+    int intOffset = buffer.writerIndex();
+    buffer.writeInts(ints);
+    int[] intCopy = new int[ints.length];
+    buffer.copyToIntArray(intOffset, intCopy, 0, ints.length * Integer.BYTES);
+    assertEquals(intCopy, ints);
+
+    long[] longs = {1L, -2L, Long.MAX_VALUE};
+    int longOffset = buffer.writerIndex();
+    buffer.writeLongs(longs);
+    long[] longCopy = new long[longs.length];
+    buffer.copyToLongArray(longOffset, longCopy, 0, longs.length * Long.BYTES);
+    assertEquals(longCopy, longs);
+
+    float[] floats = {1.5f, -2.5f, Float.MAX_VALUE};
+    int floatOffset = buffer.writerIndex();
+    buffer.writeFloats(floats);
+    float[] floatCopy = new float[floats.length];
+    buffer.copyToFloatArray(floatOffset, floatCopy, 0, floats.length * Float.BYTES);
+    assertEquals(floatCopy, floats);
+
+    double[] doubles = {1.5d, -2.5d, Double.MAX_VALUE};
+    int doubleOffset = buffer.writerIndex();
+    buffer.writeDoubles(doubles);
+    double[] doubleCopy = new double[doubles.length];
+    buffer.copyToDoubleArray(doubleOffset, doubleCopy, 0, doubles.length * Double.BYTES);
+    assertEquals(doubleCopy, doubles);
   }
 
   @Test

@@ -26,8 +26,12 @@ import static org.apache.fory.codegen.ExpressionUtils.cast;
 import static org.apache.fory.collection.Collections.ofHashSet;
 import static org.apache.fory.type.TypeUtils.OBJECT_ARRAY_TYPE;
 import static org.apache.fory.type.TypeUtils.OBJECT_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_BOOLEAN_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_BYTE_ARRAY_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_BYTE_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_CHAR_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_DOUBLE_TYPE;
+import static org.apache.fory.type.TypeUtils.PRIMITIVE_FLOAT_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_INT_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_LONG_TYPE;
 import static org.apache.fory.type.TypeUtils.PRIMITIVE_SHORT_TYPE;
@@ -60,6 +64,7 @@ import org.apache.fory.codegen.ExpressionVisitor;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.TypeDef;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
@@ -376,6 +381,9 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   private List<Expression> serializePrimitivesUnCompressed(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      return serializeRawPrimitivesIndexed(bean, buffer, primitiveGroups, totalSize);
+    }
     List<Expression> expressions = new ArrayList<>();
     int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
     Literal totalSizeLiteral = new Literal(totalSize, PRIMITIVE_INT_TYPE);
@@ -469,6 +477,9 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   private List<Expression> serializePrimitivesCompressed(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      return serializeCompressedIndexed(bean, buffer, primitiveGroups, totalSize);
+    }
     List<Expression> expressions = new ArrayList<>();
     // int/long may need extra one-byte for writing.
     int extraSize = 0;
@@ -615,6 +626,324 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       }
     }
     return expressions;
+  }
+
+  private List<Expression> serializeRawPrimitivesIndexed(
+      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
+    List<Expression> expressions = new ArrayList<>();
+    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
+    Literal totalSizeLiteral = new Literal(totalSize, PRIMITIVE_INT_TYPE);
+    expressions.add(new Invoke(buffer, "grow", totalSizeLiteral));
+    Expression writerIndex = new Invoke(buffer, "writerIndex", "writerIndex", PRIMITIVE_INT_TYPE);
+    expressions.add(writerIndex);
+    int acc = 0;
+    for (List<Descriptor> group : primitiveGroups) {
+      ListExpression groupExpressions = new ListExpression();
+      for (Descriptor descriptor : group) {
+        int dispatchId = getNumericDescriptorDispatchId(descriptor);
+        Expression fieldValue = getFieldValue(bean, descriptor);
+        if (fieldValue instanceof Inlineable) {
+          ((Inlineable) fieldValue).inline();
+        }
+        if (dispatchId == DispatchId.BOOL) {
+          groupExpressions.add(
+              bufferPutBoolean(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 1;
+        } else if (dispatchId == DispatchId.INT8) {
+          groupExpressions.add(bufferPutByte(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 1;
+        } else if (dispatchId == DispatchId.UINT8) {
+          groupExpressions.add(
+              bufferPutByte(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  primitiveByteValue(fieldValue, descriptor)));
+          acc += 1;
+        } else if (dispatchId == DispatchId.CHAR) {
+          groupExpressions.add(bufferPutChar(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 2;
+        } else if (dispatchId == DispatchId.INT16) {
+          groupExpressions.add(
+              bufferPutInt16(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 2;
+        } else if (dispatchId == DispatchId.UINT16) {
+          groupExpressions.add(
+              bufferPutInt16(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  primitiveShortValue(fieldValue, descriptor)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.FLOAT16 || dispatchId == DispatchId.BFLOAT16) {
+          groupExpressions.add(
+              bufferPutInt16(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  new Invoke(fieldValue, "toBits", SHORT_TYPE)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.INT32) {
+          groupExpressions.add(
+              bufferPutInt32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 4;
+        } else if (dispatchId == DispatchId.UINT32) {
+          groupExpressions.add(
+              bufferPutInt32(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  primitiveIntValue(fieldValue, descriptor)));
+          acc += 4;
+        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
+          groupExpressions.add(
+              bufferPutInt64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 8;
+        } else if (dispatchId == DispatchId.FLOAT32) {
+          groupExpressions.add(
+              bufferPutFloat32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 4;
+        } else if (dispatchId == DispatchId.FLOAT64) {
+          groupExpressions.add(
+              bufferPutFloat64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 8;
+        } else {
+          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+        }
+      }
+      if (hasFewFields() || numPrimitiveFields < 4) {
+        expressions.add(groupExpressions);
+      } else {
+        expressions.add(
+            objectCodecOptimizer.invokeGenerated(
+                ofHashSet(bean, buffer, writerIndex), groupExpressions, "writeFields"));
+      }
+    }
+    Expression increaseWriterIndex =
+        new Invoke(
+            buffer,
+            "_increaseWriterIndexUnsafe",
+            new Literal(totalSizeLiteral, PRIMITIVE_INT_TYPE));
+    expressions.add(increaseWriterIndex);
+    return expressions;
+  }
+
+  private List<Expression> serializeCompressedIndexed(
+      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
+    List<Expression> expressions = new ArrayList<>();
+    int extraSize = 0;
+    for (List<Descriptor> group : primitiveGroups) {
+      for (Descriptor d : group) {
+        int id = getNumericDescriptorDispatchId(d);
+        if (id == DispatchId.INT32
+            || id == DispatchId.VARINT32
+            || id == DispatchId.VAR_UINT32
+            || id == DispatchId.UINT32) {
+          extraSize += 4;
+        } else if (id == DispatchId.INT64
+            || id == DispatchId.VARINT64
+            || id == DispatchId.TAGGED_INT64
+            || id == DispatchId.VAR_UINT64
+            || id == DispatchId.TAGGED_UINT64
+            || id == DispatchId.UINT64) {
+          extraSize += 1;
+        }
+      }
+    }
+    int growSize = totalSize + extraSize;
+    expressions.add(new Invoke(buffer, "grow", Literal.ofInt(growSize)));
+    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
+    for (List<Descriptor> group : primitiveGroups) {
+      ListExpression groupExpressions = new ListExpression();
+      Expression writerIndex = new Invoke(buffer, "writerIndex", "writerIndex", PRIMITIVE_INT_TYPE);
+      int acc = 0;
+      boolean compressStarted = false;
+      for (Descriptor descriptor : group) {
+        int dispatchId = getNumericDescriptorDispatchId(descriptor);
+        Expression fieldValue = getFieldValue(bean, descriptor);
+        if (fieldValue instanceof Inlineable) {
+          ((Inlineable) fieldValue).inline();
+        }
+        if (dispatchId == DispatchId.BOOL) {
+          groupExpressions.add(
+              bufferPutBoolean(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 1;
+        } else if (dispatchId == DispatchId.INT8) {
+          groupExpressions.add(bufferPutByte(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 1;
+        } else if (dispatchId == DispatchId.UINT8) {
+          groupExpressions.add(
+              bufferPutByte(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  primitiveByteValue(fieldValue, descriptor)));
+          acc += 1;
+        } else if (dispatchId == DispatchId.CHAR) {
+          groupExpressions.add(bufferPutChar(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 2;
+        } else if (dispatchId == DispatchId.INT16) {
+          groupExpressions.add(
+              bufferPutInt16(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 2;
+        } else if (dispatchId == DispatchId.UINT16) {
+          groupExpressions.add(
+              bufferPutInt16(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  primitiveShortValue(fieldValue, descriptor)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.FLOAT16 || dispatchId == DispatchId.BFLOAT16) {
+          groupExpressions.add(
+              bufferPutInt16(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  new Invoke(fieldValue, "toBits", SHORT_TYPE)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.FLOAT32) {
+          groupExpressions.add(
+              bufferPutFloat32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 4;
+        } else if (dispatchId == DispatchId.FLOAT64) {
+          groupExpressions.add(
+              bufferPutFloat64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 8;
+        } else if (dispatchId == DispatchId.INT32) {
+          groupExpressions.add(
+              bufferPutInt32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 4;
+        } else if (dispatchId == DispatchId.UINT32) {
+          groupExpressions.add(
+              bufferPutInt32(
+                  buffer,
+                  getBufferIndex(writerIndex, acc),
+                  primitiveIntValue(fieldValue, descriptor)));
+          acc += 4;
+        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
+          groupExpressions.add(
+              bufferPutInt64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
+          acc += 8;
+        } else if (dispatchId == DispatchId.VARINT32) {
+          if (!compressStarted) {
+            addIncWriterIndexExpr(groupExpressions, buffer, acc);
+            compressStarted = true;
+          }
+          groupExpressions.add(new Invoke(buffer, "_unsafeWriteVarInt32", fieldValue));
+        } else if (dispatchId == DispatchId.VAR_UINT32) {
+          if (!compressStarted) {
+            addIncWriterIndexExpr(groupExpressions, buffer, acc);
+            compressStarted = true;
+          }
+          groupExpressions.add(
+              new Invoke(
+                  buffer, "_unsafeWriteVarUInt32", primitiveIntValue(fieldValue, descriptor)));
+        } else if (dispatchId == DispatchId.VARINT64) {
+          if (!compressStarted) {
+            addIncWriterIndexExpr(groupExpressions, buffer, acc);
+            compressStarted = true;
+          }
+          groupExpressions.add(new Invoke(buffer, "writeVarInt64", fieldValue));
+        } else if (dispatchId == DispatchId.TAGGED_INT64) {
+          if (!compressStarted) {
+            addIncWriterIndexExpr(groupExpressions, buffer, acc);
+            compressStarted = true;
+          }
+          groupExpressions.add(new Invoke(buffer, "writeTaggedInt64", fieldValue));
+        } else if (dispatchId == DispatchId.VAR_UINT64) {
+          if (!compressStarted) {
+            addIncWriterIndexExpr(groupExpressions, buffer, acc);
+            compressStarted = true;
+          }
+          groupExpressions.add(new Invoke(buffer, "writeVarUInt64", fieldValue));
+        } else if (dispatchId == DispatchId.TAGGED_UINT64) {
+          if (!compressStarted) {
+            addIncWriterIndexExpr(groupExpressions, buffer, acc);
+            compressStarted = true;
+          }
+          groupExpressions.add(new Invoke(buffer, "writeTaggedUInt64", fieldValue));
+        } else {
+          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+        }
+      }
+      if (!compressStarted) {
+        addIncWriterIndexExpr(groupExpressions, buffer, acc);
+      }
+      if (hasFewFields() || numPrimitiveFields < 4) {
+        expressions.add(groupExpressions);
+      } else {
+        expressions.add(
+            objectCodecOptimizer.invokeGenerated(
+                ofHashSet(bean, buffer, writerIndex), groupExpressions, "writeFields"));
+      }
+    }
+    return expressions;
+  }
+
+  private Expression bufferPutByte(Expression buffer, Expression index, Expression value) {
+    return new Invoke(buffer, "_unsafePutByte", index, value);
+  }
+
+  private Expression bufferPutBoolean(Expression buffer, Expression index, Expression value) {
+    return new Invoke(buffer, "_unsafePutBoolean", index, value);
+  }
+
+  private Expression bufferPutChar(Expression buffer, Expression index, Expression value) {
+    return new Invoke(buffer, "_unsafePutChar", index, value);
+  }
+
+  private Expression bufferPutInt16(Expression buffer, Expression index, Expression value) {
+    return new Invoke(buffer, "_unsafePutInt16", index, value);
+  }
+
+  private Expression bufferPutInt32(Expression buffer, Expression index, Expression value) {
+    return new Invoke(buffer, "_unsafePutInt32", index, value);
+  }
+
+  private Expression bufferPutInt64(Expression buffer, Expression index, Expression value) {
+    return new Invoke(buffer, "_unsafePutInt64", index, value);
+  }
+
+  private Expression bufferPutFloat32(Expression buffer, Expression index, Expression value) {
+    return bufferPutInt32(
+        buffer,
+        index,
+        new StaticInvoke(Float.class, "floatToRawIntBits", PRIMITIVE_INT_TYPE, value));
+  }
+
+  private Expression bufferPutFloat64(Expression buffer, Expression index, Expression value) {
+    return bufferPutInt64(
+        buffer,
+        index,
+        new StaticInvoke(Double.class, "doubleToRawLongBits", PRIMITIVE_LONG_TYPE, value));
+  }
+
+  private Expression bufferGetByte(Expression buffer, Expression index) {
+    return new Invoke(buffer, "_unsafeGetByte", PRIMITIVE_BYTE_TYPE, index);
+  }
+
+  private Expression bufferGetBoolean(Expression buffer, Expression index) {
+    return new Invoke(buffer, "_unsafeGetBoolean", PRIMITIVE_BOOLEAN_TYPE, index);
+  }
+
+  private Expression bufferGetChar(Expression buffer, Expression index) {
+    return new Invoke(buffer, "_unsafeGetChar", PRIMITIVE_CHAR_TYPE, index);
+  }
+
+  private Expression bufferGetInt16(Expression buffer, Expression index) {
+    return new Invoke(buffer, "_unsafeGetInt16", PRIMITIVE_SHORT_TYPE, index);
+  }
+
+  private Expression bufferGetInt32(Expression buffer, Expression index) {
+    return new Invoke(buffer, "_unsafeGetInt32", PRIMITIVE_INT_TYPE, index);
+  }
+
+  private Expression bufferGetInt64(Expression buffer, Expression index) {
+    return new Invoke(buffer, "_unsafeGetInt64", PRIMITIVE_LONG_TYPE, index);
+  }
+
+  private Expression bufferGetFloat32(Expression buffer, Expression index) {
+    return new StaticInvoke(
+        Float.class, "intBitsToFloat", PRIMITIVE_FLOAT_TYPE, bufferGetInt32(buffer, index));
+  }
+
+  private Expression bufferGetFloat64(Expression buffer, Expression index) {
+    return new StaticInvoke(
+        Double.class, "longBitsToDouble", PRIMITIVE_DOUBLE_TYPE, bufferGetInt64(buffer, index));
   }
 
   private Expression primitiveByteValue(Expression fieldValue, Descriptor descriptor) {
@@ -869,6 +1198,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   protected Expression createConstructorObject(FieldsArray fieldValues) {
     Expression[] params = new Expression[constructorFieldIndexes.length];
+    Expression[] directParams = new Expression[constructorFieldIndexes.length];
     for (int i = 0; i < constructorFieldIndexes.length; i++) {
       int index = constructorFieldIndexes[i];
       if (index < 0) {
@@ -876,9 +1206,16 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       } else {
         params[i] = fieldValue(fieldValues, index);
       }
+      directParams[i] = tryInlineCast(params[i], TypeRef.of(constructorFieldTypes[i]));
+    }
+    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    if (JdkVersion.MAJOR_VERSION >= 25
+        && objectCreator.isOnlyPublicConstructor()
+        && sourcePublicAccessible(beanClass)
+        && constructorParamsAccessible()) {
+      return new NewInstance(beanType, directParams);
     }
     Expression args = new Expression.NewArray(OBJECT_ARRAY_TYPE, params);
-    ObjectCreators.getObjectCreator(beanClass); // trigger cache and make error raised early
     Expression newInstance =
         new Invoke(getObjectCreator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, args);
     return sourcePublicAccessible(beanClass) ? new Cast(newInstance, beanType) : newInstance;
@@ -892,6 +1229,15 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         staticClassFieldExpr(
             constructorFieldTypes[constructorParameterIndex],
             "constructorFieldClass" + constructorParameterIndex + "_"));
+  }
+
+  private boolean constructorParamsAccessible() {
+    for (Class<?> constructorFieldType : constructorFieldTypes) {
+      if (!sourcePublicAccessible(constructorFieldType)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private void addNonConstructorFieldSetters(
@@ -1109,6 +1455,9 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   private List<Expression> deserializeUnCompressedPrimitives(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      return deserializeRawIndexed(bean, buffer, primitiveGroups, totalSize);
+    }
     List<Expression> expressions = new ArrayList<>();
     int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
     Literal totalSizeLiteral = Literal.ofInt(totalSize);
@@ -1213,6 +1562,9 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   private List<Expression> deserializeCompressedPrimitives(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups) {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      return deserializeCompressedIndexed(bean, buffer, primitiveGroups);
+    }
     List<Expression> expressions = new ArrayList<>();
     int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
     for (List<Descriptor> group : primitiveGroups) {
@@ -1360,6 +1712,247 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     return expressions;
   }
 
+  private List<Expression> deserializeRawIndexed(
+      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
+    List<Expression> expressions = new ArrayList<>();
+    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
+    Literal totalSizeLiteral = Literal.ofInt(totalSize);
+    expressions.add(new Invoke(buffer, "checkReadableBytes", totalSizeLiteral));
+    Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
+    expressions.add(readerIndex);
+    int acc = 0;
+    for (List<Descriptor> group : primitiveGroups) {
+      ListExpression groupExpressions = new ListExpression();
+      for (Descriptor descriptor : group) {
+        int dispatchId = getNumericDescriptorDispatchId(descriptor);
+        Expression fieldValue;
+        if (dispatchId == DispatchId.BOOL) {
+          fieldValue = bufferGetBoolean(buffer, getBufferIndex(readerIndex, acc));
+          acc += 1;
+        } else if (dispatchId == DispatchId.INT8) {
+          fieldValue = bufferGetByte(buffer, getBufferIndex(readerIndex, acc));
+          acc += 1;
+        } else if (dispatchId == DispatchId.UINT8) {
+          fieldValue =
+              new StaticInvoke(
+                  Byte.class,
+                  "toUnsignedInt",
+                  descriptor.getTypeRef(),
+                  bufferGetByte(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 1;
+        } else if (dispatchId == DispatchId.CHAR) {
+          fieldValue = bufferGetChar(buffer, getBufferIndex(readerIndex, acc));
+          acc += 2;
+        } else if (dispatchId == DispatchId.INT16) {
+          fieldValue = bufferGetInt16(buffer, getBufferIndex(readerIndex, acc));
+          acc += 2;
+        } else if (dispatchId == DispatchId.UINT16) {
+          fieldValue =
+              new StaticInvoke(
+                  Short.class,
+                  "toUnsignedInt",
+                  descriptor.getTypeRef(),
+                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.FLOAT16) {
+          fieldValue =
+              new StaticInvoke(
+                  Float16.class,
+                  "fromBits",
+                  TypeRef.of(Float16.class),
+                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.BFLOAT16) {
+          fieldValue =
+              new StaticInvoke(
+                  BFloat16.class,
+                  "fromBits",
+                  TypeRef.of(BFloat16.class),
+                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.INT32) {
+          fieldValue = bufferGetInt32(buffer, getBufferIndex(readerIndex, acc));
+          acc += 4;
+        } else if (dispatchId == DispatchId.UINT32) {
+          fieldValue =
+              new StaticInvoke(
+                  Integer.class,
+                  "toUnsignedLong",
+                  descriptor.getTypeRef(),
+                  bufferGetInt32(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 4;
+        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
+          fieldValue = bufferGetInt64(buffer, getBufferIndex(readerIndex, acc));
+          acc += 8;
+        } else if (dispatchId == DispatchId.FLOAT32) {
+          fieldValue = bufferGetFloat32(buffer, getBufferIndex(readerIndex, acc));
+          acc += 4;
+        } else if (dispatchId == DispatchId.FLOAT64) {
+          fieldValue = bufferGetFloat64(buffer, getBufferIndex(readerIndex, acc));
+          acc += 8;
+        } else {
+          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+        }
+        groupExpressions.add(setFieldValue(bean, descriptor, fieldValue));
+      }
+      if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
+        expressions.add(groupExpressions);
+      } else {
+        expressions.add(
+            objectCodecOptimizer.invokeGenerated(
+                ofHashSet(bean, buffer, readerIndex), groupExpressions, "readFields"));
+      }
+    }
+    Expression increaseReaderIndex =
+        new Invoke(
+            buffer, "increaseReaderIndex", new Literal(totalSizeLiteral, PRIMITIVE_INT_TYPE));
+    expressions.add(increaseReaderIndex);
+    return expressions;
+  }
+
+  private List<Expression> deserializeCompressedIndexed(
+      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups) {
+    List<Expression> expressions = new ArrayList<>();
+    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
+    for (List<Descriptor> group : primitiveGroups) {
+      ReplaceStub checkReadableBytesStub = new ReplaceStub();
+      expressions.add(checkReadableBytesStub);
+      Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
+      expressions.add(readerIndex);
+      ListExpression groupExpressions = new ListExpression();
+      int acc = 0;
+      boolean compressStarted = false;
+      for (Descriptor descriptor : group) {
+        int dispatchId = getNumericDescriptorDispatchId(descriptor);
+        Expression fieldValue;
+        if (dispatchId == DispatchId.BOOL) {
+          fieldValue = bufferGetBoolean(buffer, getBufferIndex(readerIndex, acc));
+          acc += 1;
+        } else if (dispatchId == DispatchId.INT8) {
+          fieldValue = bufferGetByte(buffer, getBufferIndex(readerIndex, acc));
+          acc += 1;
+        } else if (dispatchId == DispatchId.UINT8) {
+          fieldValue =
+              new StaticInvoke(
+                  Byte.class,
+                  "toUnsignedInt",
+                  descriptor.getTypeRef(),
+                  bufferGetByte(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 1;
+        } else if (dispatchId == DispatchId.CHAR) {
+          fieldValue = bufferGetChar(buffer, getBufferIndex(readerIndex, acc));
+          acc += 2;
+        } else if (dispatchId == DispatchId.INT16) {
+          fieldValue = bufferGetInt16(buffer, getBufferIndex(readerIndex, acc));
+          acc += 2;
+        } else if (dispatchId == DispatchId.UINT16) {
+          fieldValue =
+              new StaticInvoke(
+                  Short.class,
+                  "toUnsignedInt",
+                  descriptor.getTypeRef(),
+                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.FLOAT16) {
+          fieldValue =
+              new StaticInvoke(
+                  Float16.class,
+                  "fromBits",
+                  TypeRef.of(Float16.class),
+                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.BFLOAT16) {
+          fieldValue =
+              new StaticInvoke(
+                  BFloat16.class,
+                  "fromBits",
+                  TypeRef.of(BFloat16.class),
+                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 2;
+        } else if (dispatchId == DispatchId.FLOAT32) {
+          fieldValue = bufferGetFloat32(buffer, getBufferIndex(readerIndex, acc));
+          acc += 4;
+        } else if (dispatchId == DispatchId.FLOAT64) {
+          fieldValue = bufferGetFloat64(buffer, getBufferIndex(readerIndex, acc));
+          acc += 8;
+        } else if (dispatchId == DispatchId.INT32) {
+          fieldValue = bufferGetInt32(buffer, getBufferIndex(readerIndex, acc));
+          acc += 4;
+        } else if (dispatchId == DispatchId.UINT32) {
+          fieldValue =
+              new StaticInvoke(
+                  Integer.class,
+                  "toUnsignedLong",
+                  descriptor.getTypeRef(),
+                  bufferGetInt32(buffer, getBufferIndex(readerIndex, acc)));
+          acc += 4;
+        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
+          fieldValue = bufferGetInt64(buffer, getBufferIndex(readerIndex, acc));
+          acc += 8;
+        } else if (dispatchId == DispatchId.VARINT32) {
+          if (!compressStarted) {
+            compressStarted = true;
+            addIncReaderIndexExpr(groupExpressions, buffer, acc);
+          }
+          fieldValue = readVarInt32(buffer);
+        } else if (dispatchId == DispatchId.VAR_UINT32) {
+          if (!compressStarted) {
+            compressStarted = true;
+            addIncReaderIndexExpr(groupExpressions, buffer, acc);
+          }
+          fieldValue =
+              new StaticInvoke(
+                  Integer.class,
+                  "toUnsignedLong",
+                  descriptor.getTypeRef(),
+                  new Invoke(buffer, "readVarUInt32", PRIMITIVE_INT_TYPE));
+        } else if (dispatchId == DispatchId.VARINT64) {
+          if (!compressStarted) {
+            compressStarted = true;
+            addIncReaderIndexExpr(groupExpressions, buffer, acc);
+          }
+          fieldValue = new Invoke(buffer, "readVarInt64", PRIMITIVE_LONG_TYPE);
+        } else if (dispatchId == DispatchId.TAGGED_INT64) {
+          if (!compressStarted) {
+            compressStarted = true;
+            addIncReaderIndexExpr(groupExpressions, buffer, acc);
+          }
+          fieldValue = new Invoke(buffer, "readTaggedInt64", PRIMITIVE_LONG_TYPE);
+        } else if (dispatchId == DispatchId.VAR_UINT64) {
+          if (!compressStarted) {
+            compressStarted = true;
+            addIncReaderIndexExpr(groupExpressions, buffer, acc);
+          }
+          fieldValue = new Invoke(buffer, "readVarUInt64", PRIMITIVE_LONG_TYPE);
+        } else if (dispatchId == DispatchId.TAGGED_UINT64) {
+          if (!compressStarted) {
+            compressStarted = true;
+            addIncReaderIndexExpr(groupExpressions, buffer, acc);
+          }
+          fieldValue = new Invoke(buffer, "readTaggedUInt64", PRIMITIVE_LONG_TYPE);
+        } else {
+          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+        }
+        groupExpressions.add(setFieldValue(bean, descriptor, fieldValue));
+      }
+      if (acc != 0) {
+        checkReadableBytesStub.setTargetObject(
+            new Invoke(buffer, "checkReadableBytes", Literal.ofInt(acc)));
+      }
+      if (!compressStarted) {
+        addIncReaderIndexExpr(groupExpressions, buffer, acc);
+      }
+      if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
+        expressions.add(groupExpressions);
+      } else {
+        expressions.add(
+            objectCodecOptimizer.invokeGenerated(
+                ofHashSet(bean, buffer, readerIndex), groupExpressions, "readFields"));
+      }
+    }
+    return expressions;
+  }
+
   private void addIncReaderIndexExpr(ListExpression expressions, Expression buffer, int diff) {
     if (diff != 0) {
       expressions.add(new Invoke(buffer, "increaseReaderIndex", Literal.ofInt(diff)));
@@ -1371,5 +1964,12 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       return readerPos;
     }
     return add(readerPos, new Literal(acc, PRIMITIVE_LONG_TYPE));
+  }
+
+  private Expression getBufferIndex(Expression index, int acc) {
+    if (acc == 0) {
+      return index;
+    }
+    return add(index, Literal.ofInt(acc));
   }
 }

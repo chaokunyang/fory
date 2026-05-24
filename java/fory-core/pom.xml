@@ -243,8 +243,6 @@
                         <include name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
                         <include
                             name="META-INF/versions/25/org/apache/fory/platform/internal/_JDKAccess.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/builder/CodecBuilder.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/platform/internal/DefineClass.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/platform/internal/_Lookup.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessor.class"/>
@@ -262,12 +260,6 @@
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_JDKAccess.class"
                         property="jdk25.jdkaccess.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/builder/CodecBuilder.class"
-                        property="jdk25.codecbuilder.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"
-                        property="jdk25.objectcodecbuilder.present"/>
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/DefineClass.class"
                         property="jdk25.defineclass.present"/>
@@ -292,12 +284,6 @@
                     <fail
                         unless="jdk25.jdkaccess.present"
                         message="JDK25 multi-release _JDKAccess class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.codecbuilder.present"
-                        message="JDK25 multi-release CodecBuilder class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.objectcodecbuilder.present"
-                        message="JDK25 multi-release ObjectCodecBuilder class is missing from the packaged fory-core jar."/>
                     <fail
                         unless="jdk25.defineclass.present"
                         message="JDK25 multi-release DefineClass class is missing from the packaged fory-core jar."/>

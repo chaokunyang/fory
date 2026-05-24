@@ -3625,18 +3625,134 @@ public final class MemoryBuffer {
     source.copyTo(sourcePointer, this, offset, numBytes);
   }
 
-  /**
-   * JVM-only bulk copy method. Copies {@code numBytes} bytes to target unsafe object and pointer.
-   * Throws on Android before executing unsafe memory access.
-   */
-  public void copyToUnsafe(long offset, Object target, long targetPointer, int numBytes) {
+  public void copyToByteArray(int offset, byte[] target, int targetOffset, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.throwRawUnsafeMemoryCopyUnsupported();
+      MemoryOps.copyToByteArray(this, offset, target, targetOffset, numBytes);
     } else {
-      final long thisPointer = this.address + offset;
-      checkArgument(thisPointer + numBytes <= addressLimit);
-      UNSAFE.copyMemory(this.heapMemory, thisPointer, target, targetPointer, numBytes);
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.BYTE_ARRAY_OFFSET + targetOffset,
+          numBytes);
     }
+  }
+
+  public void copyToBooleanArray(int offset, boolean[] target, int targetOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyToBooleanArray(this, offset, target, targetOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.BOOLEAN_ARRAY_OFFSET + targetOffset,
+          numBytes);
+    }
+  }
+
+  public void copyToCharArray(int offset, char[] target, int targetOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyToCharArray(this, offset, target, targetOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.CHAR_ARRAY_OFFSET + arrayCopyOffset(targetOffset, 1),
+          numBytes);
+    }
+  }
+
+  public void copyToShortArray(int offset, short[] target, int targetOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyToShortArray(this, offset, target, targetOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.SHORT_ARRAY_OFFSET + arrayCopyOffset(targetOffset, 1),
+          numBytes);
+    }
+  }
+
+  public void copyToIntArray(int offset, int[] target, int targetOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyToIntArray(this, offset, target, targetOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.INT_ARRAY_OFFSET + arrayCopyOffset(targetOffset, 2),
+          numBytes);
+    }
+  }
+
+  public void copyToLongArray(int offset, long[] target, int targetOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyToLongArray(this, offset, target, targetOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.LONG_ARRAY_OFFSET + arrayCopyOffset(targetOffset, 3),
+          numBytes);
+    }
+  }
+
+  public void copyToFloatArray(int offset, float[] target, int targetOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyToFloatArray(this, offset, target, targetOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.FLOAT_ARRAY_OFFSET + arrayCopyOffset(targetOffset, 2),
+          numBytes);
+    }
+  }
+
+  public void copyToDoubleArray(int offset, double[] target, int targetOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyToDoubleArray(this, offset, target, targetOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
+      UNSAFE.copyMemory(
+          heapMemory,
+          address + offset,
+          target,
+          UnsafeOps.DOUBLE_ARRAY_OFFSET + arrayCopyOffset(targetOffset, 3),
+          numBytes);
+    }
+  }
+
+  private void checkArrayCopy(
+      int offset, int targetOffset, int targetLength, int numBytes, int elementShift) {
+    int elementMask = (1 << elementShift) - 1;
+    if ((numBytes & elementMask) != 0) {
+      throw new IllegalArgumentException("numBytes is not aligned to array element size");
+    }
+    int numElements = numBytes >> elementShift;
+    if ((offset | targetOffset | numBytes | numElements) < 0
+        || offset > size - numBytes
+        || targetOffset > targetLength - numElements) {
+      throwOOBException();
+    }
+  }
+
+  private static long arrayCopyOffset(int elementOffset, int elementShift) {
+    return (long) elementOffset << elementShift;
   }
 
   /**

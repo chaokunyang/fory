@@ -36,6 +36,7 @@ import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.MathUtils;
@@ -84,7 +85,11 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   private static boolean jdkInternalFieldAccess() {
-    return !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_STRING_FIELD_ACCESS;
+    // Native-image runtime string layout is not a HotSpot Unsafe-offset contract; use public
+    // string copies there even when the image build can see JDK private fields.
+    return !AndroidSupport.IS_ANDROID
+        && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+        && _JDKAccess.JDK_STRING_FIELD_ACCESS;
   }
 
   private final boolean compressString;

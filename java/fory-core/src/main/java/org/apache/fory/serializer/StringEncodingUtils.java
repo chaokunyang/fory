@@ -17,22 +17,73 @@
  * under the License.
  */
 
-package org.apache.fory.util;
+package org.apache.fory.serializer;
 
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_ASCII_MASK;
+import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_LATIN_MASK;
 
+import org.apache.fory.memory.LittleEndian;
+import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.util.MathUtils;
 
 /** String Encoding Utils. */
 public class StringEncodingUtils {
+  private static final byte LATIN1 = 0;
+  private static final byte UTF16 = 1;
+  private static final byte UTF8 = 2;
+
+  public static boolean isLatin(char[] chars) {
+    return isLatin(chars, 0);
+  }
+
+  public static boolean isLatin(char[] chars, int start) {
+    if (start > chars.length) {
+      return false;
+    }
+    int numChars = chars.length;
+    int charIndex = start;
+    while (charIndex + 4 <= numChars) {
+      // Check 4 chars in a vectorized way. See CompressStringSuite.latinSuperWordCheck.
+      long multiChars = PlatformStringUtils.getCharsLong(chars, charIndex);
+      if ((multiChars & MULTI_CHARS_NON_LATIN_MASK) != 0) {
+        return false;
+      }
+      charIndex += 4;
+    }
+    for (int i = charIndex; i < numChars; i++) {
+      if (chars[i] > 0xFF) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static boolean isLatin(char[] chars, int offset, int count) {
+    int end = offset + count;
+    int vectorizedChars = count & ~3;
+    int vectorEnd = offset + vectorizedChars;
+    for (int charIndex = offset; charIndex < vectorEnd; charIndex += 4) {
+      long multiChars = PlatformStringUtils.getCharsLong(chars, charIndex);
+      if ((multiChars & MULTI_CHARS_NON_LATIN_MASK) != 0) {
+        return false;
+      }
+    }
+    for (int i = vectorEnd; i < end; i++) {
+      if (chars[i] > 0xFF) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   /** A fast convert algorithm to convert an utf16 char array into an utf8 byte array. */
   public static int convertUTF16ToUTF8(char[] src, byte[] dst, int dp) {
     int numChars = src.length;
-    for (int charOffset = 0, arrayOffset = UnsafeOps.CHAR_ARRAY_OFFSET; charOffset < numChars; ) {
+    for (int charOffset = 0; charOffset < numChars; ) {
       if (charOffset + 4 <= numChars
-          && (UnsafeOps.getLong(src, arrayOffset) & MULTI_CHARS_NON_ASCII_MASK) == 0) {
+          && (PlatformStringUtils.getCharsLong(src, charOffset) & MULTI_CHARS_NON_ASCII_MASK)
+              == 0) {
         // ascii only
         dst[dp] = (byte) src[charOffset];
         dst[dp + 1] = (byte) src[charOffset + 1];
@@ -40,10 +91,8 @@ public class StringEncodingUtils {
         dst[dp + 3] = (byte) src[charOffset + 3];
         dp += 4;
         charOffset += 4;
-        arrayOffset += 8;
       } else {
         char c = src[charOffset++];
-        arrayOffset += 2;
         if (c < 0x80) {
           dst[dp++] = (byte) c;
         } else if (c < 0x800) {
@@ -54,7 +103,6 @@ public class StringEncodingUtils {
           utf8ToChar2(src, charOffset, c, dst, dp);
           dp += 4;
           charOffset++;
-          arrayOffset += 2;
         } else {
           dst[dp] = (byte) (0xe0 | ((c >> 12)));
           dst[dp + 1] = (byte) (0x80 | ((c >> 6) & 0x3f));
@@ -69,20 +117,18 @@ public class StringEncodingUtils {
   /** A fast convert algorithm to convert an utf16 char array slice into an utf8 byte array. */
   public static int convertUTF16ToUTF8(char[] src, int offset, int len, byte[] dst, int dp) {
     int end = offset + len;
-    for (int charOffset = offset, arrayOffset = UnsafeOps.CHAR_ARRAY_OFFSET + (offset << 1);
-        charOffset < end; ) {
+    for (int charOffset = offset; charOffset < end; ) {
       if (charOffset + 4 <= end
-          && (UnsafeOps.getLong(src, arrayOffset) & MULTI_CHARS_NON_ASCII_MASK) == 0) {
+          && (PlatformStringUtils.getCharsLong(src, charOffset) & MULTI_CHARS_NON_ASCII_MASK)
+              == 0) {
         dst[dp] = (byte) src[charOffset];
         dst[dp + 1] = (byte) src[charOffset + 1];
         dst[dp + 2] = (byte) src[charOffset + 2];
         dst[dp + 3] = (byte) src[charOffset + 3];
         dp += 4;
         charOffset += 4;
-        arrayOffset += 8;
       } else {
         char c = src[charOffset++];
-        arrayOffset += 2;
         if (c < 0x80) {
           dst[dp++] = (byte) c;
         } else if (c < 0x800) {
@@ -96,7 +142,6 @@ public class StringEncodingUtils {
           utf8ToChar2(src, charOffset, c, dst, dp);
           dp += 4;
           charOffset++;
-          arrayOffset += 2;
         } else {
           dst[dp] = (byte) (0xe0 | ((c >> 12)));
           dst[dp + 1] = (byte) (0x80 | ((c >> 6) & 0x3f));
@@ -113,9 +158,7 @@ public class StringEncodingUtils {
     int numBytes = src.length;
     for (int offset = 0; offset < numBytes; ) {
       if (offset + 8 <= numBytes
-          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset)
-                  & MULTI_CHARS_NON_ASCII_MASK)
-              == 0) {
+          && (PlatformStringUtils.getBytesLong(src, offset) & MULTI_CHARS_NON_ASCII_MASK) == 0) {
         // ascii only
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           dst[dp] = src[offset];
@@ -131,7 +174,7 @@ public class StringEncodingUtils {
         dp += 4;
         offset += 8;
       } else {
-        char c = UnsafeOps.getChar(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset);
+        char c = PlatformStringUtils.getBytesChar(src, offset);
         offset += 2;
 
         if (c < 0x80) {
@@ -169,8 +212,7 @@ public class StringEncodingUtils {
 
     while (offset < end) {
       if (offset + 8 <= end
-          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset) & 0x8080808080808080L)
-              == 0) {
+          && (PlatformStringUtils.getBytesLong(src, offset) & 0x8080808080808080L) == 0) {
         // ascii only
         if (NativeByteOrder.IS_LITTLE_ENDIAN) {
           dst[dp] = src[offset];
@@ -292,8 +334,7 @@ public class StringEncodingUtils {
     int dp = 0;
     while (offset < end) {
       if (offset + 8 <= end
-          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset) & 0x8080808080808080L)
-              == 0) {
+          && (PlatformStringUtils.getBytesLong(src, offset) & 0x8080808080808080L) == 0) {
         // ascii only
         dst[dp] = (char) src[offset];
         dst[dp + 1] = (char) src[offset + 1];
@@ -410,8 +451,7 @@ public class StringEncodingUtils {
     char d;
     if (c > Character.MAX_HIGH_SURROGATE
         || numBytes - offset < 1
-        || (d = UnsafeOps.getChar(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset))
-            < Character.MIN_LOW_SURROGATE
+        || (d = PlatformStringUtils.getBytesChar(src, offset)) < Character.MIN_LOW_SURROGATE
         || d > Character.MAX_LOW_SURROGATE) {
       throw new RuntimeException("malformed input off : " + offset);
     }
@@ -466,8 +506,7 @@ public class StringEncodingUtils {
     while (offset < end) {
       // Vectorized ASCII fast path
       if (offset + 8 <= end
-          && (UnsafeOps.getLong(src, UnsafeOps.BYTE_ARRAY_OFFSET + offset) & 0x8080808080808080L)
-              == 0) {
+          && (PlatformStringUtils.getBytesLong(src, offset) & 0x8080808080808080L) == 0) {
         // 8 ASCII bytes - direct copy
         dst[dstPos] = src[offset];
         dst[dstPos + 1] = src[offset + 1];
@@ -508,7 +547,7 @@ public class StringEncodingUtils {
 
     // Check 8 bytes at a time
     for (int i = offset; i < vectorizedEnd; i += 8) {
-      if ((UnsafeOps.getLong(bytes, UnsafeOps.BYTE_ARRAY_OFFSET + i) & 0x8080808080808080L) != 0) {
+      if ((PlatformStringUtils.getBytesLong(bytes, i) & 0x8080808080808080L) != 0) {
         return false;
       }
     }
@@ -521,5 +560,232 @@ public class StringEncodingUtils {
     }
 
     return true;
+  }
+
+  static void writeCharsLatin1WithOffset(
+      StringSerializer serializer, MemoryBuffer buffer, char[] chars, int offset, int count) {
+    int writerIndex = buffer.writerIndex();
+    long header = ((long) count << 2) | LATIN1;
+    buffer.ensure(writerIndex + 5 + count);
+    byte[] targetArray = buffer.getHeapMemory();
+    if (targetArray != null) {
+      final int targetIndex = buffer._unsafeHeapWriterIndex();
+      int arrIndex = targetIndex;
+      arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
+      writerIndex += arrIndex - targetIndex;
+      for (int i = 0; i < count; i++) {
+        targetArray[arrIndex + i] = (byte) chars[offset + i];
+      }
+    } else {
+      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
+      final byte[] tmpArray = serializer.getByteArray(count);
+      for (int i = 0; i < count; i++) {
+        tmpArray[i] = (byte) chars[offset + i];
+      }
+      buffer.put(writerIndex, tmpArray, 0, count);
+    }
+    writerIndex += count;
+    buffer._unsafeWriterIndex(writerIndex);
+  }
+
+  static void writeCharsUTF16WithOffset(
+      StringSerializer serializer, MemoryBuffer buffer, char[] chars, int offset, int count) {
+    int numBytes = MathUtils.doubleExact(count);
+    int writerIndex = buffer.writerIndex();
+    long header = ((long) numBytes << 2) | UTF16;
+    buffer.ensure(writerIndex + 5 + numBytes);
+    final byte[] targetArray = buffer.getHeapMemory();
+    if (targetArray != null) {
+      final int targetIndex = buffer._unsafeHeapWriterIndex();
+      int arrIndex = targetIndex;
+      arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
+      writerIndex += arrIndex - targetIndex + numBytes;
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
+        // FIXME JDK11 utf16 string uses little-endian order.
+        PlatformStringUtils.copyCharsToBytes(chars, offset, targetArray, arrIndex, numBytes);
+      } else {
+        writeCharsUTF16BEToHeap(chars, offset, arrIndex, numBytes, targetArray);
+      }
+    } else {
+      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
+      if (NativeByteOrder.IS_LITTLE_ENDIAN) {
+        writerIndex =
+            offHeapWriteCharsUTF16WithOffset(
+                serializer, buffer, chars, offset, writerIndex, numBytes);
+      } else {
+        writerIndex =
+            offHeapWriteCharsUTF16BEWithOffset(
+                serializer, buffer, chars, offset, writerIndex, numBytes);
+      }
+    }
+    buffer._unsafeWriterIndex(writerIndex);
+  }
+
+  static void writeCharsUTF8WithOffset(
+      StringSerializer serializer, MemoryBuffer buffer, char[] chars, int offset, int count) {
+    int estimateMaxBytes = count * 3;
+    int approxNumBytes = (int) (count * 1.5) + 1;
+    int writerIndex = buffer.writerIndex();
+    buffer.ensure(writerIndex + 9 + estimateMaxBytes);
+    byte[] targetArray = buffer.getHeapMemory();
+    if (targetArray != null) {
+      int targetIndex = buffer._unsafeHeapWriterIndex();
+      int headerPos = targetIndex;
+      int arrIndex = targetIndex;
+      long header = ((long) approxNumBytes << 2) | UTF8;
+      int headerBytesWritten = LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
+      arrIndex += headerBytesWritten;
+      writerIndex += headerBytesWritten;
+      targetIndex = convertUTF16ToUTF8(chars, offset, count, targetArray, arrIndex);
+      byte stashedByte = targetArray[arrIndex];
+      int written = targetIndex - arrIndex;
+      header = ((long) written << 2) | UTF8;
+      int diff =
+          LittleEndian.putVarUint36Small(targetArray, headerPos, header) - headerBytesWritten;
+      if (diff != 0) {
+        handleWriteCharsUTF8UnalignedHeaderBytes(targetArray, arrIndex, diff, written, stashedByte);
+      }
+      buffer._unsafeWriterIndex(writerIndex + written + diff);
+    } else {
+      final byte[] tmpArray = serializer.getByteArray(estimateMaxBytes);
+      int written = convertUTF16ToUTF8(chars, offset, count, tmpArray, 0);
+      long header = ((long) written << 2) | UTF8;
+      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
+      buffer.put(writerIndex, tmpArray, 0, written);
+      buffer._unsafeWriterIndex(writerIndex + written);
+    }
+  }
+
+  static void writeCharsUTF8PerfOptimizedWithOffset(
+      StringSerializer serializer, MemoryBuffer buffer, char[] chars, int offset, int count) {
+    int estimateMaxBytes = count * 3;
+    int numBytes = MathUtils.doubleExact(count);
+    int writerIndex = buffer.writerIndex();
+    long header = ((long) numBytes << 2) | UTF8;
+    buffer.ensure(writerIndex + 9 + estimateMaxBytes);
+    byte[] targetArray = buffer.getHeapMemory();
+    if (targetArray != null) {
+      int targetIndex = buffer._unsafeHeapWriterIndex();
+      int arrIndex = targetIndex;
+      arrIndex += LittleEndian.putVarUint36Small(targetArray, arrIndex, header);
+      writerIndex += arrIndex - targetIndex;
+      targetIndex = convertUTF16ToUTF8(chars, offset, count, targetArray, arrIndex + 4);
+      int written = targetIndex - arrIndex - 4;
+      buffer._unsafePutInt32(writerIndex, written);
+      buffer._unsafeWriterIndex(writerIndex + 4 + written);
+    } else {
+      final byte[] tmpArray = serializer.getByteArray(estimateMaxBytes);
+      int written = convertUTF16ToUTF8(chars, offset, count, tmpArray, 0);
+      writerIndex += buffer._unsafePutVarUint36Small(writerIndex, header);
+      buffer._unsafePutInt32(writerIndex, written);
+      writerIndex += 4;
+      buffer.put(writerIndex, tmpArray, 0, written);
+      buffer._unsafeWriterIndex(writerIndex + written);
+    }
+  }
+
+  static byte bestCoder(char[] chars, int offset, int count) {
+    int sampleNum = Math.min(64, count);
+    int vectorizedLen = sampleNum >> 2;
+    int vectorizedChars = vectorizedLen << 2;
+    int asciiCount = 0;
+    int latin1Count = 0;
+    int charOffset = offset;
+    int vectorEnd = offset + vectorizedChars;
+    for (; charOffset < vectorEnd; charOffset += 4) {
+      long multiChars = PlatformStringUtils.getCharsLong(chars, charOffset);
+      if ((multiChars & MULTI_CHARS_NON_ASCII_MASK) == 0) {
+        latin1Count += 4;
+        asciiCount += 4;
+      } else if ((multiChars & MULTI_CHARS_NON_LATIN_MASK) == 0) {
+        latin1Count += 4;
+        for (int i = 0; i < 4; ++i) {
+          if (chars[charOffset + i] < 0x80) {
+            asciiCount++;
+          }
+        }
+      } else {
+        for (int i = 0; i < 4; ++i) {
+          char c = chars[charOffset + i];
+          if (c < 0x80) {
+            latin1Count++;
+            asciiCount++;
+          } else if (c <= 0xFF) {
+            latin1Count++;
+          }
+        }
+      }
+    }
+
+    for (int i = vectorizedChars; i < sampleNum; i++) {
+      char c = chars[offset + i];
+      if (c < 0x80) {
+        latin1Count++;
+        asciiCount++;
+      } else if (c <= 0xFF) {
+        latin1Count++;
+      }
+    }
+
+    if (latin1Count == count || (latin1Count == sampleNum && isLatin(chars, offset, count))) {
+      return LATIN1;
+    } else if (asciiCount >= sampleNum * 0.5) {
+      return UTF8;
+    } else {
+      return UTF16;
+    }
+  }
+
+  private static void handleWriteCharsUTF8UnalignedHeaderBytes(
+      byte[] targetArray, int arrIndex, int diff, int written, byte stashed) {
+    if (diff == 1) {
+      System.arraycopy(targetArray, arrIndex + 1, targetArray, arrIndex + 2, written - 1);
+      targetArray[arrIndex + 1] = stashed;
+    } else {
+      System.arraycopy(targetArray, arrIndex, targetArray, arrIndex - 1, written);
+    }
+  }
+
+  private static void writeCharsUTF16BEToHeap(
+      char[] chars, int offset, int arrIndex, int numBytes, byte[] targetArray) {
+    int charIndex = offset;
+    for (int i = arrIndex, end = i + numBytes; i < end; i += 2) {
+      char c = chars[charIndex++];
+      targetArray[i] = (byte) c;
+      targetArray[i + 1] = (byte) (c >>> 8);
+    }
+  }
+
+  private static int offHeapWriteCharsUTF16WithOffset(
+      StringSerializer serializer,
+      MemoryBuffer buffer,
+      char[] chars,
+      int offset,
+      int writerIndex,
+      int numBytes) {
+    byte[] tmpArray = serializer.getByteArray(numBytes);
+    PlatformStringUtils.copyCharsToBytes(chars, offset, tmpArray, 0, numBytes);
+    buffer.put(writerIndex, tmpArray, 0, numBytes);
+    writerIndex += numBytes;
+    return writerIndex;
+  }
+
+  private static int offHeapWriteCharsUTF16BEWithOffset(
+      StringSerializer serializer,
+      MemoryBuffer buffer,
+      char[] chars,
+      int offset,
+      int writerIndex,
+      int numBytes) {
+    byte[] tmpArray = serializer.getByteArray(numBytes);
+    int charIndex = offset;
+    for (int i = 0; i < numBytes; i += 2) {
+      char c = chars[charIndex++];
+      tmpArray[i] = (byte) c;
+      tmpArray[i + 1] = (byte) (c >>> 8);
+    }
+    buffer.put(writerIndex, tmpArray, 0, numBytes);
+    writerIndex += numBytes;
+    return writerIndex;
   }
 }

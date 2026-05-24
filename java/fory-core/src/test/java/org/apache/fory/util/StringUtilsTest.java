@@ -26,6 +26,7 @@ import static org.testng.Assert.assertTrue;
 import org.apache.fory.ForyTestBase;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.serializer.StringEncodingUtils;
 import org.testng.annotations.Test;
 
 public class StringUtilsTest extends ForyTestBase {
@@ -153,23 +154,23 @@ public class StringUtilsTest extends ForyTestBase {
 
   @Test
   public void testLatinCheck() {
-    assertTrue(StringUtils.isLatin("Fory".toCharArray()));
-    assertTrue(StringUtils.isLatin(StringUtils.random(8 * 10).toCharArray()));
+    assertTrue(StringEncodingUtils.isLatin("Fory".toCharArray()));
+    assertTrue(StringEncodingUtils.isLatin(StringUtils.random(8 * 10).toCharArray()));
     // test unaligned
-    assertTrue(StringUtils.isLatin((StringUtils.random(8 * 10) + "1").toCharArray()));
-    assertTrue(StringUtils.isLatin((StringUtils.random(8 * 10) + "12").toCharArray()));
-    assertTrue(StringUtils.isLatin((StringUtils.random(8 * 10) + "123").toCharArray()));
-    assertFalse(StringUtils.isLatin("你好, Fory".toCharArray()));
-    assertFalse(StringUtils.isLatin((StringUtils.random(8 * 10) + "你好").toCharArray()));
-    assertFalse(StringUtils.isLatin((StringUtils.random(8 * 10) + "1你好").toCharArray()));
-    assertFalse(StringUtils.isLatin((StringUtils.random(11) + "你").toCharArray()));
-    assertFalse(StringUtils.isLatin((StringUtils.random(10) + "你好").toCharArray()));
-    assertFalse(StringUtils.isLatin((StringUtils.random(9) + "性能好").toCharArray()));
-    assertFalse(StringUtils.isLatin("\u1234".toCharArray()));
-    assertFalse(StringUtils.isLatin("a\u1234".toCharArray()));
-    assertFalse(StringUtils.isLatin("ab\u1234".toCharArray()));
-    assertFalse(StringUtils.isLatin("abc\u1234".toCharArray()));
-    assertFalse(StringUtils.isLatin("abcd\u1234".toCharArray()));
-    assertFalse(StringUtils.isLatin("Javaone Keynote\u1234".toCharArray()));
+    assertTrue(StringEncodingUtils.isLatin((StringUtils.random(8 * 10) + "1").toCharArray()));
+    assertTrue(StringEncodingUtils.isLatin((StringUtils.random(8 * 10) + "12").toCharArray()));
+    assertTrue(StringEncodingUtils.isLatin((StringUtils.random(8 * 10) + "123").toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin("你好, Fory".toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin((StringUtils.random(8 * 10) + "你好").toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin((StringUtils.random(8 * 10) + "1你好").toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin((StringUtils.random(11) + "你").toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin((StringUtils.random(10) + "你好").toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin((StringUtils.random(9) + "性能好").toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin("\u1234".toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin("a\u1234".toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin("ab\u1234".toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin("abc\u1234".toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin("abcd\u1234".toCharArray()));
+    assertFalse(StringEncodingUtils.isLatin("Javaone Keynote\u1234".toCharArray()));
   }
 }

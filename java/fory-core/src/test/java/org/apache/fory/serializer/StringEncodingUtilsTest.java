@@ -17,7 +17,7 @@
  * under the License.
  */
 
-package org.apache.fory.util;
+package org.apache.fory.serializer;
 
 import static org.testng.Assert.assertEquals;
 

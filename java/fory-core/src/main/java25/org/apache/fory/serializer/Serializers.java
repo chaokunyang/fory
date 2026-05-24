@@ -70,7 +70,6 @@ import org.apache.fory.serializer.scala.SingletonCollectionSerializer;
 import org.apache.fory.serializer.scala.SingletonMapSerializer;
 import org.apache.fory.serializer.scala.SingletonObjectSerializer;
 import org.apache.fory.util.ExceptionUtils;
-import org.apache.fory.util.StringUtils;
 
 /** Serialization utils and common serializers. */
 @SuppressWarnings({"rawtypes", "unchecked"})
@@ -489,7 +488,7 @@ public class Serializers {
           return;
         }
         char[] v = (char[]) rawValue;
-        if (StringUtils.isLatin(v)) {
+        if (StringEncodingUtils.isLatin(v)) {
           stringSerializer.writeCharsLatin1(buffer, v, value.length());
         } else {
           stringSerializer.writeCharsUTF16(buffer, v, value.length());

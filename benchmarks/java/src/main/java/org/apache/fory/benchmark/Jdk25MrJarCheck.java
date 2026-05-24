@@ -23,7 +23,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.serializer.StringSerializer;
 
 /** Runtime smoke check that JDK25 benchmark runs load the multi-release Fory classes. */
 public final class Jdk25MrJarCheck {
@@ -34,9 +33,17 @@ public final class Jdk25MrJarCheck {
     verifyClass(UnsafeOps.class);
     verifyClass(_JDKAccess.class);
     verifyClass(FieldAccessor.class);
-    verifyClass(StringSerializer.class);
+    verifyClass("org.apache.fory.serializer.PlatformStringUtils");
     if (_JDKAccess.UNSAFE != null) {
       throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe-backed _JDKAccess");
+    }
+  }
+
+  private static void verifyClass(String className) {
+    try {
+      verifyClass(Class.forName(className));
+    } catch (ClassNotFoundException e) {
+      throw new IllegalStateException("JDK25 benchmark jar is missing " + className, e);
     }
   }
 

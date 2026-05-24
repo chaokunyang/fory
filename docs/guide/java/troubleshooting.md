@@ -183,10 +183,15 @@ For example, direct `ByteBuffer` wrapping on the module path requires:
 --add-opens=java.base/java.nio=ALL-UNNAMED,org.apache.fory.core,org.apache.fory.format
 ```
 
-Normal classes with final instance fields need a constructor that covers those final fields when
-Unsafe allocation is denied. Annotate the constructor with
-`java.beans.ConstructorProperties`, or compile the class with `-parameters` so Fory can bind
-constructor parameters to fields. Non-final fields can still be restored after construction.
+Normal classes with final instance fields require final-field mutation to be enabled for Fory core
+when Unsafe allocation is denied:
+
+```bash
+--enable-final-field-mutation=org.apache.fory.core
+```
+
+Fory restores those final fields through method-handle based access. Non-final fields can still be
+restored through generated direct field assignment where available.
 
 The vectorized Arrow APIs in `fory-format` depend on Apache Arrow's memory layer. With the current
 Arrow dependency, those APIs are unavailable when `--sun-misc-unsafe-memory-access=deny` is set

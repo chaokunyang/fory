@@ -239,6 +239,115 @@ public class ObjectSerializerTest extends ForyTestBase {
     private ConstructorBackrefRoot root;
   }
 
+  public static final class FinalNoArgBean {
+    private final int id;
+    private final String name;
+    private int count;
+
+    public FinalNoArgBean() {
+      id = -1;
+      name = "default";
+    }
+
+    private FinalNoArgBean(int value, String text, int total) {
+      id = value;
+      name = text;
+      count = total;
+    }
+  }
+
+  public static final class FinalPostCtorBean {
+    private final int id;
+    private String label;
+
+    @ConstructorProperties("label")
+    public FinalPostCtorBean(String label) {
+      id = -1;
+      this.label = label;
+    }
+
+    private FinalPostCtorBean(int value, String label) {
+      id = value;
+      this.label = label;
+    }
+  }
+
+  @Test
+  public void testFinalNoArgRestore() {
+    FinalNoArgBean value = new FinalNoArgBean(7, "source", 9);
+    for (boolean codegen : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .withRefTracking(true)
+              .withCodegen(codegen)
+              .requireClassRegistration(false)
+              .build();
+      FinalNoArgBean newValue = (FinalNoArgBean) fory.deserialize(fory.serialize(value));
+      assertEquals(newValue.id, value.id);
+      assertEquals(newValue.name, value.name);
+      assertEquals(newValue.count, value.count);
+    }
+  }
+
+  @Test
+  public void testFinalNoArgRestoreCodegen() {
+    FinalNoArgBean value = new FinalNoArgBean(7, "source", 9);
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    Serializer<FinalNoArgBean> serializer =
+        Serializers.newSerializer(
+            fory,
+            FinalNoArgBean.class,
+            CodecUtils.loadOrGenObjectCodecClass(FinalNoArgBean.class, fory));
+    FinalNoArgBean newValue = roundTripWithSerializer(fory, serializer, value);
+    assertEquals(newValue.id, value.id);
+    assertEquals(newValue.name, value.name);
+    assertEquals(newValue.count, value.count);
+  }
+
+  @Test
+  public void testFinalPostCtorRestore() {
+    FinalPostCtorBean value = new FinalPostCtorBean(8, "ctor");
+    for (boolean codegen : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .withRefTracking(true)
+              .withCodegen(codegen)
+              .requireClassRegistration(false)
+              .build();
+      FinalPostCtorBean newValue = (FinalPostCtorBean) fory.deserialize(fory.serialize(value));
+      assertEquals(newValue.id, value.id);
+      assertEquals(newValue.label, value.label);
+    }
+  }
+
+  @Test
+  public void testFinalPostCtorCodegen() {
+    FinalPostCtorBean value = new FinalPostCtorBean(8, "ctor");
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(true)
+            .requireClassRegistration(false)
+            .build();
+    Serializer<FinalPostCtorBean> serializer =
+        Serializers.newSerializer(
+            fory,
+            FinalPostCtorBean.class,
+            CodecUtils.loadOrGenObjectCodecClass(FinalPostCtorBean.class, fory));
+    FinalPostCtorBean newValue = roundTripWithSerializer(fory, serializer, value);
+    assertEquals(newValue.id, value.id);
+    assertEquals(newValue.label, value.label);
+  }
+
   @Test
   public void testConstructorFieldProtocolOrder() {
     ConstructorOrder value = new ConstructorOrder("root");

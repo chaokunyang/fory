@@ -28,7 +28,6 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -110,9 +109,6 @@ public class ObjectCreators {
     if (JdkVersion.MAJOR_VERSION >= 25 && noArgConstructor == null) {
       return new ConstructorObjectCreator<>(type);
     }
-    if (JdkVersion.MAJOR_VERSION >= 25 && hasFinalFields(type)) {
-      return new ConstructorObjectCreator<>(type);
-    }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       if (noArgConstructor != null) {
         return new DeclaredNoArgCtrObjectCreator<>(type);
@@ -124,15 +120,6 @@ public class ObjectCreators {
       return new UnsafeObjectCreator<>(type);
     }
     return new DeclaredNoArgCtrObjectCreator<>(type);
-  }
-
-  private static boolean hasFinalFields(Class<?> type) {
-    for (Field field : Descriptor.getFields(type)) {
-      if (Modifier.isFinal(field.getModifiers())) {
-        return true;
-      }
-    }
-    return false;
   }
 
   public static boolean supportsJdk25Creation(Class<?> type) {
@@ -179,7 +166,6 @@ public class ObjectCreators {
     Map<Integer, Field> fieldsById = new LinkedHashMap<>();
     Set<String> duplicateNames = new LinkedHashSet<>();
     Set<Integer> duplicateIds = new LinkedHashSet<>();
-    Set<Field> finalFields = new LinkedHashSet<>();
     for (Field field : fields) {
       fieldsByNameList.computeIfAbsent(field.getName(), name -> new ArrayList<>()).add(field);
       Field previous = fieldsByName.put(field.getName(), field);
@@ -192,9 +178,6 @@ public class ObjectCreators {
         if (previous != null) {
           duplicateIds.add(foryField.id());
         }
-      }
-      if (Modifier.isFinal(field.getModifiers())) {
-        finalFields.add(field);
       }
     }
     ConstructorMatch<T> best = null;
@@ -210,20 +193,15 @@ public class ObjectCreators {
               fieldsByNameList,
               fieldsById,
               duplicateNames,
-              duplicateIds,
-              finalFields);
+              duplicateIds);
       if (match != null && (best == null || match.score > best.score)) {
         best = match;
       }
     }
     if (best == null) {
-      String requirement =
-          finalFields.isEmpty()
-              ? "a bindable constructor because no no-arg constructor is available"
-              : "a constructor covering final fields " + finalFields;
       throw new ForyException(
           "JDK25 zero-Unsafe mode requires "
-              + requirement
+              + "a bindable constructor because no no-arg constructor is available"
               + " for "
               + type
               + ". Annotate the constructor with java.beans.ConstructorProperties or compile "
@@ -239,22 +217,18 @@ public class ObjectCreators {
       Map<String, List<Field>> fieldsByNameList,
       Map<Integer, Field> fieldsById,
       Set<String> duplicateNames,
-      Set<Integer> duplicateIds,
-      Set<Field> finalFields) {
+      Set<Integer> duplicateIds) {
     Field[] fields =
         constructorFields(
             constructor, fieldsByName, fieldsByNameList, fieldsById, duplicateNames, duplicateIds);
     if (fields == null) {
       return null;
     }
-    return matchConstructorFields(constructor, finalFields, fields);
+    return matchConstructorFields(constructor, fields);
   }
 
   private static <T> ConstructorMatch<T> matchConstructorFields(
-      Constructor<T> constructor, Set<Field> finalFields, Field[] fields) {
-    if (!containsAllFinalFields(finalFields, fields)) {
-      return null;
-    }
+      Constructor<T> constructor, Field[] fields) {
     Class<?>[] parameterTypes = constructor.getParameterTypes();
     String[] names = new String[fields.length];
     Class<?>[] declaringClasses = new Class<?>[fields.length];
@@ -272,34 +246,6 @@ public class ObjectCreators {
     }
     return new ConstructorMatch<>(
         constructor, names, declaringClasses, fieldTypes, finalFieldFlags, 300 - fields.length);
-  }
-
-  private static boolean containsAllFinalFields(Set<Field> finalFields, Field[] fields) {
-    Set<Field> selectedFields = new LinkedHashSet<>(Arrays.asList(fields));
-    for (Field finalField : finalFields) {
-      if (selectedFields.contains(finalField)) {
-        continue;
-      }
-      if (coveredBySyntheticField(finalField, selectedFields)) {
-        continue;
-      }
-      return false;
-    }
-    return true;
-  }
-
-  private static boolean coveredBySyntheticField(Field finalField, Set<Field> selectedFields) {
-    if (!finalField.isSynthetic()) {
-      return false;
-    }
-    for (Field selectedField : selectedFields) {
-      if (selectedField.isSynthetic()
-          && selectedField.getName().equals(finalField.getName())
-          && selectedField.getType() == finalField.getType()) {
-        return true;
-      }
-    }
-    return false;
   }
 
   private static Field[] constructorFields(

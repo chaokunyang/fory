@@ -90,6 +90,20 @@ public class FieldAccessorTest {
     }
   }
 
+  @Test
+  public void testFinalFieldWrites() throws Exception {
+    FinalFields fields = new FinalFields(1, "a");
+    FieldAccessor intAccessor =
+        FieldAccessor.createAccessor(FinalFields.class.getDeclaredField("intValue"));
+    intAccessor.putInt(fields, 2);
+    Assert.assertEquals(intAccessor.getInt(fields), 2);
+
+    FieldAccessor objectAccessor =
+        FieldAccessor.createAccessor(FinalFields.class.getDeclaredField("objectValue"));
+    objectAccessor.putObject(fields, "b");
+    Assert.assertEquals(objectAccessor.getObject(fields), "b");
+  }
+
   private static boolean isHidden(Class<?> cls) throws Exception {
     return (Boolean) Class.class.getMethod("isHidden").invoke(cls);
   }
@@ -179,5 +193,15 @@ public class FieldAccessorTest {
     private int i = 1;
     private String text = "a";
     private final long finalValue = 3;
+  }
+
+  private static final class FinalFields {
+    private final int intValue;
+    private final Object objectValue;
+
+    private FinalFields(int value, Object object) {
+      intValue = value;
+      objectValue = object;
+    }
   }
 }

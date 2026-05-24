@@ -407,6 +407,16 @@ public abstract class FieldAccessor {
         "Field cannot be written through supported JDK access APIs: " + field, cause);
   }
 
+  private static IllegalStateException finalMutationFailure(Field field, Throwable cause) {
+    return new IllegalStateException(
+        "Cannot write final field "
+            + field
+            + ". On JDK25+, start the JVM with "
+            + "--enable-final-field-mutation=org.apache.fory.core and open the declaring "
+            + "package to org.apache.fory.core,org.apache.fory.format.",
+        cause);
+  }
+
   private static RuntimeException getterFailure(Field field, Throwable cause) {
     return new RuntimeException("Failed to read record field: " + field, cause);
   }
@@ -450,102 +460,124 @@ public abstract class FieldAccessor {
   private abstract static class VarHandleAccessor extends FieldAccessor {
     protected final VarHandle handle;
     protected final boolean isStatic;
+    protected final boolean isFinal;
+    protected volatile MethodHandle finalSetter;
 
     VarHandleAccessor(Field field) {
       super(field, -1);
       handle = fieldHandle(field);
       isStatic = Modifier.isStatic(field.getModifiers());
+      isFinal = Modifier.isFinal(field.getModifiers());
     }
 
-    protected void setReflectively(Object obj, Object value, Throwable cause) {
+    private static MethodHandle createFinalSetter(Field field) {
       try {
-        prepareReflectiveWrite(cause);
-        field.set(target(obj), value);
+        field.setAccessible(true);
+        return privateLookup(field).unreflectSetter(field);
       } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        throw finalMutationFailure(field, e);
       }
     }
 
-    private Object target(Object obj) {
-      return isStatic ? null : obj;
-    }
-
-    private void prepareReflectiveWrite(Throwable cause) {
-      if (field.getDeclaringClass().getName().startsWith("java.")) {
+    private MethodHandle finalSetter(Throwable cause) {
+      if (isStatic || !isFinal) {
         throw unsupportedWrite(field, cause);
       }
-      field.setAccessible(true);
+      MethodHandle setter = finalSetter;
+      if (setter == null) {
+        setter = createFinalSetter(field);
+        finalSetter = setter;
+      }
+      return setter;
     }
 
-    protected void setBooleanReflectively(Object obj, boolean value, Throwable cause) {
+    protected void setFinal(Object obj, Object value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setBoolean(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
 
-    protected void setByteReflectively(Object obj, byte value, Throwable cause) {
+    protected void setFinalBoolean(Object obj, boolean value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setByte(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
 
-    protected void setCharReflectively(Object obj, char value, Throwable cause) {
+    protected void setFinalByte(Object obj, byte value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setChar(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
 
-    protected void setShortReflectively(Object obj, short value, Throwable cause) {
+    protected void setFinalChar(Object obj, char value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setShort(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
 
-    protected void setIntReflectively(Object obj, int value, Throwable cause) {
+    protected void setFinalShort(Object obj, short value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setInt(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
 
-    protected void setLongReflectively(Object obj, long value, Throwable cause) {
+    protected void setFinalInt(Object obj, int value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setLong(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
 
-    protected void setFloatReflectively(Object obj, float value, Throwable cause) {
+    protected void setFinalLong(Object obj, long value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setFloat(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
 
-    protected void setDoubleReflectively(Object obj, double value, Throwable cause) {
+    protected void setFinalFloat(Object obj, float value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
       try {
-        prepareReflectiveWrite(cause);
-        field.setDouble(target(obj), value);
-      } catch (IllegalAccessException | RuntimeException e) {
-        throw unsupportedWrite(field, e);
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
+      }
+    }
+
+    protected void setFinalDouble(Object obj, double value, Throwable cause) {
+      MethodHandle setter = finalSetter(cause);
+      checkObj(obj);
+      try {
+        setter.invoke(obj, value);
+      } catch (Throwable e) {
+        throw finalMutationFailure(field, e);
       }
     }
   }
@@ -578,6 +610,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putBoolean(Object obj, boolean value) {
+      if (isFinal) {
+        setFinalBoolean(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -586,7 +622,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setBooleanReflectively(obj, value, e);
+        setFinalBoolean(obj, value, e);
       }
     }
   }
@@ -656,6 +692,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putByte(Object obj, byte value) {
+      if (isFinal) {
+        setFinalByte(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -664,7 +704,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setByteReflectively(obj, value, e);
+        setFinalByte(obj, value, e);
       }
     }
   }
@@ -735,6 +775,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putChar(Object obj, char value) {
+      if (isFinal) {
+        setFinalChar(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -743,7 +787,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setCharReflectively(obj, value, e);
+        setFinalChar(obj, value, e);
       }
     }
   }
@@ -813,6 +857,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putShort(Object obj, short value) {
+      if (isFinal) {
+        setFinalShort(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -821,7 +869,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setShortReflectively(obj, value, e);
+        setFinalShort(obj, value, e);
       }
     }
   }
@@ -891,6 +939,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putInt(Object obj, int value) {
+      if (isFinal) {
+        setFinalInt(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -899,7 +951,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setIntReflectively(obj, value, e);
+        setFinalInt(obj, value, e);
       }
     }
   }
@@ -969,6 +1021,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putLong(Object obj, long value) {
+      if (isFinal) {
+        setFinalLong(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -977,7 +1033,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setLongReflectively(obj, value, e);
+        setFinalLong(obj, value, e);
       }
     }
   }
@@ -1047,6 +1103,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putFloat(Object obj, float value) {
+      if (isFinal) {
+        setFinalFloat(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1055,7 +1115,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setFloatReflectively(obj, value, e);
+        setFinalFloat(obj, value, e);
       }
     }
   }
@@ -1125,6 +1185,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putDouble(Object obj, double value) {
+      if (isFinal) {
+        setFinalDouble(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1133,7 +1197,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setDoubleReflectively(obj, value, e);
+        setFinalDouble(obj, value, e);
       }
     }
   }
@@ -1193,6 +1257,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void set(Object obj, Object value) {
+      if (isFinal) {
+        setFinal(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1201,7 +1269,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setReflectively(obj, value, e);
+        setFinal(obj, value, e);
       }
     }
   }
@@ -1289,6 +1357,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void set(Object obj, Object value) {
+      if (isFinal) {
+        setFinal(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1297,7 +1369,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setReflectively(obj, value, e);
+        setFinal(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1318,6 +1390,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putBoolean(Object obj, boolean value) {
+      if (isFinal) {
+        setFinalBoolean(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1326,7 +1402,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setBooleanReflectively(obj, value, e);
+        setFinalBoolean(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1347,6 +1423,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putByte(Object obj, byte value) {
+      if (isFinal) {
+        setFinalByte(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1355,7 +1435,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setByteReflectively(obj, value, e);
+        setFinalByte(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1376,6 +1456,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putChar(Object obj, char value) {
+      if (isFinal) {
+        setFinalChar(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1384,7 +1468,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setCharReflectively(obj, value, e);
+        setFinalChar(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1405,6 +1489,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putShort(Object obj, short value) {
+      if (isFinal) {
+        setFinalShort(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1413,7 +1501,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setShortReflectively(obj, value, e);
+        setFinalShort(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1434,6 +1522,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putInt(Object obj, int value) {
+      if (isFinal) {
+        setFinalInt(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1442,7 +1534,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setIntReflectively(obj, value, e);
+        setFinalInt(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1463,6 +1555,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putLong(Object obj, long value) {
+      if (isFinal) {
+        setFinalLong(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1471,7 +1567,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setLongReflectively(obj, value, e);
+        setFinalLong(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1492,6 +1588,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putFloat(Object obj, float value) {
+      if (isFinal) {
+        setFinalFloat(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1500,7 +1600,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setFloatReflectively(obj, value, e);
+        setFinalFloat(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -1521,6 +1621,10 @@ public abstract class FieldAccessor {
 
     @Override
     public void putDouble(Object obj, double value) {
+      if (isFinal) {
+        setFinalDouble(obj, value, null);
+        return;
+      }
       try {
         if (isStatic) {
           handle.set(value);
@@ -1529,7 +1633,7 @@ public abstract class FieldAccessor {
           handle.set(obj, value);
         }
       } catch (UnsupportedOperationException e) {
-        setDoubleReflectively(obj, value, e);
+        setFinalDouble(obj, value, e);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }

@@ -45,6 +45,7 @@ import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.type.TypeUtils;
@@ -88,27 +89,39 @@ public class _JDKAccess {
       throw new UnsupportedOperationException("Unsafe is not supported in this platform.");
     }
     UNSAFE = unsafe;
-    JDK_INTERNAL_FIELD_ACCESS = true;
-    JDK_LANG_FIELD_ACCESS = true;
-    JDK_STRING_FIELD_ACCESS = true;
-    JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS = true;
-    JDK_OBJECT_STREAM_FIELD_ACCESS = true;
-    JDK_COLLECTION_FIELD_ACCESS = true;
-    JDK_CONCURRENT_FIELD_ACCESS = true;
-    JDK_PROXY_FIELD_ACCESS = true;
-    if (JdkVersion.MAJOR_VERSION >= 11) {
+    if (AndroidSupport.IS_ANDROID) {
+      JDK_INTERNAL_FIELD_ACCESS = false;
+      JDK_LANG_FIELD_ACCESS = false;
+      JDK_STRING_FIELD_ACCESS = false;
+      JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS = false;
+      JDK_OBJECT_STREAM_FIELD_ACCESS = false;
+      JDK_COLLECTION_FIELD_ACCESS = false;
+      JDK_CONCURRENT_FIELD_ACCESS = false;
+      JDK_PROXY_FIELD_ACCESS = false;
+    } else {
+      JDK_INTERNAL_FIELD_ACCESS = true;
+      JDK_LANG_FIELD_ACCESS = true;
+      JDK_STRING_FIELD_ACCESS = true;
+      JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS = true;
+      JDK_OBJECT_STREAM_FIELD_ACCESS = true;
+      JDK_COLLECTION_FIELD_ACCESS = true;
+      JDK_CONCURRENT_FIELD_ACCESS = true;
+      JDK_PROXY_FIELD_ACCESS = true;
+    }
+    Object innerUnsafe = null;
+    Class<?> innerUnsafeClass = null;
+    if (!AndroidSupport.IS_ANDROID && JdkVersion.MAJOR_VERSION >= 11) {
       try {
         Field theInternalUnsafeField = Unsafe.class.getDeclaredField("theInternalUnsafe");
         theInternalUnsafeField.setAccessible(true);
-        _INNER_UNSAFE = theInternalUnsafeField.get(null);
-        _INNER_UNSAFE_CLASS = _INNER_UNSAFE.getClass();
+        innerUnsafe = theInternalUnsafeField.get(null);
+        innerUnsafeClass = innerUnsafe.getClass();
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
-    } else {
-      _INNER_UNSAFE_CLASS = null;
-      _INNER_UNSAFE = null;
     }
+    _INNER_UNSAFE = innerUnsafe;
+    _INNER_UNSAFE_CLASS = innerUnsafeClass;
   }
 
   private static final ClassValueCache<Lookup> lookupCache = ClassValueCache.newClassKeyCache(32);
@@ -121,29 +134,38 @@ public class _JDKAccess {
   public static final long STRING_OFFSET_FIELD_OFFSET;
 
   static {
-    try {
-      Field valueField = String.class.getDeclaredField("value");
-      STRING_VALUE_FIELD_IS_CHARS = valueField.getType() == char[].class;
-      STRING_VALUE_FIELD_IS_BYTES = valueField.getType() == byte[].class;
-      STRING_VALUE_FIELD_OFFSET = UNSAFE.objectFieldOffset(valueField);
-      Field countField = getStringFieldNullable("count");
-      Field offsetField = getStringFieldNullable("offset");
-      if (countField != null || offsetField != null) {
-        Preconditions.checkArgument(
-            countField != null && offsetField != null, "Current jdk not supported");
-        Preconditions.checkArgument(
-            countField.getType() == int.class && offsetField.getType() == int.class,
-            "Current jdk not supported");
-        STRING_HAS_COUNT_OFFSET = true;
-        STRING_COUNT_FIELD_OFFSET = UNSAFE.objectFieldOffset(countField);
-        STRING_OFFSET_FIELD_OFFSET = UNSAFE.objectFieldOffset(offsetField);
-      } else {
-        STRING_HAS_COUNT_OFFSET = false;
-        STRING_COUNT_FIELD_OFFSET = -1;
-        STRING_OFFSET_FIELD_OFFSET = -1;
+    if (AndroidSupport.IS_ANDROID) {
+      STRING_VALUE_FIELD_IS_CHARS = false;
+      STRING_VALUE_FIELD_IS_BYTES = false;
+      STRING_VALUE_FIELD_OFFSET = -1;
+      STRING_HAS_COUNT_OFFSET = false;
+      STRING_COUNT_FIELD_OFFSET = -1;
+      STRING_OFFSET_FIELD_OFFSET = -1;
+    } else {
+      try {
+        Field valueField = String.class.getDeclaredField("value");
+        STRING_VALUE_FIELD_IS_CHARS = valueField.getType() == char[].class;
+        STRING_VALUE_FIELD_IS_BYTES = valueField.getType() == byte[].class;
+        STRING_VALUE_FIELD_OFFSET = UNSAFE.objectFieldOffset(valueField);
+        Field countField = getStringFieldNullable("count");
+        Field offsetField = getStringFieldNullable("offset");
+        if (countField != null || offsetField != null) {
+          Preconditions.checkArgument(
+              countField != null && offsetField != null, "Current jdk not supported");
+          Preconditions.checkArgument(
+              countField.getType() == int.class && offsetField.getType() == int.class,
+              "Current jdk not supported");
+          STRING_HAS_COUNT_OFFSET = true;
+          STRING_COUNT_FIELD_OFFSET = UNSAFE.objectFieldOffset(countField);
+          STRING_OFFSET_FIELD_OFFSET = UNSAFE.objectFieldOffset(offsetField);
+        } else {
+          STRING_HAS_COUNT_OFFSET = false;
+          STRING_COUNT_FIELD_OFFSET = -1;
+          STRING_OFFSET_FIELD_OFFSET = -1;
+        }
+      } catch (NoSuchFieldException e) {
+        throw new RuntimeException(e);
       }
-    } catch (NoSuchFieldException e) {
-      throw new RuntimeException(e);
     }
   }
 

@@ -59,7 +59,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.TypeUtils;
@@ -1498,14 +1501,31 @@ public interface Expression {
         if (arguments.isEmpty() && !ReflectionUtils.hasPublicNoArgConstructor(rawType)) {
           // janino doesn't generics, so we cast manually.
           String instance = ctx.newName("instance");
+          String target;
+          String functionName;
+          String args;
+          if (JdkVersion.MAJOR_VERSION >= 25) {
+            String creator = ctx.newName("objectCreator");
+            codeBuilder
+                .append(
+                    ExpressionUtils.callFunc(
+                        ctx.type(ObjectCreator.class),
+                        creator,
+                        ctx.type(ObjectCreators.class),
+                        "getObjectCreator",
+                        clzName + ".class",
+                        false))
+                .append('\n');
+            target = creator;
+            functionName = "newInstance";
+            args = "";
+          } else {
+            target = ctx.type(_JDKAccess.class) + ".unsafe()";
+            functionName = "allocateInstance";
+            args = clzName + ".class";
+          }
           String code =
-              ExpressionUtils.callFunc(
-                  "Object",
-                  instance,
-                  ctx.type(UnsafeOps.class),
-                  "newInstance",
-                  clzName + ".class",
-                  false);
+              ExpressionUtils.callFunc("Object", instance, target, functionName, args, true);
           codeBuilder.append(code).append('\n');
           String cast =
               StringUtils.format(

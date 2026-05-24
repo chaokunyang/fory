@@ -239,7 +239,9 @@
                         src="${project.build.directory}/${project.build.finalName}.jar"
                         dest="${jdk25.mrjar.check.dir}">
                       <patternset>
+                        <include name="org/apache/fory/platform/UnsafeOps.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/memory/LittleEndian.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
                         <include
                             name="META-INF/versions/25/org/apache/fory/platform/internal/_JDKAccess.class"/>
@@ -252,8 +254,14 @@
                       </patternset>
                     </unzip>
                     <available
+                        file="${jdk25.mrjar.check.dir}/org/apache/fory/platform/UnsafeOps.class"
+                        property="jdk25.root.unsafeops.present"/>
+                    <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"
                         property="jdk25.unsafeops.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/memory/LittleEndian.class"
+                        property="jdk25.littleendian.present"/>
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"
                         property="jdk25.memorybuffer.present"/>
@@ -276,8 +284,14 @@
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"
                         property="jdk25.platformstring.present"/>
                     <fail
-                        unless="jdk25.unsafeops.present"
-                        message="JDK25 multi-release UnsafeOps class is missing from the packaged fory-core jar."/>
+                        if="jdk25.root.unsafeops.present"
+                        message="Root UnsafeOps class must not be packaged in fory-core."/>
+                    <fail
+                        if="jdk25.unsafeops.present"
+                        message="JDK25 multi-release UnsafeOps class must not be packaged in fory-core."/>
+                    <fail
+                        unless="jdk25.littleendian.present"
+                        message="JDK25 multi-release LittleEndian class is missing from the packaged fory-core jar."/>
                     <fail
                         unless="jdk25.memorybuffer.present"
                         message="JDK25 multi-release MemoryBuffer class is missing from the packaged fory-core jar."/>

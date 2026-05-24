@@ -124,6 +124,10 @@ public class _JDKAccess {
     _INNER_UNSAFE_CLASS = innerUnsafeClass;
   }
 
+  public static Unsafe unsafe() {
+    return UNSAFE;
+  }
+
   private static final ClassValueCache<Lookup> lookupCache = ClassValueCache.newClassKeyCache(32);
 
   public static final boolean STRING_VALUE_FIELD_IS_CHARS;

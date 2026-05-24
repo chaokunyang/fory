@@ -20,7 +20,6 @@
 package org.apache.fory.benchmark;
 
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
 
@@ -30,12 +29,21 @@ public final class Jdk25MrJarCheck {
 
   public static void main(String[] args) {
     verifyClass(MemoryBuffer.class);
-    verifyClass(UnsafeOps.class);
+    verifyMissing("org.apache.fory.platform.UnsafeOps");
     verifyClass(_JDKAccess.class);
     verifyClass(FieldAccessor.class);
     verifyClass("org.apache.fory.serializer.PlatformStringUtils");
     if (_JDKAccess.UNSAFE != null) {
       throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe-backed _JDKAccess");
+    }
+  }
+
+  private static void verifyMissing(String className) {
+    try {
+      Class.forName(className);
+      throw new IllegalStateException("JDK25 benchmark jar must not contain " + className);
+    } catch (ClassNotFoundException expected) {
+      // expected
     }
   }
 

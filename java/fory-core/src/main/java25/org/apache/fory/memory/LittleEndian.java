@@ -1,9 +1,3 @@
-package org.apache.fory.memory;
-
-import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.internal._JDKAccess;
-import sun.misc.Unsafe;
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -23,11 +17,9 @@ import sun.misc.Unsafe;
  * under the License.
  */
 
-public class LittleEndian {
-  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
-  private static final int BYTE_ARRAY_OFFSET =
-      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(byte[].class);
+package org.apache.fory.memory;
 
+public class LittleEndian {
   public static int putVarUint36Small(byte[] arr, int index, long v) {
     if (v >>> 7 == 0) {
       arr[index] = (byte) v;
@@ -64,21 +56,10 @@ public class LittleEndian {
   }
 
   public static long getInt64(byte[] o, int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getInt64(o, index);
-    }
-    long v = UNSAFE.getLong(o, BYTE_ARRAY_OFFSET + index);
-    return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
+    return MemoryOps.getInt64(o, index);
   }
 
   public static void putInt64(byte[] o, int index, long value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt64(o, index, value);
-      return;
-    }
-    if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
-      value = Long.reverseBytes(value);
-    }
-    UNSAFE.putLong(o, BYTE_ARRAY_OFFSET + index, value);
+    MemoryOps.putInt64(o, index, value);
   }
 }

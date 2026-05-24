@@ -113,7 +113,6 @@ jdk25_deny_options() {
   printf " %s" "--add-opens=java.base/java.util.concurrent.atomic=${fory_open_targets}"
   printf " %s" "--add-opens=java.base/java.io=${fory_open_targets}"
   printf " %s" "--add-opens=java.base/java.net=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.nio=${fory_open_targets}"
   printf " %s" "--add-opens=java.base/java.math=${fory_open_targets}"
 }
 
@@ -205,7 +204,7 @@ jdk17_plus_tests() {
   else
     java_major=$(echo "$java_version" | cut -d. -f1)
   fi
-  JDK_JAVA_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+  JDK_JAVA_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core"
   if [[ "$java_major" -ge 25 ]]; then
     JDK_JAVA_OPTIONS="$JDK_JAVA_OPTIONS $(jdk25_deny_options) $(jdk25_javac_options)"
   fi

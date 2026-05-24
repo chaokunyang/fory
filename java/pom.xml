@@ -74,6 +74,7 @@
     <janino.version>3.1.12</janino.version>
     <commons_codec.version>1.13</commons_codec.version>
     <fory.java.rootdir>${basedir}</fory.java.rootdir>
+    <argLine></argLine>
     <maven-spotless-plugin.version>3.3.0</maven-spotless-plugin.version>
     <lombok.version>1.18.38</lombok.version>
     <mockito.version>4.11.0</mockito.version>

@@ -22,8 +22,6 @@ package org.apache.fory.memory;
 import static org.apache.fory.util.Preconditions.checkArgument;
 import static org.apache.fory.util.Preconditions.checkNotNull;
 
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
@@ -33,7 +31,6 @@ import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.io.AbstractStreamReader;
 import org.apache.fory.io.ForyStreamReader;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.UnsafeOps;
 
 /**
  * A class for operations on memory managed by Fory. The buffer may be backed by heap memory (byte
@@ -69,8 +66,16 @@ import org.apache.fory.platform.UnsafeOps;
 public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
-  private static final boolean UNALIGNED = !AndroidSupport.IS_ANDROID && UnsafeOps.unaligned();
+  private static final boolean UNALIGNED = true;
   private static final ByteOrder NATIVE_ORDER = ByteOrder.nativeOrder();
+  private static final int BOOLEAN_ARRAY_OFFSET = 0;
+  private static final int BYTE_ARRAY_OFFSET = 0;
+  private static final int CHAR_ARRAY_OFFSET = 0;
+  private static final int SHORT_ARRAY_OFFSET = 0;
+  private static final int INT_ARRAY_OFFSET = 0;
+  private static final int LONG_ARRAY_OFFSET = 0;
+  private static final int FLOAT_ARRAY_OFFSET = 0;
+  private static final int DOUBLE_ARRAY_OFFSET = 0;
   private static final VarHandle BYTE_ARRAY_CHAR =
       MethodHandles.byteArrayViewVarHandle(char[].class, NATIVE_ORDER);
   private static final VarHandle BYTE_ARRAY_SHORT =
@@ -87,14 +92,6 @@ public final class MemoryBuffer {
       MethodHandles.byteBufferViewVarHandle(int[].class, NATIVE_ORDER);
   private static final VarHandle BYTE_BUFFER_LONG =
       MethodHandles.byteBufferViewVarHandle(long[].class, NATIVE_ORDER);
-  private static final ValueLayout.OfChar NATIVE_CHAR =
-      ValueLayout.JAVA_CHAR_UNALIGNED.withOrder(NATIVE_ORDER);
-  private static final ValueLayout.OfShort NATIVE_SHORT =
-      ValueLayout.JAVA_SHORT_UNALIGNED.withOrder(NATIVE_ORDER);
-  private static final ValueLayout.OfInt NATIVE_INT =
-      ValueLayout.JAVA_INT_UNALIGNED.withOrder(NATIVE_ORDER);
-  private static final ValueLayout.OfLong NATIVE_LONG =
-      ValueLayout.JAVA_LONG_UNALIGNED.withOrder(NATIVE_ORDER);
   // Global allocator instance that can be customized
   private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();
 
@@ -111,7 +108,6 @@ public final class MemoryBuffer {
   // the memory will not be released.
   ByteBuffer offHeapBuffer;
   ByteBuffer nativeOffHeapBuffer;
-  MemorySegment offHeapSegment;
   // The readable/writeable range is [address, addressLimit).
   // If the data in on the heap, this is the relative offset to the `heapMemory` byte array.
   // If the data is off the heap, this is the logical byte index into `offHeapBuffer`.
@@ -124,7 +120,6 @@ public final class MemoryBuffer {
   int readerIndex;
   int writerIndex;
   final ForyStreamReader streamReader;
-  private final MemoryAccess memoryAccess = new MemoryAccess(this);
 
   // Android branches in this class are intentional method-boundary exits.
   // Do not delete them or fold them into the JVM Unsafe path: each branch must make exactly one
@@ -205,10 +200,12 @@ public final class MemoryBuffer {
     checkNotNull(offHeapBuffer, "JDK25 MemoryBuffer requires a ByteBuffer owner for off-heap data");
     checkArgument(offHeapBuffer.isDirect(), "Only direct ByteBuffers can back off-heap MemoryBuffer");
     this.offHeapBuffer = offHeapBuffer;
-    this.nativeOffHeapBuffer = offHeapBuffer.duplicate().order(NATIVE_ORDER);
-    ByteBuffer segmentBuffer = offHeapBuffer.duplicate();
-    ByteBufferUtil.position(segmentBuffer, 0);
-    this.offHeapSegment = MemorySegment.ofBuffer(segmentBuffer);
+    ByteBuffer nativeBuffer = offHeapBuffer.duplicate().order(NATIVE_ORDER);
+    // Stream readers can expand the owner buffer limit after this duplicate is created. Keep the
+    // absolute-access view capacity-wide so JDK25 public ByteBuffer checks match the logical buffer
+    // size tracked by MemoryBuffer.
+    nativeBuffer.clear();
+    this.nativeOffHeapBuffer = nativeBuffer;
     this.heapMemory = null;
     this.address = offHeapAddress;
     this.addressLimit = this.address + size;
@@ -277,9 +274,7 @@ public final class MemoryBuffer {
       this.heapOffset = offset;
       this.offHeapBuffer = null;
       this.nativeOffHeapBuffer = null;
-      this.offHeapSegment = null;
-      // Versioned UnsafeOps array base offsets are zero on JDK25; address is a logical byte index.
-      final long startPos = UnsafeOps.BYTE_ARRAY_OFFSET + offset;
+      final long startPos = BYTE_ARRAY_OFFSET + offset;
       this.address = startPos;
       this.size = length;
       this.addressLimit = startPos + length;
@@ -369,6 +364,240 @@ public final class MemoryBuffer {
     } else {
       BYTE_BUFFER_LONG.set(nativeOffHeapBuffer, (int) pos, value);
     }
+  }
+
+  private void readBytesToArray(long srcOffset, byte[] target, int targetOffset, int numBytes) {
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      System.arraycopy(heap, toIntIndex(srcOffset), target, targetOffset, numBytes);
+    } else {
+      nativeOffHeapBuffer.get(toIntIndex(srcOffset), target, targetOffset, numBytes);
+    }
+  }
+
+  private void writeBytesFromArray(long targetOffset, byte[] source, int sourceOffset, int numBytes) {
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      System.arraycopy(source, sourceOffset, heap, toIntIndex(targetOffset), numBytes);
+    } else {
+      nativeOffHeapBuffer.put(toIntIndex(targetOffset), source, sourceOffset, numBytes);
+    }
+  }
+
+  private void readBooleansToArray(
+      long srcOffset, boolean[] target, int targetOffset, int numBytes) {
+    for (int i = 0; i < numBytes; i++) {
+      target[targetOffset + i] = loadByte(srcOffset + i) != 0;
+    }
+  }
+
+  private void writeBooleansFromArray(
+      long targetOffset, boolean[] source, int sourceOffset, int numBytes) {
+    for (int i = 0; i < numBytes; i++) {
+      storeByte(targetOffset + i, source[sourceOffset + i] ? (byte) 1 : (byte) 0);
+    }
+  }
+
+  private void readCharsToArray(long srcOffset, char[] target, int targetOffset, int numBytes) {
+    int elements = numBytes >>> 1;
+    int pos = toIntIndex(srcOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 2) {
+        target[targetOffset + i] = (char) BYTE_ARRAY_CHAR.get(heap, pos);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 2) {
+        target[targetOffset + i] = (char) BYTE_BUFFER_CHAR.get(direct, pos);
+      }
+    }
+  }
+
+  private void writeCharsFromArray(long targetOffset, char[] source, int sourceOffset, int numBytes) {
+    int elements = numBytes >>> 1;
+    int pos = toIntIndex(targetOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 2) {
+        BYTE_ARRAY_CHAR.set(heap, pos, source[sourceOffset + i]);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 2) {
+        BYTE_BUFFER_CHAR.set(direct, pos, source[sourceOffset + i]);
+      }
+    }
+  }
+
+  private void readShortsToArray(long srcOffset, short[] target, int targetOffset, int numBytes) {
+    int elements = numBytes >>> 1;
+    int pos = toIntIndex(srcOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 2) {
+        target[targetOffset + i] = (short) BYTE_ARRAY_SHORT.get(heap, pos);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 2) {
+        target[targetOffset + i] = (short) BYTE_BUFFER_SHORT.get(direct, pos);
+      }
+    }
+  }
+
+  private void writeShortsFromArray(
+      long targetOffset, short[] source, int sourceOffset, int numBytes) {
+    int elements = numBytes >>> 1;
+    int pos = toIntIndex(targetOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 2) {
+        BYTE_ARRAY_SHORT.set(heap, pos, source[sourceOffset + i]);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 2) {
+        BYTE_BUFFER_SHORT.set(direct, pos, source[sourceOffset + i]);
+      }
+    }
+  }
+
+  private void readIntsToArray(long srcOffset, int[] target, int targetOffset, int numBytes) {
+    int elements = numBytes >>> 2;
+    int pos = toIntIndex(srcOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 4) {
+        target[targetOffset + i] = (int) BYTE_ARRAY_INT.get(heap, pos);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 4) {
+        target[targetOffset + i] = (int) BYTE_BUFFER_INT.get(direct, pos);
+      }
+    }
+  }
+
+  private void writeIntsFromArray(long targetOffset, int[] source, int sourceOffset, int numBytes) {
+    int elements = numBytes >>> 2;
+    int pos = toIntIndex(targetOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 4) {
+        BYTE_ARRAY_INT.set(heap, pos, source[sourceOffset + i]);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 4) {
+        BYTE_BUFFER_INT.set(direct, pos, source[sourceOffset + i]);
+      }
+    }
+  }
+
+  private void readLongsToArray(long srcOffset, long[] target, int targetOffset, int numBytes) {
+    int elements = numBytes >>> 3;
+    int pos = toIntIndex(srcOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 8) {
+        target[targetOffset + i] = (long) BYTE_ARRAY_LONG.get(heap, pos);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 8) {
+        target[targetOffset + i] = (long) BYTE_BUFFER_LONG.get(direct, pos);
+      }
+    }
+  }
+
+  private void writeLongsFromArray(long targetOffset, long[] source, int sourceOffset, int numBytes) {
+    int elements = numBytes >>> 3;
+    int pos = toIntIndex(targetOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 8) {
+        BYTE_ARRAY_LONG.set(heap, pos, source[sourceOffset + i]);
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 8) {
+        BYTE_BUFFER_LONG.set(direct, pos, source[sourceOffset + i]);
+      }
+    }
+  }
+
+  private void readFloatsToArray(long srcOffset, float[] target, int targetOffset, int numBytes) {
+    int elements = numBytes >>> 2;
+    int pos = toIntIndex(srcOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 4) {
+        target[targetOffset + i] = Float.intBitsToFloat((int) BYTE_ARRAY_INT.get(heap, pos));
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 4) {
+        target[targetOffset + i] = Float.intBitsToFloat((int) BYTE_BUFFER_INT.get(direct, pos));
+      }
+    }
+  }
+
+  private void writeFloatsFromArray(
+      long targetOffset, float[] source, int sourceOffset, int numBytes) {
+    int elements = numBytes >>> 2;
+    int pos = toIntIndex(targetOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 4) {
+        BYTE_ARRAY_INT.set(heap, pos, Float.floatToRawIntBits(source[sourceOffset + i]));
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 4) {
+        BYTE_BUFFER_INT.set(direct, pos, Float.floatToRawIntBits(source[sourceOffset + i]));
+      }
+    }
+  }
+
+  private void readDoublesToArray(long srcOffset, double[] target, int targetOffset, int numBytes) {
+    int elements = numBytes >>> 3;
+    int pos = toIntIndex(srcOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 8) {
+        target[targetOffset + i] = Double.longBitsToDouble((long) BYTE_ARRAY_LONG.get(heap, pos));
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 8) {
+        target[targetOffset + i] = Double.longBitsToDouble((long) BYTE_BUFFER_LONG.get(direct, pos));
+      }
+    }
+  }
+
+  private void writeDoublesFromArray(
+      long targetOffset, double[] source, int sourceOffset, int numBytes) {
+    int elements = numBytes >>> 3;
+    int pos = toIntIndex(targetOffset);
+    byte[] heap = heapMemory;
+    if (heap != null) {
+      for (int i = 0; i < elements; i++, pos += 8) {
+        BYTE_ARRAY_LONG.set(heap, pos, Double.doubleToRawLongBits(source[sourceOffset + i]));
+      }
+    } else {
+      ByteBuffer direct = nativeOffHeapBuffer;
+      for (int i = 0; i < elements; i++, pos += 8) {
+        BYTE_BUFFER_LONG.set(direct, pos, Double.doubleToRawLongBits(source[sourceOffset + i]));
+      }
+    }
+  }
+
+  private static int toIntIndex(long offset) {
+    if (offset < 0 || offset > Integer.MAX_VALUE) {
+      throw new IndexOutOfBoundsException("offset out of int range: " + offset);
+    }
+    return (int) offset;
   }
 
   private static int putVarUInt32Heap(byte[] heap, int index, int value) {
@@ -500,7 +729,7 @@ public final class MemoryBuffer {
           < 0) {
         throwOOBException();
       }
-      memoryAccess.copyMemory(null, pos, dst, UnsafeOps.BYTE_ARRAY_OFFSET + offset, length);
+      readBytesToArray(pos, dst, BYTE_ARRAY_OFFSET + offset, length);
     }
   }
 
@@ -587,8 +816,7 @@ public final class MemoryBuffer {
           < 0) {
         throwOOBException();
       }
-      final long arrayAddress = UnsafeOps.BYTE_ARRAY_OFFSET + offset;
-      memoryAccess.copyMemory(src, arrayAddress, null, pos, length);
+      writeBytesFromArray(pos, src, BYTE_ARRAY_OFFSET + offset, length);
     }
   }
 
@@ -1873,12 +2101,7 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numElements;
       ensure(newIdx);
-      memoryAccess.copyMemory(
-          values,
-          UnsafeOps.BOOLEAN_ARRAY_OFFSET + offset,
-          heapMemory,
-          address + writerIdx,
-          numElements);
+      writeBooleansFromArray(address + writerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
       writerIndex = newIdx;
     }
   }
@@ -1905,12 +2128,7 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      memoryAccess.copyMemory(
-          values,
-          UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      writeCharsFromArray(address + writerIdx, values, CHAR_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
     }
   }
@@ -1937,12 +2155,7 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      memoryAccess.copyMemory(
-          values,
-          UnsafeOps.SHORT_ARRAY_OFFSET + ((long) offset << 1),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      writeShortsFromArray(address + writerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
     }
   }
@@ -1969,12 +2182,7 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      memoryAccess.copyMemory(
-          values,
-          UnsafeOps.INT_ARRAY_OFFSET + ((long) offset << 2),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      writeIntsFromArray(address + writerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
     }
   }
@@ -2001,12 +2209,7 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      memoryAccess.copyMemory(
-          values,
-          UnsafeOps.LONG_ARRAY_OFFSET + ((long) offset << 3),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      writeLongsFromArray(address + writerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
     }
   }
@@ -2033,12 +2236,7 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      memoryAccess.copyMemory(
-          values,
-          UnsafeOps.FLOAT_ARRAY_OFFSET + ((long) offset << 2),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      writeFloatsFromArray(address + writerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
     }
   }
@@ -2065,12 +2263,7 @@ public final class MemoryBuffer {
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
-      memoryAccess.copyMemory(
-          values,
-          UnsafeOps.DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
-          heapMemory,
-          address + writerIdx,
-          numBytes);
+      writeDoublesFromArray(address + writerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
     }
   }
@@ -3244,13 +3437,7 @@ public final class MemoryBuffer {
       streamReader.readTo(bytes, 0, length);
       return bytes;
     }
-    byte[] heapMemory = this.heapMemory;
-    if (heapMemory != null) {
-      // System.arraycopy faster for some jdk than Unsafe.
-      System.arraycopy(heapMemory, heapOffset + readerIdx, bytes, 0, length);
-    } else {
-      memoryAccess.copyMemory(null, address + readerIdx, bytes, UnsafeOps.BYTE_ARRAY_OFFSET, length);
-    }
+    readBytesToArray(address + readerIdx, bytes, BYTE_ARRAY_OFFSET, length);
     readerIndex = readerIdx + length;
     return bytes;
   }
@@ -3305,7 +3492,7 @@ public final class MemoryBuffer {
     } else {
       long start = address + readerIdx;
       for (int i = 0; i < len; i++) {
-        result |= ((long) memoryAccess.getByte(null, start + i) & 0xff) << (i * 8);
+        result |= ((long) loadByte(start + i) & 0xff) << (i * 8);
       }
     }
     return result;
@@ -3415,13 +3602,7 @@ public final class MemoryBuffer {
       streamReader.readTo(arr, 0, numBytes);
       return arr;
     }
-    byte[] heapMemory = this.heapMemory;
-    if (heapMemory != null) {
-      System.arraycopy(heapMemory, heapOffset + readerIdx, arr, 0, numBytes);
-    } else {
-      memoryAccess.copyMemory(
-          null, address + readerIdx, arr, UnsafeOps.BYTE_ARRAY_OFFSET, numBytes);
-    }
+    readBytesToArray(address + readerIdx, arr, BYTE_ARRAY_OFFSET, numBytes);
     readerIndex = readerIdx + numBytes;
     return arr;
   }
@@ -3440,12 +3621,7 @@ public final class MemoryBuffer {
         streamReader.readTo(values, 0, numBytes);
         return;
       }
-      byte[] heapMemory = this.heapMemory;
-      if (heapMemory != null) {
-        System.arraycopy(heapMemory, heapOffset + readerIdx, values, 0, numBytes);
-      } else {
-        memoryAccess.copyMemory(null, address + readerIdx, values, UnsafeOps.BYTE_ARRAY_OFFSET, numBytes);
-      }
+      readBytesToArray(address + readerIdx, values, BYTE_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3464,8 +3640,7 @@ public final class MemoryBuffer {
         streamReader.readBooleans(values, 0, numBytes);
         return;
       }
-      memoryAccess.copyMemory(
-          heapMemory, address + readerIdx, values, UnsafeOps.BOOLEAN_ARRAY_OFFSET, numBytes);
+      readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3484,8 +3659,7 @@ public final class MemoryBuffer {
         streamReader.readChars(values, 0, numBytes >>> 1);
         return;
       }
-      memoryAccess.copyMemory(
-          heapMemory, address + readerIdx, values, UnsafeOps.CHAR_ARRAY_OFFSET, numBytes);
+      readCharsToArray(address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3504,8 +3678,7 @@ public final class MemoryBuffer {
         streamReader.readShorts(values, 0, numBytes >>> 1);
         return;
       }
-      memoryAccess.copyMemory(
-          heapMemory, address + readerIdx, values, UnsafeOps.SHORT_ARRAY_OFFSET, numBytes);
+      readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3524,8 +3697,7 @@ public final class MemoryBuffer {
         streamReader.readInts(values, 0, numBytes >>> 2);
         return;
       }
-      memoryAccess.copyMemory(
-          heapMemory, address + readerIdx, values, UnsafeOps.INT_ARRAY_OFFSET, numBytes);
+      readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3544,8 +3716,7 @@ public final class MemoryBuffer {
         streamReader.readLongs(values, 0, numBytes >>> 3);
         return;
       }
-      memoryAccess.copyMemory(
-          heapMemory, address + readerIdx, values, UnsafeOps.LONG_ARRAY_OFFSET, numBytes);
+      readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3564,8 +3735,7 @@ public final class MemoryBuffer {
         streamReader.readFloats(values, 0, numBytes >>> 2);
         return;
       }
-      memoryAccess.copyMemory(
-          heapMemory, address + readerIdx, values, UnsafeOps.FLOAT_ARRAY_OFFSET, numBytes);
+      readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3584,8 +3754,7 @@ public final class MemoryBuffer {
         streamReader.readDoubles(values, 0, numBytes >>> 3);
         return;
       }
-      memoryAccess.copyMemory(
-          heapMemory, address + readerIdx, values, UnsafeOps.DOUBLE_ARRAY_OFFSET, numBytes);
+      readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3603,12 +3772,7 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      memoryAccess.copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          UnsafeOps.BOOLEAN_ARRAY_OFFSET + offset,
-          numElements);
+      readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
       readerIndex = readerIdx + numElements;
     }
   }
@@ -3631,12 +3795,7 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      memoryAccess.copyMemory(
-          heapMemory,
-          address + readerIdx,
-          chars,
-          UnsafeOps.CHAR_ARRAY_OFFSET + ((long) offset << 1),
-          numBytes);
+      readCharsToArray(address + readerIdx, chars, CHAR_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3664,12 +3823,7 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      memoryAccess.copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          UnsafeOps.SHORT_ARRAY_OFFSET + ((long) offset << 1),
-          numBytes);
+      readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3688,12 +3842,7 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      memoryAccess.copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          UnsafeOps.INT_ARRAY_OFFSET + ((long) offset << 2),
-          numBytes);
+      readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3712,12 +3861,7 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      memoryAccess.copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          UnsafeOps.LONG_ARRAY_OFFSET + ((long) offset << 3),
-          numBytes);
+      readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3736,12 +3880,7 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      memoryAccess.copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          UnsafeOps.FLOAT_ARRAY_OFFSET + ((long) offset << 2),
-          numBytes);
+      readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3760,12 +3899,7 @@ public final class MemoryBuffer {
         return;
       }
       int readerIdx = readerIndex;
-      memoryAccess.copyMemory(
-          heapMemory,
-          address + readerIdx,
-          values,
-          UnsafeOps.DOUBLE_ARRAY_OFFSET + ((long) offset << 3),
-          numBytes);
+      readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
     }
   }
@@ -3805,7 +3939,7 @@ public final class MemoryBuffer {
           && thisPointer <= this.addressLimit - numBytes
           && otherPointer <= target.addressLimit - numBytes) {
         if (thisHeapRef != null && otherHeapRef != null) {
-          memoryAccess.copyMemory(thisHeapRef, thisPointer, otherHeapRef, otherPointer, numBytes);
+          System.arraycopy(thisHeapRef, toIntIndex(thisPointer), otherHeapRef, toIntIndex(otherPointer), numBytes);
         } else if (sameBufferOverlap(target, offset, targetOffset, numBytes)) {
           byte[] tmp = new byte[numBytes];
           sliceAsByteBuffer(offset, numBytes).get(tmp);
@@ -3849,7 +3983,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToByteArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
-      memoryAccess.copyMemory(heapMemory, address + offset, target, targetOffset, numBytes);
+      readBytesToArray(address + offset, target, BYTE_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3858,7 +3992,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToBooleanArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
-      memoryAccess.copyMemory(heapMemory, address + offset, target, targetOffset, numBytes);
+      readBooleansToArray(address + offset, target, BOOLEAN_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3867,8 +4001,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToCharArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
-      memoryAccess.copyMemory(
-          heapMemory, address + offset, target, arrayCopyOffset(targetOffset, 1), numBytes);
+      readCharsToArray(address + offset, target, CHAR_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3877,8 +4010,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToShortArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
-      memoryAccess.copyMemory(
-          heapMemory, address + offset, target, arrayCopyOffset(targetOffset, 1), numBytes);
+      readShortsToArray(address + offset, target, SHORT_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3887,8 +4019,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToIntArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
-      memoryAccess.copyMemory(
-          heapMemory, address + offset, target, arrayCopyOffset(targetOffset, 2), numBytes);
+      readIntsToArray(address + offset, target, INT_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3897,8 +4028,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToLongArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
-      memoryAccess.copyMemory(
-          heapMemory, address + offset, target, arrayCopyOffset(targetOffset, 3), numBytes);
+      readLongsToArray(address + offset, target, LONG_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3907,8 +4037,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToFloatArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
-      memoryAccess.copyMemory(
-          heapMemory, address + offset, target, arrayCopyOffset(targetOffset, 2), numBytes);
+      readFloatsToArray(address + offset, target, FLOAT_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3917,8 +4046,7 @@ public final class MemoryBuffer {
       MemoryOps.copyToDoubleArray(this, offset, target, targetOffset, numBytes);
     } else {
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
-      memoryAccess.copyMemory(
-          heapMemory, address + offset, target, arrayCopyOffset(targetOffset, 3), numBytes);
+      readDoublesToArray(address + offset, target, DOUBLE_ARRAY_OFFSET + targetOffset, numBytes);
     }
   }
 
@@ -3936,22 +4064,76 @@ public final class MemoryBuffer {
     }
   }
 
-  private static long arrayCopyOffset(int elementOffset, int elementShift) {
-    return (long) elementOffset << elementShift;
+  public void copyFromByteArray(int offset, byte[] source, int sourceOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyFromByteArray(this, offset, source, sourceOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
+      writeBytesFromArray(address + offset, source, BYTE_ARRAY_OFFSET + sourceOffset, numBytes);
+    }
   }
 
-  /**
-   * JVM-only bulk copy method. Copies {@code numBytes} bytes from source unsafe object and pointer.
-   * Throws on Android before executing unsafe memory access.
-   */
-  public void copyFromUnsafe(long offset, Object source, long sourcePointer, long numBytes) {
+  public void copyFromBooleanArray(int offset, boolean[] source, int sourceOffset, int numBytes) {
     if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.throwRawUnsafeMemoryCopyUnsupported();
+      MemoryOps.copyFromBooleanArray(this, offset, source, sourceOffset, numBytes);
     } else {
-      checkArgument(source != null, "Raw native-address source copy is unsupported on JDK25");
-      final long thisPointer = this.address + offset;
-      checkArgument(thisPointer + numBytes <= addressLimit);
-      memoryAccess.copyMemory(source, sourcePointer, heapMemory, thisPointer, numBytes);
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
+      writeBooleansFromArray(
+          address + offset, source, BOOLEAN_ARRAY_OFFSET + sourceOffset, numBytes);
+    }
+  }
+
+  public void copyFromCharArray(int offset, char[] source, int sourceOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyFromCharArray(this, offset, source, sourceOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
+      writeCharsFromArray(address + offset, source, CHAR_ARRAY_OFFSET + sourceOffset, numBytes);
+    }
+  }
+
+  public void copyFromShortArray(int offset, short[] source, int sourceOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyFromShortArray(this, offset, source, sourceOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
+      writeShortsFromArray(address + offset, source, SHORT_ARRAY_OFFSET + sourceOffset, numBytes);
+    }
+  }
+
+  public void copyFromIntArray(int offset, int[] source, int sourceOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyFromIntArray(this, offset, source, sourceOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
+      writeIntsFromArray(address + offset, source, INT_ARRAY_OFFSET + sourceOffset, numBytes);
+    }
+  }
+
+  public void copyFromLongArray(int offset, long[] source, int sourceOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyFromLongArray(this, offset, source, sourceOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
+      writeLongsFromArray(address + offset, source, LONG_ARRAY_OFFSET + sourceOffset, numBytes);
+    }
+  }
+
+  public void copyFromFloatArray(int offset, float[] source, int sourceOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyFromFloatArray(this, offset, source, sourceOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
+      writeFloatsFromArray(address + offset, source, FLOAT_ARRAY_OFFSET + sourceOffset, numBytes);
+    }
+  }
+
+  public void copyFromDoubleArray(int offset, double[] source, int sourceOffset, int numBytes) {
+    if (AndroidSupport.IS_ANDROID) {
+      MemoryOps.copyFromDoubleArray(this, offset, source, sourceOffset, numBytes);
+    } else {
+      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
+      writeDoublesFromArray(address + offset, source, DOUBLE_ARRAY_OFFSET + sourceOffset, numBytes);
     }
   }
 
@@ -4008,6 +4190,7 @@ public final class MemoryBuffer {
       if (offHeapBuffer != null) {
         ByteBuffer duplicate = offHeapBuffer.duplicate();
         int start = (int) address;
+        duplicate.clear();
         ByteBufferUtil.position(duplicate, start + offset);
         duplicate.limit(start + offset + length);
         return duplicate.slice();
@@ -4046,7 +4229,7 @@ public final class MemoryBuffer {
     final long pos2 = buf2.address + offset2;
     checkArgument(pos1 < addressLimit);
     checkArgument(pos2 < buf2.addressLimit);
-    return unsafeEqualTo(memoryAccess, heapMemory, pos1, buf2.memoryAccess, buf2.heapMemory, pos2, len);
+    return unsafeEqualTo(this, heapMemory, pos1, buf2, buf2.heapMemory, pos2, len);
   }
 
   /**
@@ -4070,23 +4253,21 @@ public final class MemoryBuffer {
       return MemoryOps.equalTo(this, bytes, bytesOffset, offset, len);
     }
     final long pos = address + offset;
-    return unsafeEqualTo(
-        memoryAccess, heapMemory, pos, memoryAccess, bytes, UnsafeOps.BYTE_ARRAY_OFFSET + bytesOffset, len);
+    return unsafeEqualTo(this, heapMemory, pos, this, bytes, BYTE_ARRAY_OFFSET + bytesOffset, len);
   }
 
   private static boolean unsafeEqualTo(
-      MemoryAccess leftAccess,
+      MemoryBuffer left,
       Object leftBase,
       long leftOffset,
-      MemoryAccess rightAccess,
+      MemoryBuffer right,
       Object rightBase,
       long rightOffset,
       int length) {
     int i = 0;
     if ((leftOffset % 8) == (rightOffset % 8)) {
       while ((leftOffset + i) % 8 != 0 && i < length) {
-        if (leftAccess.getByte(leftBase, leftOffset + i)
-            != rightAccess.getByte(rightBase, rightOffset + i)) {
+        if (left.rawByte(leftBase, leftOffset + i) != right.rawByte(rightBase, rightOffset + i)) {
           return false;
         }
         i += 1;
@@ -4094,16 +4275,14 @@ public final class MemoryBuffer {
     }
     if (UNALIGNED || (((leftOffset + i) % 8 == 0) && ((rightOffset + i) % 8 == 0))) {
       while (i <= length - 8) {
-        if (leftAccess.getLong(leftBase, leftOffset + i)
-            != rightAccess.getLong(rightBase, rightOffset + i)) {
+        if (left.rawLong(leftBase, leftOffset + i) != right.rawLong(rightBase, rightOffset + i)) {
           return false;
         }
         i += 8;
       }
     }
     while (i < length) {
-      if (leftAccess.getByte(leftBase, leftOffset + i)
-          != rightAccess.getByte(rightBase, rightOffset + i)) {
+      if (left.rawByte(leftBase, leftOffset + i) != right.rawByte(rightBase, rightOffset + i)) {
         return false;
       }
       i += 1;
@@ -4111,361 +4290,18 @@ public final class MemoryBuffer {
     return true;
   }
 
-  private static final class MemoryAccess {
-    private final MemoryBuffer buffer;
-
-    private MemoryAccess(MemoryBuffer buffer) {
-      this.buffer = buffer;
+  private byte rawByte(Object base, long offset) {
+    if (base == null) {
+      return loadByte(offset);
     }
+    return ((byte[]) base)[toIntIndex(offset)];
+  }
 
-    private byte getByte(Object base, long offset) {
-      if (base != null) {
-        return UnsafeOps.getByte(base, offset);
-      }
-      return directSegment().get(ValueLayout.JAVA_BYTE, offset);
+  private long rawLong(Object base, long offset) {
+    if (base == null) {
+      return loadLong(offset);
     }
-
-    private void putByte(Object base, long offset, byte value) {
-      if (base != null) {
-        UnsafeOps.putByte(base, offset, value);
-        return;
-      }
-      directSegment().set(ValueLayout.JAVA_BYTE, offset, value);
-    }
-
-    private char getChar(Object base, long offset) {
-      if (base != null) {
-        return UnsafeOps.getChar(base, offset);
-      }
-      return directSegment().get(NATIVE_CHAR, offset);
-    }
-
-    private void putChar(Object base, long offset, char value) {
-      if (base != null) {
-        UnsafeOps.putChar(base, offset, value);
-        return;
-      }
-      directSegment().set(NATIVE_CHAR, offset, value);
-    }
-
-    private short getShort(Object base, long offset) {
-      if (base != null) {
-        return UnsafeOps.getShort(base, offset);
-      }
-      return directSegment().get(NATIVE_SHORT, offset);
-    }
-
-    private void putShort(Object base, long offset, short value) {
-      if (base != null) {
-        UnsafeOps.putShort(base, offset, value);
-        return;
-      }
-      directSegment().set(NATIVE_SHORT, offset, value);
-    }
-
-    private int getInt(Object base, long offset) {
-      if (base != null) {
-        return UnsafeOps.getInt(base, offset);
-      }
-      return directSegment().get(NATIVE_INT, offset);
-    }
-
-    private void putInt(Object base, long offset, int value) {
-      if (base != null) {
-        UnsafeOps.putInt(base, offset, value);
-        return;
-      }
-      directSegment().set(NATIVE_INT, offset, value);
-    }
-
-    private long getLong(Object base, long offset) {
-      if (base != null) {
-        return UnsafeOps.getLong(base, offset);
-      }
-      return directSegment().get(NATIVE_LONG, offset);
-    }
-
-    private void putLong(Object base, long offset, long value) {
-      if (base != null) {
-        UnsafeOps.putLong(base, offset, value);
-        return;
-      }
-      directSegment().set(NATIVE_LONG, offset, value);
-    }
-
-    private void copyMemory(
-        Object src, long srcOffset, Object dst, long dstOffset, long length) {
-      int len = toIntLength(length);
-      if (len == 0) {
-        return;
-      }
-      if (src != null && dst != null) {
-        if (dst instanceof byte[] && copyArrayToBytes(src, srcOffset, (byte[]) dst, toIntIndex(dstOffset), len)) {
-          return;
-        }
-        if (src instanceof byte[] && copyBytesToArray((byte[]) src, toIntIndex(srcOffset), dst, dstOffset, len)) {
-          return;
-        }
-        UnsafeOps.copyMemory(src, srcOffset, dst, dstOffset, len);
-      } else if (src == null && dst == null) {
-        copyDirect(srcOffset, dstOffset, len);
-      } else if (src == null) {
-        if (dst instanceof byte[]) {
-          readDirect(srcOffset, (byte[]) dst, toIntIndex(dstOffset), len);
-        } else if (readArray(srcOffset, dst, dstOffset, len)) {
-          return;
-        } else {
-          for (int i = 0; i < len; i++) {
-            UnsafeOps.putByte(dst, dstOffset + i, getByte(null, srcOffset + i));
-          }
-        }
-      } else if (src instanceof byte[]) {
-        writeDirect(dstOffset, (byte[]) src, toIntIndex(srcOffset), len);
-      } else if (writeArray(src, srcOffset, dstOffset, len)) {
-        return;
-      } else {
-        for (int i = 0; i < len; i++) {
-          putByte(null, dstOffset + i, UnsafeOps.getByte(src, srcOffset + i));
-        }
-      }
-    }
-
-    private boolean copyArrayToBytes(
-        Object src, long srcOffset, byte[] dst, int dstOffset, int len) {
-      if (src instanceof boolean[]) {
-        boolean[] array = (boolean[]) src;
-        int srcIndex = toIntIndex(srcOffset);
-        for (int i = 0; i < len; i++) {
-          dst[dstOffset + i] = array[srcIndex + i] ? (byte) 1 : (byte) 0;
-        }
-        return true;
-      } else if (src instanceof char[] && aligned(srcOffset, len, Character.BYTES)) {
-        heapBytes(dst, dstOffset, len)
-            .asCharBuffer()
-            .put((char[]) src, toIntIndex(srcOffset / Character.BYTES), len / Character.BYTES);
-        return true;
-      } else if (src instanceof short[] && aligned(srcOffset, len, Short.BYTES)) {
-        heapBytes(dst, dstOffset, len)
-            .asShortBuffer()
-            .put((short[]) src, toIntIndex(srcOffset / Short.BYTES), len / Short.BYTES);
-        return true;
-      } else if (src instanceof int[] && aligned(srcOffset, len, Integer.BYTES)) {
-        heapBytes(dst, dstOffset, len)
-            .asIntBuffer()
-            .put((int[]) src, toIntIndex(srcOffset / Integer.BYTES), len / Integer.BYTES);
-        return true;
-      } else if (src instanceof long[] && aligned(srcOffset, len, Long.BYTES)) {
-        heapBytes(dst, dstOffset, len)
-            .asLongBuffer()
-            .put((long[]) src, toIntIndex(srcOffset / Long.BYTES), len / Long.BYTES);
-        return true;
-      } else if (src instanceof float[] && aligned(srcOffset, len, Float.BYTES)) {
-        heapBytes(dst, dstOffset, len)
-            .asFloatBuffer()
-            .put((float[]) src, toIntIndex(srcOffset / Float.BYTES), len / Float.BYTES);
-        return true;
-      } else if (src instanceof double[] && aligned(srcOffset, len, Double.BYTES)) {
-        heapBytes(dst, dstOffset, len)
-            .asDoubleBuffer()
-            .put((double[]) src, toIntIndex(srcOffset / Double.BYTES), len / Double.BYTES);
-        return true;
-      }
-      return false;
-    }
-
-    private boolean copyBytesToArray(
-        byte[] src, int srcOffset, Object dst, long dstOffset, int len) {
-      if (dst instanceof boolean[]) {
-        boolean[] array = (boolean[]) dst;
-        int dstIndex = toIntIndex(dstOffset);
-        for (int i = 0; i < len; i++) {
-          array[dstIndex + i] = src[srcOffset + i] != 0;
-        }
-        return true;
-      } else if (dst instanceof char[] && aligned(dstOffset, len, Character.BYTES)) {
-        heapBytes(src, srcOffset, len)
-            .asCharBuffer()
-            .get((char[]) dst, toIntIndex(dstOffset / Character.BYTES), len / Character.BYTES);
-        return true;
-      } else if (dst instanceof short[] && aligned(dstOffset, len, Short.BYTES)) {
-        heapBytes(src, srcOffset, len)
-            .asShortBuffer()
-            .get((short[]) dst, toIntIndex(dstOffset / Short.BYTES), len / Short.BYTES);
-        return true;
-      } else if (dst instanceof int[] && aligned(dstOffset, len, Integer.BYTES)) {
-        heapBytes(src, srcOffset, len)
-            .asIntBuffer()
-            .get((int[]) dst, toIntIndex(dstOffset / Integer.BYTES), len / Integer.BYTES);
-        return true;
-      } else if (dst instanceof long[] && aligned(dstOffset, len, Long.BYTES)) {
-        heapBytes(src, srcOffset, len)
-            .asLongBuffer()
-            .get((long[]) dst, toIntIndex(dstOffset / Long.BYTES), len / Long.BYTES);
-        return true;
-      } else if (dst instanceof float[] && aligned(dstOffset, len, Float.BYTES)) {
-        heapBytes(src, srcOffset, len)
-            .asFloatBuffer()
-            .get((float[]) dst, toIntIndex(dstOffset / Float.BYTES), len / Float.BYTES);
-        return true;
-      } else if (dst instanceof double[] && aligned(dstOffset, len, Double.BYTES)) {
-        heapBytes(src, srcOffset, len)
-            .asDoubleBuffer()
-            .get((double[]) dst, toIntIndex(dstOffset / Double.BYTES), len / Double.BYTES);
-        return true;
-      }
-      return false;
-    }
-
-    private boolean writeArray(Object src, long srcOffset, long dstOffset, int len) {
-      if (src instanceof boolean[]) {
-        boolean[] array = (boolean[]) src;
-        int srcIndex = toIntIndex(srcOffset);
-        ByteBuffer dst = directBytes(dstOffset, len);
-        for (int i = 0; i < len; i++) {
-          dst.put(i, array[srcIndex + i] ? (byte) 1 : (byte) 0);
-        }
-        return true;
-      } else if (src instanceof char[] && aligned(srcOffset, len, Character.BYTES)) {
-        directBytes(dstOffset, len)
-            .asCharBuffer()
-            .put((char[]) src, toIntIndex(srcOffset / Character.BYTES), len / Character.BYTES);
-        return true;
-      } else if (src instanceof short[] && aligned(srcOffset, len, Short.BYTES)) {
-        directBytes(dstOffset, len)
-            .asShortBuffer()
-            .put((short[]) src, toIntIndex(srcOffset / Short.BYTES), len / Short.BYTES);
-        return true;
-      } else if (src instanceof int[] && aligned(srcOffset, len, Integer.BYTES)) {
-        directBytes(dstOffset, len)
-            .asIntBuffer()
-            .put((int[]) src, toIntIndex(srcOffset / Integer.BYTES), len / Integer.BYTES);
-        return true;
-      } else if (src instanceof long[] && aligned(srcOffset, len, Long.BYTES)) {
-        directBytes(dstOffset, len)
-            .asLongBuffer()
-            .put((long[]) src, toIntIndex(srcOffset / Long.BYTES), len / Long.BYTES);
-        return true;
-      } else if (src instanceof float[] && aligned(srcOffset, len, Float.BYTES)) {
-        directBytes(dstOffset, len)
-            .asFloatBuffer()
-            .put((float[]) src, toIntIndex(srcOffset / Float.BYTES), len / Float.BYTES);
-        return true;
-      } else if (src instanceof double[] && aligned(srcOffset, len, Double.BYTES)) {
-        directBytes(dstOffset, len)
-            .asDoubleBuffer()
-            .put((double[]) src, toIntIndex(srcOffset / Double.BYTES), len / Double.BYTES);
-        return true;
-      }
-      return false;
-    }
-
-    private boolean readArray(long srcOffset, Object dst, long dstOffset, int len) {
-      if (dst instanceof boolean[]) {
-        boolean[] array = (boolean[]) dst;
-        int dstIndex = toIntIndex(dstOffset);
-        ByteBuffer src = directBytes(srcOffset, len);
-        for (int i = 0; i < len; i++) {
-          array[dstIndex + i] = src.get(i) != 0;
-        }
-        return true;
-      } else if (dst instanceof char[] && aligned(dstOffset, len, Character.BYTES)) {
-        directBytes(srcOffset, len)
-            .asCharBuffer()
-            .get((char[]) dst, toIntIndex(dstOffset / Character.BYTES), len / Character.BYTES);
-        return true;
-      } else if (dst instanceof short[] && aligned(dstOffset, len, Short.BYTES)) {
-        directBytes(srcOffset, len)
-            .asShortBuffer()
-            .get((short[]) dst, toIntIndex(dstOffset / Short.BYTES), len / Short.BYTES);
-        return true;
-      } else if (dst instanceof int[] && aligned(dstOffset, len, Integer.BYTES)) {
-        directBytes(srcOffset, len)
-            .asIntBuffer()
-            .get((int[]) dst, toIntIndex(dstOffset / Integer.BYTES), len / Integer.BYTES);
-        return true;
-      } else if (dst instanceof long[] && aligned(dstOffset, len, Long.BYTES)) {
-        directBytes(srcOffset, len)
-            .asLongBuffer()
-            .get((long[]) dst, toIntIndex(dstOffset / Long.BYTES), len / Long.BYTES);
-        return true;
-      } else if (dst instanceof float[] && aligned(dstOffset, len, Float.BYTES)) {
-        directBytes(srcOffset, len)
-            .asFloatBuffer()
-            .get((float[]) dst, toIntIndex(dstOffset / Float.BYTES), len / Float.BYTES);
-        return true;
-      } else if (dst instanceof double[] && aligned(dstOffset, len, Double.BYTES)) {
-        directBytes(srcOffset, len)
-            .asDoubleBuffer()
-            .get((double[]) dst, toIntIndex(dstOffset / Double.BYTES), len / Double.BYTES);
-        return true;
-      }
-      return false;
-    }
-
-    private void copyDirect(long srcOffset, long dstOffset, int len) {
-      if (srcOffset < dstOffset && dstOffset < srcOffset + len) {
-        byte[] tmp = new byte[len];
-        readDirect(srcOffset, tmp, 0, len);
-        writeDirect(dstOffset, tmp, 0, len);
-      } else {
-        MemorySegment segment = directSegment();
-        MemorySegment.copy(segment, srcOffset, segment, dstOffset, len);
-      }
-    }
-
-    private ByteBuffer directBuffer() {
-      ByteBuffer directBuffer = buffer.nativeOffHeapBuffer;
-      if (directBuffer == null) {
-        throw new IllegalStateException("Memory buffer does not own a ByteBuffer");
-      }
-      return directBuffer;
-    }
-
-    private MemorySegment directSegment() {
-      MemorySegment segment = buffer.offHeapSegment;
-      if (segment == null) {
-        throw new IllegalStateException("Memory buffer does not own an off-heap segment");
-      }
-      return segment;
-    }
-
-    private void readDirect(long offset, byte[] dst, int dstOffset, int length) {
-      directBuffer().get(toIntIndex(offset), dst, dstOffset, length);
-    }
-
-    private void writeDirect(long offset, byte[] src, int srcOffset, int length) {
-      directBuffer().put(toIntIndex(offset), src, srcOffset, length);
-    }
-
-    private ByteBuffer directBytes(long offset, int length) {
-      ByteBuffer duplicate = directBuffer().duplicate().order(NATIVE_ORDER);
-      int start = toIntIndex(offset);
-      ByteBufferUtil.position(duplicate, start);
-      duplicate.limit(start + length);
-      return duplicate.slice().order(NATIVE_ORDER);
-    }
-
-    private static ByteBuffer heapBytes(byte[] bytes, int offset, int length) {
-      return ByteBuffer.wrap(bytes, offset, length).order(NATIVE_ORDER);
-    }
-
-    private static boolean aligned(long offset, int length, int width) {
-      return offset % width == 0 && length % width == 0;
-    }
-
-    private static int toIntIndex(long offset) {
-      if (offset < 0 || offset > Integer.MAX_VALUE) {
-        throw new IndexOutOfBoundsException("offset out of int range: " + offset);
-      }
-      return (int) offset;
-    }
-
-    private static int toIntLength(long length) {
-      if (length < 0 || length > Integer.MAX_VALUE) {
-        throw new IndexOutOfBoundsException("length out of int range: " + length);
-      }
-      return (int) length;
-    }
+    return (long) BYTE_ARRAY_LONG.get((byte[]) base, toIntIndex(offset));
   }
 
   @Override

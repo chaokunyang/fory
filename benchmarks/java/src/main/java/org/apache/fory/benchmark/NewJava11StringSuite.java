@@ -22,13 +22,14 @@ package org.apache.fory.benchmark;
 import org.apache.fory.Fory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
 import org.openjdk.jmh.Main;
+import sun.misc.Unsafe;
 
 public class NewJava11StringSuite {
+  private static final Unsafe UNSAFE = UnsafeAccess.load();
 
   static String str = StringUtils.random(10);
   static byte[] strBytes;
@@ -36,8 +37,8 @@ public class NewJava11StringSuite {
 
   static {
     if (JdkVersion.MAJOR_VERSION > 8) {
-      strBytes = (byte[]) UnsafeOps.getObject(str, fieldOffset(String.class, "value"));
-      coder = UnsafeOps.getByte(str, fieldOffset(String.class, "coder"));
+      strBytes = (byte[]) UNSAFE.getObject(str, fieldOffset(String.class, "value"));
+      coder = UNSAFE.getByte(str, fieldOffset(String.class, "coder"));
     }
   }
 
@@ -56,7 +57,7 @@ public class NewJava11StringSuite {
 
   private static long fieldOffset(Class<?> type, String fieldName) {
     try {
-      return UnsafeOps.objectFieldOffset(type.getDeclaredField(fieldName));
+      return UNSAFE.objectFieldOffset(type.getDeclaredField(fieldName));
     } catch (NoSuchFieldException e) {
       throw new IllegalStateException(e);
     }
@@ -70,8 +71,8 @@ public class NewJava11StringSuite {
   // @Benchmark
   public Object createJDK11StringByUnsafe() {
     String str = new String(stubStr);
-    UnsafeOps.putObject(str, STRING_VALUE_FIELD_OFFSET, strBytes);
-    UnsafeOps.putObject(str, STRING_CODER_FIELD_OFFSET, coder);
+    UNSAFE.putObject(str, STRING_VALUE_FIELD_OFFSET, strBytes);
+    UNSAFE.putByte(str, STRING_CODER_FIELD_OFFSET, coder);
     return str;
   }
 

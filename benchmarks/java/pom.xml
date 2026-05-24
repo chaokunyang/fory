@@ -265,7 +265,11 @@
                       dest="${jdk25.benchmark.check.dir}">
                       <patternset>
                         <include
+                          name="org/apache/fory/platform/UnsafeOps.class"/>
+                        <include
                           name="META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"/>
+                        <include
+                          name="META-INF/versions/25/org/apache/fory/memory/LittleEndian.class"/>
                         <include
                           name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
                         <include
@@ -275,16 +279,18 @@
                         <include
                           name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
                         <include
-                          name="META-INF/versions/25/org/apache/fory/builder/CodecBuilder.class"/>
-                        <include
-                          name="META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"/>
-                        <include
                           name="META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"/>
                       </patternset>
                     </unzip>
                     <available
+                      file="${jdk25.benchmark.check.dir}/org/apache/fory/platform/UnsafeOps.class"
+                      property="jdk25.benchmark.rootunsafeops.present"/>
+                    <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"
                       property="jdk25.benchmark.unsafeops.present"/>
+                    <available
+                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/memory/LittleEndian.class"
+                      property="jdk25.benchmark.littleendian.present"/>
                     <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"
                       property="jdk25.benchmark.memorybuffer.present"/>
@@ -298,17 +304,17 @@
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"
                       property="jdk25.benchmark.hiddenfieldaccessorfactory.present"/>
                     <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/builder/CodecBuilder.class"
-                      property="jdk25.benchmark.codecbuilder.present"/>
-                    <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/builder/ObjectCodecBuilder.class"
-                      property="jdk25.benchmark.objectcodecbuilder.present"/>
-                    <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"
                       property="jdk25.benchmark.platformstring.present"/>
                     <fail
-                      unless="jdk25.benchmark.unsafeops.present"
-                      message="JDK25 benchmark jar is missing the versioned UnsafeOps class."/>
+                      if="jdk25.benchmark.rootunsafeops.present"
+                      message="JDK25 benchmark jar must not contain root UnsafeOps class."/>
+                    <fail
+                      if="jdk25.benchmark.unsafeops.present"
+                      message="JDK25 benchmark jar must not contain versioned UnsafeOps class."/>
+                    <fail
+                      unless="jdk25.benchmark.littleendian.present"
+                      message="JDK25 benchmark jar is missing the versioned LittleEndian class."/>
                     <fail
                       unless="jdk25.benchmark.memorybuffer.present"
                       message="JDK25 benchmark jar is missing the versioned MemoryBuffer class."/>
@@ -321,12 +327,6 @@
                     <fail
                       unless="jdk25.benchmark.hiddenfieldaccessorfactory.present"
                       message="JDK25 benchmark jar is missing the versioned HiddenFieldAccessorFactory class."/>
-                    <fail
-                      unless="jdk25.benchmark.codecbuilder.present"
-                      message="JDK25 benchmark jar is missing the versioned CodecBuilder class."/>
-                    <fail
-                      unless="jdk25.benchmark.objectcodecbuilder.present"
-                      message="JDK25 benchmark jar is missing the versioned ObjectCodecBuilder class."/>
                     <fail
                       unless="jdk25.benchmark.platformstring.present"
                       message="JDK25 benchmark jar is missing the versioned PlatformStringUtils class."/>

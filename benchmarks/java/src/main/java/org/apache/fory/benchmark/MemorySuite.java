@@ -23,7 +23,6 @@ import java.nio.ByteBuffer;
 import java.util.Random;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.util.StringUtils;
 import org.openjdk.jmh.Main;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -33,10 +32,13 @@ import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
+import sun.misc.Unsafe;
 
 @BenchmarkMode(Mode.Throughput)
 @CompilerControl(value = CompilerControl.Mode.INLINE)
 public class MemorySuite {
+  private static final Unsafe UNSAFE = UnsafeAccess.load();
+  private static final int BYTE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
   static int arrLen = 32;
 
   static {
@@ -138,12 +140,8 @@ public class MemorySuite {
 
   @org.openjdk.jmh.annotations.Benchmark
   public Object unsafeCopy(MemoryState state) {
-    UnsafeOps.UNSAFE.copyMemory(
-        state.bytes,
-        UnsafeOps.BYTE_ARRAY_OFFSET,
-        target,
-        UnsafeOps.BYTE_ARRAY_OFFSET,
-        state.bytes.length);
+    UNSAFE.copyMemory(
+        state.bytes, BYTE_ARRAY_OFFSET, target, BYTE_ARRAY_OFFSET, state.bytes.length);
     return target;
   }
 

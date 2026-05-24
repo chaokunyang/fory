@@ -22,8 +22,10 @@ package org.apache.fory;
 import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.ImmutableMap;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
+import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.*;
@@ -31,15 +33,56 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.fory.collection.Tuple3;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.Descriptor;
 import org.testng.SkipException;
 
 /** Test utils. */
 public class TestUtils {
+  public static List<String> javaCommand(Class<?> mainClass) {
+    return javaCommand(System.getProperty("java.class.path"), mainClass);
+  }
+
+  public static List<String> javaCommand(
+      String classPath, Class<?> mainClass, String... extraJvmArgs) {
+    List<String> command = new ArrayList<>();
+    command.add(System.getProperty("java.home") + File.separator + "bin" + File.separator + "java");
+    command.addAll(forkJvmArgs());
+    Collections.addAll(command, extraJvmArgs);
+    command.add("-cp");
+    command.add(classPath);
+    command.add(mainClass.getName());
+    return command;
+  }
+
+  private static List<String> forkJvmArgs() {
+    List<String> args = new ArrayList<>();
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      args.add("--add-opens=java.base/java.lang=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.lang.invoke=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.lang.reflect=ALL-UNNAMED");
+      args.add("--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.util=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.util.concurrent=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.io=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.net=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.math=ALL-UNNAMED");
+      if (hasInputArg("--sun-misc-unsafe-memory-access=deny")) {
+        args.add("--sun-misc-unsafe-memory-access=deny");
+      }
+    }
+    return args;
+  }
+
+  private static boolean hasInputArg(String arg) {
+    return ManagementFactory.getRuntimeMXBean().getInputArguments().contains(arg);
+  }
+
   @SuppressWarnings("unchecked")
   public static <T> T getFieldValue(Object obj, String fieldName) {
     return (T)
@@ -106,7 +149,7 @@ public class TestUtils {
 
   public static <T> T unsafeCopy(T obj) {
     @SuppressWarnings("unchecked")
-    T newInstance = (T) UnsafeOps.newInstance(obj.getClass());
+    T newInstance = (T) ObjectCreators.getObjectCreator(obj.getClass()).newInstance();
     for (Field field : ReflectionUtils.getFields(obj.getClass(), true)) {
       if (!Modifier.isStatic(field.getModifiers())) {
         // Don't cache accessors by `obj.getClass()` using WeakHashMap, the `field` will reference

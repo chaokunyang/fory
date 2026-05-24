@@ -66,11 +66,9 @@ public class GuavaOptionalDependencyTest {
   }
 
   private static RegistrationIds runWithoutGuava() throws Exception {
-    String javaBin =
-        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
     String filteredClassPath = removeGuavaFromClasspath(System.getProperty("java.class.path"));
     Process process =
-        new ProcessBuilder(javaBin, "-cp", filteredClassPath, NoGuavaMain.class.getName())
+        new ProcessBuilder(TestUtils.javaCommand(filteredClassPath, NoGuavaMain.class))
             .redirectErrorStream(true)
             .start();
     String output = readFully(process.getInputStream());

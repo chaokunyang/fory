@@ -40,11 +40,11 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.record.RecordUtils;
+import sun.misc.Unsafe;
 
 /**
  * Factory class for creating and caching {@link ObjectCreator} instances.
@@ -58,8 +58,8 @@ import org.apache.fory.util.record.RecordUtils;
  *       parameterized constructor invocation
  *   <li><strong>Classes with no-arg constructors:</strong> Uses {@link
  *       DeclaredNoArgCtrObjectCreator} with MethodHandle for fast invocation
- *   <li><strong>Classes without accessible constructors:</strong> Uses {@link UnsafeObjectCreator}
- *       with platform-specific unsafe allocation
+ *   <li><strong>Classes without accessible constructors:</strong> Uses a private
+ *       constructor-bypassing creator on runtimes where that is still supported
  *   <li><strong>GraalVM native image compatibility:</strong> Uses {@link
  *       ParentNoArgCtrObjectCreator} for constructor generate-based creation when needed
  *   <li><strong>Android compatibility:</strong> Uses reflection for records and no-arg
@@ -74,6 +74,7 @@ import org.apache.fory.util.record.RecordUtils;
  */
 @SuppressWarnings("unchecked")
 public class ObjectCreators {
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
   private static final ClassValueCache<ObjectCreator<?>> cache =
       ClassValueCache.newClassKeySoftCache(8);
 
@@ -92,6 +93,18 @@ public class ObjectCreators {
    */
   public static <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
     return (ObjectCreator<T>) cache.get(type, () -> creategetObjectCreator(type));
+  }
+
+  private static <T> T allocateInstance(Class<T> type) {
+    if (UNSAFE == null || JdkVersion.MAJOR_VERSION >= 25) {
+      throw new ForyException(
+          "Constructor-bypassing allocation is unsupported in this runtime for " + type);
+    }
+    try {
+      return (T) UNSAFE.allocateInstance(type);
+    } catch (InstantiationException e) {
+      throw new ForyException("Failed to allocate instance for " + type, e);
+    }
   }
 
   private static <T> ObjectCreator<T> creategetObjectCreator(Class<T> type) {
@@ -529,7 +542,7 @@ public class ObjectCreators {
     }
   }
 
-  public static final class UnsafeObjectCreator<T> extends ObjectCreator<T> {
+  private static final class UnsafeObjectCreator<T> extends ObjectCreator<T> {
 
     public UnsafeObjectCreator(Class<T> type) {
       super(type);
@@ -537,7 +550,7 @@ public class ObjectCreators {
 
     @Override
     public T newInstance() {
-      return UnsafeOps.newInstance(type);
+      return ObjectCreators.allocateInstance(type);
     }
 
     @Override

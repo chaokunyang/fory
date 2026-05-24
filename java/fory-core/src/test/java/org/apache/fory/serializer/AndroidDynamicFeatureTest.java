@@ -21,7 +21,6 @@ package org.apache.fory.serializer;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
@@ -37,6 +36,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.ToIntFunction;
 import org.apache.fory.Fory;
+import org.apache.fory.TestUtils;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryUtils;
@@ -54,14 +54,8 @@ import org.testng.annotations.Test;
 public class AndroidDynamicFeatureTest {
   @Test
   public void testAndroidDynamicFeaturePaths() throws Exception {
-    String javaBin =
-        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
     Process process =
-        new ProcessBuilder(
-                javaBin,
-                "-cp",
-                System.getProperty("java.class.path"),
-                AndroidDynamicFeatureProbe.class.getName())
+        new ProcessBuilder(TestUtils.javaCommand(AndroidDynamicFeatureProbe.class))
             .redirectErrorStream(true)
             .start();
     String output = readFully(process.getInputStream());

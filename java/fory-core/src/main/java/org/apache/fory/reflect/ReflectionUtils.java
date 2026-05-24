@@ -454,7 +454,7 @@ public class ReflectionUtils {
   public static List<Object> getFieldValues(Collection<Field> fields, Object o) {
     List<Object> results = new ArrayList<>(fields.size());
     for (Field field : fields) {
-      // UnsafeOps.objectFieldOffset(field) can't handle primitive field.
+      // Unsafe.objectFieldOffset(field) can't handle primitive field.
       Object fieldValue = FieldAccessor.createAccessor(field).get(o);
       results.add(fieldValue);
     }

@@ -37,7 +37,6 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
@@ -47,10 +46,12 @@ import org.apache.fory.util.function.ToCharFunction;
 import org.apache.fory.util.function.ToFloatFunction;
 import org.apache.fory.util.function.ToShortFunction;
 import org.apache.fory.util.record.RecordUtils;
+import sun.misc.Unsafe;
 
 /** Field accessor for primitive types and object types. */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class FieldAccessor {
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
   private static final int REFLECTIVE_ACCESS = 0;
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;
@@ -81,7 +82,7 @@ public abstract class FieldAccessor {
       // Field offsets are rewritten by GraalVM and are not stable during native-image build time.
       return -1;
     }
-    return UnsafeOps.objectFieldOffset(field);
+    return UNSAFE.objectFieldOffset(field);
   }
 
   protected FieldAccessor(Field field, long fieldOffset) {
@@ -124,36 +125,31 @@ public abstract class FieldAccessor {
   public final void copy(Object sourceObject, Object targetObject) {
     switch (accessKind) {
       case BOOLEAN_ACCESS:
-        UnsafeOps.putBoolean(
-            targetObject, fieldOffset, UnsafeOps.getBoolean(sourceObject, fieldOffset));
+        UNSAFE.putBoolean(targetObject, fieldOffset, UNSAFE.getBoolean(sourceObject, fieldOffset));
         return;
       case BYTE_ACCESS:
-        UnsafeOps.putByte(targetObject, fieldOffset, UnsafeOps.getByte(sourceObject, fieldOffset));
+        UNSAFE.putByte(targetObject, fieldOffset, UNSAFE.getByte(sourceObject, fieldOffset));
         return;
       case CHAR_ACCESS:
-        UnsafeOps.putChar(targetObject, fieldOffset, UnsafeOps.getChar(sourceObject, fieldOffset));
+        UNSAFE.putChar(targetObject, fieldOffset, UNSAFE.getChar(sourceObject, fieldOffset));
         return;
       case SHORT_ACCESS:
-        UnsafeOps.putShort(
-            targetObject, fieldOffset, UnsafeOps.getShort(sourceObject, fieldOffset));
+        UNSAFE.putShort(targetObject, fieldOffset, UNSAFE.getShort(sourceObject, fieldOffset));
         return;
       case INT_ACCESS:
-        UnsafeOps.putInt(targetObject, fieldOffset, UnsafeOps.getInt(sourceObject, fieldOffset));
+        UNSAFE.putInt(targetObject, fieldOffset, UNSAFE.getInt(sourceObject, fieldOffset));
         return;
       case LONG_ACCESS:
-        UnsafeOps.putLong(targetObject, fieldOffset, UnsafeOps.getLong(sourceObject, fieldOffset));
+        UNSAFE.putLong(targetObject, fieldOffset, UNSAFE.getLong(sourceObject, fieldOffset));
         return;
       case FLOAT_ACCESS:
-        UnsafeOps.putFloat(
-            targetObject, fieldOffset, UnsafeOps.getFloat(sourceObject, fieldOffset));
+        UNSAFE.putFloat(targetObject, fieldOffset, UNSAFE.getFloat(sourceObject, fieldOffset));
         return;
       case DOUBLE_ACCESS:
-        UnsafeOps.putDouble(
-            targetObject, fieldOffset, UnsafeOps.getDouble(sourceObject, fieldOffset));
+        UNSAFE.putDouble(targetObject, fieldOffset, UNSAFE.getDouble(sourceObject, fieldOffset));
         return;
       case OBJECT_ACCESS:
-        UnsafeOps.putObject(
-            targetObject, fieldOffset, UnsafeOps.getObject(sourceObject, fieldOffset));
+        UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
         return;
       default:
         putObject(targetObject, getObject(sourceObject));
@@ -162,8 +158,7 @@ public abstract class FieldAccessor {
 
   public final void copyObject(Object sourceObject, Object targetObject) {
     if (accessKind == OBJECT_ACCESS) {
-      UnsafeOps.putObject(
-          targetObject, fieldOffset, UnsafeOps.getObject(sourceObject, fieldOffset));
+      UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
     } else {
       putObject(targetObject, getObject(sourceObject));
     }
@@ -238,21 +233,21 @@ public abstract class FieldAccessor {
   }
 
   public final void putObject(Object targetObject, Object object) {
-    // For primitive fields, we must use set() which calls the correct UnsafeOps.putXxx method.
-    // UnsafeOps.putObject writes object references, not primitive values.
+    // For primitive fields, we must use set() which calls the correct UNSAFE.putXxx method.
+    // UNSAFE.putObject writes object references, not primitive values.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
-      UnsafeOps.putObject(targetObject, fieldOffset, object);
+      UNSAFE.putObject(targetObject, fieldOffset, object);
     } else {
       set(targetObject, object);
     }
   }
 
   public final Object getObject(Object targetObject) {
-    // For primitive fields, we must use get() which calls the correct UnsafeOps.getXxx method
-    // and returns the boxed value. UnsafeOps.getObject interprets primitive bytes as object
+    // For primitive fields, we must use get() which calls the correct UNSAFE.getXxx method
+    // and returns the boxed value. UNSAFE.getObject interprets primitive bytes as object
     // refs.
     if (fieldOffset != -1 && !field.getType().isPrimitive()) {
-      return UnsafeOps.getObject(targetObject, fieldOffset);
+      return UNSAFE.getObject(targetObject, fieldOffset);
     } else {
       return get(targetObject);
     }
@@ -401,7 +396,7 @@ public abstract class FieldAccessor {
     @Override
     public boolean getBoolean(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getBoolean(obj, fieldOffset);
+      return UNSAFE.getBoolean(obj, fieldOffset);
     }
 
     @Override
@@ -412,7 +407,7 @@ public abstract class FieldAccessor {
     @Override
     public void putBoolean(Object obj, boolean value) {
       checkObj(obj);
-      UnsafeOps.putBoolean(obj, fieldOffset, value);
+      UNSAFE.putBoolean(obj, fieldOffset, value);
     }
   }
 
@@ -452,7 +447,7 @@ public abstract class FieldAccessor {
     @Override
     public byte getByte(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getByte(obj, fieldOffset);
+      return UNSAFE.getByte(obj, fieldOffset);
     }
 
     @Override
@@ -463,7 +458,7 @@ public abstract class FieldAccessor {
     @Override
     public void putByte(Object obj, byte value) {
       checkObj(obj);
-      UnsafeOps.putByte(obj, fieldOffset, value);
+      UNSAFE.putByte(obj, fieldOffset, value);
     }
   }
 
@@ -503,7 +498,7 @@ public abstract class FieldAccessor {
     @Override
     public char getChar(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getChar(obj, fieldOffset);
+      return UNSAFE.getChar(obj, fieldOffset);
     }
 
     @Override
@@ -514,7 +509,7 @@ public abstract class FieldAccessor {
     @Override
     public void putChar(Object obj, char value) {
       checkObj(obj);
-      UnsafeOps.putChar(obj, fieldOffset, value);
+      UNSAFE.putChar(obj, fieldOffset, value);
     }
   }
 
@@ -553,7 +548,7 @@ public abstract class FieldAccessor {
     @Override
     public short getShort(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getShort(obj, fieldOffset);
+      return UNSAFE.getShort(obj, fieldOffset);
     }
 
     @Override
@@ -564,7 +559,7 @@ public abstract class FieldAccessor {
     @Override
     public void putShort(Object obj, short value) {
       checkObj(obj);
-      UnsafeOps.putShort(obj, fieldOffset, value);
+      UNSAFE.putShort(obj, fieldOffset, value);
     }
   }
 
@@ -603,7 +598,7 @@ public abstract class FieldAccessor {
     @Override
     public int getInt(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getInt(obj, fieldOffset);
+      return UNSAFE.getInt(obj, fieldOffset);
     }
 
     @Override
@@ -614,7 +609,7 @@ public abstract class FieldAccessor {
     @Override
     public void putInt(Object obj, int value) {
       checkObj(obj);
-      UnsafeOps.putInt(obj, fieldOffset, value);
+      UNSAFE.putInt(obj, fieldOffset, value);
     }
   }
 
@@ -653,7 +648,7 @@ public abstract class FieldAccessor {
     @Override
     public long getLong(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getLong(obj, fieldOffset);
+      return UNSAFE.getLong(obj, fieldOffset);
     }
 
     @Override
@@ -664,7 +659,7 @@ public abstract class FieldAccessor {
     @Override
     public void putLong(Object obj, long value) {
       checkObj(obj);
-      UnsafeOps.putLong(obj, fieldOffset, value);
+      UNSAFE.putLong(obj, fieldOffset, value);
     }
   }
 
@@ -703,7 +698,7 @@ public abstract class FieldAccessor {
     @Override
     public float getFloat(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getFloat(obj, fieldOffset);
+      return UNSAFE.getFloat(obj, fieldOffset);
     }
 
     @Override
@@ -714,7 +709,7 @@ public abstract class FieldAccessor {
     @Override
     public void putFloat(Object obj, float value) {
       checkObj(obj);
-      UnsafeOps.putFloat(obj, fieldOffset, value);
+      UNSAFE.putFloat(obj, fieldOffset, value);
     }
   }
 
@@ -753,7 +748,7 @@ public abstract class FieldAccessor {
     @Override
     public double getDouble(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getDouble(obj, fieldOffset);
+      return UNSAFE.getDouble(obj, fieldOffset);
     }
 
     @Override
@@ -764,7 +759,7 @@ public abstract class FieldAccessor {
     @Override
     public void putDouble(Object obj, double value) {
       checkObj(obj);
-      UnsafeOps.putDouble(obj, fieldOffset, value);
+      UNSAFE.putDouble(obj, fieldOffset, value);
     }
   }
 
@@ -798,13 +793,13 @@ public abstract class FieldAccessor {
     @Override
     public Object get(Object obj) {
       checkObj(obj);
-      return UnsafeOps.getObject(obj, fieldOffset);
+      return UNSAFE.getObject(obj, fieldOffset);
     }
 
     @Override
     public void set(Object obj, Object value) {
       checkObj(obj);
-      UnsafeOps.putObject(obj, fieldOffset, value);
+      UNSAFE.putObject(obj, fieldOffset, value);
     }
   }
 
@@ -854,18 +849,18 @@ public abstract class FieldAccessor {
     StaticObjectAccessor(Field field) {
       super(field, -1);
       Preconditions.checkArgument(!TypeUtils.isPrimitive(field.getType()));
-      base = UnsafeOps.UNSAFE.staticFieldBase(field);
-      offset = UnsafeOps.UNSAFE.staticFieldOffset(field);
+      base = UNSAFE.staticFieldBase(field);
+      offset = UNSAFE.staticFieldOffset(field);
     }
 
     @Override
     public Object get(Object obj) {
-      return UnsafeOps.getObject(base, offset);
+      return UNSAFE.getObject(base, offset);
     }
 
     @Override
     public void set(Object obj, Object value) {
-      UnsafeOps.putObject(base, offset, value);
+      UNSAFE.putObject(base, offset, value);
     }
   }
 

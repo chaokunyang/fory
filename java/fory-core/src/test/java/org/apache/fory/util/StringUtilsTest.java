@@ -24,13 +24,10 @@ import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertTrue;
 
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.memory.NativeByteOrder;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.serializer.StringEncodingUtils;
 import org.testng.annotations.Test;
 
 public class StringUtilsTest extends ForyTestBase {
-
   @Test
   public void testEncodeHexString() {
     assertEquals(
@@ -106,50 +103,12 @@ public class StringUtilsTest extends ForyTestBase {
   }
 
   private boolean isLatin(char[] chars, boolean isLittle) {
-    boolean reverseBytes =
-        (NativeByteOrder.IS_LITTLE_ENDIAN && !isLittle)
-            || (!NativeByteOrder.IS_LITTLE_ENDIAN && !isLittle);
-    if (reverseBytes) {
-      for (int i = 0; i < chars.length; i++) {
-        chars[i] = Character.reverseBytes(chars[i]);
+    for (char c : chars) {
+      if (c > 0xFF) {
+        return false;
       }
     }
-    long mask;
-    if (isLittle) {
-      // latin chars will be 0xXX,0x00;0xXX,0x00 in byte order;
-      // Using 0x00,0xff(0xff00) to clear latin bits.
-      mask = 0xff00ff00ff00ff00L;
-    } else {
-      // latin chars will be 0x00,0xXX;0x00,0xXX in byte order;
-      // Using 0x00,0xff(0x00ff) to clear latin bits.
-      mask = 0x00ff00ff00ff00ffL;
-    }
-    int numChars = chars.length;
-    int vectorizedLen = numChars >> 2;
-    int vectorizedChars = vectorizedLen << 2;
-    int endOffset = UnsafeOps.CHAR_ARRAY_OFFSET + (vectorizedChars << 1);
-    boolean isLatin = true;
-    for (int offset = UnsafeOps.CHAR_ARRAY_OFFSET; offset < endOffset; offset += 8) {
-      // check 4 chars in a vectorized way, 4 times faster than scalar check loop.
-      long multiChars = UnsafeOps.getLong(chars, offset);
-      if ((multiChars & mask) != 0) {
-        isLatin = false;
-        break;
-      }
-    }
-    if (isLatin) {
-      for (int i = vectorizedChars; i < numChars; i++) {
-        char c = chars[i];
-        if (reverseBytes) {
-          c = Character.reverseBytes(c);
-        }
-        if (c > 0xFF) {
-          isLatin = false;
-          break;
-        }
-      }
-    }
-    return isLatin;
+    return true;
   }
 
   @Test

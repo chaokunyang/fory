@@ -1,6 +1,6 @@
 # Java 25 Direct Memory Access Benchmark
 
-This temporary JMH module compares direct-buffer scalar access paths used to reason about
+This diagnostic JMH module compares direct-buffer scalar access paths used to reason about
 `MemoryBuffer` on JDK 25:
 
 - `MemorySegment.get/set` with native-order unaligned layouts.
@@ -29,12 +29,16 @@ java -jar target/java25-memory-access-benchmarks.jar \
   -f 1 -wi 5 -i 5 -t 1 -w 1s -r 1s
 ```
 
-The benchmark class adds the required fork JVM options for the Unsafe path:
+The benchmark class adds fork JVM options only for the explicit Unsafe baseline:
 
 ```text
 --add-opens=java.base/java.nio=ALL-UNNAMED
 --sun-misc-unsafe-memory-access=allow
 ```
+
+These flags are not part of Fory's JDK25 zero-Unsafe deployment contract. They are present here so
+the benchmark can compare supported `ByteBuffer`/FFM access with the old raw-address Unsafe
+baseline in the same process shape.
 
 If you run with `-f 0`, pass those options to the outer `java` command because JMH will not fork a
 child JVM.

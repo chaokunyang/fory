@@ -185,7 +185,6 @@
                 <buildArg>-J--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED</buildArg>
                 <buildArg>-J--add-opens=java.base/java.io=ALL-UNNAMED</buildArg>
                 <buildArg>-J--add-opens=java.base/java.net=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.nio=ALL-UNNAMED</buildArg>
                 <buildArg>-J--add-opens=java.base/java.math=ALL-UNNAMED</buildArg>
               </buildArgs>
             </configuration>
@@ -198,13 +197,26 @@
               <execution>
                 <id>java-agent</id>
                 <goals>
-                  <goal>java</goal>
+                  <goal>exec</goal>
                 </goals>
                 <phase>test</phase>
                 <configuration>
-                  <mainClass>${mainClass}</mainClass>
-                  <includeProjectDependencies>true</includeProjectDependencies>
-                  <includePluginDependencies>false</includePluginDependencies>
+                  <executable>${java.home}/bin/java</executable>
+                  <arguments>
+                    <argument>--add-opens=java.base/java.lang=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.util=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.io=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.net=ALL-UNNAMED</argument>
+                    <argument>--add-opens=java.base/java.math=ALL-UNNAMED</argument>
+                    <argument>-classpath</argument>
+                    <classpath/>
+                    <argument>${mainClass}</argument>
+                  </arguments>
                 </configuration>
               </execution>
             </executions>

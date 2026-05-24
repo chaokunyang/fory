@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.Random;
+import org.apache.fory.TestUtils;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.testng.Assert;
@@ -112,6 +113,22 @@ public class MemoryBufferTest {
     assertThrows(
         IllegalArgumentException.class,
         () -> MemoryBuffer.fromDirectByteBuffer(ByteBuffer.allocate(8), 8, null));
+  }
+
+  @Test
+  public void testDirectByteBufferNoNioOpen() throws Exception {
+    ProcessBuilder processBuilder =
+        new ProcessBuilder(TestUtils.javaCommand(DirectByteBufferNoNioOpenProbe.class))
+            .redirectErrorStream(true);
+    for (String commandPart : processBuilder.command()) {
+      assertTrue(!commandPart.contains("java.base/java.nio"), processBuilder.command().toString());
+    }
+    processBuilder.environment().remove("JDK_JAVA_OPTIONS");
+    processBuilder.environment().remove("JAVA_TOOL_OPTIONS");
+    processBuilder.environment().remove("_JAVA_OPTIONS");
+    Process process = processBuilder.start();
+    String output = readFully(process.getInputStream());
+    assertEquals(process.waitFor(), 0, output);
   }
 
   @Test
@@ -218,8 +235,8 @@ public class MemoryBufferTest {
       byte[] bytes = new byte[4];
       source.copyToByteArray(0, bytes, 0, 4);
       check(bytes, new byte[] {1, 2, 3, 4});
-      assertThrows(
-          UnsupportedOperationException.class, () -> target.copyFromUnsafe(0, new byte[4], 0, 4));
+      target.copyFromByteArray(0, new byte[] {4, 3, 2, 1}, 0, 4);
+      check(target.getBytes(0, 4), new byte[] {4, 3, 2, 1});
     }
 
     private static void check(boolean actual, boolean expected) {
@@ -277,6 +294,54 @@ public class MemoryBufferTest {
                 + java.util.Arrays.toString(expected)
                 + " but got "
                 + java.util.Arrays.toString(actual));
+      }
+    }
+  }
+
+  public static final class DirectByteBufferNoNioOpenProbe {
+    public static void main(String[] args) {
+      if (JdkVersion.MAJOR_VERSION >= 25) {
+        for (String inputArg :
+            java.lang.management.ManagementFactory.getRuntimeMXBean().getInputArguments()) {
+          if (inputArg.contains("java.base/java.nio")) {
+            throw new AssertionError("Unexpected java.nio open: " + inputArg);
+          }
+        }
+        if (ByteBuffer.class
+            .getModule()
+            .isOpen("java.nio", DirectByteBufferNoNioOpenProbe.class.getModule())) {
+          throw new AssertionError("java.base/java.nio must not be open to this test probe");
+        }
+      }
+      MemoryBuffer buffer = MemoryUtils.wrap(ByteBuffer.allocateDirect(128));
+      buffer.writeInt32(17);
+      buffer.writeInt64(19);
+      checkEqual(buffer.readInt32(), 17);
+      checkEqual(buffer.readInt64(), 19L);
+
+      int[] ints = new int[] {1, 2, 3, 4};
+      buffer.writerIndex(0);
+      buffer.copyFromIntArray(0, ints, 0, ints.length * Integer.BYTES);
+      int[] readInts = new int[ints.length];
+      buffer.copyToIntArray(0, readInts, 0, readInts.length * Integer.BYTES);
+      if (!java.util.Arrays.equals(readInts, ints)) {
+        throw new AssertionError(
+            "Expected "
+                + java.util.Arrays.toString(ints)
+                + " but got "
+                + java.util.Arrays.toString(readInts));
+      }
+    }
+
+    private static void checkEqual(int actual, int expected) {
+      if (actual != expected) {
+        throw new AssertionError("Expected " + expected + " but got " + actual);
+      }
+    }
+
+    private static void checkEqual(long actual, long expected) {
+      if (actual != expected) {
+        throw new AssertionError("Expected " + expected + " but got " + actual);
       }
     }
   }

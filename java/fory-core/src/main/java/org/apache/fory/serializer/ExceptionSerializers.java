@@ -385,7 +385,7 @@ public final class ExceptionSerializers {
   private static <T extends Throwable> ObjectCreator<T> createThrowableObjectCreator(
       Class<T> type) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return new ObjectCreators.UnsafeObjectCreator<>(type);
+      return ObjectCreators.getObjectCreator(type);
     }
     if (ReflectionUtils.getCtrHandle(type, false) != null) {
       return ObjectCreators.getObjectCreator(type);

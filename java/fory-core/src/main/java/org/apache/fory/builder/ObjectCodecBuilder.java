@@ -65,7 +65,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
@@ -1187,8 +1186,8 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
   }
 
   protected Expression buildComponentsArray() {
-    return new StaticInvoke(
-        UnsafeOps.class, "copyObjectArray", OBJECT_ARRAY_TYPE, recordComponentDefaultValues);
+    return new Cast(
+        new Invoke(recordComponentDefaultValues, "clone", OBJECT_TYPE), OBJECT_ARRAY_TYPE);
   }
 
   protected Expression createRecord(SortedMap<Integer, Expression> recordComponents) {

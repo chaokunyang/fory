@@ -121,7 +121,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
@@ -153,6 +153,7 @@ import org.apache.fory.type.TypeUtils;
 import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.StringUtils;
+import sun.misc.Unsafe;
 
 /**
  * Generate sequential read/write code for java serialization to speed up performance. It also
@@ -420,7 +421,12 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
    */
   protected void addCommonImports() {
     ctx.addImports(
-        Fory.class, MemoryBuffer.class, WriteContext.class, ReadContext.class, UnsafeOps.class);
+        Fory.class,
+        MemoryBuffer.class,
+        WriteContext.class,
+        ReadContext.class,
+        _JDKAccess.class,
+        Unsafe.class);
     ctx.addImports(TypeInfo.class, TypeInfoHolder.class, ClassResolver.class);
     ctx.addImport(Generated.class);
     ctx.addImports(LazyInitBeanSerializer.class, EnumSerializer.class);

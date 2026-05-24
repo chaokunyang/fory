@@ -97,6 +97,29 @@ val fory: ThreadSafeFory = ForyKotlin.builder()
 
 All configuration options from Fory Java are available. See [Java Configuration](../java/configuration.md) for the complete list.
 
+## JDK25+ Zero-Unsafe Mode
+
+On JDK25+ with Unsafe memory access denied, Kotlin classes with final constructor properties need
+bindable constructor metadata so Fory can call the primary constructor instead of allocating an
+uninitialized instance. Enable Java parameter metadata for Kotlin compilation:
+
+```kotlin
+kotlin {
+    compilerOptions {
+        javaParameters = true
+    }
+}
+```
+
+For Maven builds, configure the Kotlin Maven plugin with:
+
+```xml
+<javaParameters>true</javaParameters>
+```
+
+The JVM also needs the module opens and final-field mutation option listed in
+[Java Troubleshooting](../java/troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens).
+
 Common options for Kotlin native-mode payloads:
 
 ```kotlin

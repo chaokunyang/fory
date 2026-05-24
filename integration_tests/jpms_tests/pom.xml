@@ -99,7 +99,6 @@
                 --add-opens=java.base/java.util.concurrent.atomic=org.apache.fory.core,org.apache.fory.format
                 --add-opens=java.base/java.io=org.apache.fory.core,org.apache.fory.format
                 --add-opens=java.base/java.net=org.apache.fory.core,org.apache.fory.format
-                --add-opens=java.base/java.nio=org.apache.fory.core,org.apache.fory.format
                 --add-opens=java.base/java.math=org.apache.fory.core,org.apache.fory.format
               </argLine>
             </configuration>

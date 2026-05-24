@@ -252,12 +252,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       // ObjectStreamSerializer must preserve Java serialization construction semantics. On JDK25+
       // this path cannot fall back to Unsafe, including inside GraalVM native images.
       return new ObjectCreators.ParentNoArgCtrObjectCreator<>(type);
-    } else if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return new ObjectCreators.UnsafeObjectCreator<>(type);
-    } else {
-      // In regular JVM, use the standard object creator
-      return ObjectCreators.getObjectCreator(type);
     }
+    return ObjectCreators.getObjectCreator(type);
   }
 
   private static boolean hasJdk25Fallback(Class<?> type) {

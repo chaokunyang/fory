@@ -1004,7 +1004,6 @@ public class ClassResolver extends TypeResolver {
             || isMap(cls)
             || Externalizable.class.isAssignableFrom(cls)
             || requireJavaSerialization(cls)
-            || requiresJavaSerializer(cls)
             || useReplaceResolveSerializer(cls)
             || Functions.isLambda(cls)
             || (ScalaTypes.SCALA_AVAILABLE && ReflectionUtils.isScalaSingletonObject(cls))
@@ -1546,9 +1545,6 @@ public class ClassResolver extends TypeResolver {
       if (requiresJdkStream(cls)) {
         return getDefaultJDKStreamSerializerType();
       }
-      if (requiresJavaSerializer(cls)) {
-        return JavaSerializer.class;
-      }
       if (isCrossLanguage()) {
         LOG.warn("Class {} isn't supported for cross-language serialization.", cls);
       }
@@ -1644,18 +1640,6 @@ public class ClassResolver extends TypeResolver {
         && cls.getName().startsWith("java.")
         && Serializable.class.isAssignableFrom(cls)
         && !hasNoArgConstructor(cls);
-  }
-
-  private static boolean requiresJavaSerializer(Class<?> cls) {
-    if (JdkVersion.MAJOR_VERSION < 25 || !Serializable.class.isAssignableFrom(cls)) {
-      return false;
-    }
-    // Scala products can have final derived fields initialized by the primary constructor but not
-    // represented as constructor parameters. Keep that compatibility in the isolated JDK stream
-    // path instead of teaching the generic JDK25 field serializer to ignore final fields.
-    return ScalaTypes.SCALA_AVAILABLE
-        && ScalaTypes.isScalaProductType(cls)
-        && !ReflectionUtils.isScalaSingletonObject(cls);
   }
 
   private static boolean hasNoArgConstructor(Class<?> cls) {

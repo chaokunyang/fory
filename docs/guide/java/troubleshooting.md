@@ -150,7 +150,8 @@ fory.registerSerializer(MyClass.class, new MyClassSerializer(fory.getTypeResolve
 
 ### JDK25+ zero-Unsafe mode and module opens
 
-When running on JDK25+ with Unsafe memory access denied, start the JVM with:
+When running on JDK25+ with Unsafe memory access denied, or on a later JDK where denied Unsafe
+memory access becomes the default, start the JVM with:
 
 ```bash
 --sun-misc-unsafe-memory-access=deny
@@ -163,31 +164,35 @@ When any Fory artifact is on the classpath instead of the module path, also incl
 --add-opens=<user.module>/<user.package>=ALL-UNNAMED,org.apache.fory.core,org.apache.fory.format
 ```
 
-Some optimized serializers and direct-buffer helpers also need JDK-private packages. Add only the
-opens needed by the paths used in your process:
+Some optimized serializers also need JDK-private packages. For each package in the table, open the
+owning JDK module/package to `org.apache.fory.core` and `org.apache.fory.format`; include
+`ALL-UNNAMED` too when any Fory artifact is on the classpath. Add only the opens needed by the paths
+used in your process:
 
-| Path                                                                             | Required opens                                                  |
-| -------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| String fast paths and throwable fields                                           | `java.base/java.lang`                                           |
-| Serialized lambdas                                                               | `java.base/java.lang.invoke`                                    |
-| Reflection-based object construction                                             | `java.base/java.lang.reflect`, `java.base/jdk.internal.reflect` |
-| Collection wrappers, sublists, `EnumMap`, and `StringTokenizer`                  | `java.base/java.util`                                           |
-| Blocking queue capacity serializers                                              | `java.base/java.util.concurrent`                                |
-| `ByteArrayInputStream`, `ByteArrayOutputStream`, and Java object-stream metadata | `java.base/java.io`                                             |
-| Proxy serializers                                                                | `java.base/java.lang.reflect`                                   |
-| Direct `ByteBuffer` wrapping                                                     | `java.base/java.nio`                                            |
+| Path                                                                             | Required opens                                                            |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| String fast paths and throwable fields                                           | `java.base/java.lang`                                                     |
+| Serialized lambdas                                                               | `java.base/java.lang.invoke`                                              |
+| Reflection-based object construction                                             | `java.base/java.lang.reflect`, `java.base/jdk.internal.reflect`           |
+| Collection wrappers, sublists, `EnumMap`, and `StringTokenizer`                  | `java.base/java.util`                                                     |
+| Blocking queue capacity serializers                                              | `java.base/java.util.concurrent`, `java.base/java.util.concurrent.atomic` |
+| `ByteArrayInputStream`, `ByteArrayOutputStream`, and Java object-stream metadata | `java.base/java.io`                                                       |
+| URL and networking serializers                                                   | `java.base/java.net`                                                      |
+| Proxy serializers                                                                | `java.base/java.lang.reflect`                                             |
+| Big number internals                                                             | `java.base/java.math`                                                     |
 
-For example, direct `ByteBuffer` wrapping on the module path requires:
-
-```bash
---add-opens=java.base/java.nio=ALL-UNNAMED,org.apache.fory.core,org.apache.fory.format
-```
-
-Normal classes with final instance fields require final-field mutation to be enabled for Fory core
-when Unsafe allocation is denied:
+Normal classes with final instance fields require final-field mutation to be enabled for the module
+that contains Fory's mutating code when Unsafe allocation is denied. Use the Fory module name on the
+module path:
 
 ```bash
 --enable-final-field-mutation=org.apache.fory.core
+```
+
+Use `ALL-UNNAMED` when running Fory on the classpath:
+
+```bash
+--enable-final-field-mutation=ALL-UNNAMED
 ```
 
 Fory restores those final fields through method-handle based access. Non-final fields can still be

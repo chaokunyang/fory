@@ -47,6 +47,20 @@ libraryDependencies ++= Seq(
   "dev.zio" %% "zio" % "2.1.7" % Test,
 )
 
+Test / fork := true
+Test / javaOptions ++= Seq(
+  "--add-opens=java.base/java.lang=ALL-UNNAMED",
+  "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
+  "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED",
+  "--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED",
+  "--add-opens=java.base/java.util=ALL-UNNAMED",
+  "--add-opens=java.base/java.util.concurrent=ALL-UNNAMED",
+  "--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED",
+  "--add-opens=java.base/java.io=ALL-UNNAMED",
+  "--add-opens=java.base/java.net=ALL-UNNAMED",
+  "--add-opens=java.base/java.math=ALL-UNNAMED",
+)
+
 lazy val writeTestClasspath = taskKey[File]("Writes the Scala test runtime classpath")
 
 writeTestClasspath := {

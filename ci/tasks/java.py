@@ -89,7 +89,6 @@ def jdk25_deny_options():
         f"--add-opens=java.base/java.util.concurrent.atomic={fory_open_targets}",
         f"--add-opens=java.base/java.io={fory_open_targets}",
         f"--add-opens=java.base/java.net={fory_open_targets}",
-        f"--add-opens=java.base/java.nio={fory_open_targets}",
         f"--add-opens=java.base/java.math={fory_open_targets}",
     ]
 
@@ -252,12 +251,14 @@ def run_jdk17_plus(java_version="17"):
     """Run Java 17+ tests."""
     logging.info(f"Executing fory java tests with Java {java_version}")
     common.exec_cmd("java -version")
-    jdk_options = [
-        "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
-    ]
+    jdk_options = []
     if java_version == "25":
         jdk_options.extend(jdk25_deny_options())
         jdk_options.extend(jdk25_javac_options())
+    else:
+        jdk_options.append(
+            "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
+        )
     os.environ["JDK_JAVA_OPTIONS"] = " ".join(jdk_options)
 
     common.cd_project_subdir("java")

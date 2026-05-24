@@ -23,11 +23,17 @@ import java.nio.charset.StandardCharsets;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.platform.internal._JDKAccess;
+import sun.misc.Unsafe;
 
 /** Platform-owned string internals used by {@link StringSerializer}. */
 final class PlatformStringUtils {
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
+  private static final int BYTE_ARRAY_OFFSET =
+      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(byte[].class);
+  private static final int CHAR_ARRAY_OFFSET =
+      AndroidSupport.IS_ANDROID ? 0 : UNSAFE.arrayBaseOffset(char[].class);
+
   static final boolean JDK_STRING_FIELD_ACCESS =
       !AndroidSupport.IS_ANDROID
           && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
@@ -54,19 +60,19 @@ final class PlatformStringUtils {
   private PlatformStringUtils() {}
 
   static Object getStringValue(String value) {
-    return UnsafeOps.getObject(value, STRING_VALUE_FIELD_OFFSET);
+    return UNSAFE.getObject(value, STRING_VALUE_FIELD_OFFSET);
   }
 
   static byte getStringCoder(String value) {
-    return UnsafeOps.getByte(value, STRING_CODER_FIELD_OFFSET);
+    return UNSAFE.getByte(value, STRING_CODER_FIELD_OFFSET);
   }
 
   static int getStringOffset(String value) {
-    return UnsafeOps.getInt(value, STRING_OFFSET_FIELD_OFFSET);
+    return UNSAFE.getInt(value, STRING_OFFSET_FIELD_OFFSET);
   }
 
   static int getStringCount(String value) {
-    return UnsafeOps.getInt(value, STRING_COUNT_FIELD_OFFSET);
+    return UNSAFE.getInt(value, STRING_COUNT_FIELD_OFFSET);
   }
 
   static String newCharsStringZeroCopy(char[] data) {
@@ -98,29 +104,29 @@ final class PlatformStringUtils {
   }
 
   static long getCharsLong(char[] chars, int charIndex) {
-    return UnsafeOps.getLong(chars, UnsafeOps.CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
+    return UNSAFE.getLong(chars, CHAR_ARRAY_OFFSET + ((long) charIndex << 1));
   }
 
   static long getBytesLong(byte[] bytes, int byteIndex) {
-    return UnsafeOps.getLong(bytes, UnsafeOps.BYTE_ARRAY_OFFSET + byteIndex);
+    return UNSAFE.getLong(bytes, BYTE_ARRAY_OFFSET + byteIndex);
   }
 
   static char getBytesChar(byte[] bytes, int byteIndex) {
-    return UnsafeOps.getChar(bytes, UnsafeOps.BYTE_ARRAY_OFFSET + byteIndex);
+    return UNSAFE.getChar(bytes, BYTE_ARRAY_OFFSET + byteIndex);
   }
 
   static void copyCharsToBytes(
       char[] chars, int charOffset, byte[] target, int byteOffset, int numBytes) {
-    UnsafeOps.UNSAFE.copyMemory(
+    UNSAFE.copyMemory(
         chars,
-        UnsafeOps.CHAR_ARRAY_OFFSET + ((long) charOffset << 1),
+        CHAR_ARRAY_OFFSET + ((long) charOffset << 1),
         target,
-        UnsafeOps.BYTE_ARRAY_OFFSET + byteOffset,
+        BYTE_ARRAY_OFFSET + byteOffset,
         numBytes);
   }
 
   static void putBytes(MemoryBuffer buffer, int writerIndex, byte[] bytes, int numBytes) {
     long address = buffer._unsafeWriterAddress() + writerIndex - buffer.writerIndex();
-    UnsafeOps.copyMemory(bytes, UnsafeOps.BYTE_ARRAY_OFFSET, null, address, numBytes);
+    UNSAFE.copyMemory(bytes, BYTE_ARRAY_OFFSET, null, address, numBytes);
   }
 }

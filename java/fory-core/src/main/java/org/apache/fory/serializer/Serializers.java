@@ -275,7 +275,55 @@ public class Serializers {
       return createSerializerReflectively(typeResolver, type, serializerClass);
     }
     try {
+      // Public serializers in exported JPMS packages should not require private package opens.
+      Serializer<T> serializer =
+          tryCreateSerializer(
+              typeResolver, type, serializerClass, MethodHandles.publicLookup(), false);
+      if (serializer != null) {
+        return serializer;
+      }
+      if (!hasSupportedConstructor(serializerClass)) {
+        throw new IllegalArgumentException(
+            "Serializer "
+                + serializerClass.getName()
+                + " doesn't define a supported constructor for "
+                + type);
+      }
       MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(serializerClass);
+      return tryCreateSerializer(typeResolver, type, serializerClass, lookup, true);
+    } catch (Throwable t) {
+      ExceptionUtils.throwException(t);
+      throw new IllegalStateException("unreachable");
+    }
+  }
+
+  private static boolean hasSupportedConstructor(Class<? extends Serializer> serializerClass) {
+    return hasConstructor(serializerClass, TypeResolver.class, Class.class)
+        || hasConstructor(serializerClass, TypeResolver.class)
+        || hasConstructor(serializerClass, Config.class, Class.class)
+        || hasConstructor(serializerClass, Config.class)
+        || hasConstructor(serializerClass, Class.class)
+        || hasConstructor(serializerClass);
+  }
+
+  private static boolean hasConstructor(
+      Class<? extends Serializer> serializerClass, Class<?>... parameterTypes) {
+    try {
+      serializerClass.getDeclaredConstructor(parameterTypes);
+      return true;
+    } catch (NoSuchMethodException e) {
+      return false;
+    }
+  }
+
+  private static <T> Serializer<T> tryCreateSerializer(
+      TypeResolver typeResolver,
+      Class<?> type,
+      Class<? extends Serializer> serializerClass,
+      MethodHandles.Lookup lookup,
+      boolean checked)
+      throws Throwable {
+    try {
       Config config = typeResolver.getConfig();
       try {
         MethodHandle ctr = lookup.findConstructor(serializerClass, SIG1);
@@ -283,6 +331,11 @@ public class Serializers {
         return (Serializer<T>) ctr.invoke(typeResolver, type);
       } catch (NoSuchMethodException e) {
         ExceptionUtils.ignore(e);
+      } catch (IllegalAccessException e) {
+        if (!checked) {
+          return null;
+        }
+        throw e;
       }
       try {
         MethodHandle ctr = lookup.findConstructor(serializerClass, SIG2);
@@ -290,6 +343,11 @@ public class Serializers {
         return (Serializer<T>) ctr.invoke(typeResolver);
       } catch (NoSuchMethodException e) {
         ExceptionUtils.ignore(e);
+      } catch (IllegalAccessException e) {
+        if (!checked) {
+          return null;
+        }
+        throw e;
       }
       try {
         MethodHandle ctr = lookup.findConstructor(serializerClass, SIG3);
@@ -297,6 +355,11 @@ public class Serializers {
         return (Serializer<T>) ctr.invoke(config, type);
       } catch (NoSuchMethodException e) {
         ExceptionUtils.ignore(e);
+      } catch (IllegalAccessException e) {
+        if (!checked) {
+          return null;
+        }
+        throw e;
       }
       try {
         MethodHandle ctr = lookup.findConstructor(serializerClass, SIG4);
@@ -304,6 +367,11 @@ public class Serializers {
         return (Serializer<T>) ctr.invoke(config);
       } catch (NoSuchMethodException e) {
         ExceptionUtils.ignore(e);
+      } catch (IllegalAccessException e) {
+        if (!checked) {
+          return null;
+        }
+        throw e;
       }
       try {
         MethodHandle ctr = lookup.findConstructor(serializerClass, SIG5);
@@ -311,13 +379,38 @@ public class Serializers {
         return (Serializer<T>) ctr.invoke(type);
       } catch (NoSuchMethodException e) {
         ExceptionUtils.ignore(e);
+      } catch (IllegalAccessException e) {
+        if (!checked) {
+          return null;
+        }
+        throw e;
       }
-      MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass);
+      try {
+        MethodHandle ctr = lookup.findConstructor(serializerClass, SIG6);
+        CTR_MAP.put(serializerClass, Tuple2.of(SIG6, ctr));
+        return (Serializer<T>) ctr.invoke();
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      } catch (IllegalAccessException e) {
+        if (!checked) {
+          return null;
+        }
+        throw e;
+      }
+      if (!checked) {
+        return null;
+      }
+      MethodHandle ctr = ReflectionUtils.getCtrHandle(serializerClass, true);
+      if (ctr == null) {
+        return null;
+      }
       CTR_MAP.put(serializerClass, Tuple2.of(SIG6, ctr));
       return (Serializer<T>) ctr.invoke();
-    } catch (Throwable t) {
-      ExceptionUtils.throwException(t);
-      throw new IllegalStateException("unreachable");
+    } catch (IllegalAccessException e) {
+      if (!checked) {
+        return null;
+      }
+      throw e;
     }
   }
 

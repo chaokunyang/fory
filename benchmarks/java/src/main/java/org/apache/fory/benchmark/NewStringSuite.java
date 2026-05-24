@@ -19,12 +19,13 @@
 
 package org.apache.fory.benchmark;
 
-import org.apache.fory.platform.UnsafeOps;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.StringUtils;
 import org.openjdk.jmh.Main;
+import sun.misc.Unsafe;
 
 public class NewStringSuite {
+  private static final Unsafe UNSAFE = UnsafeAccess.load();
 
   static String str = StringUtils.random(230);
   static char[] strData = str.toCharArray();
@@ -45,7 +46,7 @@ public class NewStringSuite {
 
   private static long fieldOffset(Class<?> type, String fieldName) {
     try {
-      return UnsafeOps.objectFieldOffset(type.getDeclaredField(fieldName));
+      return UNSAFE.objectFieldOffset(type.getDeclaredField(fieldName));
     } catch (NoSuchFieldException e) {
       throw new IllegalStateException(e);
     }
@@ -54,7 +55,7 @@ public class NewStringSuite {
   // @Benchmark
   public Object createJDK8StringByUnsafe() {
     String str = new String(stubStr);
-    UnsafeOps.putObject(str, STRING_VALUE_FIELD_OFFSET, strData);
+    UNSAFE.putObject(str, STRING_VALUE_FIELD_OFFSET, strData);
     return str;
   }
 

@@ -41,7 +41,7 @@ references.
   in other runtimes keep hot paths fast and payloads compact.
 - **Language And Platform Support**: Java, Python, C++, Go, Rust,
   JavaScript/TypeScript, C#, Swift, Dart, Scala, and Kotlin, including GraalVM
-  native image, Dart VM/Flutter/web, and Node.js/browser JavaScript.
+  native image, Android, Dart VM/Flutter/web, and Node.js/browser JavaScript.
 
 ## Performance
 

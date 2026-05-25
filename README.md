@@ -35,8 +35,7 @@ references.
   enums, structs, and unions. Define schemas once, then generate native domain
   objects for each language without forcing wrapper types into user code.
 - **Row-Format Random Access**: Read fields, arrays, and nested values without
-  rebuilding full objects, with zero-copy access, partial reads, and Arrow
-  integration.
+  rebuilding full objects, with zero-copy access and partial reads.
 - **Optimized Runtimes**: Java JIT serializers and generated/static serializers
   in other runtimes keep hot paths fast and payloads compact.
 - **Language And Platform Support**: Java, Python, C++, Go, Rust,

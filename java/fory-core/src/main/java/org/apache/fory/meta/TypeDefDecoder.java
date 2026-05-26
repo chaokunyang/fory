@@ -20,6 +20,7 @@
 package org.apache.fory.meta;
 
 import static org.apache.fory.meta.Encoders.fieldNameEncodings;
+import static org.apache.fory.meta.NativeTypeDefDecoder.checkMetaCount;
 import static org.apache.fory.meta.NativeTypeDefDecoder.decodeTypeDefBuf;
 import static org.apache.fory.meta.NativeTypeDefDecoder.readPkgName;
 import static org.apache.fory.meta.NativeTypeDefDecoder.readTypeName;
@@ -78,6 +79,7 @@ class TypeDefDecoder {
       if (numFields == SMALL_NUM_FIELDS_THRESHOLD) {
         numFields += buffer.readVarUInt32Small7();
       }
+      checkMetaCount("TypeDef field count", numFields, resolver);
       if (named) {
         String namespace = readPkgName(buffer);
         String typeName = readTypeName(buffer);
@@ -201,6 +203,7 @@ class TypeDefDecoder {
   // | header + type info + field name | ... | header + type info + field name |
   private static List<FieldInfo> readFieldsInfo(
       MemoryBuffer buffer, XtypeResolver resolver, String className, int numFields) {
+    checkMetaCount("TypeDef field count", numFields, resolver);
     List<FieldInfo> fieldInfos = new ArrayList<>(numFields);
     for (int i = 0; i < numFields; i++) {
       // header: 2 bits field name encoding + 4 bits size + nullability flag + ref tracking flag

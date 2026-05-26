@@ -75,6 +75,21 @@ public class BufferSerializersTest extends ForyTestBase {
   }
 
   @Test
+  public void testBufferObjectSizeLimit() {
+    Fory writer = Fory.builder().withXlang(false).build();
+    Fory reader = Fory.builder().withXlang(false).withMaxBinarySize(4).build();
+    Serializer<ByteBuffer> writerSerializer =
+        new BufferSerializers.ByteBufferSerializer(writer.getTypeResolver(), ByteBuffer.class);
+    Serializer<ByteBuffer> readerSerializer =
+        new BufferSerializers.ByteBufferSerializer(reader.getTypeResolver(), ByteBuffer.class);
+    MemoryBuffer buffer = MemoryBuffer.newHeapBuffer(32);
+    writeSerializer(writer, writerSerializer, buffer, ByteBuffer.wrap(new byte[4]));
+
+    org.testng.Assert.assertThrows(
+        DeserializationException.class, () -> readSerializer(reader, readerSerializer, buffer));
+  }
+
+  @Test
   public void testBufferObjectRejectsInvalidInBandSizeWithoutBinaryCap() {
     Fory fory = Fory.builder().withXlang(true).withCompatible(false).build();
     Serializer<ByteBuffer> serializer =

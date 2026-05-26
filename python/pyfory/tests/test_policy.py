@@ -30,6 +30,10 @@ def policy_global_function():
     return "safe"
 
 
+def policy_replacement_function():
+    return "replacement"
+
+
 class PolicyMethodHolder:
     def run(self):
         return "safe"
@@ -491,24 +495,21 @@ def test_validate_module():
     import json
     import collections
 
-    # Test 1: Return module object directly
     class ReturnModulePolicy(DeserializationPolicy):
         def validate_module(self, module_name, **kwargs):
             return collections
 
     fory1 = Fory(xlang=False, ref=True, strict=False, policy=ReturnModulePolicy())
     data = fory1.serialize(json)
-    assert fory1.deserialize(data) is collections
+    assert fory1.deserialize(data) is json
 
-    # Test 2: Return string to redirect import
     class RedirectPolicy(DeserializationPolicy):
         def validate_module(self, module_name, **kwargs):
             return "collections" if module_name == "json" else None
 
     fory2 = Fory(xlang=False, ref=True, strict=False, policy=RedirectPolicy())
-    assert fory2.deserialize(fory2.serialize(json)).__name__ == "collections"
+    assert fory2.deserialize(fory2.serialize(json)).__name__ == "json"
 
-    # Test 3: Raise to block module
     class BlockPolicy(DeserializationPolicy):
         def validate_module(self, module_name, **kwargs):
             raise ValueError(f"Module {module_name} blocked")
@@ -516,6 +517,62 @@ def test_validate_module():
     fory3 = Fory(xlang=False, ref=True, strict=False, policy=BlockPolicy())
     with pytest.raises(ValueError, match="blocked"):
         fory3.deserialize(fory3.serialize(json))
+
+
+def test_validator_returns_ignored():
+    import json
+    import collections
+
+    class ReplacementClass:
+        pass
+
+    class ReturnPolicy(DeserializationPolicy):
+        def validate_module(self, module_name, **kwargs):
+            return collections
+
+        def validate_class(self, cls, is_local, **kwargs):
+            return ReplacementClass
+
+        def validate_function(self, func, is_local, **kwargs):
+            return policy_replacement_function
+
+        def validate_method(self, method, is_local, **kwargs):
+            return policy_replacement_function
+
+    policy = ReturnPolicy()
+    fory = Fory(xlang=False, ref=True, strict=False, policy=policy)
+    assert fory.deserialize(fory.serialize(json)) is json
+    assert fory.deserialize(fory.serialize(PolicyGlobalClass)) is PolicyGlobalClass
+    assert fory.deserialize(fory.serialize(policy_global_function)) is policy_global_function
+
+    serializer = FunctionSerializer(fory.type_resolver, type(policy_global_function))
+    read_context = FakeReadContext(policy, [1, __name__, "policy_global_bound_method"])
+    assert serializer._deserialize_function(read_context) is policy_global_bound_method
+
+
+def test_local_class_return_ignored():
+    class SafeClass:
+        @classmethod
+        def run(cls):
+            return "safe"
+
+    def make_payload_class():
+        class PayloadClass:
+            @classmethod
+            def run(cls):
+                return "payload"
+
+        return PayloadClass
+
+    class ReturnClassPolicy(DeserializationPolicy):
+        def validate_class(self, cls, is_local, **kwargs):
+            return SafeClass if is_local else None
+
+    fory = Fory(xlang=False, ref=True, strict=False, policy=ReturnClassPolicy())
+    decoded = fory.deserialize(fory.serialize(make_payload_class()))
+    assert decoded is not SafeClass
+    assert decoded.run() == "payload"
+    assert SafeClass.run() == "safe"
 
 
 def test_type_deserialization_validates_module():

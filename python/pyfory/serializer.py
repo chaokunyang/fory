@@ -47,12 +47,7 @@ from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 
 
 def _import_validated_module(policy, module_name):
-    result = policy.validate_module(module_name)
-    if result is not None:
-        if isinstance(result, types.ModuleType):
-            return result
-        assert isinstance(result, str), f"validate_module must return module, str, or None, got {type(result)}"
-        module_name = result
+    policy.validate_module(module_name)
     return importlib.import_module(module_name)
 
 
@@ -111,21 +106,15 @@ def _is_bound_method_value(obj):
 
 def _validate_function_value(policy, func, is_local):
     if isinstance(func, type):
-        result = policy.validate_class(func, is_local=is_local)
-        if result is not None:
-            func = result
+        policy.validate_class(func, is_local=is_local)
         if isinstance(func, type):
             raise TypeError(f"Function serializer resolved class {func.__module__}.{func.__qualname__}")
     if _is_bound_method_value(func):
-        result = policy.validate_method(func, is_local=is_local)
-        if result is not None:
-            func = result
+        policy.validate_method(func, is_local=is_local)
         return func
     if not callable(func):
         raise TypeError(f"Function serializer resolved non-callable object {func!r}")
-    result = policy.validate_function(func, is_local=is_local)
-    if result is not None:
-        func = result
+    policy.validate_function(func, is_local=is_local)
     return func
 
 
@@ -159,9 +148,7 @@ def _resolve_validated_bound_method(policy, obj, method_name, is_local):
     if policy is DEFAULT_POLICY:
         return getattr(obj, method_name)
     method = _bind_static_method(obj, method_name)
-    result = policy.validate_method(method, is_local=is_local)
-    if result is not None:
-        method = result
+    policy.validate_method(method, is_local=is_local)
     return method
 
 
@@ -1214,15 +1201,12 @@ class ReduceSerializer(Serializer):
         self._getnewargs = getattr(cls, "__getnewargs__", None)
 
     def _validate_global_object(self, policy, obj):
-        result = None
         if isinstance(obj, type):
-            result = policy.validate_class(obj, is_local=_is_local_class(obj))
+            policy.validate_class(obj, is_local=_is_local_class(obj))
         elif _is_bound_method_value(obj):
-            result = policy.validate_method(obj, is_local=_is_local_callable(obj))
+            policy.validate_method(obj, is_local=_is_local_callable(obj))
         elif isinstance(obj, (types.FunctionType, types.BuiltinFunctionType)):
-            result = policy.validate_function(obj, is_local=_is_local_callable(obj))
-        if result is not None:
-            obj = result
+            policy.validate_function(obj, is_local=_is_local_callable(obj))
         return obj
 
     def _resolve_global_name(self, read_context, global_name):
@@ -1370,9 +1354,7 @@ class TypeSerializer(Serializer):
         module_name = read_context.read_string()
         qualname = read_context.read_string()
         cls = _resolve_validated_module_qualname(read_context.policy, module_name, qualname)
-        result = read_context.policy.validate_class(cls, is_local=_is_local_class(cls))
-        if result is not None:
-            cls = result
+        read_context.policy.validate_class(cls, is_local=_is_local_class(cls))
         return cls
 
     def _serialize_local_class(self, write_context, cls):
@@ -1422,9 +1404,7 @@ class TypeSerializer(Serializer):
         read_context.policy.authorize_instantiation(type, module=module, qualname=qualname, bases=bases)
         cls = type(name, bases, {})
         read_context.set_read_ref(ref_id, cls)
-        result = read_context.policy.validate_class(cls, is_local=True)
-        if result is not None:
-            cls = result
+        read_context.policy.validate_class(cls, is_local=True)
 
         num_class_methods = read_context.read_var_uint32()
         _check_collection_size(read_context, num_class_methods, "local class method")
@@ -1440,9 +1420,7 @@ class TypeSerializer(Serializer):
         # Set module and qualname
         cls.__module__ = module
         cls.__qualname__ = qualname
-        result = read_context.policy.validate_class(cls, is_local=True)
-        if result is not None:
-            cls = result
+        read_context.policy.validate_class(cls, is_local=True)
         return cls
 
 

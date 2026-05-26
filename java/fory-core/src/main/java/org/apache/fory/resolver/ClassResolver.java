@@ -2147,6 +2147,7 @@ public class ClassResolver extends TypeResolver {
   }
 
   @Internal
+  @Override
   public void checkClassForDeserialization(Class<?> cls) {
     if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
       return;

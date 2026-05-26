@@ -33,6 +33,7 @@ import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.exception.InsecureException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -359,7 +360,7 @@ public class ReplaceResolveSerializer extends Serializer {
 
   protected Object readObject(ReadContext readContext) {
     Class cls = classResolver.readClassInternal(readContext);
-    MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(cls);
+    MethodInfoCache jdkMethodInfoCache = getMethodInfoCache(cls, true);
     Object o = jdkMethodInfoCache.objectSerializer.read(readContext);
     ReplaceResolveInfo replaceResolveInfo = jdkMethodInfoCache.info;
     if (replaceResolveInfo.readResolveMethod == null) {
@@ -389,11 +390,31 @@ public class ReplaceResolveSerializer extends Serializer {
   }
 
   protected MethodInfoCache getMethodInfoCache(Class<?> cls) {
+    return getMethodInfoCache(cls, false);
+  }
+
+  private MethodInfoCache getMethodInfoCache(Class<?> cls, boolean checkDeserialization) {
     MethodInfoCache jdkMethodInfoCache = classTypeInfoHolderMap.get(cls);
     if (jdkMethodInfoCache == null) {
+      if (checkDeserialization) {
+        // The class is read from the replace/resolve payload, so force normal serializer
+        // resolution before building the method cache to preserve registration checks.
+        checkClassForDeserialization(cls);
+      }
       jdkMethodInfoCache = newJDKMethodInfoCache(typeResolver, cls);
       classTypeInfoHolderMap.put(cls, jdkMethodInfoCache);
     }
     return jdkMethodInfoCache;
+  }
+
+  private void checkClassForDeserialization(Class<?> cls) {
+    Serializer<?> serializer = classResolver.getSerializer(cls);
+    if (serializer instanceof CopyOnlyObjectSerializer) {
+      throw new InsecureException(
+          String.format(
+              "%s is not registered, please check whether it's the type you want to deserialize or "
+                  + "a **vulnerability**.",
+              cls));
+    }
   }
 }

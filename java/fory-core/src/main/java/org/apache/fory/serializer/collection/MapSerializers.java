@@ -340,8 +340,6 @@ public class MapSerializers {
   }
 
   public static class EnumMapSerializer extends MapSerializer<EnumMap> {
-    private static final byte NORMAL_ENUM_MAP = 0;
-
     private static final class CapturingObjectInputStream extends ObjectInputStream {
       private final ClassLoader fallbackLoader;
       private Class<?> enumClass;
@@ -380,7 +378,6 @@ public class MapSerializers {
     @Override
     public Map onMapWrite(WriteContext writeContext, EnumMap value) {
       MemoryBuffer buffer = writeContext.getBuffer();
-      buffer.writeByte(NORMAL_ENUM_MAP);
       buffer.writeVarUInt32Small7(value.size());
       Class keyType = getKeyType(value);
       ((ClassResolver) typeResolver).writeClassAndUpdateCache(writeContext, keyType);
@@ -390,10 +387,6 @@ public class MapSerializers {
     @Override
     public EnumMap newMap(ReadContext readContext) {
       MemoryBuffer buffer = readContext.getBuffer();
-      byte payloadMode = buffer.readByte();
-      if (payloadMode != NORMAL_ENUM_MAP) {
-        throw new IllegalArgumentException("Unknown EnumMap payload mode: " + payloadMode);
-      }
       setNumElements(readMapSize(buffer));
       Class<?> keyType = typeResolver.readTypeInfo(readContext).getType();
       EnumMap map = new EnumMap(keyType);
@@ -415,8 +408,7 @@ public class MapSerializers {
       try {
         return keyTypeBySerialization(value, typeResolver.getClassLoader());
       } catch (IOException | ClassNotFoundException e) {
-        ExceptionUtils.throwException(e);
-        throw new IllegalStateException("unreachable");
+        throw ExceptionUtils.throwException(e);
       }
     }
 
@@ -424,7 +416,7 @@ public class MapSerializers {
         throws IOException, ClassNotFoundException {
       // This JDK stream is local-only key-type discovery for an already-owned EnumMap; remote Fory
       // payloads must keep using the normal class metadata path in newMap.
-      EnumMap copy = (EnumMap) value.clone();
+      EnumMap copy = value.clone();
       copy.clear();
       ByteArrayOutputStream bytes = new ByteArrayOutputStream(128);
       try (ObjectOutputStream out = new ObjectOutputStream(bytes)) {

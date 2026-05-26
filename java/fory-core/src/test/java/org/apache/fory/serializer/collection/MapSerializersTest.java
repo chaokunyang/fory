@@ -724,6 +724,7 @@ public class MapSerializersTest extends ForyTestBase {
     MemoryBuffer buffer = MemoryUtils.buffer(64);
     writeSerializer(fory, serializer, buffer, enumMap);
     Assert.assertEquals(buffer.getByte(0), (byte) 0);
+    Assert.assertEquals(buffer.readerIndex(), 0);
     EnumMap<TestEnum, Object> restored = readSerializer(fory, serializer, buffer);
     Assert.assertEquals(restored, enumMap);
     restored.put(TestEnum.A, "value");
@@ -731,13 +732,15 @@ public class MapSerializersTest extends ForyTestBase {
   }
 
   @Test
-  public void testEnumMapRejectsJdkPayloadMode() {
+  public void testEnumMapHasNoPayloadMode() {
     Fory fory = getJavaFory();
     Serializer<EnumMap> serializer = fory.getSerializer(EnumMap.class);
-    MemoryBuffer buffer = MemoryUtils.buffer(8);
-    buffer.writeByte((byte) 1);
-    Assert.assertThrows(
-        IllegalArgumentException.class, () -> readSerializer(fory, serializer, buffer));
+    EnumMap<TestEnum, Object> enumMap = new EnumMap<>(TestEnum.class);
+    enumMap.put(TestEnum.A, "value");
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    writeSerializer(fory, serializer, buffer, enumMap);
+    Assert.assertEquals(buffer.getByte(0), (byte) 1);
+    Assert.assertEquals(readSerializer(fory, serializer, buffer), enumMap);
   }
 
   @Test(dataProvider = "foryCopyConfig")

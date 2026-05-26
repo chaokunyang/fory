@@ -2025,9 +2025,16 @@ public class ClassResolver extends TypeResolver {
   }
 
   /**
-   * Read serialized java classname. Note that the object of the class can be non-serializable. For
-   * serializable object, {@link #readTypeInfo(ReadContext)} or {@link #readTypeInfo(ReadContext,
-   * TypeInfoHolder)} should be invoked.
+   * Read a serialized Java class token.
+   *
+   * <p>For named-class tokens, this method enforces deserialization class policy before returning
+   * the class, including the disallowed list and registration or TypeChecker checks. For registered
+   * type-id tokens, it returns the registered class whose admission was already checked during
+   * registration.
+   *
+   * <p>Note that the object of the class can be non-serializable. For serializable object, {@link
+   * #readTypeInfo(ReadContext)} or {@link #readTypeInfo(ReadContext, TypeInfoHolder)} should be
+   * invoked.
    */
   public Class<?> readClassInternal(ReadContext readContext) {
     return readClassInternal(readContext, true);

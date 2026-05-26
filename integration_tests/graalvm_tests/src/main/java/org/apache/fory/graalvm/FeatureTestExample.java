@@ -77,6 +77,7 @@ public class FeatureTestExample {
             .requireClassRegistration(true)
             .build();
     fory.register(PrivateConstructorClass.class);
+    fory.register(TestInterface.class);
     fory.register(TestInvocationHandler.class);
     GraalvmSupport.registerProxySupport(TestInterface.class);
     fory.ensureSerializersCompiled();

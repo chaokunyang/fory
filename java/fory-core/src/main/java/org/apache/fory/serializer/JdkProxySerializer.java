@@ -88,12 +88,10 @@ public class JdkProxySerializer extends Serializer {
           Serializer.class.getClassLoader(), new Class[] {StubInterface.class}, STUB_HANDLER);
 
   private final TypeResolver typeResolver;
-  private final boolean requireClassRegistration;
 
   public JdkProxySerializer(TypeResolver typeResolver, Class cls) {
     super(typeResolver.getConfig(), cls);
     this.typeResolver = typeResolver;
-    requireClassRegistration = typeResolver.getConfig().requireClassRegistration();
     if (cls != ReplaceStub.class) {
       // Skip proxy class validation in GraalVM native image runtime to avoid issues with proxy
       // detection
@@ -141,7 +139,6 @@ public class JdkProxySerializer extends Serializer {
     final int refId = needToWriteRef ? readContext.lastPreservedRefId() : -1;
     final Class<?>[] interfaces = (Class<?>[]) readContext.readRef();
     Preconditions.checkNotNull(interfaces);
-    checkProxyInterfaces(interfaces);
     if (!needToWriteRef) {
       InvocationHandler invocationHandler =
           unwrapInvocationHandler((InvocationHandler) readContext.readRef());
@@ -163,17 +160,6 @@ public class JdkProxySerializer extends Serializer {
         unwrapInvocationHandler((InvocationHandler) readContext.readRef());
     UnsafeOps.putObject(proxy, ProxyHandlerField.OFFSET, invocationHandler);
     return proxy;
-  }
-
-  private void checkProxyInterfaces(Class<?>[] interfaces) {
-    if (requireClassRegistration) {
-      // Proxy interfaces are class tokens, not object types. Strict registration still applies to
-      // the invocation handler and other ordinary object payloads.
-      return;
-    }
-    for (Class<?> interfaceClass : interfaces) {
-      typeResolver.checkClassForDeserialization(interfaceClass);
-    }
   }
 
   private static InvocationHandler unwrapInvocationHandler(InvocationHandler invocationHandler) {

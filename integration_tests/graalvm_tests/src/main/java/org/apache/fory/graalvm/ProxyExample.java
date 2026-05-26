@@ -51,6 +51,8 @@ public class ProxyExample {
             .requireClassRegistration(true)
             .build();
     // register and generate serializer code.
+    fory.register(Function.class);
+    fory.register(Serializable.class);
     fory.register(TestInvocationHandler.class);
     GraalvmSupport.registerProxySupport(Function.class, Serializable.class);
     fory.ensureSerializersCompiled();

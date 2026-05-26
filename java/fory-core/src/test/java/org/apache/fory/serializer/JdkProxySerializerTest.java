@@ -91,6 +91,8 @@ public class JdkProxySerializerTest extends ForyTestBase {
   @Test
   public void testJdkProxyStrictInterfaces() {
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(true).build();
+    fory.register(Function.class);
+    fory.register(Serializable.class);
     fory.register(TestInvocationHandler.class);
     Function function =
         (Function)
@@ -101,6 +103,20 @@ public class JdkProxySerializerTest extends ForyTestBase {
 
     Function deserializedFunction = (Function) fory.deserialize(fory.serialize(function));
     assertEquals(deserializedFunction.apply(null), 1);
+  }
+
+  @Test
+  public void testJdkProxyStrictRejectsUnregisteredInterface() {
+    Fory writer = Fory.builder().withXlang(false).requireClassRegistration(false).build();
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                writer.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
+    byte[] bytes = writer.serialize(function);
+
+    Fory reader = Fory.builder().withXlang(false).requireClassRegistration(true).build();
+    reader.register(TestInvocationHandler.class);
+    assertThrows(InsecureException.class, () -> reader.deserialize(bytes));
   }
 
   @Test(dataProvider = "foryCopyConfig")

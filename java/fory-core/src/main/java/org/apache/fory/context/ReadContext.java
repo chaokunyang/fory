@@ -24,7 +24,6 @@ import java.util.Iterator;
 import org.apache.fory.Fory;
 import org.apache.fory.config.Config;
 import org.apache.fory.config.Int64Encoding;
-import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.InsecureException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.resolver.ClassResolver;
@@ -471,11 +470,8 @@ public final class ReadContext {
       if (size < 0) {
         throw new IllegalArgumentException("Buffer object size must be non-negative: " + size);
       }
-      int maxBinarySize = config.maxBinarySize();
-      if (size > maxBinarySize) {
-        throw new DeserializationException(
-            "Buffer object size " + size + " exceeds max binary size " + maxBinarySize);
-      }
+      // This returns a zero-copy slice. Allocation limits belong to serializers which allocate
+      // objects from the slice, not to the buffer-object transport itself.
       buffer.checkReadableBytes(size);
       int readerIndex = buffer.readerIndex();
       MemoryBuffer slice = buffer.slice(readerIndex, size);

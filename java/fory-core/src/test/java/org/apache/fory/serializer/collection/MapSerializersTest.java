@@ -716,6 +716,30 @@ public class MapSerializersTest extends ForyTestBase {
         MapSerializers.EnumMapSerializer.class);
   }
 
+  @Test
+  public void testEmptyEnumMap() {
+    Fory fory = getJavaFory();
+    EnumMap<TestEnum, Object> enumMap = new EnumMap<>(TestEnum.class);
+    Serializer<EnumMap> serializer = fory.getSerializer(EnumMap.class);
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    writeSerializer(fory, serializer, buffer, enumMap);
+    Assert.assertEquals(buffer.getByte(0), (byte) 0);
+    EnumMap<TestEnum, Object> restored = readSerializer(fory, serializer, buffer);
+    Assert.assertEquals(restored, enumMap);
+    restored.put(TestEnum.A, "value");
+    Assert.assertEquals(restored.get(TestEnum.A), "value");
+  }
+
+  @Test
+  public void testEnumMapRejectsJdkPayloadMode() {
+    Fory fory = getJavaFory();
+    Serializer<EnumMap> serializer = fory.getSerializer(EnumMap.class);
+    MemoryBuffer buffer = MemoryUtils.buffer(8);
+    buffer.writeByte((byte) 1);
+    Assert.assertThrows(
+        IllegalArgumentException.class, () -> readSerializer(fory, serializer, buffer));
+  }
+
   @Test(dataProvider = "foryCopyConfig")
   public void testEnumMap(Fory fory) {
     EnumMap<TestEnum, Object> enumMap = new EnumMap<>(TestEnum.class);

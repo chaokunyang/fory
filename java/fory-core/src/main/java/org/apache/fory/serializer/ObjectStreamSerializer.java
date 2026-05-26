@@ -291,7 +291,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       ClassResolver classResolver = (ClassResolver) typeResolver;
       TreeMap<Integer, ObjectInputValidation> callbacks = new TreeMap<>(Collections.reverseOrder());
       for (int i = 0; i < numClasses; i++) {
-        Class<?> currentClass = classResolver.readClassInternal(readContext);
+        Class<?> currentClass = classResolver.readClassInternalUnchecked(readContext);
 
         // Find the matching local slot for sender's class
         SlotInfo matchedSlot = null;
@@ -324,6 +324,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
 
         if (matchedSlot == null) {
           // Sender has a layer that receiver doesn't have - read TypeDef and skip the data
+          classResolver.checkClassForDeserialization(currentClass);
           skipUnknownLayerData(readContext, currentClass);
           continue;
         }

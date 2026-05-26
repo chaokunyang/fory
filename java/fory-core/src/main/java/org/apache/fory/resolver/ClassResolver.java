@@ -2030,6 +2030,10 @@ public class ClassResolver extends TypeResolver {
    * TypeInfoHolder)} should be invoked.
    */
   public Class<?> readClassInternal(ReadContext readContext) {
+    return readClassInternal(readContext, true);
+  }
+
+  private Class<?> readClassInternal(ReadContext readContext, boolean checkNamedClass) {
     MemoryBuffer buffer = readContext.getBuffer();
     int header = buffer.readVarUInt32Small14();
     if ((header & 0b1) != 0) {
@@ -2038,7 +2042,7 @@ public class ClassResolver extends TypeResolver {
       MetaStringReader metaStringReader = readContext.getMetaStringReader();
       EncodedMetaString packageBytes = metaStringReader.readMetaStringWithFlag(buffer, header);
       EncodedMetaString simpleClassNameBytes = metaStringReader.readMetaString(buffer);
-      return loadBytesToTypeInfo(packageBytes, simpleClassNameBytes).type;
+      return loadBytesToTypeInfo(packageBytes, simpleClassNameBytes, checkNamedClass).type;
     }
     int typeId = header >>> 1;
     switch (typeId) {
@@ -2055,6 +2059,11 @@ public class ClassResolver extends TypeResolver {
     }
   }
 
+  @Internal
+  public Class<?> readClassInternalUnchecked(ReadContext readContext) {
+    return readClassInternal(readContext, false);
+  }
+
   private TypeInfo getTypeInfoByTypeIdForReadClassInternal(int typeId, int userTypeId) {
     TypeInfo typeInfo;
     if (userTypeId != INVALID_USER_TYPE_ID) {
@@ -2069,10 +2078,16 @@ public class ClassResolver extends TypeResolver {
   @Override
   protected TypeInfo loadBytesToTypeInfo(
       EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes) {
+    return loadBytesToTypeInfo(packageBytes, simpleClassNameBytes, true);
+  }
+
+  private TypeInfo loadBytesToTypeInfo(
+      EncodedMetaString packageBytes, EncodedMetaString simpleClassNameBytes, boolean checkClass) {
     TypeNameBytes typeNameBytes = new TypeNameBytes(packageBytes, simpleClassNameBytes);
     TypeInfo typeInfo = compositeNameBytes2TypeInfo.get(typeNameBytes);
     if (typeInfo == null) {
-      typeInfo = populateBytesToTypeInfo(typeNameBytes, packageBytes, simpleClassNameBytes);
+      typeInfo =
+          populateBytesToTypeInfo(typeNameBytes, packageBytes, simpleClassNameBytes, checkClass);
     }
     // Note: Don't create serializer here - this method is used by both readTypeInfo
     // (which needs serializer) and readClassInternal (which doesn't need serializer).
@@ -2102,26 +2117,44 @@ public class ClassResolver extends TypeResolver {
   private TypeInfo populateBytesToTypeInfo(
       TypeNameBytes typeNameBytes,
       EncodedMetaString packageBytes,
-      EncodedMetaString simpleClassNameBytes) {
+      EncodedMetaString simpleClassNameBytes,
+      boolean checkClass) {
     String packageName = packageBytes.decode(PACKAGE_DECODER);
     String className = simpleClassNameBytes.decode(TYPE_NAME_DECODER);
     ClassSpec classSpec = Encoders.decodePkgAndClass(packageName, className);
     Class<?> cls = loadClass(classSpec.entireClassName, classSpec.isEnum, classSpec.dimension);
+    boolean unknownClass = UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls));
+    if (checkClass && !unknownClass) {
+      checkClassForDeserialization(cls);
+    }
     int typeId = buildUnregisteredTypeId(cls, null);
     TypeInfo typeInfo =
         new TypeInfo(cls, packageBytes, simpleClassNameBytes, null, typeId, INVALID_USER_TYPE_ID);
-    if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
+    if (unknownClass) {
       typeInfo.serializer =
           UnknownClassSerializers.getSerializer(this, classSpec.entireClassName, cls);
-    } else {
+    } else if (checkClass) {
       // don't create serializer here, if the class is an interface,
       // there won't be serializer since interface has no instance.
       if (!classInfoMap.containsKey(cls)) {
         classInfoMap.put(cls, typeInfo);
       }
     }
-    compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+    if (checkClass) {
+      compositeNameBytes2TypeInfo.put(typeNameBytes, typeInfo);
+    }
     return typeInfo;
+  }
+
+  @Internal
+  public void checkClassForDeserialization(Class<?> cls) {
+    if (UnknownClass.class.isAssignableFrom(TypeUtils.getComponentIfArray(cls))) {
+      return;
+    }
+    DisallowedList.checkNotInDisallowedList(cls.getName());
+    if (!isSecure(cls)) {
+      throw new InsecureException(generateSecurityMsg(cls));
+    }
   }
 
   public Class<?> loadClassForMeta(String className, boolean isEnum, int arrayDims) {

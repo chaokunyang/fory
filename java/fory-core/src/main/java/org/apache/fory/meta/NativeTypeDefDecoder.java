@@ -48,17 +48,6 @@ import org.apache.fory.util.Preconditions;
 class NativeTypeDefDecoder {
   private static final int MAX_TYPE_DEF_SIZE_BYTES = 16 * 1024 * 1024;
 
-  static void checkMetaCount(String name, int count, TypeResolver resolver) {
-    if (count < 0) {
-      throw new DeserializationException(name + " must be non-negative: " + count);
-    }
-    int maxCollectionSize = resolver.getConfig().maxCollectionSize();
-    if (count > maxCollectionSize) {
-      throw new DeserializationException(
-          name + " " + count + " exceeds max collection size " + maxCollectionSize);
-    }
-  }
-
   static Tuple2<byte[], byte[]> decodeTypeDefBuf(
       MemoryBuffer inputBuffer, TypeResolver resolver, long id) {
     if ((id & TypeDef.RESERVED_META_FLAGS) != 0) {
@@ -94,10 +83,13 @@ class NativeTypeDefDecoder {
     int rootTypeId = nativeTypeId(bodyHeader >>> 4);
     int numClasses = bodyHeader & NUM_CLASS_THRESHOLD;
     if (numClasses == NUM_CLASS_THRESHOLD) {
-      numClasses += typeDefBuf.readVarUInt32Small7();
+      int extraClasses = typeDefBuf.readVarUInt32Small7();
+      if (extraClasses < 0 || extraClasses > Integer.MAX_VALUE - NUM_CLASS_THRESHOLD - 1) {
+        throw new DeserializationException("Invalid TypeDef class count");
+      }
+      numClasses += extraClasses;
     }
     numClasses += 1;
-    checkMetaCount("TypeDef class count", numClasses, resolver);
     String className;
     List<FieldInfo> classFields = new ArrayList<>();
     ClassSpec classSpec = null;
@@ -107,9 +99,11 @@ class NativeTypeDefDecoder {
       // | num fields + register flag | header + package name | header + class name
       // | header + type id + field name | next field info | ... |
       int currentClassHeader = typeDefBuf.readVarUInt32Small7();
+      if (currentClassHeader < 0) {
+        throw new DeserializationException("Invalid TypeDef field count");
+      }
       boolean isRegistered = (currentClassHeader & 0b1) != 0;
       int numFields = currentClassHeader >>> 1;
-      checkMetaCount("TypeDef field count", numFields, resolver);
       Class<?> currentClass = null;
       if (isRegistered) {
         int typeId = typeDefBuf.readUInt8();
@@ -282,8 +276,7 @@ class NativeTypeDefDecoder {
 
   private static List<FieldInfo> readFieldsInfo(
       MemoryBuffer buffer, ClassResolver resolver, String className, int numFields) {
-    checkMetaCount("TypeDef field count", numFields, resolver);
-    List<FieldInfo> fieldInfos = new ArrayList<>(numFields);
+    List<FieldInfo> fieldInfos = new ArrayList<>();
     for (int i = 0; i < numFields; i++) {
       int header = buffer.readByte() & 0xff;
       //  `3 bits size + 2 bits field name encoding + nullability flag + ref tracking flag`

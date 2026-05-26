@@ -73,18 +73,17 @@ public class NativeTypeDefEncoderTest {
   }
 
   @Test
-  public void testTypeDefFieldCountLimit() {
+  public void testTypeDefCountIgnoresLimit() {
     Fory writer = Fory.builder().withXlang(false).withMetaShare(true).build();
     Fory reader =
         Fory.builder().withXlang(false).withMetaShare(true).withMaxCollectionSize(1).build();
     TypeDef typeDef =
         TypeDef.buildTypeDef(writer.getTypeResolver(), TypeDefTest.TestFieldsOrderClass1.class);
 
-    Assert.assertThrows(
-        DeserializationException.class,
-        () ->
-            TypeDef.readTypeDef(
-                reader.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded())));
+    TypeDef decoded =
+        TypeDef.readTypeDef(
+            reader.getTypeResolver(), MemoryBuffer.fromByteArray(typeDef.getEncoded()));
+    Assert.assertEquals(decoded, typeDef);
   }
 
   @Test

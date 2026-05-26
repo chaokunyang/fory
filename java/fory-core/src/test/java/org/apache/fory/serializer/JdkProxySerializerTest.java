@@ -88,6 +88,21 @@ public class JdkProxySerializerTest extends ForyTestBase {
     assertThrows(InsecureException.class, () -> reader.deserialize(bytes));
   }
 
+  @Test
+  public void testJdkProxyStrictInterfaces() {
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(true).build();
+    fory.register(TestInvocationHandler.class);
+    Function function =
+        (Function)
+            Proxy.newProxyInstance(
+                fory.getClassLoader(),
+                new Class[] {Function.class, Serializable.class},
+                new TestInvocationHandler());
+
+    Function deserializedFunction = (Function) fory.deserialize(fory.serialize(function));
+    assertEquals(deserializedFunction.apply(null), 1);
+  }
+
   @Test(dataProvider = "foryCopyConfig")
   public void testJdkProxy(Fory fory) {
     Function function =

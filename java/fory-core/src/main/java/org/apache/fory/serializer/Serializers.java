@@ -699,7 +699,10 @@ public class Serializers {
 
     @Override
     public Class read(ReadContext readContext) {
-      return ((ClassResolver) readContext.getTypeResolver()).readClassInternal(readContext);
+      // Class literals are user-visible class tokens. Callers that use a class token to instantiate
+      // objects or create serializers must enforce object admission at that use site.
+      return ((ClassResolver) readContext.getTypeResolver())
+          .readClassInternalUnchecked(readContext);
     }
   }
 

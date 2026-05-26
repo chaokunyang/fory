@@ -1145,7 +1145,7 @@ result = fory.deserialize(data)  # Policy hooks will be invoked
 
 - Reference validation hooks reject by raising exceptions and otherwise leave deserialized references unchanged.
 - `validate_class(cls, is_local)` - Validate/block class types during deserialization
-- `validate_module(module_name)` - Validate/block module imports
+- `validate_module(module_name, is_local)` - Validate/block module imports
 - `validate_function(func, is_local)` - Validate/block function references
 - `validate_method(method, is_local)` - Validate/block method references
 - `intercept_reduce_call(callable_obj, args)` - Intercept `__reduce__` invocations

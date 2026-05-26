@@ -46,18 +46,18 @@ _WINDOWS = os.name == "nt"
 from pyfory.serialization import ENABLE_FORY_CYTHON_SERIALIZATION
 
 
-def _import_validated_module(policy, module_name):
-    policy.validate_module(module_name)
+def _import_validated_module(policy, module_name, is_local=False):
+    policy.validate_module(module_name, is_local=is_local)
     return importlib.import_module(module_name)
 
 
-def _resolve_validated_module_attr(policy, module_name, attr_name):
-    module = _import_validated_module(policy, module_name)
+def _resolve_validated_module_attr(policy, module_name, attr_name, is_local=False):
+    module = _import_validated_module(policy, module_name, is_local=is_local)
     return getattr(module, attr_name)
 
 
 def _resolve_validated_module_qualname(policy, module_name, qualname):
-    obj = _import_validated_module(policy, module_name)
+    obj = _import_validated_module(policy, module_name, is_local=_is_local_qualname(module_name, qualname))
     for name in qualname.split("."):
         obj = getattr(obj, name)
     return obj
@@ -1216,7 +1216,12 @@ class ReduceSerializer(Serializer):
         else:
             module_name, obj_name = "builtins", global_name
         try:
-            obj = _resolve_validated_module_attr(policy, module_name, obj_name)
+            obj = _resolve_validated_module_attr(
+                policy,
+                module_name,
+                obj_name,
+                is_local=_is_local_qualname(module_name, obj_name),
+            )
         except AttributeError:
             raise ValueError(f"Cannot resolve global name: {global_name}")
         return self._validate_global_object(policy, obj)
@@ -1435,7 +1440,7 @@ class ModuleSerializer(Serializer):
 
     def read(self, read_context):
         mod_name = read_context.read_string()
-        return _import_validated_module(read_context.policy, mod_name)
+        return _import_validated_module(read_context.policy, mod_name, is_local=_is_local_qualname(mod_name, ""))
 
 
 class MappingProxySerializer(Serializer):
@@ -1595,7 +1600,7 @@ class FunctionSerializer(Serializer):
 
         module = read_context.read_string()
         qualname = read_context.read_string()
-        mod = _import_validated_module(read_context.policy, module)
+        mod = _import_validated_module(read_context.policy, module, is_local=_is_local_qualname(module, qualname))
         name = qualname.rsplit(".")[-1]
 
         marshalled_code = read_context.read_bytes_and_size()
@@ -1677,7 +1682,12 @@ class NativeFuncMethodSerializer(Serializer):
         name = read_context.read_string()
         if read_context.read_bool():
             module = read_context.read_string()
-            func = _resolve_validated_module_attr(read_context.policy, module, name)
+            func = _resolve_validated_module_attr(
+                read_context.policy,
+                module,
+                name,
+                is_local=_is_local_qualname(module, name),
+            )
             func = _validate_function_value(read_context.policy, func, is_local=_is_local_callable(func))
         else:
             obj = read_context.read_ref()

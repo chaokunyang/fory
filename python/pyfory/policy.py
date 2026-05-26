@@ -109,7 +109,7 @@ class DeserializationPolicy:
     >>> class SafeDeserializationPolicy(DeserializationPolicy):
     ...     ALLOWED_MODULES = {'builtins', 'datetime', 'decimal'}
     ...
-    ...     def validate_module(self, module_name, **kwargs):
+    ...     def validate_module(self, module_name, is_local, **kwargs):
     ...         # Reject imports from disallowed modules
     ...         if module_name.split('.')[0] not in self.ALLOWED_MODULES:
     ...             raise ValueError(f"Module {module_name} is not allowed")
@@ -313,7 +313,7 @@ class DeserializationPolicy:
         """
         return None
 
-    def validate_module(self, module_name: str, **kwargs):
+    def validate_module(self, module_name: str, *, is_local: bool, **kwargs):
         """Validate a deserialized module reference.
 
         This hook is called before a module is imported during deserialization.
@@ -331,6 +331,9 @@ class DeserializationPolicy:
 
         Args:
             module_name (str): The name of the module to import (e.g., 'os.path').
+            is_local (bool): True if the reference being resolved is local (defined
+                           in __main__ or within a function/method scope), False
+                           otherwise.
             **kwargs: Reserved for future extensions.
 
         Raises:
@@ -340,7 +343,7 @@ class DeserializationPolicy:
             >>> class ModuleWhitelistChecker(DeserializationPolicy):
             ...     ALLOWED = {'builtins', 'datetime', 'decimal', 'collections'}
             ...
-            ...     def validate_module(self, module_name, **kwargs):
+            ...     def validate_module(self, module_name, is_local, **kwargs):
             ...         root = module_name.split('.')[0]
             ...         if root not in self.ALLOWED:
             ...             raise ValueError(f"Module {module_name} not whitelisted")

@@ -366,8 +366,9 @@ def qualified_class_name(cls):
 
 def load_class(classname: str, policy=None):
     mod_name, cls_name = classname.rsplit("#", 1)
+    is_local = mod_name == "__main__" or "<locals>" in cls_name
     if policy is not None:
-        policy.validate_module(mod_name)
+        policy.validate_module(mod_name, is_local=is_local)
     try:
         mod = importlib.import_module(mod_name)
     except ImportError as ex:
@@ -378,7 +379,6 @@ def load_class(classname: str, policy=None):
         while classes:
             cls = getattr(cls, classes.pop(0))
         if policy is not None:
-            is_local = cls.__module__ == "__main__" or "<locals>" in cls.__qualname__
             policy.validate_class(cls, is_local=is_local)
         return cls
     except AttributeError as ex:

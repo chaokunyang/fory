@@ -234,7 +234,7 @@ unchanged.
 | Hook                                         | Description                                         |
 | -------------------------------------------- | --------------------------------------------------- |
 | `validate_class(cls, is_local)`              | Validate or block class types                       |
-| `validate_module(module_name)`               | Validate or block module imports                    |
+| `validate_module(module_name, is_local)`     | Validate or block module imports                    |
 | `validate_function(func, is_local)`          | Validate or block function references               |
 | `validate_method(method, is_local)`          | Validate or block method references                 |
 | `intercept_reduce_call(callable_obj, args)`  | Intercept `__reduce__` invocations                  |

@@ -31,6 +31,7 @@ import java.io.Externalizable;
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.invoke.SerializedLambda;
+import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -57,6 +58,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.SortedSet;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -1908,11 +1912,37 @@ public class ClassResolver extends TypeResolver {
     if (config.requireClassRegistration()) {
       return Functions.isLambda(cls)
           || ReflectionUtils.isJdkProxy(cls)
+          || isDefaultSafeClassToken(cls)
           || extRegistry.registeredClassIdMap.get(cls) != null
           || shimDispatcher.contains(cls);
     } else {
       return extRegistry.typeChecker.checkType(this, cls.getName());
     }
+  }
+
+  private static boolean isDefaultSafeClassToken(Class<?> cls) {
+    return cls == Serializable.class || cls == Externalizable.class || isDefaultSafeInterface(cls);
+  }
+
+  private static boolean isDefaultSafeInterface(Class<?> cls) {
+    return cls.isInterface()
+        && (cls == Collection.class
+            || cls == List.class
+            || cls == Set.class
+            || cls == Map.class
+            || cls == SortedMap.class
+            || cls == SortedSet.class
+            || cls.getName().startsWith("java.util.function.")
+            || !hasDefaultMethods(cls));
+  }
+
+  private static boolean hasDefaultMethods(Class<?> cls) {
+    for (Method method : cls.getMethods()) {
+      if (method.isDefault()) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**

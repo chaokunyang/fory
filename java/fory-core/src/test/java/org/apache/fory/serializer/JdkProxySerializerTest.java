@@ -91,8 +91,6 @@ public class JdkProxySerializerTest extends ForyTestBase {
   @Test
   public void testJdkProxyStrictInterfaces() {
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(true).build();
-    fory.register(Function.class);
-    fory.register(Serializable.class);
     fory.register(TestInvocationHandler.class);
     Function function =
         (Function)
@@ -106,12 +104,31 @@ public class JdkProxySerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testJdkProxyStrictRejectsUnregisteredInterface() {
+  public void testJdkProxyStrictNoDefaultInterface() {
     Fory writer = Fory.builder().withXlang(false).requireClassRegistration(false).build();
-    Function function =
-        (Function)
+    TestInterface function =
+        (TestInterface)
             Proxy.newProxyInstance(
-                writer.getClassLoader(), new Class[] {Function.class}, new TestInvocationHandler());
+                writer.getClassLoader(),
+                new Class[] {TestInterface.class},
+                new TestInvocationHandler());
+    byte[] bytes = writer.serialize(function);
+
+    Fory reader = Fory.builder().withXlang(false).requireClassRegistration(true).build();
+    reader.register(TestInvocationHandler.class);
+    TestInterface deserializedFunction = (TestInterface) reader.deserialize(bytes);
+    assertEquals(deserializedFunction.test(), 1);
+  }
+
+  @Test
+  public void testJdkProxyStrictRejectsDefaultInterface() {
+    Fory writer = Fory.builder().withXlang(false).requireClassRegistration(false).build();
+    TestDefaultInterface function =
+        (TestDefaultInterface)
+            Proxy.newProxyInstance(
+                writer.getClassLoader(),
+                new Class[] {TestDefaultInterface.class},
+                new TestInvocationHandler());
     byte[] bytes = writer.serialize(function);
 
     Fory reader = Fory.builder().withXlang(false).requireClassRegistration(true).build();
@@ -237,7 +254,13 @@ public class JdkProxySerializerTest extends ForyTestBase {
   }
 
   interface TestInterface {
-    void test();
+    int test();
+  }
+
+  interface TestDefaultInterface {
+    default int test() {
+      return 1;
+    }
   }
 
   static class ProxyFactory {

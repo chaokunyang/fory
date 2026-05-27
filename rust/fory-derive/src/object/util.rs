@@ -891,10 +891,24 @@ pub(crate) fn enum_variant_id(variant: &syn::Variant) -> Option<u32> {
 }
 
 pub(crate) fn is_default_value_variant(variant: &syn::Variant) -> bool {
-    variant
-        .attrs
-        .iter()
-        .any(|attr| attr.path().is_ident("default"))
+    variant.attrs.iter().any(|attr| {
+        if attr.path().is_ident("default") {
+            return true;
+        }
+        attr.path().is_ident("fory") && {
+            let mut is_default = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("default") {
+                    is_default = true;
+                } else if !meta.input.is_empty() {
+                    let value = meta.value()?;
+                    let _ = value.parse::<syn::Expr>()?;
+                }
+                Ok(())
+            });
+            is_default
+        }
+    })
 }
 
 #[cfg(test)]

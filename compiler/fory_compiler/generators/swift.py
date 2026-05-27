@@ -869,6 +869,22 @@ class SwiftGenerator(BaseGenerator):
             return True
         return False
 
+    def union_supports_equatable(
+        self,
+        union: Union,
+        parent_stack: Optional[List[Message]] = None,
+        visiting: Optional[Set[int]] = None,
+    ) -> bool:
+        if visiting is None:
+            visiting = set()
+        lineage = parent_stack or []
+        for field in union.fields:
+            if not self.type_supports_equatable(
+                field.field_type, parent_stack=lineage, visiting=visiting
+            ):
+                return False
+        return True
+
     def message_supports_equatable(
         self,
         message: Message,
@@ -890,32 +906,6 @@ class SwiftGenerator(BaseGenerator):
         for field in message.fields:
             if not self.type_supports_equatable(
                 field.field_type, parent_stack=lineage, visiting=visiting
-            ):
-                self._equatable_cache[key] = False
-                visiting.remove(key)
-                return False
-
-        self._equatable_cache[key] = True
-        visiting.remove(key)
-        return True
-
-    def union_supports_equatable(
-        self,
-        union: Union,
-        visiting: Optional[Set[int]] = None,
-    ) -> bool:
-        key = id(union)
-        if key in self._equatable_cache:
-            return self._equatable_cache[key]
-        if visiting is None:
-            visiting = set()
-        if key in visiting:
-            return False
-        visiting.add(key)
-
-        for field in union.fields:
-            if not self.type_supports_equatable(
-                field.field_type, parent_stack=[], visiting=visiting
             ):
                 self._equatable_cache[key] = False
                 visiting.remove(key)
@@ -978,13 +968,15 @@ class SwiftGenerator(BaseGenerator):
         if comment:
             lines.append(comment)
         lines.append(f"{ind}@ForyUnion")
-        conformances = ""
+        conformances = (
+            ": Equatable"
+            if self.union_supports_equatable(union, parent_stack=parent_stack)
+            else ""
+        )
         lines.append(f"{ind}public enum {type_name}{conformances} {{")
         lineage = parent_stack or []
         lines.append(f"{ind}{self.indent_str}@ForyCase(id: 0)")
-        lines.append(
-            f"{ind}{self.indent_str}case unknown(caseId: UInt32, value: Any?)"
-        )
+        lines.append(f"{ind}{self.indent_str}case unknown(UnknownCase)")
         lines.append("")
         for field in union.fields:
             field_type = self.generate_type(

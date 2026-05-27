@@ -100,7 +100,7 @@ def test_csharp_semantic_model_attributes():
     assert "public abstract partial record Choice" in file.content
     assert "[ForyCase(0)]" in file.content
     assert (
-        "public sealed partial record Unknown(int CaseId, object? Value) : Choice;"
+        "public sealed partial record Unknown(UnknownCase Value) : Choice;"
         in file.content
     )
     assert "[ForyCase(1)]" in file.content

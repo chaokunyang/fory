@@ -134,14 +134,32 @@ def test_swift_generator_emits_tagged_union_case_ids():
     """
     content = generate_swift(source)
     assert "@ForyUnion" in content
-    assert "public enum Animal" in content
+    assert "public enum Animal: Equatable" in content
     assert "@ForyCase(id: 0)" in content
-    assert "case unknown(caseId: UInt32, value: Any?)" in content
+    assert "case unknown(UnknownCase)" in content
     assert "@ForyCase(id: 3)" in content
     assert "case node(Demo.Node)" in content
     assert "@ForyCase(id: 7, payload: .string)" in content
     assert "case note(String)" in content
     assert "fory.register(Demo.Animal.self, id: 101)" in content
+
+
+def test_swift_union_field_preserves_synthesized_equatable():
+    source = """
+    package demo;
+
+    union Choice [id=100] {
+        string note = 1;
+    }
+
+    message Holder [id=101] {
+        Choice choice = 1;
+        optional Choice optional_choice = 2;
+    }
+    """
+    content = generate_swift(source)
+    assert "public enum Choice: Equatable" in content
+    assert "public struct Holder: Equatable" in content
 
 
 def test_swift_generator_supports_decimal_fields_and_unions():

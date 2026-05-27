@@ -131,11 +131,12 @@ IDL unions generate Scala 3 ADT enums with macro-derived serializers:
 import org.apache.fory.annotation.{ForyCase, ForyUnion, UInt32Type}
 import org.apache.fory.config.Int32Encoding
 import org.apache.fory.scala.ForySerializer
+import org.apache.fory.`type`.union.UnknownCase
 
 @ForyUnion
 enum SearchTarget derives ForySerializer {
   @ForyCase(id = 0)
-  case Unknown(caseId: Int, value: Any)
+  case Unknown(value: UnknownCase)
 
   @ForyCase(id = 1)
   case User(value: User)
@@ -145,11 +146,12 @@ enum SearchTarget derives ForySerializer {
 }
 ```
 
-Schema-defined union cases must use positive IDs. Case ID `0` is reserved for
-the Scala unknown-case carrier, whose payload stores the original positive case
-ID and the deserialized value. When a reader sees a newer positive case ID, it
-returns `Unknown(originalId, value)` instead of failing solely because the
-case ID is not known locally.
+Schema-defined union cases must use positive IDs, and a typed union must
+declare at least one non-`Unknown` case. Case ID `0` is reserved for the Scala
+unknown-case carrier, whose payload stores the original positive case ID and
+the deserialized value. When a reader sees a newer positive case ID, it returns
+`Unknown(UnknownCase)` instead of failing solely because the case ID is not
+known locally.
 
 The macro writes the existing xlang union envelope directly. It does not
 allocate temporary Java `Union` carriers.

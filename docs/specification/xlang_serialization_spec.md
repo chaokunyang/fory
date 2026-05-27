@@ -1577,6 +1577,9 @@ union Contact [id=0] {
 
 Rules:
 
+- A union schema MUST declare at least one schema-defined alternative. The
+  unknown-case carrier used by some language bindings is runtime-owned and is
+  not a schema alternative.
 - Each union alternative MUST have a stable tag number (`= 1`, `= 2`, ...).
 - Tag numbers MUST be unique within the union and MUST NOT be reused.
 - Tag number `0` is reserved for language bindings that expose an unknown-case
@@ -1616,8 +1619,19 @@ This is required even for primitives so unknown alternatives can be skipped safe
 
 If a reader sees a positive `case_id` that is not present in its local union
 schema, it SHOULD preserve the unknown case when the target language has a
-language-neutral carrier for it. Such a carrier MUST store the original positive
-case ID and the deserialized `case_value`. Writers MUST NOT serialize `0` as a
+language-neutral carrier for it. Such a carrier MUST expose the original case
+ID and decoded value, and it MUST retain only runtime-internal wire type ID
+state needed for reserialization. It MUST NOT store resolver-owned type
+metadata or other context-owned state. Writers MUST use the stored original
+case ID for the union envelope, not the local unknown-case slot ID. Unknown-case
+payload writers MUST emit the Any-style payload body in wire order: ref
+metadata first, then full value type metadata, then value bytes. For internal
+numeric type IDs, the type ID byte is the complete value type metadata and the
+payload writer MAY use the stored wire type ID to preserve fixed, variable, or
+tagged integer encodings when the decoded value has the expected runtime type.
+These scalar numeric payloads are not reference-tracked, so their ref metadata
+is `NotNullValue`. Otherwise it MUST fall back to the language runtime's
+ordinary polymorphic Any-value writer. Writers MUST NOT serialize `0` as a
 schema-defined case ID; `0` is only the local unknown-case slot used by bindings
 that need one.
 

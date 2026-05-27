@@ -478,7 +478,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     }
     if (cases.isEmpty()) {
       logger.error(
-        "@ForyUnion ${declaration.qualifiedName!!.asString()} must declare at least one schema case",
+        "@ForyUnion ${declaration.qualifiedName!!.asString()} must declare at least one non-Unknown case; Unknown is a forward-compatibility carrier and cannot be the default",
         declaration
       )
       return null
@@ -526,33 +526,18 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     val propertiesByName = declaration.getAllProperties().associateBy { it.simpleName.asString() }
     val valueParameter =
       if (caseId == 0) {
-        if (
-          parameters.size != 2 ||
-            parameters[0].name?.asString() != "caseId" ||
-            parameters[1].name?.asString() != "value"
-        ) {
+        if (parameters.size != 1 || parameters[0].name?.asString() != "value") {
           logger.error(
-            "Unknown Kotlin union case must have constructor parameters (caseId: Int, value: Any?)",
+            "Unknown Kotlin union case must have constructor parameter (value: UnknownCase)",
             declaration
           )
           return null
         }
-        if (!isKotlinType(parameters[0], "kotlin.Int", nullable = false)) {
-          logger.error("Unknown Kotlin union case parameter caseId must have type Int", declaration)
+        if (!isKotlinType(parameters[0], "org.apache.fory.type.union.UnknownCase", nullable = false)) {
+          logger.error("Unknown Kotlin union case parameter value must have type UnknownCase", declaration)
           return null
         }
-        if (!isKotlinType(parameters[1], "kotlin.Any", nullable = true)) {
-          logger.error("Unknown Kotlin union case parameter value must have type Any?", declaration)
-          return null
-        }
-        if (propertiesByName["caseId"] == null) {
-          logger.error(
-            "Unknown Kotlin union case parameter caseId must be declared as val or var",
-            declaration,
-          )
-          return null
-        }
-        parameters[1]
+        parameters[0]
       } else {
         if (parameters.size != 1 || parameters[0].name?.asString() != "value") {
           logger.error(
@@ -573,8 +558,12 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     }
     val arrayType = hasFieldAnnotation(valueProperty, ARRAY_TYPE)
     val valueType =
-      valueParameter.type.resolve().let { parseType(it, valueProperty, arrayType = arrayType) }
-        ?: return null
+      if (caseId == 0) {
+        dynamicAnyNode(nullable = true)
+      } else {
+        valueParameter.type.resolve().let { parseType(it, valueProperty, arrayType = arrayType) }
+          ?: return null
+      }
     return KotlinSourceUnionCase(
       id = caseId,
       className = declaration.simpleName.asString(),

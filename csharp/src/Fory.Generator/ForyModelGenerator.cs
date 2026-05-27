@@ -741,13 +741,13 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 unknownCase = unionCase;
                 sb.AppendLine($"            case {unionCase.TypeName} __foryCase:");
                 sb.AppendLine("            {");
-                sb.AppendLine("                if (__foryCase.CaseId < 0)");
+                sb.AppendLine("                if (__foryCase.Value.CaseId < 0)");
                 sb.AppendLine("                {");
-                sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"union case id out of range: {__foryCase.CaseId}\");");
+                sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"union case id out of range: {__foryCase.Value.CaseId}\");");
                 sb.AppendLine("                }");
                 sb.AppendLine();
-                sb.AppendLine("                context.Writer.WriteVarUInt32((uint)__foryCase.CaseId);");
-                sb.AppendLine("                global::Apache.Fory.DynamicAnyCodec.WriteAny(context, __foryCase.Value, global::Apache.Fory.RefMode.Tracking, true, false);");
+                sb.AppendLine("                context.Writer.WriteVarUInt32((uint)__foryCase.Value.CaseId);");
+                sb.AppendLine("                global::Apache.Fory.UnknownCaseSerializer.WritePayload(context, __foryCase.Value);");
                 sb.AppendLine("                return;");
                 sb.AppendLine("            }");
                 continue;
@@ -783,8 +783,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("            case 0:");
                 sb.AppendLine("            {");
-                sb.AppendLine("                object? __foryUnknownValue = global::Apache.Fory.DynamicAnyCodec.ReadAny(context, global::Apache.Fory.RefMode.Tracking, true);");
-                sb.AppendLine($"                return new {unionCase.TypeName}(0, __foryUnknownValue);");
+                sb.AppendLine("                global::Apache.Fory.UnknownCase __foryUnknownValue = global::Apache.Fory.UnknownCaseSerializer.ReadPayload(context, 0);");
+                sb.AppendLine($"                return new {unionCase.TypeName}(__foryUnknownValue);");
                 sb.AppendLine("            }");
                 continue;
             }
@@ -799,14 +799,13 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
         sb.AppendLine("            default:");
         sb.AppendLine("            {");
-        sb.AppendLine("                object? __foryUnknownValue = global::Apache.Fory.DynamicAnyCodec.ReadAny(context, global::Apache.Fory.RefMode.Tracking, true);");
         if (unknownCase is null)
         {
             sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException($\"unknown union case {caseId}\");");
         }
         else
         {
-            sb.AppendLine($"                return new {unknownCase.TypeName}(caseId, __foryUnknownValue);");
+            sb.AppendLine($"                return new {unknownCase.TypeName}(global::Apache.Fory.UnknownCaseSerializer.ReadPayload(context, caseId));");
         }
 
         sb.AppendLine("            }");
@@ -2679,14 +2678,13 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             string caseTypeName = caseType.ToDisplayString(FullNameFormat);
             if (caseId == 0)
             {
-                if (!HasProperty(caseType, "CaseId", SpecialType.System_Int32) ||
-                    !HasObjectValueProperty(caseType))
+                if (!HasUnknownCaseValueProperty(caseType))
                 {
                     diagnostics.Add(Diagnostic.Create(
                         InvalidUnionCase,
                         caseType.Locations.FirstOrDefault(),
                         caseTypeName,
-                        "case id 0 must expose CaseId:int and Value:object?"));
+                        "case id 0 must expose Value:UnknownCase"));
                     continue;
                 }
 
@@ -2733,6 +2731,14 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 unionType.Locations.FirstOrDefault(),
                 unionType.ToDisplayString(FullNameFormat),
                 "union must declare [ForyCase(0)] Unknown"));
+        }
+        else if (!cases.Any(c => !c.IsUnknown))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidUnionCase,
+                unionType.Locations.FirstOrDefault(),
+                unionType.ToDisplayString(FullNameFormat),
+                "union must declare at least one non-Unknown case; Unknown is a forward-compatibility carrier and cannot be the default"));
         }
 
         return cases.OrderBy(c => c.CaseId).ToImmutableArray();
@@ -2817,16 +2823,14 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         return null;
     }
 
-    private static bool HasProperty(INamedTypeSymbol type, string name, SpecialType specialType)
-    {
-        IPropertySymbol? property = FindProperty(type, name);
-        return property is not null && property.Type.SpecialType == specialType;
-    }
-
-    private static bool HasObjectValueProperty(INamedTypeSymbol type)
+    private static bool HasUnknownCaseValueProperty(INamedTypeSymbol type)
     {
         IPropertySymbol? property = FindProperty(type, "Value");
-        return property is not null && property.Type.SpecialType == SpecialType.System_Object;
+        return property is not null &&
+               string.Equals(
+                   property.Type.ToDisplayString(FullNameFormat),
+                   "global::Apache.Fory.UnknownCase",
+                   StringComparison.Ordinal);
     }
 
     private static ForyAttributeKind GetForyAttributeKind(INamedTypeSymbol typeSymbol)

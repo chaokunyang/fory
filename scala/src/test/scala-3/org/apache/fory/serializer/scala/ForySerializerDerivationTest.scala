@@ -35,6 +35,7 @@ import org.apache.fory.scala.ForySerializer
 import org.apache.fory.scala.ForyScala
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.`type`.{Types, TypeUtils}
+import org.apache.fory.`type`.union.UnknownCase
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpec
 
@@ -121,7 +122,7 @@ object ForySerializerDerivationTest {
   @ForyUnion
   enum SearchTarget derives ForySerializer {
     @ForyCase(id = 0)
-    case Unknown(caseId: Int, value: Any)
+    case Unknown(value: UnknownCase)
 
     @ForyCase(id = 1)
     case User(value: SearchUser)
@@ -139,7 +140,7 @@ object ForySerializerDerivationTest {
   @ForyUnion
   enum UnionCycle derives ForySerializer {
     @ForyCase(id = 0)
-    case Unknown(caseId: Int, value: Any)
+    case Unknown(value: UnknownCase)
 
     @ForyCase(id = 1)
     case Node(value: UnionRefNode)
@@ -372,10 +373,10 @@ import org.apache.fory.scala.ForyScala
         @ForyStruct
         final case class MissingCaseUser(name: String) derives ForySerializer
 
-        @ForyUnion
-        enum MissingCaseUnion derives ForySerializer {
-          @ForyCase(id = 0)
-          case Unknown(caseId: Int, value: Any)
+          @ForyUnion
+          enum MissingCaseUnion derives ForySerializer {
+            @ForyCase(id = 0)
+          case Unknown(value: org.apache.fory.`type`.union.UnknownCase)
 
           case User(value: MissingCaseUser)
         }
@@ -384,10 +385,29 @@ import org.apache.fory.scala.ForyScala
       errors.exists(_.message.contains("must be annotated with @ForyCase")) shouldBe true
     }
 
+    "reject union enums with only unknown case" in {
+      val errors = typeCheckErrors("""
+        import org.apache.fory.annotation.{ForyCase, ForyUnion}
+        import org.apache.fory.scala.ForySerializer
+        import org.apache.fory.`type`.union.UnknownCase
+
+        @ForyUnion
+        enum OnlyUnknown derives ForySerializer {
+          @ForyCase(id = 0)
+          case Unknown(value: UnknownCase)
+        }
+      """)
+
+      errors.exists(_.message.contains("at least one non-Unknown case")) shouldBe true
+    }
+
     "serialize derived union unknown cases with original ids" in {
       val fory = xlangFory()
-      val unknown = SearchTarget.Unknown(99, SearchUser("Future"))
-      fory.deserialize(fory.serialize(unknown)) shouldEqual unknown
+      val unknown = SearchTarget.Unknown(new UnknownCase(99, SearchUser("Future")))
+      val decoded = fory.deserialize(fory.serialize(unknown)).asInstanceOf[SearchTarget.Unknown]
+      decoded.value.caseId() shouldBe 99
+      decoded.value.value().asInstanceOf[SearchUser] shouldEqual SearchUser("Future")
+      decoded should not equal unknown
     }
 
     "serialize and copy derived union Option payloads" in {
@@ -492,14 +512,12 @@ import org.apache.fory.scala.ForyScala
     "copy derived union unknown cases" in {
       val fory = xlangFory()
       val unknown: SearchTarget.Unknown =
-        SearchTarget.Unknown(99, SearchUser("Future"))
+        SearchTarget.Unknown(new UnknownCase(99, SearchUser("Future")))
 
       val copied = fory.copy(unknown).asInstanceOf[SearchTarget.Unknown]
 
-      copied.caseId shouldBe 99
-      copied.value.asInstanceOf[SearchUser] shouldEqual unknown.value.asInstanceOf[SearchUser]
-      copied.value.asInstanceOf[SearchUser] should not be theSameInstanceAs(
-        unknown.value.asInstanceOf[SearchUser])
+      copied.value shouldBe theSameInstanceAs(unknown.value)
+      copied shouldEqual unknown
     }
   }
 }

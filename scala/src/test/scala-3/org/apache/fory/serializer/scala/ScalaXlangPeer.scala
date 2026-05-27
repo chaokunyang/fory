@@ -46,7 +46,7 @@ import org.apache.fory.scala.ForySerializer
 import org.apache.fory.scala.ForyScala
 import org.apache.fory.serializer.Serializer
 import org.apache.fory.`type`.{BFloat16, Float16}
-import org.apache.fory.`type`.union.Union2
+import org.apache.fory.`type`.union.{Union2, UnknownCase}
 import org.apache.fory.util.MurmurHash3
 
 import java.math.BigDecimal as JBigDecimal
@@ -349,7 +349,7 @@ final case class ScalaPeerUser(
 @ForyUnion
 enum ScalaPeerTarget derives ForySerializer {
   @ForyCase(id = 0)
-  case Unknown(caseId: Int, value: Any)
+  case Unknown(value: UnknownCase)
 
   @ForyCase(id = 1)
   case User(value: ScalaPeerUser)
@@ -893,12 +893,15 @@ object ScalaXlangPeer {
     val response = request match {
       case ScalaPeerTarget.User(user) =>
         ScalaPeerTarget.User(user.copy(id = user.id + 1, name = "scala-" + user.name, email = None))
-      case ScalaPeerTarget.Unknown(caseId, value: ScalaPeerUser) if preserveUnknown =>
+      case ScalaPeerTarget.Unknown(unknown)
+          if preserveUnknown && unknown.value().isInstanceOf[ScalaPeerUser] =>
+        val value = unknown.downcast(classOf[ScalaPeerUser])
         ScalaPeerTarget.Unknown(
-          caseId,
-          value.copy(id = value.id + 1, name = "scala-" + value.name, email = None))
-      case ScalaPeerTarget.Unknown(caseId, value) =>
-        ScalaPeerTarget.Unknown(caseId, value)
+          new UnknownCase(
+            unknown.caseId(),
+            value.copy(id = value.id + 1, name = "scala-" + value.name, email = None)))
+      case ScalaPeerTarget.Unknown(unknown) =>
+        ScalaPeerTarget.Unknown(unknown)
     }
     writeOne(dataFile, fory, response)
   }

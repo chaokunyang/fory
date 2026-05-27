@@ -49,6 +49,7 @@ import org.apache.fory.type.union.Union3;
 import org.apache.fory.type.union.Union4;
 import org.apache.fory.type.union.Union5;
 import org.apache.fory.type.union.Union6;
+import org.apache.fory.type.union.UnknownCase;
 import org.apache.fory.util.Preconditions;
 
 /**
@@ -272,17 +273,19 @@ public class UnionSerializer extends Serializer<Union> {
   }
 
   /**
-   * Writes an unknown union case payload using dynamic value metadata.
-   *
-   * <p>Unknown cases preserve the original peer case id; id {@code 0} remains the local unknown
-   * carrier tag and is not written for schema-defined cases.
+   * Writes an unknown union case using the original peer case id preserved by {@link UnknownCase}.
    */
-  public static void writeUnknownCaseValue(
-      WriteContext writeContext, Object value, int originalCaseId) {
+  public static void writeUnknownValue(WriteContext writeContext, UnknownCase unknownCase) {
+    int originalCaseId = unknownCase.caseId();
     Preconditions.checkArgument(
-        originalCaseId > 0, "Unknown union case id must preserve a positive original id");
+        originalCaseId >= 0, "Unknown union case id must be non-negative");
     writeContext.getBuffer().writeVarUInt32(originalCaseId);
-    writeContext.writeRef(value);
+    UnknownCaseSerializer.writePayload(writeContext, unknownCase);
+  }
+
+  /** Reads an unknown union payload and captures the runtime metadata needed for reserialization. */
+  public static UnknownCase readUnknownValue(ReadContext readContext, int caseId) {
+    return UnknownCaseSerializer.readPayload(readContext, caseId);
   }
 
   /** Reads a schema-defined union case payload for generated non-Java union carriers. */

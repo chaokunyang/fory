@@ -174,3 +174,23 @@ func unionPayloadHintsMustMatchPayloadType() {
         message: "Fory field type hint .uint64 does not match Swift type UInt32"
     )
 }
+
+@Test
+func unionRequiresRealCaseBeyondUnknown() {
+    assertForyDiagnostic(
+        """
+        @ForyUnion
+        enum OnlyUnknown {
+            @ForyCase(id: 0)
+            case unknown(UnknownCase)
+        }
+        """,
+        expandedSource:
+        """
+        enum OnlyUnknown {
+            case unknown(UnknownCase)
+        }
+        """,
+        message: "@ForyUnion requires at least one non-unknown case; unknown is a forward-compatibility carrier and cannot be the default"
+    )
+}

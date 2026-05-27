@@ -277,6 +277,7 @@ class ScalaGenerator(BaseGenerator):
         imports = {
             "org.apache.fory.annotation.{ForyCase, ForyUnion}",
             "org.apache.fory.scala.ForySerializer",
+            "org.apache.fory.`type`.union.UnknownCase",
         }
         self.collect_union_imports(union, imports)
         lines = self.source_header(imports)
@@ -341,7 +342,7 @@ class ScalaGenerator(BaseGenerator):
             f"{ind}enum {union.name} derives ForySerializer {{",
         ]
         lines.append(f"{ind}    @ForyCase(id = 0)")
-        lines.append(f"{ind}    case Unknown(caseId: Int, value: Any)")
+        lines.append(f"{ind}    case Unknown(value: UnknownCase)")
         lines.append("")
         for field in union.fields:
             lines.append(f"{ind}    @ForyCase(id = {field.number})")
@@ -354,6 +355,7 @@ class ScalaGenerator(BaseGenerator):
                 top_level_ref=field.ref,
                 parent_stack=parent_stack,
             )
+            field_type = self.qualify_union_payload_type(field_type, case_name)
             lines.append(f"{ind}    case {case_name}(value: {field_type})")
             lines.append("")
         lines.append(f"{ind}}}")
@@ -578,6 +580,14 @@ class ScalaGenerator(BaseGenerator):
                 return f"{package}.{name}"
         return name
 
+    def qualify_union_payload_type(self, rendered_type: str, case_name: str) -> str:
+        if rendered_type != case_name:
+            return rendered_type
+        package = self.get_scala_package()
+        if package:
+            return f"_root_.{package}.{rendered_type}"
+        return rendered_type
+
     def apply_type_annotation(self, scala_type: str, annotation: str) -> str:
         return f"{scala_type} @{annotation}"
 
@@ -680,6 +690,7 @@ class ScalaGenerator(BaseGenerator):
             imports.add("org.apache.fory.annotation.ForyEnumId")
         for union in message.nested_unions:
             imports.add("org.apache.fory.annotation.{ForyCase, ForyUnion}")
+            imports.add("org.apache.fory.`type`.union.UnknownCase")
             self.collect_union_imports(union, imports)
         for nested in message.nested_messages:
             self.collect_message_imports(nested, imports)

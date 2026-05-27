@@ -153,9 +153,7 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
     builder
       .append("      is ")
       .append(union.unknownCase.qualifiedClassName)
-      .append(
-        " -> UnionSerializer.writeUnknownCaseValue(writeContext, value.value, value.caseId)\n"
-      )
+      .append(" -> UnionSerializer.writeUnknownValue(writeContext, value.value)\n")
     for ((index, case) in union.cases.withIndex()) {
       builder.append("      is ").append(case.qualifiedClassName).append(" -> ")
       val direct = directWriteCaseStatement(case, "value.value")
@@ -199,7 +197,7 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
     builder
       .append("      else -> ")
       .append(union.unknownCase.qualifiedClassName)
-      .append("(caseId, readContext.readRef())\n")
+      .append("(UnionSerializer.readUnknownValue(readContext, caseId))\n")
     builder.append("    }\n")
     builder.append("  }\n\n")
     builder
@@ -221,7 +219,7 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
       .append(union.unknownCase.qualifiedClassName)
       .append(" -> ")
       .append(union.unknownCase.qualifiedClassName)
-      .append("(value.caseId, copyContext.copyObject(value.value))\n")
+      .append("(value.value)\n")
     for ((index, case) in union.cases.withIndex()) {
       builder
         .append("      is ")

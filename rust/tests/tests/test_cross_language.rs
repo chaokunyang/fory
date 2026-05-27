@@ -1897,6 +1897,7 @@ fn test_nullable_field_compatible_null() {
 /// Each variant has exactly one field to be Union-compatible
 #[derive(ForyUnion, Debug, PartialEq)]
 enum StringOrLong {
+    #[fory(default)]
     Str(String),
     Long(i64),
 }

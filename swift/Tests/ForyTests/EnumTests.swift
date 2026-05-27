@@ -33,6 +33,16 @@ private enum StringOrLong: Equatable {
 }
 
 @ForyUnion
+private enum ForwardStringOrLong: Equatable {
+    @ForyCase(id: 0)
+    case unknown(UnknownCase)
+    @ForyCase(id: 1)
+    case text(String)
+    @ForyCase(id: 2)
+    case number(Int64)
+}
+
+@ForyUnion
 private enum FixedPayloadEvent: Equatable {
     @ForyCase(id: 1)
     case created(String)
@@ -68,6 +78,11 @@ private indirect enum Token: Equatable {
 func enumTypeIdClassification() {
     #expect(Color.staticTypeId == .enumType)
     #expect(StringOrLong.staticTypeId == .typedUnion)
+}
+
+@Test
+func unionDefaultUsesKnownCase() {
+    #expect(ForwardStringOrLong.foryDefault() == .text(""))
 }
 
 @Test

@@ -145,7 +145,7 @@ public struct ForyEnumMacro: MemberMacro, ExtensionMacro {
         guard parsedEnum.kind == .ordinal else {
             throw MacroExpansionErrorMessage("@ForyEnum cases cannot have associated values; use @ForyUnion")
         }
-        return buildEnumDecls(parsedEnum, accessPrefix: accessPrefix)
+        return try buildEnumDecls(parsedEnum, accessPrefix: accessPrefix)
     }
 
     public static func expansion(
@@ -178,7 +178,7 @@ public struct ForyUnionMacro: MemberMacro, ExtensionMacro {
         guard parsedEnum.kind == .taggedUnion else {
             throw MacroExpansionErrorMessage("@ForyUnion requires at least one associated-value case; use @ForyEnum")
         }
-        return buildEnumDecls(parsedEnum, accessPrefix: accessPrefix)
+        return try buildEnumDecls(parsedEnum, accessPrefix: accessPrefix)
     }
 
     public static func expansion(
@@ -453,12 +453,12 @@ private func parseEnumDecl(_ enumDecl: EnumDeclSyntax) throws -> ParsedEnumDecl 
     return .init(kind: .ordinal, cases: cases)
 }
 
-private func buildEnumDecls(_ parsedEnum: ParsedEnumDecl, accessPrefix: String) -> [DeclSyntax] {
+private func buildEnumDecls(_ parsedEnum: ParsedEnumDecl, accessPrefix: String) throws -> [DeclSyntax] {
     switch parsedEnum.kind {
     case .ordinal:
         return buildOrdinalEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix)
     case .taggedUnion:
-        return buildTaggedUnionEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix)
+        return try buildTaggedUnionEnumDecls(parsedEnum.cases, accessPrefix: accessPrefix)
     }
 }
 
@@ -550,21 +550,31 @@ private func parseEnumCaseWireValue(_ element: EnumCaseElementSyntax) -> UInt32?
     return parsed
 }
 
-private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
+private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) throws -> [DeclSyntax] {
     let unknownCase = cases.first {
         $0.name == "unknown" &&
-            $0.caseID == 0 &&
-            $0.payload.count == 2 &&
-            $0.payload[0].label == "caseId" &&
-            $0.payload[1].label == "value"
+            ($0.caseID == nil || $0.caseID == 0) &&
+            $0.payload.count == 1 &&
+            ($0.payload[0].typeText == "UnknownCase" || $0.payload[0].typeText.hasSuffix(".UnknownCase"))
     }
-    let defaultExpr = enumCaseDefaultExpr(cases[0])
+    let defaultCase: ParsedEnumCase
+    if let unknownCase {
+        guard let knownCase = cases.first(where: { $0.name != unknownCase.name }) else {
+            throw MacroExpansionErrorMessage(
+                "@ForyUnion requires at least one non-unknown case; unknown is a forward-compatibility carrier and cannot be the default"
+            )
+        }
+        defaultCase = knownCase
+    } else {
+        defaultCase = cases[0]
+    }
+    let defaultExpr = enumCaseDefaultExpr(defaultCase)
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
         if enumCase.name == unknownCase?.name {
             return """
-            case .unknown(let caseID, let value):
-                context.buffer.writeVarUInt32(caseID)
-                try writeAny(value, context: context, refMode: .tracking, writeTypeInfo: true)
+            case .unknown(let value):
+                context.buffer.writeVarUInt32(value.caseId)
+                try UnknownCaseSerializer.writePayload(value, context)
             """
         }
 
@@ -593,8 +603,7 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         if enumCase.name == unknownCase?.name {
             return """
             case 0:
-                let __unknownValue = try readAny(context: context, refMode: .tracking, readTypeInfo: true)
-                return .unknown(caseId: 0, value: __unknownValue)
+                return .unknown(try UnknownCaseSerializer.readPayload(caseId: 0, context))
             """
         }
 
@@ -632,8 +641,7 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
     if unknownCase != nil {
         unknownDefault = """
             default:
-                let __unknownValue = try readAny(context: context, refMode: .tracking, readTypeInfo: true)
-                return .unknown(caseId: caseID, value: __unknownValue)
+                return .unknown(try UnknownCaseSerializer.readPayload(caseId: caseID, context))
         """
     } else {
         unknownDefault = """

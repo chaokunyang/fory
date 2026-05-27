@@ -117,6 +117,8 @@
 //!   By default, `ForyStruct` does NOT generate `impl Default` to avoid conflicts with existing
 //!   `Default` implementations. Use this attribute when you want the macro to generate both
 //!   `ForyDefault` and `Default` for you.
+//! - **`#[fory(default)]`**: Marks the default `ForyUnion` variant. `ForyUnion` requires exactly
+//!   one default variant so schema evolution and null fallback have an explicit owner.
 //!
 //! ## Field Types
 //!
@@ -182,11 +184,58 @@
 
 use fory_row::derive_row;
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, spanned::Spanned, Attribute, Data, DeriveInput, Fields, LitBool};
+use syn::{
+    parse_macro_input, spanned::Spanned, Attribute, Data, DeriveInput, Fields, LitBool, Type,
+};
 
 mod fory_row;
 mod object;
 mod util;
+
+fn is_fory_default_variant(attrs: &[Attribute]) -> bool {
+    attrs.iter().any(|attr| {
+        attr.path().is_ident("fory") && {
+            let mut is_default = false;
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("default") {
+                    is_default = true;
+                } else if !meta.input.is_empty() {
+                    let value = meta.value()?;
+                    let _ = value.parse::<syn::Expr>()?;
+                }
+                Ok(())
+            });
+            is_default
+        }
+    })
+}
+
+fn is_unknown_case_type(ty: &Type) -> bool {
+    let Type::Path(type_path) = ty else {
+        return false;
+    };
+    type_path
+        .path
+        .segments
+        .last()
+        .is_some_and(|segment| segment.ident == "UnknownCase")
+}
+
+// Only the runtime-owned forward-compatibility carrier is excluded from default
+// selection. A user variant named Unknown with a different id or payload type is
+// still a real union case.
+fn is_runtime_unknown_variant(index: usize, variant: &syn::Variant) -> bool {
+    if variant.ident != "Unknown" {
+        return false;
+    }
+    let Fields::Unnamed(fields) = &variant.fields else {
+        return false;
+    };
+    if fields.unnamed.len() != 1 || !is_unknown_case_type(&fields.unnamed[0].ty) {
+        return false;
+    }
+    object::util::enum_variant_id(variant).unwrap_or(index as u32) == 0
+}
 
 /// Derive macro for struct serialization.
 #[proc_macro_derive(ForyStruct, attributes(fory))]
@@ -251,6 +300,48 @@ pub fn proc_macro_derive_fory_union(input: proc_macro::TokenStream) -> TokenStre
         .into_compile_error()
         .into();
     }
+    let non_unknown_count = data_enum
+        .variants
+        .iter()
+        .enumerate()
+        .filter(|(index, variant)| !is_runtime_unknown_variant(*index, variant))
+        .count();
+    if non_unknown_count == 0 {
+        return syn::Error::new(
+            input.ident.span(),
+            "ForyUnion requires at least one non-Unknown case; Unknown is a forward-compatibility carrier and cannot be the default",
+        )
+        .into_compile_error()
+        .into();
+    }
+    let default_count = data_enum
+        .variants
+        .iter()
+        .filter(|variant| is_fory_default_variant(&variant.attrs))
+        .count();
+    if default_count != 1 {
+        return syn::Error::new(
+            input.ident.span(),
+            "ForyUnion requires exactly one #[fory(default)] variant for ForyDefault and Default semantics",
+        )
+        .into_compile_error()
+        .into();
+    }
+    if data_enum
+        .variants
+        .iter()
+        .enumerate()
+        .any(|(index, variant)| {
+            is_runtime_unknown_variant(index, variant) && is_fory_default_variant(&variant.attrs)
+        })
+    {
+        return syn::Error::new(
+            input.ident.span(),
+            "ForyUnion Unknown case cannot be marked #[fory(default)]",
+        )
+        .into_compile_error()
+        .into();
+    }
     derive_serializer(input)
 }
 
@@ -286,6 +377,37 @@ fn derive_serializer(input: DeriveInput) -> TokenStream {
 pub fn proc_macro_derive_fory_row(input: proc_macro::TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     derive_row(&input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use syn::parse_quote;
+
+    #[test]
+    fn detects_runtime_unknown_variant() {
+        let variant: syn::Variant = parse_quote!(
+            #[fory(id = 0)]
+            Unknown(::fory::UnknownCase)
+        );
+
+        assert!(is_runtime_unknown_variant(0, &variant));
+    }
+
+    #[test]
+    fn user_unknown_variant_remains_real_case() {
+        let wrong_id: syn::Variant = parse_quote!(
+            #[fory(id = 7)]
+            Unknown(::fory::UnknownCase)
+        );
+        let wrong_payload: syn::Variant = parse_quote!(
+            #[fory(id = 0)]
+            Unknown(String)
+        );
+
+        assert!(!is_runtime_unknown_variant(0, &wrong_id));
+        assert!(!is_runtime_unknown_variant(0, &wrong_payload));
+    }
 }
 
 /// Parsed fory attributes

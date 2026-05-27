@@ -743,6 +743,7 @@ def test_generated_code_tree_ref_options_equivalent():
 
     rust_output = render_files(generate_files(schemas["fdl"], RustGenerator))
     assert "RcWeak<TreeNode>" in rust_output
+    assert "#[derive(::fory::ForyStruct, Clone, PartialEq, Eq, Default)]" in rust_output
 
     cpp_output = render_files(generate_files(schemas["fdl"], CppGenerator))
     assert "SharedWeak<TreeNode>" in cpp_output
@@ -1105,10 +1106,9 @@ def test_rust_generated_code_uses_absolute_paths():
     assert "use std::" not in rust_output
     assert "#[derive(::fory::ForyStruct" in rust_output
     assert "#[derive(::fory::ForyUnion" in rust_output
-    assert (
-        "Unknown { case_id: u32, value: ::std::boxed::Box<dyn ::std::any::Any> },"
-        in rust_output
-    )
+    assert "Unknown(::fory::UnknownCase)," in rust_output
+    assert "#[fory(id = 1, default)]" in rust_output
+    assert "impl ::std::default::Default for Fory" in rust_output
     assert "pub value: ::std::string::String," in rust_output
     assert "pub items: ::std::vec::Vec<::std::string::String>," in rust_output
     assert (

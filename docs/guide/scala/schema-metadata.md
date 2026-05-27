@@ -86,11 +86,12 @@ IDL unions generate Scala 3 ADT enums with `@ForyUnion` and `@ForyCase` metadata
 import org.apache.fory.annotation.{ForyCase, ForyUnion, UInt32Type}
 import org.apache.fory.config.Int32Encoding
 import org.apache.fory.scala.ForySerializer
+import org.apache.fory.`type`.union.UnknownCase
 
 @ForyUnion
 enum SearchTarget derives ForySerializer {
   @ForyCase(id = 0)
-  case Unknown(caseId: Int, value: Any)
+  case Unknown(value: UnknownCase)
 
   @ForyCase(id = 1)
   case User(value: User)
@@ -100,8 +101,9 @@ enum SearchTarget derives ForySerializer {
 }
 ```
 
-Schema-defined union cases must use positive IDs. Case ID `0` is reserved for the unknown-case
-carrier used when a reader sees a newer positive case ID.
+Schema-defined union cases must use positive IDs, and a typed union must
+declare at least one non-`Unknown` case. Case ID `0` is reserved for the
+unknown-case carrier used when a reader sees a newer positive case ID.
 
 ## Generated Metadata Source
 

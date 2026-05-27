@@ -221,13 +221,16 @@ serialization.
 KSP generates serializers for top-level sealed classes annotated with
 `@ForyUnion`. Each schema case is a nested class annotated with `@ForyCase` and
 one constructor property named `value`. Case ID `0` is reserved for the unknown
-case carrier:
+case carrier. A typed union must declare at least one non-`Unknown` case;
+`Unknown(UnknownCase)` is only the runtime forward-compatibility carrier:
 
 ```kotlin
+import org.apache.fory.type.union.UnknownCase
+
 @ForyUnion
 sealed class Animal {
   @ForyCase(id = 0)
-  data class Unknown(val caseId: Int, val value: Any?) : Animal()
+  data class Unknown(val value: UnknownCase) : Animal()
 
   @ForyCase(id = 1)
   data class Dog(val value: Dog) : Animal()

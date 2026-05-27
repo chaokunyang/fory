@@ -759,7 +759,6 @@ object ForySerializerMacros {
         trackingRef: Boolean,
         hasTrackingRefMetadata: Boolean,
         payloadName: String,
-        unknownIdName: String,
         unknown: Boolean,
         fieldIndex: Int)
 
@@ -786,26 +785,22 @@ object ForySerializerMacros {
       }
     }
 
-    def payloadMeta(child: Symbol, id: Int): (TypeRepr, String, String) = {
+    def payloadMeta(child: Symbol, id: Int): (TypeRepr, String) = {
       val params = child.primaryConstructor.paramSymss.flatten
       if id == 0 then {
-        if params.size != 2 then {
+        if params.size != 1 then {
           report.errorAndAbort(
-            s"${child.fullName} is the unknown union case and must have (caseId: Int, value: Any)")
+            s"${child.fullName} is the unknown union case and must have (value: UnknownCase)")
         }
-        val caseIdType = params.head.tree match {
+        val tpe = params.head.tree match {
           case ValDef(_, tpt, _) => tpt.tpe
           case _ => params.head.termRef.widen
         }
-        val tpe = params(1).tree match {
-          case ValDef(_, tpt, _) => tpt.tpe
-          case _ => TypeRepr.of[Any]
-        }
-        if !(caseIdType =:= TypeRepr.of[Int]) || !(tpe =:= TypeRepr.of[Any]) then {
+        if !(tpe =:= TypeRepr.of[org.apache.fory.`type`.union.UnknownCase]) then {
           report.errorAndAbort(
-            s"${child.fullName} is the unknown union case and must have (caseId: Int, value: Any)")
+            s"${child.fullName} is the unknown union case and must have (value: UnknownCase)")
         }
-        (tpe, params(1).name, params.head.name)
+        (tpe, params.head.name)
       } else {
         if params.size != 1 then {
           report.errorAndAbort(s"${child.fullName} must have exactly one payload parameter")
@@ -814,7 +809,7 @@ object ForySerializerMacros {
           case ValDef(_, tpt, _) => tpt.tpe
           case _ => params.head.termRef.widen
         }
-        (tpe, params.head.name, "")
+        (tpe, params.head.name)
       }
     }
 
@@ -823,7 +818,7 @@ object ForySerializerMacros {
         report.errorAndAbort(s"${child.fullName} must be annotated with @ForyCase")
       }
       if id < 0 then report.errorAndAbort(s"${child.fullName} @ForyCase id must be >= 0")
-      val (tpe, payloadName, unknownIdName) = payloadMeta(child, id)
+      val (tpe, payloadName) = payloadMeta(child, id)
       val refTracking = topLevelTypeRefTracking(tpe)
       CaseMeta(
         child,
@@ -833,7 +828,6 @@ object ForySerializerMacros {
         refTracking.getOrElse(false),
         refTracking.nonEmpty,
         payloadName,
-        unknownIdName,
         id == 0,
         -1)
     }
@@ -849,6 +843,10 @@ object ForySerializerMacros {
     val knownCases = cases.filterNot(_.unknown)
     if cases.count(_.unknown) > 1 then {
       report.errorAndAbort(s"${owner.fullName} must define exactly one @ForyCase(id = 0) unknown case")
+    }
+    if knownCases.isEmpty then {
+      report.errorAndAbort(
+        s"${owner.fullName} must define at least one non-Unknown case; Unknown is a forward-compatibility carrier and cannot be the default")
     }
     if cases.filterNot(_.unknown).groupBy(_.id).exists(_._2.size > 1) then {
       report.errorAndAbort(s"${owner.fullName} has duplicate @ForyCase ids")
@@ -1075,17 +1073,13 @@ object ForySerializerMacros {
         unionCase.symbol.typeRef.asType match {
           case '[c] =>
             if unionCase.unknown then {
-              val originalId =
-                Select.unique(
-                  '{ $valueExpr.asInstanceOf[c] }.asTerm,
-                  unionCase.unknownIdName).asExprOf[Int]
               val payload =
                 Select.unique(
                   '{ $valueExpr.asInstanceOf[c] }.asTerm,
-                  unionCase.payloadName).asExpr
+                  unionCase.payloadName).asExprOf[org.apache.fory.`type`.union.UnknownCase]
               '{
                 if $valueExpr.isInstanceOf[c] then {
-                  UnionSerializer.writeUnknownCaseValue($writeContextExpr, $payload, $originalId)
+                  UnionSerializer.writeUnknownValue($writeContextExpr, $payload)
                 } else {
                   $next
                 }
@@ -1123,8 +1117,8 @@ object ForySerializerMacros {
         readContextExpr: Expr[org.apache.fory.context.ReadContext],
         resolverExpr: Expr[TypeResolver],
         caseFieldInfosExpr: Expr[Array[FieldGroups.SerializationFieldInfo]]): Expr[T] = {
-      val unknownPayload = '{ $readContextExpr.readRef() }
-      val unknownExpr = construct(unknown, List(caseIdExpr.asTerm, unknownPayload.asTerm))
+      val unknownPayload = '{ UnionSerializer.readUnknownValue($readContextExpr, $caseIdExpr) }
+      val unknownExpr = construct(unknown, List(unknownPayload.asTerm))
       knownCases.foldRight(unknownExpr) { (unionCase, next) =>
         val rawPayload =
           '{
@@ -1169,15 +1163,9 @@ object ForySerializerMacros {
                 '{ $valueExpr.asInstanceOf[c] }.asTerm,
                 unionCase.payloadName).asExpr
             if unionCase.unknown then {
-              val originalId =
-                Select.unique(
-                  '{ $valueExpr.asInstanceOf[c] }.asTerm,
-                  unionCase.unknownIdName).asExprOf[Int]
               '{
                 if $valueExpr.isInstanceOf[c] then {
-                  val copiedPayload = $copyContextExpr.copyObject($payload)
-                  ${ failIfCopiedDuringPayloadCopy() }
-                  ${ construct(unknown, List(originalId.asTerm, 'copiedPayload.asTerm)) }
+                  ${ construct(unknown, List(payload.asTerm)) }
                 } else $next
               }
             } else {

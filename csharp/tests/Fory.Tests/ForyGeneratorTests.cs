@@ -47,7 +47,7 @@ public sealed class ForyGeneratorTests
                 }
 
                 [ForyCase(0)]
-                public sealed partial record Unknown(int CaseId, object? Value) : Choice;
+                public sealed partial record Unknown(UnknownCase Value) : Choice;
 
                 [ForyCase(1)]
                 public sealed partial record Text(string Value) : Choice;
@@ -93,6 +93,39 @@ public sealed class ForyGeneratorTests
         ImmutableArray<Diagnostic> generatorDiagnostics = driver.GetRunResult().Diagnostics;
         Assert.Contains(generatorDiagnostics.Concat(diagnostics), diagnostic => diagnostic.Id == "FORY004");
         Assert.DoesNotContain(output.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Id != "FORY004");
+    }
+
+    [Fact]
+    public void UnionRequiresRealCaseBeyondUnknown()
+    {
+        const string source = """
+            using Apache.Fory;
+
+            namespace GeneratedDiagnostics;
+
+            [ForyUnion]
+            public abstract partial record OnlyUnknown
+            {
+                private OnlyUnknown()
+                {
+                }
+
+                [ForyCase(0)]
+                public sealed partial record Unknown(UnknownCase Value) : OnlyUnknown;
+            }
+            """;
+
+        CSharpCompilation compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyModelGenerator());
+        driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out ImmutableArray<Diagnostic> diagnostics);
+
+        ImmutableArray<Diagnostic> generatorDiagnostics = driver.GetRunResult().Diagnostics;
+        Assert.Contains(
+            generatorDiagnostics.Concat(diagnostics),
+            diagnostic =>
+                diagnostic.Id == "FORY006" &&
+                diagnostic.GetMessage().Contains("at least one non-Unknown case", StringComparison.Ordinal));
+        Assert.DoesNotContain(output.GetDiagnostics(), diagnostic => diagnostic.Severity == DiagnosticSeverity.Error && diagnostic.Id != "FORY006");
     }
 
     private static CSharpCompilation CreateCompilation(string source)

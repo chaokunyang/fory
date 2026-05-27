@@ -30,24 +30,7 @@ fn temp_var_name(i: usize) -> String {
 fn is_union_unknown_variant(variant: &syn::Variant) -> bool {
     variant.ident.to_string() == "Unknown"
         && enum_variant_id(variant) == Some(0)
-        && matches!(&variant.fields, Fields::Named(fields) if fields.named.len() == 2)
-}
-
-fn unknown_variant_fields(fields: &syn::FieldsNamed) -> (&syn::Ident, &syn::Ident) {
-    let mut case_id_ident = None;
-    let mut value_ident = None;
-    for field in fields.named.iter() {
-        let ident = field.ident.as_ref().unwrap();
-        match ident.to_string().as_str() {
-            "case_id" => case_id_ident = Some(ident),
-            "value" => value_ident = Some(ident),
-            _ => {}
-        }
-    }
-    (
-        case_id_ident.expect("Unknown union variant requires case_id"),
-        value_ident.expect("Unknown union variant requires value"),
-    )
+        && matches!(&variant.fields, Fields::Unnamed(fields) if fields.unnamed.len() == 1)
 }
 
 fn gen_write_named_variant_fields(
@@ -389,21 +372,12 @@ fn xlang_variant_branches(data_enum: &DataEnum, default_variant_value: u32) -> V
         .map(|(idx, v)| {
             let ident = &v.ident;
             if is_union_unknown_variant(v) {
-                if let Fields::Named(fields_named) = &v.fields {
-                    let (case_id_ident, value_ident) = unknown_variant_fields(fields_named);
-                    return quote! {
-                        Self::#ident { #case_id_ident, #value_ident } => {
-                            context.writer.write_var_u32(*#case_id_ident);
-                            <::std::boxed::Box<dyn ::std::any::Any> as ::fory_core::Serializer>::fory_write(
-                                #value_ident,
-                                context,
-                                ::fory_core::RefMode::Tracking,
-                                true,
-                                false,
-                            )?;
-                        }
-                    };
-                }
+                return quote! {
+                    Self::#ident(ref unknown) => {
+                        context.writer.write_var_u32(unknown.case_id());
+                        ::fory_core::serializer::unknown_case::write_payload(context, unknown)?;
+                    }
+                };
             }
 
             let mut tag_value = if is_union_compatible {
@@ -739,19 +713,12 @@ fn xlang_variant_read_branches(
         .map(|(idx, v)| {
             let ident = &v.ident;
             if is_union_unknown_variant(v) {
-                if let Fields::Named(fields_named) = &v.fields {
-                    let (case_id_ident, value_ident) = unknown_variant_fields(fields_named);
-                    return quote! {
-                        0 => {
-                            let value = <::std::boxed::Box<dyn ::std::any::Any> as ::fory_core::Serializer>::fory_read(
-                                context,
-                                ::fory_core::RefMode::Tracking,
-                                true,
-                            )?;
-                            Ok(Self::#ident { #case_id_ident: 0, #value_ident: value })
-                        }
-                    };
-                }
+                return quote! {
+                    0 => {
+                        let value = ::fory_core::serializer::unknown_case::read_payload(context, 0)?;
+                        Ok(Self::#ident(value))
+                    }
+                };
             }
 
             let mut tag_value = if is_union_compatible {
@@ -1071,19 +1038,10 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
             .find(|variant| is_union_unknown_variant(variant))
         {
             let ident = &variant.ident;
-            let fields_named = match &variant.fields {
-                Fields::Named(fields) => fields,
-                _ => unreachable!(),
-            };
-            let (case_id_ident, value_ident) = unknown_variant_fields(fields_named);
             quote! {
                 _ => {
-                    let value = <::std::boxed::Box<dyn ::std::any::Any> as ::fory_core::Serializer>::fory_read(
-                        context,
-                        ::fory_core::RefMode::Tracking,
-                        true,
-                    )?;
-                    Ok(Self::#ident { #case_id_ident: ordinal, #value_ident: value })
+                    let value = ::fory_core::serializer::unknown_case::read_payload(context, ordinal)?;
+                    Ok(Self::#ident(value))
                 }
             }
         } else {

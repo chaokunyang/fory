@@ -406,17 +406,25 @@ Rust output is one module file per schema, for example:
 ### Type Generation
 
 Unions map to Rust enums with `#[fory(id = ...)]` case attributes. Case ID `0`
-is the `Unknown` carrier for newer schema cases:
+is the `Unknown` carrier for newer schema cases. A generated typed union must
+have at least one non-`Unknown` case. The compiler marks the first declared
+non-`Unknown` case as `#[fory(default)]` and emits `Default` from that case:
 
 ```rust
-#[derive(ForyUnion)]
+#[derive(::fory::ForyUnion, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Animal {
     #[fory(id = 0)]
-    Unknown { case_id: u32, value: Box<dyn Any> },
-    #[fory(id = 1)]
+    Unknown(::fory::UnknownCase),
+    #[fory(id = 1, default)]
     Dog(Dog),
     #[fory(id = 2)]
     Cat(Cat),
+}
+
+impl ::std::default::Default for Animal {
+    fn default() -> Self {
+        Self::Dog(<Dog as ::fory::ForyDefault>::fory_default())
+    }
 }
 ```
 
@@ -794,7 +802,8 @@ Unions generate `[ForyUnion]` ADTs. Case ID `0` is the unknown-case
 carrier; schema-defined cases use positive `[ForyCase]` IDs. If a case needs
 non-default schema encoding, the generated `[ForyCase]` carries `Type`. Known
 case record names are PascalCase FDL case names; payload types are emitted as
-qualified references when needed to avoid name conflicts.
+qualified references when needed to avoid name conflicts. A typed union must
+have at least one non-`Unknown` case.
 
 ```csharp
 [ForyUnion]
@@ -803,7 +812,7 @@ public abstract partial record Animal
     private Animal() {}
 
     [ForyCase(0)]
-    public sealed partial record Unknown(int CaseId, object? Value) : Animal;
+    public sealed partial record Unknown(UnknownCase Value) : Animal;
 
     [ForyCase(1)]
     public sealed partial record Dog(global::addressbook.Dog Value) : Animal;
@@ -887,6 +896,8 @@ Swift output is one `.swift` file per schema, for example:
 ### Type Generation
 
 The generator creates Swift models with split model macros and stable field/case IDs.
+A typed union must have at least one non-`unknown` case; `unknown(UnknownCase)`
+is only the forward-compatibility carrier.
 
 When package/namespace is non-empty, namespace shaping is controlled by `swift_namespace_style`:
 
@@ -902,7 +913,7 @@ public enum Addressbook {
     @ForyUnion
     public enum Animal {
         @ForyCase(id: 0)
-        case unknown(caseId: UInt32, value: Any?)
+        case unknown(UnknownCase)
         @ForyCase(id: 1)
         case dog(Addressbook.Dog)
         @ForyCase(id: 2)
@@ -1199,13 +1210,16 @@ construction cycles.
 
 Enums generate Kotlin enum classes with stable Fory enum IDs. Unions generate
 sealed classes with `@ForyUnion`; case ID `0` is the unknown-case carrier and
-schema-defined cases hold a single `value` property.
+schema-defined cases hold a single `value` property. A typed union must have at
+least one non-`Unknown` case.
 
 ```kotlin
+import org.apache.fory.type.union.UnknownCase
+
 @ForyUnion
 public sealed class Animal {
   @ForyCase(id = 0)
-  public data class Unknown(public val caseId: Int, public val value: Any?) : Animal()
+  public data class Unknown(public val value: UnknownCase) : Animal()
 
   @ForyCase(id = 1)
   public data class Dog(public val value: Dog) : Animal()
@@ -1332,16 +1346,18 @@ enum PhoneType {
 ```
 
 Unions generate Scala 3 ADT enums. Case ID `0` is reserved for the unknown-case
-carrier; schema-defined cases start at `1`.
+carrier; schema-defined cases start at `1`. A typed union must have at least
+one non-`Unknown` case.
 
 ```scala
 import org.apache.fory.annotation.{ForyCase, ForyUnion}
 import org.apache.fory.scala.ForySerializer
+import org.apache.fory.`type`.union.UnknownCase
 
 @ForyUnion
 enum Animal derives ForySerializer {
   @ForyCase(id = 0)
-  case Unknown(caseId: Int, value: Any)
+  case Unknown(value: UnknownCase)
 
   @ForyCase(id = 1)
   case Dog(value: Dog)

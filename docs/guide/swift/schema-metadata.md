@@ -109,7 +109,7 @@ Union payloads use the same DSL through `@ForyCase(payload:)`:
 @ForyUnion
 enum Event {
     @ForyCase(id: 0)
-    case unknown(caseId: UInt32, value: Any?)
+    case unknown(UnknownCase)
 
     @ForyCase(id: 1)
     case created(String)
@@ -118,6 +118,10 @@ enum Event {
     case deleted(UInt64)
 }
 ```
+
+A typed union must declare at least one non-`unknown` case. The
+`unknown(UnknownCase)` case is only the runtime forward-compatibility carrier
+and cannot be the default value source.
 
 ## Model Macro Requirements
 

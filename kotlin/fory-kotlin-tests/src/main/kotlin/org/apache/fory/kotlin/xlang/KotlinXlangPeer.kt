@@ -46,6 +46,7 @@ import org.apache.fory.serializer.kotlin.KotlinSerializers
 import org.apache.fory.type.BFloat16Array
 import org.apache.fory.type.Float16Array
 import org.apache.fory.type.Types
+import org.apache.fory.type.union.UnknownCase
 
 @ForyStruct
 public data class KotlinUser(
@@ -142,7 +143,7 @@ public class KotlinMutableNode() {
 
 @ForyUnion
 public sealed class KotlinPet {
-  @ForyCase(id = 0) public data class Unknown(val caseId: Int, val value: Any?) : KotlinPet()
+  @ForyCase(id = 0) public data class Unknown(val value: UnknownCase) : KotlinPet()
 
   @ForyCase(id = 1) public data class User(val value: KotlinUser) : KotlinPet()
 

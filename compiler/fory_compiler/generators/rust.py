@@ -365,19 +365,18 @@ class RustGenerator(BaseGenerator):
         """Generate a Rust tagged union."""
         lines: List[str] = []
 
-        has_any = any(
-            self.field_type_has_any(field.field_type) for field in union.fields
-        )
         if self.to_pascal_case(union.name) != union.name:
             lines.append("#[allow(non_camel_case_types)]")
         comment = self.format_type_id_comment(union, "//")
         if comment:
             lines.append(comment)
-        derives = ["::fory::ForyUnion", "Debug"]
-        if not has_any:
-            derives.extend(["Clone", "PartialEq"])
+        derives = ["::fory::ForyUnion"]
         lines.append(f"#[derive({', '.join(derives)})]")
         lines.append(f"pub enum {union.name} {{")
+        lines.append("    #[fory(id = 0)]")
+        lines.append(
+            "    Unknown { case_id: u32, value: ::std::boxed::Box<dyn ::std::any::Any> },"
+        )
 
         for field in union.fields:
             variant_name = self.to_pascal_case(field.name)

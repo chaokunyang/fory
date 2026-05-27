@@ -1105,6 +1105,10 @@ def test_rust_generated_code_uses_absolute_paths():
     assert "use std::" not in rust_output
     assert "#[derive(::fory::ForyStruct" in rust_output
     assert "#[derive(::fory::ForyUnion" in rust_output
+    assert (
+        "Unknown { case_id: u32, value: ::std::boxed::Box<dyn ::std::any::Any> },"
+        in rust_output
+    )
     assert "pub value: ::std::string::String," in rust_output
     assert "pub items: ::std::vec::Vec<::std::string::String>," in rust_output
     assert (

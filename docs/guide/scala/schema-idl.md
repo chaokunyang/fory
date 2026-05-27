@@ -135,20 +135,20 @@ import org.apache.fory.scala.ForySerializer
 @ForyUnion
 enum SearchTarget derives ForySerializer {
   @ForyCase(id = 0)
-  case UnknownCase(caseId: Int, value: Any)
+  case Unknown(caseId: Int, value: Any)
 
   @ForyCase(id = 1)
-  case UserCase(value: User)
+  case User(value: User)
 
   @ForyCase(id = 2)
-  case FixedIdCase(value: Long @UInt32Type(encoding = Int32Encoding.FIXED))
+  case FixedId(value: Long @UInt32Type(encoding = Int32Encoding.FIXED))
 }
 ```
 
 Schema-defined union cases must use positive IDs. Case ID `0` is reserved for
 the Scala unknown-case carrier, whose payload stores the original positive case
 ID and the deserialized value. When a reader sees a newer positive case ID, it
-returns `UnknownCase(originalId, value)` instead of failing solely because the
+returns `Unknown(originalId, value)` instead of failing solely because the
 case ID is not known locally.
 
 The macro writes the existing xlang union envelope directly. It does not

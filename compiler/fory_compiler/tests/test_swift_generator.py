@@ -134,7 +134,9 @@ def test_swift_generator_emits_tagged_union_case_ids():
     """
     content = generate_swift(source)
     assert "@ForyUnion" in content
-    assert "public enum Animal: Equatable" in content
+    assert "public enum Animal" in content
+    assert "@ForyCase(id: 0)" in content
+    assert "case unknown(caseId: UInt32, value: Any?)" in content
     assert "@ForyCase(id: 3)" in content
     assert "case node(Demo.Node)" in content
     assert "@ForyCase(id: 7, payload: .string)" in content

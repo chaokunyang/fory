@@ -551,8 +551,23 @@ private func parseEnumCaseWireValue(_ element: EnumCaseElementSyntax) -> UInt32?
 }
 
 private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) -> [DeclSyntax] {
+    let unknownCase = cases.first {
+        $0.name == "unknown" &&
+            $0.caseID == 0 &&
+            $0.payload.count == 2 &&
+            $0.payload[0].label == "caseId" &&
+            $0.payload[1].label == "value"
+    }
     let defaultExpr = enumCaseDefaultExpr(cases[0])
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
+        if enumCase.name == unknownCase?.name {
+            return """
+            case .unknown(let caseID, let value):
+                context.buffer.writeVarUInt32(caseID)
+                try writeAny(value, context: context, refMode: .tracking, writeTypeInfo: true)
+            """
+        }
+
         let caseID = enumCase.caseID ?? index
         var lines: [String] = []
         lines.append("case \(enumCasePattern(enumCase)):")
@@ -575,6 +590,14 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
     }.joined(separator: "\n        ")
 
     let readSwitchCases = cases.enumerated().map { index, enumCase in
+        if enumCase.name == unknownCase?.name {
+            return """
+            case 0:
+                let __unknownValue = try readAny(context: context, refMode: .tracking, readTypeInfo: true)
+                return .unknown(caseId: 0, value: __unknownValue)
+            """
+        }
+
         let caseID = enumCase.caseID ?? index
         if enumCase.payload.isEmpty {
             return """
@@ -605,6 +628,19 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         lines.append("    return .\(enumCase.name)(\(ctorArgs))")
         return lines.joined(separator: "\n")
     }.joined(separator: "\n        ")
+    let unknownDefault: String
+    if unknownCase != nil {
+        unknownDefault = """
+            default:
+                let __unknownValue = try readAny(context: context, refMode: .tracking, readTypeInfo: true)
+                return .unknown(caseId: caseID, value: __unknownValue)
+        """
+    } else {
+        unknownDefault = """
+            default:
+                throw ForyError.invalidData("unknown union tag \\(caseID)")
+        """
+    }
 
     let defaultDecl: DeclSyntax = DeclSyntax(
         stringLiteral: """
@@ -638,8 +674,7 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
             let caseID = try context.buffer.readVarUInt32()
             switch caseID {
             \(readSwitchCases)
-            default:
-                throw ForyError.invalidData("unknown union tag \\(caseID)")
+            \(unknownDefault)
             }
         }
         """

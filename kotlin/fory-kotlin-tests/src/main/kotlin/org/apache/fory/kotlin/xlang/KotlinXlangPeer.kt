@@ -142,11 +142,11 @@ public class KotlinMutableNode() {
 
 @ForyUnion
 public sealed class KotlinPet {
-  @ForyCase(id = 0) public data class UnknownCase(val caseId: Int, val value: Any?) : KotlinPet()
+  @ForyCase(id = 0) public data class Unknown(val caseId: Int, val value: Any?) : KotlinPet()
 
-  @ForyCase(id = 1) public data class UserCase(val value: KotlinUser) : KotlinPet()
+  @ForyCase(id = 1) public data class User(val value: KotlinUser) : KotlinPet()
 
-  @ForyCase(id = 2) public data class NameCase(val value: String) : KotlinPet()
+  @ForyCase(id = 2) public data class Name(val value: String) : KotlinPet()
 }
 
 public fun main(args: Array<String>) {
@@ -386,7 +386,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
     "KotlinMutableNode did not load a static generated serializer"
   }
 
-  val pet: KotlinPet = KotlinPet.UserCase(response)
+  val pet: KotlinPet = KotlinPet.User(response)
   val decodedPet = fory.deserialize(fory.serialize(pet), KotlinPet::class.java)
   check(decodedPet == pet)
   check(fory.getSerializer(KotlinPet::class.java) is StaticGeneratedStructSerializer<*>) {

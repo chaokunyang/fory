@@ -655,46 +655,46 @@ class ProcessorValidationTest {
             unknownCase =
               KotlinSourceUnionCase(
                 id = 0,
-                className = "UnknownCase",
-                qualifiedClassName = "example.Pet.UnknownCase",
+                className = "Unknown",
+                qualifiedClassName = "example.Pet.Unknown",
                 valueType = any,
               ),
             cases =
               listOf(
                 KotlinSourceUnionCase(
                   id = 1,
-                  className = "OwnerCase",
-                  qualifiedClassName = "example.Pet.OwnerCase",
+                  className = "Owner",
+                  qualifiedClassName = "example.Pet.Owner",
                   valueType = owner,
                 ),
                 KotlinSourceUnionCase(
                   id = 2,
-                  className = "CountCase",
-                  qualifiedClassName = "example.Pet.CountCase",
+                  className = "Count",
+                  qualifiedClassName = "example.Pet.Count",
                   valueType = uint,
                 ),
                 KotlinSourceUnionCase(
                   id = 3,
-                  className = "DurationCase",
-                  qualifiedClassName = "example.Pet.DurationCase",
+                  className = "Duration",
+                  qualifiedClassName = "example.Pet.Duration",
                   valueType = duration,
                 ),
                 KotlinSourceUnionCase(
                   id = 4,
-                  className = "CountListCase",
-                  qualifiedClassName = "example.Pet.CountListCase",
+                  className = "CountList",
+                  qualifiedClassName = "example.Pet.CountList",
                   valueType = uintList,
                 ),
                 KotlinSourceUnionCase(
                   id = 5,
-                  className = "DurationListCase",
-                  qualifiedClassName = "example.Pet.DurationListCase",
+                  className = "DurationList",
+                  qualifiedClassName = "example.Pet.DurationList",
                   valueType = durationList,
                 ),
                 KotlinSourceUnionCase(
                   id = 6,
-                  className = "CountArrayCase",
-                  qualifiedClassName = "example.Pet.CountArrayCase",
+                  className = "CountArray",
+                  qualifiedClassName = "example.Pet.CountArray",
                   valueType = uintArray,
                 )
               ),
@@ -707,15 +707,15 @@ class ProcessorValidationTest {
     assertTrue(source.contains("UnionSerializer.writeCaseValue(typeResolver, writeContext"))
     assertTrue(source.contains("UnionSerializer.readCaseValue(typeResolver, readContext"))
     assertTrue(source.contains("UnionSerializer.copyCaseValue(copyContext"))
-    assertTrue(source.contains("UnionSerializer.writeUnknownCaseValue(writeContext"))
+    assertTrue(source.contains("UnionSerializer.writeUnknownValue(writeContext"))
     assertTrue(source.contains("TypeRef.of<Any>(Int::class.javaPrimitiveType!!"))
     assertTrue(!source.contains("UInt::class.java"))
     assertTrue(source.contains("buffer.writeUInt8(Types.VAR_UINT32)"))
     assertTrue(source.contains("buffer.writeVarUInt32(value.value.toInt())"))
-    assertTrue(source.contains("example.Pet.CountCase(value.value)"))
+    assertTrue(source.contains("example.Pet.Count(value.value)"))
     assertTrue(source.contains("DurationEncoding.write(writeContext, value.value)"))
     assertTrue(source.contains("DurationEncoding.read(readContext)"))
-    assertTrue(source.contains("example.Pet.DurationCase(value.value)"))
+    assertTrue(source.contains("example.Pet.Duration(value.value)"))
     assertTrue(source.contains("TypeRef.of<Any>(java.time.Duration::class.java"))
     assertTrue(source.contains("KotlinXlangUnsignedSerializers.serializer(typeResolver.config"))
     assertTrue(source.contains("DurationSerializers.serializer(typeResolver.config"))
@@ -727,7 +727,7 @@ class ProcessorValidationTest {
       source.contains("KotlinXlangArrayEncoding.writeUIntArray(writeContext, value.value)")
     )
     assertTrue(source.contains("KotlinXlangArrayEncoding.readUIntArray(readContext"))
-    assertTrue(source.contains("example.Pet.CountArrayCase(value.value.copyOf())"))
+    assertTrue(source.contains("example.Pet.CountArray(value.value.copyOf())"))
     assertTrue(!source.contains("org.apache.fory.type.union.Union"))
   }
 }

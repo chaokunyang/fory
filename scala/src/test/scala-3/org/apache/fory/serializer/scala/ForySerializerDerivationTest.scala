@@ -121,28 +121,28 @@ object ForySerializerDerivationTest {
   @ForyUnion
   enum SearchTarget derives ForySerializer {
     @ForyCase(id = 0)
-    case UnknownCase(caseId: Int, value: Any)
+    case Unknown(caseId: Int, value: Any)
 
     @ForyCase(id = 1)
-    case UserCase(value: SearchUser)
+    case User(value: SearchUser)
 
     @ForyCase(id = 2)
-    case FixedIdCase(value: Int)
+    case FixedId(value: Int)
 
     @ForyCase(id = 3)
-    case OptionalUserCase(value: Option[SearchUser])
+    case OptionalUser(value: Option[SearchUser])
 
     @ForyCase(id = 4)
-    case OptionalTaggedCase(value: Option[Long @UInt64Type(encoding = Int64Encoding.TAGGED)])
+    case OptionalTagged(value: Option[Long @UInt64Type(encoding = Int64Encoding.TAGGED)])
   }
 
   @ForyUnion
   enum UnionCycle derives ForySerializer {
     @ForyCase(id = 0)
-    case UnknownCase(caseId: Int, value: Any)
+    case Unknown(caseId: Int, value: Any)
 
     @ForyCase(id = 1)
-    case NodeCase(value: UnionRefNode)
+    case Node(value: UnionRefNode)
   }
 
   def xlangFory(): Fory = {
@@ -198,8 +198,8 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
 
     "serialize derived union enum cases" in {
       val fory = xlangFory()
-      val user = SearchTarget.UserCase(SearchUser("Ada"))
-      val fixed = SearchTarget.FixedIdCase(7)
+      val user = SearchTarget.User(SearchUser("Ada"))
+      val fixed = SearchTarget.FixedId(7)
       fory.deserialize(fory.serialize(user)) shouldEqual user
       fory.deserialize(fory.serialize(fixed)) shouldEqual fixed
     }
@@ -375,9 +375,9 @@ import org.apache.fory.scala.ForyScala
         @ForyUnion
         enum MissingCaseUnion derives ForySerializer {
           @ForyCase(id = 0)
-          case UnknownCase(caseId: Int, value: Any)
+          case Unknown(caseId: Int, value: Any)
 
-          case UserCase(value: MissingCaseUser)
+          case User(value: MissingCaseUser)
         }
       """)
 
@@ -386,26 +386,26 @@ import org.apache.fory.scala.ForyScala
 
     "serialize derived union unknown cases with original ids" in {
       val fory = xlangFory()
-      val unknown = SearchTarget.UnknownCase(99, SearchUser("Future"))
+      val unknown = SearchTarget.Unknown(99, SearchUser("Future"))
       fory.deserialize(fory.serialize(unknown)) shouldEqual unknown
     }
 
     "serialize and copy derived union Option payloads" in {
       val fory = xlangFory()
-      val some: SearchTarget.OptionalUserCase =
-        SearchTarget.OptionalUserCase(Some(SearchUser("Ada")))
-      val none: SearchTarget.OptionalUserCase = SearchTarget.OptionalUserCase(None)
-      val taggedSome = SearchTarget.OptionalTaggedCase(Some(99L))
-      val taggedNone = SearchTarget.OptionalTaggedCase(None)
+      val some: SearchTarget.OptionalUser =
+        SearchTarget.OptionalUser(Some(SearchUser("Ada")))
+      val none: SearchTarget.OptionalUser = SearchTarget.OptionalUser(None)
+      val taggedSome = SearchTarget.OptionalTagged(Some(99L))
+      val taggedNone = SearchTarget.OptionalTagged(None)
 
       fory.deserialize(fory.serialize(some)) shouldEqual some
       fory.deserialize(fory.serialize(none)) shouldEqual none
       fory.deserialize(fory.serialize(taggedSome)) shouldEqual taggedSome
       fory.deserialize(fory.serialize(taggedNone)) shouldEqual taggedNone
 
-      val copiedSome = fory.copy(some).asInstanceOf[SearchTarget.OptionalUserCase]
-      val copiedNone = fory.copy(none).asInstanceOf[SearchTarget.OptionalUserCase]
-      val copiedTagged = fory.copy(taggedSome).asInstanceOf[SearchTarget.OptionalTaggedCase]
+      val copiedSome = fory.copy(some).asInstanceOf[SearchTarget.OptionalUser]
+      val copiedNone = fory.copy(none).asInstanceOf[SearchTarget.OptionalUser]
+      val copiedTagged = fory.copy(taggedSome).asInstanceOf[SearchTarget.OptionalTagged]
 
       copiedSome shouldEqual some
       copiedSome should not be theSameInstanceAs(some)
@@ -449,7 +449,7 @@ import org.apache.fory.scala.ForyScala
       val fory = xlangFory()
       val root = new UnionRefNode()
       root.name = "root"
-      val choice = UnionCycle.NodeCase(root)
+      val choice = UnionCycle.Node(root)
       root.choice = Some(choice)
 
       val copied = fory.copy(root)
@@ -458,7 +458,7 @@ import org.apache.fory.scala.ForyScala
       copied.name shouldBe "root"
       copied.choice.get should not be theSameInstanceAs(choice)
       copied.choice.get match {
-        case UnionCycle.NodeCase(value) => value shouldBe theSameInstanceAs(copied)
+        case UnionCycle.Node(value) => value shouldBe theSameInstanceAs(copied)
         case other => fail(s"Unexpected copied union case $other")
       }
     }
@@ -466,7 +466,7 @@ import org.apache.fory.scala.ForyScala
     "reject cyclic copies rooted at immutable union values" in {
       val fory = xlangFory()
       val root = new UnionRefNode()
-      val choice = UnionCycle.NodeCase(root)
+      val choice = UnionCycle.Node(root)
       root.choice = Some(choice)
 
       val error = intercept[org.apache.fory.exception.CopyException] {
@@ -474,27 +474,27 @@ import org.apache.fory.scala.ForyScala
       }
 
       error.getMessage should include("constructor-owned immutable value")
-      error.getMessage should include(classOf[UnionCycle.NodeCase].getName)
+      error.getMessage should include(classOf[UnionCycle.Node].getName)
     }
 
     "copy derived union cases through payload serializers" in {
       val fory = xlangFory()
-      val target = SearchTarget.UserCase(SearchUser("Ada"))
+      val target = SearchTarget.User(SearchUser("Ada"))
 
       val copied = fory.copy(target)
 
       copied shouldEqual target
       copied should not be theSameInstanceAs(target)
-      copied.asInstanceOf[SearchTarget.UserCase].value should not be theSameInstanceAs(
-        target.asInstanceOf[SearchTarget.UserCase].value)
+      copied.asInstanceOf[SearchTarget.User].value should not be theSameInstanceAs(
+        target.asInstanceOf[SearchTarget.User].value)
     }
 
     "copy derived union unknown cases" in {
       val fory = xlangFory()
-      val unknown: SearchTarget.UnknownCase =
-        SearchTarget.UnknownCase(99, SearchUser("Future"))
+      val unknown: SearchTarget.Unknown =
+        SearchTarget.Unknown(99, SearchUser("Future"))
 
-      val copied = fory.copy(unknown).asInstanceOf[SearchTarget.UnknownCase]
+      val copied = fory.copy(unknown).asInstanceOf[SearchTarget.Unknown]
 
       copied.caseId shouldBe 99
       copied.value.asInstanceOf[SearchUser] shouldEqual unknown.value.asInstanceOf[SearchUser]

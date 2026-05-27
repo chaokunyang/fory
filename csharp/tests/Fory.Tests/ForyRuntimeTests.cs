@@ -295,7 +295,7 @@ public abstract partial record SourceGeneratedShape
     }
 
     [ForyCase(0)]
-    public sealed partial record UnknownCase(int CaseId, object? Value) : SourceGeneratedShape;
+    public sealed partial record Unknown(int CaseId, object? Value) : SourceGeneratedShape;
 
     [ForyCase(1)]
     public sealed partial record Text(string Value) : SourceGeneratedShape;
@@ -307,7 +307,7 @@ public abstract partial record SourceGeneratedShape
 [ForyStruct]
 public sealed class SourceGeneratedUnionHolder
 {
-    public SourceGeneratedShape Shape { get; set; } = new SourceGeneratedShape.UnknownCase(0, null);
+    public SourceGeneratedShape Shape { get; set; } = new SourceGeneratedShape.Unknown(0, null);
 }
 
 [ForyStruct]
@@ -1463,7 +1463,7 @@ public sealed class ForyRuntimeTests
         };
         SourceGeneratedUnionHolder unknown = new()
         {
-            Shape = new SourceGeneratedShape.UnknownCase(99, "future"),
+            Shape = new SourceGeneratedShape.Unknown(99, "future"),
         };
 
         SourceGeneratedUnionHolder knownDecoded =
@@ -1473,8 +1473,8 @@ public sealed class ForyRuntimeTests
 
         SourceGeneratedShape.Number number = Assert.IsType<SourceGeneratedShape.Number>(knownDecoded.Shape);
         Assert.Equal(42, number.Value);
-        SourceGeneratedShape.UnknownCase unknownCase =
-            Assert.IsType<SourceGeneratedShape.UnknownCase>(unknownDecoded.Shape);
+        SourceGeneratedShape.Unknown unknownCase =
+            Assert.IsType<SourceGeneratedShape.Unknown>(unknownDecoded.Shape);
         Assert.Equal(99, unknownCase.CaseId);
         Assert.Equal("future", unknownCase.Value);
     }

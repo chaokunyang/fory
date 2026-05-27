@@ -77,11 +77,11 @@ def test_scala_generator_emits_case_classes_options_enums_and_unions():
     assert "@ForyUnion" in union
     assert "enum SearchTarget derives ForySerializer" in union
     assert "@ForyCase(id = 0)" in union
-    assert "case UnknownCase(caseId: Int, value: Any)" in union
+    assert "case Unknown(caseId: Int, value: Any)" in union
     assert "@ForyCase(id = 1)" in union
-    assert "case UserCase(value: User)" in union
+    assert "case User(value: User)" in union
     assert "@ForyCase(id = 2)" in union
-    assert "case NoteCase(value: String)" in union
+    assert "case Note(value: String)" in union
 
 
 def test_scala_generator_uses_mutable_normal_class_for_construction_cycles():
@@ -252,10 +252,10 @@ def test_scala_generator_collects_nested_union_payload_imports():
     assert "import org.apache.fory.annotation.Ref" in envelope
     assert "import org.apache.fory.config.Int32Encoding" in envelope
     assert (
-        "case FixedIdCase(value: Int @Int32Type(encoding = Int32Encoding.FIXED))"
+        "case FixedId(value: Int @Int32Type(encoding = Int32Encoding.FIXED))"
         in envelope
     )
-    assert "case UsersCase(value: List[Envelope.User @Ref])" in envelope
+    assert "case Users(value: List[Envelope.User @Ref])" in envelope
 
 
 def test_scala_generator_marks_nested_union_mediated_cycles_mutable():
@@ -282,7 +282,7 @@ def test_scala_generator_marks_nested_union_mediated_cycles_mutable():
     assert "final case class Envelope(" in envelope
     assert "@ForyField(id = 1) root: Option[Envelope.Node]" in envelope
     assert "enum Choice derives ForySerializer" in envelope
-    assert "case NodeCase(value: Envelope.Node)" in envelope
+    assert "case Node(value: Envelope.Node)" in envelope
     assert "final class Node() derives ForySerializer" in envelope
     assert 'var id: String = ""' in envelope
     assert (

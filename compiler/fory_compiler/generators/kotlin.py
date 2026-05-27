@@ -344,7 +344,7 @@ class KotlinGenerator(BaseGenerator):
         union_name = self.type_name(union, parent_stack)
         lines = ["@ForyUnion", f"public sealed class {union_name} {{"]
         lines.append("    @ForyCase(id = 0)")
-        lines.append("    public data class UnknownCase(")
+        lines.append("    public data class Unknown(")
         lines.append("        public val caseId: Int,")
         lines.append("        public val value: Any?,")
         lines.append(f"    ) : {union_name}()")
@@ -361,7 +361,7 @@ class KotlinGenerator(BaseGenerator):
                 parent_stack=parent_stack,
             )
             lines.append(
-                f"    public data class {case_name}Case(public val value: {field_type}) : {union_name}()"
+                f"    public data class {case_name}(public val value: {field_type}) : {union_name}()"
             )
         lines.append("}")
         return lines

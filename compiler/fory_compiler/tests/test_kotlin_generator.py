@@ -85,12 +85,12 @@ def test_emits_models():
     union = files["org/example/demo/SearchTarget.kt"]
     assert "@ForyUnion" in union
     assert "public sealed class SearchTarget" in union
-    assert "public data class UnknownCase(" in union
+    assert "public data class Unknown(" in union
     assert "@ForyCase(id = 1)" in union
-    assert "public data class UserCase(public val value: User)" in union
+    assert "public data class User(public val value: User)" in union
     assert "import org.apache.fory.annotation.ArrayType" in union
     assert (
-        "public data class BytesCase(public val value: @ArrayType ByteArray)" in union
+        "public data class Bytes(public val value: @ArrayType ByteArray)" in union
     )
 
     assert (

@@ -98,7 +98,7 @@ public abstract partial record Shape
     private Shape() {}
 
     [ForyCase(0)]
-    public sealed partial record UnknownCase(int CaseId, object? Value) : Shape;
+    public sealed partial record Unknown(int CaseId, object? Value) : Shape;
 
     [ForyCase(1)]
     public sealed partial record Circle(global::example.Circle Value) : Shape;

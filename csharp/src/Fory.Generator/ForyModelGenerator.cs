@@ -2732,7 +2732,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 InvalidUnionCase,
                 unionType.Locations.FirstOrDefault(),
                 unionType.ToDisplayString(FullNameFormat),
-                "union must declare [ForyCase(0)] UnknownCase"));
+                "union must declare [ForyCase(0)] Unknown"));
         }
 
         return cases.OrderBy(c => c.CaseId).ToImmutableArray();

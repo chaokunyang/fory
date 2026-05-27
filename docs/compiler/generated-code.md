@@ -405,11 +405,14 @@ Rust output is one module file per schema, for example:
 
 ### Type Generation
 
-Unions map to Rust enums with `#[fory(id = ...)]` case attributes:
+Unions map to Rust enums with `#[fory(id = ...)]` case attributes. Case ID `0`
+is the `Unknown` carrier for newer schema cases:
 
 ```rust
-#[derive(ForyUnion, Debug, Clone, PartialEq)]
+#[derive(ForyUnion)]
 pub enum Animal {
+    #[fory(id = 0)]
+    Unknown { case_id: u32, value: Box<dyn Any> },
     #[fory(id = 1)]
     Dog(Dog),
     #[fory(id = 2)]
@@ -800,7 +803,7 @@ public abstract partial record Animal
     private Animal() {}
 
     [ForyCase(0)]
-    public sealed partial record UnknownCase(int CaseId, object? Value) : Animal;
+    public sealed partial record Unknown(int CaseId, object? Value) : Animal;
 
     [ForyCase(1)]
     public sealed partial record Dog(global::addressbook.Dog Value) : Animal;
@@ -897,7 +900,9 @@ For non-empty package with default `enum` style:
 ```swift
 public enum Addressbook {
     @ForyUnion
-    public enum Animal: Equatable {
+    public enum Animal {
+        @ForyCase(id: 0)
+        case unknown(caseId: UInt32, value: Any?)
         @ForyCase(id: 1)
         case dog(Addressbook.Dog)
         @ForyCase(id: 2)
@@ -1200,10 +1205,10 @@ schema-defined cases hold a single `value` property.
 @ForyUnion
 public sealed class Animal {
   @ForyCase(id = 0)
-  public data class UnknownCase(public val caseId: Int, public val value: Any?) : Animal()
+  public data class Unknown(public val caseId: Int, public val value: Any?) : Animal()
 
   @ForyCase(id = 1)
-  public data class DogCase(public val value: Dog) : Animal()
+  public data class Dog(public val value: Dog) : Animal()
 }
 ```
 
@@ -1336,13 +1341,13 @@ import org.apache.fory.scala.ForySerializer
 @ForyUnion
 enum Animal derives ForySerializer {
   @ForyCase(id = 0)
-  case UnknownCase(caseId: Int, value: Any)
+  case Unknown(caseId: Int, value: Any)
 
   @ForyCase(id = 1)
-  case DogCase(value: Dog)
+  case Dog(value: Dog)
 
   @ForyCase(id = 2)
-  case CatCase(value: Cat)
+  case Cat(value: Cat)
 }
 ```
 

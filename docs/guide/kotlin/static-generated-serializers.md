@@ -227,10 +227,10 @@ case carrier:
 @ForyUnion
 sealed class Animal {
   @ForyCase(id = 0)
-  data class UnknownCase(val caseId: Int, val value: Any?) : Animal()
+  data class Unknown(val caseId: Int, val value: Any?) : Animal()
 
   @ForyCase(id = 1)
-  data class DogCase(val value: Dog) : Animal()
+  data class Dog(val value: Dog) : Animal()
 }
 ```
 

@@ -107,7 +107,10 @@ Union payloads use the same DSL through `@ForyCase(payload:)`:
 
 ```swift
 @ForyUnion
-enum Event: Equatable {
+enum Event {
+    @ForyCase(id: 0)
+    case unknown(caseId: UInt32, value: Any?)
+
     @ForyCase(id: 1)
     case created(String)
 

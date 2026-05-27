@@ -90,13 +90,13 @@ import org.apache.fory.scala.ForySerializer
 @ForyUnion
 enum SearchTarget derives ForySerializer {
   @ForyCase(id = 0)
-  case UnknownCase(caseId: Int, value: Any)
+  case Unknown(caseId: Int, value: Any)
 
   @ForyCase(id = 1)
-  case UserCase(value: User)
+  case User(value: User)
 
   @ForyCase(id = 2)
-  case FixedIdCase(value: Long @UInt32Type(encoding = Int32Encoding.FIXED))
+  case FixedId(value: Long @UInt32Type(encoding = Int32Encoding.FIXED))
 }
 ```
 

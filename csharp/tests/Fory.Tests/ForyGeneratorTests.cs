@@ -47,7 +47,7 @@ public sealed class ForyGeneratorTests
                 }
 
                 [ForyCase(0)]
-                public sealed partial record UnknownCase(int CaseId, object? Value) : Choice;
+                public sealed partial record Unknown(int CaseId, object? Value) : Choice;
 
                 [ForyCase(1)]
                 public sealed partial record Text(string Value) : Choice;

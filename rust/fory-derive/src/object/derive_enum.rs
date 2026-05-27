@@ -27,6 +27,29 @@ fn temp_var_name(i: usize) -> String {
     format!("f{}", i)
 }
 
+fn is_union_unknown_variant(variant: &syn::Variant) -> bool {
+    variant.ident.to_string() == "Unknown"
+        && enum_variant_id(variant) == Some(0)
+        && matches!(&variant.fields, Fields::Named(fields) if fields.named.len() == 2)
+}
+
+fn unknown_variant_fields(fields: &syn::FieldsNamed) -> (&syn::Ident, &syn::Ident) {
+    let mut case_id_ident = None;
+    let mut value_ident = None;
+    for field in fields.named.iter() {
+        let ident = field.ident.as_ref().unwrap();
+        match ident.to_string().as_str() {
+            "case_id" => case_id_ident = Some(ident),
+            "value" => value_ident = Some(ident),
+            _ => {}
+        }
+    }
+    (
+        case_id_ident.expect("Unknown union variant requires case_id"),
+        value_ident.expect("Unknown union variant requires value"),
+    )
+}
+
 fn gen_write_named_variant_fields(
     source_fields: &[crate::util::SourceField<'_>],
     field_idents: &[&syn::Ident],
@@ -235,6 +258,7 @@ pub fn gen_variants_fields_info(enum_name: &syn::Ident, data_enum: &DataEnum) ->
     let variant_info: Vec<TokenStream> = data_enum
         .variants
         .iter()
+        .filter(|v| !is_union_unknown_variant(v))
         .map(|v| {
             let variant_name = v.ident.to_string();
             match &v.fields {
@@ -288,6 +312,9 @@ pub(crate) fn gen_all_variant_meta_types_with_enum_name(
         .variants
         .iter()
         .filter_map(|v| {
+            if is_union_unknown_variant(v) {
+                return None;
+            }
             if let Fields::Named(fields_named) = &v.fields {
                 let ident = &v.ident;
                 Some(gen_named_variant_meta_type_impl_with_enum_name(
@@ -361,6 +388,24 @@ fn xlang_variant_branches(data_enum: &DataEnum, default_variant_value: u32) -> V
         .enumerate()
         .map(|(idx, v)| {
             let ident = &v.ident;
+            if is_union_unknown_variant(v) {
+                if let Fields::Named(fields_named) = &v.fields {
+                    let (case_id_ident, value_ident) = unknown_variant_fields(fields_named);
+                    return quote! {
+                        Self::#ident { #case_id_ident, #value_ident } => {
+                            context.writer.write_var_u32(*#case_id_ident);
+                            <::std::boxed::Box<dyn ::std::any::Any> as ::fory_core::Serializer>::fory_write(
+                                #value_ident,
+                                context,
+                                ::fory_core::RefMode::Tracking,
+                                true,
+                                false,
+                            )?;
+                        }
+                    };
+                }
+            }
+
             let mut tag_value = if is_union_compatible {
                 enum_variant_id(v).unwrap_or(idx as u32)
             } else {
@@ -653,8 +698,9 @@ fn is_union_compatible_enum(data_enum: &DataEnum) -> bool {
     let has_data_variant = data_enum
         .variants
         .iter()
-        .any(|v| !matches!(v.fields, Fields::Unit));
+        .any(|v| !is_union_unknown_variant(v) && !matches!(v.fields, Fields::Unit));
     let all_variants_compatible = data_enum.variants.iter().all(|v| match &v.fields {
+        _ if is_union_unknown_variant(v) => true,
         Fields::Unit => true,
         Fields::Unnamed(f) => f.unnamed.len() == 1,
         Fields::Named(f) => f.named.len() == 1,
@@ -692,6 +738,22 @@ fn xlang_variant_read_branches(
         .enumerate()
         .map(|(idx, v)| {
             let ident = &v.ident;
+            if is_union_unknown_variant(v) {
+                if let Fields::Named(fields_named) = &v.fields {
+                    let (case_id_ident, value_ident) = unknown_variant_fields(fields_named);
+                    return quote! {
+                        0 => {
+                            let value = <::std::boxed::Box<dyn ::std::any::Any> as ::fory_core::Serializer>::fory_read(
+                                context,
+                                ::fory_core::RefMode::Tracking,
+                                true,
+                            )?;
+                            Ok(Self::#ident { #case_id_ident: 0, #value_ident: value })
+                        }
+                    };
+                }
+            }
+
             let mut tag_value = if is_union_compatible {
                 enum_variant_id(v).unwrap_or(idx as u32)
             } else {
@@ -1003,14 +1065,37 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
     };
 
     let unknown_xlang_branch = if is_union_compatible && has_data_variants {
-        quote! {
-            _ => {
-                use ::fory_core::serializer::skip::skip_any_value;
-                skip_any_value(context, true)?;
-                if context.is_compatible() {
-                    Ok(#default_variant_construction)
-                } else {
-                    return Err(::fory_core::error::Error::unknown_enum("unknown enum value"));
+        if let Some(variant) = data_enum
+            .variants
+            .iter()
+            .find(|variant| is_union_unknown_variant(variant))
+        {
+            let ident = &variant.ident;
+            let fields_named = match &variant.fields {
+                Fields::Named(fields) => fields,
+                _ => unreachable!(),
+            };
+            let (case_id_ident, value_ident) = unknown_variant_fields(fields_named);
+            quote! {
+                _ => {
+                    let value = <::std::boxed::Box<dyn ::std::any::Any> as ::fory_core::Serializer>::fory_read(
+                        context,
+                        ::fory_core::RefMode::Tracking,
+                        true,
+                    )?;
+                    Ok(Self::#ident { #case_id_ident: ordinal, #value_ident: value })
+                }
+            }
+        } else {
+            quote! {
+                _ => {
+                    use ::fory_core::serializer::skip::skip_any_value;
+                    skip_any_value(context, true)?;
+                    if context.is_compatible() {
+                        Ok(#default_variant_construction)
+                    } else {
+                        return Err(::fory_core::error::Error::unknown_enum("unknown enum value"));
+                    }
                 }
             }
         }

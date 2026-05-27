@@ -341,7 +341,7 @@ class ScalaGenerator(BaseGenerator):
             f"{ind}enum {union.name} derives ForySerializer {{",
         ]
         lines.append(f"{ind}    @ForyCase(id = 0)")
-        lines.append(f"{ind}    case UnknownCase(caseId: Int, value: Any)")
+        lines.append(f"{ind}    case Unknown(caseId: Int, value: Any)")
         lines.append("")
         for field in union.fields:
             lines.append(f"{ind}    @ForyCase(id = {field.number})")
@@ -354,7 +354,7 @@ class ScalaGenerator(BaseGenerator):
                 top_level_ref=field.ref,
                 parent_stack=parent_stack,
             )
-            lines.append(f"{ind}    case {case_name}Case(value: {field_type})")
+            lines.append(f"{ind}    case {case_name}(value: {field_type})")
             lines.append("")
         lines.append(f"{ind}}}")
         lines.append("")

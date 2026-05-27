@@ -349,10 +349,10 @@ final case class ScalaPeerUser(
 @ForyUnion
 enum ScalaPeerTarget derives ForySerializer {
   @ForyCase(id = 0)
-  case UnknownCase(caseId: Int, value: Any)
+  case Unknown(caseId: Int, value: Any)
 
   @ForyCase(id = 1)
-  case UserCase(value: ScalaPeerUser)
+  case User(value: ScalaPeerUser)
 }
 
 object ScalaXlangPeer {
@@ -422,8 +422,8 @@ object ScalaXlangPeer {
       case "test_list_array_compatible_nullable_list_to_array_error" =>
         roundTripValues(dataFile, nullableInt32ListFory())
       case "derived_struct_round_trip" => roundTripUser(dataFile)
-      case "known_union_case_round_trip" => roundTripTarget(dataFile, preserveUnknownCase = false)
-      case "unknown_union_case_round_trip" => roundTripTarget(dataFile, preserveUnknownCase = true)
+      case "known_union_case_round_trip" => roundTripTarget(dataFile, preserveUnknown = false)
+      case "unknown_union_case_round_trip" => roundTripTarget(dataFile, preserveUnknown = true)
       case other => throw new IllegalArgumentException(s"Unknown Scala xlang peer case: $other")
     }
   }
@@ -887,18 +887,18 @@ object ScalaXlangPeer {
     writeOne(dataFile, fory, request.copy(id = request.id + 1, name = "scala-" + request.name, email = None))
   }
 
-  private def roundTripTarget(dataFile: Path, preserveUnknownCase: Boolean): Unit = {
+  private def roundTripTarget(dataFile: Path, preserveUnknown: Boolean): Unit = {
     val fory = scalaPeerFory()
     val request = readOne[ScalaPeerTarget](dataFile, fory)
     val response = request match {
-      case ScalaPeerTarget.UserCase(user) =>
-        ScalaPeerTarget.UserCase(user.copy(id = user.id + 1, name = "scala-" + user.name, email = None))
-      case ScalaPeerTarget.UnknownCase(caseId, value: ScalaPeerUser) if preserveUnknownCase =>
-        ScalaPeerTarget.UnknownCase(
+      case ScalaPeerTarget.User(user) =>
+        ScalaPeerTarget.User(user.copy(id = user.id + 1, name = "scala-" + user.name, email = None))
+      case ScalaPeerTarget.Unknown(caseId, value: ScalaPeerUser) if preserveUnknown =>
+        ScalaPeerTarget.Unknown(
           caseId,
           value.copy(id = value.id + 1, name = "scala-" + value.name, email = None))
-      case ScalaPeerTarget.UnknownCase(caseId, value) =>
-        ScalaPeerTarget.UnknownCase(caseId, value)
+      case ScalaPeerTarget.Unknown(caseId, value) =>
+        ScalaPeerTarget.Unknown(caseId, value)
     }
     writeOne(dataFile, fory, response)
   }

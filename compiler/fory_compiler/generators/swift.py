@@ -978,9 +978,14 @@ class SwiftGenerator(BaseGenerator):
         if comment:
             lines.append(comment)
         lines.append(f"{ind}@ForyUnion")
-        conformances = ": Equatable" if self.union_supports_equatable(union) else ""
+        conformances = ""
         lines.append(f"{ind}public enum {type_name}{conformances} {{")
         lineage = parent_stack or []
+        lines.append(f"{ind}{self.indent_str}@ForyCase(id: 0)")
+        lines.append(
+            f"{ind}{self.indent_str}case unknown(caseId: UInt32, value: Any?)"
+        )
+        lines.append("")
         for field in union.fields:
             field_type = self.generate_type(
                 field.field_type,

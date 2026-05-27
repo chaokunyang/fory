@@ -25,7 +25,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace Apache.Fory.Generator;
 
 [Generator(LanguageNames.CSharp)]
-public sealed class ForyObjectGenerator : IIncrementalGenerator
+public sealed class ForyModelGenerator : IIncrementalGenerator
 {
     private static readonly SymbolDisplayFormat FullNameFormat =
         SymbolDisplayFormat.FullyQualifiedFormat.WithMiscellaneousOptions(
@@ -33,8 +33,8 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
     private static readonly DiagnosticDescriptor GenericTypeNotSupported = new(
         id: "FORY001",
-        title: "Generic types are not supported by ForyObject generator",
-        messageFormat: "Type '{0}' is generic and is not supported by [ForyObject]",
+        title: "Generic types are not supported by the Fory source generator",
+        messageFormat: "Type '{0}' is generic and is not supported by generated Fory attributes",
         category: "Fory",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -42,7 +42,7 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor MissingCtor = new(
         id: "FORY002",
         title: "Missing parameterless constructor",
-        messageFormat: "Class '{0}' must declare an accessible parameterless constructor for [ForyObject]",
+        messageFormat: "Class '{0}' must declare an accessible parameterless constructor for [ForyStruct]",
         category: "Fory",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -63,18 +63,35 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    private static readonly DiagnosticDescriptor InvalidUnionType = new(
+        id: "FORY005",
+        title: "Invalid Fory union type",
+        messageFormat: "Class '{0}' must derive from Apache.Fory.Union for [ForyUnion]",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         IncrementalValuesProvider<TypeModel?> typeModels = context.SyntaxProvider
-            .ForAttributeWithMetadataName(
-                "Apache.Fory.ForyObjectAttribute",
-                static (node, _) => node is TypeDeclarationSyntax || node is EnumDeclarationSyntax,
+            .CreateSyntaxProvider(
+                static (node, _) => HasCandidateAttributes(node),
                 static (syntaxContext, ct) => BuildTypeModel(syntaxContext, ct))
             .Where(static m => m is not null);
 
         context.RegisterSourceOutput(
             typeModels.Collect(),
             static (spc, models) => Emit(spc, models));
+    }
+
+    private static bool HasCandidateAttributes(SyntaxNode node)
+    {
+        return node switch
+        {
+            TypeDeclarationSyntax typeDeclaration => typeDeclaration.AttributeLists.Count > 0,
+            EnumDeclarationSyntax enumDeclaration => enumDeclaration.AttributeLists.Count > 0,
+            _ => false,
+        };
     }
 
     private static void Emit(SourceProductionContext context, ImmutableArray<TypeModel?> maybeModels)
@@ -138,6 +155,11 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
             {
                 sb.AppendLine(
                     $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TypeName}, global::Apache.Fory.EnumSerializer<{model.TypeName}>>();");
+            }
+            else if (model.Kind == DeclKind.Union)
+            {
+                sb.AppendLine(
+                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TypeName}, global::Apache.Fory.UnionSerializer<{model.TypeName}>>();");
             }
             else
             {
@@ -2112,27 +2134,77 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         return BoolLiteral(member.NeedsFieldTypeInfo);
     }
 
-    private static TypeModel? BuildTypeModel(GeneratorAttributeSyntaxContext context, CancellationToken cancellationToken)
+    private static TypeModel? BuildTypeModel(GeneratorSyntaxContext context, CancellationToken cancellationToken)
     {
         _ = cancellationToken;
-        if (context.TargetSymbol is not INamedTypeSymbol typeSymbol)
+        if (context.SemanticModel.GetDeclaredSymbol(context.Node, cancellationToken) is not INamedTypeSymbol typeSymbol)
         {
             return null;
         }
 
-        if (typeSymbol.TypeParameters.Length > 0)
+        ForyAttributeKind attributeKind = GetForyAttributeKind(typeSymbol);
+        if (attributeKind == ForyAttributeKind.None)
         {
             return null;
         }
 
         string typeName = typeSymbol.ToDisplayString(FullNameFormat);
-        string serializerName = "__ForySerializer_" + Sanitize(typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
-        if (typeSymbol.TypeKind == TypeKind.Enum)
+        if (typeSymbol.TypeParameters.Length > 0)
         {
+            return new TypeModel(
+                typeName,
+                string.Empty,
+                DeclKind.Unknown,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray.Create(Diagnostic.Create(
+                    GenericTypeNotSupported,
+                    typeSymbol.Locations.FirstOrDefault(),
+                    typeName)));
+        }
+
+        string serializerName = "__ForySerializer_" + Sanitize(typeSymbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));
+        if (attributeKind == ForyAttributeKind.Enum)
+        {
+            if (typeSymbol.TypeKind != TypeKind.Enum)
+            {
+                return null;
+            }
+
             return new TypeModel(
                 typeName,
                 serializerName,
                 DeclKind.Enum,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<Diagnostic>.Empty);
+        }
+
+        if (attributeKind == ForyAttributeKind.Union)
+        {
+            if (typeSymbol.TypeKind != TypeKind.Class)
+            {
+                return null;
+            }
+
+            if (!IsUnionType(typeSymbol))
+            {
+                return new TypeModel(
+                    typeName,
+                    serializerName,
+                    DeclKind.Union,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray<MemberModel>.Empty,
+                    ImmutableArray.Create(Diagnostic.Create(
+                        InvalidUnionType,
+                        typeSymbol.Locations.FirstOrDefault(),
+                        typeName)));
+            }
+
+            return new TypeModel(
+                typeName,
+                serializerName,
+                DeclKind.Union,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray<Diagnostic>.Empty);
@@ -2152,7 +2224,16 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
 
         if (kind == DeclKind.Class && !HasAccessibleParameterlessCtor(typeSymbol))
         {
-            return null;
+            return new TypeModel(
+                typeName,
+                serializerName,
+                kind,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray<MemberModel>.Empty,
+                ImmutableArray.Create(Diagnostic.Create(
+                    MissingCtor,
+                    typeSymbol.Locations.FirstOrDefault(),
+                    typeName)));
         }
 
         List<Diagnostic> diagnostics = [];
@@ -2217,6 +2298,30 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         ImmutableArray<MemberModel> sorted = SortMembers(ordered);
 
         return new TypeModel(typeName, serializerName, kind, ordered, sorted, diagnostics.ToImmutableArray());
+    }
+
+    private static ForyAttributeKind GetForyAttributeKind(INamedTypeSymbol typeSymbol)
+    {
+        foreach (AttributeData attribute in typeSymbol.GetAttributes())
+        {
+            string? attrName = attribute.AttributeClass?.ToDisplayString();
+            if (string.Equals(attrName, "Apache.Fory.ForyStructAttribute", StringComparison.Ordinal))
+            {
+                return ForyAttributeKind.Struct;
+            }
+
+            if (string.Equals(attrName, "Apache.Fory.ForyEnumAttribute", StringComparison.Ordinal))
+            {
+                return ForyAttributeKind.Enum;
+            }
+
+            if (string.Equals(attrName, "Apache.Fory.ForyUnionAttribute", StringComparison.Ordinal))
+            {
+                return ForyAttributeKind.Union;
+            }
+        }
+
+        return ForyAttributeKind.None;
     }
 
     private static MemberModel? BuildMemberModel(
@@ -3624,6 +3729,15 @@ public sealed class ForyObjectGenerator : IIncrementalGenerator
         Class,
         Struct,
         Enum,
+        Union,
+    }
+
+    private enum ForyAttributeKind
+    {
+        None,
+        Struct,
+        Enum,
+        Union,
     }
 
     private enum DynamicAnyKind

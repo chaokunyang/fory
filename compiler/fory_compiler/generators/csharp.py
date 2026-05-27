@@ -675,7 +675,7 @@ class CSharpGenerator(BaseGenerator):
         comment = self.format_type_id_comment(enum, f"{ind}//")
         if comment:
             lines.append(comment)
-        lines.append(f"{ind}[ForyObject]")
+        lines.append(f"{ind}[ForyEnum]")
         lines.append(f"{ind}public enum {self.safe_type_identifier(enum.name)}")
         lines.append(f"{ind}{{")
 
@@ -704,6 +704,7 @@ class CSharpGenerator(BaseGenerator):
         comment = self.format_type_id_comment(union, f"{ind}//")
         if comment:
             lines.append(comment)
+        lines.append(f"{ind}[ForyUnion]")
         lines.append(f"{ind}public sealed class {type_name} : Union")
         lines.append(f"{ind}{{")
         lines.append(f"{ind}{self.indent_str}public enum {case_enum}")
@@ -823,9 +824,9 @@ class CSharpGenerator(BaseGenerator):
         if comment:
             lines.append(comment)
         if self.get_effective_evolving(message):
-            lines.append(f"{ind}[ForyObject]")
+            lines.append(f"{ind}[ForyStruct]")
         else:
-            lines.append(f"{ind}[ForyObject(Evolving = false)]")
+            lines.append(f"{ind}[ForyStruct(Evolving = false)]")
         lines.append(f"{ind}public sealed partial class {type_name}")
         lines.append(f"{ind}{{")
 

@@ -69,6 +69,32 @@ def test_csharp_namespace_fallback_to_package():
     assert "namespace com.example.models;" in file.content
 
 
+def test_csharp_semantic_model_attributes():
+    file = generate(
+        """
+        package example;
+
+        enum Status {
+            READY = 1;
+        }
+
+        union Choice {
+            string text = 1;
+        }
+
+        message Envelope {
+            Status status = 1;
+            Choice choice = 2;
+        }
+        """
+    )
+
+    assert "[ForyEnum]" in file.content
+    assert "[ForyUnion]" in file.content
+    assert "[ForyStruct]" in file.content
+    assert "[ForyObject]" not in file.content
+
+
 def test_csharp_registration_uses_fdl_package_for_name_registration():
     file = generate(
         """

@@ -26,7 +26,7 @@ using S = Apache.Fory.Schema.Types;
 
 namespace Apache.Fory.Tests;
 
-[ForyObject]
+[ForyEnum]
 public enum TestColor
 {
     Green,
@@ -35,14 +35,14 @@ public enum TestColor
     White,
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class Address
 {
     public string Street { get; set; } = string.Empty;
     public int Zip { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class Person
 {
     public long Id { get; set; }
@@ -54,14 +54,14 @@ public sealed class Person
     public Dictionary<sbyte, int?> Metadata { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class Node
 {
     public int Value { get; set; }
     public Node? Next { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class FieldOrder
 {
     public string Z { get; set; } = string.Empty;
@@ -70,7 +70,7 @@ public sealed class FieldOrder
     public int C { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class NonPrimitiveFieldOrder
 {
     [ForyField(20)]
@@ -84,7 +84,7 @@ public sealed class NonPrimitiveFieldOrder
     public int IntValue { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class SchemaNumbers
 {
     [ForyField(Type = typeof(S.Fixed<S.UInt32>))]
@@ -94,21 +94,21 @@ public sealed class SchemaNumbers
     public ulong U64Tagged { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class NestedSchemaByName
 {
     [ForyField(Type = typeof(S.Map<S.Fixed<S.UInt32>, S.List<S.Tagged<S.UInt64>>>))]
     public Dictionary<uint, List<ulong?>?> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class NestedSchemaById
 {
     [ForyField(3, Type = typeof(S.Map<S.Fixed<S.UInt32>, S.List<S.Tagged<S.UInt64>>>))]
     public Dictionary<uint, List<ulong?>?> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class NestedSchemaSkipWriter
 {
     [ForyField(Type = typeof(S.Map<S.Fixed<S.UInt32>, S.List<S.Tagged<S.UInt64>>>))]
@@ -117,76 +117,76 @@ public sealed class NestedSchemaSkipWriter
     public int Tail { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class DefaultListSchema
 {
     public List<int> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class ExplicitArraySchema
 {
     [ForyField(Type = typeof(S.Array<S.Int32>))]
     public int[] Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleListSchema
 {
     [ForyField(Type = typeof(S.List<S.Int32>))]
     public List<int> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleNullableListSchema
 {
     [ForyField(Type = typeof(S.List<S.Int32>))]
     public List<int?> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleArraySchema
 {
     [ForyField(Type = typeof(S.Array<S.Int32>))]
     public int[] Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleUInt32ListSchema
 {
     [ForyField(Type = typeof(S.List<S.UInt32>))]
     public List<uint> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleUInt32ArraySchema
 {
     [ForyField(Type = typeof(S.Array<S.UInt32>))]
     public uint[] Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleUInt32ArrayListCarrierSchema
 {
     [ForyField(Type = typeof(S.Array<S.UInt32>))]
     public List<uint> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleNestedListSchema
 {
     [ForyField(Type = typeof(S.Map<S.String, S.List<S.Int32>>))]
     public Dictionary<string, List<int>> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CompatibleNestedArraySchema
 {
     [ForyField(Type = typeof(S.Map<S.String, S.Array<S.Int32>>))]
     public Dictionary<string, int[]> Values { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class SemanticScalarSchema
 {
     [ForyField(Type = typeof(S.Int32))]
@@ -199,62 +199,62 @@ public sealed class SemanticScalarSchema
     public long TaggedI64 { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class NestedSchemaSkipReader
 {
     public int Tail { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class OneStringField
 {
     public string? F1 { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class TwoStringField
 {
     public string F1 { get; set; } = string.Empty;
     public string F2 { get; set; } = string.Empty;
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class EvolvingOverrideValue
 {
     public string F1 { get; set; } = string.Empty;
 }
 
-[ForyObject(Evolving = false)]
+[ForyStruct(Evolving = false)]
 public sealed class FixedOverrideValue
 {
     public string F1 { get; set; } = string.Empty;
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class OneStringFieldListHolder
 {
     public List<OneStringField?> Items { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class TwoStringFieldListHolder
 {
     public List<TwoStringField?> Items { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class OneStringFieldMapHolder
 {
     public Dictionary<string, OneStringField?> Items { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class TwoStringFieldMapHolder
 {
     public Dictionary<string, TwoStringField?> Items { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class UnsignedFields
 {
     public byte U8 { get; set; }
@@ -267,7 +267,7 @@ public sealed class UnsignedFields
     public ulong? U64Nullable { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class StructWithEnum
 {
     public string Name { get; set; } = string.Empty;
@@ -275,19 +275,19 @@ public sealed class StructWithEnum
     public int Value { get; set; }
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class StructWithNullableMap
 {
     public NullableKeyDictionary<string, string?> Data { get; set; } = new();
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class StructWithUnion2
 {
     public Union2<string, long> Union { get; set; } = Union2<string, long>.OfT1(string.Empty);
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class DynamicAnyHolder
 {
     public object? AnyValue { get; set; }
@@ -295,7 +295,7 @@ public sealed class DynamicAnyHolder
     public Dictionary<object, object?> AnyMap { get; set; } = [];
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class DictionaryContainerHolder
 {
     public Dictionary<string, int> DictionaryField { get; set; } = [];
@@ -304,7 +304,7 @@ public sealed class DictionaryContainerHolder
     public ConcurrentDictionary<string, int> ConcurrentField { get; set; } = new();
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class CollectionContainerHolder
 {
     public LinkedList<int> LinkedListField { get; set; } = new();
@@ -314,7 +314,7 @@ public sealed class CollectionContainerHolder
     public Stack<int> StackField { get; set; } = new();
 }
 
-[ForyObject]
+[ForyStruct]
 public sealed class NestedTypedContainers
 {
     public List<List<string>> NestedLists { get; set; } = [];

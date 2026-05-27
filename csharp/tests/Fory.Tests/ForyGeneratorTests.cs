@@ -25,6 +25,57 @@ namespace Apache.Fory.Tests;
 public sealed class ForyGeneratorTests
 {
     [Fact]
+    public void SplitAttributesCompile()
+    {
+        const string source = """
+            using Apache.Fory;
+
+            namespace GeneratedDiagnostics;
+
+            [ForyEnum]
+            public enum Status
+            {
+                Ready,
+                Done,
+            }
+
+            [ForyUnion]
+            public sealed class Choice : Union
+            {
+                private Choice(int index, object? value)
+                    : base(index, value)
+                {
+                }
+
+                public static Choice Of(int index, object? value)
+                {
+                    return new Choice(index, value);
+                }
+
+                public static Choice Text(string value)
+                {
+                    return new Choice(1, value);
+                }
+            }
+
+            [ForyStruct]
+            public sealed class Envelope
+            {
+                public Status Status { get; set; }
+                public Choice Choice { get; set; } = Choice.Text(string.Empty);
+            }
+            """;
+
+        CSharpCompilation compilation = CreateCompilation(source);
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyModelGenerator());
+        driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out ImmutableArray<Diagnostic> diagnostics);
+
+        Assert.DoesNotContain(
+            diagnostics.Concat(output.GetDiagnostics()),
+            diagnostic => diagnostic.Severity == DiagnosticSeverity.Error);
+    }
+
+    [Fact]
     public void NegativeForyFieldIdReportsDiagnostic()
     {
         const string source = """
@@ -32,7 +83,7 @@ public sealed class ForyGeneratorTests
 
             namespace GeneratedDiagnostics;
 
-            [ForyObject]
+            [ForyStruct]
             public sealed class InvalidFieldId
             {
                 [ForyField(-1)]
@@ -41,7 +92,7 @@ public sealed class ForyGeneratorTests
             """;
 
         CSharpCompilation compilation = CreateCompilation(source);
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyObjectGenerator());
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new ForyModelGenerator());
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out Compilation output, out ImmutableArray<Diagnostic> diagnostics);
 
         ImmutableArray<Diagnostic> generatorDiagnostics = driver.GetRunResult().Diagnostics;
@@ -56,7 +107,7 @@ public sealed class ForyGeneratorTests
             .Split(Path.PathSeparator)
             .Select(path => MetadataReference.CreateFromFile(path));
         MetadataReference foryReference =
-            MetadataReference.CreateFromFile(typeof(ForyObjectAttribute).Assembly.Location);
+            MetadataReference.CreateFromFile(typeof(ForyStructAttribute).Assembly.Location);
 
         return CSharpCompilation.Create(
             "ForyGeneratorDiagnostics",

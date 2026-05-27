@@ -130,27 +130,15 @@ public sealed class DynamicAnyObjectSerializer : Serializer<object?>
 
     private object? ReadNonNullDynamicAny(ReadContext context, bool readTypeInfo)
     {
-        context.IncreaseReadDepth();
-        bool loadedDynamicTypeInfo = false;
-        try
+        if (!readTypeInfo)
         {
-            if (readTypeInfo)
-            {
-                ReadAnyTypeInfo(context);
-                loadedDynamicTypeInfo = true;
-            }
-
             return ReadData(context);
         }
-        finally
-        {
-            if (loadedDynamicTypeInfo)
-            {
-                context.ClearReadTypeInfo(typeof(object));
-            }
 
-            context.DecreaseReadDepth();
-        }
+        ReadAnyTypeInfo(context);
+        object? value = ReadData(context);
+        context.ClearReadTypeInfo(typeof(object));
+        return value;
     }
 }
 

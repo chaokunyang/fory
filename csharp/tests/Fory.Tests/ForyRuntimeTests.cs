@@ -1633,7 +1633,7 @@ public sealed class ForyRuntimeTests
         object? value = new List<object?> { new List<object?> { 1 } };
         byte[] payload = writer.Serialize<object?>(value);
 
-        ForyRuntime reader = ForyRuntime.Builder().MaxDepth(2).Build();
+        ForyRuntime reader = ForyRuntime.Builder().MaxDepth(1).Build();
         InvalidDataException ex = Assert.Throws<InvalidDataException>(() => reader.Deserialize<object?>(payload));
         Assert.Contains("dynamic object nesting depth", ex.Message);
     }
@@ -1641,7 +1641,7 @@ public sealed class ForyRuntimeTests
     [Fact]
     public void DynamicObjectReadDepthWithinLimitRoundTrip()
     {
-        ForyRuntime fory = ForyRuntime.Builder().MaxDepth(3).Build();
+        ForyRuntime fory = ForyRuntime.Builder().MaxDepth(2).Build();
         object? value = new List<object?> { new List<object?> { 1 } };
 
         List<object?> outer = Assert.IsType<List<object?>>(fory.Deserialize<object?>(fory.Serialize<object?>(value)));
@@ -1649,6 +1649,45 @@ public sealed class ForyRuntimeTests
         List<object?> inner = Assert.IsType<List<object?>>(outer[0]);
         Assert.Single(inner);
         Assert.Equal(1, inner[0]);
+    }
+
+    [Fact]
+    public void UnknownCaseReadDepthExceededThrows()
+    {
+        ForyRuntime writer = ForyRuntime.Builder().Compatible(false).Build();
+        writer.Register<SourceGeneratedShape>(304);
+        writer.Register<SourceGeneratedUnionHolder>(305);
+        SourceGeneratedUnionHolder source = new()
+        {
+            Shape = new SourceGeneratedShape.Unknown(
+                new UnknownCase(99, new List<object?> { new List<object?> { 1 } })),
+        };
+        byte[] payload = writer.Serialize(source);
+
+        ForyRuntime reader = ForyRuntime.Builder().Compatible(false).MaxDepth(1).Build();
+        reader.Register<SourceGeneratedShape>(304);
+        reader.Register<SourceGeneratedUnionHolder>(305);
+        InvalidDataException ex =
+            Assert.Throws<InvalidDataException>(() => reader.Deserialize<SourceGeneratedUnionHolder>(payload));
+        Assert.Contains("dynamic object nesting depth", ex.Message);
+    }
+
+    [Fact]
+    public void UnknownCaseScalarReadDepthFree()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(false).MaxDepth(1).Build();
+        fory.Register<SourceGeneratedShape>(306);
+        fory.Register<SourceGeneratedUnionHolder>(307);
+        SourceGeneratedUnionHolder source = new()
+        {
+            Shape = new SourceGeneratedShape.Unknown(new UnknownCase(99, 1)),
+        };
+
+        SourceGeneratedUnionHolder decoded =
+            fory.Deserialize<SourceGeneratedUnionHolder>(fory.Serialize(source));
+        SourceGeneratedShape.Unknown unknown = Assert.IsType<SourceGeneratedShape.Unknown>(decoded.Shape);
+        Assert.Equal(99, unknown.Value.CaseId);
+        Assert.Equal(1, unknown.Value.Value);
     }
 
     [Fact]

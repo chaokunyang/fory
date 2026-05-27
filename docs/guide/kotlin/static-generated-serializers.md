@@ -225,6 +225,10 @@ case carrier. A typed union must declare at least one non-`Unknown` case;
 `Unknown(UnknownCase)` is only the runtime forward-compatibility carrier:
 
 ```kotlin
+package example
+
+import org.apache.fory.annotation.ForyCase
+import org.apache.fory.annotation.ForyUnion
 import org.apache.fory.type.union.UnknownCase
 
 @ForyUnion
@@ -233,9 +237,14 @@ sealed class Animal {
   data class Unknown(val value: UnknownCase) : Animal()
 
   @ForyCase(id = 1)
-  data class Dog(val value: Dog) : Animal()
+  data class Dog(val value: example.Dog) : Animal()
 }
 ```
+
+When a generated Kotlin union case name matches the payload type simple name,
+packaged output keeps the case name and qualifies the payload type. If a target
+output mode cannot express a legal qualifier for a conflict, the IDL compiler
+appends `Case` to the generated case class name.
 
 Generated schema modules register sealed unions through `KotlinSerializers.registerUnion`.
 The runtime discovers the generated `<Target>_ForySerializer` automatically, so

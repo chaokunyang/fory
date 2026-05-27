@@ -391,6 +391,9 @@ class RustGenerator(BaseGenerator):
                 parent_stack=parent_stack,
                 pointer_type=pointer_type,
             )
+            variant_type = self.qualify_union_payload_type(
+                field.field_type, variant_type, variant_name
+            )
             variant_attrs = [f"id = {field.number}"]
             if index == 0:
                 variant_attrs.append("default")
@@ -419,6 +422,9 @@ class RustGenerator(BaseGenerator):
                 parent_stack=parent_stack,
                 pointer_type=default_pointer_type,
             )
+            default_type = self.qualify_union_payload_type(
+                default_field.field_type, default_type, default_variant
+            )
             lines.append(f"impl ::std::default::Default for {union.name} {{")
             lines.append("    fn default() -> Self {")
             lines.append(
@@ -431,6 +437,16 @@ class RustGenerator(BaseGenerator):
         lines.extend(self.generate_bytes_impl(union.name))
 
         return lines
+
+    def qualify_union_payload_type(
+        self,
+        field_type: FieldType,
+        rendered_type: str,
+        variant_name: str,
+    ) -> str:
+        if rendered_type == variant_name and isinstance(field_type, NamedType):
+            return f"self::{rendered_type}"
+        return rendered_type
 
     def generate_message(
         self,
@@ -642,9 +658,12 @@ class RustGenerator(BaseGenerator):
             )
             if trait in ("PartialEq", "Eq"):
                 return key_ok and value_ok
-            return self.type_supports_trait(
-                field.field_type.key_type, trait, parent_stack, visiting
-            ) and value_ok
+            return (
+                self.type_supports_trait(
+                    field.field_type.key_type, trait, parent_stack, visiting
+                )
+                and value_ok
+            )
         return self.type_supports_trait(field.field_type, trait, parent_stack, visiting)
 
     def ref_type_supports_trait(

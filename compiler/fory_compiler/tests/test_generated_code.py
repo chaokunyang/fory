@@ -1119,3 +1119,28 @@ def test_rust_generated_code_uses_absolute_paths():
     assert "pub parent: ::fory::RcWeak<String>," in rust_output
     assert "pub fn register_types(fory: &mut ::fory::Fory)" in rust_output
     assert "static FORY: ::std::sync::OnceLock<::fory::Fory>" in rust_output
+
+
+def test_rust_union_conflicting_payload_uses_self_path():
+    schema = parse_fdl(
+        dedent(
+            """
+            package foo;
+
+            message Dog {
+                string name = 1;
+            }
+
+            union Animal {
+                Dog dog = 1;
+            }
+            """
+        )
+    )
+
+    rust_output = render_files(generate_files(schema, RustGenerator))
+    assert "Dog(self::Dog)," in rust_output
+    assert (
+        "Self::Dog(<self::Dog as ::fory::ForyDefault>::fory_default())" in rust_output
+    )
+    assert "Dog(Dog)," not in rust_output

@@ -1633,7 +1633,7 @@ These scalar numeric payloads are not reference-tracked, so their ref metadata
 is `NotNullValue`. Otherwise it MUST fall back to the language runtime's
 ordinary polymorphic Any-value writer. Writers MUST NOT serialize `0` as a
 schema-defined case ID; `0` is only the local unknown-case slot used by bindings
-that need one.
+that need one. Readers of typed ADT unions MUST reject a wire `case_id` of `0`.
 
 #### Wire layouts
 

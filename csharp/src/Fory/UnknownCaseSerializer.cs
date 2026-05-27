@@ -154,16 +154,11 @@ public static class UnknownCaseSerializer
 
     private static (uint TypeId, object? Value) ReadNonNullPayload(ReadContext context)
     {
-        context.IncreaseReadDepth();
-        try
-        {
-            TypeInfo typeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
-            object? value = context.TypeResolver.ReadAnyValue(typeInfo, context);
-            return ((uint)(typeInfo.WireTypeId ?? typeInfo.BuiltInTypeId ?? TypeId.Unknown), value);
-        }
-        finally
-        {
-            context.DecreaseReadDepth();
-        }
+        // UnknownCase owns the union payload envelope only. The envelope is not
+        // a nested dynamic value, so depth checks belong to the decoded payload
+        // serializer or the final root-context reset, not this carrier reader.
+        TypeInfo typeInfo = context.TypeResolver.ReadAnyTypeInfo(context);
+        object? value = context.TypeResolver.ReadAnyValue(typeInfo, context);
+        return ((uint)(typeInfo.WireTypeId ?? typeInfo.BuiltInTypeId ?? TypeId.Unknown), value);
     }
 }

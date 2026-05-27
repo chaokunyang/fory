@@ -355,6 +355,7 @@ class ScalaGenerator(BaseGenerator):
                 top_level_ref=field.ref,
                 parent_stack=parent_stack,
             )
+            case_name = self.union_case_name(field.field_type, field_type, case_name)
             field_type = self.qualify_union_payload_type(field_type, case_name)
             lines.append(f"{ind}    case {case_name}(value: {field_type})")
             lines.append("")
@@ -587,6 +588,20 @@ class ScalaGenerator(BaseGenerator):
         if package:
             return f"_root_.{package}.{rendered_type}"
         return rendered_type
+
+    def union_case_name(
+        self,
+        field_type: FieldType,
+        rendered_type: str,
+        case_name: str,
+    ) -> str:
+        if (
+            rendered_type == case_name
+            and isinstance(field_type, NamedType)
+            and not self.get_scala_package()
+        ):
+            return f"{case_name}Case"
+        return case_name
 
     def apply_type_annotation(self, scala_type: str, annotation: str) -> str:
         return f"{scala_type} @{annotation}"

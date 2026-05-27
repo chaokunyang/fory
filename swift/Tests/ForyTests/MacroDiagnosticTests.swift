@@ -161,6 +161,8 @@ func unionPayloadHintsMustMatchPayloadType() {
         """
         @ForyUnion
         enum BadUnion {
+            @ForyCase(id: 0)
+            case unknown(UnknownCase)
             @ForyCase(id: 1, payload: .uint64(encoding: .fixed))
             case deleted(UInt32)
         }
@@ -168,10 +170,31 @@ func unionPayloadHintsMustMatchPayloadType() {
         expandedSource:
         """
         enum BadUnion {
+            case unknown(UnknownCase)
             case deleted(UInt32)
         }
         """,
         message: "Fory field type hint .uint64 does not match Swift type UInt32"
+    )
+}
+
+@Test
+func unionRequiresUnknownCarrier() {
+    assertForyDiagnostic(
+        """
+        @ForyUnion
+        enum BadUnion {
+            @ForyCase(id: 1)
+            case dog(Dog)
+        }
+        """,
+        expandedSource:
+        """
+        enum BadUnion {
+            case dog(Dog)
+        }
+        """,
+        message: "@ForyUnion requires @ForyCase(id: 0) unknown(UnknownCase)"
     )
 }
 
@@ -192,5 +215,79 @@ func unionRequiresRealCaseBeyondUnknown() {
         }
         """,
         message: "@ForyUnion requires at least one non-unknown case; unknown is a forward-compatibility carrier and cannot be the default"
+    )
+}
+
+@Test
+func unionRejectsUnknownCaseLookalike() {
+    assertForyDiagnostic(
+        """
+        enum Local {
+            struct UnknownCase {}
+        }
+        @ForyUnion
+        enum BadUnion {
+            @ForyCase(id: 0)
+            case unknown(Local.UnknownCase)
+            @ForyCase(id: 1)
+            case dog(Dog)
+        }
+        """,
+        expandedSource:
+        """
+        enum Local {
+            struct UnknownCase {}
+        }
+        enum BadUnion {
+            case unknown(Local.UnknownCase)
+            case dog(Dog)
+        }
+        """,
+        message: "@ForyUnion case id 0 is reserved for unknown(UnknownCase)"
+    )
+}
+
+@Test
+func unionRejectsReservedZeroCase() {
+    assertForyDiagnostic(
+        """
+        @ForyUnion
+        enum BadUnion {
+            @ForyCase(id: 0)
+            case unknown(String)
+            @ForyCase(id: 1)
+            case dog(Dog)
+        }
+        """,
+        expandedSource:
+        """
+        enum BadUnion {
+            case unknown(String)
+            case dog(Dog)
+        }
+        """,
+        message: "@ForyUnion case id 0 is reserved for unknown(UnknownCase)"
+    )
+}
+
+@Test
+func unionUnknownRequiresExplicitZeroCaseId() {
+    assertForyDiagnostic(
+        """
+        @ForyUnion
+        enum BadUnion {
+            case unknown(UnknownCase)
+            @ForyCase(id: 1)
+            case dog(Dog)
+        }
+        """,
+        expandedSource:
+        """
+        enum BadUnion {
+            case unknown(UnknownCase)
+            case dog(Dog)
+        }
+        """,
+        message: "@ForyUnion unknown case must declare @ForyCase(id: 0)"
     )
 }

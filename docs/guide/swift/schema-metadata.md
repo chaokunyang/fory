@@ -119,9 +119,10 @@ enum Event {
 }
 ```
 
-A typed union must declare at least one non-`unknown` case. The
-`unknown(UnknownCase)` case is only the runtime forward-compatibility carrier
-and cannot be the default value source.
+Every `@ForyUnion` must declare `@ForyCase(id: 0) case unknown(UnknownCase)` and
+at least one non-`unknown` case. The unknown case is only the runtime
+forward-compatibility carrier, cannot be the default value source, and schema
+cases use positive IDs.
 
 ## Model Macro Requirements
 

@@ -381,6 +381,107 @@ class ProcessorValidationTest {
   }
 
   @Test
+  fun defaultPackageWritersOmitPackage() {
+    val stringType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "String::class.java",
+        kotlinTypeName = "kotlin.String",
+        valueTypeName = "String",
+        typeName = "java.lang.String",
+        typeId = "Types.STRING",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val any =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Any::class.java",
+        kotlinTypeName = "Any?",
+        valueTypeName = "Any?",
+        typeName = "java.lang.Object",
+        typeId = "Types.UNKNOWN",
+        nullable = true,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val dogType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Dog::class.java",
+        kotlinTypeName = "Dog",
+        valueTypeName = "Dog",
+        typeName = "Dog",
+        typeId = null,
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val structSource =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "",
+            typeName = "Dog",
+            qualifiedTypeName = "Dog",
+            serializerName = "Dog_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "name",
+                  type = stringType,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "String",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+    val unionSource =
+      UnionSerializerSourceWriter(
+          KotlinSourceUnion(
+            packageName = "",
+            typeName = "Animal",
+            qualifiedTypeName = "Animal",
+            serializerName = "Animal_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            unknownCase =
+              KotlinSourceUnionCase(
+                id = 0,
+                className = "Unknown",
+                qualifiedClassName = "Animal.Unknown",
+                valueType = any,
+              ),
+            cases =
+              listOf(
+                KotlinSourceUnionCase(
+                  id = 1,
+                  className = "DogCase",
+                  qualifiedClassName = "Animal.DogCase",
+                  valueType = dogType,
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(!structSource.contains("\npackage "))
+    assertTrue(!unionSource.contains("\npackage "))
+    assertTrue(unionSource.contains("is Animal.DogCase ->"))
+    assertTrue(unionSource.contains("as Dog"))
+  }
+
+  @Test
   fun durationUsesCodec() {
     val duration =
       KotlinSourceTypeNode(
@@ -696,6 +797,12 @@ class ProcessorValidationTest {
                   className = "CountArray",
                   qualifiedClassName = "example.Pet.CountArray",
                   valueType = uintArray,
+                ),
+                KotlinSourceUnionCase(
+                  id = 7,
+                  className = "UseCase",
+                  qualifiedClassName = "example.Pet.UseCase",
+                  valueType = owner,
                 )
               ),
             originatingFiles = emptyList(),
@@ -716,6 +823,11 @@ class ProcessorValidationTest {
     assertTrue(source.contains("DurationEncoding.write(writeContext, value.value)"))
     assertTrue(source.contains("DurationEncoding.read(readContext)"))
     assertTrue(source.contains("example.Pet.Duration(value.value)"))
+    assertTrue(
+      source.contains(
+        "0 -> throw IllegalStateException(\"Unknown union case id must be positive\")"
+      )
+    )
     assertTrue(source.contains("TypeRef.of<Any>(java.time.Duration::class.java"))
     assertTrue(source.contains("KotlinXlangUnsignedSerializers.serializer(typeResolver.config"))
     assertTrue(source.contains("DurationSerializers.serializer(typeResolver.config"))
@@ -728,6 +840,8 @@ class ProcessorValidationTest {
     )
     assertTrue(source.contains("KotlinXlangArrayEncoding.readUIntArray(readContext"))
     assertTrue(source.contains("example.Pet.CountArray(value.value.copyOf())"))
+    assertTrue(source.contains("\"UseCase\","))
+    assertTrue(source.contains("is example.Pet.UseCase ->"))
     assertTrue(!source.contains("org.apache.fory.type.union.Union"))
   }
 }

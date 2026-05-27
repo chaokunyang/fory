@@ -83,6 +83,8 @@ xlang mode.
 IDL unions generate Scala 3 ADT enums with `@ForyUnion` and `@ForyCase` metadata:
 
 ```scala
+package example
+
 import org.apache.fory.annotation.{ForyCase, ForyUnion, UInt32Type}
 import org.apache.fory.config.Int32Encoding
 import org.apache.fory.scala.ForySerializer
@@ -94,7 +96,7 @@ enum SearchTarget derives ForySerializer {
   case Unknown(value: UnknownCase)
 
   @ForyCase(id = 1)
-  case User(value: User)
+  case User(value: _root_.example.User)
 
   @ForyCase(id = 2)
   case FixedId(value: Long @UInt32Type(encoding = Int32Encoding.FIXED))
@@ -104,6 +106,10 @@ enum SearchTarget derives ForySerializer {
 Schema-defined union cases must use positive IDs, and a typed union must
 declare at least one non-`Unknown` case. Case ID `0` is reserved for the
 unknown-case carrier used when a reader sees a newer positive case ID.
+When a generated Scala union case name matches the payload type simple name,
+packaged output keeps the case name and qualifies the payload type. If a target
+output mode cannot express a legal qualifier for a conflict, the IDL compiler
+appends `Case` to the generated case name.
 
 ## Generated Metadata Source
 

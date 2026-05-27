@@ -49,6 +49,8 @@ public final class UnknownCaseSerializer {
   public static UnknownCase readPayload(ReadContext readContext, int caseId) {
     int nextReadRefId = readContext.tryPreserveRefId();
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
+      // UnknownCase owns only the union payload envelope. It does not create a separate
+      // depth frame; nested payload serializers and the root-context reset own depth state.
       TypeInfo typeInfo = readContext.getTypeResolver().readTypeInfo(readContext);
       Object value = readContext.readNonRef(typeInfo);
       readContext.setReadRef(nextReadRefId, value);

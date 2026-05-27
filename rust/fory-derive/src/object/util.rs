@@ -21,7 +21,7 @@ use fory_core::util::to_snake_case;
 use proc_macro2::TokenStream;
 use quote::{quote, ToTokens};
 use std::cell::RefCell;
-use syn::{Field, GenericArgument, Index, PathArguments, Type};
+use syn::{Field, Fields, GenericArgument, Index, PathArguments, Type};
 
 /// Get field name for a field, handling both named and tuple struct fields.
 /// For named fields, returns the field name.
@@ -888,6 +888,46 @@ pub(crate) fn enum_variant_id(variant: &syn::Variant) -> Option<u32> {
         }
     }
     None
+}
+
+pub(crate) fn is_unknown_case_type(ty: &Type) -> bool {
+    let Type::Path(type_path) = ty else {
+        return false;
+    };
+    let segments: Vec<String> = type_path
+        .path
+        .segments
+        .iter()
+        .map(|segment| segment.ident.to_string())
+        .collect();
+    let segments: Vec<&str> = segments.iter().map(String::as_str).collect();
+    matches!(
+        segments.as_slice(),
+        [owner, "UnknownCase"] if *owner == "fory" || *owner == "fory_core"
+    ) || matches!(
+        segments.as_slice(),
+        [owner, "types", "UnknownCase"] if *owner == "fory_core"
+    )
+}
+
+// The generated typed-ADT forward-compatibility carrier is exactly
+// `#[fory(id = 0)] Unknown(UnknownCase)`. The same payload at another id is a
+// normal schema case; id 0 with any other name or payload is invalid.
+pub(crate) fn is_runtime_unknown_variant(variant: &syn::Variant) -> bool {
+    if variant.ident != "Unknown" {
+        return false;
+    }
+    let Fields::Unnamed(fields) = &variant.fields else {
+        return false;
+    };
+    if fields.unnamed.len() != 1 || !is_unknown_case_type(&fields.unnamed[0].ty) {
+        return false;
+    }
+    enum_variant_id(variant) == Some(0)
+}
+
+pub(crate) fn is_reserved_zero_variant(variant: &syn::Variant) -> bool {
+    enum_variant_id(variant) == Some(0) && !is_runtime_unknown_variant(variant)
 }
 
 pub(crate) fn is_default_value_variant(variant: &syn::Variant) -> bool {

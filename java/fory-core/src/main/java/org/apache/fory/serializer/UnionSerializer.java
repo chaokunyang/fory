@@ -277,14 +277,16 @@ public class UnionSerializer extends Serializer<Union> {
    */
   public static void writeUnknownValue(WriteContext writeContext, UnknownCase unknownCase) {
     int originalCaseId = unknownCase.caseId();
-    Preconditions.checkArgument(
-        originalCaseId >= 0, "Unknown union case id must be non-negative");
+    Preconditions.checkArgument(originalCaseId > 0, "Unknown union case id must be positive");
     writeContext.getBuffer().writeVarUInt32(originalCaseId);
     UnknownCaseSerializer.writePayload(writeContext, unknownCase);
   }
 
-  /** Reads an unknown union payload and captures the runtime metadata needed for reserialization. */
+  /**
+   * Reads an unknown union payload and captures the runtime metadata needed for reserialization.
+   */
   public static UnknownCase readUnknownValue(ReadContext readContext, int caseId) {
+    Preconditions.checkArgument(caseId > 0, "Unknown union case id must be positive");
     return UnknownCaseSerializer.readPayload(readContext, caseId);
   }
 

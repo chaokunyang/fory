@@ -416,14 +416,14 @@ pub enum Animal {
     #[fory(id = 0)]
     Unknown(::fory::UnknownCase),
     #[fory(id = 1, default)]
-    Dog(Dog),
+    Dog(self::Dog),
     #[fory(id = 2)]
-    Cat(Cat),
+    Cat(self::Cat),
 }
 
 impl ::std::default::Default for Animal {
     fn default() -> Self {
-        Self::Dog(<Dog as ::fory::ForyDefault>::fory_default())
+        Self::Dog(<self::Dog as ::fory::ForyDefault>::fory_default())
     }
 }
 ```
@@ -504,7 +504,7 @@ fory.register_union_by_name::<Holder>("myapp.models", "Holder")?;
 ```rust
 let person = Person {
     name: "Alice".into(),
-    pet: Animal::Dog(Dog::default()),
+    pet: Animal::Dog(self::Dog::default()),
     ..Default::default()
 };
 
@@ -896,8 +896,8 @@ Swift output is one `.swift` file per schema, for example:
 ### Type Generation
 
 The generator creates Swift models with split model macros and stable field/case IDs.
-A typed union must have at least one non-`unknown` case; `unknown(UnknownCase)`
-is only the forward-compatibility carrier.
+A typed union must include `unknown(UnknownCase)` and at least one non-`unknown`
+case; `unknown(UnknownCase)` is only the forward-compatibility carrier.
 
 When package/namespace is non-empty, namespace shaping is controlled by `swift_namespace_style`:
 
@@ -1214,6 +1214,10 @@ schema-defined cases hold a single `value` property. A typed union must have at
 least one non-`Unknown` case.
 
 ```kotlin
+package addressbook
+
+import org.apache.fory.annotation.ForyCase
+import org.apache.fory.annotation.ForyUnion
 import org.apache.fory.type.union.UnknownCase
 
 @ForyUnion
@@ -1222,9 +1226,14 @@ public sealed class Animal {
   public data class Unknown(public val value: UnknownCase) : Animal()
 
   @ForyCase(id = 1)
-  public data class Dog(public val value: Dog) : Animal()
+  public data class Dog(public val value: addressbook.Dog) : Animal()
 }
 ```
+
+Packaged Kotlin output keeps the schema case name and qualifies the payload
+type when both have the same simple name. If a target output mode cannot express
+a legal qualifier for a conflict, the compiler appends `Case` to the generated
+case class name.
 
 Kotlin `int32`, `int64`, `uint32`, and `uint64` fields use xlang varint
 encoding by default, so generated Kotlin does not emit `@VarInt` for the
@@ -1350,6 +1359,8 @@ carrier; schema-defined cases start at `1`. A typed union must have at least
 one non-`Unknown` case.
 
 ```scala
+package addressbook
+
 import org.apache.fory.annotation.{ForyCase, ForyUnion}
 import org.apache.fory.scala.ForySerializer
 import org.apache.fory.`type`.union.UnknownCase
@@ -1360,12 +1371,17 @@ enum Animal derives ForySerializer {
   case Unknown(value: UnknownCase)
 
   @ForyCase(id = 1)
-  case Dog(value: Dog)
+  case Dog(value: _root_.addressbook.Dog)
 
   @ForyCase(id = 2)
-  case Cat(value: Cat)
+  case Cat(value: _root_.addressbook.Cat)
 }
 ```
+
+Packaged Scala output keeps the schema case name and qualifies the payload type
+when both have the same simple name. If a target output mode cannot express a
+legal qualifier for a conflict, the compiler appends `Case` to the generated
+case name.
 
 `optional T` fields generate `Option[T]`. Top-level message references use
 `@Ref` on the field or constructor parameter. Nested element/value references

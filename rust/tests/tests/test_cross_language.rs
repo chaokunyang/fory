@@ -1895,10 +1895,14 @@ fn test_nullable_field_compatible_null() {
 
 /// Rust enum that matches Java Union2<String, Long>
 /// Each variant has exactly one field to be Union-compatible
+#[allow(dead_code)]
 #[derive(ForyUnion, Debug, PartialEq)]
 enum StringOrLong {
-    #[fory(default)]
+    #[fory(id = 0)]
+    Unknown(fory_core::UnknownCase),
+    #[fory(id = 1, default)]
     Str(String),
+    #[fory(id = 2)]
     Long(i64),
 }
 

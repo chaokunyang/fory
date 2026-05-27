@@ -360,6 +360,7 @@ class KotlinGenerator(BaseGenerator):
                 top_level_ref=field.ref,
                 parent_stack=parent_stack,
             )
+            case_name = self.union_case_name(field.field_type, field_type, case_name)
             field_type = self.qualify_union_payload_type(
                 field.field_type, field_type, case_name, parent_stack
             )
@@ -777,15 +778,28 @@ class KotlinGenerator(BaseGenerator):
             return rendered_type
         if isinstance(field_type, NamedType) and self.kotlin_package:
             return f"{self.kotlin_package}.{rendered_type}"
-        if (
-            isinstance(field_type, ArrayType)
-            and isinstance(field_type.element_type, PrimitiveType)
+        if isinstance(field_type, ArrayType) and isinstance(
+            field_type.element_type, PrimitiveType
         ):
             if field_type.element_type.kind == PrimitiveKind.FLOAT16:
                 return "org.apache.fory.type.Float16Array"
             if field_type.element_type.kind == PrimitiveKind.BFLOAT16:
                 return "org.apache.fory.type.BFloat16Array"
         return rendered_type
+
+    def union_case_name(
+        self,
+        field_type: FieldType,
+        rendered_type: str,
+        case_name: str,
+    ) -> str:
+        if (
+            rendered_type == case_name
+            and isinstance(field_type, NamedType)
+            and not self.kotlin_package
+        ):
+            return f"{case_name}Case"
+        return case_name
 
     def type_name(self, type_def: object, parent_stack: List[Message]) -> str:
         if not parent_stack:

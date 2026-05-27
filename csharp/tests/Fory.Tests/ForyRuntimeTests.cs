@@ -308,7 +308,7 @@ public abstract partial record SourceGeneratedShape
 public sealed class SourceGeneratedUnionHolder
 {
     public SourceGeneratedShape Shape { get; set; } =
-        new SourceGeneratedShape.Unknown(new UnknownCase(0, null));
+        new SourceGeneratedShape.Text(string.Empty);
 }
 
 [ForyStruct]
@@ -1478,6 +1478,29 @@ public sealed class ForyRuntimeTests
             Assert.IsType<SourceGeneratedShape.Unknown>(unknownDecoded.Shape);
         Assert.Equal(99, unknownCase.Value.CaseId);
         Assert.Equal("future", unknownCase.Value.Value);
+
+        SourceGeneratedUnionHolder invalidUnknown = new()
+        {
+            Shape = new SourceGeneratedShape.Unknown(new UnknownCase(0, "reserved")),
+        };
+        InvalidDataException error =
+            Assert.Throws<InvalidDataException>(() => fory.Serialize(invalidUnknown));
+        Assert.Contains(
+            "unknown union case id must be positive",
+            error.Message,
+            StringComparison.Ordinal);
+
+        TypeResolver resolver = new();
+        Serializer<SourceGeneratedShape> serializer = resolver.GetSerializer<SourceGeneratedShape>();
+        ByteWriter writer = new();
+        writer.WriteVarUInt32(0);
+        ReadContext context = new(new ByteReader(writer.ToArray()), resolver, false, false);
+        InvalidDataException readError =
+            Assert.Throws<InvalidDataException>(() => serializer.ReadData(context));
+        Assert.Contains(
+            "unknown union case id must be positive",
+            readError.Message,
+            StringComparison.Ordinal);
     }
 
     [Fact]

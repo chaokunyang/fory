@@ -200,13 +200,6 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       )
       return null
     }
-    if (declaration.packageName.asString().isEmpty()) {
-      logger.error(
-        "Kotlin KSP xlang serializers require @ForyStruct declarations to be in a named package",
-        declaration,
-      )
-      return null
-    }
     val visibilityDiagnostic = structVisibilityError(declaration.modifiers)
     if (visibilityDiagnostic != null) {
       logger.error(visibilityDiagnostic, declaration)
@@ -421,13 +414,6 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       )
       return null
     }
-    if (declaration.packageName.asString().isEmpty()) {
-      logger.error(
-        "Kotlin KSP xlang serializers require @ForyUnion declarations to be in a named package",
-        declaration
-      )
-      return null
-    }
     if (Modifier.SEALED !in declaration.modifiers || declaration.classKind != ClassKind.CLASS) {
       logger.error("@ForyUnion targets must be sealed classes", declaration)
       return null
@@ -533,8 +519,13 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
           )
           return null
         }
-        if (!isKotlinType(parameters[0], "org.apache.fory.type.union.UnknownCase", nullable = false)) {
-          logger.error("Unknown Kotlin union case parameter value must have type UnknownCase", declaration)
+        if (
+          !isKotlinType(parameters[0], "org.apache.fory.type.union.UnknownCase", nullable = false)
+        ) {
+          logger.error(
+            "Unknown Kotlin union case parameter value must have type UnknownCase",
+            declaration
+          )
           return null
         }
         parameters[0]

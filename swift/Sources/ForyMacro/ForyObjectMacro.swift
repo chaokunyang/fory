@@ -551,28 +551,51 @@ private func parseEnumCaseWireValue(_ element: EnumCaseElementSyntax) -> UInt32?
 }
 
 private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: String) throws -> [DeclSyntax] {
-    let unknownCase = cases.first {
-        $0.name == "unknown" &&
-            ($0.caseID == nil || $0.caseID == 0) &&
-            $0.payload.count == 1 &&
-            ($0.payload[0].typeText == "UnknownCase" || $0.payload[0].typeText.hasSuffix(".UnknownCase"))
-    }
-    let defaultCase: ParsedEnumCase
-    if let unknownCase {
-        guard let knownCase = cases.first(where: { $0.name != unknownCase.name }) else {
+    for enumCase in cases {
+        if enumCase.caseID == 0 && !isRuntimeUnknownCase(enumCase) {
             throw MacroExpansionErrorMessage(
-                "@ForyUnion requires at least one non-unknown case; unknown is a forward-compatibility carrier and cannot be the default"
+                "@ForyUnion case id 0 is reserved for unknown(UnknownCase)"
             )
         }
-        defaultCase = knownCase
-    } else {
-        defaultCase = cases[0]
+        if enumCase.name == "unknown" && enumCase.caseID == nil {
+            throw MacroExpansionErrorMessage(
+                "@ForyUnion unknown case must declare @ForyCase(id: 0)"
+            )
+        }
+        if enumCase.name == "unknown" && enumCase.caseID == 0 && !isRuntimeUnknownCase(enumCase) {
+            throw MacroExpansionErrorMessage(
+                "@ForyUnion unknown case must be unknown(UnknownCase)"
+            )
+        }
     }
+    guard let unknownCase = cases.first(where: isRuntimeUnknownCase) else {
+        throw MacroExpansionErrorMessage(
+            "@ForyUnion requires @ForyCase(id: 0) unknown(UnknownCase)"
+        )
+    }
+    for (index, enumCase) in cases.enumerated() where enumCase.name != unknownCase.name {
+        let caseID = enumCase.caseID ?? index
+        if caseID == 0 {
+            throw MacroExpansionErrorMessage(
+                "@ForyUnion schema case ids must be positive; case id 0 is reserved for unknown(UnknownCase)"
+            )
+        }
+    }
+    let defaultCase: ParsedEnumCase
+    guard let knownCase = cases.first(where: { $0.name != unknownCase.name }) else {
+        throw MacroExpansionErrorMessage(
+            "@ForyUnion requires at least one non-unknown case; unknown is a forward-compatibility carrier and cannot be the default"
+        )
+    }
+    defaultCase = knownCase
     let defaultExpr = enumCaseDefaultExpr(defaultCase)
     let writeSwitchCases = cases.enumerated().map { index, enumCase in
-        if enumCase.name == unknownCase?.name {
+        if enumCase.name == unknownCase.name {
             return """
             case .unknown(let value):
+                guard value.caseId > 0 else {
+                    throw ForyError.invalidData("Unknown union case id must be positive")
+                }
                 context.buffer.writeVarUInt32(value.caseId)
                 try UnknownCaseSerializer.writePayload(value, context)
             """
@@ -600,10 +623,10 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
     }.joined(separator: "\n        ")
 
     let readSwitchCases = cases.enumerated().map { index, enumCase in
-        if enumCase.name == unknownCase?.name {
+        if enumCase.name == unknownCase.name {
             return """
             case 0:
-                return .unknown(try UnknownCaseSerializer.readPayload(caseId: 0, context))
+                throw ForyError.invalidData("Unknown union case id must be positive")
             """
         }
 
@@ -637,18 +660,10 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
         lines.append("    return .\(enumCase.name)(\(ctorArgs))")
         return lines.joined(separator: "\n")
     }.joined(separator: "\n        ")
-    let unknownDefault: String
-    if unknownCase != nil {
-        unknownDefault = """
+    let unknownDefault: String = """
             default:
                 return .unknown(try UnknownCaseSerializer.readPayload(caseId: caseID, context))
         """
-    } else {
-        unknownDefault = """
-            default:
-                throw ForyError.invalidData("unknown union tag \\(caseID)")
-        """
-    }
 
     let defaultDecl: DeclSyntax = DeclSyntax(
         stringLiteral: """
@@ -689,6 +704,16 @@ private func buildTaggedUnionEnumDecls(_ cases: [ParsedEnumCase], accessPrefix: 
     )
 
     return [defaultDecl, staticTypeIDDecl, writeWrapperDecl, writeDecl, readDecl]
+}
+
+private func isRuntimeUnknownCase(_ enumCase: ParsedEnumCase) -> Bool {
+    enumCase.name == "unknown" &&
+        enumCase.caseID == 0 &&
+        enumCase.payload.count == 1 &&
+        (
+            enumCase.payload[0].typeText == "UnknownCase" ||
+                enumCase.payload[0].typeText == "Fory.UnknownCase"
+        )
 }
 
 private func enumCasePattern(_ enumCase: ParsedEnumCase) -> String {

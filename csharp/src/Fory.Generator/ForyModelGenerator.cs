@@ -741,9 +741,9 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 unknownCase = unionCase;
                 sb.AppendLine($"            case {unionCase.TypeName} __foryCase:");
                 sb.AppendLine("            {");
-                sb.AppendLine("                if (__foryCase.Value.CaseId < 0)");
+                sb.AppendLine("                if (__foryCase.Value.CaseId <= 0)");
                 sb.AppendLine("                {");
-                sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"union case id out of range: {__foryCase.Value.CaseId}\");");
+                sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"unknown union case id must be positive: {__foryCase.Value.CaseId}\");");
                 sb.AppendLine("                }");
                 sb.AppendLine();
                 sb.AppendLine("                context.Writer.WriteVarUInt32((uint)__foryCase.Value.CaseId);");
@@ -777,15 +777,12 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        int caseId = (int)rawCaseId;");
         sb.AppendLine("        switch (caseId)");
         sb.AppendLine("        {");
+        sb.AppendLine("            case 0:");
+        sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException(\"unknown union case id must be positive\");");
         foreach (UnionCaseModel unionCase in model.UnionCases.OrderBy(c => c.CaseId))
         {
             if (unionCase.IsUnknown)
             {
-                sb.AppendLine("            case 0:");
-                sb.AppendLine("            {");
-                sb.AppendLine("                global::Apache.Fory.UnknownCase __foryUnknownValue = global::Apache.Fory.UnknownCaseSerializer.ReadPayload(context, 0);");
-                sb.AppendLine($"                return new {unionCase.TypeName}(__foryUnknownValue);");
-                sb.AppendLine("            }");
                 continue;
             }
 

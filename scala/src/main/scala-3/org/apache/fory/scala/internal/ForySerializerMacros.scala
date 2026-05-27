@@ -1119,7 +1119,7 @@ object ForySerializerMacros {
         caseFieldInfosExpr: Expr[Array[FieldGroups.SerializationFieldInfo]]): Expr[T] = {
       val unknownPayload = '{ UnionSerializer.readUnknownValue($readContextExpr, $caseIdExpr) }
       val unknownExpr = construct(unknown, List(unknownPayload.asTerm))
-      knownCases.foldRight(unknownExpr) { (unionCase, next) =>
+      val dispatch = knownCases.foldRight(unknownExpr) { (unionCase, next) =>
         val rawPayload =
           '{
             UnionSerializer.readCaseValue(
@@ -1132,6 +1132,11 @@ object ForySerializerMacros {
         '{
           if $caseIdExpr == ${ Expr(unionCase.id) } then $current else $next
         }
+      }
+      '{
+        if $caseIdExpr == 0 then {
+          throw new IllegalStateException("Unknown union case id must be positive")
+        } else $dispatch
       }
     }
 

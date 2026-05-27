@@ -30,6 +30,7 @@ import org.apache.fory.annotation.{
   UInt8Type
 }
 import org.apache.fory.config.Int64Encoding
+import org.apache.fory.memory.MemoryBuffer
 import org.apache.fory.meta.TypeDef
 import org.apache.fory.scala.ForySerializer
 import org.apache.fory.scala.ForyScala
@@ -408,6 +409,20 @@ import org.apache.fory.scala.ForyScala
       decoded.value.caseId() shouldBe 99
       decoded.value.value().asInstanceOf[SearchUser] shouldEqual SearchUser("Future")
       decoded should not equal unknown
+    }
+
+    "reject union wire case id zero" in {
+      val fory = xlangFory()
+      val serializer = summon[ForySerializer[SearchTarget]].createSerializer(fory.getTypeResolver)
+      val buffer = MemoryBuffer.newHeapBuffer(8)
+      buffer.writeVarUInt32(0)
+      val readContext = fory.getReadContext
+      readContext.prepare(buffer, null, false)
+
+      val error = intercept[IllegalStateException] {
+        serializer.read(readContext)
+      }
+      error.getMessage should include("Unknown union case id must be positive")
     }
 
     "serialize and copy derived union Option payloads" in {

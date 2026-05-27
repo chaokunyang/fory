@@ -125,7 +125,7 @@ fn has_typed_value(unknown: &UnknownCase) -> bool {
 pub fn read_payload(context: &mut ReadContext, case_id: u32) -> Result<UnknownCase, Error> {
     let ref_flag = context.ref_reader.read_ref_flag(&mut context.reader)?;
     match ref_flag {
-        RefFlag::Null => Ok(UnknownCase::new(case_id, TypeId::UNKNOWN as u32, ())),
+        RefFlag::Null => Ok(UnknownCase::new(case_id, ())),
         RefFlag::Ref => {
             let ref_id = context.ref_reader.read_ref_id(&mut context.reader)?;
             let value = context
@@ -141,13 +141,15 @@ pub fn read_payload(context: &mut ReadContext, case_id: u32) -> Result<UnknownCa
             ))
         }
         RefFlag::NotNullValue | RefFlag::RefValue => {
-            context.inc_depth()?;
+            // The unknown-case serializer owns only the union payload envelope. It must
+            // not add a depth frame here: the decoded Any value is not a new nesting
+            // boundary by itself, and real nested payload serializers perform their
+            // own depth checks.
             let type_info = context.read_any_type_info()?;
             check_generic_container_type(&type_info)?;
             let boxed = type_info
                 .get_harness()
                 .read_polymorphic_data(context, &type_info)?;
-            context.dec_depth();
             let value: Arc<dyn Any> = Arc::from(boxed);
             if matches!(ref_flag, RefFlag::RefValue) {
                 context.ref_reader.store_arc_ref(value.clone());
@@ -163,7 +165,7 @@ pub fn read_payload(context: &mut ReadContext, case_id: u32) -> Result<UnknownCa
 
 impl ForyDefault for UnknownCase {
     fn fory_default() -> Self {
-        UnknownCase::new(0, TypeId::UNKNOWN as u32, ())
+        UnknownCase::new(0, ())
     }
 }
 

@@ -107,7 +107,7 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
       builder.append("      descriptors.add(Descriptor(")
       builder.append(case.valueType.typeRefExpression()).append(", ")
       builder.append("\"").append(escape(case.valueType.typeName)).append("\", ")
-      builder.append("\"").append(escape(case.className.removeSuffix("Case"))).append("\", ")
+      builder.append("\"").append(escape(case.className)).append("\", ")
       builder.append("0, ")
       builder.append("\"").append(escape(union.qualifiedTypeName)).append("\", ")
       builder.append("true, ")
@@ -179,6 +179,9 @@ internal class UnionSerializerSourceWriter(private val union: KotlinSourceUnion)
       .append(" {\n")
     builder.append("    val caseId = readContext.buffer.readVarUInt32()\n")
     builder.append("    return when (caseId) {\n")
+    builder.append(
+      "      0 -> throw IllegalStateException(\"Unknown union case id must be positive\")\n"
+    )
     for ((index, case) in union.cases.withIndex()) {
       builder.append("      ").append(case.id).append(" -> ")
       val direct = directReadCaseExpression(case)

@@ -143,8 +143,9 @@ public enum UnknownCaseSerializer {
     }
 
     private static func readNonNullPayload(_ context: ReadContext) throws -> (UInt32, Any?) {
-        try context.enterDynamicAnyDepth()
-        defer { context.leaveDynamicAnyDepth() }
+        // UnknownCase owns the union payload envelope only. The envelope is not
+        // a nested dynamic value, so depth checks belong to the decoded payload
+        // serializer or the final root-context reset, not this carrier reader.
         let typeInfo = try context.readTypeInfo()
         let value = try context.readAnyValue(typeInfo: typeInfo)
         return (typeInfo.typeID.rawValue, value is ForyAnyNullValue ? nil : value)

@@ -23,6 +23,7 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertNull;
+import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.util.ArrayList;
@@ -37,6 +38,7 @@ import org.apache.fory.type.union.Union3;
 import org.apache.fory.type.union.Union4;
 import org.apache.fory.type.union.Union5;
 import org.apache.fory.type.union.Union6;
+import org.apache.fory.type.union.UnknownCase;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
@@ -66,6 +68,14 @@ public class UnionSerializerTest extends ForyTestBase {
     fory.register(StructWithUnion5.class);
     fory.register(StructWithUnion6.class);
     return fory;
+  }
+
+  @Test
+  public void testUnknownCaseIdZeroRejected() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> UnionSerializer.writeUnknownValue(null, new UnknownCase(0, "reserved")));
+    assertThrows(IllegalArgumentException.class, () -> UnionSerializer.readUnknownValue(null, 0));
   }
 
   // Test struct classes with Union fields

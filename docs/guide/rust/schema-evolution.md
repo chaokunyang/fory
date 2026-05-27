@@ -129,9 +129,11 @@ let decoded: Value = fory.deserialize(&bytes)?;
 assert_eq!(value, decoded);
 ```
 
-For generated typed ADT unions, `Unknown(::fory::UnknownCase)` is only the
-runtime forward-compatibility carrier. It cannot be the default variant, and the
-union must include at least one real schema case.
+For typed ADT unions whose schema cases are unit or single-payload variants,
+`#[fory(id = 0)] Unknown(::fory::UnknownCase)` is only the runtime
+forward-compatibility carrier. It cannot be the default variant, and the union
+must include at least one real schema case. Use the Fory runtime carrier path for
+the unknown case; schema cases use positive IDs.
 
 ### Enum Schema Evolution
 

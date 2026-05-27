@@ -15,6 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+use crate::type_id;
 use std::any::Any;
 use std::fmt;
 use std::hash::{Hash, Hasher};
@@ -31,13 +32,17 @@ pub struct UnknownCase {
 }
 
 impl UnknownCase {
-    pub fn new<T>(case_id: u32, type_id: u32, value: T) -> Self
+    /// Creates a fresh carrier for user-supplied unknown payloads.
+    ///
+    /// Replay metadata is owned by the runtime read path; public construction
+    /// always uses the ordinary Any writer.
+    pub fn new<T>(case_id: u32, value: T) -> Self
     where
         T: Any,
     {
         Self {
             case_id,
-            type_id,
+            type_id: type_id::UNKNOWN,
             value: Arc::new(value),
         }
     }
@@ -88,9 +93,10 @@ impl Hash for UnknownCase {
 
 impl fmt::Debug for UnknownCase {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let value_ptr = Arc::as_ptr(&self.value) as *const ();
         f.debug_struct("UnknownCase")
             .field("case_id", &self.case_id)
-            .field("type_id", &self.type_id())
+            .field("value_ptr", &value_ptr)
             .finish_non_exhaustive()
     }
 }

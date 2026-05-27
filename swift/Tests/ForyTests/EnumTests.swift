@@ -28,7 +28,11 @@ private enum Color: Equatable {
 
 @ForyUnion
 private enum StringOrLong: Equatable {
+    @ForyCase(id: 0)
+    case unknown(UnknownCase)
+    @ForyCase(id: 1)
     case text(String)
+    @ForyCase(id: 2)
     case number(Int64)
 }
 
@@ -44,6 +48,9 @@ private enum ForwardStringOrLong: Equatable {
 
 @ForyUnion
 private enum FixedPayloadEvent: Equatable {
+    @ForyCase(id: 0)
+    case unknown(UnknownCase)
+
     @ForyCase(id: 1)
     case created(String)
 
@@ -65,6 +72,8 @@ private struct StructWithUnion: Equatable {
 
 @ForyUnion
 private indirect enum Token: Equatable {
+    @ForyCase(id: 0)
+    case unknown(UnknownCase)
     case plus
     case number(Int64)
     case ident(String)
@@ -83,6 +92,24 @@ func enumTypeIdClassification() {
 @Test
 func unionDefaultUsesKnownCase() {
     #expect(ForwardStringOrLong.foryDefault() == .text(""))
+}
+
+@Test
+func unionRejectsWireCaseZero() throws {
+    let buffer = ByteBuffer()
+    buffer.writeVarUInt32(0)
+    let context = ReadContext(
+        buffer: buffer,
+        typeResolver: TypeResolver(trackRef: false),
+        trackRef: false
+    )
+
+    do {
+        _ = try ForwardStringOrLong.foryReadData(context)
+        Issue.record("expected case id 0 to be rejected")
+    } catch let error as ForyError {
+        #expect(String(describing: error).contains("Unknown union case id must be positive"))
+    }
 }
 
 @Test

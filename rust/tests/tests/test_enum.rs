@@ -162,10 +162,14 @@ fn union_compatible_enum_xlang_format() {
     use fory_core::type_id::TypeId;
 
     // Define a Union-compatible enum (each variant has exactly one field)
+    #[allow(dead_code)]
     #[derive(ForyUnion, Debug, PartialEq, Clone)]
     enum StringOrLong {
-        #[fory(default)]
+        #[fory(id = 0)]
+        Unknown(fory_core::UnknownCase),
+        #[fory(id = 1, default)]
         Text(String),
+        #[fory(id = 2)]
         Number(i64),
     }
 
@@ -190,6 +194,32 @@ fn union_compatible_enum_xlang_format() {
         ForwardStringOrLong::fory_default(),
         ForwardStringOrLong::Text(String::new())
     );
+    let mut forward_fory = Fory::builder().xlang(true).compatible(false).build();
+    forward_fory.register::<ForwardStringOrLong>(302).unwrap();
+    let error = forward_fory
+        .serialize(&ForwardStringOrLong::Unknown(fory_core::UnknownCase::new(
+            0,
+            "reserved".to_string(),
+        )))
+        .unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("Unknown union case id must be positive"));
+    let mut write_context = fory_core::WriteContext::new(
+        fory_core::TypeResolver::default(),
+        fory_core::Config::default(),
+    );
+    write_context.writer.write_var_u32(0);
+    let bytes = write_context.writer.dump();
+    let mut read_context = fory_core::ReadContext::new(
+        fory_core::TypeResolver::default(),
+        fory_core::Config::default(),
+    );
+    read_context.attach_reader(fory_core::buffer::Reader::new(&bytes));
+    let error = ForwardStringOrLong::fory_read_data(&mut read_context).unwrap_err();
+    assert!(error
+        .to_string()
+        .contains("Unknown union case id must be positive"));
 
     // Struct containing the Union-compatible enum
     #[derive(ForyStruct, Debug, PartialEq)]
@@ -223,6 +253,8 @@ fn union_compatible_enum_xlang_format() {
 fn union_payload_nested_codec_annotations_roundtrip() {
     #[derive(ForyUnion, Debug, PartialEq)]
     enum Payload {
+        #[fory(id = 0)]
+        Unknown(fory_core::UnknownCase),
         #[fory(default)]
         Empty,
         Values(#[fory(list(element(nullable = true, encoding = fixed)))] Vec<Option<i32>>),

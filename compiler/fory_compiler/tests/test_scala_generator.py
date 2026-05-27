@@ -85,6 +85,24 @@ def test_scala_generator_emits_case_classes_options_enums_and_unions():
     assert "case Note(value: String)" in union
 
 
+def test_default_package_union_conflict_uses_case_suffix():
+    files = generate_scala(
+        """
+        message Dog {
+            string name = 1;
+        }
+
+        union Animal {
+            Dog dog = 1;
+        }
+        """
+    )
+
+    union = files["Animal.scala"]
+    assert "case DogCase(value: Dog)" in union
+    assert "case Dog(value: Dog)" not in union
+
+
 def test_scala_generator_uses_mutable_normal_class_for_construction_cycles():
     files = generate_scala(
         """

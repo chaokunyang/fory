@@ -40,29 +40,24 @@ public sealed class ForyGeneratorTests
             }
 
             [ForyUnion]
-            public sealed class Choice : Union
+            public abstract partial record Choice
             {
-                private Choice(int index, object? value)
-                    : base(index, value)
+                private Choice()
                 {
                 }
 
-                public static Choice Of(int index, object? value)
-                {
-                    return new Choice(index, value);
-                }
+                [ForyCase(0)]
+                public sealed partial record UnknownCase(int CaseId, object? Value) : Choice;
 
-                public static Choice Text(string value)
-                {
-                    return new Choice(1, value);
-                }
+                [ForyCase(1)]
+                public sealed partial record Text(string Value) : Choice;
             }
 
             [ForyStruct]
             public sealed class Envelope
             {
                 public Status Status { get; set; }
-                public Choice Choice { get; set; } = Choice.Text(string.Empty);
+                public Choice Choice { get; set; } = new Choice.Text(string.Empty);
             }
             """;
 

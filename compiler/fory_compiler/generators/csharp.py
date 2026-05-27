@@ -545,6 +545,9 @@ class CSharpGenerator(BaseGenerator):
 
         raise ValueError(f"Unknown field type: {field_type}")
 
+    def _union_case_type_name(self, field: Field) -> str:
+        return self.safe_identifier(self.to_pascal_case(field.name))
+
     def _default_initializer(
         self, field: Field, parent_stack: List[Message]
     ) -> Optional[str]:
@@ -697,7 +700,6 @@ class CSharpGenerator(BaseGenerator):
         lines: List[str] = []
         ind = self.indent_str * indent
         type_name = self.safe_type_identifier(union.name)
-        case_enum = self.safe_type_identifier(f"{union.name}Case")
         registration_class = self.get_registration_class_name()
         full_type_ref = self._type_reference_for_local(union)
 
@@ -705,87 +707,37 @@ class CSharpGenerator(BaseGenerator):
         if comment:
             lines.append(comment)
         lines.append(f"{ind}[ForyUnion]")
-        lines.append(f"{ind}public sealed class {type_name} : Union")
+        lines.append(f"{ind}public abstract partial record {type_name}")
         lines.append(f"{ind}{{")
-        lines.append(f"{ind}{self.indent_str}public enum {case_enum}")
-        lines.append(f"{ind}{self.indent_str}{{")
-        lines.append(f"{ind}{self.indent_str * 2}Unknown = 0,")
-        for i, field in enumerate(union.fields):
-            comma = "," if i < len(union.fields) - 1 else ""
-            case_name = self.safe_identifier(self.to_pascal_case(field.name))
-            lines.append(
-                f"{ind}{self.indent_str * 2}{case_name} = {field.number}{comma}"
-            )
-        lines.append(f"{ind}{self.indent_str}}}")
-        lines.append("")
-
-        lines.append(
-            f"{ind}{self.indent_str}private {type_name}(int index, object? value) : base(index, value)"
-        )
+        lines.append(f"{ind}{self.indent_str}private {type_name}()")
         lines.append(f"{ind}{self.indent_str}{{")
         lines.append(f"{ind}{self.indent_str}}}")
         lines.append("")
 
+        lines.append(f"{ind}{self.indent_str}[ForyCase(0)]")
         lines.append(
-            f"{ind}{self.indent_str}public static {type_name} Of(int index, object? value)"
+            f"{ind}{self.indent_str}public sealed partial record UnknownCase(int CaseId, object? Value) : {type_name};"
         )
-        lines.append(f"{ind}{self.indent_str}{{")
-        lines.append(f"{ind}{self.indent_str * 2}return new {type_name}(index, value);")
-        lines.append(f"{ind}{self.indent_str}}}")
         lines.append("")
 
         for field in union.fields:
-            case_name = self.safe_identifier(self.to_pascal_case(field.name))
+            case_name = self._union_case_type_name(field)
             case_type = self.generate_type(
                 field.field_type,
                 nullable=False,
                 parent_stack=parent_stack,
             )
+            schema_type = self._schema_type_hint(field.field_type)
+            if schema_type:
+                lines.append(
+                    f"{ind}{self.indent_str}[ForyCase({field.number}, Type = typeof({schema_type}))]"
+                )
+            else:
+                lines.append(f"{ind}{self.indent_str}[ForyCase({field.number})]")
             lines.append(
-                f"{ind}{self.indent_str}public static {type_name} {case_name}({case_type} value)"
-            )
-            lines.append(f"{ind}{self.indent_str}{{")
-            lines.append(
-                f"{ind}{self.indent_str * 2}return new {type_name}({field.number}, value);"
-            )
-            lines.append(f"{ind}{self.indent_str}}}")
-            lines.append("")
-
-            lines.append(
-                f"{ind}{self.indent_str}public bool Is{case_name} => Index == {field.number};"
+                f"{ind}{self.indent_str}public sealed partial record {case_name}({case_type} Value) : {type_name};"
             )
             lines.append("")
-            lines.append(f"{ind}{self.indent_str}public {case_type} {case_name}Value()")
-            lines.append(f"{ind}{self.indent_str}{{")
-            lines.append(f"{ind}{self.indent_str * 2}if (!Is{case_name})")
-            lines.append(f"{ind}{self.indent_str * 2}{{")
-            lines.append(
-                f'{ind}{self.indent_str * 3}throw new InvalidOperationException("Union does not hold case {case_name}");'
-            )
-            lines.append(f"{ind}{self.indent_str * 2}}}")
-            lines.append(f"{ind}{self.indent_str * 2}return GetValue<{case_type}>();")
-            lines.append(f"{ind}{self.indent_str}}}")
-            lines.append("")
-
-        lines.append(f"{ind}{self.indent_str}public {case_enum} Case()")
-        lines.append(f"{ind}{self.indent_str}{{")
-        lines.append(f"{ind}{self.indent_str * 2}return Index switch")
-        lines.append(f"{ind}{self.indent_str * 2}{{")
-        for field in union.fields:
-            case_name = self.safe_identifier(self.to_pascal_case(field.name))
-            lines.append(
-                f"{ind}{self.indent_str * 3}{field.number} => {case_enum}.{case_name},"
-            )
-        lines.append(f"{ind}{self.indent_str * 3}_ => {case_enum}.Unknown,")
-        lines.append(f"{ind}{self.indent_str * 2}}};")
-        lines.append(f"{ind}{self.indent_str}}}")
-        lines.append("")
-
-        lines.append(f"{ind}{self.indent_str}public int CaseId()")
-        lines.append(f"{ind}{self.indent_str}{{")
-        lines.append(f"{ind}{self.indent_str * 2}return Index;")
-        lines.append(f"{ind}{self.indent_str}}}")
-        lines.append("")
 
         lines.append(f"{ind}{self.indent_str}public byte[] ToBytes()")
         lines.append(f"{ind}{self.indent_str}{{")

@@ -287,6 +287,29 @@ public sealed class StructWithUnion2
     public Union2<string, long> Union { get; set; } = Union2<string, long>.OfT1(string.Empty);
 }
 
+[ForyUnion]
+public abstract partial record SourceGeneratedShape
+{
+    private SourceGeneratedShape()
+    {
+    }
+
+    [ForyCase(0)]
+    public sealed partial record UnknownCase(int CaseId, object? Value) : SourceGeneratedShape;
+
+    [ForyCase(1)]
+    public sealed partial record Text(string Value) : SourceGeneratedShape;
+
+    [ForyCase(2, Type = typeof(S.Fixed<S.Int32>))]
+    public sealed partial record Number(int Value) : SourceGeneratedShape;
+}
+
+[ForyStruct]
+public sealed class SourceGeneratedUnionHolder
+{
+    public SourceGeneratedShape Shape { get; set; } = new SourceGeneratedShape.UnknownCase(0, null);
+}
+
 [ForyStruct]
 public sealed class DynamicAnyHolder
 {
@@ -1425,6 +1448,35 @@ public sealed class ForyRuntimeTests
 
         byte[] payload = writer.Serialize(new OneStringField { F1 = "hello" });
         Assert.Throws<InvalidDataException>(() => { _ = reader.Deserialize<TwoStringField>(payload); });
+    }
+
+    [Fact]
+    public void SourceGeneratedUnionRoundTrip()
+    {
+        ForyRuntime fory = ForyRuntime.Builder().Compatible(false).Build();
+        fory.Register<SourceGeneratedShape>(302);
+        fory.Register<SourceGeneratedUnionHolder>(303);
+
+        SourceGeneratedUnionHolder known = new()
+        {
+            Shape = new SourceGeneratedShape.Number(42),
+        };
+        SourceGeneratedUnionHolder unknown = new()
+        {
+            Shape = new SourceGeneratedShape.UnknownCase(99, "future"),
+        };
+
+        SourceGeneratedUnionHolder knownDecoded =
+            fory.Deserialize<SourceGeneratedUnionHolder>(fory.Serialize(known));
+        SourceGeneratedUnionHolder unknownDecoded =
+            fory.Deserialize<SourceGeneratedUnionHolder>(fory.Serialize(unknown));
+
+        SourceGeneratedShape.Number number = Assert.IsType<SourceGeneratedShape.Number>(knownDecoded.Shape);
+        Assert.Equal(42, number.Value);
+        SourceGeneratedShape.UnknownCase unknownCase =
+            Assert.IsType<SourceGeneratedShape.UnknownCase>(unknownDecoded.Shape);
+        Assert.Equal(99, unknownCase.CaseId);
+        Assert.Equal("future", unknownCase.Value);
     }
 
     [Fact]

@@ -66,7 +66,23 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor InvalidUnionType = new(
         id: "FORY005",
         title: "Invalid Fory union type",
-        messageFormat: "Class '{0}' must derive from Apache.Fory.Union for [ForyUnion]",
+        messageFormat: "Class '{0}' must declare nested [ForyCase] case types for [ForyUnion]",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor InvalidUnionCase = new(
+        id: "FORY006",
+        title: "Invalid Fory union case",
+        messageFormat: "Union case '{0}' is invalid: {1}",
+        category: "Fory",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    private static readonly DiagnosticDescriptor DuplicateUnionCaseId = new(
+        id: "FORY007",
+        title: "Duplicate Fory union case id",
+        messageFormat: "Union case id {0} is declared more than once in '{1}'",
         category: "Fory",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -141,6 +157,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 EmitObjectSerializer(sb, model);
                 sb.AppendLine();
             }
+            else if (model.Kind == DeclKind.Union)
+            {
+                EmitUnionSerializer(sb, model);
+                sb.AppendLine();
+            }
         }
 
         sb.AppendLine("internal static class __ForyGeneratedModuleInitializer");
@@ -159,7 +180,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             else if (model.Kind == DeclKind.Union)
             {
                 sb.AppendLine(
-                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TypeName}, global::Apache.Fory.UnionSerializer<{model.TypeName}>>();");
+                    $"        global::Apache.Fory.TypeResolver.RegisterGenerated<{model.TypeName}, {model.SerializerName}>();");
             }
             else
             {
@@ -674,6 +695,284 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        return valueSchema;");
         sb.AppendLine("    }");
         sb.AppendLine("}");
+    }
+
+    private static void EmitUnionSerializer(StringBuilder sb, TypeModel model)
+    {
+        sb.AppendLine(
+            $"file sealed class {model.SerializerName} : global::Apache.Fory.Serializer<{model.TypeName}>");
+        sb.AppendLine("{");
+        sb.AppendLine($"    public override {model.TypeName} DefaultValue => null!;");
+        sb.AppendLine();
+        sb.AppendLine("    private static global::Apache.Fory.RefMode __ForyRefMode(bool nullable, bool trackRef)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        if (trackRef)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            return global::Apache.Fory.RefMode.Tracking;");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        return nullable ? global::Apache.Fory.RefMode.NullOnly : global::Apache.Fory.RefMode.None;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        foreach (UnionCaseModel unionCase in model.UnionCases.OrderBy(c => c.CaseId))
+        {
+            if (unionCase.ValueMember is { HasSchemaType: true } member)
+            {
+                EmitUnionCaseSerializer(sb, unionCase.CaseId, member);
+            }
+        }
+
+        sb.AppendLine(
+            $"    public override void WriteData(global::Apache.Fory.WriteContext context, in {model.TypeName} value, bool hasGenerics)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        _ = hasGenerics;");
+        sb.AppendLine("        if (value is null)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            throw new global::Apache.Fory.InvalidDataException(\"union value is null\");");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        switch (value)");
+        sb.AppendLine("        {");
+        UnionCaseModel? unknownCase = null;
+        foreach (UnionCaseModel unionCase in model.UnionCases.OrderBy(c => c.CaseId))
+        {
+            if (unionCase.IsUnknown)
+            {
+                unknownCase = unionCase;
+                sb.AppendLine($"            case {unionCase.TypeName} __foryCase:");
+                sb.AppendLine("            {");
+                sb.AppendLine("                if (__foryCase.CaseId < 0)");
+                sb.AppendLine("                {");
+                sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"union case id out of range: {__foryCase.CaseId}\");");
+                sb.AppendLine("                }");
+                sb.AppendLine();
+                sb.AppendLine("                context.Writer.WriteVarUInt32((uint)__foryCase.CaseId);");
+                sb.AppendLine("                global::Apache.Fory.DynamicAnyCodec.WriteAny(context, __foryCase.Value, global::Apache.Fory.RefMode.Tracking, true, false);");
+                sb.AppendLine("                return;");
+                sb.AppendLine("            }");
+                continue;
+            }
+
+            sb.AppendLine($"            case {unionCase.TypeName} __foryCase:");
+            sb.AppendLine("            {");
+            sb.AppendLine($"                context.Writer.WriteVarUInt32({unionCase.CaseId}u);");
+            EmitWriteUnionCasePayload(sb, unionCase, "__foryCase.Value", 4);
+            sb.AppendLine("                return;");
+            sb.AppendLine("            }");
+        }
+
+        sb.AppendLine("            default:");
+        sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException($\"unsupported union case {value.GetType()}\");");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine($"    public override {model.TypeName} ReadData(global::Apache.Fory.ReadContext context)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        uint rawCaseId = context.Reader.ReadVarUInt32();");
+        sb.AppendLine("        if (rawCaseId > int.MaxValue)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            throw new global::Apache.Fory.InvalidDataException($\"union case id out of range: {rawCaseId}\");");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        int caseId = (int)rawCaseId;");
+        sb.AppendLine("        switch (caseId)");
+        sb.AppendLine("        {");
+        foreach (UnionCaseModel unionCase in model.UnionCases.OrderBy(c => c.CaseId))
+        {
+            if (unionCase.IsUnknown)
+            {
+                sb.AppendLine("            case 0:");
+                sb.AppendLine("            {");
+                sb.AppendLine("                object? __foryUnknownValue = global::Apache.Fory.DynamicAnyCodec.ReadAny(context, global::Apache.Fory.RefMode.Tracking, true);");
+                sb.AppendLine($"                return new {unionCase.TypeName}(0, __foryUnknownValue);");
+                sb.AppendLine("            }");
+                continue;
+            }
+
+            string valueVar = $"__foryCaseValue{unionCase.CaseId}";
+            sb.AppendLine($"            case {unionCase.CaseId}:");
+            sb.AppendLine("            {");
+            EmitReadUnionCasePayload(sb, unionCase, valueVar, 4);
+            sb.AppendLine($"                return new {unionCase.TypeName}({valueVar});");
+            sb.AppendLine("            }");
+        }
+
+        sb.AppendLine("            default:");
+        sb.AppendLine("            {");
+        sb.AppendLine("                object? __foryUnknownValue = global::Apache.Fory.DynamicAnyCodec.ReadAny(context, global::Apache.Fory.RefMode.Tracking, true);");
+        if (unknownCase is null)
+        {
+            sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException($\"unknown union case {caseId}\");");
+        }
+        else
+        {
+            sb.AppendLine($"                return new {unknownCase.TypeName}(caseId, __foryUnknownValue);");
+        }
+
+        sb.AppendLine("            }");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine("}");
+    }
+
+    private static void EmitUnionCaseSerializer(
+        StringBuilder sb,
+        int caseId,
+        MemberModel member)
+    {
+        sb.AppendLine($"    private sealed class __ForyCaseSerializer{caseId} : global::Apache.Fory.Serializer<{member.TypeName}>");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        internal static readonly __ForyCaseSerializer{caseId} Instance = new();");
+        sb.AppendLine();
+        sb.AppendLine($"        public override {member.TypeName} DefaultValue => default!;");
+        sb.AppendLine();
+        sb.AppendLine($"        public override void WriteData(global::Apache.Fory.WriteContext context, in {member.TypeName} value, bool hasGenerics)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            _ = hasGenerics;");
+        EmitWriteUnionTopType(sb, member.TypeMeta, 3);
+        string payloadExpr = member.IsNullableValueType ? "value.GetValueOrDefault()" : "value";
+        EmitWriteUnionPayload(sb, NonNullableMember(member), payloadExpr, 3);
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine($"        public override {member.TypeName} ReadData(global::Apache.Fory.ReadContext context)");
+        sb.AppendLine("        {");
+        EmitValidateUnionTopType(sb, member.TypeMeta, 3);
+        EmitReadUnionPayload(sb, NonNullableMember(member), "__foryPayload", 3);
+        sb.AppendLine("            return __foryPayload;");
+        sb.AppendLine("        }");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    private static void EmitWriteUnionCasePayload(
+        StringBuilder sb,
+        UnionCaseModel unionCase,
+        string valueExpr,
+        int indentLevel)
+    {
+        MemberModel member = unionCase.ValueMember!;
+        string indent = new(' ', indentLevel * 4);
+        string refModeExpr = BuildUnionCaseRefModeExpression(member);
+        string hasGenerics = member.IsCollection ? "true" : "false";
+
+        if (member.DynamicAnyKind == DynamicAnyKind.AnyValue)
+        {
+            sb.AppendLine(
+                $"{indent}global::Apache.Fory.DynamicAnyCodec.WriteAny(context, {valueExpr}, {refModeExpr}, true, false);");
+            return;
+        }
+
+        if (!member.HasSchemaType)
+        {
+            sb.AppendLine(
+                $"{indent}context.TypeResolver.GetSerializer<{member.TypeName}>().Write(context, {valueExpr}, {refModeExpr}, true, {hasGenerics});");
+            return;
+        }
+
+        sb.AppendLine(
+            $"{indent}__ForyCaseSerializer{unionCase.CaseId}.Instance.Write(context, {valueExpr}, {refModeExpr}, false, false);");
+    }
+
+    private static void EmitReadUnionCasePayload(
+        StringBuilder sb,
+        UnionCaseModel unionCase,
+        string valueVar,
+        int indentLevel)
+    {
+        MemberModel member = unionCase.ValueMember!;
+        string indent = new(' ', indentLevel * 4);
+        string refModeExpr = BuildUnionCaseRefModeExpression(member);
+
+        if (member.DynamicAnyKind == DynamicAnyKind.AnyValue)
+        {
+            string typeOfTypeName = StripNullableForTypeOf(member.TypeName);
+            sb.AppendLine(
+                $"{indent}{member.TypeName} {valueVar} = ({member.TypeName})global::Apache.Fory.DynamicAnyCodec.CastAnyDynamicValue(global::Apache.Fory.DynamicAnyCodec.ReadAny(context, {refModeExpr}, true), typeof({typeOfTypeName}))!;");
+            return;
+        }
+
+        if (!member.HasSchemaType)
+        {
+            sb.AppendLine(
+                $"{indent}{member.TypeName} {valueVar} = context.TypeResolver.GetSerializer<{member.TypeName}>().Read(context, {refModeExpr}, true);");
+            return;
+        }
+
+        sb.AppendLine(
+            $"{indent}{member.TypeName} {valueVar} = __ForyCaseSerializer{unionCase.CaseId}.Instance.Read(context, {refModeExpr}, false);");
+    }
+
+    private static void EmitWriteUnionPayload(
+        StringBuilder sb,
+        MemberModel member,
+        string valueExpr,
+        int indentLevel)
+    {
+        int id = 0;
+        if (member.FieldCodec is not null)
+        {
+            EmitWritePayload(sb, member.FieldCodec, valueExpr, indentLevel, ref id);
+            return;
+        }
+
+        if (TryBuildDirectPayloadWrite(member.Classification.TypeId, valueExpr, out string? writeCode))
+        {
+            string indent = new(' ', indentLevel * 4);
+            sb.AppendLine($"{indent}{writeCode}");
+            return;
+        }
+
+        string hasGenerics = member.IsCollection ? "true" : "false";
+        string fallbackIndent = new(' ', indentLevel * 4);
+        sb.AppendLine(
+            $"{fallbackIndent}context.TypeResolver.GetSerializer<{member.TypeName}>().WriteData(context, {valueExpr}, {hasGenerics});");
+    }
+
+    private static void EmitReadUnionPayload(
+        StringBuilder sb,
+        MemberModel member,
+        string valueVar,
+        int indentLevel)
+    {
+        int id = 0;
+        if (member.FieldCodec is not null)
+        {
+            EmitReadPayload(sb, member.FieldCodec, valueVar, indentLevel, ref id);
+            return;
+        }
+
+        if (TryBuildDirectPayloadRead(member.Classification.TypeId, out string? readExpr))
+        {
+            string indent = new(' ', indentLevel * 4);
+            sb.AppendLine($"{indent}{member.TypeName} {valueVar} = {readExpr};");
+            return;
+        }
+
+        string fallbackIndent = new(' ', indentLevel * 4);
+        sb.AppendLine(
+            $"{fallbackIndent}{member.TypeName} {valueVar} = context.TypeResolver.GetSerializer<{member.TypeName}>().ReadData(context);");
+    }
+
+    private static void EmitWriteUnionTopType(
+        StringBuilder sb,
+        TypeMetaFieldTypeModel model,
+        int indentLevel)
+    {
+        string indent = new(' ', indentLevel * 4);
+        sb.AppendLine($"{indent}context.Writer.WriteUInt8((byte)({model.TypeIdExpr}));");
+    }
+
+    private static void EmitValidateUnionTopType(
+        StringBuilder sb,
+        TypeMetaFieldTypeModel model,
+        int indentLevel)
+    {
+        string indent = new(' ', indentLevel * 4);
+        sb.AppendLine($"{indent}uint __foryTypeId = context.Reader.ReadUInt8();");
+        sb.AppendLine($"{indent}if (__foryTypeId != ({model.TypeIdExpr}))");
+        sb.AppendLine($"{indent}{{");
+        sb.AppendLine($"{indent}    throw new global::Apache.Fory.TypeMismatchException({model.TypeIdExpr}, __foryTypeId);");
+        sb.AppendLine($"{indent}}}");
     }
 
     private static void EmitFieldCodecMethods(StringBuilder sb, MemberModel member)
@@ -1471,6 +1770,40 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             codec.Generics);
     }
 
+    private static MemberModel NonNullableMember(MemberModel member)
+    {
+        if (!member.IsNullable)
+        {
+            return member;
+        }
+
+        return new MemberModel(
+            member.Name,
+            member.FieldIdentifier,
+            member.OriginalIndex,
+            member.DeclKind,
+            member.IsNullableValueType && member.TypeName.EndsWith("?", StringComparison.Ordinal)
+                ? member.TypeName.Substring(0, member.TypeName.Length - 1)
+                : StripNullableForTypeOf(member.TypeName),
+            false,
+            false,
+            member.FieldId,
+            member.Classification,
+            member.Group,
+            member.IsCollection,
+            member.UseDictionaryTypeInfoCache,
+            member.IsRefType,
+            member.NeedsFieldTypeInfo,
+            member.DynamicAnyKind,
+            new TypeMetaFieldTypeModel(
+                member.TypeMeta.TypeIdExpr,
+                false,
+                member.TypeMeta.TrackRefByContext,
+                member.TypeMeta.Generics),
+            member.FieldCodec is null ? null : NonNullableCodec(member.FieldCodec),
+            member.HasSchemaType);
+    }
+
     private static string ElementTypeName(string arrayTypeName)
     {
         return arrayTypeName.EndsWith("[]", StringComparison.Ordinal)
@@ -2129,6 +2462,13 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         };
     }
 
+    private static string BuildUnionCaseRefModeExpression(MemberModel member)
+    {
+        return member.IsRefType
+            ? "__ForyRefMode(true, context.TrackRef)"
+            : "global::Apache.Fory.RefMode.NullOnly";
+    }
+
     private static string BuildFieldTypeInfoLiteral(MemberModel member)
     {
         return BoolLiteral(member.NeedsFieldTypeInfo);
@@ -2187,7 +2527,9 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 return null;
             }
 
-            if (!IsUnionType(typeSymbol))
+            List<Diagnostic> unionDiagnostics = [];
+            ImmutableArray<UnionCaseModel> unionCases = BuildUnionCases(typeSymbol, unionDiagnostics);
+            if (unionCases.IsEmpty)
             {
                 return new TypeModel(
                     typeName,
@@ -2207,7 +2549,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 DeclKind.Union,
                 ImmutableArray<MemberModel>.Empty,
                 ImmutableArray<MemberModel>.Empty,
-                ImmutableArray<Diagnostic>.Empty);
+                unionDiagnostics.ToImmutableArray(),
+                unionCases);
         }
 
         DeclKind kind = typeSymbol.TypeKind switch
@@ -2300,6 +2643,192 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         return new TypeModel(typeName, serializerName, kind, ordered, sorted, diagnostics.ToImmutableArray());
     }
 
+    private static ImmutableArray<UnionCaseModel> BuildUnionCases(
+        INamedTypeSymbol unionType,
+        List<Diagnostic> diagnostics)
+    {
+        List<UnionCaseModel> cases = [];
+        HashSet<int> caseIds = [];
+        foreach (INamedTypeSymbol caseType in unionType.GetTypeMembers())
+        {
+            if (!TryGetForyCase(caseType, diagnostics, out int caseId, out SchemaTypeModel? schemaType))
+            {
+                continue;
+            }
+
+            if (!caseIds.Add(caseId))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    DuplicateUnionCaseId,
+                    caseType.Locations.FirstOrDefault(),
+                    caseId,
+                    unionType.ToDisplayString(FullNameFormat)));
+                continue;
+            }
+
+            if (!SymbolEqualityComparer.Default.Equals(caseType.BaseType, unionType))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidUnionCase,
+                    caseType.Locations.FirstOrDefault(),
+                    caseType.ToDisplayString(FullNameFormat),
+                    "case type must directly derive from the annotated union root"));
+                continue;
+            }
+
+            string caseTypeName = caseType.ToDisplayString(FullNameFormat);
+            if (caseId == 0)
+            {
+                if (!HasProperty(caseType, "CaseId", SpecialType.System_Int32) ||
+                    !HasObjectValueProperty(caseType))
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        InvalidUnionCase,
+                        caseType.Locations.FirstOrDefault(),
+                        caseTypeName,
+                        "case id 0 must expose CaseId:int and Value:object?"));
+                    continue;
+                }
+
+                cases.Add(new UnionCaseModel(caseId, caseTypeName, isUnknown: true, valueMember: null));
+                continue;
+            }
+
+            IPropertySymbol? valueProperty = FindProperty(caseType, "Value");
+            if (valueProperty is null)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidUnionCase,
+                    caseType.Locations.FirstOrDefault(),
+                    caseTypeName,
+                    "known cases must expose a Value property"));
+                continue;
+            }
+
+            MemberModel? valueMember = BuildMemberModel(
+                valueProperty.Name,
+                valueProperty.Type,
+                valueProperty,
+                MemberDeclKind.Property,
+                diagnostics,
+                schemaType,
+                parseFieldAttribute: false);
+            if (valueMember is null)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidUnionCase,
+                    valueProperty.Locations.FirstOrDefault(),
+                    caseTypeName,
+                    "case Value type is not supported"));
+                continue;
+            }
+
+            cases.Add(new UnionCaseModel(caseId, caseTypeName, isUnknown: false, valueMember));
+        }
+
+        if (!cases.Any(c => c.IsUnknown))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidUnionCase,
+                unionType.Locations.FirstOrDefault(),
+                unionType.ToDisplayString(FullNameFormat),
+                "union must declare [ForyCase(0)] UnknownCase"));
+        }
+
+        return cases.OrderBy(c => c.CaseId).ToImmutableArray();
+    }
+
+    private static bool TryGetForyCase(
+        INamedTypeSymbol caseType,
+        List<Diagnostic> diagnostics,
+        out int caseId,
+        out SchemaTypeModel? schemaType)
+    {
+        caseId = default;
+        schemaType = null;
+        foreach (AttributeData attribute in caseType.GetAttributes())
+        {
+            string? attrName = attribute.AttributeClass?.ToDisplayString();
+            if (!string.Equals(attrName, "Apache.Fory.ForyCaseAttribute", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (attribute.ConstructorArguments.Length != 1 ||
+                !TryGetUnionCaseId(attribute.ConstructorArguments[0], out caseId))
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidUnionCase,
+                    caseType.Locations.FirstOrDefault(),
+                    caseType.ToDisplayString(FullNameFormat),
+                    "case id must be a non-negative int"));
+                return true;
+            }
+
+            foreach (KeyValuePair<string, TypedConstant> namedArg in attribute.NamedArguments)
+            {
+                if (!string.Equals(namedArg.Key, "Type", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (namedArg.Value.Value is not ITypeSymbol schemaSymbol ||
+                    TryParseSchemaType(schemaSymbol) is not SchemaTypeModel parsedSchema)
+                {
+                    diagnostics.Add(Diagnostic.Create(
+                        InvalidUnionCase,
+                        caseType.Locations.FirstOrDefault(),
+                        caseType.ToDisplayString(FullNameFormat),
+                        "ForyCase.Type must be an Apache.Fory.Schema.Types descriptor"));
+                    continue;
+                }
+
+                schemaType = parsedSchema;
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetUnionCaseId(TypedConstant value, out int caseId)
+    {
+        caseId = default;
+        if (value.Value is int id && id >= 0)
+        {
+            caseId = id;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static IPropertySymbol? FindProperty(INamedTypeSymbol type, string name)
+    {
+        foreach (ISymbol member in type.GetMembers(name))
+        {
+            if (member is IPropertySymbol property && !property.IsStatic)
+            {
+                return property;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool HasProperty(INamedTypeSymbol type, string name, SpecialType specialType)
+    {
+        IPropertySymbol? property = FindProperty(type, name);
+        return property is not null && property.Type.SpecialType == specialType;
+    }
+
+    private static bool HasObjectValueProperty(INamedTypeSymbol type)
+    {
+        IPropertySymbol? property = FindProperty(type, "Value");
+        return property is not null && property.Type.SpecialType == SpecialType.System_Object;
+    }
+
     private static ForyAttributeKind GetForyAttributeKind(INamedTypeSymbol typeSymbol)
     {
         foreach (AttributeData attribute in typeSymbol.GetAttributes())
@@ -2331,43 +2860,65 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         MemberDeclKind memberDeclKind,
         List<Diagnostic> diagnostics)
     {
+        return BuildMemberModel(
+            name,
+            memberType,
+            memberSymbol,
+            memberDeclKind,
+            diagnostics,
+            schemaTypeOverride: null,
+            parseFieldAttribute: true);
+    }
+
+    private static MemberModel? BuildMemberModel(
+        string name,
+        ITypeSymbol memberType,
+        ISymbol memberSymbol,
+        MemberDeclKind memberDeclKind,
+        List<Diagnostic> diagnostics,
+        SchemaTypeModel? schemaTypeOverride,
+        bool parseFieldAttribute)
+    {
         (bool isOptional, ITypeSymbol unwrappedType) = UnwrapNullable(memberType);
         short? fieldId = null;
-        SchemaTypeModel? schemaType = null;
-        foreach (AttributeData attribute in memberSymbol.GetAttributes())
+        SchemaTypeModel? schemaType = schemaTypeOverride;
+        if (parseFieldAttribute)
         {
-            string? attrName = attribute.AttributeClass?.ToDisplayString();
-            if (!string.Equals(attrName, "Apache.Fory.ForyFieldAttribute", StringComparison.Ordinal))
+            foreach (AttributeData attribute in memberSymbol.GetAttributes())
             {
-                continue;
-            }
-
-            if (attribute.ConstructorArguments.Length == 1 &&
-                TryGetFieldId(attribute.ConstructorArguments[0], memberSymbol, diagnostics, out short ctorFieldId))
-            {
-                fieldId = ctorFieldId;
-            }
-
-            foreach (KeyValuePair<string, TypedConstant> namedArg in attribute.NamedArguments)
-            {
-                if (string.Equals(namedArg.Key, "Id", StringComparison.Ordinal))
+                string? attrName = attribute.AttributeClass?.ToDisplayString();
+                if (!string.Equals(attrName, "Apache.Fory.ForyFieldAttribute", StringComparison.Ordinal))
                 {
-                    if (TryGetFieldId(namedArg.Value, memberSymbol, diagnostics, out short parsedFieldId))
+                    continue;
+                }
+
+                if (attribute.ConstructorArguments.Length == 1 &&
+                    TryGetFieldId(attribute.ConstructorArguments[0], memberSymbol, diagnostics, out short ctorFieldId))
+                {
+                    fieldId = ctorFieldId;
+                }
+
+                foreach (KeyValuePair<string, TypedConstant> namedArg in attribute.NamedArguments)
+                {
+                    if (string.Equals(namedArg.Key, "Id", StringComparison.Ordinal))
                     {
-                        fieldId = parsedFieldId;
+                        if (TryGetFieldId(namedArg.Value, memberSymbol, diagnostics, out short parsedFieldId))
+                        {
+                            fieldId = parsedFieldId;
+                        }
+
+                        continue;
                     }
 
-                    continue;
-                }
+                    if (!string.Equals(namedArg.Key, "Type", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
 
-                if (!string.Equals(namedArg.Key, "Type", StringComparison.Ordinal))
-                {
-                    continue;
-                }
-
-                if (namedArg.Value.Value is ITypeSymbol schemaSymbol)
-                {
-                    schemaType = TryParseSchemaType(schemaSymbol);
+                    if (namedArg.Value.Value is ITypeSymbol schemaSymbol)
+                    {
+                        schemaType = TryParseSchemaType(schemaSymbol);
+                    }
                 }
             }
         }
@@ -2418,7 +2969,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             FieldNeedsTypeInfo(classification, dynamicAnyKind, unwrappedType),
             dynamicAnyKind == DynamicAnyKind.None ? DynamicAnyKind.None : dynamicAnyKind,
             typeMeta,
-            fieldCodec);
+            fieldCodec,
+            schemaType is not null);
     }
 
     private static TypeMetaFieldTypeModel BuildTypeMetaFieldTypeModel(
@@ -3323,6 +3875,12 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
     private static bool IsUnionType(ITypeSymbol symbol)
     {
+        if (symbol is INamedTypeSymbol namedType &&
+            GetForyAttributeKind(namedType) == ForyAttributeKind.Union)
+        {
+            return true;
+        }
+
         INamedTypeSymbol? current = symbol as INamedTypeSymbol;
         while (current is not null)
         {
@@ -3640,7 +4198,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             DeclKind kind,
             ImmutableArray<MemberModel> members,
             ImmutableArray<MemberModel> sortedMembers,
-            ImmutableArray<Diagnostic> diagnostics)
+            ImmutableArray<Diagnostic> diagnostics,
+            ImmutableArray<UnionCaseModel> unionCases = default)
         {
             TypeName = typeName;
             SerializerName = serializerName;
@@ -3648,6 +4207,9 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             Members = members;
             SortedMembers = sortedMembers;
             Diagnostics = diagnostics;
+            UnionCases = unionCases.IsDefault
+                ? ImmutableArray<UnionCaseModel>.Empty
+                : unionCases;
         }
 
         public string TypeName { get; }
@@ -3656,6 +4218,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         public ImmutableArray<MemberModel> Members { get; }
         public ImmutableArray<MemberModel> SortedMembers { get; }
         public ImmutableArray<Diagnostic> Diagnostics { get; }
+        public ImmutableArray<UnionCaseModel> UnionCases { get; }
     }
 
     private sealed class MemberModel
@@ -3677,7 +4240,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             bool needsFieldTypeInfo,
             DynamicAnyKind dynamicAnyKind,
             TypeMetaFieldTypeModel typeMeta,
-            FieldCodecModel? fieldCodec)
+            FieldCodecModel? fieldCodec,
+            bool hasSchemaType = false)
         {
             Name = name;
             FieldIdentifier = fieldIdentifier;
@@ -3696,6 +4260,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             DynamicAnyKind = dynamicAnyKind;
             TypeMeta = typeMeta;
             FieldCodec = fieldCodec;
+            HasSchemaType = hasSchemaType;
         }
 
         public string Name { get; }
@@ -3715,6 +4280,23 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         public DynamicAnyKind DynamicAnyKind { get; }
         public TypeMetaFieldTypeModel TypeMeta { get; }
         public FieldCodecModel? FieldCodec { get; }
+        public bool HasSchemaType { get; }
+    }
+
+    private sealed class UnionCaseModel
+    {
+        public UnionCaseModel(int caseId, string typeName, bool isUnknown, MemberModel? valueMember)
+        {
+            CaseId = caseId;
+            TypeName = typeName;
+            IsUnknown = isUnknown;
+            ValueMember = valueMember;
+        }
+
+        public int CaseId { get; }
+        public string TypeName { get; }
+        public bool IsUnknown { get; }
+        public MemberModel? ValueMember { get; }
     }
 
     private enum MemberDeclKind

@@ -38,11 +38,38 @@ public sealed class ForyEnumAttribute : Attribute
 }
 
 /// <summary>
-/// Marks a <see cref="Union"/> subclass as a generated Fory union type.
+/// Marks a generated Fory union type.
 /// </summary>
 [AttributeUsage(AttributeTargets.Class)]
 public sealed class ForyUnionAttribute : Attribute
 {
+}
+
+/// <summary>
+/// Marks a nested case type within a generated Fory union.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class ForyCaseAttribute : Attribute
+{
+    public ForyCaseAttribute(int id)
+    {
+        if (id < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(id));
+        }
+
+        Id = id;
+    }
+
+    /// <summary>
+    /// Stable union case id written on the wire.
+    /// </summary>
+    public int Id { get; }
+
+    /// <summary>
+    /// Optional Fory schema descriptor type from <c>Apache.Fory.Schema.Types</c>.
+    /// </summary>
+    public Type? Type { get; set; }
 }
 
 /// <summary>

@@ -251,14 +251,15 @@ fn field_type_for_serializer<T: Serializer>(
     track_ref: bool,
 ) -> Result<FieldType, Error> {
     let static_type_id = T::fory_static_type_id() as u32;
-    if static_type_id == TypeId::UNION as u32
-        || static_type_id == TypeId::TYPED_UNION as u32
-        || static_type_id == TypeId::NAMED_UNION as u32
+    if type_resolver.is_xlang()
+        && (static_type_id == TypeId::UNION as u32
+            || static_type_id == TypeId::TYPED_UNION as u32
+            || static_type_id == TypeId::NAMED_UNION as u32)
     {
-        // Do not resolve a registered union identity for static field metadata.
-        // Derive-generated typed ADTs expose UNION as their static field kind,
-        // while typed/named union IDs are reserved for root or dynamic Any type
-        // metadata where no field owner supplies the schema.
+        // Xlang struct fields already own the union schema in FieldType, so they
+        // use UNION instead of TYPED_UNION/NAMED_UNION. Native mode must keep
+        // the registered enum identity because compatible enum evolution uses
+        // that identity to resolve named variant metadata.
         return Ok(FieldType::new_with_user_type_id(
             TypeId::UNION as u32,
             u32::MAX,
@@ -275,11 +276,15 @@ fn field_type_for_serializer<T: Serializer>(
         user_type_id = type_info.get_user_type_id();
         // Field TypeDef metadata must be schema-local. Registered union
         // identities are written only by root or dynamic Any type metadata.
-        if type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32 {
+        if type_resolver.is_xlang()
+            && (type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32)
+        {
             type_id = TypeId::UNION as u32;
             user_type_id = u32::MAX;
         }
-    } else if type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32 {
+    } else if type_resolver.is_xlang()
+        && (type_id == TypeId::TYPED_UNION as u32 || type_id == TypeId::NAMED_UNION as u32)
+    {
         type_id = TypeId::UNION as u32;
     }
     Ok(FieldType::new_with_user_type_id(

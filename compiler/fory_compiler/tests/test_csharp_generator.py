@@ -83,9 +83,9 @@ def test_csharp_semantic_model_attributes():
         }
 
         union Choice {
-            string text = 1;
-            fixed int32 code = 2;
-            Item item = 3;
+            string text = 0;
+            fixed int32 code = 1;
+            Item item = 2;
         }
 
         message Envelope {
@@ -98,16 +98,16 @@ def test_csharp_semantic_model_attributes():
     assert "[ForyEnum]" in file.content
     assert "[ForyUnion]" in file.content
     assert "public abstract partial record Choice" in file.content
-    assert "[ForyCase(0)]" in file.content
+    assert "[ForyUnknownCase]" in file.content
     assert (
         "public sealed partial record Unknown(UnknownCase Value) : Choice;"
         in file.content
     )
-    assert "[ForyCase(1)]" in file.content
+    assert "[ForyCase(0)]" in file.content
     assert "public sealed partial record Text(string Value) : Choice;" in file.content
-    assert "[ForyCase(2, Type = typeof(S.Fixed<S.Int32>))]" in file.content
+    assert "[ForyCase(1, Type = typeof(S.Fixed<S.Int32>))]" in file.content
     assert "public sealed partial record Code(int Value) : Choice;" in file.content
-    assert "[ForyCase(3)]" in file.content
+    assert "[ForyCase(2)]" in file.content
     assert (
         "public sealed partial record Item(global::example.Item Value) : Choice;"
         in file.content

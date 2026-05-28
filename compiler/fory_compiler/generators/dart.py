@@ -1190,7 +1190,10 @@ class DartGenerator(BaseGenerator):
             if isinstance(resolved, Enum):
                 return self.ref_name(resolved), "TypeIds.enumById"
             if isinstance(resolved, Union):
-                return self.ref_name(resolved), "TypeIds.typedUnion"
+                # Static union fields carry the schema in the owning field
+                # TypeDef, so they use UNION. TYPED_UNION/NAMED_UNION are only
+                # root or dynamic Any identities.
+                return self.ref_name(resolved), "TypeIds.union"
             if isinstance(resolved, Message):
                 return self.ref_name(
                     resolved

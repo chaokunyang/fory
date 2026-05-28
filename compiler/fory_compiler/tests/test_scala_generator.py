@@ -52,8 +52,8 @@ def test_scala_generator_emits_case_classes_options_enums_and_unions():
         }
 
         union SearchTarget [id=103] {
-            User user = 1;
-            string note = 2;
+            User user = 0;
+            string note = 1;
         }
         """
     )
@@ -77,11 +77,11 @@ def test_scala_generator_emits_case_classes_options_enums_and_unions():
     assert "@ForyUnion" in union
     assert "import org.apache.fory.`type`.union.UnknownCase" in union
     assert "enum SearchTarget derives ForySerializer" in union
-    assert "@ForyCase(id = 0)" in union
+    assert "@ForyUnknownCase" in union
     assert "case Unknown(value: UnknownCase)" in union
-    assert "@ForyCase(id = 1)" in union
+    assert "@ForyCase(id = 0)" in union
     assert "case User(value: _root_.demo.User)" in union
-    assert "@ForyCase(id = 2)" in union
+    assert "@ForyCase(id = 1)" in union
     assert "case Note(value: String)" in union
 
 

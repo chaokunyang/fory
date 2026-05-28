@@ -340,45 +340,19 @@ private struct AnimalMapHolder {
     var animalMap: [String: Any] = [:]
 }
 
-private enum JavaUnion2StringLong: Equatable, Serializer {
+@ForyUnion
+private enum StringOrLong {
+    @ForyUnknownCase
+    case unknown(UnknownCase)
+    @ForyCase(id: 0)
     case text(String)
+    @ForyCase(id: 1)
     case number(Int64)
-
-    static var staticTypeId: TypeId { .union }
-
-    static func foryDefault() -> Self {
-        .text("")
-    }
-
-    func foryWriteData(_ context: WriteContext, hasGenerics _: Bool) throws {
-        switch self {
-        case .text(let value):
-            context.buffer.writeVarUInt32(0)
-            try value.foryWrite(context, refMode: .tracking, writeTypeInfo: true, hasGenerics: false)
-        case .number(let value):
-            context.buffer.writeVarUInt32(1)
-            try value.foryWrite(context, refMode: .tracking, writeTypeInfo: true, hasGenerics: false)
-        }
-    }
-
-    static func foryReadData(_ context: ReadContext) throws -> Self {
-        let caseID = try context.buffer.readVarUInt32()
-        switch caseID {
-        case 0:
-            return .text(try String.foryRead(context, refMode: .tracking, readTypeInfo: true))
-        case 1:
-            return .number(try Int64.foryRead(context, refMode: .tracking, readTypeInfo: true))
-        default:
-            throw ForyError.invalidData("Unknown Java Union2 case id \(caseID)")
-        }
-    }
 }
 
 @ForyStruct
 private struct StructWithUnion2 {
-    // Java Union2 uses zero-based case indexes. Keep this xlang fixture separate
-    // from typed ADT unions, where case id 0 is reserved for unknown(UnknownCase).
-    var union: JavaUnion2StringLong = .foryDefault()
+    var union: StringOrLong = .foryDefault()
 }
 
 @ForyStruct

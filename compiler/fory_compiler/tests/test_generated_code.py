@@ -1106,6 +1106,7 @@ def test_rust_generated_code_uses_absolute_paths():
     assert "use std::" not in rust_output
     assert "#[derive(::fory::ForyStruct" in rust_output
     assert "#[derive(::fory::ForyUnion" in rust_output
+    assert "#[fory(unknown)]" in rust_output
     assert "Unknown(::fory::UnknownCase)," in rust_output
     assert "#[fory(id = 1, default)]" in rust_output
     assert "impl ::std::default::Default for Fory" in rust_output

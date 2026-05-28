@@ -15,7 +15,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use super::util::{is_reserved_zero_variant, is_runtime_unknown_variant};
+use super::util::{enum_variant_id, has_fory_unknown_attr, is_runtime_unknown_variant};
 use syn::{Attribute, Data, DataEnum, DeriveInput, Fields};
 
 pub(crate) fn validate_input(input: &DeriveInput) -> syn::Result<()> {
@@ -35,20 +35,19 @@ pub(crate) fn validate_input(input: &DeriveInput) -> syn::Result<()> {
             "ForyUnion requires at least one payload variant; use ForyEnum for pure unit enums",
         ));
     }
-    if let Some(variant) = data_enum
-        .variants
-        .iter()
-        .find(|variant| is_reserved_zero_variant(variant))
-    {
+    if let Some(variant) = data_enum.variants.iter().find(|variant| {
+        has_fory_unknown_attr(variant)
+            && (!is_runtime_unknown_variant(variant) || enum_variant_id(variant).is_some())
+    }) {
         return Err(syn::Error::new(
             variant.ident.span(),
-            "ForyUnion case id 0 is reserved for Unknown(UnknownCase)",
+            "ForyUnion unknown case must be #[fory(unknown)] Unknown(UnknownCase) without an id",
         ));
     }
     if is_typed_adt_union(data_enum) && !data_enum.variants.iter().any(is_runtime_unknown_variant) {
         return Err(syn::Error::new(
             input.ident.span(),
-            "ForyUnion typed ADT unions require #[fory(id = 0)] Unknown(UnknownCase)",
+            "ForyUnion typed ADT unions require #[fory(unknown)] Unknown(UnknownCase)",
         ));
     }
     let non_unknown_count = data_enum
@@ -80,6 +79,30 @@ pub(crate) fn validate_input(input: &DeriveInput) -> syn::Result<()> {
             input.ident.span(),
             "ForyUnion Unknown case cannot be marked #[fory(default)]",
         ));
+    }
+    validate_known_case_ids(data_enum)?;
+    Ok(())
+}
+
+fn validate_known_case_ids(data_enum: &DataEnum) -> syn::Result<()> {
+    let mut seen: Vec<(u32, &syn::Ident)> = Vec::new();
+    let mut implicit_id = 0u32;
+    for variant in &data_enum.variants {
+        if is_runtime_unknown_variant(variant) {
+            continue;
+        }
+        let case_id = enum_variant_id(variant).unwrap_or(implicit_id);
+        implicit_id += 1;
+        if let Some((_, first)) = seen.iter().find(|(id, _)| *id == case_id) {
+            return Err(syn::Error::new(
+                variant.ident.span(),
+                format!(
+                    "duplicate ForyUnion case id {case_id}; {} conflicts with {}",
+                    variant.ident, first
+                ),
+            ));
+        }
+        seen.push((case_id, &variant.ident));
     }
     Ok(())
 }
@@ -126,7 +149,7 @@ mod tests {
     #[test]
     fn detects_runtime_unknown_variant() {
         let variant: syn::Variant = parse_quote!(
-            #[fory(id = 0)]
+            #[fory(unknown)]
             Unknown(::fory::UnknownCase)
         );
 
@@ -140,7 +163,7 @@ mod tests {
             Unknown(::fory::UnknownCase)
         );
         let wrong_payload: syn::Variant = parse_quote!(
-            #[fory(id = 0)]
+            #[fory(unknown)]
             Unknown(String)
         );
         let implicit_id: syn::Variant = parse_quote!(Unknown(::fory::UnknownCase));
@@ -151,28 +174,45 @@ mod tests {
     }
 
     #[test]
-    fn rejects_reserved_zero_schema_cases() {
-        let wrong_payload: syn::Variant = parse_quote!(
+    fn known_schema_case_zero_is_not_unknown() {
+        let known_unknown_name: syn::Variant = parse_quote!(
             #[fory(id = 0)]
             Unknown(String)
         );
-        let wrong_name: syn::Variant = parse_quote!(
+        let known_text: syn::Variant = parse_quote!(
             #[fory(id = 0)]
             Text(String)
         );
         let runtime_unknown: syn::Variant = parse_quote!(
-            #[fory(id = 0)]
+            #[fory(unknown)]
             Unknown(::fory::UnknownCase)
         );
-        let ambiguous_unknown: syn::Variant = parse_quote!(
+        let unknown_without_marker: syn::Variant = parse_quote!(
             #[fory(id = 0)]
             Unknown(UnknownCase)
         );
 
-        assert!(is_reserved_zero_variant(&wrong_payload));
-        assert!(is_reserved_zero_variant(&wrong_name));
-        assert!(is_reserved_zero_variant(&ambiguous_unknown));
-        assert!(!is_reserved_zero_variant(&runtime_unknown));
+        assert!(!is_runtime_unknown_variant(&known_unknown_name));
+        assert!(!is_runtime_unknown_variant(&known_text));
+        assert!(!is_runtime_unknown_variant(&unknown_without_marker));
+        assert!(is_runtime_unknown_variant(&runtime_unknown));
+    }
+
+    #[test]
+    fn rejects_unknown_marker_with_id() {
+        let input: DeriveInput = parse_quote!(
+            enum BadUnion {
+                #[fory(unknown, id = 0)]
+                Unknown(::fory::UnknownCase),
+                #[fory(id = 1, default)]
+                Dog(String),
+            }
+        );
+
+        let error = validate_input(&input).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("unknown case must be #[fory(unknown)]"));
     }
 
     #[test]
@@ -204,5 +244,39 @@ mod tests {
         assert!(error
             .to_string()
             .contains("ForyUnion typed ADT unions require"));
+    }
+
+    #[test]
+    fn rejects_duplicate_known_ids() {
+        let input: DeriveInput = parse_quote!(
+            enum BadUnion {
+                #[fory(unknown)]
+                Unknown(::fory::UnknownCase),
+                #[fory(id = 0, default)]
+                Dog(String),
+                #[fory(id = 0)]
+                Cat(String),
+            }
+        );
+
+        let error = validate_input(&input).unwrap_err();
+        assert!(error.to_string().contains("duplicate ForyUnion case id 0"));
+    }
+
+    #[test]
+    fn rejects_implicit_id_collision() {
+        let input: DeriveInput = parse_quote!(
+            enum BadUnion {
+                #[fory(unknown)]
+                Unknown(::fory::UnknownCase),
+                #[fory(default)]
+                Dog(String),
+                #[fory(id = 0)]
+                Cat(String),
+            }
+        );
+
+        let error = validate_input(&input).unwrap_err();
+        assert!(error.to_string().contains("duplicate ForyUnion case id 0"));
     }
 }

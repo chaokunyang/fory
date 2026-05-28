@@ -275,7 +275,7 @@ class ScalaGenerator(BaseGenerator):
 
     def generate_union_file(self, union: Union) -> GeneratedFile:
         imports = {
-            "org.apache.fory.annotation.{ForyCase, ForyUnion}",
+            "org.apache.fory.annotation.{ForyCase, ForyUnion, ForyUnknownCase}",
             "org.apache.fory.scala.ForySerializer",
             "org.apache.fory.`type`.union.UnknownCase",
         }
@@ -341,7 +341,7 @@ class ScalaGenerator(BaseGenerator):
             f"{ind}@ForyUnion",
             f"{ind}enum {union.name} derives ForySerializer {{",
         ]
-        lines.append(f"{ind}    @ForyCase(id = 0)")
+        lines.append(f"{ind}    @ForyUnknownCase")
         lines.append(f"{ind}    case Unknown(value: UnknownCase)")
         lines.append("")
         for field in union.fields:
@@ -704,7 +704,9 @@ class ScalaGenerator(BaseGenerator):
         for enum in message.nested_enums:
             imports.add("org.apache.fory.annotation.ForyEnumId")
         for union in message.nested_unions:
-            imports.add("org.apache.fory.annotation.{ForyCase, ForyUnion}")
+            imports.add(
+                "org.apache.fory.annotation.{ForyCase, ForyUnion, ForyUnknownCase}"
+            )
             imports.add("org.apache.fory.`type`.union.UnknownCase")
             self.collect_union_imports(union, imports)
         for nested in message.nested_messages:

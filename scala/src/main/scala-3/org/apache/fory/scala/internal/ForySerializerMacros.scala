@@ -19,7 +19,7 @@
 
 package org.apache.fory.scala.internal
 
-import org.apache.fory.annotation.{ForyCase, ForyField, ForyStruct, ForyUnion}
+import org.apache.fory.annotation.{ForyCase, ForyField, ForyStruct, ForyUnion, ForyUnknownCase}
 import org.apache.fory.meta.{TypeDef => ForyTypeDef, TypeExtMeta}
 import org.apache.fory.resolver.TypeResolver
 import org.apache.fory.scala.ForySerializer
@@ -260,6 +260,9 @@ object ForySerializerMacros {
           .headOption
           .orElse(option.map(inner => wireTypeId(peelAnnotations(boxedIfPrimitive(inner))._1)))
           .orElse {
+            // The owning field supplies the union schema, so field TypeMeta uses
+            // UNION. TYPED_UNION/NAMED_UNION are reserved for root or dynamic Any
+            // values without static field schema.
             if hasAnnotation[ForyUnion](base.typeSymbol) then Some(Types.UNION) else None
           }
           .orElse {
@@ -753,7 +756,7 @@ object ForySerializerMacros {
 
     final case class CaseMeta(
         symbol: Symbol,
-        id: Int,
+        id: Option[Int],
         payloadType: TypeRepr,
         option: Boolean,
         trackingRef: Boolean,
@@ -785,9 +788,9 @@ object ForySerializerMacros {
       }
     }
 
-    def payloadMeta(child: Symbol, id: Int): (TypeRepr, String) = {
+    def payloadMeta(child: Symbol, unknown: Boolean): (TypeRepr, String) = {
       val params = child.primaryConstructor.paramSymss.flatten
-      if id == 0 then {
+      if unknown then {
         if params.size != 1 then {
           report.errorAndAbort(
             s"${child.fullName} is the unknown union case and must have (value: UnknownCase)")
@@ -814,11 +817,26 @@ object ForySerializerMacros {
     }
 
     val rawCases = owner.children.filter(_.flags.is(Flags.Case)).map { child =>
-      val id = annotationIntArg[ForyCase](child, "id").getOrElse {
-        report.errorAndAbort(s"${child.fullName} must be annotated with @ForyCase")
+      val unknown = hasAnnotation[ForyUnknownCase](child)
+      val id =
+        if unknown then {
+          if annotationIntArg[ForyCase](child, "id").nonEmpty then {
+            report.errorAndAbort(
+              s"${child.fullName} unknown case must use @ForyUnknownCase without @ForyCase")
+          }
+          if child.name != "Unknown" then {
+            report.errorAndAbort(s"${child.fullName} unknown case must be named Unknown")
+          }
+          None
+        } else {
+          Some(annotationIntArg[ForyCase](child, "id").getOrElse {
+            report.errorAndAbort(s"${child.fullName} must be annotated with @ForyCase")
+          })
+        }
+      if !unknown && id.exists(_ < 0) then {
+        report.errorAndAbort(s"${child.fullName} @ForyCase id must be non-negative")
       }
-      if id < 0 then report.errorAndAbort(s"${child.fullName} @ForyCase id must be >= 0")
-      val (tpe, payloadName) = payloadMeta(child, id)
+      val (tpe, payloadName) = payloadMeta(child, unknown)
       val refTracking = topLevelTypeRefTracking(tpe)
       CaseMeta(
         child,
@@ -828,7 +846,7 @@ object ForySerializerMacros {
         refTracking.getOrElse(false),
         refTracking.nonEmpty,
         payloadName,
-        id == 0,
+        unknown,
         -1)
     }
     var nextFieldIndex = 0
@@ -842,18 +860,22 @@ object ForySerializerMacros {
     }
     val knownCases = cases.filterNot(_.unknown)
     if cases.count(_.unknown) > 1 then {
-      report.errorAndAbort(s"${owner.fullName} must define exactly one @ForyCase(id = 0) unknown case")
+      report.errorAndAbort(s"${owner.fullName} must define exactly one @ForyUnknownCase unknown case")
     }
     if knownCases.isEmpty then {
       report.errorAndAbort(
         s"${owner.fullName} must define at least one non-Unknown case; Unknown is a forward-compatibility carrier and cannot be the default")
     }
-    if cases.filterNot(_.unknown).groupBy(_.id).exists(_._2.size > 1) then {
-      report.errorAndAbort(s"${owner.fullName} has duplicate @ForyCase ids")
-    }
     val unknown =
       cases.find(_.unknown).getOrElse(
-        report.errorAndAbort(s"${owner.fullName} must define @ForyCase(id = 0) unknown case"))
+        report.errorAndAbort(s"${owner.fullName} must define @ForyUnknownCase unknown case"))
+
+    def knownCaseId(unionCase: CaseMeta): Int =
+      unionCase.id.getOrElse(report.errorAndAbort("unknown union carrier has no schema case id"))
+
+    if knownCases.groupBy(knownCaseId).exists(_._2.size > 1) then {
+      report.errorAndAbort(s"${owner.fullName} has duplicate @ForyCase ids")
+    }
 
     def boxedIfPrimitive(tpe: TypeRepr): TypeRepr = {
       val (base, annotations) = peelAnnotations(tpe)
@@ -972,6 +994,9 @@ object ForySerializerMacros {
           .headOption
           .orElse(option.map(inner => wireTypeId(peelAnnotations(boxedIfPrimitive(inner))._1)))
           .orElse {
+            // The owning field supplies the union schema, so field TypeMeta uses
+            // UNION. TYPED_UNION/NAMED_UNION are reserved for root or dynamic Any
+            // values without static field schema.
             if hasAnnotation[ForyUnion](base.typeSymbol) then Some(Types.UNION) else None
           }
           .orElse {
@@ -1020,7 +1045,7 @@ object ForySerializerMacros {
           ${ Expr(Modifier.PRIVATE | Modifier.FINAL) },
           ${ Expr(owner.fullName.replace("$.", "$")) },
           true,
-          ${ Expr(unionCase.id) },
+          ${ Expr(knownCaseId(unionCase)) },
           ${ Expr(unionCase.option) },
           ${ Expr(unionCase.trackingRef) },
           ${ Expr(unionCase.hasTrackingRefMetadata) },
@@ -1097,7 +1122,7 @@ object ForySerializerMacros {
                     $writeContextExpr,
                     $caseFieldInfosExpr(${ Expr(unionCase.fieldIndex) }),
                     $payloadValue,
-                    ${ Expr(unionCase.id) })
+                    ${ Expr(knownCaseId(unionCase)) })
                 } else {
                   $next
                 }
@@ -1130,14 +1155,10 @@ object ForySerializerMacros {
         val payload = decodePayload(rawPayload, unionCase)
         val current = construct(unionCase, List(payload.asTerm))
         '{
-          if $caseIdExpr == ${ Expr(unionCase.id) } then $current else $next
+          if $caseIdExpr == ${ Expr(knownCaseId(unionCase)) } then $current else $next
         }
       }
-      '{
-        if $caseIdExpr == 0 then {
-          throw new IllegalStateException("Unknown union case id must be positive")
-        } else $dispatch
-      }
+      dispatch
     }
 
     def copyDispatch(
@@ -1168,9 +1189,13 @@ object ForySerializerMacros {
                 '{ $valueExpr.asInstanceOf[c] }.asTerm,
                 unionCase.payloadName).asExpr
             if unionCase.unknown then {
+              val unknownPayload =
+                payload.asExprOf[org.apache.fory.`type`.union.UnknownCase]
+              val copiedPayload =
+                '{ UnionSerializer.copyUnknownValue($copyContextExpr, $unknownPayload) }
               '{
                 if $valueExpr.isInstanceOf[c] then {
-                  ${ construct(unknown, List(payload.asTerm)) }
+                  ${ construct(unknown, List(copiedPayload.asTerm)) }
                 } else $next
               }
             } else {

@@ -78,6 +78,8 @@ impl UnknownCase {
 
 impl PartialEq for UnknownCase {
     fn eq(&self, other: &Self) -> bool {
+        // UnknownCase equality is carrier identity. The replay metadata controls
+        // wire preservation, but it is intentionally not structural equality.
         Arc::ptr_eq(&self.value, &other.value)
     }
 }
@@ -98,5 +100,43 @@ impl fmt::Debug for UnknownCase {
             .field("case_id", &self.case_id)
             .field("value_ptr", &value_ptr)
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UnknownCase;
+    use std::any::Any;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    use std::sync::Arc;
+
+    fn hash_of(value: &UnknownCase) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    #[test]
+    fn equality_uses_carrier_identity() {
+        let first = UnknownCase::new(7, String::from("future"));
+        let same_carrier = first.clone();
+        let same_content = UnknownCase::new(7, String::from("future"));
+
+        assert_eq!(first, same_carrier);
+        assert_eq!(hash_of(&first), hash_of(&same_carrier));
+        assert_ne!(first, same_content);
+    }
+
+    #[test]
+    fn replay_metadata_does_not_affect_identity() {
+        let value: Arc<dyn Any> = Arc::new(String::from("future"));
+        let first = UnknownCase::from_runtime(7, 21, value.clone());
+        let same_payload = UnknownCase::from_runtime(8, 5, value);
+
+        assert_eq!(first, same_payload);
+        assert_eq!(hash_of(&first), hash_of(&same_payload));
+        assert_eq!(first.case_id(), 7);
+        assert_eq!(same_payload.case_id(), 8);
     }
 }

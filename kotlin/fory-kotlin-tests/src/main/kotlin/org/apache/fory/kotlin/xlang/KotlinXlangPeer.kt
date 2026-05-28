@@ -34,6 +34,7 @@ import org.apache.fory.annotation.ForyCase
 import org.apache.fory.annotation.ForyField
 import org.apache.fory.annotation.ForyStruct
 import org.apache.fory.annotation.ForyUnion
+import org.apache.fory.annotation.ForyUnknownCase
 import org.apache.fory.annotation.Ref
 import org.apache.fory.exception.ForyException
 import org.apache.fory.kotlin.Fixed
@@ -143,11 +144,11 @@ public class KotlinMutableNode() {
 
 @ForyUnion
 public sealed class KotlinPet {
-  @ForyCase(id = 0) public data class Unknown(val value: UnknownCase) : KotlinPet()
+  @ForyUnknownCase public data class Unknown(val value: UnknownCase) : KotlinPet()
 
-  @ForyCase(id = 1) public data class User(val value: KotlinUser) : KotlinPet()
+  @ForyCase(id = 0) public data class User(val value: KotlinUser) : KotlinPet()
 
-  @ForyCase(id = 2) public data class Name(val value: String) : KotlinPet()
+  @ForyCase(id = 1) public data class Name(val value: String) : KotlinPet()
 }
 
 public fun main(args: Array<String>) {
@@ -374,6 +375,8 @@ private fun staticSerializerRoundTrip(dataFile: String) {
 
   val refFory = newRefFory()
   refFory.register<KotlinMutableNode>("kotlin", "KotlinMutableNode")
+  refFory.register<KotlinUser>("kotlin", "KotlinUser")
+  KotlinSerializers.registerUnion(refFory, KotlinPet::class.java, "kotlin", "KotlinPet")
   val node = KotlinMutableNode()
   node.id = "root"
   node.parent = node
@@ -386,6 +389,14 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   ) {
     "KotlinMutableNode did not load a static generated serializer"
   }
+  val unknownPayload = KotlinUser(id = 7u, name = "future", score = 11L)
+  val unknownPet = KotlinPet.Unknown(UnknownCase(99, unknownPayload))
+  val copiedUnknownPet = refFory.copy(unknownPet) as KotlinPet.Unknown
+  check(copiedUnknownPet.value !== unknownPet.value)
+  check(copiedUnknownPet.value.caseId() == 99)
+  val copiedUnknownPayload = copiedUnknownPet.value.downcast(KotlinUser::class.java)
+  check(copiedUnknownPayload == unknownPayload)
+  check(copiedUnknownPayload !== unknownPayload)
 
   val pet: KotlinPet = KotlinPet.User(response)
   val decodedPet = fory.deserialize(fory.serialize(pet), KotlinPet::class.java)

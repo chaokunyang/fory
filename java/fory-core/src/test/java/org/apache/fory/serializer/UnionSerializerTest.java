@@ -22,8 +22,8 @@ package org.apache.fory.serializer;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertNull;
-import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
 import java.util.ArrayList;
@@ -32,6 +32,9 @@ import java.util.List;
 import java.util.Map;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.memory.MemoryBuffer;
+import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.type.Types;
 import org.apache.fory.type.union.Union;
 import org.apache.fory.type.union.Union2;
 import org.apache.fory.type.union.Union3;
@@ -71,11 +74,76 @@ public class UnionSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testUnknownCaseIdZeroRejected() {
-    assertThrows(
-        IllegalArgumentException.class,
-        () -> UnionSerializer.writeUnknownValue(null, new UnknownCase(0, "reserved")));
-    assertThrows(IllegalArgumentException.class, () -> UnionSerializer.readUnknownValue(null, 0));
+  public void testUnknownCaseIdZeroPreserved() {
+    Fory fory = createXlangFory(true);
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> UnionSerializer.writeUnknownValue(context, new UnknownCase(0, "zero")));
+    assertEquals(buffer.readVarUInt32(), 0);
+    UnknownCase unknown =
+        withReadContext(fory, buffer, context -> UnionSerializer.readUnknownValue(context, 0));
+    assertEquals(unknown.caseId(), 0);
+    assertEquals(unknown.value(), "zero");
+  }
+
+  @Test
+  public void testCopyUnknownValueCopiesPayload() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(true)
+            .withRefTracking(true)
+            .withRefCopy(true)
+            .requireClassRegistration(true)
+            .build();
+    ArrayList<String> payload = new ArrayList<>();
+    payload.add("future");
+    UnknownCase unknown = UnknownCase.ofRuntime(7, Types.LIST, payload);
+
+    UnknownCase copied =
+        withCopyContext(fory, context -> UnionSerializer.copyUnknownValue(context, unknown));
+
+    assertNotSame(copied, unknown);
+    assertEquals(copied.caseId(), unknown.caseId());
+    assertEquals(copied.typeId(), unknown.typeId());
+    assertEquals(copied.value(), payload);
+    assertNotSame(copied.value(), payload);
+  }
+
+  @Test
+  public void testGenericUnionWireCaseIds() {
+    Fory fory = createXlangFory(true);
+    UnionSerializer serializer = new UnionSerializer(fory.getTypeResolver(), Union2.class);
+
+    Union text = writeReadUnion(fory, serializer, Union2.ofT1("hello"), 0);
+    assertTrue(text instanceof Union2);
+    assertEquals(text.getIndex(), 0);
+    assertEquals(text.getValue(), "hello");
+
+    Union number = writeReadUnion(fory, serializer, Union2.ofT2(100L), 1);
+    assertTrue(number instanceof Union2);
+    assertEquals(number.getIndex(), 1);
+    assertEquals(number.getValue(), 100L);
+  }
+
+  @Test
+  public void testCustomUnionWireCaseIds() {
+    Fory fory = createXlangFory(true);
+    UnionSerializer serializer = new UnionSerializer(fory.getTypeResolver(), SchemaUnion.class);
+    Union union = writeReadUnion(fory, serializer, new SchemaUnion(0, "hello", Types.STRING), 0);
+    assertTrue(union instanceof SchemaUnion);
+    assertEquals(union.getIndex(), 0);
+    assertEquals(union.getValue(), "hello");
+  }
+
+  private static Union writeReadUnion(
+      Fory fory, UnionSerializer serializer, Union value, int expectedCaseId) {
+    MemoryBuffer buffer = MemoryUtils.buffer(64);
+    writeSerializer(fory, serializer, buffer, value);
+    assertEquals(buffer.readVarUInt32(), expectedCaseId);
+    buffer.readerIndex(0);
+    return readSerializer(fory, serializer, buffer);
   }
 
   // Test struct classes with Union fields
@@ -86,6 +154,16 @@ public class UnionSerializerTest extends ForyTestBase {
 
     public StructWithUnion(Union union) {
       this.union = union;
+    }
+  }
+
+  public static class SchemaUnion extends Union {
+    public SchemaUnion(int caseId, Object value) {
+      super(caseId, value);
+    }
+
+    public SchemaUnion(int caseId, Object value, int typeId) {
+      super(caseId, value, typeId);
     }
   }
 

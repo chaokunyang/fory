@@ -81,10 +81,10 @@ def test_swift_generator_emits_nested_field_encoding_hints():
     }
 
     union Event [id=101] {
-        fixed uint64 deleted = 1;
-        list<fixed int32> many = 2;
-        map<fixed int32, string> fixed_keys = 3;
-        array<int32> dense = 4;
+        fixed uint64 deleted = 0;
+        list<fixed int32> many = 1;
+        map<fixed int32, string> fixed_keys = 2;
+        array<int32> dense = 3;
     }
     """
     content = generate_swift(source)
@@ -108,15 +108,15 @@ def test_swift_generator_emits_nested_field_encoding_hints():
     assert "@ArrayField(element: .int32())" in content
     assert "@MapField(key: .string, value: .array(element: .uint8))" in content
     assert "@ForyUnion" in content
-    assert "@ForyCase(id: 1, payload: .uint64(encoding: .fixed))" in content
+    assert "@ForyCase(id: 0, payload: .uint64(encoding: .fixed))" in content
     assert (
-        "@ForyCase(id: 2, payload: .list(element: .int32(encoding: .fixed)))" in content
+        "@ForyCase(id: 1, payload: .list(element: .int32(encoding: .fixed)))" in content
     )
     assert (
-        "@ForyCase(id: 3, payload: .map(key: .int32(encoding: .fixed), value: .string))"
+        "@ForyCase(id: 2, payload: .map(key: .int32(encoding: .fixed), value: .string))"
         in content
     )
-    assert "@ForyCase(id: 4, payload: .array(element: .int32()))" in content
+    assert "@ForyCase(id: 3, payload: .array(element: .int32()))" in content
 
 
 def test_swift_generator_emits_tagged_union_case_ids():
@@ -135,7 +135,7 @@ def test_swift_generator_emits_tagged_union_case_ids():
     content = generate_swift(source)
     assert "@ForyUnion" in content
     assert "public enum Animal: Equatable" in content
-    assert "@ForyCase(id: 0)" in content
+    assert "@ForyUnknownCase" in content
     assert "case unknown(UnknownCase)" in content
     assert "@ForyCase(id: 3)" in content
     assert "case node(Demo.Node)" in content

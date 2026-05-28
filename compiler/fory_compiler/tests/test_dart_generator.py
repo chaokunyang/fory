@@ -111,6 +111,10 @@ def test_dart_generator_keeps_union_serializers_direct_and_marks_union_types():
             Node node = 3;
             string note = 7;
         }
+
+        union Envelope [id=102] {
+            Animal pet = 0;
+        }
         """
     )
 
@@ -126,6 +130,8 @@ def test_dart_generator_keeps_union_serializers_direct_and_marks_union_types():
     assert "Animal buildValue(int caseId, Object? value) {" in file.content
     assert "if (caseId == 3) return Animal.node(value as Node);" in file.content
     assert "if (caseId == 7) return Animal.note(value as String);" in file.content
+    assert "type: Animal," in file.content
+    assert "typeId: TypeIds.union," in file.content
     assert "void write(" not in file.content
     assert "Animal read(" not in file.content
     assert (

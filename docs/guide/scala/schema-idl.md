@@ -130,20 +130,20 @@ IDL unions generate Scala 3 ADT enums with macro-derived serializers:
 ```scala
 package example
 
-import org.apache.fory.annotation.{ForyCase, ForyUnion, UInt32Type}
+import org.apache.fory.annotation.{ForyCase, ForyUnion, ForyUnknownCase, UInt32Type}
 import org.apache.fory.config.Int32Encoding
 import org.apache.fory.scala.ForySerializer
 import org.apache.fory.`type`.union.UnknownCase
 
 @ForyUnion
 enum SearchTarget derives ForySerializer {
-  @ForyCase(id = 0)
+  @ForyUnknownCase
   case Unknown(value: UnknownCase)
 
-  @ForyCase(id = 1)
+  @ForyCase(id = 0)
   case User(value: _root_.example.User)
 
-  @ForyCase(id = 2)
+  @ForyCase(id = 1)
   case FixedId(value: Long @UInt32Type(encoding = Int32Encoding.FIXED))
 }
 ```
@@ -153,12 +153,12 @@ packaged output keeps the case name and qualifies the payload type. If a target
 output mode cannot express a legal qualifier for a conflict, the IDL compiler
 appends `Case` to the generated case name.
 
-Schema-defined union cases must use positive IDs, and a typed union must
-declare at least one non-`Unknown` case. Case ID `0` is reserved for the Scala
-unknown-case carrier, whose payload stores the original positive case ID and
-the deserialized value. When a reader sees a newer positive case ID, it returns
-`Unknown(UnknownCase)` instead of failing solely because the case ID is not
-known locally.
+Schema-defined union cases use non-negative IDs, and a typed union must declare
+at least one non-`Unknown` case. The Scala unknown-case carrier is selected by
+`@ForyUnknownCase`, not by a schema case ID. Its payload stores the original case
+ID and the deserialized value. When a reader sees a newer case ID, it returns
+`Unknown(UnknownCase)` instead of failing solely because the case ID is not known
+locally.
 
 The macro writes the existing xlang union envelope directly. It does not
 allocate temporary Java `Union` carriers.

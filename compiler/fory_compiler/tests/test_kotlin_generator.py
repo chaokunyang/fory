@@ -57,9 +57,9 @@ def test_emits_models():
         }
 
         union SearchTarget [id=103] {
-            User user = 1;
-            string note = 2;
-            array<int8> bytes = 3;
+            User user = 0;
+            string note = 1;
+            array<int8> bytes = 2;
         }
         """
     )
@@ -85,9 +85,10 @@ def test_emits_models():
     union = files["org/example/demo/SearchTarget.kt"]
     assert "@ForyUnion" in union
     assert "public sealed class SearchTarget" in union
+    assert "@ForyUnknownCase" in union
     assert "public data class Unknown(" in union
     assert "public val value: UnknownCase" in union
-    assert "@ForyCase(id = 1)" in union
+    assert "@ForyCase(id = 0)" in union
     assert "public data class User(public val value: org.example.demo.User)" in union
     assert "import org.apache.fory.annotation.ArrayType" in union
     assert "public data class Bytes(public val value: @ArrayType ByteArray)" in union

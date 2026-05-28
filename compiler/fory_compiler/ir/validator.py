@@ -275,9 +275,9 @@ class SchemaValidator:
             case_numbers = {}
             case_names = {}
             for f in union.fields:
-                if f.number <= 0:
+                if f.number < 0:
                     self._error(
-                        f"Union case id {f.number} in {full_name} is reserved; use ids starting from 1",
+                        f"Union case id {f.number} in {full_name} must be non-negative",
                         f.location,
                     )
                 if f.number in case_numbers:

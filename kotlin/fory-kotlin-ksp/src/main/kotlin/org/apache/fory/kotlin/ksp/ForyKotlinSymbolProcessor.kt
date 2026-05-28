@@ -427,7 +427,33 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     var unknownCase: KotlinSourceUnionCase? = null
     val caseIds = hashSetOf<Int>()
     for (caseDeclaration in declaration.declarations.filterIsInstance<KSClassDeclaration>()) {
+      if (hasForyUnknownCase(caseDeclaration)) {
+        if (foryCaseId(caseDeclaration, reportMissing = false) != null) {
+          logger.error(
+            "Unknown Kotlin union case must use @ForyUnknownCase without @ForyCase",
+            caseDeclaration
+          )
+          return null
+        }
+        val parsed = parseUnionCase(caseDeclaration, null, unknown = true) ?: return null
+        if (unknownCase != null) {
+          logger.error(
+            "@ForyUnion ${declaration.qualifiedName!!.asString()} must declare exactly one @ForyUnknownCase",
+            caseDeclaration
+          )
+          return null
+        }
+        unknownCase = parsed
+        continue
+      }
       val caseId = foryCaseId(caseDeclaration, reportMissing = false) ?: continue
+      if (caseId < 0) {
+        logger.error(
+          "Schema Kotlin union @ForyCase ids must be non-negative",
+          caseDeclaration
+        )
+        return null
+      }
       if (!caseIds.add(caseId)) {
         logger.error(
           "Duplicate @ForyCase id $caseId in ${declaration.qualifiedName!!.asString()}",
@@ -436,19 +462,19 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         return null
       }
       val parsed = parseUnionCase(caseDeclaration, caseId) ?: return null
-      if (caseId == 0) {
-        unknownCase = parsed
-      } else {
-        cases.add(parsed)
-      }
+      cases.add(parsed)
     }
     for (caseDeclaration in declaration.declarations.filterIsInstance<KSClassDeclaration>()) {
       val isCompanionObject =
         caseDeclaration.classKind == ClassKind.OBJECT &&
           caseDeclaration.simpleName.asString() == "Companion"
-      if (!isCompanionObject && foryCaseId(caseDeclaration, reportMissing = false) == null) {
+      if (
+        !isCompanionObject &&
+          !hasForyUnknownCase(caseDeclaration) &&
+          foryCaseId(caseDeclaration, reportMissing = false) == null
+      ) {
         logger.error(
-          "Every direct Kotlin sealed union subclass must declare @ForyCase",
+          "Every direct Kotlin sealed union subclass must declare @ForyCase or @ForyUnknownCase",
           caseDeclaration
         )
         return null
@@ -457,7 +483,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     val unknown = unknownCase
     if (unknown == null) {
       logger.error(
-        "@ForyUnion ${declaration.qualifiedName!!.asString()} must declare one @ForyCase(id = 0) unknown-case carrier",
+        "@ForyUnion ${declaration.qualifiedName!!.asString()} must declare one @ForyUnknownCase unknown-case carrier",
         declaration
       )
       return null
@@ -483,14 +509,15 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
           KotlinSerializerVisibility.PUBLIC
         },
       unknownCase = unknown,
-      cases = cases.sortedBy { it.id },
+      cases = cases.sortedBy { it.knownId },
       originatingFiles = listOfNotNull(declaration.containingFile),
     )
   }
 
   private fun parseUnionCase(
     declaration: KSClassDeclaration,
-    caseId: Int,
+    caseId: Int?,
+    unknown: Boolean = false,
   ): KotlinSourceUnionCase? {
     val qualifiedName = declaration.qualifiedName?.asString()
     if (qualifiedName == null) {
@@ -511,7 +538,14 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     val parameters = primaryConstructor.parameters
     val propertiesByName = declaration.getAllProperties().associateBy { it.simpleName.asString() }
     val valueParameter =
-      if (caseId == 0) {
+      if (unknown) {
+        if (declaration.simpleName.asString() != "Unknown") {
+          logger.error(
+            "Unknown Kotlin union case must be named Unknown and use @ForyUnknownCase",
+            declaration
+          )
+          return null
+        }
         if (parameters.size != 1 || parameters[0].name?.asString() != "value") {
           logger.error(
             "Unknown Kotlin union case must have constructor parameter (value: UnknownCase)",
@@ -549,7 +583,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     }
     val arrayType = hasFieldAnnotation(valueProperty, ARRAY_TYPE)
     val valueType =
-      if (caseId == 0) {
+      if (unknown) {
         dynamicAnyNode(nullable = true)
       } else {
         valueParameter.type.resolve().let { parseType(it, valueProperty, arrayType = arrayType) }
@@ -591,6 +625,10 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     }
     logger.error("@ForyCase must declare id", declaration)
     return null
+  }
+
+  private fun hasForyUnknownCase(declaration: KSClassDeclaration): Boolean {
+    return declaration.annotations.any { isAnnotation(it, FORY_UNKNOWN_CASE) }
   }
 
   private fun writeR8Rules(union: KotlinSourceUnion) {
@@ -1012,6 +1050,9 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       )
     }
     if (hasDeclarationAnnotation(declaration, FORY_UNION)) {
+      // Leave the field TypeRef without typed-union metadata. The owning field
+      // supplies the union schema; TYPED_UNION/NAMED_UNION are root or dynamic Any
+      // type identities.
       return KotlinSourceTypeNode(
         rawClassExpression = "${qualifiedName}::class.java",
         kotlinTypeName = declaration.simpleName.asString(),
@@ -1671,6 +1712,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     const val FORY_STRUCT = "org.apache.fory.annotation.ForyStruct"
     const val FORY_UNION = "org.apache.fory.annotation.ForyUnion"
     const val FORY_CASE = "org.apache.fory.annotation.ForyCase"
+    const val FORY_UNKNOWN_CASE = "org.apache.fory.annotation.ForyUnknownCase"
     const val FORY_FIELD = "org.apache.fory.annotation.ForyField"
     const val ARRAY_TYPE = "org.apache.fory.annotation.ArrayType"
     const val NULLABLE = "org.apache.fory.annotation.Nullable"

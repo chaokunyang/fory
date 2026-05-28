@@ -131,7 +131,7 @@ struct FixedOverrideValue: Equatable {
 
 @ForyUnion
 enum FieldIdUnionSource: Equatable {
-  @ForyCase(id: 0)
+  @ForyUnknownCase
   case unknown(UnknownCase)
 
   @ForyCase(id: 3)
@@ -143,7 +143,7 @@ enum FieldIdUnionSource: Equatable {
 
 @ForyUnion
 enum FieldIdUnionTarget: Equatable {
-  @ForyCase(id: 0)
+  @ForyUnknownCase
   case unknown(UnknownCase)
 
   @ForyCase(id: 3)

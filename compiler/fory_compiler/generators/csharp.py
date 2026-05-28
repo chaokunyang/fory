@@ -714,7 +714,7 @@ class CSharpGenerator(BaseGenerator):
         lines.append(f"{ind}{self.indent_str}}}")
         lines.append("")
 
-        lines.append(f"{ind}{self.indent_str}[ForyCase(0)]")
+        lines.append(f"{ind}{self.indent_str}[ForyUnknownCase]")
         lines.append(
             f"{ind}{self.indent_str}public sealed partial record Unknown(UnknownCase Value) : {type_name};"
         )

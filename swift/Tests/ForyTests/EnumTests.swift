@@ -28,33 +28,33 @@ private enum Color: Equatable {
 
 @ForyUnion
 private enum StringOrLong: Equatable {
-    @ForyCase(id: 0)
+    @ForyUnknownCase
     case unknown(UnknownCase)
-    @ForyCase(id: 1)
+    @ForyCase(id: 0)
     case text(String)
-    @ForyCase(id: 2)
+    @ForyCase(id: 1)
     case number(Int64)
 }
 
 @ForyUnion
 private enum ForwardStringOrLong: Equatable {
-    @ForyCase(id: 0)
+    @ForyUnknownCase
     case unknown(UnknownCase)
-    @ForyCase(id: 1)
+    @ForyCase(id: 0)
     case text(String)
-    @ForyCase(id: 2)
+    @ForyCase(id: 1)
     case number(Int64)
 }
 
 @ForyUnion
 private enum FixedPayloadEvent: Equatable {
-    @ForyCase(id: 0)
+    @ForyUnknownCase
     case unknown(UnknownCase)
 
-    @ForyCase(id: 1)
+    @ForyCase(id: 0)
     case created(String)
 
-    @ForyCase(id: 2, payload: .uint64(encoding: .fixed))
+    @ForyCase(id: 1, payload: .uint64(encoding: .fixed))
     case deleted(UInt64)
 }
 
@@ -72,7 +72,7 @@ private struct StructWithUnion: Equatable {
 
 @ForyUnion
 private indirect enum Token: Equatable {
-    @ForyCase(id: 0)
+    @ForyUnknownCase
     case unknown(UnknownCase)
     case plus
     case number(Int64)
@@ -95,21 +95,21 @@ func unionDefaultUsesKnownCase() {
 }
 
 @Test
-func unionRejectsWireCaseZero() throws {
+func unionCaseIdZeroIsKnownCase() throws {
     let buffer = ByteBuffer()
-    buffer.writeVarUInt32(0)
+    let typeResolver = TypeResolver(trackRef: false)
+    let writeContext = WriteContext(buffer: buffer, typeResolver: typeResolver, trackRef: false)
+    try ForwardStringOrLong.text("zero").foryWriteData(writeContext, hasGenerics: false)
+    buffer.flip()
+    #expect(try buffer.readVarUInt32() == 0)
+    buffer.flip()
     let context = ReadContext(
         buffer: buffer,
-        typeResolver: TypeResolver(trackRef: false),
+        typeResolver: typeResolver,
         trackRef: false
     )
 
-    do {
-        _ = try ForwardStringOrLong.foryReadData(context)
-        Issue.record("expected case id 0 to be rejected")
-    } catch let error as ForyError {
-        #expect(String(describing: error).contains("Unknown union case id must be positive"))
-    }
+    #expect(try ForwardStringOrLong.foryReadData(context) == .text("zero"))
 }
 
 @Test

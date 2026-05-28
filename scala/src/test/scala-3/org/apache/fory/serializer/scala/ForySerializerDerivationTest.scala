@@ -25,6 +25,7 @@ import org.apache.fory.annotation.{
   ForyField,
   ForyStruct,
   ForyUnion,
+  ForyUnknownCase,
   Ref,
   UInt64Type,
   UInt8Type
@@ -122,25 +123,25 @@ object ForySerializerDerivationTest {
 
   @ForyUnion
   enum SearchTarget derives ForySerializer {
-    @ForyCase(id = 0)
+    @ForyUnknownCase
     case Unknown(value: UnknownCase)
 
-    @ForyCase(id = 1)
+    @ForyCase(id = 0)
     case User(value: SearchUser)
 
-    @ForyCase(id = 2)
+    @ForyCase(id = 1)
     case FixedId(value: Int)
 
-    @ForyCase(id = 3)
+    @ForyCase(id = 2)
     case OptionalUser(value: Option[SearchUser])
 
-    @ForyCase(id = 4)
+    @ForyCase(id = 3)
     case OptionalTagged(value: Option[Long @UInt64Type(encoding = Int64Encoding.TAGGED)])
   }
 
   @ForyUnion
   enum UnionCycle derives ForySerializer {
-    @ForyCase(id = 0)
+    @ForyUnknownCase
     case Unknown(value: UnknownCase)
 
     @ForyCase(id = 1)
@@ -367,7 +368,7 @@ class ForySerializerDerivationTest extends AnyWordSpec with Matchers {
 
     "reject union enum cases without ForyCase metadata" in {
       val errors = typeCheckErrors("""
-        import org.apache.fory.annotation.{ForyCase, ForyStruct, ForyUnion}
+        import org.apache.fory.annotation.{ForyCase, ForyStruct, ForyUnion, ForyUnknownCase}
         import org.apache.fory.scala.ForySerializer
 import org.apache.fory.scala.ForyScala
 
@@ -376,7 +377,7 @@ import org.apache.fory.scala.ForyScala
 
           @ForyUnion
           enum MissingCaseUnion derives ForySerializer {
-            @ForyCase(id = 0)
+            @ForyUnknownCase
           case Unknown(value: org.apache.fory.`type`.union.UnknownCase)
 
           case User(value: MissingCaseUser)
@@ -388,13 +389,13 @@ import org.apache.fory.scala.ForyScala
 
     "reject union enums with only unknown case" in {
       val errors = typeCheckErrors("""
-        import org.apache.fory.annotation.{ForyCase, ForyUnion}
+        import org.apache.fory.annotation.{ForyUnion, ForyUnknownCase}
         import org.apache.fory.scala.ForySerializer
         import org.apache.fory.`type`.union.UnknownCase
 
         @ForyUnion
         enum OnlyUnknown derives ForySerializer {
-          @ForyCase(id = 0)
+          @ForyUnknownCase
           case Unknown(value: UnknownCase)
         }
       """)
@@ -411,18 +412,22 @@ import org.apache.fory.scala.ForyScala
       decoded should not equal unknown
     }
 
-    "reject union wire case id zero" in {
+    "serialize derived union case id zero" in {
       val fory = xlangFory()
       val serializer = summon[ForySerializer[SearchTarget]].createSerializer(fory.getTypeResolver)
-      val buffer = MemoryBuffer.newHeapBuffer(8)
-      buffer.writeVarUInt32(0)
+      val value = SearchTarget.User(SearchUser("Ada"))
+      val buffer = MemoryBuffer.newHeapBuffer(64)
+      val writeContext = fory.getWriteContext
+      writeContext.prepare(buffer, null)
+      try serializer.write(writeContext, value)
+      finally writeContext.reset()
+      buffer.readerIndex(0)
+      buffer.readVarUInt32() shouldBe 0
+      buffer.readerIndex(0)
       val readContext = fory.getReadContext
       readContext.prepare(buffer, null, false)
-
-      val error = intercept[IllegalStateException] {
-        serializer.read(readContext)
-      }
-      error.getMessage should include("Unknown union case id must be positive")
+      try serializer.read(readContext) shouldBe value
+      finally readContext.reset()
     }
 
     "serialize and copy derived union Option payloads" in {
@@ -531,8 +536,11 @@ import org.apache.fory.scala.ForyScala
 
       val copied = fory.copy(unknown).asInstanceOf[SearchTarget.Unknown]
 
-      copied.value shouldBe theSameInstanceAs(unknown.value)
-      copied shouldEqual unknown
+      copied.value should not be theSameInstanceAs(unknown.value)
+      copied.value.caseId() shouldBe unknown.value.caseId()
+      copied.value.typeId() shouldBe unknown.value.typeId()
+      copied.value.value() shouldEqual unknown.value.value()
+      copied.value.value() should not be theSameInstanceAs(unknown.value.value())
     }
   }
 }

@@ -59,7 +59,7 @@ import org.apache.fory.util.Preconditions;
  * <p>The serialization format is:
  *
  * <ul>
- *   <li>Variant index (varuint32): identifies which alternative type is active
+ *   <li>Union case id (varuint32): identifier for the active alternative
  *   <li>Value data: the serialized value of the active alternative
  * </ul>
  *
@@ -148,8 +148,9 @@ public class UnionSerializer extends Serializer<Union> {
   @Override
   public void write(WriteContext writeContext, Union union) {
     MemoryBuffer buffer = writeContext.getBuffer();
-    int index = union.getIndex();
-    buffer.writeVarUInt32(index);
+    int caseId = union.getIndex();
+    checkWireCaseId(caseId);
+    buffer.writeVarUInt32(caseId);
 
     Object value = union.getValue();
     int valueTypeId = union.getValueTypeId();
@@ -161,22 +162,23 @@ public class UnionSerializer extends Serializer<Union> {
       }
       return;
     }
-    writeCaseValue(writeContext, value, valueTypeId, index);
+    writeCaseValue(writeContext, value, valueTypeId, caseId);
   }
 
   @Override
   public Union read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
-    int index = buffer.readVarUInt32();
+    int caseId = buffer.readVarUInt32();
+    checkWireCaseId(caseId);
     Object caseValue;
     int nextReadRefId = readContext.tryPreserveRefId();
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       // ref value or not-null value
-      TypeInfo declared = getFinalCaseTypeInfo(index);
+      TypeInfo declared = getFinalCaseTypeInfo(caseId);
       TypeInfo readTypeInfo = resolver.readTypeInfo(readContext, declared);
       if (declared != null) {
-        Serializer serializer = getCaseSerializer(index, readTypeInfo.getTypeId(), declared);
-        GenericType genericType = getCaseGenericType(index, readTypeInfo.getTypeId());
+        Serializer serializer = getCaseSerializer(caseId, readTypeInfo.getTypeId(), declared);
+        GenericType genericType = getCaseGenericType(caseId, readTypeInfo.getTypeId());
         caseValue = readCaseValue(readContext, serializer, genericType);
       } else {
         caseValue = Serializers.read(readContext, readTypeInfo.getSerializer());
@@ -185,7 +187,17 @@ public class UnionSerializer extends Serializer<Union> {
     } else {
       caseValue = readContext.getReadRef();
     }
-    return factory.apply(index, caseValue);
+    return factory.apply(caseId, caseValue);
+  }
+
+  private static void checkWireCaseId(int caseId) {
+    if (caseId < 0) {
+      throwInvalidWireCaseId(caseId);
+    }
+  }
+
+  private static void throwInvalidWireCaseId(int caseId) {
+    throw new IllegalArgumentException("Union wire case id must be non-negative: " + caseId);
   }
 
   @Override
@@ -202,6 +214,25 @@ public class UnionSerializer extends Serializer<Union> {
   public static Object copyCaseValue(
       CopyContext copyContext, FieldGroups.SerializationFieldInfo fieldInfo, Object value) {
     return StaticGeneratedStructSerializer.copyFieldValue(copyContext, value, fieldInfo);
+  }
+
+  /**
+   * Copies an unknown union carrier while preserving its original peer case and payload type ids.
+   */
+  public static UnknownCase copyUnknownValue(CopyContext copyContext, UnknownCase unknownCase) {
+    UnknownCase existing = copyContext.getCopyObject(unknownCase);
+    if (existing != null) {
+      return existing;
+    }
+    // Generated ADT unknown cases use UnknownCase identity semantics. Reusing the carrier would
+    // also reuse a mutable payload, so copy creates a fresh runtime carrier and copies only the
+    // polymorphic payload while keeping the wire metadata needed for reserialization.
+    Object value = unknownCase.value();
+    Object copiedValue = value == null ? null : copyContext.copyObject(value);
+    UnknownCase copied =
+        UnknownCase.ofRuntime(unknownCase.caseId(), unknownCase.typeId(), copiedValue);
+    copyContext.reference(unknownCase, copied);
+    return copied;
   }
 
   /**
@@ -277,7 +308,7 @@ public class UnionSerializer extends Serializer<Union> {
    */
   public static void writeUnknownValue(WriteContext writeContext, UnknownCase unknownCase) {
     int originalCaseId = unknownCase.caseId();
-    Preconditions.checkArgument(originalCaseId > 0, "Unknown union case id must be positive");
+    checkWireCaseId(originalCaseId);
     writeContext.getBuffer().writeVarUInt32(originalCaseId);
     UnknownCaseSerializer.writePayload(writeContext, unknownCase);
   }
@@ -286,7 +317,7 @@ public class UnionSerializer extends Serializer<Union> {
    * Reads an unknown union payload and captures the runtime metadata needed for reserialization.
    */
   public static UnknownCase readUnknownValue(ReadContext readContext, int caseId) {
-    Preconditions.checkArgument(caseId > 0, "Unknown union case id must be positive");
+    checkWireCaseId(caseId);
     return UnknownCaseSerializer.readPayload(readContext, caseId);
   }
 

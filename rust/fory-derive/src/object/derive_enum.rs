@@ -370,11 +370,6 @@ fn xlang_variant_branches(data_enum: &DataEnum, default_variant_value: u32) -> V
             if is_runtime_unknown_variant(v) {
                 return quote! {
                     Self::#ident(ref unknown) => {
-                        if unknown.case_id() == 0 {
-                            return ::std::result::Result::Err(::fory_core::error::Error::invalid_data(
-                                "Unknown union case id must be positive"
-                            ));
-                        }
                         context.writer.write_var_u32(unknown.case_id());
                         ::fory_core::serializer::unknown_case::write_payload(context, unknown)?;
                     }
@@ -689,7 +684,7 @@ fn xlang_union_case_id(data_enum: &DataEnum, idx: usize, variant: &syn::Variant)
         data_enum
             .variants
             .iter()
-            .take(idx + 1)
+            .take(idx)
             .filter(|variant| !is_runtime_unknown_variant(variant))
             .count() as u32
     })
@@ -725,13 +720,7 @@ fn xlang_variant_read_branches(
         .map(|(idx, v)| {
             let ident = &v.ident;
             if is_runtime_unknown_variant(v) {
-                return quote! {
-                    0 => {
-                        Err(::fory_core::error::Error::invalid_data(
-                            "Unknown union case id must be positive"
-                        ))
-                    }
-                };
+                return quote! {};
             }
 
             let mut tag_value = if is_union_compatible {
@@ -1072,22 +1061,9 @@ pub fn gen_read_data(data_enum: &DataEnum) -> TokenStream {
             }
         }
     };
-    let reject_reserved_xlang_case_zero = if is_union_compatible && has_data_variants {
-        quote! {
-            if ordinal == 0 {
-                return Err(::fory_core::error::Error::invalid_data(
-                    "Unknown union case id must be positive"
-                ));
-            }
-        }
-    } else {
-        quote! {}
-    };
-
     quote! {
         if context.is_xlang() {
             let ordinal = context.reader.read_var_u32()?;
-            #reject_reserved_xlang_case_zero
             match ordinal {
                 #(#xlang_variant_branches)*
                 #unknown_xlang_branch

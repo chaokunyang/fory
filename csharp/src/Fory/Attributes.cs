@@ -73,6 +73,14 @@ public sealed class ForyCaseAttribute : Attribute
 }
 
 /// <summary>
+/// Marks the runtime-owned unknown-case carrier inside a generated Fory union.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class)]
+public sealed class ForyUnknownCaseAttribute : Attribute
+{
+}
+
+/// <summary>
 /// Overrides generated serializer behavior for a field or property.
 /// </summary>
 [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]

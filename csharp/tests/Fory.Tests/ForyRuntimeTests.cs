@@ -294,13 +294,13 @@ public abstract partial record SourceGeneratedShape
     {
     }
 
-    [ForyCase(0)]
+    [ForyUnknownCase]
     public sealed partial record Unknown(UnknownCase Value) : SourceGeneratedShape;
 
-    [ForyCase(1)]
+    [ForyCase(0)]
     public sealed partial record Text(string Value) : SourceGeneratedShape;
 
-    [ForyCase(2, Type = typeof(S.Fixed<S.Int32>))]
+    [ForyCase(1, Type = typeof(S.Fixed<S.Int32>))]
     public sealed partial record Number(int Value) : SourceGeneratedShape;
 }
 
@@ -1462,6 +1462,10 @@ public sealed class ForyRuntimeTests
         {
             Shape = new SourceGeneratedShape.Number(42),
         };
+        SourceGeneratedUnionHolder knownZero = new()
+        {
+            Shape = new SourceGeneratedShape.Text("zero"),
+        };
         SourceGeneratedUnionHolder unknown = new()
         {
             Shape = new SourceGeneratedShape.Unknown(new UnknownCase(99, "future")),
@@ -1469,38 +1473,19 @@ public sealed class ForyRuntimeTests
 
         SourceGeneratedUnionHolder knownDecoded =
             fory.Deserialize<SourceGeneratedUnionHolder>(fory.Serialize(known));
+        SourceGeneratedUnionHolder knownZeroDecoded =
+            fory.Deserialize<SourceGeneratedUnionHolder>(fory.Serialize(knownZero));
         SourceGeneratedUnionHolder unknownDecoded =
             fory.Deserialize<SourceGeneratedUnionHolder>(fory.Serialize(unknown));
 
         SourceGeneratedShape.Number number = Assert.IsType<SourceGeneratedShape.Number>(knownDecoded.Shape);
         Assert.Equal(42, number.Value);
+        SourceGeneratedShape.Text text = Assert.IsType<SourceGeneratedShape.Text>(knownZeroDecoded.Shape);
+        Assert.Equal("zero", text.Value);
         SourceGeneratedShape.Unknown unknownCase =
             Assert.IsType<SourceGeneratedShape.Unknown>(unknownDecoded.Shape);
         Assert.Equal(99, unknownCase.Value.CaseId);
         Assert.Equal("future", unknownCase.Value.Value);
-
-        SourceGeneratedUnionHolder invalidUnknown = new()
-        {
-            Shape = new SourceGeneratedShape.Unknown(new UnknownCase(0, "reserved")),
-        };
-        InvalidDataException error =
-            Assert.Throws<InvalidDataException>(() => fory.Serialize(invalidUnknown));
-        Assert.Contains(
-            "unknown union case id must be positive",
-            error.Message,
-            StringComparison.Ordinal);
-
-        TypeResolver resolver = new();
-        Serializer<SourceGeneratedShape> serializer = resolver.GetSerializer<SourceGeneratedShape>();
-        ByteWriter writer = new();
-        writer.WriteVarUInt32(0);
-        ReadContext context = new(new ByteReader(writer.ToArray()), resolver, false, false);
-        InvalidDataException readError =
-            Assert.Throws<InvalidDataException>(() => serializer.ReadData(context));
-        Assert.Contains(
-            "unknown union case id must be positive",
-            readError.Message,
-            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -1519,6 +1504,36 @@ public sealed class ForyRuntimeTests
         Assert.Equal("hello", firstDecoded.Union.GetT1());
         Assert.Equal(1, secondDecoded.Union.Index);
         Assert.Equal(42L, secondDecoded.Union.GetT2());
+    }
+
+    [Fact]
+    public void Union2UsesZeroBasedWireCaseIds()
+    {
+        TypeResolver resolver = new();
+        Serializer<Union2<string, long>> serializer = resolver.GetSerializer<Union2<string, long>>();
+
+        ByteWriter firstWriter = new();
+        WriteContext firstWrite = new(firstWriter, resolver, trackRef: true);
+        serializer.WriteData(firstWrite, Union2<string, long>.OfT1("hello"), hasGenerics: false);
+        ByteReader firstReader = new(firstWriter.ToArray());
+        Assert.Equal(0u, firstReader.ReadVarUInt32());
+
+        Union2<string, long> firstDecoded =
+            serializer.ReadData(new ReadContext(new ByteReader(firstWriter.ToArray()), resolver, trackRef: true));
+        Assert.Equal(0, firstDecoded.Index);
+        Assert.Equal("hello", firstDecoded.GetT1());
+
+        ByteWriter secondWriter = new();
+        WriteContext secondWrite = new(secondWriter, resolver, trackRef: true);
+        serializer.WriteData(secondWrite, Union2<string, long>.OfT2(42L), hasGenerics: false);
+        ByteReader secondReader = new(secondWriter.ToArray());
+        Assert.Equal(1u, secondReader.ReadVarUInt32());
+
+        Union2<string, long> secondDecoded =
+            serializer.ReadData(new ReadContext(new ByteReader(secondWriter.ToArray()), resolver, trackRef: true));
+        Assert.Equal(1, secondDecoded.Index);
+        Assert.Equal(42L, secondDecoded.GetT2());
+
     }
 
     [Fact]

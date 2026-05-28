@@ -27,6 +27,7 @@ import org.apache.fory.annotation.{
   ForyField,
   ForyStruct,
   ForyUnion,
+  ForyUnknownCase,
   Int32Type,
   Int64Type,
   Ref,
@@ -348,10 +349,10 @@ final case class ScalaPeerUser(
 
 @ForyUnion
 enum ScalaPeerTarget derives ForySerializer {
-  @ForyCase(id = 0)
+  @ForyUnknownCase
   case Unknown(value: UnknownCase)
 
-  @ForyCase(id = 1)
+  @ForyCase(id = 0)
   case User(value: ScalaPeerUser)
 }
 

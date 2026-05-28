@@ -108,21 +108,22 @@ Union payloads use the same DSL through `@ForyCase(payload:)`:
 ```swift
 @ForyUnion
 enum Event {
-    @ForyCase(id: 0)
+    @ForyUnknownCase
     case unknown(UnknownCase)
 
-    @ForyCase(id: 1)
+    @ForyCase(id: 0)
     case created(String)
 
-    @ForyCase(id: 2, payload: .uint64(encoding: .fixed))
+    @ForyCase(id: 1, payload: .uint64(encoding: .fixed))
     case deleted(UInt64)
 }
 ```
 
-Every `@ForyUnion` must declare `@ForyCase(id: 0) case unknown(UnknownCase)` and
+Every `@ForyUnion` must declare `@ForyUnknownCase case unknown(UnknownCase)` and
 at least one non-`unknown` case. The unknown case is only the runtime
-forward-compatibility carrier, cannot be the default value source, and schema
-cases use positive IDs.
+forward-compatibility carrier and cannot be the default value source. It is
+omitted from the schema case table because the marker only selects the carrier
+and does not add a schema entry. Schema cases use non-negative IDs.
 
 ## Model Macro Requirements
 

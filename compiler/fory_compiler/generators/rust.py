@@ -376,7 +376,7 @@ class RustGenerator(BaseGenerator):
                 derives.append(trait)
         lines.append(f"#[derive({', '.join(derives)})]")
         lines.append(f"pub enum {union.name} {{")
-        lines.append("    #[fory(id = 0)]")
+        lines.append("    #[fory(unknown)]")
         lines.append("    Unknown(::fory::UnknownCase),")
 
         for index, field in enumerate(union.fields):

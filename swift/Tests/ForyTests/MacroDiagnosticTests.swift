@@ -26,6 +26,7 @@ private func foryMacros() -> [String: Macro.Type] {
         "ForyUnion": ForyUnionMacro.self,
         "ForyField": ForyFieldMacro.self,
         "ForyCase": ForyCaseMacro.self,
+        "ForyUnknownCase": ForyUnknownCaseMacro.self,
         "ListField": ListFieldMacro.self,
         "ArrayField": ArrayFieldMacro.self,
         "SetField": SetFieldMacro.self,
@@ -161,7 +162,7 @@ func unionPayloadHintsMustMatchPayloadType() {
         """
         @ForyUnion
         enum BadUnion {
-            @ForyCase(id: 0)
+            @ForyUnknownCase
             case unknown(UnknownCase)
             @ForyCase(id: 1, payload: .uint64(encoding: .fixed))
             case deleted(UInt32)
@@ -194,7 +195,7 @@ func unionRequiresUnknownCarrier() {
             case dog(Dog)
         }
         """,
-        message: "@ForyUnion requires @ForyCase(id: 0) unknown(UnknownCase)"
+        message: "@ForyUnion requires @ForyUnknownCase case unknown(UnknownCase)"
     )
 }
 
@@ -204,7 +205,7 @@ func unionRequiresRealCaseBeyondUnknown() {
         """
         @ForyUnion
         enum OnlyUnknown {
-            @ForyCase(id: 0)
+            @ForyUnknownCase
             case unknown(UnknownCase)
         }
         """,
@@ -227,7 +228,7 @@ func unionRejectsUnknownCaseLookalike() {
         }
         @ForyUnion
         enum BadUnion {
-            @ForyCase(id: 0)
+            @ForyUnknownCase
             case unknown(Local.UnknownCase)
             @ForyCase(id: 1)
             case dog(Dog)
@@ -243,19 +244,19 @@ func unionRejectsUnknownCaseLookalike() {
             case dog(Dog)
         }
         """,
-        message: "@ForyUnion case id 0 is reserved for unknown(UnknownCase)"
+        message: "@ForyUnion unknown case must be @ForyUnknownCase case unknown(UnknownCase)"
     )
 }
 
 @Test
-func unionRejectsReservedZeroCase() {
+func unionRejectsUnknownMarkerWithWrongPayload() {
     assertForyDiagnostic(
         """
         @ForyUnion
         enum BadUnion {
+            @ForyUnknownCase
+            case unknown(String)
             @ForyCase(id: 0)
-            case unknown(String)
-            @ForyCase(id: 1)
             case dog(Dog)
         }
         """,
@@ -266,12 +267,12 @@ func unionRejectsReservedZeroCase() {
             case dog(Dog)
         }
         """,
-        message: "@ForyUnion case id 0 is reserved for unknown(UnknownCase)"
+        message: "@ForyUnion unknown case must be @ForyUnknownCase case unknown(UnknownCase)"
     )
 }
 
 @Test
-func unionUnknownRequiresExplicitZeroCaseId() {
+func unionUnknownRequiresMarker() {
     assertForyDiagnostic(
         """
         @ForyUnion
@@ -288,6 +289,6 @@ func unionUnknownRequiresExplicitZeroCaseId() {
             case dog(Dog)
         }
         """,
-        message: "@ForyUnion unknown case must declare @ForyCase(id: 0)"
+        message: "@ForyUnion requires @ForyUnknownCase case unknown(UnknownCase)"
     )
 }

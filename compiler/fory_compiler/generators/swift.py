@@ -975,7 +975,7 @@ class SwiftGenerator(BaseGenerator):
         )
         lines.append(f"{ind}public enum {type_name}{conformances} {{")
         lineage = parent_stack or []
-        lines.append(f"{ind}{self.indent_str}@ForyCase(id: 0)")
+        lines.append(f"{ind}{self.indent_str}@ForyUnknownCase")
         lines.append(f"{ind}{self.indent_str}case unknown(UnknownCase)")
         lines.append("")
         for field in union.fields:

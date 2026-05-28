@@ -272,6 +272,7 @@ class KotlinGenerator(BaseGenerator):
         imports = {
             "org.apache.fory.annotation.ForyCase",
             "org.apache.fory.annotation.ForyUnion",
+            "org.apache.fory.annotation.ForyUnknownCase",
             "org.apache.fory.type.union.UnknownCase",
         }
         self.collect_union_imports(union, imports)
@@ -344,7 +345,7 @@ class KotlinGenerator(BaseGenerator):
     def generate_union(self, union: Union, parent_stack: List[Message]) -> List[str]:
         union_name = self.type_name(union, parent_stack)
         lines = ["@ForyUnion", f"public sealed class {union_name} {{"]
-        lines.append("    @ForyCase(id = 0)")
+        lines.append("    @ForyUnknownCase")
         lines.append("    public data class Unknown(")
         lines.append("        public val value: UnknownCase,")
         lines.append(f"    ) : {union_name}()")

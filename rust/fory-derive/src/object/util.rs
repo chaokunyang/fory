@@ -890,6 +890,25 @@ pub(crate) fn enum_variant_id(variant: &syn::Variant) -> Option<u32> {
     None
 }
 
+pub(crate) fn has_fory_unknown_attr(variant: &syn::Variant) -> bool {
+    variant.attrs.iter().any(|attr| {
+        if !attr.path().is_ident("fory") {
+            return false;
+        }
+        let mut is_unknown = false;
+        let _ = attr.parse_nested_meta(|meta| {
+            if meta.path.is_ident("unknown") {
+                is_unknown = true;
+            } else if !meta.input.is_empty() {
+                let value = meta.value()?;
+                let _ = value.parse::<syn::Expr>()?;
+            }
+            Ok(())
+        });
+        is_unknown
+    })
+}
+
 pub(crate) fn is_unknown_case_type(ty: &Type) -> bool {
     let Type::Path(type_path) = ty else {
         return false;
@@ -910,10 +929,12 @@ pub(crate) fn is_unknown_case_type(ty: &Type) -> bool {
     )
 }
 
-// The generated typed-ADT forward-compatibility carrier is exactly
-// `#[fory(id = 0)] Unknown(UnknownCase)`. The same payload at another id is a
-// normal schema case; id 0 with any other name or payload is invalid.
+// The typed-ADT forward-compatibility carrier is selected by a runtime marker,
+// not by a schema case id. Known schema cases may still use id 0.
 pub(crate) fn is_runtime_unknown_variant(variant: &syn::Variant) -> bool {
+    if !has_fory_unknown_attr(variant) {
+        return false;
+    }
     if variant.ident != "Unknown" {
         return false;
     }
@@ -923,11 +944,7 @@ pub(crate) fn is_runtime_unknown_variant(variant: &syn::Variant) -> bool {
     if fields.unnamed.len() != 1 || !is_unknown_case_type(&fields.unnamed[0].ty) {
         return false;
     }
-    enum_variant_id(variant) == Some(0)
-}
-
-pub(crate) fn is_reserved_zero_variant(variant: &syn::Variant) -> bool {
-    enum_variant_id(variant) == Some(0) && !is_runtime_unknown_variant(variant)
+    enum_variant_id(variant).is_none()
 }
 
 pub(crate) fn is_default_value_variant(variant: &syn::Variant) -> bool {

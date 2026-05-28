@@ -424,7 +424,7 @@ fn test_enum_variant_type_change() {
     // Version 1: Different variant types
     #[derive(ForyUnion, Debug, PartialEq)]
     enum StatusV1 {
-        #[fory(id = 0)]
+        #[fory(unknown)]
         Unknown(fory_core::UnknownCase),
         #[fory(default)]
         Active, // Unit variant
@@ -437,7 +437,7 @@ fn test_enum_variant_type_change() {
     // Version 2: Change variant types
     #[derive(ForyUnion, Debug, PartialEq)]
     enum StatusV2 {
-        #[fory(id = 0)]
+        #[fory(unknown)]
         Unknown(fory_core::UnknownCase),
         #[fory(default)]
         Active {
@@ -453,7 +453,7 @@ fn test_enum_variant_type_change() {
     // Version 3: More type changes
     #[derive(ForyUnion, Debug, PartialEq)]
     enum StatusV3 {
-        #[fory(id = 0)]
+        #[fory(unknown)]
         Unknown(fory_core::UnknownCase),
         #[fory(default)]
         Active, // Named -> Unit
@@ -538,7 +538,7 @@ fn test_struct_with_enum_field_evolution() {
     // Version 1: Struct with enum field
     #[derive(ForyUnion, Debug, PartialEq)]
     enum StateV1 {
-        #[fory(id = 0)]
+        #[fory(unknown)]
         Unknown(fory_core::UnknownCase),
         #[fory(default)]
         Init,
@@ -557,7 +557,7 @@ fn test_struct_with_enum_field_evolution() {
     // Version 2: Enum evolved with new fields and variant
     #[derive(ForyUnion, Debug, PartialEq)]
     enum StateV2 {
-        #[fory(id = 0)]
+        #[fory(unknown)]
         Unknown(fory_core::UnknownCase),
         #[fory(default)]
         Init,
@@ -582,7 +582,7 @@ fn test_struct_with_enum_field_evolution() {
     // Version 3: Enum variant type changed
     #[derive(ForyUnion, Debug, PartialEq)]
     enum StateV3 {
-        #[fory(id = 0)]
+        #[fory(unknown)]
         Unknown(fory_core::UnknownCase),
         #[fory(default)]
         Init,

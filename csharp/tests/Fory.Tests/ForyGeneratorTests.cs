@@ -46,10 +46,10 @@ public sealed class ForyGeneratorTests
                 {
                 }
 
-                [ForyCase(0)]
+                [ForyUnknownCase]
                 public sealed partial record Unknown(UnknownCase Value) : Choice;
 
-                [ForyCase(1)]
+                [ForyCase(0)]
                 public sealed partial record Text(string Value) : Choice;
             }
 
@@ -110,7 +110,7 @@ public sealed class ForyGeneratorTests
                 {
                 }
 
-                [ForyCase(0)]
+                [ForyUnknownCase]
                 public sealed partial record Unknown(UnknownCase Value) : OnlyUnknown;
             }
             """;

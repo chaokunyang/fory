@@ -22,8 +22,8 @@ use fory_core::serializer::{ForyDefault, Serializer};
 use fory_core::type_id::TypeId;
 use fory_core::util::murmurhash3_x64_128;
 use fory_core::{read_data, write_data, BFloat16, Date, Decimal, Float16, Fory, Timestamp};
-use fory_core::{ReadContext, RefMode, WriteContext};
-use fory_derive::{ForyEnum, ForyStruct};
+use fory_core::{ReadContext, WriteContext};
+use fory_derive::{ForyEnum, ForyStruct, ForyUnion};
 use num_bigint::BigInt;
 use std::collections::{HashMap, HashSet};
 use std::{fs, vec};
@@ -1893,96 +1893,34 @@ fn test_nullable_field_compatible_null() {
 // Union Xlang Tests - Rust enum <-> Java Union2
 // ============================================================================
 
-/// Rust peer for Java's generic Union2<String, Long> wire model.
+/// Rust typed ADT union that matches Java Union2<String, Long> as a struct field.
 #[allow(dead_code)]
-#[derive(Debug, PartialEq)]
-enum JavaUnion2StringLong {
+#[derive(ForyUnion, Debug, PartialEq)]
+enum StringOrLong {
+    #[fory(unknown)]
+    Unknown(fory_core::UnknownCase),
+    #[fory(id = 0, default)]
     Str(String),
+    #[fory(id = 1)]
     Long(i64),
 }
 
-impl Default for JavaUnion2StringLong {
+impl Default for StringOrLong {
     fn default() -> Self {
-        JavaUnion2StringLong::Str(String::default())
-    }
-}
-
-impl ForyDefault for JavaUnion2StringLong {
-    fn fory_default() -> Self {
-        Self::default()
-    }
-}
-
-impl Serializer for JavaUnion2StringLong {
-    fn fory_write_data(&self, context: &mut WriteContext) -> Result<(), Error> {
-        // Java Union2 uses zero-based case indexes. Keep this xlang fixture separate
-        // from typed ADT unions, where case id 0 is reserved for Unknown(UnknownCase).
-        match self {
-            JavaUnion2StringLong::Str(value) => {
-                context.writer.write_var_u32(0);
-                value.fory_write(context, RefMode::Tracking, true, false)
-            }
-            JavaUnion2StringLong::Long(value) => {
-                context.writer.write_var_u32(1);
-                value.fory_write(context, RefMode::Tracking, true, false)
-            }
-        }
-    }
-
-    fn fory_read_data(context: &mut ReadContext) -> Result<Self, Error>
-    where
-        Self: Sized + ForyDefault,
-    {
-        match context.reader.read_var_u32()? {
-            0 => Ok(JavaUnion2StringLong::Str(String::fory_read(
-                context,
-                RefMode::Tracking,
-                true,
-            )?)),
-            1 => Ok(JavaUnion2StringLong::Long(i64::fory_read(
-                context,
-                RefMode::Tracking,
-                true,
-            )?)),
-            case_id => Err(Error::invalid_data(format!(
-                "Unknown Java Union2 case id {case_id}"
-            ))),
-        }
-    }
-
-    fn fory_get_type_id(_: &TypeResolver) -> Result<TypeId, Error>
-    where
-        Self: Sized,
-    {
-        Ok(TypeId::UNION)
-    }
-
-    fn fory_type_id_dyn(&self, _: &TypeResolver) -> Result<TypeId, Error> {
-        Ok(TypeId::UNION)
-    }
-
-    fn fory_static_type_id() -> TypeId
-    where
-        Self: Sized,
-    {
-        TypeId::UNION
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+        StringOrLong::Str(String::default())
     }
 }
 
 /// Struct containing a Union field, matches Java StructWithUnion2
 #[derive(ForyStruct, Debug, PartialEq)]
 struct StructWithUnion2 {
-    union: JavaUnion2StringLong,
+    union: StringOrLong,
 }
 
-/// Test cross-language Union serialization between the Rust peer and Java Union2.
+/// Test cross-language Union serialization between Rust typed ADT and Java Union2.
 ///
-/// This uses the built-in UNION field wire model: the owning struct field carries
-/// null/ref metadata, and the union payload starts with Java's zero-based case id.
+/// The struct field owner supplies the union schema, so field metadata stays the
+/// generic UNION type and the payload starts with Java's zero-based case id.
 #[test]
 #[ignore]
 fn test_union_xlang() {
@@ -1990,21 +1928,18 @@ fn test_union_xlang() {
     let bytes = fs::read(&data_file_path).unwrap();
 
     let mut fory = Fory::builder().compatible(true).xlang(true).build();
-    // Only the owning struct is registered; JavaUnion2StringLong maps to the
-    // built-in UNION field type and has no standalone type metadata.
+    // Only the owning struct is registered. TYPED_UNION is for dynamic values;
+    // a statically typed union field uses the generic UNION field metadata.
     fory.register::<StructWithUnion2>(301).unwrap();
 
-    // Read struct1 with String value (index 0)
+    // Read struct1 with String value.
     let mut reader = Reader::new(bytes.as_slice());
     let struct1: StructWithUnion2 = fory.deserialize_from(&mut reader).unwrap();
-    assert_eq!(
-        struct1.union,
-        JavaUnion2StringLong::Str("hello".to_string())
-    );
+    assert_eq!(struct1.union, StringOrLong::Str("hello".to_string()));
 
-    // Read struct2 with Long value (index 1)
+    // Read struct2 with Long value.
     let struct2: StructWithUnion2 = fory.deserialize_from(&mut reader).unwrap();
-    assert_eq!(struct2.union, JavaUnion2StringLong::Long(42));
+    assert_eq!(struct2.union, StringOrLong::Long(42));
 
     // Serialize back
     let mut buf = Vec::new();

@@ -66,7 +66,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor InvalidUnionType = new(
         id: "FORY005",
         title: "Invalid Fory union type",
-        messageFormat: "Class '{0}' must declare nested [ForyCase] case types for [ForyUnion]",
+        messageFormat: "Class '{0}' must declare nested [ForyUnknownCase] and [ForyCase] case types for [ForyUnion]",
         category: "Fory",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -714,11 +714,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        return nullable ? global::Apache.Fory.RefMode.NullOnly : global::Apache.Fory.RefMode.None;");
         sb.AppendLine("    }");
         sb.AppendLine();
-        foreach (UnionCaseModel unionCase in model.UnionCases.OrderBy(c => c.CaseId))
+        foreach (UnionCaseModel unionCase in KnownUnionCases(model))
         {
             if (unionCase.ValueMember is { HasSchemaType: true } member)
             {
-                EmitUnionCaseSerializer(sb, unionCase.CaseId, member);
+                EmitUnionCaseSerializer(sb, unionCase.KnownCaseId, member);
             }
         }
 
@@ -733,29 +733,27 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        switch (value)");
         sb.AppendLine("        {");
-        UnionCaseModel? unknownCase = null;
-        foreach (UnionCaseModel unionCase in model.UnionCases.OrderBy(c => c.CaseId))
+        UnionCaseModel? unknownCase = model.UnionCases.FirstOrDefault(c => c.IsUnknown);
+        if (unknownCase is not null)
         {
-            if (unionCase.IsUnknown)
-            {
-                unknownCase = unionCase;
-                sb.AppendLine($"            case {unionCase.TypeName} __foryCase:");
-                sb.AppendLine("            {");
-                sb.AppendLine("                if (__foryCase.Value.CaseId <= 0)");
-                sb.AppendLine("                {");
-                sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"unknown union case id must be positive: {__foryCase.Value.CaseId}\");");
-                sb.AppendLine("                }");
-                sb.AppendLine();
-                sb.AppendLine("                context.Writer.WriteVarUInt32((uint)__foryCase.Value.CaseId);");
-                sb.AppendLine("                global::Apache.Fory.UnknownCaseSerializer.WritePayload(context, __foryCase.Value);");
-                sb.AppendLine("                return;");
-                sb.AppendLine("            }");
-                continue;
-            }
+            sb.AppendLine($"            case {unknownCase.TypeName} __foryCase:");
+            sb.AppendLine("            {");
+            sb.AppendLine("                if (__foryCase.Value.CaseId < 0)");
+            sb.AppendLine("                {");
+            sb.AppendLine("                    throw new global::Apache.Fory.InvalidDataException($\"unknown union case id must be non-negative: {__foryCase.Value.CaseId}\");");
+            sb.AppendLine("                }");
+            sb.AppendLine();
+            sb.AppendLine("                context.Writer.WriteVarUInt32((uint)__foryCase.Value.CaseId);");
+            sb.AppendLine("                global::Apache.Fory.UnknownCaseSerializer.WritePayload(context, __foryCase.Value);");
+            sb.AppendLine("                return;");
+            sb.AppendLine("            }");
+        }
 
+        foreach (UnionCaseModel unionCase in KnownUnionCases(model))
+        {
             sb.AppendLine($"            case {unionCase.TypeName} __foryCase:");
             sb.AppendLine("            {");
-            sb.AppendLine($"                context.Writer.WriteVarUInt32({unionCase.CaseId}u);");
+            sb.AppendLine($"                context.Writer.WriteVarUInt32({unionCase.KnownCaseId}u);");
             EmitWriteUnionCasePayload(sb, unionCase, "__foryCase.Value", 4);
             sb.AppendLine("                return;");
             sb.AppendLine("            }");
@@ -777,17 +775,11 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         sb.AppendLine("        int caseId = (int)rawCaseId;");
         sb.AppendLine("        switch (caseId)");
         sb.AppendLine("        {");
-        sb.AppendLine("            case 0:");
-        sb.AppendLine("                throw new global::Apache.Fory.InvalidDataException(\"unknown union case id must be positive\");");
-        foreach (UnionCaseModel unionCase in model.UnionCases.OrderBy(c => c.CaseId))
+        foreach (UnionCaseModel unionCase in KnownUnionCases(model))
         {
-            if (unionCase.IsUnknown)
-            {
-                continue;
-            }
-
-            string valueVar = $"__foryCaseValue{unionCase.CaseId}";
-            sb.AppendLine($"            case {unionCase.CaseId}:");
+            int caseId = unionCase.KnownCaseId;
+            string valueVar = $"__foryCaseValue{caseId}";
+            sb.AppendLine($"            case {caseId}:");
             sb.AppendLine("            {");
             EmitReadUnionCasePayload(sb, unionCase, valueVar, 4);
             sb.AppendLine($"                return new {unionCase.TypeName}({valueVar});");
@@ -866,7 +858,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine(
-            $"{indent}__ForyCaseSerializer{unionCase.CaseId}.Instance.Write(context, {valueExpr}, {refModeExpr}, false, false);");
+            $"{indent}__ForyCaseSerializer{unionCase.KnownCaseId}.Instance.Write(context, {valueExpr}, {refModeExpr}, false, false);");
     }
 
     private static void EmitReadUnionCasePayload(
@@ -895,7 +887,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine(
-            $"{indent}{member.TypeName} {valueVar} = __ForyCaseSerializer{unionCase.CaseId}.Instance.Read(context, {refModeExpr}, false);");
+            $"{indent}{member.TypeName} {valueVar} = __ForyCaseSerializer{unionCase.KnownCaseId}.Instance.Read(context, {refModeExpr}, false);");
     }
 
     private static void EmitWriteUnionPayload(
@@ -2647,8 +2639,46 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         HashSet<int> caseIds = [];
         foreach (INamedTypeSymbol caseType in unionType.GetTypeMembers())
         {
+            bool isUnknown = HasForyUnknownCase(caseType);
             if (!TryGetForyCase(caseType, diagnostics, out int caseId, out SchemaTypeModel? schemaType))
             {
+                if (isUnknown)
+                {
+                    string unknownCaseTypeName = caseType.ToDisplayString(FullNameFormat);
+                    if (!SymbolEqualityComparer.Default.Equals(caseType.BaseType, unionType))
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            InvalidUnionCase,
+                            caseType.Locations.FirstOrDefault(),
+                            unknownCaseTypeName,
+                            "unknown case type must directly derive from the annotated union root"));
+                        continue;
+                    }
+
+                    if (!string.Equals(caseType.Name, "Unknown", StringComparison.Ordinal) ||
+                        !HasUnknownCaseValueProperty(caseType))
+                    {
+                        diagnostics.Add(Diagnostic.Create(
+                            InvalidUnionCase,
+                            caseType.Locations.FirstOrDefault(),
+                            unknownCaseTypeName,
+                            "unknown case must be named Unknown and expose Value:UnknownCase"));
+                        continue;
+                    }
+
+                    cases.Add(new UnionCaseModel(null, unknownCaseTypeName, isUnknown: true, valueMember: null));
+                }
+
+                continue;
+            }
+
+            if (isUnknown)
+            {
+                diagnostics.Add(Diagnostic.Create(
+                    InvalidUnionCase,
+                    caseType.Locations.FirstOrDefault(),
+                    caseType.ToDisplayString(FullNameFormat),
+                    "unknown case must use [ForyUnknownCase] without [ForyCase]"));
                 continue;
             }
 
@@ -2673,22 +2703,6 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             }
 
             string caseTypeName = caseType.ToDisplayString(FullNameFormat);
-            if (caseId == 0)
-            {
-                if (!HasUnknownCaseValueProperty(caseType))
-                {
-                    diagnostics.Add(Diagnostic.Create(
-                        InvalidUnionCase,
-                        caseType.Locations.FirstOrDefault(),
-                        caseTypeName,
-                        "case id 0 must expose Value:UnknownCase"));
-                    continue;
-                }
-
-                cases.Add(new UnionCaseModel(caseId, caseTypeName, isUnknown: true, valueMember: null));
-                continue;
-            }
-
             IPropertySymbol? valueProperty = FindProperty(caseType, "Value");
             if (valueProperty is null)
             {
@@ -2721,13 +2735,21 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             cases.Add(new UnionCaseModel(caseId, caseTypeName, isUnknown: false, valueMember));
         }
 
-        if (!cases.Any(c => c.IsUnknown))
+        if (cases.Count(c => c.IsUnknown) > 1)
         {
             diagnostics.Add(Diagnostic.Create(
                 InvalidUnionCase,
                 unionType.Locations.FirstOrDefault(),
                 unionType.ToDisplayString(FullNameFormat),
-                "union must declare [ForyCase(0)] Unknown"));
+                "union must declare exactly one [ForyUnknownCase] Unknown"));
+        }
+        else if (!cases.Any(c => c.IsUnknown))
+        {
+            diagnostics.Add(Diagnostic.Create(
+                InvalidUnionCase,
+                unionType.Locations.FirstOrDefault(),
+                unionType.ToDisplayString(FullNameFormat),
+                "union must declare [ForyUnknownCase] Unknown"));
         }
         else if (!cases.Any(c => !c.IsUnknown))
         {
@@ -2738,7 +2760,16 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
                 "union must declare at least one non-Unknown case; Unknown is a forward-compatibility carrier and cannot be the default"));
         }
 
-        return cases.OrderBy(c => c.CaseId).ToImmutableArray();
+        return cases
+            .OrderBy(c => c.CaseId ?? -1)
+            .ToImmutableArray();
+    }
+
+    private static IEnumerable<UnionCaseModel> KnownUnionCases(TypeModel model)
+    {
+        return model.UnionCases
+            .Where(c => !c.IsUnknown)
+            .OrderBy(c => c.KnownCaseId);
     }
 
     private static bool TryGetForyCase(
@@ -2802,6 +2833,20 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
         {
             caseId = id;
             return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasForyUnknownCase(INamedTypeSymbol caseType)
+    {
+        foreach (AttributeData attribute in caseType.GetAttributes())
+        {
+            string? attrName = attribute.AttributeClass?.ToDisplayString();
+            if (string.Equals(attrName, "Apache.Fory.ForyUnknownCaseAttribute", StringComparison.Ordinal))
+            {
+                return true;
+            }
         }
 
         return false;
@@ -3062,6 +3107,9 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
         if (IsUnionType(unwrapped))
         {
+            // The field owner supplies the union schema, so static union fields
+            // must use UNION. TYPED_UNION/NAMED_UNION are root or dynamic Any
+            // identities where no field schema is available.
             return new TypeMetaFieldTypeModel(
                 "(uint)global::Apache.Fory.TypeId.Union",
                 nullable,
@@ -4286,7 +4334,7 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
 
     private sealed class UnionCaseModel
     {
-        public UnionCaseModel(int caseId, string typeName, bool isUnknown, MemberModel? valueMember)
+        public UnionCaseModel(int? caseId, string typeName, bool isUnknown, MemberModel? valueMember)
         {
             CaseId = caseId;
             TypeName = typeName;
@@ -4294,7 +4342,8 @@ public sealed class ForyModelGenerator : IIncrementalGenerator
             ValueMember = valueMember;
         }
 
-        public int CaseId { get; }
+        public int? CaseId { get; }
+        public int KnownCaseId => CaseId ?? throw new InvalidOperationException("unknown union carrier has no schema case id");
         public string TypeName { get; }
         public bool IsUnknown { get; }
         public MemberModel? ValueMember { get; }

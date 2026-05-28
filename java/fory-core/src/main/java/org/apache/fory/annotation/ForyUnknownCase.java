@@ -25,22 +25,8 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-/**
- * Declares a stable xlang union case ID.
- *
- * <p>Schema-defined union cases may use IDs {@code 0..N}. Use {@link ForyUnknownCase} for the
- * runtime-owned unknown-case carrier; the marker selects that carrier without adding an entry to
- * the schema case table.
- */
+/** Marks the runtime-owned unknown-case carrier inside a typed ADT union. */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)
-@Target({
-  ElementType.TYPE,
-  ElementType.FIELD,
-  ElementType.METHOD,
-  ElementType.PARAMETER,
-  ElementType.CONSTRUCTOR
-})
-public @interface ForyCase {
-  int id();
-}
+@Target({ElementType.TYPE, ElementType.FIELD, ElementType.METHOD})
+public @interface ForyUnknownCase {}

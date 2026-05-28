@@ -215,11 +215,8 @@ def test_csharp_imported_registration_calls_generated():
     generator = CSharpGenerator(schema, GeneratorOptions(output_dir=Path("/tmp")))
     file = generator.generate()[0]
 
-    assert (
-        "global::addressbook.AddressbookForyRegistration.Register(fory);"
-        in file.content
-    )
-    assert "global::tree.TreeForyRegistration.Register(fory);" in file.content
+    assert "global::addressbook.AddressbookForyModule.Install(fory);" in file.content
+    assert "global::tree.TreeForyModule.Install(fory);" in file.content
 
 
 def test_csharp_namespace_option_is_known():

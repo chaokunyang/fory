@@ -98,7 +98,9 @@ final class ForyGenerator extends Generator {
     final helperBaseName = _toPascalCase(
       buildStep.inputId.pathSegments.last.split('.').first,
     );
-    final generatedApiName = '${helperBaseName}Fory';
+    final generatedApiName = '${helperBaseName}ForyModule';
+    final emitRegistrationHelper =
+        !_declaresGeneratedApiOwner(library, buildStep, generatedApiName);
 
     final enumSpecs = enumElements.map(_analyzeEnum).toList(growable: false);
     final structSpecs = annotatedClasses
@@ -118,13 +120,28 @@ final class ForyGenerator extends Generator {
       _writeStruct(output, structSpec);
     }
 
-    _writeRegistrationHelpers(
+    _writeGeneratedSupport(
       output,
       enumSpecs: enumSpecs,
       structSpecs: structSpecs,
       generatedApiName: generatedApiName,
+      emitRegistrationHelper: emitRegistrationHelper,
     );
     return output.toString();
+  }
+
+  bool _declaresGeneratedApiOwner(
+    LibraryReader library,
+    BuildStep buildStep,
+    String generatedApiName,
+  ) {
+    final inputFileName = buildStep.inputId.pathSegments.last;
+    return library.classes.any(
+      (element) =>
+          element.displayName == generatedApiName &&
+          element.firstFragment.libraryFragment.source.shortName ==
+              inputFileName,
+    );
   }
 
   _GeneratedStructSpec _analyzeStruct(ClassElement element) {
@@ -469,8 +486,7 @@ final class ForyGenerator extends Generator {
   void _writeStruct(StringBuffer output, _GeneratedStructSpec structSpec) {
     final serializerClassName = '_${structSpec.name}ForySerializer';
     final metadataListName = '_${_toCamelCase(structSpec.name)}ForyFieldInfo';
-    final registrationName =
-        '_${_toCamelCase(structSpec.name)}ForyRegistration';
+    final schemaName = '_${_toCamelCase(structSpec.name)}ForySchema';
     final hasRuntimeFastPath = structSpec.fields.any(
       (field) => !_usesDirectGeneratedBasicFastPath(field),
     );
@@ -505,7 +521,7 @@ final class ForyGenerator extends Generator {
       ..writeln('];')
       ..writeln()
       ..writeln(
-        'final GeneratedStructRegistration<${structSpec.name}> $registrationName = GeneratedStructRegistration<${structSpec.name}>(',
+        'final GeneratedStructSchema<${structSpec.name}> $schemaName = GeneratedStructSchema<${structSpec.name}>(',
       );
     output
       ..writeln('  type: ${structSpec.name},')
@@ -534,7 +550,7 @@ final class ForyGenerator extends Generator {
         '    return _generatedFields ??= buildGeneratedStructFieldInfos(',
       )
       ..writeln('      context.typeResolver,')
-      ..writeln('      $registrationName,')
+      ..writeln('      $schemaName,')
       ..writeln('    );')
       ..writeln('  }')
       ..writeln()
@@ -545,7 +561,7 @@ final class ForyGenerator extends Generator {
         '    return _generatedFields ??= buildGeneratedStructFieldInfos(',
       )
       ..writeln('      context.typeResolver,')
-      ..writeln('      $registrationName,')
+      ..writeln('      $schemaName,')
       ..writeln('    );')
       ..writeln('  }')
       ..writeln('  @override')
@@ -878,18 +894,18 @@ final class ForyGenerator extends Generator {
     output.writeln('  }');
   }
 
-  void _writeRegistrationHelpers(
+  void _writeGeneratedSupport(
     StringBuffer output, {
     required List<_GeneratedEnumSpec> enumSpecs,
     required List<_GeneratedStructSpec> structSpecs,
     required String generatedApiName,
+    required bool emitRegistrationHelper,
   }) {
     for (final enumSpec in enumSpecs) {
-      final registrationName =
-          '_${_toCamelCase(enumSpec.name)}ForyRegistration';
+      final schemaName = '_${_toCamelCase(enumSpec.name)}ForySchema';
       output
         ..writeln(
-          'final GeneratedEnumRegistration $registrationName = GeneratedEnumRegistration(',
+          'final GeneratedEnumSchema $schemaName = GeneratedEnumSchema(',
         )
         ..writeln('  type: ${enumSpec.name},')
         ..writeln('  serializerFactory: _${enumSpec.name}ForySerializer.new,')
@@ -898,6 +914,10 @@ final class ForyGenerator extends Generator {
     }
     if (enumSpecs.isNotEmpty && structSpecs.isNotEmpty) {
       output.writeln();
+    }
+
+    if (!emitRegistrationHelper) {
+      return;
     }
 
     output
@@ -925,12 +945,11 @@ final class ForyGenerator extends Generator {
       ..writeln('    }');
 
     for (final enumSpec in enumSpecs) {
-      final registrationName =
-          '_${_toCamelCase(enumSpec.name)}ForyRegistration';
+      final schemaName = '_${_toCamelCase(enumSpec.name)}ForySchema';
       output.writeln('  if (type == ${enumSpec.name}) {');
       output.writeln('    registerGeneratedEnum(');
       output.writeln('      fory,');
-      output.writeln('      $registrationName,');
+      output.writeln('      $schemaName,');
       output.writeln('      id: id,');
       output.writeln('      namespace: namespace,');
       output.writeln('      typeName: typeName,');
@@ -939,12 +958,11 @@ final class ForyGenerator extends Generator {
       output.writeln('  }');
     }
     for (final structSpec in structSpecs) {
-      final registrationName =
-          '_${_toCamelCase(structSpec.name)}ForyRegistration';
+      final schemaName = '_${_toCamelCase(structSpec.name)}ForySchema';
       output.writeln('  if (type == ${structSpec.name}) {');
       output.writeln('    registerGeneratedStruct(');
       output.writeln('      fory,');
-      output.writeln('      $registrationName,');
+      output.writeln('      $schemaName,');
       output.writeln('      id: id,');
       output.writeln('      namespace: namespace,');
       output.writeln('      typeName: typeName,');

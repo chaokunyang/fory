@@ -282,24 +282,24 @@ final class TypeResolver {
     String? namespace,
     String? typeName,
   }) {
-    final registration = GeneratedRegistrationCatalog.lookup(type);
-    if (registration == null) {
+    final entry = GeneratedTypeCatalog.lookup(type);
+    if (entry == null) {
       throw StateError(
-        'Type $type has no generated registration metadata. '
+        'Type $type has no generated type metadata. '
         'Register it through its generated library namespace first.',
       );
     }
     _registerResolvedSerializer(
       type,
-      registration.serializerFactory(),
-      switch (registration.kind) {
-        GeneratedRegistrationKind.enumType => RegistrationKind.enumType,
-        GeneratedRegistrationKind.struct => RegistrationKind.struct,
+      entry.serializerFactory(),
+      switch (entry.kind) {
+        GeneratedTypeKind.enumType => RegistrationKind.enumType,
+        GeneratedTypeKind.struct => RegistrationKind.struct,
       },
-      evolving: registration.evolving,
-      fields: registration.fields,
-      needsRootRef: registration.needsRootRef,
-      usesNestedTypeDefinitions: registration.usesNestedTypeDefinitions,
+      evolving: entry.evolving,
+      fields: entry.fields,
+      needsRootRef: entry.needsRootRef,
+      usesNestedTypeDefinitions: entry.usesNestedTypeDefinitions,
       id: id,
       namespace: namespace,
       typeName: typeName,

@@ -55,7 +55,7 @@ bool registerXlangManualType(
   if (type == RefOverrideContainer) {
     registerGeneratedStruct(
       fory,
-      _refOverrideContainerForyRegistration,
+      _refOverrideContainerForySchema,
       id: id,
       namespace: namespace,
       typeName: typeName,
@@ -164,16 +164,15 @@ _refOverrideContainerForyFieldInfo = <GeneratedFieldInfo>[
   ),
 ];
 
-final GeneratedStructRegistration<RefOverrideContainer>
-_refOverrideContainerForyRegistration =
-    GeneratedStructRegistration<RefOverrideContainer>(
-      type: RefOverrideContainer,
-      serializerFactory: _RefOverrideContainerForySerializer.new,
-      evolving: true,
-      needsRootRef: true,
-      usesNestedTypeDefinitions: true,
-      fields: _refOverrideContainerForyFieldInfo,
-    );
+final GeneratedStructSchema<RefOverrideContainer>
+_refOverrideContainerForySchema = GeneratedStructSchema<RefOverrideContainer>(
+  type: RefOverrideContainer,
+  serializerFactory: _RefOverrideContainerForySerializer.new,
+  evolving: true,
+  needsRootRef: true,
+  usesNestedTypeDefinitions: true,
+  fields: _refOverrideContainerForyFieldInfo,
+);
 
 final class _RefOverrideContainerForySerializer
     extends Serializer<RefOverrideContainer>
@@ -185,14 +184,14 @@ final class _RefOverrideContainerForySerializer
   List<GeneratedStructFieldInfo> _writeFields(WriteContext context) {
     return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
-      _refOverrideContainerForyRegistration,
+      _refOverrideContainerForySchema,
     );
   }
 
   List<GeneratedStructFieldInfo> _readFields(ReadContext context) {
     return _generatedFields ??= buildGeneratedStructFieldInfos(
       context.typeResolver,
-      _refOverrideContainerForyRegistration,
+      _refOverrideContainerForySchema,
     );
   }
 

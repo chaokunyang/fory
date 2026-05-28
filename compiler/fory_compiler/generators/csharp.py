@@ -203,15 +203,15 @@ class CSharpGenerator(BaseGenerator):
             return self.schema.package
         return "generated"
 
-    def get_registration_class_name(self) -> str:
-        return self._registration_class_name_for_namespace(self.get_csharp_namespace())
+    def get_module_class_name(self) -> str:
+        return self._module_class_name_for_namespace(self.get_csharp_namespace())
 
-    def _registration_class_name_for_namespace(self, namespace_name: str) -> str:
+    def _module_class_name_for_namespace(self, namespace_name: str) -> str:
         if namespace_name:
             leaf = namespace_name.split(".")[-1]
         else:
             leaf = "generated"
-        return f"{self.to_pascal_case(leaf)}ForyRegistration"
+        return f"{self.to_pascal_case(leaf)}ForyModule"
 
     def _module_file_name(self) -> str:
         if self.schema.source_file and not self.schema.source_file.startswith("<"):
@@ -328,7 +328,7 @@ class CSharpGenerator(BaseGenerator):
             return self.get_csharp_namespace()
         return self._csharp_namespace_for_schema(schema)
 
-    def _collect_imported_registrations(self) -> List[Tuple[str, str]]:
+    def _collect_imported_modules(self) -> List[Tuple[str, str]]:
         file_info: Dict[str, Tuple[str, str]] = {}
         for type_def in self.schema.enums + self.schema.unions + self.schema.messages:
             if not self.is_imported_type(type_def):
@@ -344,10 +344,8 @@ class CSharpGenerator(BaseGenerator):
             if imported_schema is None:
                 continue
             namespace_name = self._csharp_namespace_for_schema(imported_schema)
-            registration_name = self._registration_class_name_for_namespace(
-                namespace_name
-            )
-            file_info[normalized] = (namespace_name, registration_name)
+            module_name = self._module_class_name_for_namespace(namespace_name)
+            file_info[normalized] = (namespace_name, module_name)
 
         ordered: List[Tuple[str, str]] = []
         used: Set[str] = set()
@@ -411,7 +409,7 @@ class CSharpGenerator(BaseGenerator):
             lines.extend(self.generate_message(message, parent_stack=[]))
             lines.append("")
 
-        lines.extend(self.generate_registration_class())
+        lines.extend(self.generate_module_class())
         lines.append("")
 
         file_name = self._module_file_name()
@@ -700,7 +698,7 @@ class CSharpGenerator(BaseGenerator):
         lines: List[str] = []
         ind = self.indent_str * indent
         type_name = self.safe_type_identifier(union.name)
-        registration_class = self.get_registration_class_name()
+        module_class = self.get_module_class_name()
         full_type_ref = self._type_reference_for_local(union)
 
         comment = self.format_type_id_comment(union, f"{ind}//")
@@ -742,7 +740,7 @@ class CSharpGenerator(BaseGenerator):
         lines.append(f"{ind}{self.indent_str}public byte[] ToBytes()")
         lines.append(f"{ind}{self.indent_str}{{")
         lines.append(
-            f"{ind}{self.indent_str * 2}return {registration_class}.GetFory().Serialize(this);"
+            f"{ind}{self.indent_str * 2}return {module_class}.GetFory().Serialize(this);"
         )
         lines.append(f"{ind}{self.indent_str}}}")
         lines.append("")
@@ -751,7 +749,7 @@ class CSharpGenerator(BaseGenerator):
         )
         lines.append(f"{ind}{self.indent_str}{{")
         lines.append(
-            f"{ind}{self.indent_str * 2}return {registration_class}.GetFory().Deserialize<{full_type_ref}>(data);"
+            f"{ind}{self.indent_str * 2}return {module_class}.GetFory().Deserialize<{full_type_ref}>(data);"
         )
         lines.append(f"{ind}{self.indent_str}}}")
 
@@ -768,7 +766,7 @@ class CSharpGenerator(BaseGenerator):
         ind = self.indent_str * indent
         parent_stack = parent_stack or []
         lineage = parent_stack + [message]
-        registration_class = self.get_registration_class_name()
+        module_class = self.get_module_class_name()
         type_name = self.safe_type_identifier(message.name)
         full_type_ref = self._type_reference_for_local(message)
 
@@ -819,7 +817,7 @@ class CSharpGenerator(BaseGenerator):
         lines.append(f"{ind}{self.indent_str}public byte[] ToBytes()")
         lines.append(f"{ind}{self.indent_str}{{")
         lines.append(
-            f"{ind}{self.indent_str * 2}return {registration_class}.GetFory().Serialize(this);"
+            f"{ind}{self.indent_str * 2}return {module_class}.GetFory().Serialize(this);"
         )
         lines.append(f"{ind}{self.indent_str}}}")
         lines.append("")
@@ -828,7 +826,7 @@ class CSharpGenerator(BaseGenerator):
         )
         lines.append(f"{ind}{self.indent_str}{{")
         lines.append(
-            f"{ind}{self.indent_str * 2}return {registration_class}.GetFory().Deserialize<{full_type_ref}>(data);"
+            f"{ind}{self.indent_str * 2}return {module_class}.GetFory().Deserialize<{full_type_ref}>(data);"
         )
         lines.append(f"{ind}{self.indent_str}}}")
 
@@ -876,10 +874,10 @@ class CSharpGenerator(BaseGenerator):
 
         return local_types
 
-    def generate_registration_class(self) -> List[str]:
+    def generate_module_class(self) -> List[str]:
         lines: List[str] = []
-        class_name = self.safe_type_identifier(self.get_registration_class_name())
-        imported_regs = self._collect_imported_registrations()
+        class_name = self.safe_type_identifier(self.get_module_class_name())
+        imported_modules = self._collect_imported_modules()
         local_types = self._collect_local_types()
 
         lines.append(f"public static class {class_name}")
@@ -899,18 +897,21 @@ class CSharpGenerator(BaseGenerator):
         lines.append(
             f"{self.indent_str * 2}ThreadSafeFory fory = Fory.Builder().TrackRef(true).BuildThreadSafe();"
         )
-        lines.append(f"{self.indent_str * 2}Register(fory);")
+        lines.append(f"{self.indent_str * 2}Install(fory);")
         lines.append(f"{self.indent_str * 2}return fory;")
         lines.append(f"{self.indent_str}}}")
         lines.append("")
 
-        lines.append(f"{self.indent_str}public static void Register(Fory fory)")
+        lines.append(f"{self.indent_str}public static void Install(Fory fory)")
         lines.append(f"{self.indent_str}{{")
-        for namespace_name, reg_name in imported_regs:
-            if namespace_name == self.get_csharp_namespace() and reg_name == class_name:
+        for namespace_name, module_name in imported_modules:
+            if (
+                namespace_name == self.get_csharp_namespace()
+                and module_name == class_name
+            ):
                 continue
             lines.append(
-                f"{self.indent_str * 2}global::{namespace_name}.{self.safe_type_identifier(reg_name)}.Register(fory);"
+                f"{self.indent_str * 2}global::{namespace_name}.{self.safe_type_identifier(module_name)}.Install(fory);"
             )
         for type_def in local_types:
             for register_line in self._register_type_lines(type_def, "fory"):
@@ -919,14 +920,17 @@ class CSharpGenerator(BaseGenerator):
         lines.append("")
 
         lines.append(
-            f"{self.indent_str}public static void Register(ThreadSafeFory fory)"
+            f"{self.indent_str}public static void Install(ThreadSafeFory fory)"
         )
         lines.append(f"{self.indent_str}{{")
-        for namespace_name, reg_name in imported_regs:
-            if namespace_name == self.get_csharp_namespace() and reg_name == class_name:
+        for namespace_name, module_name in imported_modules:
+            if (
+                namespace_name == self.get_csharp_namespace()
+                and module_name == class_name
+            ):
                 continue
             lines.append(
-                f"{self.indent_str * 2}global::{namespace_name}.{self.safe_type_identifier(reg_name)}.Register(fory);"
+                f"{self.indent_str * 2}global::{namespace_name}.{self.safe_type_identifier(module_name)}.Install(fory);"
             )
         for type_def in local_types:
             for register_line in self._register_type_lines(type_def, "fory"):

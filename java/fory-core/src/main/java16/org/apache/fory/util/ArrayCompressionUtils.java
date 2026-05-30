@@ -19,14 +19,38 @@
 
 package org.apache.fory.util;
 
-/** Utility methods for optional primitive array compression. */
+/**
+ * Utility methods for optional primitive array compression.
+ *
+ * <p>The compressed array serializers use these helpers when every value in a primitive array fits
+ * in a narrower primitive type:
+ *
+ * <ul>
+ *   <li>{@code int[]} to {@code byte[]} when all values are in byte range.
+ *   <li>{@code int[]} to {@code short[]} when all values are in short range.
+ *   <li>{@code long[]} to {@code int[]} when all values are in int range.
+ * </ul>
+ *
+ * <p>Java 16+ runtimes can load the Vector API implementation from the multi-release tree. Older
+ * runtimes, or minimal module images without {@code jdk.incubator.vector}, use the scalar
+ * implementation.
+ */
 public final class ArrayCompressionUtils {
+  // Minimum array size to justify compression analysis and the compressed payload marker overhead.
   static final int MIN_COMPRESSION_SIZE = 1 << 9;
   private static final CompressionSupport SCALAR_SUPPORT = new ScalarCompressionSupport();
   private static final CompressionSupport COMPRESSION_SUPPORT = loadCompressionSupport();
 
   private ArrayCompressionUtils() {}
 
+  /**
+   * Determines the best compression type for an int array.
+   *
+   * @param array the array to analyze
+   * @return {@link PrimitiveArrayCompressionType#INT_TO_BYTE}, {@link
+   *     PrimitiveArrayCompressionType#INT_TO_SHORT}, or {@link PrimitiveArrayCompressionType#NONE}
+   * @throws NullPointerException if {@code array} is null
+   */
   public static PrimitiveArrayCompressionType determineIntCompressionType(int[] array) {
     if (array == null) {
       throw new NullPointerException("Input array cannot be null");
@@ -37,6 +61,14 @@ public final class ArrayCompressionUtils {
     return COMPRESSION_SUPPORT.determineIntCompressionType(array);
   }
 
+  /**
+   * Determines the best compression type for a long array.
+   *
+   * @param array the array to analyze
+   * @return {@link PrimitiveArrayCompressionType#LONG_TO_INT} or {@link
+   *     PrimitiveArrayCompressionType#NONE}
+   * @throws NullPointerException if {@code array} is null
+   */
   public static PrimitiveArrayCompressionType determineLongCompressionType(long[] array) {
     if (array == null) {
       throw new NullPointerException("Input array cannot be null");
@@ -47,6 +79,13 @@ public final class ArrayCompressionUtils {
     return COMPRESSION_SUPPORT.determineLongCompressionType(array);
   }
 
+  /**
+   * Compresses an int array to a byte array.
+   *
+   * @param array the int array to compress; values must be in byte range
+   * @return compressed byte array
+   * @throws NullPointerException if {@code array} is null
+   */
   public static byte[] compressToBytes(int[] array) {
     if (array == null) {
       throw new NullPointerException("Array cannot be null");
@@ -58,6 +97,13 @@ public final class ArrayCompressionUtils {
     return compressed;
   }
 
+  /**
+   * Compresses an int array to a short array.
+   *
+   * @param array the int array to compress; values must be in short range
+   * @return compressed short array
+   * @throws NullPointerException if {@code array} is null
+   */
   public static short[] compressToShorts(int[] array) {
     if (array == null) {
       throw new NullPointerException("Array cannot be null");
@@ -69,6 +115,13 @@ public final class ArrayCompressionUtils {
     return compressed;
   }
 
+  /**
+   * Compresses a long array to an int array.
+   *
+   * @param array the long array to compress; values must be in int range
+   * @return compressed int array
+   * @throws NullPointerException if {@code array} is null
+   */
   public static int[] compressToInts(long[] array) {
     if (array == null) {
       throw new NullPointerException("Array cannot be null");
@@ -80,6 +133,13 @@ public final class ArrayCompressionUtils {
     return compressed;
   }
 
+  /**
+   * Decompresses a byte array to an int array.
+   *
+   * @param array the byte array to decompress
+   * @return decompressed int array
+   * @throws NullPointerException if {@code array} is null
+   */
   public static int[] decompressFromBytes(byte[] array) {
     if (array == null) {
       throw new NullPointerException("Array cannot be null");
@@ -91,6 +151,13 @@ public final class ArrayCompressionUtils {
     return decompressed;
   }
 
+  /**
+   * Decompresses a short array to an int array.
+   *
+   * @param array the short array to decompress
+   * @return decompressed int array
+   * @throws NullPointerException if {@code array} is null
+   */
   public static int[] decompressFromShorts(short[] array) {
     if (array == null) {
       throw new NullPointerException("Array cannot be null");
@@ -102,6 +169,13 @@ public final class ArrayCompressionUtils {
     return decompressed;
   }
 
+  /**
+   * Decompresses an int array to a long array.
+   *
+   * @param array the int array to decompress
+   * @return decompressed long array
+   * @throws NullPointerException if {@code array} is null
+   */
   public static long[] decompressFromInts(int[] array) {
     if (array == null) {
       throw new NullPointerException("Array cannot be null");

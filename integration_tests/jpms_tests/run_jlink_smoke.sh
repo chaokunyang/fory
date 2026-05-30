@@ -86,7 +86,13 @@ reject_jar_entry "$FORMAT_JAR" "module-info.class"
 
 if [[ "$JAVA_MAJOR" -ge 16 ]] \
   && jar tf "$CORE_JAR" | grep -qx "META-INF/versions/16/module-info.class"; then
+  require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/serializer/CompressedArraySerializers.class"
+  require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/util/ArrayCompressionUtils.class"
+  require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/util/PrimitiveArrayCompressionType.class"
   require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/util/VectorArrayCompression.class"
+  reject_jar_entry "$CORE_JAR" "org/apache/fory/serializer/CompressedArraySerializers.class"
+  reject_jar_entry "$CORE_JAR" "org/apache/fory/util/ArrayCompressionUtils.class"
+  reject_jar_entry "$CORE_JAR" "org/apache/fory/util/PrimitiveArrayCompressionType.class"
   jar --file "$CORE_JAR" --describe-module --release 16 | grep -q "requires jdk.incubator.vector static"
 fi
 

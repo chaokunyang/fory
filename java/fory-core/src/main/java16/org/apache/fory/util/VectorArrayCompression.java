@@ -24,6 +24,7 @@ import jdk.incubator.vector.LongVector;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
 
+/** Java 16+ Vector API implementation for primitive array compression analysis. */
 final class VectorArrayCompression implements ArrayCompressionUtils.CompressionSupport {
   private static final VectorSpecies<Integer> INT_SPECIES = IntVector.SPECIES_PREFERRED;
   private static final VectorSpecies<Long> LONG_SPECIES = LongVector.SPECIES_PREFERRED;
@@ -34,6 +35,9 @@ final class VectorArrayCompression implements ArrayCompressionUtils.CompressionS
     boolean canCompressToShort = true;
     int i = 0;
     int upperBound = INT_SPECIES.loopBound(array.length);
+
+    // Vector loop: test each lane against the target primitive ranges and stop checking a narrower
+    // representation once any lane exceeds its range.
     for (; i < upperBound && (canCompressToByte || canCompressToShort); i += INT_SPECIES.length()) {
       IntVector vector = IntVector.fromArray(INT_SPECIES, array, i);
       if (canCompressToByte) {
@@ -49,6 +53,8 @@ final class VectorArrayCompression implements ArrayCompressionUtils.CompressionS
         }
       }
     }
+
+    // Scalar tail for elements that do not fill a complete vector.
     for (; i < array.length && (canCompressToByte || canCompressToShort); i++) {
       int value = array[i];
       if (canCompressToByte && (value < Byte.MIN_VALUE || value > Byte.MAX_VALUE)) {
@@ -70,6 +76,8 @@ final class VectorArrayCompression implements ArrayCompressionUtils.CompressionS
   public PrimitiveArrayCompressionType determineLongCompressionType(long[] array) {
     int i = 0;
     int upperBound = LONG_SPECIES.loopBound(array.length);
+
+    // Vector loop: any lane outside int range means long-to-int compression is not safe.
     for (; i < upperBound; i += LONG_SPECIES.length()) {
       LongVector vector = LongVector.fromArray(LONG_SPECIES, array, i);
       if (vector.compare(VectorOperators.GT, Integer.MAX_VALUE).anyTrue()
@@ -77,6 +85,8 @@ final class VectorArrayCompression implements ArrayCompressionUtils.CompressionS
         return PrimitiveArrayCompressionType.NONE;
       }
     }
+
+    // Scalar tail for elements that do not fill a complete vector.
     for (; i < array.length; i++) {
       long value = array[i];
       if (value > Integer.MAX_VALUE || value < Integer.MIN_VALUE) {

@@ -22,13 +22,20 @@ package org.apache.fory.util;
 /**
  * Compression types for primitive arrays.
  *
- * <p>These types are used by the optional compressed array serializers when array values can be
- * stored with a narrower primitive type.
+ * <p>Defines the available compression strategies for reducing the size of primitive arrays by
+ * detecting when values can be stored with a narrower primitive type.
  */
 public enum PrimitiveArrayCompressionType {
+  /** No compression applied. */
   NONE(0),
+
+  /** Compresses {@code int[]} values to {@code byte[]} when every value fits in byte range. */
   INT_TO_BYTE(1),
+
+  /** Compresses {@code int[]} values to {@code short[]} when every value fits in short range. */
   INT_TO_SHORT(2),
+
+  /** Compresses {@code long[]} values to {@code int[]} when every value fits in int range. */
   LONG_TO_INT(3);
 
   private final int value;
@@ -37,10 +44,22 @@ public enum PrimitiveArrayCompressionType {
     this.value = value;
   }
 
+  /**
+   * Gets the numeric value for this compression type.
+   *
+   * @return the numeric value written to the serialized payload
+   */
   public int getValue() {
     return value;
   }
 
+  /**
+   * Gets the compression type from its numeric value.
+   *
+   * @param value the numeric value read from the serialized payload
+   * @return the corresponding compression type
+   * @throws IllegalArgumentException if the value is not valid
+   */
   public static PrimitiveArrayCompressionType fromValue(int value) {
     switch (value) {
       case 0:
@@ -56,25 +75,51 @@ public enum PrimitiveArrayCompressionType {
     }
   }
 
+  /** Compression utilities for int arrays. Supports compression to byte[] and short[] formats. */
   public static final class IntArrayCompression {
     private IntArrayCompression() {}
 
+    /**
+     * Determines the best compression type for the given int array.
+     *
+     * @param array the array to analyze
+     * @return the optimal compression type
+     */
     public static PrimitiveArrayCompressionType determine(int[] array) {
       return ArrayCompressionUtils.determineIntCompressionType(array);
     }
 
+    /**
+     * Checks if the compression type is supported for int arrays.
+     *
+     * @param type the compression type to check
+     * @return true if supported
+     */
     public static boolean isSupported(PrimitiveArrayCompressionType type) {
       return type == NONE || type == INT_TO_BYTE || type == INT_TO_SHORT;
     }
   }
 
+  /** Compression utilities for long arrays. Supports compression to int[] format. */
   public static final class LongArrayCompression {
     private LongArrayCompression() {}
 
+    /**
+     * Determines the best compression type for the given long array.
+     *
+     * @param array the array to analyze
+     * @return the optimal compression type
+     */
     public static PrimitiveArrayCompressionType determine(long[] array) {
       return ArrayCompressionUtils.determineLongCompressionType(array);
     }
 
+    /**
+     * Checks if the compression type is supported for long arrays.
+     *
+     * @param type the compression type to check
+     * @return true if supported
+     */
     public static boolean isSupported(PrimitiveArrayCompressionType type) {
       return type == NONE || type == LONG_TO_INT;
     }

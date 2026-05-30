@@ -254,7 +254,9 @@
                            executable="${java.home}/bin/javac"
                            debug="true">
                       <include name="**/*.java"/>
-                      <compilerarg value="--release"/>
+                      <compilerarg value="--source"/>
+                      <compilerarg value="16"/>
+                      <compilerarg value="--target"/>
                       <compilerarg value="16"/>
                       <compilerarg value="--module-path"/>
                       <compilerarg path="${compile.module.path}"/>

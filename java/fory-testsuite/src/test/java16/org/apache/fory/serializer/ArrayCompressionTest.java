@@ -22,8 +22,6 @@ package org.apache.fory.serializer;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.util.Random;
 import org.apache.fory.Fory;
 import org.apache.fory.config.ForyBuilder;
@@ -59,7 +57,7 @@ public class ArrayCompressionTest {
   public void testIntArrayCompressionRoundTrip(String description, int[] originalArray) {
     Fory foryWithCompression =
         new ForyBuilder().withXlang(false).withIntArrayCompressed(true).build();
-    registerSerializers(foryWithCompression);
+    CompressedArraySerializers.registerSerializers(foryWithCompression);
     byte[] serializedWithCompression = foryWithCompression.serialize(originalArray);
     int[] deserializedWithCompression =
         (int[]) foryWithCompression.deserialize(serializedWithCompression);
@@ -73,7 +71,7 @@ public class ArrayCompressionTest {
   public void testLongArrayCompressionRoundTrip(String description, long[] originalArray) {
     Fory foryWithCompression =
         new ForyBuilder().withXlang(false).withLongArrayCompressed(true).build();
-    registerSerializers(foryWithCompression);
+    CompressedArraySerializers.registerSerializers(foryWithCompression);
     byte[] serializedWithCompression = foryWithCompression.serialize(originalArray);
     long[] deserializedWithCompression =
         (long[]) foryWithCompression.deserialize(serializedWithCompression);
@@ -91,7 +89,7 @@ public class ArrayCompressionTest {
             .withIntArrayCompressed(true)
             .withLongArrayCompressed(true)
             .build();
-    registerSerializers(foryWithCompression);
+    CompressedArraySerializers.registerSerializers(foryWithCompression);
 
     Fory foryWithoutCompression =
         new ForyBuilder()
@@ -139,7 +137,7 @@ public class ArrayCompressionTest {
             .withIntArrayCompressed(true)
             .withLongArrayCompressed(true)
             .build();
-    registerSerializers(fory);
+    CompressedArraySerializers.registerSerializers(fory);
 
     // Test very large compressible arrays
     int[] largeIntArray = createByteRangeArray(100_000);
@@ -210,28 +208,5 @@ public class ArrayCompressionTest {
       array[i] = random.nextLong();
     }
     return array;
-  }
-
-  private static void registerSerializers(Fory fory) {
-    try {
-      Method method =
-          Java16CompressionSupport.loadClass(
-                  "org.apache.fory.serializer.CompressedArraySerializers")
-              .getMethod("registerSerializers", Fory.class);
-      method.invoke(null, fory);
-    } catch (IllegalAccessException e) {
-      throw new AssertionError("Cannot access CompressedArraySerializers.registerSerializers", e);
-    } catch (InvocationTargetException e) {
-      Throwable cause = e.getCause();
-      if (cause instanceof RuntimeException) {
-        throw (RuntimeException) cause;
-      }
-      if (cause instanceof Error) {
-        throw (Error) cause;
-      }
-      throw new AssertionError("Unexpected checked exception from registerSerializers", cause);
-    } catch (NoSuchMethodException e) {
-      throw new AssertionError("Missing CompressedArraySerializers.registerSerializers", e);
-    }
   }
 }

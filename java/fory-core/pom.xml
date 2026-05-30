@@ -243,6 +243,7 @@
                 </goals>
                 <configuration>
                   <target>
+                    <delete dir="${project.build.directory}/jpms-classes/java16"/>
                     <mkdir dir="${project.build.directory}/jpms-classes/java16"/>
                     <pathconvert property="compile.module.path" refid="maven.compile.classpath"
                                  pathsep="${path.separator}"/>
@@ -262,6 +263,18 @@
                       <compilerarg value="--patch-module"/>
                       <compilerarg value="org.apache.fory.core=${project.build.outputDirectory}"/>
                     </javac>
+                  </target>
+                </configuration>
+              </execution>
+              <execution>
+                <id>clean-java16-package-classes</id>
+                <phase>prepare-package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <delete dir="${project.build.outputDirectory}/META-INF/versions/16"/>
                   </target>
                 </configuration>
               </execution>

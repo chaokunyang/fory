@@ -89,7 +89,6 @@ if [[ "$JAVA_MAJOR" -ge 16 ]] \
   require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/serializer/CompressedArraySerializers.class"
   require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/util/ArrayCompressionUtils.class"
   require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/util/PrimitiveArrayCompressionType.class"
-  require_jar_entry "$CORE_JAR" "META-INF/versions/16/org/apache/fory/util/VectorArrayCompression.class"
   reject_jar_entry "$CORE_JAR" "org/apache/fory/serializer/CompressedArraySerializers.class"
   reject_jar_entry "$CORE_JAR" "org/apache/fory/util/ArrayCompressionUtils.class"
   reject_jar_entry "$CORE_JAR" "org/apache/fory/util/PrimitiveArrayCompressionType.class"
@@ -170,20 +169,14 @@ if echo "$IMAGE_MODULES" \
 fi
 
 if [[ "$JAVA_MAJOR" -ge 16 ]] \
-  && jar tf "$CORE_JAR" | grep -qx "META-INF/versions/16/org/apache/fory/util/VectorArrayCompression.class"; then
+  && jar tf "$CORE_JAR" | grep -qx "META-INF/versions/16/org/apache/fory/util/ArrayCompressionUtils.class"; then
   mkdir -p "$WORK_DIR/vector-classes"
   cat > "$WORK_DIR/VectorSmoke.java" <<'EOF'
-import java.lang.reflect.Method;
 import org.apache.fory.util.ArrayCompressionUtils;
 import org.apache.fory.util.PrimitiveArrayCompressionType;
 
 public final class VectorSmoke {
   public static void main(String[] args) throws Exception {
-    Method method = ArrayCompressionUtils.class.getDeclaredMethod("isVectorCompressionEnabled");
-    method.setAccessible(true);
-    if (!Boolean.TRUE.equals(method.invoke(null))) {
-      throw new AssertionError("Vector compression support was not enabled");
-    }
     int[] values = new int[1024];
     for (int i = 0; i < values.length; i++) {
       values[i] = (i & 0xff) - 128;

@@ -143,7 +143,11 @@
                 <configuration>
                   <target>
                     <mkdir dir="${project.build.directory}/jpms-classes/java11"/>
-                    <pathconvert property="compile.module.path" refid="maven.compile.classpath"
+                    <path id="compile.module.path.elements">
+                      <pathelement location="${project.basedir}/../fory-core/target/jpms-classes/java9"/>
+                      <path refid="maven.compile.classpath"/>
+                    </path>
+                    <pathconvert property="compile.module.path" refid="compile.module.path.elements"
                                  pathsep="${path.separator}"/>
                     <javac srcdir="${project.basedir}/src/main/java11"
                            destdir="${project.build.directory}/jpms-classes/java11"

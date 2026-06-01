@@ -32,7 +32,6 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URL;
@@ -116,8 +115,6 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.serializer.ArraySerializers;
 import org.apache.fory.serializer.BufferSerializers;
@@ -1484,7 +1481,7 @@ public class ClassResolver extends TypeResolver {
         if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
           throw new UnsupportedOperationException(
               "StringTokenizer serialization requires JDK internal field access. On JDK25+, open "
-                  + "java.base/java.util to org.apache.fory.core,org.apache.fory.format.");
+                  + "java.base/java.lang.invoke to org.apache.fory.core.");
         }
         return Serializers.StringTokenizerSerializer.class;
       } else if (ByteBuffer.class.isAssignableFrom(cls)) {
@@ -1546,9 +1543,6 @@ public class ClassResolver extends TypeResolver {
           return MapSerializer.class;
         }
       }
-      if (requiresJdkStream(cls)) {
-        return getDefaultJDKStreamSerializerType();
-      }
       if (isCrossLanguage()) {
         LOG.warn("Class {} isn't supported for cross-language serialization.", cls);
       }
@@ -1587,9 +1581,6 @@ public class ClassResolver extends TypeResolver {
   public Class<? extends Serializer> getObjectSerializerClass(
       Class<?> cls, JITContext.SerializerJITCallback<Class<? extends Serializer>> callback) {
     boolean codegen = config.isCodeGenEnabled() && supportCodegenForJavaSerialization(cls);
-    if (JdkVersion.MAJOR_VERSION >= 25 && !Modifier.isPublic(cls.getModifiers())) {
-      codegen = false;
-    }
     return getObjectSerializerClass(cls, false, codegen, callback);
   }
 
@@ -1636,22 +1627,6 @@ public class ClassResolver extends TypeResolver {
         LOG.info("Object of type {} can't be serialized by jit", cls);
       }
       return staticSerializerClass == null ? ObjectSerializer.class : staticSerializerClass;
-    }
-  }
-
-  private static boolean requiresJdkStream(Class<?> cls) {
-    return JdkVersion.MAJOR_VERSION >= 25
-        && cls.getName().startsWith("java.")
-        && Serializable.class.isAssignableFrom(cls)
-        && !hasNoArgConstructor(cls);
-  }
-
-  private static boolean hasNoArgConstructor(Class<?> cls) {
-    try {
-      cls.getDeclaredConstructor();
-      return true;
-    } catch (NoSuchMethodException e) {
-      return false;
     }
   }
 
@@ -1906,7 +1881,7 @@ public class ClassResolver extends TypeResolver {
       RecordUtils.getRecordComponents(cls);
     }
     if (needsGraalvmObjectCreator(cls, serializerClass)) {
-      ObjectCreators.getObjectCreator(cls);
+      getObjectCreator(cls);
     }
   }
 

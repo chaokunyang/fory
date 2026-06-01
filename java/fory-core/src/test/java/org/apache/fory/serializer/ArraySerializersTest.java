@@ -23,7 +23,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
-import java.beans.ConstructorProperties;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.util.Arrays;
@@ -36,6 +35,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.config.Int64Encoding;
 import org.apache.fory.context.MetaReadContext;
@@ -487,7 +487,7 @@ public class ArraySerializersTest extends ForyTestBase {
   static class A {
     final int f1;
 
-    @ConstructorProperties({"f1"})
+    @ForyConstructor({"f1"})
     A(int f1) {
       this.f1 = f1;
     }
@@ -497,7 +497,7 @@ public class ArraySerializersTest extends ForyTestBase {
   static class B extends A {
     final String f2;
 
-    @ConstructorProperties({"f1", "f2"})
+    @ForyConstructor({"f1", "f2"})
     B(int f1, String f2) {
       super(f1);
       this.f2 = f2;
@@ -521,7 +521,7 @@ public class ArraySerializersTest extends ForyTestBase {
       this.array = (T[]) Array.newInstance(clazz, capacity);
     }
 
-    @ConstructorProperties({"array"})
+    @ForyConstructor({"array"})
     public GenericArrayWrapper(T[] array) {
       this.array = array;
     }

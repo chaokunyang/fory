@@ -27,8 +27,8 @@ import org.apache.fory.platform.internal._JDKAccess;
 /** Memory utils for fory. */
 public class MemoryUtils {
   // JDK25+ internal-field access must be backed by supported access in the multi-release classes.
-  // When a JDK25+ path needs JDK private fields, open the needed java.base package to both
-  // org.apache.fory.core and org.apache.fory.format.
+  // The JDK25+ replacement obtains a trusted lookup through java.base/java.lang.invoke instead of
+  // requiring per-package JDK opens or jdk.unsupported.
   public static final boolean JDK_INTERNAL_FIELD_ACCESS =
       !AndroidSupport.IS_ANDROID
           && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE

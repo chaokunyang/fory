@@ -76,6 +76,74 @@ class ProcessorValidationTest {
   }
 
   @Test
+  fun validatesConstructorBinding() {
+    assertNull(constructorBindingError(listOf("userName"), listOf("name"), "example.User"))
+    assertEquals(
+      constructorBindingError(listOf("name"), listOf("name", "age"), "example.User"),
+      "@ForyConstructor on example.User must declare one field name for each primary constructor parameter",
+    )
+    assertEquals(
+      constructorBindingError(listOf("name", "age"), listOf("name", "name"), "example.User"),
+      "@ForyConstructor on example.User declares duplicate field name name",
+    )
+    assertEquals(
+      constructorBindingError(listOf("name"), listOf(""), "example.User"),
+      "@ForyConstructor on example.User must not declare blank field names",
+    )
+  }
+
+  @Test
+  fun constructorBindingNamesArguments() {
+    val stringType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "String::class.java",
+        kotlinTypeName = "kotlin.String",
+        valueTypeName = "String",
+        typeName = "java.lang.String",
+        typeId = "Types.STRING",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "User",
+            qualifiedTypeName = "example.User",
+            serializerName = "User_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "name",
+                  type = stringType,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "String",
+                  constructorParameterName = "userName",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("writeContext.writeString(value.name)"))
+    assertTrue(source.contains("return User(userName = field0!!)"))
+    assertTrue(!source.contains("return User(name = field0!!)"))
+    assertTrue(source.contains("constructorFieldIds = if (objectCreator.hasConstructorFields())"))
+    assertTrue(source.contains("objectCreator.newInstanceWithArguments(*constructorArgs"))
+  }
+
+  @Test
   fun tracksWidePresence() {
     val intType =
       KotlinSourceTypeNode(

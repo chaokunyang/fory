@@ -19,6 +19,7 @@
 
 package org.apache.fory;
 
+import java.lang.reflect.Constructor;
 import java.util.function.Function;
 import org.apache.fory.resolver.TypeChecker;
 import org.apache.fory.resolver.TypeResolver;
@@ -64,6 +65,12 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   @Override
   public void register(ForyModule module) {
     registerCallback(fory -> fory.register(module));
+  }
+
+  @Override
+  public <T> void registerConstructor(
+      Class<T> type, Constructor<T> constructor, String... fieldNames) {
+    registerCallback(fory -> fory.registerConstructor(type, constructor, fieldNames));
   }
 
   public void registerUnion(

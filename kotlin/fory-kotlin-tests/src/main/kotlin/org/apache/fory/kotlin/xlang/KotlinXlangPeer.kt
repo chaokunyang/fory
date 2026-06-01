@@ -57,6 +57,12 @@ public data class KotlinUser(
 )
 
 @ForyStruct
+public data class KotlinRegisteredSwap(
+  @ForyField(id = 1) val left: String,
+  @ForyField(id = 2) val right: String,
+)
+
+@ForyStruct
 internal data class KotlinInternalUser(
   @ForyField(id = 1) val id: UInt,
   @ForyField(id = 2) val name: String = "internal",
@@ -167,7 +173,14 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   checkNoArgRegisterReceivers()
 
   val fory = newFory()
+  fory.registerConstructor(
+    KotlinRegisteredSwap::class.java,
+    KotlinRegisteredSwap::class.java.getDeclaredConstructor(String::class.java, String::class.java),
+    "right",
+    "left",
+  )
   fory.register<KotlinUser>("kotlin", "KotlinUser")
+  fory.register<KotlinRegisteredSwap>("kotlin", "KotlinRegisteredSwap")
   fory.register<KotlinInternalUser>("kotlin", "KotlinInternalUser")
   fory.register<KotlinConcreteCollections>("kotlin", "KotlinConcreteCollections")
   fory.register<KotlinUnsignedCollections>("kotlin", "KotlinUnsignedCollections")
@@ -195,6 +208,14 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(descriptors[0].foryFieldId == 1)
   check(descriptors[0].typeRef.typeExtMeta.typeId() == Types.UINT32)
   check(descriptors[2].typeRef.typeExtMeta.typeId() == Types.VARINT64)
+
+  val swap = KotlinRegisteredSwap(left = "left", right = "right")
+  val swapped = KotlinRegisteredSwap(left = "right", right = "left")
+  check(fory.deserialize(fory.serialize(swap), KotlinRegisteredSwap::class.java) == swapped)
+  check(fory.copy(swap) == swapped)
+  check(fory.getSerializer(KotlinRegisteredSwap::class.java) is StaticGeneratedStructSerializer<*>) {
+    "KotlinRegisteredSwap did not load a static generated serializer"
+  }
 
   val internalUser = KotlinInternalUser(id = UInt.MAX_VALUE, name = "internal-static")
   check(

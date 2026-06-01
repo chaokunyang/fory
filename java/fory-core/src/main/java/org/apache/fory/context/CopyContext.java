@@ -21,7 +21,6 @@ package org.apache.fory.context;
 
 import java.util.Arrays;
 import org.apache.fory.collection.IdentityMap;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -42,7 +41,6 @@ public final class CopyContext {
   private final TypeResolver typeResolver;
   private final boolean copyRefTracking;
   private final IdentityMap<Object, Object> originToCopyMap;
-  private static final Object COPY_IN_PROGRESS = new Object();
 
   /**
    * Creates a copy context for one runtime.
@@ -90,26 +88,7 @@ public final class CopyContext {
 
   /** Returns the previously registered copy for {@code origin}, or {@code null} if absent. */
   public <T> T getCopyObject(T origin) {
-    Object copied = originToCopyMap.get(origin);
-    if (copied == COPY_IN_PROGRESS) {
-      throw new ForyException(
-          "Cyclic references to constructor-bound objects cannot be copied before construction.");
-    }
-    return (T) copied;
-  }
-
-  /** Marks {@code origin} as being copied before a constructor-bound copy can be registered. */
-  public void markCopying(Object origin) {
-    if (copyRefTracking && origin != null) {
-      originToCopyMap.put(origin, COPY_IN_PROGRESS);
-    }
-  }
-
-  /** Clears an in-progress constructor-bound copy marker after a failed copy. */
-  public void cancelCopy(Object origin) {
-    if (copyRefTracking && origin != null && originToCopyMap.get(origin) == COPY_IN_PROGRESS) {
-      originToCopyMap.remove(origin);
-    }
+    return (T) originToCopyMap.get(origin);
   }
 
   /**

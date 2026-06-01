@@ -20,6 +20,7 @@
 package org.apache.fory;
 
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.function.Function;
 import org.apache.fory.io.ForyInputStream;
@@ -88,6 +89,17 @@ public interface BaseFory {
    * deserialization, or copy operations start.
    */
   void register(ForyModule module);
+
+  /**
+   * Register an explicit constructor-to-field mapping for {@code type}.
+   *
+   * <p>The constructor arguments are populated from {@code fieldNames} in order. This is useful for
+   * third-party classes that cannot annotate a constructor with {@code @ForyConstructor}.
+   *
+   * <p>Call this during setup before top-level serialization, deserialization, or copy operations
+   * start.
+   */
+  <T> void registerConstructor(Class<T> type, Constructor<T> constructor, String... fieldNames);
 
   void registerUnion(Class<?> cls, int id, Serializer<?> serializer);
 

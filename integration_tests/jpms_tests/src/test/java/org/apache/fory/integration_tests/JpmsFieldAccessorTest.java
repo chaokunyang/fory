@@ -40,6 +40,19 @@ public class JpmsFieldAccessorTest {
   }
 
   @Test
+  public void testPrivateFinalFieldSerialization() {
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    PrivateFieldBean result =
+        (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(13)));
+    Assert.assertEquals(result.value(), 13);
+  }
+
+  @Test
   public void testPublicSerializerInExportedPackage() {
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     fory.registerSerializer(PublicSerializerValue.class, PublicSerializerValueSerializer.class);

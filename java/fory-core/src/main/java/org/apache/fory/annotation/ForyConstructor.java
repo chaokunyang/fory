@@ -17,20 +17,25 @@
  * under the License.
  */
 
-package org.apache.fory.integration_tests.model;
+package org.apache.fory.annotation;
 
-import java.io.Serializable;
+import java.lang.annotation.Documented;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-public final class PrivateFieldBean implements Serializable {
-  private static final long serialVersionUID = 1L;
-
-  private final int value;
-
-  public PrivateFieldBean(int value) {
-    this.value = value;
-  }
-
-  public int value() {
-    return value;
-  }
+/** Maps one constructor's arguments to serialized field names. */
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.CONSTRUCTOR)
+@Public
+public @interface ForyConstructor {
+  /**
+   * Field names in constructor argument order.
+   *
+   * <p>Every name must refer to one non-static serialized field declared by the target class or a
+   * superclass. Duplicate field names in a class hierarchy are not bindable by this annotation.
+   */
+  String[] value();
 }

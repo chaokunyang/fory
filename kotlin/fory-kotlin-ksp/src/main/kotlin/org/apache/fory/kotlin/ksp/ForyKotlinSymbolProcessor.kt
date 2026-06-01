@@ -48,6 +48,14 @@ private data class ParsedStructFields(
   val fields: List<KotlinSourceField>,
 )
 
+private sealed class ConstructorFields {
+  object Absent : ConstructorFields()
+
+  object Invalid : ConstructorFields()
+
+  data class Present(val names: List<String>) : ConstructorFields()
+}
+
 internal fun fieldLimitError(defaultFieldCount: Int): String? =
   if (defaultFieldCount > MAX_DEFAULT_FIELDS) {
     "Kotlin KSP xlang serializers currently support at most $MAX_DEFAULT_FIELDS defaulted constructor fields because Kotlin source generation must call constructors with omitted default arguments"
@@ -99,6 +107,24 @@ internal fun ctorVisibilityError(modifiers: Set<Modifier>): String? =
   } else {
     null
   }
+
+internal fun constructorBindingError(
+  parameterNames: List<String>,
+  fieldNames: List<String>,
+  targetName: String,
+): String? {
+  if (parameterNames.size != fieldNames.size) {
+    return "@ForyConstructor on $targetName must declare one field name for each primary constructor parameter"
+  }
+  val duplicates = fieldNames.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+  if (duplicates.isNotEmpty()) {
+    return "@ForyConstructor on $targetName declares duplicate field name ${duplicates.first()}"
+  }
+  if (fieldNames.any { it.isBlank() }) {
+    return "@ForyConstructor on $targetName must not declare blank field names"
+  }
+  return null
+}
 
 internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcessorEnvironment) :
   SymbolProcessor {
@@ -258,32 +284,122 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     declaration: KSClassDeclaration,
     primaryConstructor: KSFunctionDeclaration,
   ): ParsedStructFields? {
+    val constructorFields =
+      when (val parsed = parseConstructorFields(declaration, primaryConstructor)) {
+        ConstructorFields.Absent -> null
+        ConstructorFields.Invalid -> return null
+        is ConstructorFields.Present -> parsed.names
+      }
     if (primaryConstructor.parameters.isEmpty()) {
+      if (constructorFields != null) {
+        logger.error(
+          "@ForyConstructor is only supported on Kotlin primary constructors that build schema fields",
+          primaryConstructor,
+        )
+        return null
+      }
       return ParsedStructFields(
         KotlinStructConstruction.MUTABLE,
         parseVarFields(declaration) ?: return null,
       )
     }
     val propertiesByName = declaration.getAllProperties().associateBy { it.simpleName.asString() }
-    val fields = parseCtorFields(declaration, primaryConstructor, propertiesByName) ?: return null
+    val fields =
+      parseCtorFields(declaration, primaryConstructor, propertiesByName, constructorFields)
+        ?: return null
     return ParsedStructFields(KotlinStructConstruction.CONSTRUCTOR, fields)
+  }
+
+  private fun parseConstructorFields(
+    declaration: KSClassDeclaration,
+    primaryConstructor: KSFunctionDeclaration,
+  ): ConstructorFields {
+    val annotation =
+      primaryConstructor.annotations.firstOrNull { isAnnotation(it, FORY_CONSTRUCTOR) }
+        ?: return ConstructorFields.Absent
+    val fieldNames = mutableListOf<String>()
+    val argument =
+      annotation.arguments.firstOrNull { it.name?.asString() == "value" }
+        ?: annotation.arguments.singleOrNull()
+    when (val value = argument?.value) {
+      is String -> fieldNames.add(value)
+      is List<*> -> {
+        for (entry in value) {
+          if (entry !is String) {
+            logger.error("@ForyConstructor values must be field names", primaryConstructor)
+            return ConstructorFields.Invalid
+          }
+          fieldNames.add(entry)
+        }
+      }
+      is Array<*> -> {
+        for (entry in value) {
+          if (entry !is String) {
+            logger.error("@ForyConstructor values must be field names", primaryConstructor)
+            return ConstructorFields.Invalid
+          }
+          fieldNames.add(entry)
+        }
+      }
+      else -> {
+        logger.error("@ForyConstructor must declare field names", primaryConstructor)
+        return ConstructorFields.Invalid
+      }
+    }
+    val parameterNames = mutableListOf<String>()
+    for (parameter in primaryConstructor.parameters) {
+      val parameterName = parameter.name?.asString()
+      if (parameterName == null) {
+        logger.error(
+          "@ForyConstructor requires named Kotlin primary constructor parameters",
+          parameter,
+        )
+        return ConstructorFields.Invalid
+      }
+      parameterNames.add(parameterName)
+    }
+    val bindingError =
+      constructorBindingError(
+        parameterNames,
+        fieldNames,
+        declaration.qualifiedName?.asString() ?: declaration.simpleName.asString(),
+      )
+    if (bindingError != null) {
+      logger.error(bindingError, primaryConstructor)
+      return ConstructorFields.Invalid
+    }
+    return ConstructorFields.Present(fieldNames)
   }
 
   private fun parseCtorFields(
     declaration: KSClassDeclaration,
     primaryConstructor: KSFunctionDeclaration,
     propertiesByName: Map<String, KSPropertyDeclaration>,
+    constructorFields: List<String>?,
   ): List<KotlinSourceField>? {
     val fields = mutableListOf<KotlinSourceField>()
     val foryIds = hashSetOf<Int>()
     var nextId = 0
-    for (parameter in primaryConstructor.parameters) {
+    val explicitConstructor = constructorFields != null
+    for ((index, parameter) in primaryConstructor.parameters.withIndex()) {
       val parameterName = parameter.name?.asString() ?: continue
-      val property = propertiesByName[parameterName]
-      if (property == null || (!parameter.isVal && !parameter.isVar)) {
+      val fieldName = constructorFields?.get(index) ?: parameterName
+      val property = propertiesByName[fieldName]
+      if (property == null || (!explicitConstructor && !parameter.isVal && !parameter.isVar)) {
         logger.error(
-          "Constructor parameter $parameterName is not a field-backed property",
+          "Constructor parameter $parameterName is not bound to an accessible schema property",
           parameter
+        )
+        return null
+      }
+      val fieldType = property.type.resolve()
+      val parameterType = parameter.type.resolve()
+      val fieldTypeName = kotlinSourceTypeName(fieldType)
+      val parameterTypeName = kotlinSourceTypeName(parameterType)
+      if (explicitConstructor && fieldTypeName != parameterTypeName) {
+        logger.error(
+          "@ForyConstructor field $fieldName type $fieldTypeName must match primary constructor parameter $parameterName type $parameterTypeName",
+          parameter,
         )
         return null
       }
@@ -291,13 +407,14 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         parseField(
           declaration,
           property,
-          parameterName,
-          parameter.type.resolve(),
+          fieldName,
+          fieldType,
           parameter,
           nextId,
           parameter.hasDefault,
           foryIds,
           requireForyId = false,
+          constructorParameterName = parameterName,
         ) ?: return null
       fields.add(field)
       nextId++
@@ -336,6 +453,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
           hasDefault = false,
           foryIds,
           requireForyId = true,
+          constructorParameterName = property.simpleName.asString(),
         ) ?: return null
       fields.add(field)
     }
@@ -352,6 +470,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     hasDefault: Boolean,
     foryIds: MutableSet<Int>,
     requireForyId: Boolean,
+    constructorParameterName: String,
   ): KotlinSourceField? {
     if (Modifier.PRIVATE in property.modifiers) {
       logger.error("Private Fory field $fieldName is inaccessible to generated code", property)
@@ -382,6 +501,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     return KotlinSourceField(
       id = id,
       name = fieldName,
+      constructorParameterName = constructorParameterName,
       type = typeNode,
       hasForyField = fieldMeta.hasAnnotation,
       foryFieldId = fieldMeta.id,
@@ -448,10 +568,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       }
       val caseId = foryCaseId(caseDeclaration, reportMissing = false) ?: continue
       if (caseId < 0) {
-        logger.error(
-          "Schema Kotlin union @ForyCase ids must be non-negative",
-          caseDeclaration
-        )
+        logger.error("Schema Kotlin union @ForyCase ids must be non-negative", caseDeclaration)
         return null
       }
       if (!caseIds.add(caseId)) {
@@ -1710,6 +1827,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
 
   private companion object {
     const val FORY_STRUCT = "org.apache.fory.annotation.ForyStruct"
+    const val FORY_CONSTRUCTOR = "org.apache.fory.annotation.ForyConstructor"
     const val FORY_UNION = "org.apache.fory.annotation.ForyUnion"
     const val FORY_CASE = "org.apache.fory.annotation.ForyCase"
     const val FORY_UNKNOWN_CASE = "org.apache.fory.annotation.ForyUnknownCase"

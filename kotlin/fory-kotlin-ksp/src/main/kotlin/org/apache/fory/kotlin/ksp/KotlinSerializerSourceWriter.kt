@@ -92,6 +92,8 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("  private val allFields: Array<SerializationFieldInfo>\n")
     builder.append("  private val allFieldIds: IntArray\n")
     builder.append("  private val fieldsById: Array<SerializationFieldInfo?>\n")
+    builder.append("  private val constructorFieldIds: IntArray?\n")
+    builder.append("  private val constructorFieldBits: LongArray?\n")
     builder.append("  private val classVersionHash: Int\n")
     builder.append("  private val sameSchemaCompatible: Boolean\n\n")
   }
@@ -134,6 +136,8 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    this.allFields = emptyArray()\n")
     builder.append("    this.allFieldIds = IntArray(0)\n")
     builder.append("    this.fieldsById = arrayOfNulls(0)\n")
+    builder.append("    this.constructorFieldIds = null\n")
+    builder.append("    this.constructorFieldBits = null\n")
     builder.append("    this.classVersionHash = 0\n")
     builder.append("    this.sameSchemaCompatible = false\n")
     builder.append("  }\n\n")
@@ -162,6 +166,12 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    for (i in this.allFields.indices) {\n")
     builder.append("      this.fieldsById[this.allFieldIds[i]] = this.allFields[i]\n")
     builder.append("    }\n")
+    builder.append(
+      "    this.constructorFieldIds = if (objectCreator.hasConstructorFields()) buildConstructorFieldIds(DESCRIPTORS) else null\n"
+    )
+    builder.append(
+      "    this.constructorFieldBits = buildConstructorFieldBits(DESCRIPTORS.size, constructorFieldIds)\n"
+    )
     writeScalarBindings()
     builder.append(
       "    this.classVersionHash = if (typeResolver.checkClassVersion()) computeClassVersionHash(DESCRIPTORS) else 0\n"
@@ -234,6 +244,177 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("      }\n")
     builder.append("    }\n")
     builder.append("  }\n\n")
+
+    builder
+      .append("  private fun readCompatibleConstructor(readContext: ReadContext): ")
+      .append(struct.typeName)
+      .append(" {\n")
+    builder.append("    val fieldValues = arrayOfNulls<Any?>(DESCRIPTORS.size)\n")
+    builder.append("    val bufferedFields = newFieldBits(DESCRIPTORS.size)\n")
+    builder.append("    val presentFields = newFieldBits(DESCRIPTORS.size)\n")
+    builder.append("    beginConstructorRef(readContext)\n")
+    builder.append("    try {\n")
+    builder.append("      var remaining = countConstructorFields(constructorFieldBits!!)\n")
+    builder.append("      var value: ").append(struct.typeName).append("? = null\n")
+    builder.append("      if (remaining == 0) {\n")
+    builder.append("        val constructed = newConstructorObject(fieldValues)\n")
+    builder.append("        value = constructed\n")
+    builder.append("        referenceConstructorRef(readContext, constructed)\n")
+    builder.append("      }\n")
+    builder.append("      for (i in remoteFields.indices) {\n")
+    builder.append("        val remoteField = remoteFields[i]\n")
+    builder.append("        val fieldId = remoteField.matchedId\n")
+    builder.append("        if (fieldId < 0) {\n")
+    builder.append("          skipField(readContext, remoteField)\n")
+    builder.append("          continue\n")
+    builder.append("        }\n")
+    builder.append("        val localField = fieldsById[fieldId]!!\n")
+    builder.append("        if (!canReadRemoteField(remoteField, localField)) {\n")
+    builder.append("          skipField(readContext, remoteField)\n")
+    builder.append("          continue\n")
+    builder.append("        }\n")
+    builder.append(
+      "        val fieldValue = readCompatibleConstructorField(readContext, remoteField, localField, fieldId)\n"
+    )
+    builder.append("        markField(presentFields, fieldId)\n")
+    builder.append("        if (hasField(constructorFieldBits!!, fieldId)) {\n")
+    builder.append(
+      "          fieldValues[fieldId] = ctorFieldValue(readContext, fieldValue, type)\n"
+    )
+    builder.append("          remaining--\n")
+    builder.append("          if (remaining == 0) {\n")
+    builder.append("            checkNoUnresolvedReadRef(readContext)\n")
+    builder.append("            val constructed = newConstructorObject(fieldValues)\n")
+    builder.append("            value = constructed\n")
+    builder.append("            referenceConstructorRef(readContext, constructed)\n")
+    builder.append("            setBufferedFields(constructed, fieldValues, bufferedFields)\n")
+    builder.append("          }\n")
+    builder.append("        } else if (value == null) {\n")
+    builder.append(
+      "          fieldValues[fieldId] = bufferFieldValue(readContext, fieldValue, type)\n"
+    )
+    builder.append("          markField(bufferedFields, fieldId)\n")
+    builder.append("        } else {\n")
+    builder.append("          setFieldById(value!!, localField, fieldId, fieldValue)\n")
+    builder.append("        }\n")
+    builder.append("      }\n")
+    for (field in struct.fields) {
+      if (field.hasDefault || field.nullable) {
+        continue
+      }
+      builder.append("      if (!hasField(presentFields, ").append(field.id).append(")) {\n")
+      builder
+        .append("        throw DeserializationException(\"Required Kotlin field ")
+        .append(struct.qualifiedTypeName)
+        .append('.')
+        .append(field.name)
+        .append(" is missing in compatible xlang payload\")\n")
+      builder.append("      }\n")
+    }
+    builder.append("      if (value == null) {\n")
+    builder.append("        checkNoUnresolvedReadRef(readContext)\n")
+    builder.append("        val constructed = newConstructorObject(fieldValues)\n")
+    builder.append("        value = constructed\n")
+    builder.append("        referenceConstructorRef(readContext, constructed)\n")
+    builder.append("        setBufferedFields(constructed, fieldValues, bufferedFields)\n")
+    builder.append("      }\n")
+    builder.append("      return value!!\n")
+    builder.append("    } finally {\n")
+    builder.append("      endConstructorRef(readContext)\n")
+    builder.append("    }\n")
+    builder.append("  }\n\n")
+
+    builder.append(
+      "  private fun readCompatibleConstructorField(readContext: ReadContext, remoteField: StaticGeneratedStructSerializer.RemoteFieldInfo, localField: SerializationFieldInfo, fieldId: Int): Any? {\n"
+    )
+    builder.append("    return when (fieldId) {\n")
+    for (field in struct.fields) {
+      val expression =
+        castReadExpression(
+          field,
+          "readCompatibleFieldValue(readContext, remoteField, localField)",
+          compatible = true,
+        )
+      builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
+    }
+    builder.append(
+      "      else -> throw IllegalStateException(\"Unknown generated field id \${fieldId}\")\n"
+    )
+    builder.append("    }\n")
+    builder.append("  }\n\n")
+
+    builder
+      .append("  private fun newConstructorObject(fieldValues: Array<Any?>): ")
+      .append(struct.typeName)
+      .append(" {\n")
+    builder.append(
+      "    return objectCreator.newInstanceWithArguments(*constructorArgs(fieldValues, constructorFieldIds!!, objectCreator.getConstructorFieldTypes())) as "
+    )
+    builder.append(struct.typeName).append("\n")
+    builder.append("  }\n\n")
+
+    builder.append(
+      "  private fun setBufferedFields(value: ${struct.typeName}, fieldValues: Array<Any?>, bufferedFields: LongArray) {\n"
+    )
+    builder.append("    for (fieldId in fieldsById.indices) {\n")
+    builder.append("      if (hasField(bufferedFields, fieldId)) {\n")
+    builder.append(
+      "        setFieldById(value, fieldsById[fieldId]!!, fieldId, resolveBufferedValue(fieldValues[fieldId], value))\n"
+    )
+    builder.append("      }\n")
+    builder.append("    }\n")
+    builder.append("  }\n\n")
+
+    builder.append(
+      "  private fun setFieldById(value: ${struct.typeName}, fieldInfo: SerializationFieldInfo, fieldId: Int, fieldValue: Any?) {\n"
+    )
+    builder.append("    when (fieldId) {\n")
+    for (field in struct.fields) {
+      builder
+        .append("      ")
+        .append(field.id)
+        .append(" -> setGeneratedFieldValue(value, fieldInfo, fieldValue)\n")
+    }
+    builder.append(
+      "      else -> throw IllegalStateException(\"Unknown generated field id \${fieldId}\")\n"
+    )
+    builder.append("    }\n")
+    builder.append("  }\n\n")
+
+    builder
+      .append("  private fun copyConstructorObject(copyContext: CopyContext, value: ")
+      .append(struct.typeName)
+      .append("): ")
+      .append(struct.typeName)
+      .append(" {\n")
+    builder.append("    val fieldValues = arrayOfNulls<Any?>(DESCRIPTORS.size)\n")
+    for (field in struct.fields) {
+      builder.append("    if (hasField(constructorFieldBits!!, ").append(field.id).append(")) {\n")
+      builder
+        .append("      fieldValues[")
+        .append(field.id)
+        .append("] = copyConstructorFieldValue(copyContext, value, ")
+        .append("value.")
+        .append(field.name)
+        .append(", fieldsById[")
+        .append(field.id)
+        .append("]!!)\n")
+      builder.append("    }\n")
+    }
+    builder.append("    val copied = newConstructorObject(fieldValues)\n")
+    builder.append("    copyContext.reference(value, copied)\n")
+    for (field in struct.fields) {
+      builder.append("    if (!hasField(constructorFieldBits!!, ").append(field.id).append(")) {\n")
+      builder
+        .append("      setGeneratedFieldValue(copied, fieldsById[")
+        .append(field.id)
+        .append("]!!, ")
+        .append(copyExpression(field))
+        .append(")\n")
+      builder.append("    }\n")
+    }
+    builder.append("    return copied\n")
+    builder.append("  }\n\n")
   }
 
   private fun writeRead() {
@@ -257,9 +438,13 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    if (typeResolver.checkClassVersion()) {\n")
     builder.append("      checkClassVersion(buffer.readInt32(), classVersionHash)\n")
     builder.append("    }\n")
+    builder.append("    if (constructorFieldIds != null) {\n")
+    builder.append("      return readSchemaConstructor(readContext)\n")
+    builder.append("    }\n")
     if (struct.construction == KotlinStructConstruction.MUTABLE) {
       writeMutableReadBody()
       builder.append("  }\n\n")
+      writeConstructorRead()
       return
     }
     writeLocalDeclarations()
@@ -287,6 +472,80 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    return ")
     appendConstructorCall(defaultMask = 0L)
     builder.append("\n")
+    builder.append("  }\n\n")
+    writeConstructorRead()
+  }
+
+  private fun writeConstructorRead() {
+    builder
+      .append("  private fun readSchemaConstructor(readContext: ReadContext): ")
+      .append(struct.typeName)
+      .append(" {\n")
+    builder.append("    val fieldValues = arrayOfNulls<Any?>(DESCRIPTORS.size)\n")
+    builder.append("    val bufferedFields = newFieldBits(DESCRIPTORS.size)\n")
+    builder.append("    beginConstructorRef(readContext)\n")
+    builder.append("    try {\n")
+    builder.append("      var remaining = countConstructorFields(constructorFieldBits!!)\n")
+    builder.append("      var value: ").append(struct.typeName).append("? = null\n")
+    builder.append("      if (remaining == 0) {\n")
+    builder.append("        val constructed = newConstructorObject(fieldValues)\n")
+    builder.append("        value = constructed\n")
+    builder.append("        referenceConstructorRef(readContext, constructed)\n")
+    builder.append("      }\n")
+    builder.append("      for (i in allFields.indices) {\n")
+    builder.append("        val fieldInfo = allFields[i]\n")
+    builder.append("        val fieldId = allFieldIds[i]\n")
+    builder.append(
+      "        val fieldValue = readSchemaConstructorField(readContext, fieldInfo, fieldId)\n"
+    )
+    builder.append("        if (hasField(constructorFieldBits!!, fieldId)) {\n")
+    builder.append(
+      "          fieldValues[fieldId] = ctorFieldValue(readContext, fieldValue, type)\n"
+    )
+    builder.append("          remaining--\n")
+    builder.append("          if (remaining == 0) {\n")
+    builder.append("            checkNoUnresolvedReadRef(readContext)\n")
+    builder.append("            val constructed = newConstructorObject(fieldValues)\n")
+    builder.append("            value = constructed\n")
+    builder.append("            referenceConstructorRef(readContext, constructed)\n")
+    builder.append("            setBufferedFields(constructed, fieldValues, bufferedFields)\n")
+    builder.append("          }\n")
+    builder.append("        } else if (value == null) {\n")
+    builder.append(
+      "          fieldValues[fieldId] = bufferFieldValue(readContext, fieldValue, type)\n"
+    )
+    builder.append("          markField(bufferedFields, fieldId)\n")
+    builder.append("        } else {\n")
+    builder.append("          setFieldById(value!!, fieldInfo, fieldId, fieldValue)\n")
+    builder.append("        }\n")
+    builder.append("      }\n")
+    builder.append("      if (value == null) {\n")
+    builder.append("        checkNoUnresolvedReadRef(readContext)\n")
+    builder.append("        val constructed = newConstructorObject(fieldValues)\n")
+    builder.append("        value = constructed\n")
+    builder.append("        referenceConstructorRef(readContext, constructed)\n")
+    builder.append("        setBufferedFields(constructed, fieldValues, bufferedFields)\n")
+    builder.append("      }\n")
+    builder.append("      return value!!\n")
+    builder.append("    } finally {\n")
+    builder.append("      endConstructorRef(readContext)\n")
+    builder.append("    }\n")
+    builder.append("  }\n\n")
+
+    builder.append(
+      "  private fun readSchemaConstructorField(readContext: ReadContext, fieldInfo: SerializationFieldInfo, fieldId: Int): Any? {\n"
+    )
+    builder.append("    val buffer = readContext.buffer\n")
+    builder.append("    return when (fieldId) {\n")
+    for (field in struct.fields) {
+      val direct = directReadExpression(field)
+      val expression = direct ?: castReadExpression(field, "readFieldValue(readContext, fieldInfo)")
+      builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
+    }
+    builder.append(
+      "      else -> throw IllegalStateException(\"Unknown generated field id \${fieldId}\")\n"
+    )
+    builder.append("    }\n")
     builder.append("  }\n\n")
   }
 
@@ -325,6 +584,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       .append(" {\n")
     builder.append("    if (sameSchemaCompatible) {\n")
     builder.append("      return readSchemaConsistent(readContext)\n")
+    builder.append("    }\n")
+    builder.append("    if (constructorFieldIds != null) {\n")
+    builder.append("      return readCompatibleConstructor(readContext)\n")
     builder.append("    }\n")
     if (struct.construction == KotlinStructConstruction.MUTABLE) {
       writeMutableCompatibleReadBody()
@@ -488,6 +750,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    if (immutable) {\n")
     builder.append("      return value\n")
     builder.append("    }\n")
+    builder.append("    if (constructorFieldIds != null) {\n")
+    builder.append("      return copyConstructorObject(copyContext, value)\n")
+    builder.append("    }\n")
     if (struct.construction == KotlinStructConstruction.MUTABLE) {
       writeMutableCopyBody()
       builder.append("  }\n")
@@ -569,6 +834,20 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    return copy\n")
   }
 
+  private fun copyExpression(field: KotlinSourceField): String =
+    when {
+      field.type.primitive || isScalarUnsigned(field) -> "value.${field.name}"
+      isDenseUnsignedArray(field) ->
+        if (field.nullable) "value.${field.name}?.copyOf()" else "value.${field.name}.copyOf()"
+      field.type.isCollectionOrMap() ->
+        copyContainerExpression(field.type, "value.${field.name}", 0)
+      else ->
+        castReadExpression(
+          field,
+          "copyFieldValue(copyContext, value.${field.name}, fieldsById[${field.id}]!!)"
+        )
+    }
+
   private fun writeLocalDeclarations() {
     for (field in struct.fields) {
       builder
@@ -624,7 +903,10 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       if (!first) {
         builder.append(", ")
       }
-      builder.append(field.name).append(" = ").append(constructorValueExpression(field))
+      builder
+        .append(field.constructorParameterName)
+        .append(" = ")
+        .append(constructorValueExpression(field))
       first = false
     }
     builder.append(")")

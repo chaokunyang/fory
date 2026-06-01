@@ -162,6 +162,54 @@ For ordinary application classes, Fory can use generated serializers and avoid J
 serialization-compatible path; prefer a Fory custom serializer for hot classes when the hook-based
 path is too expensive.
 
+## Final Fields And Constructors
+
+Records are deserialized through their canonical constructor. Ordinary classes use Fory's normal
+object-creation path and field setting unless you provide an explicit constructor mapping.
+
+Use `@ForyConstructor` when a constructor should receive serialized field values:
+
+```java
+import org.apache.fory.annotation.ForyConstructor;
+
+public final class User {
+  private final String name;
+  private final int age;
+
+  @ForyConstructor({"name", "age"})
+  public User(String name, int age) {
+    this.name = name;
+    this.age = age;
+  }
+}
+```
+
+For third-party classes that cannot be annotated, register the constructor during runtime setup:
+
+```java
+import java.lang.reflect.Constructor;
+
+Constructor<User> constructor = User.class.getDeclaredConstructor(String.class, int.class);
+fory.registerConstructor(User.class, constructor, "name", "age");
+```
+
+The field names are the binding contract. For ordinary classes, Fory does not infer constructor
+bindings from Java parameter names, `-parameters`, or `@ConstructorProperties`.
+
+When no explicit constructor mapping is provided, normal classes with final fields use Fory's normal
+object creation and field setting. On JDK25+ with Unsafe memory access denied, Fory reports an error
+if the class cannot be created by supported Java mechanisms. Use `@ForyConstructor`,
+`registerConstructor(...)`, a record canonical constructor, or a custom serializer for those classes.
+Use the `java.base/java.lang.invoke` open shown in troubleshooting for supported JDK25+ access paths.
+On JDK26+, enable final-field mutation for the Fory runtime module, or for `ALL-UNNAMED` when Fory is
+loaded from the classpath. JDK25 does not have the final-field mutation flag. See
+[Troubleshooting](troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens) for the required JVM
+flags.
+
+Constructor-bound objects cannot receive a constructor argument that refers directly to the same
+object under construction. Model those cycles through non-constructor fields or use a custom
+serializer.
+
 ## JDK Serialization Hooks
 
 Java native mode supports the JDK serialization hooks that are part of many existing Java object
@@ -171,6 +219,9 @@ models:
 - `writeReplace` and `readResolve`
 - `readObjectNoData`
 - `Externalizable`
+
+Fory native serialization remains stable across supported JDK versions when writers and readers use
+the same Fory version and runtime configuration.
 
 ```java
 import java.io.IOException;

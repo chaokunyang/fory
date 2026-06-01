@@ -34,7 +34,6 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.struct.Fingerprint;
@@ -74,7 +73,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   public ObjectSerializer(TypeResolver typeResolver, Class<T> cls, boolean resolveParent) {
-    this(typeResolver, cls, resolveParent, ObjectCreators.getObjectCreator(cls));
+    this(typeResolver, cls, resolveParent, typeResolver.getObjectCreator(cls));
   }
 
   public ObjectSerializer(

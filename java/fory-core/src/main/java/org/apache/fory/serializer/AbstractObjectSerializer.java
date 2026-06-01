@@ -26,6 +26,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
+import org.apache.fory.collection.IntArray;
 import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
@@ -38,7 +39,6 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
@@ -64,6 +64,11 @@ import org.apache.fory.util.record.RecordUtils;
 public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(AbstractObjectSerializer.class);
   private static final Object SELF_REFERENCE = new Object();
+  // Constructor-bound objects reserve a ref id before constructor arguments are read, but the
+  // context package must stay a generic ref owner. Track unresolved constructor refs here so
+  // final-field construction does not add context APIs or bind the wrong pending ref id.
+  private static final Object CONSTRUCTOR_REF_IDS = new Object();
+  private static final Object UNRESOLVED_CONSTRUCTOR_REF_IDS = new Object();
   protected final Config config;
   protected final TypeResolver typeResolver;
   protected final boolean isRecord;
@@ -80,7 +85,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   public AbstractObjectSerializer(TypeResolver typeResolver, Class<T> type) {
-    this(typeResolver, type, ObjectCreators.getObjectCreator(type));
+    this(typeResolver, type, typeResolver.getObjectCreator(type));
   }
 
   public AbstractObjectSerializer(
@@ -161,6 +166,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       MemoryBuffer buffer) {
     if (fieldInfo.useDeclaredTypeInfo) {
       if (refMode == RefMode.TRACKING) {
+        trackConstructorRefRead(readContext, buffer);
         return readContext.readRef(fieldInfo.typeInfo);
       }
       if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
@@ -170,6 +176,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       return null;
     }
     if (refMode == RefMode.TRACKING) {
+      trackConstructorRefRead(readContext, buffer);
       int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         Object value =
@@ -896,20 +903,27 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     int[] constructorFieldIndexes = buildConstructorFieldIndexes(fieldInfos);
     boolean[] constructorFieldMask =
         buildConstructorFieldMask(fieldInfos.length, constructorFieldIndexes);
-    copyContext.markCopying(originObj);
-    try {
-      Object[] fieldValues =
-          copyFieldValues(copyContext, originObj, fieldInfos, constructorFieldMask, true);
-      T newObj =
-          objectCreator.newInstanceWithArguments(
-              constructorArgs(
-                  fieldValues, constructorFieldIndexes, objectCreator.getConstructorFieldTypes()));
-      copyContext.reference(originObj, newObj);
-      copyFields(copyContext, fieldInfos, originObj, newObj, constructorFieldMask, false);
-      return newObj;
-    } catch (Throwable e) {
-      copyContext.cancelCopy(originObj);
-      throw e;
+    checkNoSelfConstructorField(originObj, fieldInfos, constructorFieldMask);
+    Object[] fieldValues =
+        copyFieldValues(copyContext, originObj, fieldInfos, constructorFieldMask, true);
+    T newObj =
+        objectCreator.newInstanceWithArguments(
+            constructorArgs(
+                fieldValues, constructorFieldIndexes, objectCreator.getConstructorFieldTypes()));
+    copyContext.reference(originObj, newObj);
+    copyFields(copyContext, fieldInfos, originObj, newObj, constructorFieldMask, false);
+    return newObj;
+  }
+
+  private void checkNoSelfConstructorField(
+      T originObj, SerializationFieldInfo[] fieldInfos, boolean[] constructorFieldMask) {
+    for (int i = 0; i < fieldInfos.length; i++) {
+      if (constructorFieldMask[i] && !fieldInfos[i].isPrimitiveField) {
+        Object fieldValue = fieldInfos[i].fieldAccessor.getObject(originObj);
+        if (fieldValue == originObj) {
+          throwConstructorCycle(type);
+        }
+      }
     }
   }
 
@@ -1246,20 +1260,24 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
 
   public static void beginConstructorRef(ReadContext readContext) {
     if (readContext.hasPreservedRefId()) {
-      readContext.trackUnresolvedRef(readContext.lastPreservedRefId());
+      constructorRefIds(readContext).add(readContext.lastPreservedRefId());
     }
   }
 
   public static void endConstructorRef(ReadContext readContext) {
-    readContext.untrackUnresolvedRef();
+    IntArray refIds = (IntArray) readContext.getContextObject(CONSTRUCTOR_REF_IDS);
+    if (refIds != null && refIds.size > 0) {
+      refIds.pop();
+    }
   }
 
   public static void referenceConstructorRef(ReadContext readContext, Object object) {
-    if (readContext.hasTrackedRef()) {
-      // Constructor-bound objects are registered after some fields may already have reserved and
-      // resolved their own ids, so bind the tracked id instead of popping the current stack top.
-      readContext.reference(readContext.currentTrackedRefId(), object);
-    } else if (readContext.hasPreservedRefId()) {
+    int constructorRefId = currentConstructorRefId(readContext);
+    if (constructorRefId >= 0) {
+      readContext.setReadRef(constructorRefId, object);
+      return;
+    }
+    if (readContext.hasPreservedRefId()) {
       readContext.reference(object);
     }
   }
@@ -1287,14 +1305,87 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   private static boolean consumeSelfRef(ReadContext readContext) {
-    if (readContext.hasTrackedRef()) {
-      return readContext.consumeUnresolvedRef(readContext.currentTrackedRefId());
-    }
-    return readContext.hasPreservedRefId()
-        && readContext.consumeUnresolvedRef(readContext.lastPreservedRefId());
+    int constructorRefId = currentConstructorRefId(readContext);
+    return constructorRefId >= 0 && consumeUnresolvedConstructorRef(readContext, constructorRefId);
   }
 
-  private static void throwConstructorCycle(Class<?> type) {
+  public static void trackConstructorRefRead(ReadContext readContext, MemoryBuffer buffer) {
+    IntArray constructorRefIds = (IntArray) readContext.getContextObject(CONSTRUCTOR_REF_IDS);
+    if (constructorRefIds == null || constructorRefIds.size == 0) {
+      return;
+    }
+    int readerIndex = buffer.readerIndex();
+    if (buffer.getByte(readerIndex) != Fory.REF_FLAG) {
+      return;
+    }
+    int refId;
+    try {
+      buffer.readerIndex(readerIndex + 1);
+      refId = buffer.readVarUInt32Small14();
+    } finally {
+      buffer.readerIndex(readerIndex);
+    }
+    if (readContext.getReadRef(refId) == null && containsRefId(constructorRefIds, refId)) {
+      unresolvedConstructorRefIds(readContext).add(refId);
+    }
+  }
+
+  private static IntArray constructorRefIds(ReadContext readContext) {
+    IntArray refIds = (IntArray) readContext.getContextObject(CONSTRUCTOR_REF_IDS);
+    if (refIds == null) {
+      refIds = new IntArray(4);
+      readContext.putContextObject(CONSTRUCTOR_REF_IDS, refIds);
+    }
+    return refIds;
+  }
+
+  private static IntArray unresolvedConstructorRefIds(ReadContext readContext) {
+    IntArray refIds = (IntArray) readContext.getContextObject(UNRESOLVED_CONSTRUCTOR_REF_IDS);
+    if (refIds == null) {
+      refIds = new IntArray(4);
+      readContext.putContextObject(UNRESOLVED_CONSTRUCTOR_REF_IDS, refIds);
+    }
+    return refIds;
+  }
+
+  private static int currentConstructorRefId(ReadContext readContext) {
+    IntArray refIds = (IntArray) readContext.getContextObject(CONSTRUCTOR_REF_IDS);
+    if (refIds == null || refIds.size == 0) {
+      return -1;
+    }
+    return refIds.get(refIds.size - 1);
+  }
+
+  private static boolean containsRefId(IntArray refIds, int refId) {
+    for (int i = refIds.size - 1; i >= 0; i--) {
+      if (refIds.get(i) == refId) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean consumeUnresolvedConstructorRef(ReadContext readContext, int refId) {
+    IntArray unresolvedRefIds =
+        (IntArray) readContext.getContextObject(UNRESOLVED_CONSTRUCTOR_REF_IDS);
+    if (unresolvedRefIds == null || unresolvedRefIds.size == 0) {
+      return false;
+    }
+    boolean found = false;
+    int newSize = 0;
+    for (int i = 0; i < unresolvedRefIds.size; i++) {
+      int unresolvedRefId = unresolvedRefIds.get(i);
+      if (unresolvedRefId == refId) {
+        found = true;
+      } else {
+        unresolvedRefIds.elementData[newSize++] = unresolvedRefId;
+      }
+    }
+    unresolvedRefIds.size = newSize;
+    return found;
+  }
+
+  protected static void throwConstructorCycle(Class<?> type) {
     throw new ForyException(
         "Cyclic references to constructor-bound type "
             + type.getName()

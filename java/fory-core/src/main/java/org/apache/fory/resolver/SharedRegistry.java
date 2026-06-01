@@ -39,6 +39,7 @@ import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.reflect.ObjectCreatorRegistry;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
@@ -81,6 +82,7 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
+  private final ObjectCreatorRegistry objectCreatorRegistry = new ObjectCreatorRegistry();
   final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
       new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
@@ -123,6 +125,10 @@ public final class SharedRegistry {
               type.getName(), existing, serializer));
     }
     return existing;
+  }
+
+  public ObjectCreatorRegistry getObjectCreatorRegistry() {
+    return objectCreatorRegistry;
   }
 
   TypeInfo cacheRegisteredTypeInfo(Class<?> type, TypeInfo typeInfo) {

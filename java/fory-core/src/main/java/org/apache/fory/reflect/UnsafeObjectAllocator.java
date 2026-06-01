@@ -19,36 +19,29 @@
 
 package org.apache.fory.reflect;
 
-import java.lang.reflect.Field;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.ForyException;
+import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.platform.internal._JDKAccess;
+import sun.misc.Unsafe;
 
-final class ReflectionFieldAccessor extends FieldAccessor {
-  ReflectionFieldAccessor(Field field) {
-    super(field);
-    try {
-      field.setAccessible(true);
-    } catch (RuntimeException e) {
-      throw new ForyException("Failed to make field accessible: " + field, e);
+/** Internal JDK8-24 allocator used by object creators. */
+@Internal
+final class UnsafeObjectAllocator {
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
+
+  private UnsafeObjectAllocator() {}
+
+  static <T> T allocate(Class<T> type) {
+    if (UNSAFE == null || JdkVersion.MAJOR_VERSION >= 25) {
+      throw new ForyException(
+          "Constructor-bypassing Unsafe allocation is unsupported in this runtime for " + type);
     }
-  }
-
-  @Override
-  public Object get(Object obj) {
-    checkObj(obj);
     try {
-      return field.get(obj);
-    } catch (IllegalAccessException | IllegalArgumentException e) {
-      throw new ForyException("Failed to read field reflectively: " + field, e);
-    }
-  }
-
-  @Override
-  public void set(Object obj, Object value) {
-    checkObj(obj);
-    try {
-      field.set(obj, value);
-    } catch (IllegalAccessException | IllegalArgumentException e) {
-      throw new ForyException("Failed to write field reflectively: " + field, e);
+      return (T) UNSAFE.allocateInstance(type);
+    } catch (InstantiationException e) {
+      throw new ForyException("Failed to allocate instance for " + type, e);
     }
   }
 }

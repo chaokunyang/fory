@@ -19,9 +19,11 @@
 
 package org.apache.fory.integration_tests;
 
+import java.io.Serializable;
 import org.apache.fory.Fory;
 import org.apache.fory.benchmark.data.MediaContent;
 import org.apache.fory.benchmark.data.Sample;
+import org.apache.fory.platform.JdkVersion;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -43,5 +45,48 @@ public class ForyTest {
     byte[] data = fory.serialize(object);
     MediaContent mediaContent = (MediaContent) fory.deserialize(data);
     Assert.assertEquals(mediaContent, object);
+  }
+
+  @Test
+  public void testClasspathRuntime() throws Exception {
+    if (JdkVersion.MAJOR_VERSION >= 9) {
+      Object module = Class.class.getMethod("getModule").invoke(Fory.class);
+      boolean named = (boolean) module.getClass().getMethod("isNamed").invoke(module);
+      Assert.assertFalse(named);
+    }
+  }
+
+  @Test
+  public void testFinalFieldBean() {
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
+    FinalFieldBean value = new FinalFieldBean("amy", 42);
+    Object deserialized = fory.deserialize(fory.serialize(value));
+    Assert.assertEquals(deserialized, value);
+  }
+
+  static final class FinalFieldBean implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private final String name;
+    private final int age;
+
+    private FinalFieldBean(String name, int age) {
+      this.name = name;
+      this.age = age;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof FinalFieldBean)) {
+        return false;
+      }
+      FinalFieldBean other = (FinalFieldBean) obj;
+      return age == other.age && name.equals(other.name);
+    }
+
+    @Override
+    public int hashCode() {
+      return name.hashCode() * 31 + age;
+    }
   }
 }

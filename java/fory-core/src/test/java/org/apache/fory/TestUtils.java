@@ -28,7 +28,17 @@ import java.io.ObjectOutputStream;
 import java.lang.management.ManagementFactory;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.fory.collection.Tuple3;
@@ -44,7 +54,7 @@ import org.testng.SkipException;
 /** Test utils. */
 public class TestUtils {
   public static List<String> javaCommand(Class<?> mainClass) {
-    return javaCommand(System.getProperty("java.class.path"), mainClass);
+    return javaCommand(forkClassPath(), mainClass);
   }
 
   public static List<String> javaCommand(
@@ -53,6 +63,15 @@ public class TestUtils {
     command.add(System.getProperty("java.home") + File.separator + "bin" + File.separator + "java");
     command.addAll(forkJvmArgs());
     Collections.addAll(command, extraJvmArgs);
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      String modulePath = System.getProperty("jdk.module.path");
+      if (modulePath != null && !modulePath.isEmpty()) {
+        command.add("--module-path");
+        command.add(modulePath);
+        command.add("--add-modules");
+        command.add("org.apache.fory.core");
+      }
+    }
     command.add("-cp");
     command.add(classPath);
     command.add(mainClass.getName());
@@ -62,21 +81,37 @@ public class TestUtils {
   private static List<String> forkJvmArgs() {
     List<String> args = new ArrayList<>();
     if (JdkVersion.MAJOR_VERSION >= 25) {
-      args.add("--add-opens=java.base/java.lang=ALL-UNNAMED");
       args.add("--add-opens=java.base/java.lang.invoke=ALL-UNNAMED");
-      args.add("--add-opens=java.base/java.lang.reflect=ALL-UNNAMED");
-      args.add("--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED");
-      args.add("--add-opens=java.base/java.util=ALL-UNNAMED");
-      args.add("--add-opens=java.base/java.util.concurrent=ALL-UNNAMED");
       if (hasInputArg("--sun-misc-unsafe-memory-access=deny")) {
         args.add("--sun-misc-unsafe-memory-access=deny");
       }
+      finalFieldMutationArg().ifPresent(args::add);
     }
     return args;
   }
 
+  public static String forkClassPath() {
+    LinkedHashSet<String> elements = new LinkedHashSet<>();
+    addPathElements(elements, System.getProperty("surefire.real.class.path"));
+    addPathElements(elements, System.getProperty("java.class.path"));
+    return String.join(File.pathSeparator, elements);
+  }
+
+  private static void addPathElements(Set<String> elements, String path) {
+    if (path == null || path.isEmpty()) {
+      return;
+    }
+    Collections.addAll(elements, path.split(java.util.regex.Pattern.quote(File.pathSeparator)));
+  }
+
   private static boolean hasInputArg(String arg) {
     return ManagementFactory.getRuntimeMXBean().getInputArguments().contains(arg);
+  }
+
+  private static Optional<String> finalFieldMutationArg() {
+    return ManagementFactory.getRuntimeMXBean().getInputArguments().stream()
+        .filter(arg -> arg.startsWith("--enable-final-field-mutation="))
+        .findFirst();
   }
 
   @SuppressWarnings("unchecked")

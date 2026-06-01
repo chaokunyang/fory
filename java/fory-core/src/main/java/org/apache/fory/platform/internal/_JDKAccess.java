@@ -359,6 +359,7 @@ public class _JDKAccess {
     private static final Method WRITE_OBJECT;
     private static final Method READ_OBJECT;
     private static final Method READ_OBJECT_NO_DATA;
+    private static final Method DEFAULT_READ_OBJECT;
     private static final Method WRITE_REPLACE;
     private static final Method READ_RESOLVE;
 
@@ -367,6 +368,7 @@ public class _JDKAccess {
       Method writeObject = null;
       Method readObject = null;
       Method readObjectNoData = null;
+      Method defaultReadObject = null;
       Method writeReplace = null;
       Method readResolve = null;
       try {
@@ -377,6 +379,12 @@ public class _JDKAccess {
         readObject = factoryClass.getDeclaredMethod("readObjectForSerialization", Class.class);
         readObjectNoData =
             factoryClass.getDeclaredMethod("readObjectNoDataForSerialization", Class.class);
+        try {
+          defaultReadObject =
+              factoryClass.getDeclaredMethod("defaultReadObjectForSerialization", Class.class);
+        } catch (NoSuchMethodException e) {
+          ExceptionUtils.ignore(e);
+        }
         writeReplace = factoryClass.getDeclaredMethod("writeReplaceForSerialization", Class.class);
         readResolve = factoryClass.getDeclaredMethod("readResolveForSerialization", Class.class);
       } catch (Throwable e) {
@@ -386,23 +394,27 @@ public class _JDKAccess {
       WRITE_OBJECT = writeObject;
       READ_OBJECT = readObject;
       READ_OBJECT_NO_DATA = readObjectNoData;
+      DEFAULT_READ_OBJECT = defaultReadObject;
       WRITE_REPLACE = writeReplace;
       READ_RESOLVE = readResolve;
     }
   }
 
-  private static Method getSerializationMethod(Class<?> type, Method factoryMethod) {
-    if (!isSerializationHookLookupAvailable() || factoryMethod == null) {
+  private static MethodHandle getSerializationHandle(Class<?> type, Method factoryMethod) {
+    if (SerializationMethods.REFLECTION_FACTORY == null || factoryMethod == null) {
       return null;
     }
     try {
-      MethodHandle handle =
-          (MethodHandle) factoryMethod.invoke(SerializationMethods.REFLECTION_FACTORY, type);
-      return handle == null ? null : MethodHandles.reflectAs(Method.class, handle);
+      return (MethodHandle) factoryMethod.invoke(SerializationMethods.REFLECTION_FACTORY, type);
     } catch (Throwable e) {
       ExceptionUtils.ignore(e);
       return null;
     }
+  }
+
+  private static Method getSerializationMethod(Class<?> type, Method factoryMethod) {
+    MethodHandle handle = getSerializationHandle(type, factoryMethod);
+    return handle == null ? null : MethodHandles.reflectAs(Method.class, handle);
   }
 
   public static Method getSerializationWriteObjectMethod(Class<?> type) {
@@ -415,6 +427,10 @@ public class _JDKAccess {
 
   public static Method getSerializationReadObjectNoDataMethod(Class<?> type) {
     return getSerializationMethod(type, SerializationMethods.READ_OBJECT_NO_DATA);
+  }
+
+  public static MethodHandle getSerializationDefaultReadObjectHandle(Class<?> type) {
+    return getSerializationHandle(type, SerializationMethods.DEFAULT_READ_OBJECT);
   }
 
   public static Method getSerializationWriteReplaceMethod(Class<?> type) {

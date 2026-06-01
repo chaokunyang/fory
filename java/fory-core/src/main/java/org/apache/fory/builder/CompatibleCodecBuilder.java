@@ -43,7 +43,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.CodegenSerializer;
@@ -370,7 +369,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
     if (constructorFieldIndexes == null) {
       return false;
     }
-    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    ObjectCreator<?> objectCreator = typeResolver.getObjectCreator(beanClass);
     String[] names = objectCreator.getConstructorFieldNames();
     Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
     for (int i = 0; i < names.length; i++) {
@@ -385,7 +384,7 @@ public class CompatibleCodecBuilder extends ObjectCodecBuilder {
 
   @Override
   protected Expression defaultConstructorValue(int constructorParameterIndex) {
-    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    ObjectCreator<?> objectCreator = typeResolver.getObjectCreator(beanClass);
     String fieldName = objectCreator.getConstructorFieldNames()[constructorParameterIndex];
     Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
     Class<?> declaringClass =

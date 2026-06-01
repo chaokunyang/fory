@@ -93,17 +93,11 @@ public class DefineClass {
           .defineHiddenClass(bytecodes, true, Lookup.ClassOption.NESTMATE)
           .lookupClass();
     } catch (IllegalAccessException | IllegalStateException e) {
-      Module module = neighbor.getModule();
-      Package pkg = neighbor.getPackage();
-      String packageName = pkg == null ? "" : pkg.getName();
       throw new IllegalStateException(
           "Cannot define hidden nestmate for "
               + neighbor.getName()
-              + " because package "
-              + packageName
-              + " in module "
-              + module.getName()
-              + " is not open to org.apache.fory.core,org.apache.fory.format",
+              + ". JDK25 zero-Unsafe mode requires java.base/java.lang.invoke to be open to "
+              + "org.apache.fory.core",
           e);
     }
   }

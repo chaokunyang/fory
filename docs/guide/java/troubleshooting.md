@@ -157,30 +157,25 @@ memory access becomes the default, start the JVM with:
 --sun-misc-unsafe-memory-access=deny
 ```
 
-If Fory needs private fields in your named module, open the target package to both Java modules.
-When any Fory artifact is on the classpath instead of the module path, also include `ALL-UNNAMED`:
+If Fory runs from the classpath, including a modular Fory jar placed on the classpath, open
+`java.base/java.lang.invoke` to the unnamed module:
 
 ```bash
---add-opens=<user.module>/<user.package>=ALL-UNNAMED,org.apache.fory.core,org.apache.fory.format
+--add-opens=java.base/java.lang.invoke=ALL-UNNAMED
 ```
 
-Some optimized serializers also need JDK-private packages. For each package in the table, open the
-owning JDK module/package to `org.apache.fory.core` and `org.apache.fory.format`; include
-`ALL-UNNAMED` too when any Fory artifact is on the classpath. Add only the opens needed by the paths
-used in your process:
+If Fory runs as named modules on the module path, open `java.base/java.lang.invoke` to the Fory core
+module:
 
-| Path                                                            | Required opens                                                  |
-| --------------------------------------------------------------- | --------------------------------------------------------------- |
-| String fast paths and throwable fields                          | `java.base/java.lang`                                           |
-| Serialized lambdas                                              | `java.base/java.lang.invoke`                                    |
-| Reflection-based object construction                            | `java.base/java.lang.reflect`, `java.base/jdk.internal.reflect` |
-| Collection wrappers, sublists, `EnumMap`, and `StringTokenizer` | `java.base/java.util`                                           |
-| Blocking queue capacity serializers                             | `java.base/java.util.concurrent`                                |
-| Proxy serializers                                               | `java.base/java.lang.reflect`                                   |
+```bash
+--add-opens=java.base/java.lang.invoke=org.apache.fory.core
+```
 
-Normal classes with final instance fields require final-field mutation to be enabled for the module
-that contains Fory's mutating code when Unsafe allocation is denied. Use the Fory module name on the
-module path:
+If this open is missing, Fory reports an error that names `java.base/java.lang.invoke`.
+
+On JDK26 and later, normal classes with final instance fields require final-field mutation to be
+enabled for the module that contains Fory's mutating code when Unsafe allocation is denied. Use the
+Fory module name on the module path:
 
 ```bash
 --enable-final-field-mutation=org.apache.fory.core
@@ -192,8 +187,10 @@ Use `ALL-UNNAMED` when running Fory on the classpath:
 --enable-final-field-mutation=ALL-UNNAMED
 ```
 
-Fory restores those final fields through method-handle based access. Non-final fields can still be
-restored through generated direct field assignment where available.
+Fory can restore those final fields when final-field mutation is enabled. JDK25 has no
+`--enable-final-field-mutation` option, so no final-field mutation flag is needed on JDK25. Named
+application modules that contain private fields still need to open the application package to
+`org.apache.fory.core`.
 
 The vectorized Arrow APIs in `fory-format` depend on Apache Arrow's memory layer. With the current
 Arrow dependency, those APIs are unavailable when `--sun-misc-unsafe-memory-access=deny` is set

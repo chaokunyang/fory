@@ -26,7 +26,6 @@ import static org.apache.fory.collection.Collections.ofHashMap;
 import static org.testng.Assert.assertEquals;
 
 import com.google.common.collect.ImmutableMap;
-import java.beans.ConstructorProperties;
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -55,6 +54,7 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.annotation.Ref;
 import org.apache.fory.collection.LazyMap;
 import org.apache.fory.collection.MapEntry;
@@ -859,7 +859,7 @@ public class MapSerializersTest extends ForyTestBase {
       this(new HashSet<>());
     }
 
-    @ConstructorProperties({"data"})
+    @ForyConstructor({"data"})
     public TestClass1ForDefaultMap(Set<MapEntry> data) {
       this.data = data;
     }
@@ -883,7 +883,7 @@ public class MapSerializersTest extends ForyTestBase {
       this(new HashSet<>());
     }
 
-    @ConstructorProperties({"data"})
+    @ForyConstructor({"data"})
     public TestClass2ForDefaultMap(Set<Entry<String, Object>> data) {
       this.data = data;
     }
@@ -1227,7 +1227,7 @@ public class MapSerializersTest extends ForyTestBase {
     List<PrivateMap<String, Integer>> mapList;
     PrivateMap<String, Integer> map;
 
-    @ConstructorProperties({"mapList", "map"})
+    @ForyConstructor({"mapList", "map"})
     LazyMapCollectionFieldStruct(
         List<PrivateMap<String, Integer>> mapList, PrivateMap<String, Integer> map) {
       this.mapList = mapList;
@@ -1446,7 +1446,7 @@ public class MapSerializersTest extends ForyTestBase {
       this(new LinkedHashMap<>(), new LinkedHashMap<>());
     }
 
-    @ConstructorProperties({"valueMap", "keyMap"})
+    @ForyConstructor({"valueMap", "keyMap"})
     public PrivateFinalMapFieldStruct(
         Map<String, PrivateFinalValue> valueMap, Map<PrivateFinalKey, String> keyMap) {
       this.valueMap = valueMap;

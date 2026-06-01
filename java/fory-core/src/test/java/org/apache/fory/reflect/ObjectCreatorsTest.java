@@ -20,13 +20,14 @@
 package org.apache.fory.reflect;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
+import org.apache.fory.TestUtils;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.ObjectCreators.ParentNoArgCtrObjectCreator;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -44,6 +45,9 @@ public class ObjectCreatorsTest {
 
   @Test
   public void testObjectCreator() {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      return;
+    }
     ParentNoArgCtrObjectCreator<ArrayBlockingQueue> creator =
         new ParentNoArgCtrObjectCreator<>(ArrayBlockingQueue.class);
     Assert.assertEquals(creator.newInstance().getClass(), ArrayBlockingQueue.class);
@@ -54,14 +58,8 @@ public class ObjectCreatorsTest {
 
   @Test
   public void testAndroidObjectCreators() throws Exception {
-    String javaBin =
-        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
     Process process =
-        new ProcessBuilder(
-                javaBin,
-                "-cp",
-                System.getProperty("java.class.path"),
-                AndroidObjectCreatorProbe.class.getName())
+        new ProcessBuilder(TestUtils.javaCommand(AndroidObjectCreatorProbe.class))
             .redirectErrorStream(true)
             .start();
     String output = readFully(process.getInputStream());

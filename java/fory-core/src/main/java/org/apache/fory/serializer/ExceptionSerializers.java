@@ -42,6 +42,7 @@ import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
@@ -88,7 +89,7 @@ public final class ExceptionSerializers {
       messageConstructor = getOptionalMessageConstructor(type);
       objectCreator =
           messageConstructor == null && MemoryUtils.JDK_LANG_FIELD_ACCESS
-              ? createThrowableObjectCreator(type)
+              ? createThrowableObjectCreator(typeResolver, type)
               : null;
       slotsSerializers = buildSlotsSerializers(typeResolver, type);
       if (!MemoryUtils.JDK_LANG_FIELD_ACCESS
@@ -98,7 +99,7 @@ public final class ExceptionSerializers {
             "Throwable serialization for JDK type "
                 + type.getName()
                 + " with subclass fields requires JDK internal field access. On JDK25+, open "
-                + "java.base/java.lang to org.apache.fory.core,org.apache.fory.format.");
+                + "java.base/java.lang.invoke to org.apache.fory.core.");
       }
       // Native-image runtime must rebuild slot serializers once so field accessors and
       // descriptors are created against the runtime heap layout instead of reusing
@@ -158,8 +159,7 @@ public final class ExceptionSerializers {
             "Deserializing Throwable type "
                 + type.getName()
                 + " without a String message constructor requires JDK internal field access. "
-                + "On JDK25+, open java.base/java.lang to "
-                + "org.apache.fory.core,org.apache.fory.format.");
+                + "On JDK25+, open java.base/java.lang.invoke to org.apache.fory.core.");
       }
       int refId = readContext.lastPreservedRefId();
       if (refId >= 0) {
@@ -173,8 +173,8 @@ public final class ExceptionSerializers {
         throw new ForyException(
             "Deserializing cyclic Throwable references for type "
                 + type.getName()
-                + " requires JDK internal field access. On JDK25+, open java.base/java.lang "
-                + "to org.apache.fory.core,org.apache.fory.format.");
+                + " requires JDK internal field access. On JDK25+, open java.base/java.lang.invoke "
+                + "to org.apache.fory.core.");
       }
       T obj = newThrowableWithMessage(detailMessage);
       readContext.reference(obj);
@@ -383,12 +383,12 @@ public final class ExceptionSerializers {
   }
 
   private static <T extends Throwable> ObjectCreator<T> createThrowableObjectCreator(
-      Class<T> type) {
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return ObjectCreators.getObjectCreator(type);
+      TypeResolver typeResolver, Class<T> type) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE || JdkVersion.MAJOR_VERSION >= 25) {
+      return typeResolver.getObjectCreator(type);
     }
     if (ReflectionUtils.getCtrHandle(type, false) != null) {
-      return ObjectCreators.getObjectCreator(type);
+      return typeResolver.getObjectCreator(type);
     }
     return new ObjectCreators.ParentNoArgCtrObjectCreator<>(type);
   }

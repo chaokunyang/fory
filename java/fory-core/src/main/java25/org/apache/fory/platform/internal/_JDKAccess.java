@@ -19,6 +19,8 @@
 
 package org.apache.fory.platform.internal;
 
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaConversionException;
 import java.lang.invoke.LambdaMetafactory;
@@ -30,6 +32,7 @@ import java.lang.invoke.SerializedLambda;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -55,26 +58,18 @@ import org.apache.fory.util.function.ToByteFunction;
 import org.apache.fory.util.function.ToCharFunction;
 import org.apache.fory.util.function.ToFloatFunction;
 import org.apache.fory.util.function.ToShortFunction;
-import sun.misc.Unsafe;
 
 /** JDK internals access for the JDK25 multi-release runtime. */
 // CHECKSTYLE.OFF:TypeName
 public class _JDKAccess {
   // CHECKSTYLE.ON:TypeName
   public static final boolean IS_OPEN_J9;
-  public static final Unsafe UNSAFE = null;
   public static final boolean JDK_INTERNAL_FIELD_ACCESS;
   public static final boolean JDK_LANG_FIELD_ACCESS;
   public static final boolean JDK_STRING_FIELD_ACCESS;
   public static final boolean JDK_COLLECTION_FIELD_ACCESS;
   public static final boolean JDK_CONCURRENT_FIELD_ACCESS;
   public static final boolean JDK_PROXY_FIELD_ACCESS;
-  public static final Class<?> _INNER_UNSAFE_CLASS = null;
-  public static final Object _INNER_UNSAFE = null;
-
-  public static Unsafe unsafe() {
-    return UNSAFE;
-  }
 
   private static final ClassValueCache<Lookup> lookupCache = ClassValueCache.newClassKeyCache(32);
 
@@ -115,12 +110,12 @@ public class _JDKAccess {
 
       StringHandles stringHandles = initStringHandles(valueField.getType(), countField, offsetField);
 
-      JDK_LANG_FIELD_ACCESS = canOpen(String.class);
+      JDK_LANG_FIELD_ACCESS = canAccess(String.class);
       JDK_STRING_FIELD_ACCESS = stringHandles != null;
-      JDK_COLLECTION_FIELD_ACCESS = canOpen("java.util.Collections$SynchronizedCollection");
+      JDK_COLLECTION_FIELD_ACCESS = canAccess("java.util.Collections$SynchronizedCollection");
       JDK_CONCURRENT_FIELD_ACCESS =
-          canOpen(ArrayBlockingQueue.class) && canOpen(LinkedBlockingQueue.class);
-      JDK_PROXY_FIELD_ACCESS = canOpen(Proxy.class);
+          canAccess(ArrayBlockingQueue.class) && canAccess(LinkedBlockingQueue.class);
+      JDK_PROXY_FIELD_ACCESS = canAccess(Proxy.class);
       JDK_INTERNAL_FIELD_ACCESS = JDK_STRING_FIELD_ACCESS;
 
       STRING_VALUE_HANDLE = stringHandles == null ? null : stringHandles.value;
@@ -143,7 +138,7 @@ public class _JDKAccess {
   private static StringHandles initStringHandles(
       Class<?> stringValueType, Field countField, Field offsetField) {
     try {
-      Lookup stringLookup = MethodHandles.privateLookupIn(String.class, MethodHandles.lookup());
+      Lookup stringLookup = _Lookup._trustedLookup(String.class);
       return new StringHandles(
           stringLookup.findVarHandle(String.class, "value", stringValueType),
           STRING_VALUE_FIELD_IS_BYTES
@@ -158,17 +153,17 @@ public class _JDKAccess {
     }
   }
 
-  private static boolean canOpen(String className) {
+  private static boolean canAccess(String className) {
     try {
-      return canOpen(Class.forName(className));
+      return canAccess(Class.forName(className));
     } catch (Throwable ignored) {
       return false;
     }
   }
 
-  private static boolean canOpen(Class<?> type) {
+  private static boolean canAccess(Class<?> type) {
     try {
-      MethodHandles.privateLookupIn(type, MethodHandles.lookup());
+      _Lookup._trustedLookup(type);
       return true;
     } catch (Throwable ignored) {
       return false;
@@ -248,7 +243,7 @@ public class _JDKAccess {
       } catch (RuntimeException inaccessible) {
         throw new IllegalStateException(
             "SerializedLambda readResolve requires java.base/java.lang.invoke to be open to "
-                + "org.apache.fory.core,org.apache.fory.format",
+                + "org.apache.fory.core",
             inaccessible);
       }
       return MethodHandles.lookup().unreflect(method);
@@ -431,89 +426,97 @@ public class _JDKAccess {
     if (!JDK_STRING_FIELD_ACCESS) {
       throw new UnsupportedOperationException(
           target
-              + " private access is unavailable; open java.base/java.lang to "
-              + "org.apache.fory.core,org.apache.fory.format");
+              + " private access is unavailable; open java.base/java.lang.invoke to "
+              + "org.apache.fory.core");
     }
   }
 
-  private static class SerializationMethods {
-    private static final Object REFLECTION_FACTORY;
-    private static final Method WRITE_OBJECT;
-    private static final Method READ_OBJECT;
-    private static final Method READ_OBJECT_NO_DATA;
-    private static final Method WRITE_REPLACE;
-    private static final Method READ_RESOLVE;
+  private static final ClassValueCache<SerializationMethods> serializationMethodsCache =
+      ClassValueCache.newClassKeyCache(32);
 
-    static {
-      Object reflectionFactory = null;
-      Method writeObject = null;
-      Method readObject = null;
-      Method readObjectNoData = null;
-      Method writeReplace = null;
-      Method readResolve = null;
-      try {
-        Class<?> factoryClass = Class.forName("sun.reflect.ReflectionFactory");
-        Method getReflectionFactory = factoryClass.getDeclaredMethod("getReflectionFactory");
-        reflectionFactory = getReflectionFactory.invoke(null);
-        writeObject = factoryClass.getDeclaredMethod("writeObjectForSerialization", Class.class);
-        readObject = factoryClass.getDeclaredMethod("readObjectForSerialization", Class.class);
-        readObjectNoData =
-            factoryClass.getDeclaredMethod("readObjectNoDataForSerialization", Class.class);
-        writeReplace = factoryClass.getDeclaredMethod("writeReplaceForSerialization", Class.class);
-        readResolve = factoryClass.getDeclaredMethod("readResolveForSerialization", Class.class);
-      } catch (Throwable e) {
-        ExceptionUtils.ignore(e);
-      }
-      REFLECTION_FACTORY = reflectionFactory;
-      WRITE_OBJECT = writeObject;
-      READ_OBJECT = readObject;
-      READ_OBJECT_NO_DATA = readObjectNoData;
-      WRITE_REPLACE = writeReplace;
-      READ_RESOLVE = readResolve;
+  private static final class SerializationMethods {
+    private final Method writeObject;
+    private final Method readObject;
+    private final Method readObjectNoData;
+    private final Method writeReplace;
+    private final Method readResolve;
+
+    private SerializationMethods(Class<?> type) {
+      writeObject =
+          getPrivateMethod(type, "writeObject", void.class, ObjectOutputStream.class);
+      readObject = getPrivateMethod(type, "readObject", void.class, ObjectInputStream.class);
+      readObjectNoData = getPrivateMethod(type, "readObjectNoData", void.class);
+      writeReplace = getInheritableObjectMethod(type, "writeReplace");
+      readResolve = getInheritableObjectMethod(type, "readResolve");
     }
   }
 
-  private static Method getSerializationMethod(Class<?> type, Method factoryMethod) {
-    if (!isSerializationHookLookupAvailable() || factoryMethod == null) {
-      return null;
-    }
+  private static SerializationMethods serializationMethods(Class<?> type) {
+    return serializationMethodsCache.get(type, () -> new SerializationMethods(type));
+  }
+
+  private static Method getPrivateMethod(
+      Class<?> type, String methodName, Class<?> returnType, Class<?>... parameterTypes) {
     try {
-      MethodHandle handle =
-          (MethodHandle) factoryMethod.invoke(SerializationMethods.REFLECTION_FACTORY, type);
-      return handle == null ? null : MethodHandles.reflectAs(Method.class, handle);
-    } catch (Throwable e) {
+      Method method = type.getDeclaredMethod(methodName, parameterTypes);
+      int modifiers = method.getModifiers();
+      if (Modifier.isPrivate(modifiers)
+          && !Modifier.isStatic(modifiers)
+          && method.getReturnType() == returnType) {
+        return method;
+      }
+    } catch (NoSuchMethodException | SecurityException e) {
       ExceptionUtils.ignore(e);
-      return null;
     }
+    return null;
+  }
+
+  private static Method getInheritableObjectMethod(Class<?> type, String methodName) {
+    Class<?> cls = type;
+    while (cls != null) {
+      try {
+        Method method = cls.getDeclaredMethod(methodName);
+        int modifiers = method.getModifiers();
+        if (!Modifier.isStatic(modifiers) && method.getReturnType() == Object.class) {
+          return method;
+        }
+        return null;
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      } catch (SecurityException e) {
+        return null;
+      }
+      cls = cls.getSuperclass();
+    }
+    return null;
   }
 
   public static Method getSerializationWriteObjectMethod(Class<?> type) {
-    return getSerializationMethod(type, SerializationMethods.WRITE_OBJECT);
+    return serializationMethods(type).writeObject;
   }
 
   public static Method getSerializationReadObjectMethod(Class<?> type) {
-    return getSerializationMethod(type, SerializationMethods.READ_OBJECT);
+    return serializationMethods(type).readObject;
   }
 
   public static Method getSerializationReadObjectNoDataMethod(Class<?> type) {
-    return getSerializationMethod(type, SerializationMethods.READ_OBJECT_NO_DATA);
+    return serializationMethods(type).readObjectNoData;
+  }
+
+  public static MethodHandle getSerializationDefaultReadObjectHandle(Class<?> type) {
+    return null;
   }
 
   public static Method getSerializationWriteReplaceMethod(Class<?> type) {
-    return getSerializationMethod(type, SerializationMethods.WRITE_REPLACE);
+    return serializationMethods(type).writeReplace;
   }
 
   public static Method getSerializationReadResolveMethod(Class<?> type) {
-    return getSerializationMethod(type, SerializationMethods.READ_RESOLVE);
+    return serializationMethods(type).readResolve;
   }
 
   public static boolean isSerializationHookLookupAvailable() {
-    return SerializationMethods.REFLECTION_FACTORY != null
-        && SerializationMethods.WRITE_OBJECT != null
-        && SerializationMethods.READ_OBJECT != null
-        && SerializationMethods.READ_OBJECT_NO_DATA != null
-        && SerializationMethods.WRITE_REPLACE != null
-        && SerializationMethods.READ_RESOLVE != null;
+    return true;
   }
 
   public static <T> T tryMakeFunction(

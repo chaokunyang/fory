@@ -86,7 +86,7 @@ graalvm_test() {
     java_major=$(echo "$java_version" | cut -d. -f1)
   fi
   if [[ "$java_major" -ge 25 ]]; then
-    export JDK_JAVA_OPTIONS="$(jdk25_deny_options) $(jdk25_javac_options)"
+    export JDK_JAVA_OPTIONS="$(jdk25_javac_options)"
   else
     unset JDK_JAVA_OPTIONS
   fi
@@ -101,15 +101,24 @@ graalvm_test() {
   echo "Execute graalvm tests succeed!"
 }
 
-jdk25_deny_options() {
-  local fory_open_targets="ALL-UNNAMED,org.apache.fory.core,org.apache.fory.format"
+jdk25_access_options() {
+  local fory_open_targets="${1:-ALL-UNNAMED}"
   printf "%s" "--sun-misc-unsafe-memory-access=deny"
-  printf " %s" "--add-opens=java.base/java.lang=${fory_open_targets}"
   printf " %s" "--add-opens=java.base/java.lang.invoke=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.lang.reflect=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/jdk.internal.reflect=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.util=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.util.concurrent=${fory_open_targets}"
+}
+
+jdk26_final_field_options() {
+  local fory_modules="${1:-ALL-UNNAMED}"
+  printf "%s" "--enable-final-field-mutation=${fory_modules}"
+}
+
+jdk25_plus_options() {
+  local java_major="$1"
+  local fory_targets="${2:-ALL-UNNAMED}"
+  printf "%s" "$(jdk25_access_options "$fory_targets")"
+  if [[ "$java_major" -ge 26 ]]; then
+    printf " %s" "$(jdk26_final_field_options "$fory_targets")"
+  fi
 }
 
 jdk25_javac_options() {
@@ -130,8 +139,13 @@ use_jdk() {
   local jdk="$1"
   export JAVA_HOME="$ROOT/$jdk"
   export PATH=$JAVA_HOME/bin:$PATH
-  if [[ "$jdk" == zulu25* ]]; then
-    export JDK_JAVA_OPTIONS="$(jdk25_deny_options) $(jdk25_javac_options)"
+  if [[ "$jdk" =~ zulu([0-9]+) ]]; then
+    local java_major="${BASH_REMATCH[1]}"
+    if [[ "$java_major" -ge 25 ]]; then
+      export JDK_JAVA_OPTIONS="$(jdk25_plus_options "$java_major") $(jdk25_javac_options)"
+    else
+      unset JDK_JAVA_OPTIONS
+    fi
   else
     unset JDK_JAVA_OPTIONS
   fi
@@ -147,11 +161,13 @@ install_jdk25_fory_artifacts() {
   [[ -n "${JDK_JAVA_OPTIONS+x}" ]] && had_jdk_java_options=1
 
   use_jdk "zulu25.30.17-ca-jdk25.0.1-linux_x64"
+  export JDK_JAVA_OPTIONS="$(jdk25_javac_options)"
   cd "$ROOT"/java
   mvn -T10 -B --no-transfer-progress clean install -DskipTests -Dmaven.compiler.parameters=true -pl '!:fory-testsuite'
   echo "Verify JDK25 benchmark multi-release jar"
   cd "$ROOT"/benchmarks/java
   mvn -T10 -B --no-transfer-progress -Pjmh -DskipTests install
+  unset JDK_JAVA_OPTIONS
   echo "Verify JPMS tests on JDK25"
   cd "$ROOT"/integration_tests/jpms_tests
   mvn -T10 -B --no-transfer-progress clean test
@@ -203,20 +219,40 @@ jdk17_plus_tests() {
   fi
   JDK_JAVA_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
   if [[ "$java_major" -ge 25 ]]; then
-    JDK_JAVA_OPTIONS="$JDK_JAVA_OPTIONS $(jdk25_deny_options) $(jdk25_javac_options)"
+    JDK_JAVA_OPTIONS="$JDK_JAVA_OPTIONS $(jdk25_javac_options)"
   fi
   export JDK_JAVA_OPTIONS
   echo "Executing fory java tests"
   cd "$ROOT/java"
   set +e
-  jdk25_test_classpath=()
   if [[ "$java_major" -ge 25 ]]; then
-    jdk25_test_classpath=(-Dfory.jdk25.test.classpath=true -Dmaven.compiler.parameters=true)
+    # JDK25+ must be tested from the packaged multi-release artifact. Raw
+    # reactor test classes bypass META-INF/versions/25 and exercise the
+    # JDK8-24 root implementation instead.
+    mvn -T10 --batch-mode --no-transfer-progress clean install -DskipTests -Dmaven.compiler.parameters=true
+  else
+    mvn -T10 --batch-mode --no-transfer-progress install
   fi
-  mvn -T10 --batch-mode --no-transfer-progress install "${jdk25_test_classpath[@]}"
   testcode=$?
   if [[ $testcode -ne 0 ]]; then
     exit $testcode
+  fi
+  if [[ "$java_major" -ge 25 ]]; then
+    unset JDK_JAVA_OPTIONS
+    echo "Executing JDK${java_major} packaged classpath tests"
+    cd "$ROOT/integration_tests/jdk_compatibility_tests"
+    mvn -T10 --batch-mode --no-transfer-progress clean test
+    testcode=$?
+    if [[ $testcode -ne 0 ]]; then
+      exit $testcode
+    fi
+    echo "Executing JDK${java_major} JPMS tests"
+    cd "$ROOT/integration_tests/jpms_tests"
+    mvn -T10 --batch-mode --no-transfer-progress clean test
+    testcode=$?
+    if [[ $testcode -ne 0 ]]; then
+      exit $testcode
+    fi
   fi
   echo "Executing fory java tests succeeds"
 }
@@ -270,7 +306,7 @@ case $1 in
       echo "Executing fory java tests"
       cd "$ROOT/java"
       set +e
-      mvn -T16 --batch-mode --no-transfer-progress test
+      mvn -T16 --batch-mode --no-transfer-progress clean test
       testcode=$?
       if [[ $testcode -ne 0 ]]; then
         exit $testcode
@@ -282,7 +318,7 @@ case $1 in
       echo "Executing fory java tests"
       cd "$ROOT/java"
       set +e
-      mvn -T16 --batch-mode --no-transfer-progress test
+      mvn -T16 --batch-mode --no-transfer-progress clean test
       testcode=$?
       if [[ $testcode -ne 0 ]]; then
         exit $testcode
@@ -296,6 +332,9 @@ case $1 in
       jdk17_plus_tests
     ;;
     java25)
+      jdk17_plus_tests
+    ;;
+    java26)
       jdk17_plus_tests
     ;;
     kotlin)

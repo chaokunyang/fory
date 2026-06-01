@@ -17,20 +17,33 @@
  * under the License.
  */
 
-package org.apache.fory.integration_tests.model;
+package org.apache.fory.builder;
 
-import java.io.Serializable;
+import java.lang.reflect.Field;
+import org.apache.fory.annotation.Internal;
 
-public final class PrivateFieldBean implements Serializable {
-  private static final long serialVersionUID = 1L;
+/** JDK25 replacement that keeps builder classes free of Unsafe runtime linkage. */
+@Internal
+public final class UnsafeCodegenSupport {
+  private UnsafeCodegenSupport() {}
 
-  private final int value;
-
-  public PrivateFieldBean(int value) {
-    this.value = value;
+  public static Object unsafe() {
+    throw unsupported();
   }
 
-  public int value() {
-    return value;
+  public static long objectFieldOffset(Field field) {
+    throw unsupported();
+  }
+
+  static String unsafeTypeName() {
+    throw unsupported();
+  }
+
+  static String unsafeInitCode() {
+    throw unsupported();
+  }
+
+  private static UnsupportedOperationException unsupported() {
+    return new UnsupportedOperationException("Generated Unsafe access is unsupported on JDK25+");
   }
 }

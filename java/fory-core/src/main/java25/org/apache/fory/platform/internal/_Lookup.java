@@ -19,31 +19,22 @@
 
 package org.apache.fory.platform.internal;
 
-import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.reflect.Field;
 
 // CHECKSTYLE.OFF:TypeName
 class _Lookup {
   // CHECKSTYLE.ON:TypeName
-  static final Lookup IMPL_LOOKUP = MethodHandles.lookup();
+  private static volatile Lookup implLookup;
 
   // CHECKSTYLE.OFF:MethodName
   public static Lookup _trustedLookup(Class<?> objectClass) {
     // CHECKSTYLE.ON:MethodName
-    return privateLookupIn(objectClass, MethodHandles.lookup());
+    return implLookup().in(objectClass);
   }
 
   public static Lookup privateLookupIn(Class<?> targetClass, Lookup caller) {
-    try {
-      Module foryModule = _Lookup.class.getModule();
-      Module targetModule = targetClass.getModule();
-      if (foryModule != targetModule) {
-        foryModule.addReads(targetModule);
-      }
-      return MethodHandles.privateLookupIn(targetClass, caller);
-    } catch (IllegalAccessException e) {
-      throw new IllegalStateException(privateAccessMessage(targetClass), e);
-    }
+    return _trustedLookup(targetClass);
   }
 
   /**
@@ -55,20 +46,36 @@ class _Lookup {
     try {
       return lookup.defineClass(bytes);
     } catch (IllegalAccessException e) {
-      throw new IllegalStateException(privateAccessMessage(lookup.lookupClass()), e);
+      throw new IllegalStateException(trustedLookupMessage(), e);
     }
   }
 
-  private static String privateAccessMessage(Class<?> targetClass) {
-    Module module = targetClass.getModule();
-    Package pkg = targetClass.getPackage();
-    String packageName = pkg == null ? "" : pkg.getName();
-    return "Private lookup for "
-        + targetClass.getName()
-        + " requires package "
-        + packageName
-        + " in module "
-        + module.getName()
-        + " to be open to org.apache.fory.core,org.apache.fory.format";
+  private static Lookup loadImplLookup() {
+    try {
+      Field field = Lookup.class.getDeclaredField("IMPL_LOOKUP");
+      field.setAccessible(true);
+      return (Lookup) field.get(null);
+    } catch (ReflectiveOperationException | RuntimeException e) {
+      throw new IllegalStateException(trustedLookupMessage(), e);
+    }
+  }
+
+  private static Lookup implLookup() {
+    Lookup lookup = implLookup;
+    if (lookup == null) {
+      synchronized (_Lookup.class) {
+        lookup = implLookup;
+        if (lookup == null) {
+          lookup = loadImplLookup();
+          implLookup = lookup;
+        }
+      }
+    }
+    return lookup;
+  }
+
+  private static String trustedLookupMessage() {
+    return "JDK25 zero-Unsafe mode requires java.base/java.lang.invoke to be open to "
+        + "org.apache.fory.core";
   }
 }

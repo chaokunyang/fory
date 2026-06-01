@@ -20,15 +20,15 @@
 package org.apache.fory.reflect;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import lombok.AllArgsConstructor;
+import org.apache.fory.TestUtils;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.reflect.FieldAccessor.GeneratedAccessor;
+import org.apache.fory.reflect.FieldAccessorStrategy.GeneratedAccessor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -110,14 +110,8 @@ public class FieldAccessorTest {
 
   @Test
   public void testAndroidReflectionFieldAccessorPaths() throws Exception {
-    String javaBin =
-        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
     Process process =
-        new ProcessBuilder(
-                javaBin,
-                "-cp",
-                System.getProperty("java.class.path"),
-                AndroidReflectionFieldAccessorProbe.class.getName())
+        new ProcessBuilder(TestUtils.javaCommand(AndroidReflectionFieldAccessorProbe.class))
             .redirectErrorStream(true)
             .start();
     String output = readFully(process.getInputStream());

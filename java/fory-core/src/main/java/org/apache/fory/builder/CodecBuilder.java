@@ -43,6 +43,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import org.apache.fory.codegen.Code;
 import org.apache.fory.codegen.CodegenContext;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Cast;
@@ -57,7 +58,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
@@ -71,7 +71,6 @@ import org.apache.fory.util.StringUtils;
 import org.apache.fory.util.function.Functions;
 import org.apache.fory.util.record.RecordComponent;
 import org.apache.fory.util.record.RecordUtils;
-import sun.misc.Unsafe;
 
 /**
  * Base builder for generating code to serialize java bean in row-format or object stream format.
@@ -333,12 +332,11 @@ public abstract class CodecBuilder {
       Preconditions.checkArgument(!fieldNullable);
       TypeRef<?> returnType = descriptor.getTypeRef();
       String funcName = "get" + StringUtils.capitalize(descriptor.getRawType().toString());
-      return new Invoke(getUnsafe(), funcName, returnType, false, inputObject, fieldOffsetExpr);
+      return unsafeInvoke(funcName, returnType, false, inputObject, fieldOffsetExpr);
     } else {
       // ex: Unsafe.getObject(obj, fieldOffset)
       Invoke getObj =
-          new Invoke(
-              getUnsafe(), "getObject", OBJECT_TYPE, fieldNullable, inputObject, fieldOffsetExpr);
+          unsafeInvoke("getObject", OBJECT_TYPE, fieldNullable, inputObject, fieldOffsetExpr);
       return tryCastIfPublic(getObj, descriptor.getTypeRef(), fieldName);
     }
   }
@@ -356,21 +354,66 @@ public abstract class CodecBuilder {
             Expression classExpr = beanClassExpr(field.getDeclaringClass());
             new Invoke(classExpr, "getDeclaredField", TypeRef.of(Field.class));
             Expression reflectFieldRef = getReflectField(field.getDeclaringClass(), field, false);
-            return new Invoke(
-                    getUnsafe(), "objectFieldOffset", PRIMITIVE_LONG_TYPE, reflectFieldRef)
-                .inline();
+            return unsafeInvoke("objectFieldOffset", PRIMITIVE_LONG_TYPE, reflectFieldRef).inline();
           });
     } else {
-      return Literal.ofLong(_JDKAccess.UNSAFE.objectFieldOffset(field));
+      return Literal.ofLong(UnsafeCodegenSupport.objectFieldOffset(field));
     }
   }
 
   private Reference getUnsafe() {
-    return getOrCreateField(
-        true,
-        Unsafe.class,
-        "_unsafe_",
-        () -> new StaticInvoke(_JDKAccess.class, "unsafe", TypeRef.of(Unsafe.class)));
+    String fieldName = "_unsafe_";
+    Reference fieldRef = fieldMap.get(fieldName);
+    if (fieldRef == null) {
+      String uniqueFieldName = ctx.newName(fieldName);
+      ctx.addField(
+          true,
+          true,
+          UnsafeCodegenSupport.unsafeTypeName(),
+          uniqueFieldName,
+          new UnsafeInitExpression());
+      fieldRef = new Reference(uniqueFieldName, OBJECT_TYPE);
+      fieldMap.put(fieldName, fieldRef);
+    }
+    return fieldRef;
+  }
+
+  private Invoke unsafeInvoke(String functionName, TypeRef<?> returnType, Expression... arguments) {
+    return unsafeInvoke(functionName, returnType, false, arguments);
+  }
+
+  private Invoke unsafeInvoke(
+      String functionName, TypeRef<?> returnType, boolean returnNullable, Expression... arguments) {
+    return new Invoke(
+        getUnsafe(),
+        functionName,
+        "",
+        returnType,
+        returnNullable,
+        "allocateInstance".equals(functionName),
+        arguments);
+  }
+
+  private Invoke unsafeInvoke(String functionName, Expression... arguments) {
+    return new Invoke(getUnsafe(), functionName, "", PRIMITIVE_VOID_TYPE, false, false, arguments);
+  }
+
+  private static final class UnsafeInitExpression extends Expression.AbstractExpression {
+    private UnsafeInitExpression() {
+      super(new Expression[0]);
+    }
+
+    @Override
+    public TypeRef<?> type() {
+      return OBJECT_TYPE;
+    }
+
+    @Override
+    public Code.ExprCode doGenCode(CodegenContext ctx) {
+      return new Code.ExprCode(
+          Code.LiteralValue.FalseLiteral,
+          Code.exprValue(Object.class, UnsafeCodegenSupport.unsafeInitCode()));
+    }
   }
 
   private Reference getFieldAccessor(Descriptor descriptor) {
@@ -477,9 +520,9 @@ public abstract class CodecBuilder {
     if (descriptor.getTypeRef().isPrimitive()) {
       Preconditions.checkArgument(getRawType(value.type()) == getRawType(fieldType));
       String funcName = "put" + StringUtils.capitalize(getRawType(fieldType).toString());
-      return new Invoke(getUnsafe(), funcName, bean, fieldOffsetExpr, value);
+      return unsafeInvoke(funcName, bean, fieldOffsetExpr, value);
     } else {
-      return new Invoke(getUnsafe(), "putObject", bean, fieldOffsetExpr, value);
+      return unsafeInvoke("putObject", bean, fieldOffsetExpr, value);
     }
   }
 
@@ -549,18 +592,21 @@ public abstract class CodecBuilder {
       return new Expression.NewInstance(beanType);
     } else {
       if (JdkVersion.MAJOR_VERSION >= 25) {
-        ObjectCreators.getObjectCreator(beanClass); // trigger cache
+        cacheObjectCreator(beanClass); // trigger cache
         Invoke newInstance = new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
         return sourcePublicAccessible(beanClass) ? new Cast(newInstance, beanType) : newInstance;
       }
-      Invoke newInstance =
-          new Invoke(getUnsafe(), "allocateInstance", OBJECT_TYPE, beanClassExpr());
+      Invoke newInstance = unsafeInvoke("allocateInstance", OBJECT_TYPE, beanClassExpr());
       return sourcePublicAccessible(beanClass) ? new Cast(newInstance, beanType) : newInstance;
     }
   }
 
+  protected void cacheObjectCreator(Class<?> type) {
+    ObjectCreators.getObjectCreator(type);
+  }
+
   protected Expression getObjectCreator(Class<?> type) {
-    ObjectCreators.getObjectCreator(type); // trigger cache
+    cacheObjectCreator(type);
     return getOrCreateField(
         true,
         ObjectCreator.class,
@@ -654,49 +700,49 @@ public abstract class CodecBuilder {
 
   /** Build unsafePut operation. */
   protected Expression unsafePut(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putByte", base, pos, value);
+    return unsafeInvoke("putByte", base, pos, value);
   }
 
   protected Expression unsafePutBoolean(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putBoolean", base, pos, value);
+    return unsafeInvoke("putBoolean", base, pos, value);
   }
 
   protected Expression unsafePutChar(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putChar", base, pos, value);
+    return unsafeInvoke("putChar", base, pos, value);
   }
 
   protected Expression unsafePutShort(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putShort", base, pos, value);
+    return unsafeInvoke("putShort", base, pos, value);
   }
 
   protected Expression unsafePutInt(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putInt", base, pos, value);
+    return unsafeInvoke("putInt", base, pos, value);
   }
 
   protected Expression unsafePutLong(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putLong", base, pos, value);
+    return unsafeInvoke("putLong", base, pos, value);
   }
 
   protected Expression unsafePutFloat(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putFloat", base, pos, value);
+    return unsafeInvoke("putFloat", base, pos, value);
   }
 
   /** Build unsafePutDouble operation. */
   protected Expression unsafePutDouble(Expression base, Expression pos, Expression value) {
-    return new Invoke(getUnsafe(), "putDouble", base, pos, value);
+    return unsafeInvoke("putDouble", base, pos, value);
   }
 
   /** Build unsafeGet operation. */
   protected Expression unsafeGet(Expression base, Expression pos) {
-    return new Invoke(getUnsafe(), "getByte", PRIMITIVE_BYTE_TYPE, base, pos);
+    return unsafeInvoke("getByte", PRIMITIVE_BYTE_TYPE, base, pos);
   }
 
   protected Expression unsafeGetBoolean(Expression base, Expression pos) {
-    return new Invoke(getUnsafe(), "getBoolean", PRIMITIVE_BOOLEAN_TYPE, base, pos);
+    return unsafeInvoke("getBoolean", PRIMITIVE_BOOLEAN_TYPE, base, pos);
   }
 
   protected Expression unsafeGetChar(Expression base, Expression pos) {
-    Inlineable expr = new Invoke(getUnsafe(), "getChar", PRIMITIVE_CHAR_TYPE, base, pos);
+    Inlineable expr = unsafeInvoke("getChar", PRIMITIVE_CHAR_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Character.class, "reverseBytes", PRIMITIVE_CHAR_TYPE, expr.inline());
     }
@@ -704,7 +750,7 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetShort(Expression base, Expression pos) {
-    Inlineable expr = new Invoke(getUnsafe(), "getShort", PRIMITIVE_SHORT_TYPE, base, pos);
+    Inlineable expr = unsafeInvoke("getShort", PRIMITIVE_SHORT_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Short.class, "reverseBytes", PRIMITIVE_SHORT_TYPE, expr.inline());
     }
@@ -712,7 +758,7 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetInt(Expression base, Expression pos) {
-    Inlineable expr = new Invoke(getUnsafe(), "getInt", PRIMITIVE_INT_TYPE, base, pos);
+    Inlineable expr = unsafeInvoke("getInt", PRIMITIVE_INT_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
@@ -720,7 +766,7 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetLong(Expression base, Expression pos) {
-    Inlineable expr = new Invoke(getUnsafe(), "getLong", PRIMITIVE_LONG_TYPE, base, pos);
+    Inlineable expr = unsafeInvoke("getLong", PRIMITIVE_LONG_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }
@@ -728,7 +774,7 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetFloat(Expression base, Expression pos) {
-    Inlineable expr = new Invoke(getUnsafe(), "getInt", PRIMITIVE_INT_TYPE, base, pos);
+    Inlineable expr = unsafeInvoke("getInt", PRIMITIVE_INT_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Integer.class, "reverseBytes", PRIMITIVE_INT_TYPE, expr.inline());
     }
@@ -736,7 +782,7 @@ public abstract class CodecBuilder {
   }
 
   protected Expression unsafeGetDouble(Expression base, Expression pos) {
-    Inlineable expr = new Invoke(getUnsafe(), "getLong", PRIMITIVE_LONG_TYPE, base, pos);
+    Inlineable expr = unsafeInvoke("getLong", PRIMITIVE_LONG_TYPE, base, pos);
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       expr = new StaticInvoke(Long.class, "reverseBytes", PRIMITIVE_LONG_TYPE, expr.inline());
     }

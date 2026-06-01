@@ -77,6 +77,7 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
+import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.CodegenSerializer;
@@ -340,6 +341,17 @@ public abstract class TypeResolver {
   @Internal
   public abstract void registerEnum(
       Class<?> type, String namespace, String typeName, Serializer<?> serializer);
+
+  /**
+   * Returns the runtime-scoped object creator for {@code type}.
+   *
+   * <p>The creator respects constructor mappings registered through {@code Fory} and annotations on
+   * the target type.
+   */
+  @Internal
+  public final <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
+    return sharedRegistry.getObjectCreatorRegistry().getObjectCreator(type);
+  }
 
   /**
    * Registers a custom serializer for a type.

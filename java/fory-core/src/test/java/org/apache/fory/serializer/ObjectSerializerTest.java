@@ -23,15 +23,16 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotSame;
 import static org.testng.Assert.assertSame;
 
-import java.beans.ConstructorProperties;
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.TestUtils;
+import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.builder.CodecUtils;
 import org.apache.fory.memory.MemoryBuffer;
@@ -181,7 +182,7 @@ public class ObjectSerializerTest extends ForyTestBase {
     private final String name;
     private ConstructorCycle next;
 
-    @ConstructorProperties("name")
+    @ForyConstructor("name")
     public ConstructorCycle(String name) {
       this.name = name;
     }
@@ -194,7 +195,7 @@ public class ObjectSerializerTest extends ForyTestBase {
     @ForyField(id = 1)
     private final String name;
 
-    @ConstructorProperties("name")
+    @ForyConstructor("name")
     public ConstructorCycleBeforeFinal(String name) {
       this.name = name;
     }
@@ -204,7 +205,7 @@ public class ObjectSerializerTest extends ForyTestBase {
     private int id;
     private final String name;
 
-    @ConstructorProperties("name")
+    @ForyConstructor("name")
     public ConstructorOrder(String name) {
       this.name = name;
     }
@@ -220,7 +221,7 @@ public class ObjectSerializerTest extends ForyTestBase {
     @ForyField(id = 2)
     private Object second;
 
-    @ConstructorProperties("name")
+    @ForyConstructor("name")
     public ConstructorInterveningRef(String name) {
       this.name = name;
     }
@@ -229,7 +230,7 @@ public class ObjectSerializerTest extends ForyTestBase {
   public static final class ConstructorBackrefRoot {
     private final ConstructorBackrefChild child;
 
-    @ConstructorProperties("child")
+    @ForyConstructor("child")
     public ConstructorBackrefRoot(ConstructorBackrefChild child) {
       this.child = child;
     }
@@ -237,6 +238,19 @@ public class ObjectSerializerTest extends ForyTestBase {
 
   public static final class ConstructorBackrefChild {
     private ConstructorBackrefRoot root;
+  }
+
+  public static final class RegisteredCtorBean {
+    @ForyField(id = 0)
+    private final String name;
+
+    @ForyField(id = 1)
+    private final int age;
+
+    private RegisteredCtorBean(int age, String name) {
+      this.name = name;
+      this.age = age;
+    }
   }
 
   public static final class FinalNoArgBean {
@@ -260,7 +274,7 @@ public class ObjectSerializerTest extends ForyTestBase {
     private final int id;
     private String label;
 
-    @ConstructorProperties("label")
+    @ForyConstructor("label")
     public FinalPostCtorBean(String label) {
       id = -1;
       this.label = label;
@@ -387,6 +401,31 @@ public class ObjectSerializerTest extends ForyTestBase {
     MemoryBuffer buffer = MemoryUtils.buffer(32);
     withWriteContext(fory, buffer, context -> serializer.write(context, value));
     assertEquals(buffer.readInt32(), 42);
+  }
+
+  @Test
+  public void testRegisterConstructor() throws Exception {
+    Constructor<RegisteredCtorBean> constructor =
+        RegisteredCtorBean.class.getDeclaredConstructor(int.class, String.class);
+    for (boolean codegen : new boolean[] {false, true}) {
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .withRefTracking(true)
+              .withCodegen(codegen)
+              .requireClassRegistration(false)
+              .build();
+      fory.registerConstructor(RegisteredCtorBean.class, constructor, "age", "name");
+      assertEquals(
+          fory.getTypeResolver()
+              .getObjectCreator(RegisteredCtorBean.class)
+              .getConstructorFieldNames(),
+          new String[] {"age", "name"});
+      RegisteredCtorBean value = new RegisteredCtorBean(42, "amy");
+      RegisteredCtorBean newValue = (RegisteredCtorBean) fory.deserialize(fory.serialize(value));
+      assertEquals(newValue.name, value.name);
+      assertEquals(newValue.age, value.age);
+    }
   }
 
   @Test
@@ -772,14 +811,8 @@ public class ObjectSerializerTest extends ForyTestBase {
 
   @Test
   public void testAndroidObjectSerializerReflectionPaths() throws Exception {
-    String javaBin =
-        System.getProperty("java.home") + File.separator + "bin" + File.separator + "java";
     ProcessBuilder processBuilder =
-        new ProcessBuilder(
-                javaBin,
-                "-cp",
-                System.getProperty("java.class.path"),
-                AndroidObjectSerializerProbe.class.getName())
+        new ProcessBuilder(TestUtils.javaCommand(AndroidObjectSerializerProbe.class))
             .redirectErrorStream(true);
     processBuilder.environment().put("FORY_ANDROID_ENABLED", "1");
     Process process = processBuilder.start();

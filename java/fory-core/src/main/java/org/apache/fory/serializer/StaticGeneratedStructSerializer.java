@@ -20,6 +20,8 @@
 package org.apache.fory.serializer;
 
 import java.lang.reflect.Constructor;
+import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -43,6 +45,7 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
+import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.StringUtils;
 
@@ -172,7 +175,25 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   protected final List<Descriptor> runtimeDescriptors(List<Descriptor> descriptors) {
-    return typeResolver.normalizeFieldDescriptors(type, true, descriptors);
+    return typeResolver.normalizeFieldDescriptors(type, true, attachFields(descriptors));
+  }
+
+  private List<Descriptor> attachFields(List<Descriptor> descriptors) {
+    Map<String, Field> fields = new HashMap<>();
+    for (Field field : Descriptor.getFields(type)) {
+      fields.put(field.getDeclaringClass().getName() + "." + field.getName(), field);
+    }
+    List<Descriptor> result = new ArrayList<>(descriptors.size());
+    for (Descriptor descriptor : descriptors) {
+      if (descriptor.getField() != null || !Modifier.isFinal(descriptor.getModifier())) {
+        result.add(descriptor);
+        continue;
+      }
+      Field field = fields.get(fieldKey(descriptor));
+      result.add(
+          field == null ? descriptor : new DescriptorBuilder(descriptor).field(field).build());
+    }
+    return result;
   }
 
   private static boolean hasSourceOnlyMetadata(List<Descriptor> descriptors) {
@@ -225,6 +246,104 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       ids[i] = id;
     }
     return ids;
+  }
+
+  protected final int[] buildConstructorFieldIds(List<Descriptor> descriptors) {
+    String[] fieldNames = objectCreator.getConstructorFieldNames();
+    if (fieldNames.length == 0) {
+      return null;
+    }
+    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
+    boolean[] finalFields = objectCreator.getConstructorFieldFinal();
+    int[] ids = new int[fieldNames.length];
+    for (int i = 0; i < fieldNames.length; i++) {
+      Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];
+      ids[i] = constructorFieldId(descriptors, declaringClass, fieldNames[i], !finalFields[i]);
+    }
+    return ids;
+  }
+
+  private int constructorFieldId(
+      List<Descriptor> descriptors,
+      Class<?> declaringClass,
+      String fieldName,
+      boolean allowMissing) {
+    int id = UNKNOWN_FIELD;
+    String declaringClassName = declaringClass == null ? null : declaringClass.getName();
+    for (int i = 0; i < descriptors.size(); i++) {
+      Descriptor descriptor = descriptors.get(i);
+      if (!descriptor.getName().equals(fieldName)
+          || (declaringClassName != null
+              && !descriptor.getDeclaringClass().equals(declaringClassName))) {
+        continue;
+      }
+      if (id != UNKNOWN_FIELD) {
+        throw new ForyException(
+            "Constructor field " + fieldName + " is ambiguous because multiple fields match");
+      }
+      id = i;
+    }
+    if (id == UNKNOWN_FIELD && !allowMissing) {
+      throw new ForyException("Constructor field " + fieldName + " is not serialized");
+    }
+    return id;
+  }
+
+  protected final long[] buildConstructorFieldBits(int size, int[] indexes) {
+    if (indexes == null) {
+      return null;
+    }
+    long[] bits = newFieldBits(size);
+    for (int index : indexes) {
+      if (index >= 0) {
+        markField(bits, index);
+      }
+    }
+    return bits;
+  }
+
+  protected static long[] newFieldBits(int size) {
+    return new long[(size + Long.SIZE - 1) / Long.SIZE];
+  }
+
+  protected static boolean hasField(long[] bits, int fieldId) {
+    return (bits[fieldId / Long.SIZE] & (1L << (fieldId % Long.SIZE))) != 0;
+  }
+
+  protected static void markField(long[] bits, int fieldId) {
+    bits[fieldId / Long.SIZE] |= 1L << (fieldId % Long.SIZE);
+  }
+
+  protected static int countConstructorFields(long[] constructorFieldBits) {
+    int count = 0;
+    for (long constructorFields : constructorFieldBits) {
+      count += Long.bitCount(constructorFields);
+    }
+    return count;
+  }
+
+  protected final void setGeneratedFieldValue(
+      Object targetObject, SerializationFieldInfo fieldInfo, Object fieldValue) {
+    if (fieldInfo.fieldAccessor != null) {
+      fieldInfo.fieldAccessor.putObject(targetObject, fieldValue);
+      return;
+    }
+    if (fieldInfo.fieldConverter != null) {
+      fieldInfo.fieldConverter.set(targetObject, fieldValue);
+      return;
+    }
+    throw new ForyException("Generated field " + fieldInfo.getName() + " is not writable");
+  }
+
+  protected final Object copyConstructorFieldValue(
+      CopyContext copyContext,
+      Object originObject,
+      Object fieldValue,
+      SerializationFieldInfo fieldInfo) {
+    if (fieldValue == originObject) {
+      throwConstructorCycle(type);
+    }
+    return copyFieldValue(copyContext, fieldValue, fieldInfo);
   }
 
   protected final void writeBuildInFieldValue(

@@ -66,7 +66,6 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.ObjectSerializer;
@@ -176,7 +175,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       boolean allowMissingNonFinal,
       String[] defaultFields,
       Class<?>[] defaultDeclaringClasses) {
-    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    ObjectCreator<?> objectCreator = typeResolver.getObjectCreator(beanClass);
     if (!objectCreator.hasConstructorFields()) {
       return;
     }
@@ -1035,7 +1034,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         FieldsCollector collector = (FieldsCollector) bean;
         bean = createRecord(collector.recordValuesMap);
       } else {
-        ObjectCreators.getObjectCreator(beanClass); // trigger cache and make error raised early
+        typeResolver.getObjectCreator(beanClass); // trigger cache and make error raised early
         bean =
             new Invoke(getObjectCreator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, bean);
       }
@@ -1064,6 +1063,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       int index = fieldIndexes.get(descriptor);
       walkPath.add(descriptor.getDeclaringClass() + descriptor.getName());
       if (constructorFieldMask[index]) {
+        trackConstructorRefRead(expressions, buffer, descriptor);
         expressions.add(deserializeToFieldsArray(fieldsArray, buffer, descriptor, true));
         remainingConstructorFields--;
         if (remainingConstructorFields == 0) {
@@ -1071,6 +1071,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
           addBufferedFieldSetters(expressions, bean, fieldsArray, bufferedNonConstructorFields);
         }
       } else if (bean == null) {
+        trackConstructorRefRead(expressions, buffer, descriptor);
         expressions.add(deserializeToFieldsArray(fieldsArray, buffer, descriptor, false));
         bufferedNonConstructorFields.add(descriptor);
       } else {
@@ -1104,6 +1105,19 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
     addDescriptors(descriptors, objectCodecOptimizer.boxedReadGroups);
     addDescriptors(descriptors, objectCodecOptimizer.nonPrimitiveReadGroups);
     return descriptors;
+  }
+
+  private void trackConstructorRefRead(
+      ListExpression expressions, Reference buffer, Descriptor descriptor) {
+    if (descriptor.isTrackingRef()) {
+      expressions.add(
+          new StaticInvoke(
+              AbstractObjectSerializer.class,
+              "trackConstructorRefRead",
+              PRIMITIVE_VOID_TYPE,
+              readContextRef(),
+              buffer));
+    }
   }
 
   private void addDescriptors(List<Descriptor> descriptors, List<List<Descriptor>> groups) {
@@ -1207,7 +1221,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
       }
       directParams[i] = tryInlineCast(params[i], TypeRef.of(constructorFieldTypes[i]));
     }
-    ObjectCreator<?> objectCreator = ObjectCreators.getObjectCreator(beanClass);
+    ObjectCreator<?> objectCreator = typeResolver.getObjectCreator(beanClass);
     if (JdkVersion.MAJOR_VERSION >= 25
         && objectCreator.isOnlyPublicConstructor()
         && sourcePublicAccessible(beanClass)

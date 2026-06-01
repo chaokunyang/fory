@@ -28,7 +28,6 @@ import static org.testng.Assert.assertSame;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
-import java.beans.ConstructorProperties;
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -71,6 +70,7 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
+import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.memory.MemoryBuffer;
@@ -886,7 +886,7 @@ public class CollectionSerializersTest extends ForyTestBase {
     Collection<String> collection;
     Set<String> set;
 
-    @ConstructorProperties({"collection", "set"})
+    @ForyConstructor({"collection", "set"})
     public CollectionViewTestStruct(Collection<String> collection, Set<String> set) {
       this.collection = collection;
       this.set = set;
@@ -1381,7 +1381,7 @@ public class CollectionSerializersTest extends ForyTestBase {
       this(new ArrayList<>());
     }
 
-    @ConstructorProperties({"data"})
+    @ForyConstructor({"data"})
     public TestClassForDefaultCollectionSerializer(List<String> data) {
       this.data = data;
     }

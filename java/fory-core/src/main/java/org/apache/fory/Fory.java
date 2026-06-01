@@ -21,6 +21,7 @@ package org.apache.fory;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.IdentityHashMap;
 import java.util.function.Consumer;
@@ -209,6 +210,13 @@ public final class Fory implements BaseFory {
       installedModules.remove(module);
       throw e;
     }
+  }
+
+  @Override
+  public <T> void registerConstructor(
+      Class<T> type, Constructor<T> constructor, String... fieldNames) {
+    checkRegisterAllowed();
+    sharedRegistry.getObjectCreatorRegistry().registerConstructor(type, constructor, fieldNames);
   }
 
   @Override
@@ -657,6 +665,15 @@ public final class Fory implements BaseFory {
   @Internal
   SharedRegistry getSharedRegistry() {
     return sharedRegistry;
+  }
+
+  private void checkRegisterAllowed() {
+    if (typeResolver.isRegistrationFinished()) {
+      throw new ForyException(
+          "Cannot register class/serializer after registration has been frozen. Please register "
+              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
+              + "Fory.");
+    }
   }
 
   public Config getConfig() {

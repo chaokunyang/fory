@@ -72,6 +72,8 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <guava.version>32.1.2-jre</guava.version>
     <janino.version>3.1.12</janino.version>
+    <jsr305.version>3.0.2</jsr305.version>
+    <slf4j.version>2.0.12</slf4j.version>
     <commons_codec.version>1.13</commons_codec.version>
     <fory.java.rootdir>${basedir}</fory.java.rootdir>
     <argLine></argLine>
@@ -110,38 +112,6 @@
         <module>fory-latest-jdk-tests</module>
       </modules>
     </profile>
-    <!-- Surefire does not apply multi-release class selection to target/classes. JDK25
-         reactor tests opt in to this overlay so dependent modules exercise the
-         versioned fory-core classes without breaking focused module tests that use
-         the installed packaged artifact. -->
-    <profile>
-      <id>jdk25-test-classpath</id>
-      <activation>
-        <jdk>[25,]</jdk>
-        <property>
-          <name>fory.jdk25.test.classpath</name>
-          <value>true</value>
-        </property>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-surefire-plugin</artifactId>
-            <configuration>
-              <classpathDependencyExcludes>
-                <classpathDependencyExclude>org.apache.fory:fory-core</classpathDependencyExclude>
-              </classpathDependencyExcludes>
-              <additionalClasspathElements>
-                <additionalClasspathElement>
-                  ${maven.multiModuleProjectDirectory}/fory-core/target/jdk25-test-classes
-                </additionalClasspathElement>
-              </additionalClasspathElements>
-            </configuration>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
   </profiles>
 
   <dependencyManagement>
@@ -149,7 +119,7 @@
       <dependency>
         <groupId>org.slf4j</groupId>
         <artifactId>slf4j-api</artifactId>
-        <version>2.0.12</version>
+        <version>${slf4j.version}</version>
         <scope>provided</scope>
         <optional>true</optional>
       </dependency>

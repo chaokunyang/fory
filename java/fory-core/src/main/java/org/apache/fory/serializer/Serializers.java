@@ -654,7 +654,7 @@ public class Serializers {
     private static UnsupportedOperationException stringTokenizerAccessError() {
       return new UnsupportedOperationException(
           "StringTokenizer serialization requires JDK internal field access. On JDK25+, open "
-              + "java.base/java.util to org.apache.fory.core,org.apache.fory.format.");
+              + "java.base/java.lang.invoke to org.apache.fory.core.");
     }
 
     private static final class Accessors {

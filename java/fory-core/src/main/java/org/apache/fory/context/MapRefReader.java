@@ -38,8 +38,6 @@ public final class MapRefReader implements RefReader {
   private long readTotalObjectSize = 0;
   private final ObjectArray readObjects = new ObjectArray(DEFAULT_ARRAY_CAPACITY);
   private final IntArray readRefIds = new IntArray(DEFAULT_ARRAY_CAPACITY);
-  private final IntArray trackedRefIds = new IntArray(DEFAULT_ARRAY_CAPACITY);
-  private final IntArray unresolvedRefIds = new IntArray(DEFAULT_ARRAY_CAPACITY);
   private Object readObject;
 
   /** Reads a ref-or-null header and resolves cached references immediately when present. */
@@ -47,7 +45,7 @@ public final class MapRefReader implements RefReader {
   public byte readRefOrNull(MemoryBuffer buffer) {
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.REF_FLAG) {
-      readObject = readRef(buffer.readVarUInt32Small14());
+      readObject = getReadRef(buffer.readVarUInt32Small14());
     } else {
       readObject = null;
     }
@@ -75,7 +73,7 @@ public final class MapRefReader implements RefReader {
   public int tryPreserveRefId(MemoryBuffer buffer) {
     byte headFlag = buffer.readByte();
     if (headFlag == Fory.REF_FLAG) {
-      readObject = readRef(buffer.readVarUInt32Small14());
+      readObject = getReadRef(buffer.readVarUInt32Small14());
     } else {
       readObject = null;
       if (headFlag == Fory.REF_VALUE_FLAG) {
@@ -106,26 +104,6 @@ public final class MapRefReader implements RefReader {
     setReadRef(refId, object);
   }
 
-  /** Binds a reserved ref id that may no longer be the top of the pending-id stack. */
-  @Override
-  public void reference(int refId, Object object) {
-    removePreservedRefId(refId);
-    setReadRef(refId, object);
-  }
-
-  private void removePreservedRefId(int refId) {
-    for (int i = readRefIds.size - 1; i >= 0; i--) {
-      if (readRefIds.elementData[i] == refId) {
-        int numMoved = readRefIds.size - i - 1;
-        if (numMoved > 0) {
-          System.arraycopy(readRefIds.elementData, i + 1, readRefIds.elementData, i, numMoved);
-        }
-        readRefIds.size--;
-        return;
-      }
-    }
-  }
-
   /** Returns the previously materialized object stored at {@code id}. */
   @Override
   public Object getReadRef(int id) {
@@ -138,70 +116,12 @@ public final class MapRefReader implements RefReader {
     return readObject;
   }
 
-  private Object readRef(int id) {
-    if (trackedRefIds.size == 0) {
-      return readObjects.get(id);
-    }
-    Object object = readObjects.get(id);
-    if (object == null && isTrackedRef(id)) {
-      unresolvedRefIds.add(id);
-    }
-    return object;
-  }
-
-  private boolean isTrackedRef(int id) {
-    for (int i = trackedRefIds.size - 1; i >= 0; i--) {
-      if (trackedRefIds.get(i) == id) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   /** Stores {@code object} under an already reserved read ref id. */
   @Override
   public void setReadRef(int id, Object object) {
     if (id >= 0) {
       readObjects.set(id, object);
     }
-  }
-
-  @Override
-  public void trackUnresolvedRef(int id) {
-    trackedRefIds.add(id);
-  }
-
-  @Override
-  public boolean hasTrackedRef() {
-    return trackedRefIds.size > 0;
-  }
-
-  @Override
-  public int currentTrackedRefId() {
-    return trackedRefIds.get(trackedRefIds.size - 1);
-  }
-
-  @Override
-  public void untrackUnresolvedRef() {
-    if (trackedRefIds.size > 0) {
-      trackedRefIds.pop();
-    }
-  }
-
-  @Override
-  public boolean consumeUnresolvedRef(int id) {
-    boolean found = false;
-    int newSize = 0;
-    for (int i = 0; i < unresolvedRefIds.size; i++) {
-      int unresolvedRefId = unresolvedRefIds.get(i);
-      if (unresolvedRefId == id) {
-        found = true;
-      } else {
-        unresolvedRefIds.elementData[newSize++] = unresolvedRefId;
-      }
-    }
-    unresolvedRefIds.size = newSize;
-    return found;
   }
 
   /** Exposes the resolved read-reference table for debugging and focused tests. */
@@ -226,8 +146,6 @@ public final class MapRefReader implements RefReader {
     }
     readObjects.clearApproximate(avg);
     readRefIds.clear();
-    trackedRefIds.clear();
-    unresolvedRefIds.clear();
     readObject = null;
   }
 }

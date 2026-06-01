@@ -37,9 +37,7 @@ import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -251,18 +249,11 @@ public class ReplaceResolveSerializer extends Serializer {
       serializerClass = ExternalizableSerializer.class;
     } else if (JavaSerializer.getReadRefMethod(cls, true) == null
         && JavaSerializer.getWriteObjectMethod(cls, true) == null) {
-      if (JdkVersion.MAJOR_VERSION >= 25
-          && Serializable.class.isAssignableFrom(cls)
-          && !ObjectCreators.supportsJdk25Creation(cls)) {
-        serializerClass = typeResolver.getDefaultJDKStreamSerializerType();
-      } else {
-        serializerClass =
-            classResolver.getObjectSerializerClass(
-                cls,
-                sc ->
-                    methodInfoCache.setObjectSerializer(
-                        createDataSerializer(typeResolver, cls, sc)));
-      }
+      serializerClass =
+          classResolver.getObjectSerializerClass(
+              cls,
+              sc ->
+                  methodInfoCache.setObjectSerializer(createDataSerializer(typeResolver, cls, sc)));
     } else {
       serializerClass = typeResolver.getDefaultJDKStreamSerializerType();
     }

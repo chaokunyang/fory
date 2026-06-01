@@ -176,12 +176,7 @@
                 <!-- for fast build -->
                 <!-- <buildArg>-Ob</buildArg> -->
                 <buildArg>-H:+UnlockExperimentalVMOptions</buildArg>
-                <buildArg>-J--add-opens=java.base/java.lang=ALL-UNNAMED</buildArg>
                 <buildArg>-J--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.util=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</buildArg>
               </buildArgs>
             </configuration>
           </plugin>
@@ -199,12 +194,7 @@
                 <configuration>
                   <executable>${java.home}/bin/java</executable>
                   <arguments>
-                    <argument>--add-opens=java.base/java.lang=ALL-UNNAMED</argument>
                     <argument>--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/java.lang.reflect=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/java.util=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</argument>
                     <argument>-classpath</argument>
                     <classpath/>
                     <argument>${mainClass}</argument>

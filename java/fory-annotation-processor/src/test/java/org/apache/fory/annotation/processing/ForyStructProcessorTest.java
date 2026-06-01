@@ -20,6 +20,7 @@
 package org.apache.fory.annotation.processing;
 
 import java.io.IOException;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -112,6 +113,106 @@ public class ForyStructProcessorTest {
     try (URLClassLoader loader = result.classLoader()) {
       loader.loadClass("test.LegacyFixedStruct_ForySerializer");
       loader.loadClass("test.LegacyFixedStruct_ForyNativeSerializer");
+    }
+  }
+
+  @Test
+  public void testStaticAnnotatedConstructor() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.AnnotatedConstructorStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyConstructor;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class AnnotatedConstructorStruct {\n"
+                + "  private final String name;\n"
+                + "  private final int age;\n"
+                + "  public String note;\n"
+                + "  @ForyConstructor({\"name\", \"age\"})\n"
+                + "  public AnnotatedConstructorStruct(String name, int age) {\n"
+                + "    this.name = name;\n"
+                + "    this.age = age;\n"
+                + "  }\n"
+                + "  public String getName() { return name; }\n"
+                + "  public int getAge() { return age; }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    String generatedSource =
+        result.generatedSource("test/AnnotatedConstructorStruct_ForyNativeSerializer.java");
+    Assert.assertFalse(generatedSource.contains("boolean[]"), generatedSource);
+    Assert.assertTrue(generatedSource.contains("long[] constructorFieldBits"), generatedSource);
+    Assert.assertTrue(
+        generatedSource.contains("newFieldBits(DESCRIPTORS.size())"), generatedSource);
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.AnnotatedConstructorStruct");
+      Object value = type.getConstructor(String.class, int.class).newInstance("fory", 12);
+      setField(type, value, "note", "static");
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .withClassLoader(loader)
+              .withCodegen(false)
+              .requireClassRegistration(false)
+              .build();
+      Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
+      Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
+
+      Object roundTrip = fory.deserialize(fory.serialize(value));
+      Assert.assertEquals(invoke(type, roundTrip, "getName"), "fory");
+      Assert.assertEquals(invoke(type, roundTrip, "getAge"), 12);
+      Assert.assertEquals(getField(type, roundTrip, "note"), "static");
+      Object copied = fory.copy(value);
+      Assert.assertEquals(invoke(type, copied, "getName"), "fory");
+      Assert.assertEquals(invoke(type, copied, "getAge"), 12);
+      Assert.assertEquals(getField(type, copied, "note"), "static");
+    }
+  }
+
+  @Test
+  @SuppressWarnings({"unchecked", "rawtypes"})
+  public void testStaticRegisteredConstructor() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.RegisteredConstructorStruct",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class RegisteredConstructorStruct {\n"
+                + "  public static int constructorCalls;\n"
+                + "  private final String name;\n"
+                + "  private final int age;\n"
+                + "  public String note;\n"
+                + "  public RegisteredConstructorStruct(String name, int age) {\n"
+                + "    constructorCalls++;\n"
+                + "    this.name = name;\n"
+                + "    this.age = age;\n"
+                + "  }\n"
+                + "  public String getName() { return name; }\n"
+                + "  public int getAge() { return age; }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.RegisteredConstructorStruct");
+      Constructor constructor = type.getConstructor(String.class, int.class);
+      Object value = constructor.newInstance("registered", 34);
+      setField(type, value, "note", "ctor");
+
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .withClassLoader(loader)
+              .withCodegen(false)
+              .requireClassRegistration(false)
+              .build();
+      fory.registerConstructor(type, constructor, "name", "age");
+      Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
+      Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
+
+      setField(type, null, "constructorCalls", 0);
+      Object roundTrip = fory.deserialize(fory.serialize(value));
+      Assert.assertEquals(getField(type, null, "constructorCalls"), 1);
+      Assert.assertEquals(invoke(type, roundTrip, "getName"), "registered");
+      Assert.assertEquals(invoke(type, roundTrip, "getAge"), 34);
+      Assert.assertEquals(getField(type, roundTrip, "note"), "ctor");
     }
   }
 

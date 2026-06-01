@@ -35,7 +35,6 @@ import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefMode;
 import org.apache.fory.resolver.TypeResolver;
@@ -267,7 +266,7 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
                 || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
                 || JdkVersion.MAJOR_VERSION >= 25
             ? newBean()
-            : ObjectCreators.getObjectCreator(type).newInstance();
+            : typeResolver.getObjectCreator(type).newInstance();
     // Set default values for missing fields in Scala case classes
     DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
     return obj;

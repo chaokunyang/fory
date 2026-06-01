@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import org.apache.fory.collection.IdentityObjectIntMap;
 import org.apache.fory.collection.ObjectIntMap;
+import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.RefReader;
@@ -199,6 +200,15 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
     return vals;
   }
 
+  @SuppressWarnings("rawtypes")
+  public Object[] copyFieldValuesForPutFields(
+      CopyContext copyContext, Object obj, ObjectIntMap fieldIndexMap, int arraySize) {
+    checkLayerSerializerMeta();
+    Object[] vals = new Object[arraySize];
+    collectCopiedPutFieldValues(copyContext, obj, fieldIndexMap, vals, allFields);
+    return vals;
+  }
+
   public void skipFields(ReadContext readContext) {
     checkLayerSerializerMeta();
     MemoryBuffer buffer = readContext.getBuffer();
@@ -357,6 +367,29 @@ public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSer
         int index = fieldIndexMap.get(fieldName, -1);
         if (index != -1 && index < vals.length) {
           vals[index] = fieldAccessor.get(obj);
+        }
+      }
+    }
+  }
+
+  @SuppressWarnings("rawtypes")
+  private void collectCopiedPutFieldValues(
+      CopyContext copyContext,
+      Object obj,
+      ObjectIntMap fieldIndexMap,
+      Object[] vals,
+      SerializationFieldInfo[] fieldInfos) {
+    for (SerializationFieldInfo fieldInfo : fieldInfos) {
+      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
+      if (fieldAccessor != null) {
+        String fieldName = fieldAccessor.getField().getName();
+        int index = fieldIndexMap.get(fieldName, -1);
+        if (index != -1 && index < vals.length) {
+          Object fieldValue = fieldAccessor.get(obj);
+          vals[index] =
+              fieldInfo.isPrimitiveField || fieldValue == null
+                  ? fieldValue
+                  : copyContext.copyObject(fieldValue);
         }
       }
     }

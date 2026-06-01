@@ -26,7 +26,7 @@ Apache Fory™ C# is a high-performance, cross-language serialization runtime fo
 - High performance binary serialization for .NET 8+
 - Xlang compatibility with Fory implementations in Java, Python, C++, Go, Rust,
   JavaScript/TypeScript, Swift, Dart, Scala, and Kotlin
-- Source-generator-based serializers for `[ForyObject]` types
+- Source-generator-based serializers for `[ForyStruct]` types, plus `[ForyEnum]` and `[ForyUnion]` registration
 - Optional reference tracking for shared and circular object graphs
 - Compatible mode for schema evolution
 - Thread-safe runtime (`ThreadSafeFory`) for multi-threaded services
@@ -40,11 +40,11 @@ Apache Fory™ C# is a high-performance, cross-language serialization runtime fo
 
 ### Install from NuGet
 
-Reference the single `Apache.Fory` package. It includes the runtime and the source generator for `[ForyObject]` types.
+Reference the single `Apache.Fory` package. It includes the runtime and the source generator for `[ForyStruct]`, `[ForyEnum]`, and `[ForyUnion]` types.
 
 ```xml
 <ItemGroup>
-  <PackageReference Include="Apache.Fory" Version="1.0.0" />
+  <PackageReference Include="Apache.Fory" Version="1.1.0" />
 </ItemGroup>
 ```
 
@@ -53,7 +53,7 @@ Reference the single `Apache.Fory` package. It includes the runtime and the sour
 ```csharp
 using Apache.Fory;
 
-[ForyObject]
+[ForyStruct]
 public sealed class User
 {
     public long Id { get; set; }

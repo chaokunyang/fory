@@ -46,6 +46,7 @@ import org.apache.fory.collection.UInt16List;
 import org.apache.fory.collection.UInt32List;
 import org.apache.fory.collection.UInt64List;
 import org.apache.fory.collection.UInt8List;
+import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
@@ -67,6 +68,7 @@ import org.apache.fory.util.Preconditions;
 
 public class FieldTypes {
   private static final Logger LOG = LoggerFactory.getLogger(FieldTypes.class);
+  private static final int MAX_ARRAY_DIMS = 255;
 
   /** Returns true if can use current field type. */
   static boolean useFieldType(Class<?> parsedType, Descriptor descriptor) {
@@ -242,6 +244,9 @@ public class FieldTypes {
 
     boolean isUnionType = Types.isUnionType(typeId);
     if (isUnionType) {
+      // Static fields already carry the union schema in their declared field
+      // type. TYPED_UNION/NAMED_UNION are only for root or dynamic Any values
+      // where the wire must identify the union without field context.
       typeId = Types.UNION;
     }
 
@@ -525,6 +530,9 @@ public class FieldTypes {
         return new CollectionFieldType(-1, nullable, trackingRef, read(buffer, resolver));
       } else if (kind == 3) {
         int dims = buffer.readVarUInt32Small7();
+        if (dims <= 0 || dims > MAX_ARRAY_DIMS) {
+          throw new DeserializationException("Invalid array dimensions in TypeDef: " + dims);
+        }
         return new ArrayFieldType(-1, nullable, trackingRef, read(buffer, resolver), dims);
       } else if (kind == 4) {
         return new EnumFieldType(nullable, -1, -1);

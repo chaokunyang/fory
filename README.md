@@ -35,13 +35,12 @@ references.
   enums, structs, and unions. Define schemas once, then generate native domain
   objects for each language without forcing wrapper types into user code.
 - **Row-Format Random Access**: Read fields, arrays, and nested values without
-  rebuilding full objects, with zero-copy access, partial reads, and Arrow
-  integration.
+  rebuilding full objects, with zero-copy access and partial reads.
 - **Optimized Runtimes**: Java JIT serializers and generated/static serializers
   in other runtimes keep hot paths fast and payloads compact.
 - **Language And Platform Support**: Java, Python, C++, Go, Rust,
   JavaScript/TypeScript, C#, Swift, Dart, Scala, and Kotlin, including GraalVM
-  native image, Dart VM/Flutter/web, and Node.js/browser JavaScript.
+  native image, Android, Dart VM/Flutter/web, and Node.js/browser JavaScript.
 
 ## Performance
 
@@ -133,14 +132,14 @@ Maven:
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-core</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
 </dependency>
 ```
 
 Gradle:
 
 ```gradle
-implementation "org.apache.fory:fory-core:1.0.0"
+implementation "org.apache.fory:fory-core:1.1.0"
 ```
 
 **Scala**
@@ -148,7 +147,7 @@ implementation "org.apache.fory:fory-core:1.0.0"
 sbt:
 
 ```scala
-libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.0.0"
+libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.1.0"
 ```
 
 **Kotlin**
@@ -156,7 +155,7 @@ libraryDependencies += "org.apache.fory" %% "fory-scala" % "1.0.0"
 Gradle:
 
 ```kotlin
-implementation("org.apache.fory:fory-kotlin:1.0.0")
+implementation("org.apache.fory:fory-kotlin:1.1.0")
 ```
 
 Maven:
@@ -165,7 +164,7 @@ Maven:
 <dependency>
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-kotlin</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
 </dependency>
 ```
 
@@ -187,7 +186,7 @@ pip install "pyfory[format]"
 
 ```toml
 [dependencies]
-fory = "1.0.0"
+fory = "1.1.0"
 ```
 
 **C++**
@@ -199,7 +198,7 @@ include(FetchContent)
 FetchContent_Declare(
   fory
   GIT_REPOSITORY https://github.com/apache/fory.git
-  GIT_TAG v1.0.0
+  GIT_TAG v1.1.0
   SOURCE_SUBDIR cpp
 )
 FetchContent_MakeAvailable(fory)
@@ -210,8 +209,8 @@ Bazel:
 
 ```bazel
 # MODULE.bazel
-bazel_dep(name = "fory", version = "1.0.0")
-git_override(module_name = "fory", remote = "https://github.com/apache/fory.git", commit = "v1.0.0")
+bazel_dep(name = "fory", version = "1.1.0")
+git_override(module_name = "fory", remote = "https://github.com/apache/fory.git", commit = "v1.1.0")
 
 # BUILD
 deps = ["@fory//cpp/fory/serialization:fory_serialization"]
@@ -244,13 +243,13 @@ npm install @apache-fory/core @apache-fory/hps
 **C#**
 
 ```bash
-dotnet add package Apache.Fory --version 1.0.0
+dotnet add package Apache.Fory --version 1.1.0
 ```
 
 **Dart**
 
 ```bash
-dart pub add fory:^1.0.0
+dart pub add fory:^1.1.0
 dart pub add dev:build_runner
 ```
 
@@ -260,7 +259,7 @@ Add Fory to `Package.swift`:
 
 ```swift
 dependencies: [
-  .package(url: "https://github.com/apache/fory.git", exact: "1.0.0")
+  .package(url: "https://github.com/apache/fory.git", exact: "1.1.0")
 ],
 targets: [
   .target(
@@ -473,7 +472,7 @@ console.log(person.name);
 ```csharp
 using Apache.Fory;
 
-[ForyObject]
+[ForyStruct]
 public sealed class Person
 {
     public string Name { get; set; } = string.Empty;
@@ -752,23 +751,24 @@ deserialization, see the
 
 **User Guides**
 
-| Guide                 | Source                                                                   | Website                                                         |
-| --------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| Java                  | [docs/guide/java](docs/guide/java)                                       | [View](https://fory.apache.org/docs/guide/java/)                |
-| Python                | [docs/guide/python](docs/guide/python)                                   | [View](https://fory.apache.org/docs/guide/python/)              |
-| Rust                  | [docs/guide/rust](docs/guide/rust)                                       | [View](https://fory.apache.org/docs/guide/rust/)                |
-| C++                   | [docs/guide/cpp](docs/guide/cpp)                                         | [View](https://fory.apache.org/docs/guide/cpp/)                 |
-| Go                    | [docs/guide/go](docs/guide/go)                                           | [View](https://fory.apache.org/docs/guide/go/)                  |
-| JavaScript/TypeScript | [docs/guide/javascript](docs/guide/javascript)                           | [View](https://fory.apache.org/docs/guide/javascript/)          |
-| C#                    | [docs/guide/csharp](docs/guide/csharp)                                   | [View](https://fory.apache.org/docs/guide/csharp/)              |
-| Swift                 | [docs/guide/swift](docs/guide/swift)                                     | [View](https://fory.apache.org/docs/guide/swift/)               |
-| Dart                  | [docs/guide/dart](docs/guide/dart)                                       | [View](https://fory.apache.org/docs/guide/dart/)                |
-| Scala                 | [docs/guide/scala](docs/guide/scala)                                     | [View](https://fory.apache.org/docs/guide/scala/)               |
-| Kotlin                | [docs/guide/kotlin](docs/guide/kotlin)                                   | [View](https://fory.apache.org/docs/guide/kotlin/)              |
-| Cross-language xlang  | [docs/guide/xlang](docs/guide/xlang)                                     | [View](https://fory.apache.org/docs/guide/xlang/)               |
-| Schema IDL/compiler   | [docs/compiler](docs/compiler)                                           | [View](https://fory.apache.org/docs/compiler/)                  |
-| GraalVM native image  | [docs/guide/java/graalvm-support.md](docs/guide/java/graalvm-support.md) | [View](https://fory.apache.org/docs/guide/java/graalvm_support) |
-| Development           | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)                               | [View](docs/DEVELOPMENT.md)                                     |
+| Guide                 | Source                                                                       | Website                                                            |
+| --------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Java                  | [docs/guide/java](docs/guide/java)                                           | [View](https://fory.apache.org/docs/guide/java/)                   |
+| Python                | [docs/guide/python](docs/guide/python)                                       | [View](https://fory.apache.org/docs/guide/python/)                 |
+| Rust                  | [docs/guide/rust](docs/guide/rust)                                           | [View](https://fory.apache.org/docs/guide/rust/)                   |
+| C++                   | [docs/guide/cpp](docs/guide/cpp)                                             | [View](https://fory.apache.org/docs/guide/cpp/)                    |
+| Go                    | [docs/guide/go](docs/guide/go)                                               | [View](https://fory.apache.org/docs/guide/go/)                     |
+| JavaScript/TypeScript | [docs/guide/javascript](docs/guide/javascript)                               | [View](https://fory.apache.org/docs/guide/javascript/)             |
+| C#                    | [docs/guide/csharp](docs/guide/csharp)                                       | [View](https://fory.apache.org/docs/guide/csharp/)                 |
+| Swift                 | [docs/guide/swift](docs/guide/swift)                                         | [View](https://fory.apache.org/docs/guide/swift/)                  |
+| Dart                  | [docs/guide/dart](docs/guide/dart)                                           | [View](https://fory.apache.org/docs/guide/dart/)                   |
+| Scala                 | [docs/guide/scala](docs/guide/scala)                                         | [View](https://fory.apache.org/docs/guide/scala/)                  |
+| Kotlin                | [docs/guide/kotlin](docs/guide/kotlin)                                       | [View](https://fory.apache.org/docs/guide/kotlin/)                 |
+| Cross-language xlang  | [docs/guide/xlang](docs/guide/xlang)                                         | [View](https://fory.apache.org/docs/guide/xlang/)                  |
+| Schema IDL/compiler   | [docs/compiler](docs/compiler)                                               | [View](https://fory.apache.org/docs/compiler/)                     |
+| GraalVM native image  | [docs/guide/java/graalvm-support.md](docs/guide/java/graalvm-support.md)     | [View](https://fory.apache.org/docs/guide/java/graalvm_support)    |
+| Android               | [docs/guide/kotlin/android-support.md](docs/guide/kotlin/android-support.md) | [View](https://fory.apache.org/docs/guide/kotlin/android_support/) |
+| Development           | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)                                   | [View](docs/DEVELOPMENT.md)                                        |
 
 **Specifications**
 

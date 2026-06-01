@@ -33,7 +33,7 @@ The Swift implementation provides high-performance object graph serialization wi
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/apache/fory.git", from: "1.0.0")
+    .package(url: "https://github.com/apache/fory.git", from: "1.1.0")
 ],
 targets: [
     .target(
@@ -347,7 +347,13 @@ enum Color: Equatable {
 
 @ForyUnion
 enum StringOrLong: Equatable {
+    @ForyUnknownCase
+    case unknown(UnknownCase)
+
+    @ForyCase(id: 0)
     case text(String)
+
+    @ForyCase(id: 1)
     case number(Int64)
 }
 

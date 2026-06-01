@@ -33,7 +33,7 @@
   <groupId>org.apache.fory</groupId>
   <artifactId>fory-parent</artifactId>
   <packaging>pom</packaging>
-  <version>1.1.0-SNAPSHOT</version>
+  <version>1.2.0-SNAPSHOT</version>
   <name>Fory Project Parent POM</name>
   <description>
     Apache Fory™ is a blazingly fast multi-language serialization framework powered by jit and zero-copy.
@@ -75,7 +75,8 @@
     <commons_codec.version>1.13</commons_codec.version>
     <fory.java.rootdir>${basedir}</fory.java.rootdir>
     <argLine></argLine>
-    <maven-spotless-plugin.version>3.3.0</maven-spotless-plugin.version>
+    <maven-spotless-plugin.version>3.6.0</maven-spotless-plugin.version>
+    <google-java-format.version>1.35.0</google-java-format.version>
     <lombok.version>1.18.38</lombok.version>
     <mockito.version>4.11.0</mockito.version>
   </properties>
@@ -106,7 +107,6 @@
         <jdk>[21,]</jdk>
       </activation>
       <modules>
-        <module>fory-simd</module>
         <module>fory-latest-jdk-tests</module>
       </modules>
     </profile>
@@ -307,8 +307,7 @@
         <configuration>
           <java>
             <googleJavaFormat>
-              <!-- 1.35 support JDK25 -->
-              <version>1.35.0</version>
+              <version>${google-java-format.version}</version>
               <style>GOOGLE</style>
             </googleJavaFormat>
           </java>

@@ -23,7 +23,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertThrows;
 import static org.testng.Assert.assertTrue;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
@@ -83,29 +82,6 @@ public class MemoryBufferTest {
     assertEquals(buffer.readFloat64(), Double.MAX_VALUE, 0.1);
     assertEquals(buffer.readBytes(bytes.length), bytes);
     assertEquals(buffer.readerIndex(), buffer.writerIndex());
-  }
-
-  @Test
-  public void testByteArrayStreamWrap() {
-    if (!MemoryUtils.JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS) {
-      return;
-    }
-    ByteArrayOutputStream outputStream = new ByteArrayOutputStream(8);
-    outputStream.write(new byte[] {1, 2, 3}, 0, 3);
-    MemoryBuffer buffer = MemoryUtils.buffer(1);
-    MemoryUtils.wrap(outputStream, buffer);
-    assertEquals(buffer.writerIndex(), 3);
-    assertEquals(buffer.getByte(0), (byte) 1);
-    buffer.writeByte((byte) 4);
-    MemoryUtils.wrap(buffer, outputStream);
-    assertEquals(outputStream.size(), 4);
-    assertEquals(outputStream.toByteArray(), new byte[] {1, 2, 3, 4});
-
-    ByteArrayInputStream inputStream = new ByteArrayInputStream(new byte[] {5, 6, 7});
-    assertEquals(inputStream.read(), 5);
-    MemoryUtils.wrap(inputStream, buffer);
-    assertEquals(buffer.readerIndex(), 1);
-    assertEquals(buffer.readByte(), (byte) 6);
   }
 
   @Test

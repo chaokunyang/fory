@@ -58,7 +58,6 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.FieldTypes;
 import org.apache.fory.meta.NativeTypeDefEncoder;
@@ -686,21 +685,28 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final Consumer readObjectNoDataFunc;
 
     private StreamTypeInfo(Class<?> type) {
-      // ObjectStreamClass.lookup has cache inside, invocation cost won't be big.
-      ObjectStreamClass objectStreamClass = safeObjectStreamClassLookup(type);
-      // In JDK17, set private jdk method accessible will fail by default, use ObjectStreamClass
-      // instead, since it set accessible.
+      // ReflectionFactory exposes Java serialization hooks without reading ObjectStreamClass
+      // private fields or requiring the java.io package to be opened.
       Method writeMethod = null;
       Method readMethod = null;
       Method noDataMethod = null;
-      if (AndroidSupport.IS_ANDROID || !MemoryUtils.JDK_OBJECT_STREAM_FIELD_ACCESS) {
+      if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         writeMethod = JavaSerializer.getWriteObjectMethod(type, false);
         readMethod = JavaSerializer.getReadRefMethod(type, false);
         noDataMethod = JavaSerializer.getReadRefNoData(type, false);
-      } else if (objectStreamClass != null) {
-        writeMethod = _JDKAccess.getObjectStreamClassWriteObjectMethod(objectStreamClass);
-        readMethod = _JDKAccess.getObjectStreamClassReadObjectMethod(objectStreamClass);
-        noDataMethod = _JDKAccess.getObjectStreamClassReadObjectNoDataMethod(objectStreamClass);
+      } else {
+        writeMethod = _JDKAccess.getSerializationWriteObjectMethod(type);
+        readMethod = _JDKAccess.getSerializationReadObjectMethod(type);
+        noDataMethod = _JDKAccess.getSerializationReadObjectNoDataMethod(type);
+        if (writeMethod == null) {
+          writeMethod = JavaSerializer.getWriteObjectMethod(type, false);
+        }
+        if (readMethod == null) {
+          readMethod = JavaSerializer.getReadRefMethod(type, false);
+        }
+        if (noDataMethod == null) {
+          noDataMethod = JavaSerializer.getReadRefNoData(type, false);
+        }
       }
       this.writeObjectMethod = writeMethod;
       this.readObjectMethod = readMethod;

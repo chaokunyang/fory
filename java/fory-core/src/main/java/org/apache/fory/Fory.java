@@ -19,7 +19,6 @@
 
 package org.apache.fory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
@@ -563,31 +562,20 @@ public final class Fory implements BaseFory {
 
   private void serializeToStream(OutputStream outputStream, Consumer<MemoryBuffer> function) {
     MemoryBuffer buf = getBuffer();
-    if (MemoryUtils.JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS
-        && outputStream.getClass() == ByteArrayOutputStream.class) {
-      byte[] oldBytes = buf.getHeapMemory(); // Note: This should not be null.
-      assert oldBytes != null;
-      MemoryUtils.wrap((ByteArrayOutputStream) outputStream, buf);
-      function.accept(buf);
-      MemoryUtils.wrap(buf, (ByteArrayOutputStream) outputStream);
-      buf.pointTo(oldBytes, 0, oldBytes.length);
-      resetBuffer();
-    } else {
-      buf.writerIndex(0);
-      function.accept(buf);
-      try {
-        byte[] bytes = buf.getHeapMemory();
-        if (bytes != null) {
-          outputStream.write(bytes, 0, buf.writerIndex());
-        } else {
-          outputStream.write(buf.getBytes(0, buf.writerIndex()));
-        }
-        outputStream.flush();
-      } catch (IOException e) {
-        throw new SerializationException(e);
-      } finally {
-        resetBuffer();
+    buf.writerIndex(0);
+    function.accept(buf);
+    try {
+      byte[] bytes = buf.getHeapMemory();
+      if (bytes != null) {
+        outputStream.write(bytes, 0, buf.writerIndex());
+      } else {
+        outputStream.write(buf.getBytes(0, buf.writerIndex()));
       }
+      outputStream.flush();
+    } catch (IOException e) {
+      throw new SerializationException(e);
+    } finally {
+      resetBuffer();
     }
   }
 

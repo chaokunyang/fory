@@ -169,17 +169,14 @@ owning JDK module/package to `org.apache.fory.core` and `org.apache.fory.format`
 `ALL-UNNAMED` too when any Fory artifact is on the classpath. Add only the opens needed by the paths
 used in your process:
 
-| Path                                                                             | Required opens                                                            |
-| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| String fast paths and throwable fields                                           | `java.base/java.lang`                                                     |
-| Serialized lambdas                                                               | `java.base/java.lang.invoke`                                              |
-| Reflection-based object construction                                             | `java.base/java.lang.reflect`, `java.base/jdk.internal.reflect`           |
-| Collection wrappers, sublists, `EnumMap`, and `StringTokenizer`                  | `java.base/java.util`                                                     |
-| Blocking queue capacity serializers                                              | `java.base/java.util.concurrent`, `java.base/java.util.concurrent.atomic` |
-| `ByteArrayInputStream`, `ByteArrayOutputStream`, and Java object-stream metadata | `java.base/java.io`                                                       |
-| URL and networking serializers                                                   | `java.base/java.net`                                                      |
-| Proxy serializers                                                                | `java.base/java.lang.reflect`                                             |
-| Big number internals                                                             | `java.base/java.math`                                                     |
+| Path                                                            | Required opens                                                  |
+| --------------------------------------------------------------- | --------------------------------------------------------------- |
+| String fast paths and throwable fields                          | `java.base/java.lang`                                           |
+| Serialized lambdas                                              | `java.base/java.lang.invoke`                                    |
+| Reflection-based object construction                            | `java.base/java.lang.reflect`, `java.base/jdk.internal.reflect` |
+| Collection wrappers, sublists, `EnumMap`, and `StringTokenizer` | `java.base/java.util`                                           |
+| Blocking queue capacity serializers                             | `java.base/java.util.concurrent`                                |
+| Proxy serializers                                               | `java.base/java.lang.reflect`                                   |
 
 Normal classes with final instance fields require final-field mutation to be enabled for the module
 that contains Fory's mutating code when Unsafe allocation is denied. Use the Fory module name on the

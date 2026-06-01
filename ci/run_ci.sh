@@ -110,10 +110,6 @@ jdk25_deny_options() {
   printf " %s" "--add-opens=java.base/jdk.internal.reflect=${fory_open_targets}"
   printf " %s" "--add-opens=java.base/java.util=${fory_open_targets}"
   printf " %s" "--add-opens=java.base/java.util.concurrent=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.util.concurrent.atomic=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.io=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.net=${fory_open_targets}"
-  printf " %s" "--add-opens=java.base/java.math=${fory_open_targets}"
 }
 
 jdk25_javac_options() {

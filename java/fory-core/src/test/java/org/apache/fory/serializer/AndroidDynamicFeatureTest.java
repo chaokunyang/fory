@@ -19,7 +19,6 @@
 
 package org.apache.fory.serializer;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -82,7 +81,7 @@ public class AndroidDynamicFeatureTest {
           LambdaSerializer.STUB_LAMBDA_CLASS == LambdaSerializer.ReplaceStub.class,
           "Android must not create a runtime lambda stub class");
       verifyReflectiveGetter();
-      verifyMemoryUtilsStreamWrapGuards();
+      verifyJdkInternalFieldAccessDisabled();
       verifyXlangUnion();
 
       verifyFory(false);
@@ -167,21 +166,10 @@ public class AndroidDynamicFeatureTest {
       checkEquals(fory.deserialize(outputStream.toByteArray()), value, "OutputStream round trip");
     }
 
-    private static void verifyMemoryUtilsStreamWrapGuards() {
+    private static void verifyJdkInternalFieldAccessDisabled() {
       check(
           !MemoryUtils.JDK_INTERNAL_FIELD_ACCESS,
           "Android must report JDK internal field access unsupported");
-      expectUnsupportedAndroidWrap(
-          () -> MemoryUtils.wrap(new ByteArrayOutputStream(), MemoryUtils.buffer(8)),
-          "ByteArrayOutputStream direct wrapping");
-      expectUnsupportedAndroidWrap(
-          () -> MemoryUtils.wrap(MemoryUtils.buffer(8), new ByteArrayOutputStream()),
-          "ByteArrayOutputStream direct wrapping");
-      expectUnsupportedAndroidWrap(
-          () ->
-              MemoryUtils.wrap(
-                  new ByteArrayInputStream(new byte[] {1, 2, 3}), MemoryUtils.buffer(8)),
-          "ByteArrayInputStream direct wrapping");
     }
 
     private static void verifyXlangUnion() {
@@ -251,17 +239,6 @@ public class AndroidDynamicFeatureTest {
       } catch (UnsupportedOperationException expected) {
         check(
             expected.getMessage().contains("Lambda serialization is unsupported on Android"),
-            "Unexpected unsupported message: " + expected.getMessage());
-      }
-    }
-
-    private static void expectUnsupportedAndroidWrap(Runnable operation, String messageFragment) {
-      try {
-        operation.run();
-        throw new AssertionError("Expected Android unsafe stream wrapping to fail");
-      } catch (UnsupportedOperationException expected) {
-        check(
-            expected.getMessage().contains(messageFragment),
             "Unexpected unsupported message: " + expected.getMessage());
       }
     }

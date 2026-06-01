@@ -19,9 +19,6 @@
 
 package org.apache.fory.platform.internal;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.ObjectStreamClass;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaMetafactory;
 import java.lang.invoke.MethodHandle;
@@ -44,7 +41,6 @@ import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
@@ -69,8 +65,6 @@ public class _JDKAccess {
   public static final boolean JDK_INTERNAL_FIELD_ACCESS;
   public static final boolean JDK_LANG_FIELD_ACCESS;
   public static final boolean JDK_STRING_FIELD_ACCESS;
-  public static final boolean JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS;
-  public static final boolean JDK_OBJECT_STREAM_FIELD_ACCESS;
   public static final boolean JDK_COLLECTION_FIELD_ACCESS;
   public static final boolean JDK_CONCURRENT_FIELD_ACCESS;
   public static final boolean JDK_PROXY_FIELD_ACCESS;
@@ -93,8 +87,6 @@ public class _JDKAccess {
       JDK_INTERNAL_FIELD_ACCESS = false;
       JDK_LANG_FIELD_ACCESS = false;
       JDK_STRING_FIELD_ACCESS = false;
-      JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS = false;
-      JDK_OBJECT_STREAM_FIELD_ACCESS = false;
       JDK_COLLECTION_FIELD_ACCESS = false;
       JDK_CONCURRENT_FIELD_ACCESS = false;
       JDK_PROXY_FIELD_ACCESS = false;
@@ -102,8 +94,6 @@ public class _JDKAccess {
       JDK_INTERNAL_FIELD_ACCESS = true;
       JDK_LANG_FIELD_ACCESS = true;
       JDK_STRING_FIELD_ACCESS = true;
-      JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS = true;
-      JDK_OBJECT_STREAM_FIELD_ACCESS = true;
       JDK_COLLECTION_FIELD_ACCESS = true;
       JDK_CONCURRENT_FIELD_ACCESS = true;
       JDK_PROXY_FIELD_ACCESS = true;
@@ -364,105 +354,84 @@ public class _JDKAccess {
     }
   }
 
-  // Lazy load offsets and keep the access shape in one class so the JDK25 multi-release
-  // replacement can change these methods without touching MemoryUtils callers.
-  private static class ByteArrayStreamFields {
-    private static final long BAS_BUF_BUF;
-    private static final long BAS_BUF_COUNT;
-    private static final long BIS_BUF_BUF;
-    private static final long BIS_BUF_POS;
-    private static final long BIS_BUF_COUNT;
+  private static class SerializationMethods {
+    private static final Object REFLECTION_FACTORY;
+    private static final Method WRITE_OBJECT;
+    private static final Method READ_OBJECT;
+    private static final Method READ_OBJECT_NO_DATA;
+    private static final Method WRITE_REPLACE;
+    private static final Method READ_RESOLVE;
 
     static {
+      Object reflectionFactory = null;
+      Method writeObject = null;
+      Method readObject = null;
+      Method readObjectNoData = null;
+      Method writeReplace = null;
+      Method readResolve = null;
       try {
-        BAS_BUF_BUF = UNSAFE.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("buf"));
-        BAS_BUF_COUNT =
-            UNSAFE.objectFieldOffset(ByteArrayOutputStream.class.getDeclaredField("count"));
-        BIS_BUF_BUF = UNSAFE.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("buf"));
-        BIS_BUF_POS = UNSAFE.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("pos"));
-        BIS_BUF_COUNT =
-            UNSAFE.objectFieldOffset(ByteArrayInputStream.class.getDeclaredField("count"));
-      } catch (NoSuchFieldException e) {
-        throw new RuntimeException(e);
+        Class<?> factoryClass = Class.forName("sun.reflect.ReflectionFactory");
+        Method getReflectionFactory = factoryClass.getDeclaredMethod("getReflectionFactory");
+        reflectionFactory = getReflectionFactory.invoke(null);
+        writeObject = factoryClass.getDeclaredMethod("writeObjectForSerialization", Class.class);
+        readObject = factoryClass.getDeclaredMethod("readObjectForSerialization", Class.class);
+        readObjectNoData =
+            factoryClass.getDeclaredMethod("readObjectNoDataForSerialization", Class.class);
+        writeReplace = factoryClass.getDeclaredMethod("writeReplaceForSerialization", Class.class);
+        readResolve = factoryClass.getDeclaredMethod("readResolveForSerialization", Class.class);
+      } catch (Throwable e) {
+        ExceptionUtils.ignore(e);
       }
+      REFLECTION_FACTORY = reflectionFactory;
+      WRITE_OBJECT = writeObject;
+      READ_OBJECT = readObject;
+      READ_OBJECT_NO_DATA = readObjectNoData;
+      WRITE_REPLACE = writeReplace;
+      READ_RESOLVE = readResolve;
     }
   }
 
-  public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
-    Preconditions.checkNotNull(stream);
-    byte[] buf = (byte[]) UNSAFE.getObject(stream, ByteArrayStreamFields.BAS_BUF_BUF);
-    int count = UNSAFE.getInt(stream, ByteArrayStreamFields.BAS_BUF_COUNT);
-    buffer.pointTo(buf, 0, buf.length);
-    buffer.writerIndex(count);
-  }
-
-  public static void wrap(MemoryBuffer buffer, ByteArrayOutputStream stream) {
-    Preconditions.checkNotNull(stream);
-    byte[] bytes = buffer.getHeapMemory();
-    Preconditions.checkNotNull(bytes);
-    UNSAFE.putObject(stream, ByteArrayStreamFields.BAS_BUF_BUF, bytes);
-    UNSAFE.putInt(stream, ByteArrayStreamFields.BAS_BUF_COUNT, buffer.writerIndex());
-  }
-
-  public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
-    Preconditions.checkNotNull(stream);
-    byte[] buf = (byte[]) UNSAFE.getObject(stream, ByteArrayStreamFields.BIS_BUF_BUF);
-    int count = UNSAFE.getInt(stream, ByteArrayStreamFields.BIS_BUF_COUNT);
-    int pos = UNSAFE.getInt(stream, ByteArrayStreamFields.BIS_BUF_POS);
-    buffer.pointTo(buf, 0, count);
-    buffer.readerIndex(pos);
-  }
-
-  private static class ObjectStreamClassFields {
-    private static final long WRITE_OBJECT_METHOD;
-    private static final long READ_OBJECT_METHOD;
-    private static final long READ_OBJECT_NO_DATA_METHOD;
-    private static final long WRITE_REPLACE_METHOD;
-    private static final long READ_RESOLVE_METHOD;
-
-    static {
-      try {
-        WRITE_OBJECT_METHOD =
-            UNSAFE.objectFieldOffset(ObjectStreamClass.class.getDeclaredField("writeObjectMethod"));
-        READ_OBJECT_METHOD =
-            UNSAFE.objectFieldOffset(ObjectStreamClass.class.getDeclaredField("readObjectMethod"));
-        READ_OBJECT_NO_DATA_METHOD =
-            UNSAFE.objectFieldOffset(
-                ObjectStreamClass.class.getDeclaredField("readObjectNoDataMethod"));
-        WRITE_REPLACE_METHOD =
-            UNSAFE.objectFieldOffset(
-                ObjectStreamClass.class.getDeclaredField("writeReplaceMethod"));
-        READ_RESOLVE_METHOD =
-            UNSAFE.objectFieldOffset(ObjectStreamClass.class.getDeclaredField("readResolveMethod"));
-      } catch (NoSuchFieldException e) {
-        throw new RuntimeException(e);
-      }
+  private static Method getSerializationMethod(Class<?> type, Method factoryMethod) {
+    if (!isSerializationHookLookupAvailable() || factoryMethod == null) {
+      return null;
+    }
+    try {
+      MethodHandle handle =
+          (MethodHandle) factoryMethod.invoke(SerializationMethods.REFLECTION_FACTORY, type);
+      return handle == null ? null : MethodHandles.reflectAs(Method.class, handle);
+    } catch (Throwable e) {
+      ExceptionUtils.ignore(e);
+      return null;
     }
   }
 
-  public static Method getObjectStreamClassWriteObjectMethod(ObjectStreamClass objectStreamClass) {
-    return (Method)
-        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.WRITE_OBJECT_METHOD);
+  public static Method getSerializationWriteObjectMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.WRITE_OBJECT);
   }
 
-  public static Method getObjectStreamClassReadObjectMethod(ObjectStreamClass objectStreamClass) {
-    return (Method) UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.READ_OBJECT_METHOD);
+  public static Method getSerializationReadObjectMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.READ_OBJECT);
   }
 
-  public static Method getObjectStreamClassReadObjectNoDataMethod(
-      ObjectStreamClass objectStreamClass) {
-    return (Method)
-        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.READ_OBJECT_NO_DATA_METHOD);
+  public static Method getSerializationReadObjectNoDataMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.READ_OBJECT_NO_DATA);
   }
 
-  public static Method getObjectStreamClassWriteReplaceMethod(ObjectStreamClass objectStreamClass) {
-    return (Method)
-        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.WRITE_REPLACE_METHOD);
+  public static Method getSerializationWriteReplaceMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.WRITE_REPLACE);
   }
 
-  public static Method getObjectStreamClassReadResolveMethod(ObjectStreamClass objectStreamClass) {
-    return (Method)
-        UNSAFE.getObject(objectStreamClass, ObjectStreamClassFields.READ_RESOLVE_METHOD);
+  public static Method getSerializationReadResolveMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.READ_RESOLVE);
+  }
+
+  public static boolean isSerializationHookLookupAvailable() {
+    return SerializationMethods.REFLECTION_FACTORY != null
+        && SerializationMethods.WRITE_OBJECT != null
+        && SerializationMethods.READ_OBJECT != null
+        && SerializationMethods.READ_OBJECT_NO_DATA != null
+        && SerializationMethods.WRITE_REPLACE != null
+        && SerializationMethods.READ_RESOLVE != null;
   }
 
   public static <T> T tryMakeFunction(

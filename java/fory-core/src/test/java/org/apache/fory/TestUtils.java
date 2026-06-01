@@ -68,10 +68,6 @@ public class TestUtils {
       args.add("--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED");
       args.add("--add-opens=java.base/java.util=ALL-UNNAMED");
       args.add("--add-opens=java.base/java.util.concurrent=ALL-UNNAMED");
-      args.add("--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED");
-      args.add("--add-opens=java.base/java.io=ALL-UNNAMED");
-      args.add("--add-opens=java.base/java.net=ALL-UNNAMED");
-      args.add("--add-opens=java.base/java.math=ALL-UNNAMED");
       if (hasInputArg("--sun-misc-unsafe-memory-access=deny")) {
         args.add("--sun-misc-unsafe-memory-access=deny");
       }

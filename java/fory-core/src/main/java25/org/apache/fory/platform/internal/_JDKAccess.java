@@ -19,9 +19,6 @@
 
 package org.apache.fory.platform.internal;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.ObjectStreamClass;
 import java.lang.invoke.CallSite;
 import java.lang.invoke.LambdaConversionException;
 import java.lang.invoke.LambdaMetafactory;
@@ -49,7 +46,6 @@ import java.util.function.ToIntFunction;
 import java.util.function.ToLongFunction;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
-import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.type.TypeUtils;
@@ -70,8 +66,6 @@ public class _JDKAccess {
   public static final boolean JDK_INTERNAL_FIELD_ACCESS;
   public static final boolean JDK_LANG_FIELD_ACCESS;
   public static final boolean JDK_STRING_FIELD_ACCESS;
-  public static final boolean JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS;
-  public static final boolean JDK_OBJECT_STREAM_FIELD_ACCESS;
   public static final boolean JDK_COLLECTION_FIELD_ACCESS;
   public static final boolean JDK_CONCURRENT_FIELD_ACCESS;
   public static final boolean JDK_PROXY_FIELD_ACCESS;
@@ -95,16 +89,6 @@ public class _JDKAccess {
   private static final VarHandle STRING_CODER_HANDLE;
   private static final VarHandle STRING_COUNT_HANDLE;
   private static final VarHandle STRING_OFFSET_HANDLE;
-  private static final VarHandle BAS_BUF_HANDLE;
-  private static final VarHandle BAS_COUNT_HANDLE;
-  private static final VarHandle BIS_BUF_HANDLE;
-  private static final VarHandle BIS_POS_HANDLE;
-  private static final VarHandle BIS_COUNT_HANDLE;
-  private static final VarHandle OSC_WRITE_OBJECT_METHOD_HANDLE;
-  private static final VarHandle OSC_READ_OBJECT_METHOD_HANDLE;
-  private static final VarHandle OSC_READ_OBJECT_NO_DATA_METHOD_HANDLE;
-  private static final VarHandle OSC_WRITE_REPLACE_METHOD_HANDLE;
-  private static final VarHandle OSC_READ_RESOLVE_METHOD_HANDLE;
 
   static {
     String jmvName = System.getProperty("java.vm.name", "");
@@ -130,41 +114,19 @@ public class _JDKAccess {
       }
 
       StringHandles stringHandles = initStringHandles(valueField.getType(), countField, offsetField);
-      StreamHandles streamHandles = initStreamHandles();
-      ObjectStreamHandles objectStreamHandles = initObjectStreamHandles();
 
       JDK_LANG_FIELD_ACCESS = canOpen(String.class);
       JDK_STRING_FIELD_ACCESS = stringHandles != null;
-      JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS = streamHandles != null;
-      JDK_OBJECT_STREAM_FIELD_ACCESS = objectStreamHandles != null;
       JDK_COLLECTION_FIELD_ACCESS = canOpen("java.util.Collections$SynchronizedCollection");
       JDK_CONCURRENT_FIELD_ACCESS =
           canOpen(ArrayBlockingQueue.class) && canOpen(LinkedBlockingQueue.class);
       JDK_PROXY_FIELD_ACCESS = canOpen(Proxy.class);
-      JDK_INTERNAL_FIELD_ACCESS =
-          JDK_STRING_FIELD_ACCESS
-              && JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS
-              && JDK_OBJECT_STREAM_FIELD_ACCESS;
+      JDK_INTERNAL_FIELD_ACCESS = JDK_STRING_FIELD_ACCESS;
 
       STRING_VALUE_HANDLE = stringHandles == null ? null : stringHandles.value;
       STRING_CODER_HANDLE = stringHandles == null ? null : stringHandles.coder;
       STRING_COUNT_HANDLE = stringHandles == null ? null : stringHandles.count;
       STRING_OFFSET_HANDLE = stringHandles == null ? null : stringHandles.offset;
-      BAS_BUF_HANDLE = streamHandles == null ? null : streamHandles.basBuf;
-      BAS_COUNT_HANDLE = streamHandles == null ? null : streamHandles.basCount;
-      BIS_BUF_HANDLE = streamHandles == null ? null : streamHandles.bisBuf;
-      BIS_POS_HANDLE = streamHandles == null ? null : streamHandles.bisPos;
-      BIS_COUNT_HANDLE = streamHandles == null ? null : streamHandles.bisCount;
-      OSC_WRITE_OBJECT_METHOD_HANDLE =
-          objectStreamHandles == null ? null : objectStreamHandles.writeObjectMethod;
-      OSC_READ_OBJECT_METHOD_HANDLE =
-          objectStreamHandles == null ? null : objectStreamHandles.readObjectMethod;
-      OSC_READ_OBJECT_NO_DATA_METHOD_HANDLE =
-          objectStreamHandles == null ? null : objectStreamHandles.readObjectNoDataMethod;
-      OSC_WRITE_REPLACE_METHOD_HANDLE =
-          objectStreamHandles == null ? null : objectStreamHandles.writeReplaceMethod;
-      OSC_READ_RESOLVE_METHOD_HANDLE =
-          objectStreamHandles == null ? null : objectStreamHandles.readResolveMethod;
     } catch (NoSuchFieldException e) {
       throw new RuntimeException(e);
     }
@@ -191,38 +153,6 @@ public class _JDKAccess {
           offsetField == null
               ? null
               : stringLookup.findVarHandle(String.class, "offset", int.class));
-    } catch (Throwable ignored) {
-      return null;
-    }
-  }
-
-  private static StreamHandles initStreamHandles() {
-    try {
-      Lookup basLookup =
-          MethodHandles.privateLookupIn(ByteArrayOutputStream.class, MethodHandles.lookup());
-      Lookup bisLookup =
-          MethodHandles.privateLookupIn(ByteArrayInputStream.class, MethodHandles.lookup());
-      return new StreamHandles(
-          basLookup.findVarHandle(ByteArrayOutputStream.class, "buf", byte[].class),
-          basLookup.findVarHandle(ByteArrayOutputStream.class, "count", int.class),
-          bisLookup.findVarHandle(ByteArrayInputStream.class, "buf", byte[].class),
-          bisLookup.findVarHandle(ByteArrayInputStream.class, "pos", int.class),
-          bisLookup.findVarHandle(ByteArrayInputStream.class, "count", int.class));
-    } catch (Throwable ignored) {
-      return null;
-    }
-  }
-
-  private static ObjectStreamHandles initObjectStreamHandles() {
-    try {
-      Lookup oscLookup =
-          MethodHandles.privateLookupIn(ObjectStreamClass.class, MethodHandles.lookup());
-      return new ObjectStreamHandles(
-          oscLookup.findVarHandle(ObjectStreamClass.class, "writeObjectMethod", Method.class),
-          oscLookup.findVarHandle(ObjectStreamClass.class, "readObjectMethod", Method.class),
-          oscLookup.findVarHandle(ObjectStreamClass.class, "readObjectNoDataMethod", Method.class),
-          oscLookup.findVarHandle(ObjectStreamClass.class, "writeReplaceMethod", Method.class),
-          oscLookup.findVarHandle(ObjectStreamClass.class, "readResolveMethod", Method.class));
     } catch (Throwable ignored) {
       return null;
     }
@@ -259,53 +189,9 @@ public class _JDKAccess {
     }
   }
 
-  private static class StreamHandles {
-    private final VarHandle basBuf;
-    private final VarHandle basCount;
-    private final VarHandle bisBuf;
-    private final VarHandle bisPos;
-    private final VarHandle bisCount;
-
-    private StreamHandles(
-        VarHandle basBuf,
-        VarHandle basCount,
-        VarHandle bisBuf,
-        VarHandle bisPos,
-        VarHandle bisCount) {
-      this.basBuf = basBuf;
-      this.basCount = basCount;
-      this.bisBuf = bisBuf;
-      this.bisPos = bisPos;
-      this.bisCount = bisCount;
-    }
-  }
-
-  private static class ObjectStreamHandles {
-    private final VarHandle writeObjectMethod;
-    private final VarHandle readObjectMethod;
-    private final VarHandle readObjectNoDataMethod;
-    private final VarHandle writeReplaceMethod;
-    private final VarHandle readResolveMethod;
-
-    private ObjectStreamHandles(
-        VarHandle writeObjectMethod,
-        VarHandle readObjectMethod,
-        VarHandle readObjectNoDataMethod,
-        VarHandle writeReplaceMethod,
-        VarHandle readResolveMethod) {
-      this.writeObjectMethod = writeObjectMethod;
-      this.readObjectMethod = readObjectMethod;
-      this.readObjectNoDataMethod = readObjectNoDataMethod;
-      this.writeReplaceMethod = writeReplaceMethod;
-      this.readResolveMethod = readResolveMethod;
-    }
-  }
-
-  // The root native-image configuration names these root lazy helpers. Keep same-named JDK25
-  // shadows so multi-release class lookup does not fall back to the root Unsafe offset helpers.
+  // The root native-image configuration names this root lazy helper. Keep a same-named JDK25
+  // shadow so multi-release class lookup does not fall back to the root Unsafe offset helper.
   private static class StringCoderField {}
-
-  private static class ByteArrayStreamFields {}
 
   public static Object getStringValue(String value) {
     checkStringAccess("String.value");
@@ -541,61 +427,6 @@ public class _JDKAccess {
     }
   }
 
-  public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
-    Preconditions.checkNotNull(stream);
-    checkByteArrayStreamAccess("ByteArrayOutputStream");
-    byte[] buf = (byte[]) BAS_BUF_HANDLE.get(stream);
-    int count = (int) BAS_COUNT_HANDLE.get(stream);
-    buffer.pointTo(buf, 0, buf.length);
-    buffer.writerIndex(count);
-  }
-
-  public static void wrap(MemoryBuffer buffer, ByteArrayOutputStream stream) {
-    Preconditions.checkNotNull(stream);
-    checkByteArrayStreamAccess("ByteArrayOutputStream");
-    byte[] bytes = buffer.getHeapMemory();
-    Preconditions.checkNotNull(bytes);
-    BAS_BUF_HANDLE.set(stream, bytes);
-    BAS_COUNT_HANDLE.set(stream, buffer.writerIndex());
-  }
-
-  public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
-    Preconditions.checkNotNull(stream);
-    checkByteArrayStreamAccess("ByteArrayInputStream");
-    byte[] buf = (byte[]) BIS_BUF_HANDLE.get(stream);
-    int count = (int) BIS_COUNT_HANDLE.get(stream);
-    int pos = (int) BIS_POS_HANDLE.get(stream);
-    buffer.pointTo(buf, 0, count);
-    buffer.readerIndex(pos);
-  }
-
-  public static Method getObjectStreamClassWriteObjectMethod(ObjectStreamClass objectStreamClass) {
-    checkObjectStreamAccess("ObjectStreamClass.writeObjectMethod");
-    return (Method) OSC_WRITE_OBJECT_METHOD_HANDLE.get(objectStreamClass);
-  }
-
-  public static Method getObjectStreamClassReadObjectMethod(ObjectStreamClass objectStreamClass) {
-    checkObjectStreamAccess("ObjectStreamClass.readObjectMethod");
-    return (Method) OSC_READ_OBJECT_METHOD_HANDLE.get(objectStreamClass);
-  }
-
-  public static Method getObjectStreamClassReadObjectNoDataMethod(
-      ObjectStreamClass objectStreamClass) {
-    checkObjectStreamAccess("ObjectStreamClass.readObjectNoDataMethod");
-    return (Method) OSC_READ_OBJECT_NO_DATA_METHOD_HANDLE.get(objectStreamClass);
-  }
-
-  public static Method getObjectStreamClassWriteReplaceMethod(
-      ObjectStreamClass objectStreamClass) {
-    checkObjectStreamAccess("ObjectStreamClass.writeReplaceMethod");
-    return (Method) OSC_WRITE_REPLACE_METHOD_HANDLE.get(objectStreamClass);
-  }
-
-  public static Method getObjectStreamClassReadResolveMethod(ObjectStreamClass objectStreamClass) {
-    checkObjectStreamAccess("ObjectStreamClass.readResolveMethod");
-    return (Method) OSC_READ_RESOLVE_METHOD_HANDLE.get(objectStreamClass);
-  }
-
   private static void checkStringAccess(String target) {
     if (!JDK_STRING_FIELD_ACCESS) {
       throw new UnsupportedOperationException(
@@ -605,22 +436,84 @@ public class _JDKAccess {
     }
   }
 
-  private static void checkByteArrayStreamAccess(String target) {
-    if (!JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS) {
-      throw new UnsupportedOperationException(
-          target
-              + " private access is unavailable; open java.base/java.io to "
-              + "org.apache.fory.core,org.apache.fory.format");
+  private static class SerializationMethods {
+    private static final Object REFLECTION_FACTORY;
+    private static final Method WRITE_OBJECT;
+    private static final Method READ_OBJECT;
+    private static final Method READ_OBJECT_NO_DATA;
+    private static final Method WRITE_REPLACE;
+    private static final Method READ_RESOLVE;
+
+    static {
+      Object reflectionFactory = null;
+      Method writeObject = null;
+      Method readObject = null;
+      Method readObjectNoData = null;
+      Method writeReplace = null;
+      Method readResolve = null;
+      try {
+        Class<?> factoryClass = Class.forName("sun.reflect.ReflectionFactory");
+        Method getReflectionFactory = factoryClass.getDeclaredMethod("getReflectionFactory");
+        reflectionFactory = getReflectionFactory.invoke(null);
+        writeObject = factoryClass.getDeclaredMethod("writeObjectForSerialization", Class.class);
+        readObject = factoryClass.getDeclaredMethod("readObjectForSerialization", Class.class);
+        readObjectNoData =
+            factoryClass.getDeclaredMethod("readObjectNoDataForSerialization", Class.class);
+        writeReplace = factoryClass.getDeclaredMethod("writeReplaceForSerialization", Class.class);
+        readResolve = factoryClass.getDeclaredMethod("readResolveForSerialization", Class.class);
+      } catch (Throwable e) {
+        ExceptionUtils.ignore(e);
+      }
+      REFLECTION_FACTORY = reflectionFactory;
+      WRITE_OBJECT = writeObject;
+      READ_OBJECT = readObject;
+      READ_OBJECT_NO_DATA = readObjectNoData;
+      WRITE_REPLACE = writeReplace;
+      READ_RESOLVE = readResolve;
     }
   }
 
-  private static void checkObjectStreamAccess(String target) {
-    if (!JDK_OBJECT_STREAM_FIELD_ACCESS) {
-      throw new UnsupportedOperationException(
-          target
-              + " private access is unavailable; open java.base/java.io to "
-              + "org.apache.fory.core,org.apache.fory.format");
+  private static Method getSerializationMethod(Class<?> type, Method factoryMethod) {
+    if (!isSerializationHookLookupAvailable() || factoryMethod == null) {
+      return null;
     }
+    try {
+      MethodHandle handle =
+          (MethodHandle) factoryMethod.invoke(SerializationMethods.REFLECTION_FACTORY, type);
+      return handle == null ? null : MethodHandles.reflectAs(Method.class, handle);
+    } catch (Throwable e) {
+      ExceptionUtils.ignore(e);
+      return null;
+    }
+  }
+
+  public static Method getSerializationWriteObjectMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.WRITE_OBJECT);
+  }
+
+  public static Method getSerializationReadObjectMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.READ_OBJECT);
+  }
+
+  public static Method getSerializationReadObjectNoDataMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.READ_OBJECT_NO_DATA);
+  }
+
+  public static Method getSerializationWriteReplaceMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.WRITE_REPLACE);
+  }
+
+  public static Method getSerializationReadResolveMethod(Class<?> type) {
+    return getSerializationMethod(type, SerializationMethods.READ_RESOLVE);
+  }
+
+  public static boolean isSerializationHookLookupAvailable() {
+    return SerializationMethods.REFLECTION_FACTORY != null
+        && SerializationMethods.WRITE_OBJECT != null
+        && SerializationMethods.READ_OBJECT != null
+        && SerializationMethods.READ_OBJECT_NO_DATA != null
+        && SerializationMethods.WRITE_REPLACE != null
+        && SerializationMethods.READ_RESOLVE != null;
   }
 
   public static <T> T tryMakeFunction(

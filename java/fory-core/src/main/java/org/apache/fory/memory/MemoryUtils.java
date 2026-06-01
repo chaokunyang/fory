@@ -19,8 +19,6 @@
 
 package org.apache.fory.memory;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
@@ -39,14 +37,6 @@ public class MemoryUtils {
       !AndroidSupport.IS_ANDROID
           && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
           && _JDKAccess.JDK_LANG_FIELD_ACCESS;
-  public static final boolean JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS;
-  public static final boolean JDK_OBJECT_STREAM_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_OBJECT_STREAM_FIELD_ACCESS;
   public static final boolean JDK_COLLECTION_FIELD_ACCESS =
       !AndroidSupport.IS_ANDROID
           && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
@@ -99,42 +89,6 @@ public class MemoryUtils {
       return MemoryBuffer.fromByteArray(buffer.array(), offset, buffer.remaining());
     } else {
       return copyToHeapBuffer(buffer);
-    }
-  }
-
-  /**
-   * Wrap a {@link ByteArrayOutputStream} into a {@link MemoryBuffer}. The writerIndex of buffer
-   * will be the count of stream.
-   */
-  public static void wrap(ByteArrayOutputStream stream, MemoryBuffer buffer) {
-    checkByteArrayStreamWrap("ByteArrayOutputStream");
-    _JDKAccess.wrap(stream, buffer);
-  }
-
-  /**
-   * Wrap a @link MemoryBuffer} into a {@link ByteArrayOutputStream}. The count of stream will be
-   * the writerIndex of buffer.
-   */
-  public static void wrap(MemoryBuffer buffer, ByteArrayOutputStream stream) {
-    checkByteArrayStreamWrap("ByteArrayOutputStream");
-    _JDKAccess.wrap(buffer, stream);
-  }
-
-  /**
-   * Wrap a {@link ByteArrayInputStream} into a {@link MemoryBuffer}. The readerIndex of buffer will
-   * be the pos of stream.
-   */
-  public static void wrap(ByteArrayInputStream stream, MemoryBuffer buffer) {
-    checkByteArrayStreamWrap("ByteArrayInputStream");
-    _JDKAccess.wrap(stream, buffer);
-  }
-
-  private static void checkByteArrayStreamWrap(String streamType) {
-    if (!JDK_BYTE_ARRAY_STREAM_FIELD_ACCESS) {
-      throw new UnsupportedOperationException(
-          streamType
-              + " direct wrapping requires JDK internal field access. On JDK25+, open "
-              + "java.base/java.io to org.apache.fory.core,org.apache.fory.format.");
     }
   }
 

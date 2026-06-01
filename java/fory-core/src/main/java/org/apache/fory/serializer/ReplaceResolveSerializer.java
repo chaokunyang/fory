@@ -20,7 +20,6 @@
 package org.apache.fory.serializer;
 
 import java.io.Externalizable;
-import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
@@ -36,8 +35,8 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ObjectCreators;
@@ -75,15 +74,17 @@ public class ReplaceResolveSerializer extends Serializer {
 
     private ReplaceResolveInfo(Class<?> cls) {
       Method writeReplaceMethod, readResolveMethod;
-      // In JDK17, set private jdk method accessible will fail by default, use ObjectStreamClass
-      // instead, since it set accessible.
-      if (AndroidSupport.IS_ANDROID || !MemoryUtils.JDK_OBJECT_STREAM_FIELD_ACCESS) {
+      if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
         writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
         readResolveMethod = JavaSerializer.getReadResolveMethod(cls);
       } else if (Serializable.class.isAssignableFrom(cls)) {
-        ObjectStreamClass objectStreamClass = ObjectStreamClass.lookup(cls);
-        writeReplaceMethod = _JDKAccess.getObjectStreamClassWriteReplaceMethod(objectStreamClass);
-        readResolveMethod = _JDKAccess.getObjectStreamClassReadResolveMethod(objectStreamClass);
+        if (_JDKAccess.isSerializationHookLookupAvailable()) {
+          writeReplaceMethod = _JDKAccess.getSerializationWriteReplaceMethod(cls);
+          readResolveMethod = _JDKAccess.getSerializationReadResolveMethod(cls);
+        } else {
+          writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
+          readResolveMethod = JavaSerializer.getReadResolveMethod(cls);
+        }
       } else {
         // FIXME class with `writeReplace` method defined should be Serializable,
         //  but hessian ignores this check and many existing system are using hessian,
@@ -113,7 +114,7 @@ public class ReplaceResolveSerializer extends Serializer {
               : (readResolveMethod != null ? readResolveMethod.getDeclaringClass() : null);
       Function writeReplaceFunc = null, readResolveFunc = null;
       if (declaringClass != null) {
-        if (AndroidSupport.IS_ANDROID || !MemoryUtils.JDK_OBJECT_STREAM_FIELD_ACCESS) {
+        if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
           makeAccessible(writeReplaceMethod);
           makeAccessible(readResolveMethod);
         } else {

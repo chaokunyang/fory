@@ -182,10 +182,6 @@
                 <buildArg>-J--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED</buildArg>
                 <buildArg>-J--add-opens=java.base/java.util=ALL-UNNAMED</buildArg>
                 <buildArg>-J--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.io=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.net=ALL-UNNAMED</buildArg>
-                <buildArg>-J--add-opens=java.base/java.math=ALL-UNNAMED</buildArg>
               </buildArgs>
             </configuration>
           </plugin>
@@ -209,10 +205,6 @@
                     <argument>--add-opens=java.base/jdk.internal.reflect=ALL-UNNAMED</argument>
                     <argument>--add-opens=java.base/java.util=ALL-UNNAMED</argument>
                     <argument>--add-opens=java.base/java.util.concurrent=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/java.io=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/java.net=ALL-UNNAMED</argument>
-                    <argument>--add-opens=java.base/java.math=ALL-UNNAMED</argument>
                     <argument>-classpath</argument>
                     <classpath/>
                     <argument>${mainClass}</argument>

@@ -126,8 +126,7 @@ final class FieldAccessorStrategy {
     String versionMessage =
         JdkVersion.MAJOR_VERSION >= 26
             ? "On JDK26+, start the JVM with "
-                + "--enable-final-field-mutation=org.apache.fory.core, or ALL-UNNAMED "
-                + "when Fory is loaded from the classpath. "
+                + "--enable-final-field-mutation=org.apache.fory.core. "
             : "";
     return new IllegalStateException(
         "Cannot write final field "

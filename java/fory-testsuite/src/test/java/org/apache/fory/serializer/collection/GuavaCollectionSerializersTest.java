@@ -25,11 +25,11 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import com.google.common.collect.ImmutableSortedSet;
-import java.beans.ConstructorProperties;
 import java.util.List;
 import java.util.Objects;
 import org.apache.fory.Fory;
 import org.apache.fory.TestBase;
+import org.apache.fory.annotation.ForyConstructor;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
@@ -230,7 +230,7 @@ public class GuavaCollectionSerializersTest extends TestBase {
   public static final class Pojo {
     private final List<List<Object>> data;
 
-    @ConstructorProperties("data")
+    @ForyConstructor("data")
     public Pojo(List<List<Object>> data) {
       this.data = data;
     }

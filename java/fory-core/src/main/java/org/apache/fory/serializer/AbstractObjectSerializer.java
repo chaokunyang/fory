@@ -73,6 +73,10 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   protected final TypeResolver typeResolver;
   protected final boolean isRecord;
   protected final ObjectCreator<T> objectCreator;
+  private final String[] objectCreatorConstructorFieldNames;
+  private final Class<?>[] objectCreatorConstructorFieldDeclaringClasses;
+  private final Class<?>[] objectCreatorConstructorFieldTypes;
+  private final boolean[] objectCreatorConstructorFieldFinal;
   private SerializationFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
 
@@ -82,6 +86,10 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.typeResolver = null;
     this.isRecord = false;
     this.objectCreator = null;
+    this.objectCreatorConstructorFieldNames = null;
+    this.objectCreatorConstructorFieldDeclaringClasses = null;
+    this.objectCreatorConstructorFieldTypes = null;
+    this.objectCreatorConstructorFieldFinal = null;
   }
 
   public AbstractObjectSerializer(TypeResolver typeResolver, Class<T> type) {
@@ -95,6 +103,18 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.typeResolver = typeResolver;
     this.isRecord = RecordUtils.isRecord(type);
     this.objectCreator = objectCreator;
+    if (objectCreator.hasConstructorFields()) {
+      this.objectCreatorConstructorFieldNames = objectCreator.getConstructorFieldNames();
+      this.objectCreatorConstructorFieldDeclaringClasses =
+          objectCreator.getConstructorFieldDeclaringClasses();
+      this.objectCreatorConstructorFieldTypes = objectCreator.getConstructorFieldTypes();
+      this.objectCreatorConstructorFieldFinal = objectCreator.getConstructorFieldFinal();
+    } else {
+      this.objectCreatorConstructorFieldNames = null;
+      this.objectCreatorConstructorFieldDeclaringClasses = null;
+      this.objectCreatorConstructorFieldTypes = null;
+      this.objectCreatorConstructorFieldFinal = null;
+    }
   }
 
   static void writeField(
@@ -909,7 +929,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     T newObj =
         objectCreator.newInstanceWithArguments(
             constructorArgs(
-                fieldValues, constructorFieldIndexes, objectCreator.getConstructorFieldTypes()));
+                fieldValues, constructorFieldIndexes, objectCreatorConstructorFieldTypes));
     copyContext.reference(originObj, newObj);
     copyFields(copyContext, fieldInfos, originObj, newObj, constructorFieldMask, false);
     return newObj;
@@ -1164,6 +1184,22 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     return objectCreator.newInstance();
   }
 
+  protected final String[] constructorFieldNames() {
+    return objectCreatorConstructorFieldNames;
+  }
+
+  protected final Class<?>[] constructorFieldDeclaringClasses() {
+    return objectCreatorConstructorFieldDeclaringClasses;
+  }
+
+  protected final Class<?>[] constructorFieldTypes() {
+    return objectCreatorConstructorFieldTypes;
+  }
+
+  protected final boolean[] constructorFieldFinal() {
+    return objectCreatorConstructorFieldFinal;
+  }
+
   protected final int[] buildConstructorFieldIndexes(SerializationFieldInfo[] fieldInfos) {
     return buildConstructorFieldIndexes(fieldInfos, true);
   }
@@ -1183,12 +1219,12 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       boolean allowMissingNonFinal,
       String[] defaultFields,
       Class<?>[] defaultDeclaringClasses) {
-    String[] fieldNames = objectCreator.getConstructorFieldNames();
+    String[] fieldNames = objectCreatorConstructorFieldNames;
     if (fieldNames.length == 0) {
       return null;
     }
-    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
-    boolean[] finalFields = objectCreator.getConstructorFieldFinal();
+    Class<?>[] declaringClasses = objectCreatorConstructorFieldDeclaringClasses;
+    boolean[] finalFields = objectCreatorConstructorFieldFinal;
     int[] indexes = new int[fieldNames.length];
     for (int i = 0; i < fieldNames.length; i++) {
       Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];

@@ -105,7 +105,6 @@
         <configuration>
           <archive>
             <manifestEntries>
-              <Multi-Release>true</Multi-Release>
               <Automatic-Module-Name>org.apache.fory.format</Automatic-Module-Name>
               <Multi-Release>true</Multi-Release>
             </manifestEntries>

@@ -94,6 +94,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("  private val fieldsById: Array<SerializationFieldInfo?>\n")
     builder.append("  private val constructorFieldIds: IntArray?\n")
     builder.append("  private val constructorFieldBits: LongArray?\n")
+    builder.append("  private val constructorFieldTypes: Array<Class<*>>?\n")
     builder.append("  private val classVersionHash: Int\n")
     builder.append("  private val sameSchemaCompatible: Boolean\n\n")
   }
@@ -138,6 +139,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    this.fieldsById = arrayOfNulls(0)\n")
     builder.append("    this.constructorFieldIds = null\n")
     builder.append("    this.constructorFieldBits = null\n")
+    builder.append("    this.constructorFieldTypes = null\n")
     builder.append("    this.classVersionHash = 0\n")
     builder.append("    this.sameSchemaCompatible = false\n")
     builder.append("  }\n\n")
@@ -171,6 +173,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     )
     builder.append(
       "    this.constructorFieldBits = buildConstructorFieldBits(DESCRIPTORS.size, constructorFieldIds)\n"
+    )
+    builder.append(
+      "    this.constructorFieldTypes = if (constructorFieldIds != null) constructorFieldTypes() else null\n"
     )
     writeScalarBindings()
     builder.append(
@@ -348,7 +353,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       .append(struct.typeName)
       .append(" {\n")
     builder.append(
-      "    return objectCreator.newInstanceWithArguments(*constructorArgs(fieldValues, constructorFieldIds!!, objectCreator.getConstructorFieldTypes())) as "
+      "    return objectCreator.newInstanceWithArguments(*constructorArgs(fieldValues, constructorFieldIds!!, constructorFieldTypes!!)) as "
     )
     builder.append(struct.typeName).append("\n")
     builder.append("  }\n\n")

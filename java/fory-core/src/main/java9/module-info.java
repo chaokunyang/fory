@@ -53,9 +53,4 @@ module org.apache.fory.core {
   exports org.apache.fory.util;
   exports org.apache.fory.util.function;
   exports org.apache.fory.util.record;
-  // Sibling artifacts still use these internal JDK access helpers; keep this qualified
-  // export until those imports move behind public owner APIs.
-  exports org.apache.fory.platform.internal to
-      org.apache.fory.extension,
-      org.apache.fory.format;
 }

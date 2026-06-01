@@ -32,13 +32,10 @@ import org.openjdk.jmh.annotations.Mode;
 import org.openjdk.jmh.annotations.Scope;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
-import sun.misc.Unsafe;
 
 @BenchmarkMode(Mode.Throughput)
 @CompilerControl(value = CompilerControl.Mode.INLINE)
 public class MemorySuite {
-  private static final Unsafe UNSAFE = UnsafeAccess.load();
-  private static final int BYTE_ARRAY_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
   static int arrLen = 32;
 
   static {
@@ -135,13 +132,6 @@ public class MemorySuite {
   @org.openjdk.jmh.annotations.Benchmark
   public Object systemArrayCopy(MemoryState state) {
     System.arraycopy(state.bytes, 0, target, 0, state.bytes.length);
-    return target;
-  }
-
-  @org.openjdk.jmh.annotations.Benchmark
-  public Object unsafeCopy(MemoryState state) {
-    UNSAFE.copyMemory(
-        state.bytes, BYTE_ARRAY_OFFSET, target, BYTE_ARRAY_OFFSET, state.bytes.length);
     return target;
   }
 

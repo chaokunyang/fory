@@ -22,11 +22,8 @@ package org.apache.fory.benchmark;
 import org.apache.fory.serializer.StringSerializer;
 import org.apache.fory.util.StringUtils;
 import org.openjdk.jmh.Main;
-import sun.misc.Unsafe;
 
 public class NewStringSuite {
-  private static final Unsafe UNSAFE = UnsafeAccess.load();
-
   static String str = StringUtils.random(230);
   static char[] strData = str.toCharArray();
   static byte[] array = new byte[strData.length * 2];
@@ -39,24 +36,6 @@ public class NewStringSuite {
   // @Benchmark
   public Object createJDK8StringByCopy() {
     return new String(strData);
-  }
-
-  private static final long STRING_VALUE_FIELD_OFFSET = fieldOffset(String.class, "value");
-  private static String stubStr = new String(new char[] {Character.MAX_VALUE, Character.MIN_VALUE});
-
-  private static long fieldOffset(Class<?> type, String fieldName) {
-    try {
-      return UNSAFE.objectFieldOffset(type.getDeclaredField(fieldName));
-    } catch (NoSuchFieldException e) {
-      throw new IllegalStateException(e);
-    }
-  }
-
-  // @Benchmark
-  public Object createJDK8StringByUnsafe() {
-    String str = new String(stubStr);
-    UNSAFE.putObject(str, STRING_VALUE_FIELD_OFFSET, strData);
-    return str;
   }
 
   // @Benchmark

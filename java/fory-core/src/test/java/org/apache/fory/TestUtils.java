@@ -81,7 +81,7 @@ public class TestUtils {
   private static List<String> forkJvmArgs() {
     List<String> args = new ArrayList<>();
     if (JdkVersion.MAJOR_VERSION >= 25) {
-      args.add("--add-opens=java.base/java.lang.invoke=ALL-UNNAMED");
+      args.add("--add-opens=java.base/java.lang.invoke=org.apache.fory.core");
       if (hasInputArg("--sun-misc-unsafe-memory-access=deny")) {
         args.add("--sun-misc-unsafe-memory-access=deny");
       }

@@ -19,11 +19,11 @@
 
 package org.apache.fory.graalvm;
 
-import java.beans.ConstructorProperties;
 import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import org.apache.fory.annotation.ForyConstructor;
 
 public class Foo implements Serializable {
   int f1;
@@ -31,7 +31,7 @@ public class Foo implements Serializable {
   List<String> f3;
   Map<String, Long> f4;
 
-  @ConstructorProperties({"f1", "f2", "f3", "f4"})
+  @ForyConstructor({"f1", "f2", "f3", "f4"})
   public Foo(int f1, String f2, List<String> f3, Map<String, Long> f4) {
     this.f1 = f1;
     this.f2 = f2;

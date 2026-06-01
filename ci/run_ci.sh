@@ -102,19 +102,19 @@ graalvm_test() {
 }
 
 jdk25_access_options() {
-  local fory_open_targets="${1:-ALL-UNNAMED}"
+  local fory_open_targets="${1:-org.apache.fory.core}"
   printf "%s" "--sun-misc-unsafe-memory-access=deny"
   printf " %s" "--add-opens=java.base/java.lang.invoke=${fory_open_targets}"
 }
 
 jdk26_final_field_options() {
-  local fory_modules="${1:-ALL-UNNAMED}"
+  local fory_modules="${1:-org.apache.fory.core}"
   printf "%s" "--enable-final-field-mutation=${fory_modules}"
 }
 
 jdk25_plus_options() {
   local java_major="$1"
-  local fory_targets="${2:-ALL-UNNAMED}"
+  local fory_targets="${2:-org.apache.fory.core}"
   printf "%s" "$(jdk25_access_options "$fory_targets")"
   if [[ "$java_major" -ge 26 ]]; then
     printf " %s" "$(jdk26_final_field_options "$fory_targets")"
@@ -198,11 +198,19 @@ integration_tests() {
   cd "$ROOT"/integration_tests/jdk_compatibility_tests
   mvn -T10 -B --no-transfer-progress clean test
   for jdk in "${JDKS[@]}"; do
+     if [[ "$jdk" =~ zulu([0-9]+) && "${BASH_REMATCH[1]}" -ge 25 ]]; then
+       echo "Skipping classpath JDK compatibility data generation for ${jdk}; JDK25+ zero-Unsafe coverage runs on JPMS"
+       continue
+     fi
      use_jdk "$jdk"
      echo "First round for generate data: ${jdk}"
      mvn -T10 --no-transfer-progress clean test -Dtest=org.apache.fory.integration_tests.JDKCompatibilityTest
   done
   for jdk in "${JDKS[@]}"; do
+     if [[ "$jdk" =~ zulu([0-9]+) && "${BASH_REMATCH[1]}" -ge 25 ]]; then
+       echo "Skipping classpath JDK compatibility verification for ${jdk}; JDK25+ zero-Unsafe coverage runs on JPMS"
+       continue
+     fi
      use_jdk "$jdk"
      echo "Second round for compatibility: ${jdk}"
      mvn -T10 --no-transfer-progress clean test -Dtest=org.apache.fory.integration_tests.JDKCompatibilityTest
@@ -239,13 +247,6 @@ jdk17_plus_tests() {
   fi
   if [[ "$java_major" -ge 25 ]]; then
     unset JDK_JAVA_OPTIONS
-    echo "Executing JDK${java_major} packaged classpath tests"
-    cd "$ROOT/integration_tests/jdk_compatibility_tests"
-    mvn -T10 --batch-mode --no-transfer-progress clean test
-    testcode=$?
-    if [[ $testcode -ne 0 ]]; then
-      exit $testcode
-    fi
     echo "Executing JDK${java_major} JPMS tests"
     cd "$ROOT/integration_tests/jpms_tests"
     mvn -T10 --batch-mode --no-transfer-progress clean test

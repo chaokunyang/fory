@@ -63,24 +63,34 @@ final class UnsafeObjectAllocator {
   }
 
   private static final class ObjectStreamClassAccess {
-    private static final MethodHandle NEW_INSTANCE = newInstanceHandle();
+    private static final MethodHandle NEW_INSTANCE;
+    private static final Throwable INIT_ERROR;
 
-    private static MethodHandle newInstanceHandle() {
+    static {
+      MethodHandle newInstance = null;
+      Throwable error = null;
       try {
-        return _JDKAccess
-            ._trustedLookup(ObjectStreamClass.class)
-            .findVirtual(
-                ObjectStreamClass.class, "newInstance", MethodType.methodType(Object.class));
-      } catch (ReflectiveOperationException e) {
-        throw new ForyException(
-            "JDK25+ Serializable object creation requires java.base/java.lang.invoke to be open "
-                + "to org.apache.fory.core",
-            e);
+        newInstance =
+            _JDKAccess
+                ._trustedLookup(ObjectStreamClass.class)
+                .findVirtual(
+                    ObjectStreamClass.class, "newInstance", MethodType.methodType(Object.class));
+      } catch (ReflectiveOperationException | RuntimeException e) {
+        error = e;
       }
+      NEW_INSTANCE = newInstance;
+      INIT_ERROR = error;
     }
 
     private static Object newInstance(Class<?> type) throws Throwable {
-      return NEW_INSTANCE.invoke(ObjectStreamClass.lookupAny(type));
+      MethodHandle handle = NEW_INSTANCE;
+      if (handle == null) {
+        throw new ForyException(
+            "JDK25+ Serializable object creation requires java.base/java.lang.invoke to be open "
+                + "to org.apache.fory.core",
+            INIT_ERROR);
+      }
+      return handle.invoke(ObjectStreamClass.lookupAny(type));
     }
   }
 }

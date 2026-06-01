@@ -19,7 +19,6 @@
 
 package org.apache.fory.test.bean;
 
-import java.beans.ConstructorProperties;
 import lombok.Data;
 
 public class AccessBeans {
@@ -29,7 +28,8 @@ public class AccessBeans {
     int f2;
     private int f3;
 
-    @ConstructorProperties({"f1", "f2", "f3"})
+    PrivateClass() {}
+
     PrivateClass(int f1, int f2, int f3) {
       this.f1 = f1;
       this.f2 = f2;
@@ -43,7 +43,8 @@ public class AccessBeans {
     int f2;
     private int f3;
 
-    @ConstructorProperties({"f1", "f2", "f3"})
+    FinalPrivateClass() {}
+
     FinalPrivateClass(int f1, int f2, int f3) {
       this.f1 = f1;
       this.f2 = f2;
@@ -57,7 +58,8 @@ public class AccessBeans {
     int f2;
     private int f3;
 
-    @ConstructorProperties({"f1", "f2", "f3"})
+    DefaultLevelClass() {}
+
     DefaultLevelClass(int f1, int f2, int f3) {
       this.f1 = f1;
       this.f2 = f2;
@@ -74,7 +76,8 @@ public class AccessBeans {
     private PrivateClass f5;
     private FinalPrivateClass f6;
 
-    @ConstructorProperties({"f1", "f2", "f3", "f4", "f5", "f6"})
+    public PublicClass() {}
+
     public PublicClass(
         int f1, int f2, int f3, DefaultLevelClass f4, PrivateClass f5, FinalPrivateClass f6) {
       this.f1 = f1;

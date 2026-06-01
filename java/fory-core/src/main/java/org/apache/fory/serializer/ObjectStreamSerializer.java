@@ -692,8 +692,8 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final Consumer readObjectNoDataFunc;
 
     private StreamTypeInfo(Class<?> type) {
-      // ReflectionFactory exposes Java serialization hooks without reading ObjectStreamClass
-      // private fields or requiring the java.io package to be opened.
+      // _JDKAccess owns version-specific discovery of serialization hooks without requiring
+      // ObjectStreamClass private-field access or a java.io package open.
       Method writeMethod = null;
       Method readMethod = null;
       Method noDataMethod = null;

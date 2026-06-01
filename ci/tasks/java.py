@@ -77,18 +77,18 @@ def install_jdks():
     logging.info("JDKs downloaded and installed successfully")
 
 
-def jdk25_access_options(fory_targets="ALL-UNNAMED"):
+def jdk25_access_options(fory_targets="org.apache.fory.core"):
     return [
         "--sun-misc-unsafe-memory-access=deny",
         f"--add-opens=java.base/java.lang.invoke={fory_targets}",
     ]
 
 
-def jdk26_final_field_options(fory_targets="ALL-UNNAMED"):
+def jdk26_final_field_options(fory_targets="org.apache.fory.core"):
     return [f"--enable-final-field-mutation={fory_targets}"]
 
 
-def jdk25_plus_options(java_version, fory_targets="ALL-UNNAMED"):
+def jdk25_plus_options(java_version, fory_targets="org.apache.fory.core"):
     options = jdk25_access_options(fory_targets)
     if int(java_version) >= 26:
         options.extend(jdk26_final_field_options(fory_targets))
@@ -272,9 +272,6 @@ def run_jdk17_plus(java_version="17"):
             "-DskipTests -Dmaven.compiler.parameters=true"
         )
         os.environ.pop("JDK_JAVA_OPTIONS", None)
-        logging.info(f"Executing JDK{java_version} packaged classpath tests")
-        common.cd_project_subdir("integration_tests/jdk_compatibility_tests")
-        common.exec_cmd("mvn -T10 --batch-mode --no-transfer-progress clean test")
         logging.info(f"Executing JDK{java_version} JPMS tests")
         common.cd_project_subdir("integration_tests/jpms_tests")
         common.exec_cmd("mvn -T10 --batch-mode --no-transfer-progress clean test")
@@ -332,6 +329,12 @@ def run_integration_tests():
     # First round: Generate serialized data files
     logging.info("First round: Generate serialized data files for each JDK version")
     for java_version, jdk in JDKS.items():
+        if int(java_version) >= 25:
+            logging.info(
+                "Skipping classpath JDK compatibility data generation for "
+                f"JDK{java_version}; JDK25+ zero-Unsafe coverage runs on JPMS"
+            )
+            continue
         use_jdk(java_version)
 
         logging.info(f"Generating data with JDK: {jdk}")
@@ -342,6 +345,12 @@ def run_integration_tests():
     # Second round: Test cross-JDK compatibility
     logging.info("Second round: Test cross-JDK compatibility")
     for java_version, jdk in JDKS.items():
+        if int(java_version) >= 25:
+            logging.info(
+                "Skipping classpath JDK compatibility verification for "
+                f"JDK{java_version}; JDK25+ zero-Unsafe coverage runs on JPMS"
+            )
+            continue
         use_jdk(java_version)
 
         logging.info(f"Testing compatibility with JDK: {jdk}")
@@ -387,15 +396,23 @@ def run_release():
         )
     common.cd_project_subdir("java")
 
-    # Clean and install without tests first
-    logging.info("Cleaning and installing dependencies")
-    common.exec_cmd("mvn -T10 -B --no-transfer-progress clean install -DskipTests")
+    previous_jdk_options = os.environ.get("JDK_JAVA_OPTIONS")
+    os.environ["JDK_JAVA_OPTIONS"] = " ".join(jdk25_javac_options())
+    try:
+        # Clean and install without tests first
+        logging.info("Cleaning and installing dependencies")
+        common.exec_cmd("mvn -T10 -B --no-transfer-progress clean install -DskipTests")
 
-    # Deploy to Maven Central
-    logging.info("Deploying to Maven Central")
-    common.exec_cmd(
-        "mvn -T10 -B --no-transfer-progress clean deploy -Dgpg.skip -DskipTests -Papache-release"
-    )
+        # Deploy to Maven Central
+        logging.info("Deploying to Maven Central")
+        common.exec_cmd(
+            "mvn -T10 -B --no-transfer-progress clean deploy -Dgpg.skip -DskipTests -Papache-release"
+        )
+    finally:
+        if previous_jdk_options is None:
+            os.environ.pop("JDK_JAVA_OPTIONS", None)
+        else:
+            os.environ["JDK_JAVA_OPTIONS"] = previous_jdk_options
 
     logging.info("Release to Maven Central completed successfully")
 

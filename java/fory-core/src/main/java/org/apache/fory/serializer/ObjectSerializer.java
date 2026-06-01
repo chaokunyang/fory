@@ -66,6 +66,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   private final SerializationFieldInfo[] allFields;
   private final int[] constructorFieldIndexes;
   private final boolean[] constructorFieldMask;
+  private final Class<?>[] constructorFieldTypes;
   private final int classVersionHash;
 
   public ObjectSerializer(TypeResolver typeResolver, Class<T> cls) {
@@ -140,9 +141,11 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     if (!isRecord && objectCreator.hasConstructorFields()) {
       constructorFieldIndexes = buildConstructorFieldIndexes(allFields);
       constructorFieldMask = buildConstructorFieldMask(allFields.length, constructorFieldIndexes);
+      constructorFieldTypes = constructorFieldTypes();
     } else {
       constructorFieldIndexes = null;
       constructorFieldMask = null;
+      constructorFieldTypes = null;
     }
   }
 
@@ -162,19 +165,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       WriteContext writeContext, T value, RefWriter refWriter, Generics generics) {
     for (SerializationFieldInfo fieldInfo : allFields) {
       writeFieldByCodecCategory(writeContext, value, refWriter, generics, fieldInfo);
-    }
-  }
-
-  private void writeFields(
-      WriteContext writeContext,
-      T value,
-      RefWriter refWriter,
-      Generics generics,
-      boolean constructorFields) {
-    for (int i = 0; i < allFields.length; i++) {
-      if (constructorFieldMask[i] == constructorFields) {
-        writeFieldByCodecCategory(writeContext, value, refWriter, generics, allFields[i]);
-      }
     }
   }
 
@@ -308,8 +298,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
 
   private T createConstructorObject(Object[] fieldValues) {
     return objectCreator.newInstanceWithArguments(
-        constructorArgs(
-            fieldValues, constructorFieldIndexes, objectCreator.getConstructorFieldTypes()));
+        constructorArgs(fieldValues, constructorFieldIndexes, constructorFieldTypes));
   }
 
   private void setBufferedNonConstructorFields(
@@ -338,19 +327,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     return fieldValues;
   }
 
-  private void readFields(
-      ReadContext readContext, Object[] fieldValues, boolean constructorFields) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    Generics generics = readContext.getGenerics();
-    for (int i = 0; i < allFields.length; i++) {
-      if (constructorFieldMask[i] == constructorFields) {
-        fieldValues[i] =
-            readFieldByCodecCategory(readContext, refReader, generics, allFields[i], buffer);
-      }
-    }
-  }
-
   public T readAndSetFields(ReadContext readContext, T obj) {
     MemoryBuffer buffer = readContext.getBuffer();
     RefReader refReader = readContext.getRefReader();
@@ -363,17 +339,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       readAndSetFieldByCodecCategory(readContext, refReader, generics, fieldInfo, buffer, obj);
     }
     return obj;
-  }
-
-  private void readAndSetFields(ReadContext readContext, T obj, boolean constructorFields) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    Generics generics = readContext.getGenerics();
-    for (int i = 0; i < allFields.length; i++) {
-      if (constructorFieldMask[i] == constructorFields) {
-        readAndSetFieldByCodecCategory(readContext, refReader, generics, allFields[i], buffer, obj);
-      }
-    }
   }
 
   private Object readFieldByCodecCategory(

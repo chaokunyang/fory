@@ -157,14 +157,7 @@ memory access becomes the default, start the JVM with:
 --sun-misc-unsafe-memory-access=deny
 ```
 
-If Fory runs from the classpath, including a modular Fory jar placed on the classpath, open
-`java.base/java.lang.invoke` to the unnamed module:
-
-```bash
---add-opens=java.base/java.lang.invoke=ALL-UNNAMED
-```
-
-If Fory runs as named modules on the module path, open `java.base/java.lang.invoke` to the Fory core
+Run Fory as named modules on the module path and open `java.base/java.lang.invoke` to the Fory core
 module:
 
 ```bash
@@ -179,12 +172,6 @@ Fory module name on the module path:
 
 ```bash
 --enable-final-field-mutation=org.apache.fory.core
-```
-
-Use `ALL-UNNAMED` when running Fory on the classpath:
-
-```bash
---enable-final-field-mutation=ALL-UNNAMED
 ```
 
 Fory can restore those final fields when final-field mutation is enabled. JDK25 has no

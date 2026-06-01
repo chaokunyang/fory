@@ -48,9 +48,6 @@ libraryDependencies ++= Seq(
 )
 
 Test / fork := true
-Test / javaOptions ++= Seq(
-  "--add-opens=java.base/java.lang.invoke=ALL-UNNAMED",
-)
 
 lazy val writeTestClasspath = taskKey[File]("Writes the Scala test runtime classpath")
 

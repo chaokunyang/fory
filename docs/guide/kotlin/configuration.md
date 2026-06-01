@@ -100,8 +100,21 @@ All configuration options from Fory Java are available. See [Java Configuration]
 ## JDK25+ Zero-Unsafe Mode
 
 On JDK25+ with Unsafe memory access denied, Kotlin classes with final constructor properties need
-bindable constructor metadata so Fory can call the primary constructor instead of allocating an
-uninitialized instance. Enable Java parameter metadata for Kotlin compilation:
+an explicit constructor mapping when Fory must call the primary constructor. Annotate the
+constructor with `@ForyConstructor`, register the constructor with `registerConstructor(...)`, use a
+generated serializer that carries explicit constructor metadata, or provide a custom serializer.
+
+```kotlin
+import org.apache.fory.annotation.ForyConstructor
+
+class User @ForyConstructor("name", "age") constructor(
+    val name: String,
+    val age: Int,
+)
+```
+
+For generated serializers and tooling that read Java parameter metadata, enable Java parameter
+metadata for Kotlin compilation:
 
 ```kotlin
 kotlin {

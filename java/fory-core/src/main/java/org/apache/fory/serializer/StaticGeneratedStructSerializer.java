@@ -249,12 +249,12 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   protected final int[] buildConstructorFieldIds(List<Descriptor> descriptors) {
-    String[] fieldNames = objectCreator.getConstructorFieldNames();
+    String[] fieldNames = constructorFieldNames();
     if (fieldNames.length == 0) {
       return null;
     }
-    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
-    boolean[] finalFields = objectCreator.getConstructorFieldFinal();
+    Class<?>[] declaringClasses = constructorFieldDeclaringClasses();
+    boolean[] finalFields = constructorFieldFinal();
     int[] ids = new int[fieldNames.length];
     for (int i = 0; i < fieldNames.length; i++) {
       Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];

@@ -159,7 +159,6 @@ public class AndroidJvmRoundTripTest {
       return;
     }
     addAddOpens(command, "java.base/java.lang=ALL-UNNAMED");
-    addAddOpens(command, "java.base/java.lang.invoke=ALL-UNNAMED");
     addAddOpens(command, "java.base/java.lang.reflect=ALL-UNNAMED");
     addAddOpens(command, "java.base/java.util=ALL-UNNAMED");
   }

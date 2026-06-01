@@ -70,6 +70,9 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   private final SerializationFieldInfo[] allFields;
   private final int[] constructorFieldIndexes;
   private final boolean[] constructorFieldMask;
+  private final String[] constructorFieldNames;
+  private final Class<?>[] constructorFieldDeclaringClasses;
+  private final Class<?>[] constructorFieldTypes;
   private final CompatibleCollectionArrayReader.ReadAction[] allCompatibleReadActions;
   private final boolean hasCompatibleCollectionArrayRead;
   private final RecordInfo recordInfo;
@@ -149,9 +152,15 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
               defaultFieldNames(defaultValueFields),
               defaultDeclaringClasses(defaultValueFields));
       constructorFieldMask = buildConstructorFieldMask(allFields.length, constructorFieldIndexes);
+      constructorFieldNames = constructorFieldNames();
+      constructorFieldDeclaringClasses = constructorFieldDeclaringClasses();
+      constructorFieldTypes = constructorFieldTypes();
     } else {
       constructorFieldIndexes = null;
       constructorFieldMask = null;
+      constructorFieldNames = null;
+      constructorFieldDeclaringClasses = null;
+      constructorFieldTypes = null;
     }
   }
 
@@ -273,17 +282,17 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   private Object[] compatibleConstructorArgs(Object[] fieldValues) {
-    String[] fieldNames = objectCreator.getConstructorFieldNames();
-    Class<?>[] declaringClasses = objectCreator.getConstructorFieldDeclaringClasses();
-    Class<?>[] fieldTypes = objectCreator.getConstructorFieldTypes();
     Object[] args = new Object[constructorFieldIndexes.length];
     for (int i = 0; i < constructorFieldIndexes.length; i++) {
       int index = constructorFieldIndexes[i];
       if (index >= 0) {
         args[i] = fieldValues[index];
       } else {
-        Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];
-        args[i] = defaultConstructorValue(fieldNames[i], declaringClass, fieldTypes[i]);
+        Class<?> declaringClass =
+            constructorFieldDeclaringClasses == null ? null : constructorFieldDeclaringClasses[i];
+        args[i] =
+            defaultConstructorValue(
+                constructorFieldNames[i], declaringClass, constructorFieldTypes[i]);
       }
     }
     return args;
@@ -396,10 +405,7 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
 
   private void setNonConstructorDefaultValues(T targetObject) {
     DefaultValueUtils.setDefaultValues(
-        targetObject,
-        defaultValueFields,
-        objectCreator.getConstructorFieldNames(),
-        objectCreator.getConstructorFieldDeclaringClasses());
+        targetObject, defaultValueFields, constructorFieldNames, constructorFieldDeclaringClasses);
   }
 
   private void setBufferedNonConstructorFields(
@@ -429,17 +435,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     }
   }
 
-  private void readFields(ReadContext readContext, T targetObject, boolean constructorFields) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    Generics generics = readContext.getGenerics();
-    for (int i = 0; i < allFields.length; i++) {
-      if (constructorFieldMask[i] == constructorFields) {
-        readField(readContext, targetObject, refReader, generics, allFields[i], buffer, null);
-      }
-    }
-  }
-
   private void readFields(ReadContext readContext, Object[] fields) {
     MemoryBuffer buffer = readContext.getBuffer();
     int counter = 0;
@@ -447,17 +442,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     Generics generics = readContext.getGenerics();
     for (SerializationFieldInfo fieldInfo : allFields) {
       fields[counter++] = readField(readContext, refReader, generics, fieldInfo, buffer, null);
-    }
-  }
-
-  private void readFields(ReadContext readContext, Object[] fields, boolean constructorFields) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    Generics generics = readContext.getGenerics();
-    for (int i = 0; i < allFields.length; i++) {
-      if (constructorFieldMask[i] == constructorFields) {
-        fields[i] = readField(readContext, refReader, generics, allFields[i], buffer, null);
-      }
     }
   }
 
@@ -485,25 +469,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     }
   }
 
-  private void readFieldsWithCompatibleCollectionArray(
-      ReadContext readContext, T targetObject, boolean constructorFields) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    Generics generics = readContext.getGenerics();
-    for (int i = 0; i < allFields.length; i++) {
-      if (constructorFieldMask[i] != constructorFields) {
-        continue;
-      }
-      SerializationFieldInfo fieldInfo = allFields[i];
-      CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
-      if (Utils.DEBUG_OUTPUT_VERBOSE) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      readField(readContext, targetObject, refReader, generics, fieldInfo, buffer, action);
-    }
-  }
-
   private void readFieldsWithCompatibleCollectionArray(ReadContext readContext, Object[] fields) {
     MemoryBuffer buffer = readContext.getBuffer();
     int counter = 0;
@@ -517,25 +482,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
         printFieldDebugInfo(fieldInfo, buffer);
       }
       fields[counter++] = readField(readContext, refReader, generics, fieldInfo, buffer, action);
-    }
-  }
-
-  private void readFieldsWithCompatibleCollectionArray(
-      ReadContext readContext, Object[] fields, boolean constructorFields) {
-    MemoryBuffer buffer = readContext.getBuffer();
-    RefReader refReader = readContext.getRefReader();
-    Generics generics = readContext.getGenerics();
-    for (int i = 0; i < allFields.length; i++) {
-      if (constructorFieldMask[i] != constructorFields) {
-        continue;
-      }
-      SerializationFieldInfo fieldInfo = allFields[i];
-      CompatibleCollectionArrayReader.ReadAction action =
-          compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
-      if (Utils.DEBUG_OUTPUT_ENABLED) {
-        printFieldDebugInfo(fieldInfo, buffer);
-      }
-      fields[i] = readField(readContext, refReader, generics, fieldInfo, buffer, action);
     }
   }
 

@@ -90,6 +90,7 @@ final class StaticSerializerSourceWriter {
     builder.append("  private final SerializationFieldInfo[] fieldsById;\n");
     builder.append("  private final int[] constructorFieldIds;\n");
     builder.append("  private final long[] constructorFieldBits;\n");
+    builder.append("  private final Class<?>[] constructorFieldTypes;\n");
     builder.append("  private final int classVersionHash;\n");
     builder.append("  private final boolean sameSchemaCompatible;\n\n");
   }
@@ -144,6 +145,7 @@ final class StaticSerializerSourceWriter {
     builder.append("    this.fieldsById = null;\n");
     builder.append("    this.constructorFieldIds = null;\n");
     builder.append("    this.constructorFieldBits = null;\n");
+    builder.append("    this.constructorFieldTypes = null;\n");
     builder.append("    this.classVersionHash = 0;\n");
     builder.append("    this.sameSchemaCompatible = false;\n");
     builder.append("  }\n\n");
@@ -179,6 +181,8 @@ final class StaticSerializerSourceWriter {
         "    this.constructorFieldIds = objectCreator.hasConstructorFields() ? buildConstructorFieldIds(DESCRIPTORS) : null;\n");
     builder.append(
         "    this.constructorFieldBits = buildConstructorFieldBits(DESCRIPTORS.size(), constructorFieldIds);\n");
+    builder.append(
+        "    this.constructorFieldTypes = constructorFieldIds != null ? constructorFieldTypes() : null;\n");
     builder.append(
         "    this.classVersionHash = typeResolver.checkClassVersion() ? computeClassVersionHash(DESCRIPTORS) : 0;\n");
     builder.append("    this.sameSchemaCompatible = ").append(sameSchemaExpression).append(";\n");
@@ -487,7 +491,7 @@ final class StaticSerializerSourceWriter {
         .append("    return (")
         .append(struct.typeName)
         .append(
-            ") objectCreator.newInstanceWithArguments(constructorArgs(fieldValues, constructorFieldIds, objectCreator.getConstructorFieldTypes()));\n");
+            ") objectCreator.newInstanceWithArguments(constructorArgs(fieldValues, constructorFieldIds, constructorFieldTypes));\n");
     builder.append("  }\n\n");
 
     builder

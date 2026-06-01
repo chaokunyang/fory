@@ -22,9 +22,9 @@ package org.apache.fory.test;
 import com.alibaba.fastjson.JSONObject;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
-import java.beans.ConstructorProperties;
 import java.util.List;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.collection.Collections;
 import org.testng.Assert;
 import org.testng.annotations.DataProvider;
@@ -35,7 +35,7 @@ public class FastJsonTest {
     private JSONObject json;
     private List<JSONObject> objects;
 
-    @ConstructorProperties("json")
+    @ForyConstructor("json")
     public DemoResponse(JSONObject json) {
       this.json = json;
       objects = Collections.ofArrayList(json);

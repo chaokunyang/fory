@@ -176,7 +176,6 @@
                 <!-- for fast build -->
                 <!-- <buildArg>-Ob</buildArg> -->
                 <buildArg>-H:+UnlockExperimentalVMOptions</buildArg>
-                <buildArg>-J--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</buildArg>
               </buildArgs>
             </configuration>
           </plugin>
@@ -188,42 +187,16 @@
               <execution>
                 <id>java-agent</id>
                 <goals>
-                  <goal>exec</goal>
+                  <goal>java</goal>
                 </goals>
                 <phase>test</phase>
                 <configuration>
-                  <executable>${java.home}/bin/java</executable>
-                  <arguments>
-                    <argument>--add-opens=java.base/java.lang.invoke=ALL-UNNAMED</argument>
-                    <argument>-classpath</argument>
-                    <classpath/>
-                    <argument>${mainClass}</argument>
-                  </arguments>
+                  <mainClass>${mainClass}</mainClass>
+                  <includeProjectDependencies>true</includeProjectDependencies>
+                  <includePluginDependencies>false</includePluginDependencies>
                 </configuration>
               </execution>
             </executions>
-          </plugin>
-        </plugins>
-      </build>
-    </profile>
-    <profile>
-      <id>jdk25-native</id>
-      <activation>
-        <jdk>[25,)</jdk>
-      </activation>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.graalvm.buildtools</groupId>
-            <artifactId>native-maven-plugin</artifactId>
-            <configuration>
-              <jvmArgs combine.children="append">
-                <jvmArg>--sun-misc-unsafe-memory-access=deny</jvmArg>
-              </jvmArgs>
-              <buildArgs combine.children="append">
-                <buildArg>-J--sun-misc-unsafe-memory-access=deny</buildArg>
-              </buildArgs>
-            </configuration>
           </plugin>
         </plugins>
       </build>

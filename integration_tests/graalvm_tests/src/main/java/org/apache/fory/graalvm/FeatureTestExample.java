@@ -19,11 +19,11 @@
 
 package org.apache.fory.graalvm;
 
-import java.beans.ConstructorProperties;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import org.apache.fory.Fory;
+import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -51,7 +51,7 @@ public class FeatureTestExample {
   public static class TestInvocationHandler implements InvocationHandler {
     private final String value;
 
-    @ConstructorProperties("value")
+    @ForyConstructor("value")
     public TestInvocationHandler(String value) {
       this.value = value;
     }

@@ -23,8 +23,6 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
-import java.lang.reflect.Field;
-import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.concurrent.TimeUnit;
@@ -39,18 +37,12 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Threads;
 import org.openjdk.jmh.annotations.Warmup;
-import sun.misc.Unsafe;
 
 @BenchmarkMode(Mode.AverageTime)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
 @Warmup(iterations = 5, time = 1)
 @Measurement(iterations = 5, time = 1)
-@Fork(
-    value = 1,
-    jvmArgsAppend = {
-      "--add-opens=java.base/java.nio=ALL-UNNAMED",
-      "--sun-misc-unsafe-memory-access=allow"
-    })
+@Fork(1)
 @Threads(1)
 public class DirectMemoryAccessBenchmark {
   private static final int BUFFER_BYTES = 64 * 1024;
@@ -59,8 +51,6 @@ public class DirectMemoryAccessBenchmark {
   private static final int INT_SLOT_MASK = INT_SLOTS - 1;
   private static final int LONG_SLOT_MASK = LONG_SLOTS - 1;
   private static final ByteOrder NATIVE_ORDER = ByteOrder.nativeOrder();
-  private static final Unsafe UNSAFE = loadUnsafe();
-  private static final long BUFFER_ADDRESS_OFFSET = bufferAddressOffset();
   private static final VarHandle INT_HANDLE =
       MethodHandles.byteBufferViewVarHandle(int[].class, NATIVE_ORDER);
   private static final VarHandle LONG_HANDLE =
@@ -74,7 +64,6 @@ public class DirectMemoryAccessBenchmark {
   public static class DirectState {
     ByteBuffer buffer;
     MemorySegment segment;
-    long address;
     int intValue;
     int intCursor;
     long longValue;
@@ -84,18 +73,17 @@ public class DirectMemoryAccessBenchmark {
     public void setup() {
       buffer = ByteBuffer.allocateDirect(BUFFER_BYTES).order(NATIVE_ORDER);
       segment = MemorySegment.ofBuffer(buffer);
-      address = UNSAFE.getLong(buffer, BUFFER_ADDRESS_OFFSET);
       intValue = 0x12345678;
       longValue = 0x123456789abcdef0L;
       for (int i = 0; i < INT_SLOTS; i++) {
         int intOffset = i << 2;
         int intPattern = intValue + i;
-        UNSAFE.putInt(null, address + intOffset, intPattern);
+        segment.set(INT_LAYOUT, intOffset, intPattern);
       }
       for (int i = 0; i < LONG_SLOTS; i++) {
         int longOffset = i << 3;
         long longPattern = longValue + i;
-        UNSAFE.putLong(null, address + longOffset, longPattern);
+        segment.set(LONG_LAYOUT, longOffset, longPattern);
       }
     }
 
@@ -135,14 +123,6 @@ public class DirectMemoryAccessBenchmark {
   }
 
   @Benchmark
-  public int unsafePutInt(DirectState state) {
-    int offset = state.nextIntOffset();
-    int value = state.nextIntValue();
-    UNSAFE.putInt(null, state.address + offset, value);
-    return value;
-  }
-
-  @Benchmark
   public int memorySegmentGetInt(DirectState state) {
     return state.segment.get(INT_LAYOUT, state.nextIntOffset());
   }
@@ -150,11 +130,6 @@ public class DirectMemoryAccessBenchmark {
   @Benchmark
   public int varHandleGetInt(DirectState state) {
     return (int) INT_HANDLE.get(state.buffer, state.nextIntOffset());
-  }
-
-  @Benchmark
-  public int unsafeGetInt(DirectState state) {
-    return UNSAFE.getInt(null, state.address + state.nextIntOffset());
   }
 
   @Benchmark
@@ -174,14 +149,6 @@ public class DirectMemoryAccessBenchmark {
   }
 
   @Benchmark
-  public long unsafePutLong(DirectState state) {
-    int offset = state.nextLongOffset();
-    long value = state.nextLongValue();
-    UNSAFE.putLong(null, state.address + offset, value);
-    return value;
-  }
-
-  @Benchmark
   public long memorySegmentGetLong(DirectState state) {
     return state.segment.get(LONG_LAYOUT, state.nextLongOffset());
   }
@@ -189,28 +156,5 @@ public class DirectMemoryAccessBenchmark {
   @Benchmark
   public long varHandleGetLong(DirectState state) {
     return (long) LONG_HANDLE.get(state.buffer, state.nextLongOffset());
-  }
-
-  @Benchmark
-  public long unsafeGetLong(DirectState state) {
-    return UNSAFE.getLong(null, state.address + state.nextLongOffset());
-  }
-
-  private static Unsafe loadUnsafe() {
-    try {
-      Field field = Unsafe.class.getDeclaredField("theUnsafe");
-      field.setAccessible(true);
-      return (Unsafe) field.get(null);
-    } catch (ReflectiveOperationException e) {
-      throw new ExceptionInInitializerError(e);
-    }
-  }
-
-  private static long bufferAddressOffset() {
-    try {
-      return UNSAFE.objectFieldOffset(Buffer.class.getDeclaredField("address"));
-    } catch (NoSuchFieldException e) {
-      throw new ExceptionInInitializerError(e);
-    }
   }
 }

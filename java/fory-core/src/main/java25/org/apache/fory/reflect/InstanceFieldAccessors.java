@@ -22,10 +22,19 @@ package org.apache.fory.reflect;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.Preconditions;
 
-final class InstanceFieldAccessors {
+/**
+ * Non-record instance field accessor owner.
+ *
+ * <p>This class is public only so generated serializers can name {@link InstanceAccessor} as a
+ * concrete field type on JDK25+. Callers must still create accessors through {@link
+ * FieldAccessor#createAccessor(Field)} so platform dispatch stays centralized.
+ */
+@Internal
+public final class InstanceFieldAccessors {
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;
   private static final int CHAR_ACCESS = 3;
@@ -86,7 +95,8 @@ final class InstanceFieldAccessors {
         cause);
   }
 
-  static final class InstanceAccessor extends FieldAccessor {
+  /** Public only for generated serializers; use {@link FieldAccessor#createAccessor(Field)}. */
+  public static final class InstanceAccessor extends FieldAccessor {
     private final VarHandle handle;
     private final int accessKind;
 

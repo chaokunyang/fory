@@ -115,7 +115,8 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   trusted-lookup initialization or cold setup, not inside string hot paths.
 - `FieldAccessor` owns field-accessor dispatch. `RecordFieldAccessors` owns record field access,
   and `InstanceFieldAccessors` owns non-record instance field access. Do not reintroduce a
-  `FieldAccessorFactory` layer.
+  `FieldAccessorFactory` layer. `InstanceFieldAccessors` is public only so generated serializers
+  can name its concrete nested accessor type; treat it as internal owner code, not user API.
 - Android non-record reflection field access belongs inside the root `InstanceFieldAccessors`
   owner. Do not keep a standalone `ReflectionFieldAccessor`; Java25 never needs that path, and
   record reflection fallback remains record-owned in `RecordFieldAccessors`. Keep `sun.misc.Unsafe`
@@ -134,6 +135,15 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   hot-path try/catch blocks and do not call `FieldAccessor.checkObj`; VarHandle validates null and
   receiver type itself. Root Unsafe offset access may keep a debug-only `assert` receiver check
   because Unsafe does not validate the target object; do not add production receiver checks.
+- JDK25+ generated serializers should store field accessors as concrete
+  `InstanceFieldAccessors.InstanceAccessor` static final fields, initialized once through
+  `FieldAccessor.createAccessor(...)` and a static-init cast. This keeps platform dispatch out of
+  generated read/write hot paths and avoids `FieldAccessor` virtual dispatch on final/private field
+  get/set calls.
+- Do not move the JDK25 `DefineClass.defineHiddenNestmate(...)` implementation to `java9`.
+  `Lookup#defineClass` is a Java 9 normal class-definition API, not hidden-nestmate definition; the
+  dynamic nestmate API is `Lookup#defineHiddenClass(..., NESTMATE)`, so Java 9 through Java 14
+  cannot use that path.
 - Keep JDK26 `--illegal-final-field-mutation=deny` scoped to the JPMS runtime tests that prove
   Fory's field-access path. Do not put it in global Maven `JDK_JAVA_OPTIONS`, because build tools
   such as Lombok may perform their own reflective final-field access during compilation.

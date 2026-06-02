@@ -25,6 +25,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
@@ -35,7 +36,15 @@ import org.apache.fory.platform.internal._UnsafeUtils;
 import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
-final class InstanceFieldAccessors {
+/**
+ * Non-record instance field accessor owner.
+ *
+ * <p>This class is public only so generated serializers can name {@link InstanceAccessor} as a
+ * concrete field type on JDK25+. Callers must still create accessors through {@link
+ * FieldAccessor#createAccessor(Field)} so platform dispatch stays centralized.
+ */
+@Internal
+public final class InstanceFieldAccessors {
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;
   private static final int CHAR_ACCESS = 3;
@@ -110,7 +119,8 @@ final class InstanceFieldAccessors {
     }
   }
 
-  static final class InstanceAccessor extends FieldAccessor {
+  /** Public only for generated serializers; use {@link FieldAccessor#createAccessor(Field)}. */
+  public static final class InstanceAccessor extends FieldAccessor {
     private static final Unsafe UNSAFE = _UnsafeUtils.UNSAFE;
 
     private final long fieldOffset;

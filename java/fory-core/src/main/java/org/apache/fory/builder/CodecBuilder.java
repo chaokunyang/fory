@@ -59,6 +59,7 @@ import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.reflect.InstanceFieldAccessors.InstanceAccessor;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -425,6 +426,24 @@ public abstract class CodecBuilder {
                 : "")
             + fieldName
             + "_accessor_";
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      // JDK25+ field writes go through the VarHandle-backed instance accessor. Keep the generated
+      // static field typed as the concrete final accessor so hot-path putX calls do not pay a
+      // FieldAccessor virtual dispatch. FieldAccessor.createAccessor still owns platform dispatch;
+      // this one-time cast happens only during generated-class initialization.
+      return getOrCreateField(
+          true,
+          InstanceAccessor.class,
+          fieldAccessorName,
+          () ->
+              new Cast(
+                  new StaticInvoke(
+                      FieldAccessor.class,
+                      "createAccessor",
+                      TypeRef.of(FieldAccessor.class),
+                      getReflectField(field.getDeclaringClass(), field, false)),
+                  TypeRef.of(InstanceAccessor.class)));
+    }
     return getOrCreateField(
         true,
         FieldAccessor.class,

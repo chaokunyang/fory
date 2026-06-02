@@ -56,10 +56,24 @@ public class LittleEndian {
   }
 
   public static long getInt64(byte[] o, int index) {
-    return MemoryOps.getInt64(o, index);
+    return ((long) o[index] & 0xff)
+        | (((long) o[index + 1] & 0xff) << 8)
+        | (((long) o[index + 2] & 0xff) << 16)
+        | (((long) o[index + 3] & 0xff) << 24)
+        | (((long) o[index + 4] & 0xff) << 32)
+        | (((long) o[index + 5] & 0xff) << 40)
+        | (((long) o[index + 6] & 0xff) << 48)
+        | (((long) o[index + 7] & 0xff) << 56);
   }
 
   public static void putInt64(byte[] o, int index, long value) {
-    MemoryOps.putInt64(o, index, value);
+    o[index] = (byte) value;
+    o[index + 1] = (byte) (value >>> 8);
+    o[index + 2] = (byte) (value >>> 16);
+    o[index + 3] = (byte) (value >>> 24);
+    o[index + 4] = (byte) (value >>> 32);
+    o[index + 5] = (byte) (value >>> 40);
+    o[index + 6] = (byte) (value >>> 48);
+    o[index + 7] = (byte) (value >>> 56);
   }
 }

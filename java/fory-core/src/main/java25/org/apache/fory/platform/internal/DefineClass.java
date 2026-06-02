@@ -80,9 +80,7 @@ public class DefineClass {
     Preconditions.checkNotNull(bytecodes);
     try {
       Lookup lookup = _Lookup.privateLookupIn(neighbor, MethodHandles.lookup());
-      return lookup
-          .defineHiddenClass(bytecodes, true, Lookup.ClassOption.NESTMATE)
-          .lookupClass();
+      return lookup.defineHiddenClass(bytecodes, true, Lookup.ClassOption.NESTMATE).lookupClass();
     } catch (IllegalAccessException | IllegalStateException e) {
       throw new IllegalStateException(
           "Cannot define hidden nestmate for "

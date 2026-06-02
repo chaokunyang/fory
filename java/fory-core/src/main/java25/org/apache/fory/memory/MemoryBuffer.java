@@ -197,7 +197,8 @@ public final class MemoryBuffer {
   private void initOffHeapBuffer(long offHeapAddress, int size, ByteBuffer offHeapBuffer) {
     checkArgument(offHeapAddress >= 0 && size >= 0);
     checkNotNull(offHeapBuffer, "JDK25 MemoryBuffer requires a ByteBuffer owner for off-heap data");
-    checkArgument(offHeapBuffer.isDirect(), "Only direct ByteBuffers can back off-heap MemoryBuffer");
+    checkArgument(
+        offHeapBuffer.isDirect(), "Only direct ByteBuffers can back off-heap MemoryBuffer");
     this.offHeapBuffer = offHeapBuffer;
     ByteBuffer nativeBuffer = offHeapBuffer.duplicate().order(NATIVE_ORDER);
     // Stream readers can expand the owner buffer limit after this duplicate is created. Keep the
@@ -219,9 +220,7 @@ public final class MemoryBuffer {
 
   public void initByteBuffer(ByteBuffer buffer, int size) {
     if (buffer.isDirect()) {
-
-        initOffHeapBuffer(0, size, buffer);
-
+      initOffHeapBuffer(0, size, buffer);
     } else if (buffer.hasArray()) {
       initHeapBuffer(buffer.array(), buffer.arrayOffset(), size);
     } else {
@@ -261,19 +260,17 @@ public final class MemoryBuffer {
   }
 
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
-
-      if (buffer == null) {
-        throw new NullPointerException("buffer");
-      }
-      this.heapMemory = buffer;
-      this.heapOffset = offset;
-      this.offHeapBuffer = null;
-      this.nativeOffHeapBuffer = null;
-      final long startPos = BYTE_ARRAY_OFFSET + offset;
-      this.address = startPos;
-      this.size = length;
-      this.addressLimit = startPos + length;
-
+    if (buffer == null) {
+      throw new NullPointerException("buffer");
+    }
+    this.heapMemory = buffer;
+    this.heapOffset = offset;
+    this.offHeapBuffer = null;
+    this.nativeOffHeapBuffer = null;
+    final long startPos = BYTE_ARRAY_OFFSET + offset;
+    this.address = startPos;
+    this.size = length;
+    this.addressLimit = startPos + length;
   }
 
   private byte loadByte(long pos) {
@@ -370,7 +367,8 @@ public final class MemoryBuffer {
     }
   }
 
-  private void writeBytesFromArray(long targetOffset, byte[] source, int sourceOffset, int numBytes) {
+  private void writeBytesFromArray(
+      long targetOffset, byte[] source, int sourceOffset, int numBytes) {
     byte[] heap = heapMemory;
     if (heap != null) {
       System.arraycopy(source, sourceOffset, heap, toIntIndex(targetOffset), numBytes);
@@ -409,7 +407,8 @@ public final class MemoryBuffer {
     }
   }
 
-  private void writeCharsFromArray(long targetOffset, char[] source, int sourceOffset, int numBytes) {
+  private void writeCharsFromArray(
+      long targetOffset, char[] source, int sourceOffset, int numBytes) {
     int elements = numBytes >>> 1;
     int pos = toIntIndex(targetOffset);
     byte[] heap = heapMemory;
@@ -506,7 +505,8 @@ public final class MemoryBuffer {
     }
   }
 
-  private void writeLongsFromArray(long targetOffset, long[] source, int sourceOffset, int numBytes) {
+  private void writeLongsFromArray(
+      long targetOffset, long[] source, int sourceOffset, int numBytes) {
     int elements = numBytes >>> 3;
     int pos = toIntIndex(targetOffset);
     byte[] heap = heapMemory;
@@ -566,7 +566,8 @@ public final class MemoryBuffer {
     } else {
       ByteBuffer direct = nativeOffHeapBuffer;
       for (int i = 0; i < elements; i++, pos += 8) {
-        target[targetOffset + i] = Double.longBitsToDouble((long) BYTE_BUFFER_LONG.get(direct, pos));
+        target[targetOffset + i] =
+            Double.longBitsToDouble((long) BYTE_BUFFER_LONG.get(direct, pos));
       }
     }
   }
@@ -812,7 +813,6 @@ public final class MemoryBuffer {
   }
 
   public byte getByte(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 1);
     return loadByte(pos);
@@ -821,36 +821,28 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public byte _unsafeGetByte(int index) {
     // CHECKSTYLE.ON:MethodName
-
     return loadByte(address + index);
   }
 
   public void putByte(int index, int b) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 1);
-      storeByte(pos, (byte) b);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 1);
+    storeByte(pos, (byte) b);
   }
 
   public void putByte(int index, byte b) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 1);
-      storeByte(pos, b);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 1);
+    storeByte(pos, b);
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutByte(int index, byte b) {
     // CHECKSTYLE.ON:MethodName
-
-      storeByte(address + index, b);
-
+    storeByte(address + index, b);
   }
 
   public boolean getBoolean(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 1);
     return loadByte(pos) != 0;
@@ -859,26 +851,20 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public boolean _unsafeGetBoolean(int index) {
     // CHECKSTYLE.ON:MethodName
-
     return loadByte(address + index) != 0;
   }
 
   public void putBoolean(int index, boolean value) {
-
-      storeByte(address + index, (value ? (byte) 1 : (byte) 0));
-
+    storeByte(address + index, (value ? (byte) 1 : (byte) 0));
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutBoolean(int index, boolean value) {
     // CHECKSTYLE.ON:MethodName
-
-      storeByte(address + index, (value ? (byte) 1 : (byte) 0));
-
+    storeByte(address + index, (value ? (byte) 1 : (byte) 0));
   }
 
   public char getChar(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 2);
     char c = loadChar(pos);
@@ -888,35 +874,29 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public char _unsafeGetChar(int index) {
     // CHECKSTYLE.ON:MethodName
-
     char c = loadChar(address + index);
     return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
   }
 
   public void putChar(int index, char value) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 2);
-      if (!LITTLE_ENDIAN) {
-        value = Character.reverseBytes(value);
-      }
-      storeChar(pos, value);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 2);
+    if (!LITTLE_ENDIAN) {
+      value = Character.reverseBytes(value);
+    }
+    storeChar(pos, value);
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutChar(int index, char value) {
     // CHECKSTYLE.ON:MethodName
-
-      if (!LITTLE_ENDIAN) {
-        value = Character.reverseBytes(value);
-      }
-      storeChar(address + index, value);
-
+    if (!LITTLE_ENDIAN) {
+      value = Character.reverseBytes(value);
+    }
+    storeChar(address + index, value);
   }
 
   public short getInt16(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 2);
     short v = loadShort(pos);
@@ -924,20 +904,17 @@ public final class MemoryBuffer {
   }
 
   public void putInt16(int index, short value) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 2);
-      if (!LITTLE_ENDIAN) {
-        value = Short.reverseBytes(value);
-      }
-      storeShort(pos, value);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 2);
+    if (!LITTLE_ENDIAN) {
+      value = Short.reverseBytes(value);
+    }
+    storeShort(pos, value);
   }
 
   // CHECKSTYLE.OFF:MethodName
   public short _unsafeGetInt16(int index) {
     // CHECKSTYLE.ON:MethodName
-
     short v = loadShort(address + index);
     return LITTLE_ENDIAN ? v : Short.reverseBytes(v);
   }
@@ -945,16 +922,13 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt16(int index, short value) {
     // CHECKSTYLE.ON:MethodName
-
-      if (!LITTLE_ENDIAN) {
-        value = Short.reverseBytes(value);
-      }
-      storeShort(address + index, value);
-
+    if (!LITTLE_ENDIAN) {
+      value = Short.reverseBytes(value);
+    }
+    storeShort(address + index, value);
   }
 
   public int getInt32(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 4);
     int v = loadInt(pos);
@@ -962,20 +936,17 @@ public final class MemoryBuffer {
   }
 
   public void putInt32(int index, int value) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 4);
-      if (!LITTLE_ENDIAN) {
-        value = Integer.reverseBytes(value);
-      }
-      storeInt(pos, value);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 4);
+    if (!LITTLE_ENDIAN) {
+      value = Integer.reverseBytes(value);
+    }
+    storeInt(pos, value);
   }
 
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeGetInt32(int index) {
     // CHECKSTYLE.ON:MethodName
-
     int v = loadInt(address + index);
     return LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
   }
@@ -983,16 +954,13 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt32(int index, int value) {
     // CHECKSTYLE.ON:MethodName
-
-      if (!LITTLE_ENDIAN) {
-        value = Integer.reverseBytes(value);
-      }
-      storeInt(address + index, value);
-
+    if (!LITTLE_ENDIAN) {
+      value = Integer.reverseBytes(value);
+    }
+    storeInt(address + index, value);
   }
 
   public long getInt64(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 8);
     long v = loadLong(pos);
@@ -1000,20 +968,17 @@ public final class MemoryBuffer {
   }
 
   public void putInt64(int index, long value) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 8);
-      if (!LITTLE_ENDIAN) {
-        value = Long.reverseBytes(value);
-      }
-      storeLong(pos, value);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 8);
+    if (!LITTLE_ENDIAN) {
+      value = Long.reverseBytes(value);
+    }
+    storeLong(pos, value);
   }
 
   // CHECKSTYLE.OFF:MethodName
   public long _unsafeGetInt64(int index) {
     // CHECKSTYLE.ON:MethodName
-
     long v = loadLong(address + index);
     return LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
@@ -1021,16 +986,13 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt64(int index, long value) {
     // CHECKSTYLE.ON:MethodName
-
-      if (!LITTLE_ENDIAN) {
-        value = Long.reverseBytes(value);
-      }
-      storeLong(address + index, value);
-
+    if (!LITTLE_ENDIAN) {
+      value = Long.reverseBytes(value);
+    }
+    storeLong(address + index, value);
   }
 
   public float getFloat32(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 4);
     int v = loadInt(pos);
@@ -1041,19 +1003,16 @@ public final class MemoryBuffer {
   }
 
   public void putFloat32(int index, float value) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 4);
-      int v = Float.floatToRawIntBits(value);
-      if (!LITTLE_ENDIAN) {
-        v = Integer.reverseBytes(v);
-      }
-      storeInt(pos, v);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 4);
+    int v = Float.floatToRawIntBits(value);
+    if (!LITTLE_ENDIAN) {
+      v = Integer.reverseBytes(v);
+    }
+    storeInt(pos, v);
   }
 
   public double getFloat64(int index) {
-
     final long pos = address + index;
     checkPosition(index, pos, 8);
     long v = loadLong(pos);
@@ -1064,15 +1023,13 @@ public final class MemoryBuffer {
   }
 
   public void putFloat64(int index, double value) {
-
-      final long pos = address + index;
-      checkPosition(index, pos, 8);
-      long v = Double.doubleToRawLongBits(value);
-      if (!LITTLE_ENDIAN) {
-        v = Long.reverseBytes(v);
-      }
-      storeLong(pos, v);
-
+    final long pos = address + index;
+    checkPosition(index, pos, 8);
+    long v = Double.doubleToRawLongBits(value);
+    if (!LITTLE_ENDIAN) {
+      v = Long.reverseBytes(v);
+    }
+    storeLong(pos, v);
   }
 
   // Check should be done outside to avoid this method got into the critical path.
@@ -1143,26 +1100,22 @@ public final class MemoryBuffer {
   }
 
   public void writeBoolean(boolean value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 1;
-      ensure(newIdx);
-      final long pos = address + writerIdx;
-      storeByte(pos, (byte) (value ? 1 : 0));
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 1;
+    ensure(newIdx);
+    final long pos = address + writerIdx;
+    storeByte(pos, (byte) (value ? 1 : 0));
+    writerIndex = newIdx;
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafeWriteByte(byte value) {
     // CHECKSTYLE.ON:MethodName
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 1;
-      final long pos = address + writerIdx;
-      storeByte(pos, value);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 1;
+    final long pos = address + writerIdx;
+    storeByte(pos, value);
+    writerIndex = newIdx;
   }
 
   public void writeUInt8(int value) {
@@ -1170,14 +1123,12 @@ public final class MemoryBuffer {
   }
 
   public void writeByte(byte value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 1;
-      ensure(newIdx);
-      final long pos = address + writerIdx;
-      storeByte(pos, value);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 1;
+    ensure(newIdx);
+    final long pos = address + writerIdx;
+    storeByte(pos, value);
+    writerIndex = newIdx;
   }
 
   public void writeByte(int value) {
@@ -1185,84 +1136,72 @@ public final class MemoryBuffer {
   }
 
   public void writeChar(char value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 2;
-      ensure(newIdx);
-      final long pos = address + writerIdx;
-      if (!LITTLE_ENDIAN) {
-        value = Character.reverseBytes(value);
-      }
-      storeChar(pos, value);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 2;
+    ensure(newIdx);
+    final long pos = address + writerIdx;
+    if (!LITTLE_ENDIAN) {
+      value = Character.reverseBytes(value);
+    }
+    storeChar(pos, value);
+    writerIndex = newIdx;
   }
 
   public void writeInt16(short value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 2;
-      ensure(newIdx);
-      if (!LITTLE_ENDIAN) {
-        value = Short.reverseBytes(value);
-      }
-      storeShort(address + writerIdx, value);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 2;
+    ensure(newIdx);
+    if (!LITTLE_ENDIAN) {
+      value = Short.reverseBytes(value);
+    }
+    storeShort(address + writerIdx, value);
+    writerIndex = newIdx;
   }
 
   public void writeInt32(int value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 4;
-      ensure(newIdx);
-      if (!LITTLE_ENDIAN) {
-        value = Integer.reverseBytes(value);
-      }
-      storeInt(address + writerIdx, value);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 4;
+    ensure(newIdx);
+    if (!LITTLE_ENDIAN) {
+      value = Integer.reverseBytes(value);
+    }
+    storeInt(address + writerIdx, value);
+    writerIndex = newIdx;
   }
 
   public void writeInt64(long value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 8;
-      ensure(newIdx);
-      if (!LITTLE_ENDIAN) {
-        value = Long.reverseBytes(value);
-      }
-      storeLong(address + writerIdx, value);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 8;
+    ensure(newIdx);
+    if (!LITTLE_ENDIAN) {
+      value = Long.reverseBytes(value);
+    }
+    storeLong(address + writerIdx, value);
+    writerIndex = newIdx;
   }
 
   public void writeFloat32(float value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 4;
-      ensure(newIdx);
-      int v = Float.floatToRawIntBits(value);
-      if (!LITTLE_ENDIAN) {
-        v = Integer.reverseBytes(v);
-      }
-      storeInt(address + writerIdx, v);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 4;
+    ensure(newIdx);
+    int v = Float.floatToRawIntBits(value);
+    if (!LITTLE_ENDIAN) {
+      v = Integer.reverseBytes(v);
+    }
+    storeInt(address + writerIdx, v);
+    writerIndex = newIdx;
   }
 
   public void writeFloat64(double value) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + 8;
-      ensure(newIdx);
-      long v = Double.doubleToRawLongBits(value);
-      if (!LITTLE_ENDIAN) {
-        v = Long.reverseBytes(v);
-      }
-      storeLong(address + writerIdx, v);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + 8;
+    ensure(newIdx);
+    long v = Double.doubleToRawLongBits(value);
+    if (!LITTLE_ENDIAN) {
+      v = Long.reverseBytes(v);
+    }
+    storeLong(address + writerIdx, v);
+    writerIndex = newIdx;
   }
 
   /**
@@ -1270,7 +1209,6 @@ public final class MemoryBuffer {
    * to save one bit.
    */
   public int writeVarInt32(int v) {
-
     ensure(writerIndex + 8);
     // Zigzag encoding: maps negative values to positive values
     // This works entirely in int without conversion to long
@@ -1287,7 +1225,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarInt32(int v) {
     // CHECKSTYLE.ON:MethodName
-
     // Zigzag encoding ensures negatives close to zero are encoded in few bytes
     int varintBytes = _unsafePutVarUInt32(writerIndex, (v << 1) ^ (v >> 31));
     writerIndex += varintBytes;
@@ -1300,7 +1237,6 @@ public final class MemoryBuffer {
    * @return The number of bytes written.
    */
   public int writeVarUInt32(int v) {
-
     // ensure at least 8 bytes are writable at once, so jvm-jit
     // generated code is smaller. Otherwise, the reference writer fast path
     // may be `callee is too large`/`already compiled into a big method`
@@ -1317,7 +1253,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarUInt32(int v) {
     // CHECKSTYLE.ON:MethodName
-
     int varintBytes = _unsafePutVarUInt32(writerIndex, v);
     writerIndex += varintBytes;
     return varintBytes;
@@ -1328,7 +1263,6 @@ public final class MemoryBuffer {
    * 127). When the value is equal or greater than 127, the write will be a little slower.
    */
   public int writeVarUInt32Small7(int value) {
-
     ensure(writerIndex + 8);
     if (value >>> 7 == 0) {
       storeByte(address + writerIndex++, (byte) value);
@@ -1383,7 +1317,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafePutVarUInt32(int index, int value) {
     // CHECKSTYLE.ON:MethodName
-
     byte[] heap = heapMemory;
     if (heap != null) {
       return putVarUInt32Heap(heap, (int) (address + index), value);
@@ -1503,7 +1436,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafePutVarUint36Small(int index, long value) {
     // CHECKSTYLE.ON:MethodName
-
     long encoded = (value & 0x7F);
     if (value >>> 7 == 0) {
       storeByte(address + index, (byte) value);
@@ -1574,7 +1506,6 @@ public final class MemoryBuffer {
    * @return The number of bytes written.
    */
   public int writeVarUInt32Aligned(int value) {
-
     // Mask first 6 bits,
     // bit 7 `unset` indicates have next padding bytes,
     // bit 8 `set` indicates have next data bytes.
@@ -1767,7 +1698,6 @@ public final class MemoryBuffer {
    * #writeVarUInt64} to save one bit.
    */
   public int writeVarInt64(long value) {
-
     ensure(writerIndex + 9);
     return _unsafeWriteVarUInt64((value << 1) ^ (value >> 63));
   }
@@ -1776,12 +1706,10 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-
     return _unsafeWriteVarUInt64((value << 1) ^ (value >> 63));
   }
 
   public int writeVarUInt64(long value) {
-
     // Var long encoding algorithm is based kryo UnsafeMemoryOutput.writeVarInt64.
     // var long are written using little endian byte order.
     ensure(writerIndex + 9);
@@ -1792,7 +1720,6 @@ public final class MemoryBuffer {
   @CodegenInvoke
   public int _unsafeWriteVarUInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-
     final int writerIndex = this.writerIndex;
     int varInt;
     varInt = (int) (value & 0x7F);
@@ -1875,7 +1802,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteTaggedUInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-
     final int writerIndex = this.writerIndex;
     final long pos = address + writerIndex;
     final byte[] heapMemory = this.heapMemory;
@@ -1906,7 +1832,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteTaggedInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-
     final int writerIndex = this.writerIndex;
     final long pos = address + writerIndex;
     final byte[] heapMemory = this.heapMemory;
@@ -1960,17 +1885,13 @@ public final class MemoryBuffer {
   }
 
   public void writeBytesWithSize(byte[] values) {
-
-      writeVarUInt32Small7(values.length);
-      writeBytes(values, 0, values.length);
-
+    writeVarUInt32Small7(values.length);
+    writeBytes(values, 0, values.length);
   }
 
   public void writeBooleansWithSize(boolean[] values) {
-
-      writeVarUInt32Small7(values.length);
-      writeBooleans(values, 0, values.length);
-
+    writeVarUInt32Small7(values.length);
+    writeBooleans(values, 0, values.length);
   }
 
   public void writeBooleans(boolean[] values) {
@@ -1978,21 +1899,17 @@ public final class MemoryBuffer {
   }
 
   public void writeBooleans(boolean[] values, int offset, int numElements) {
-
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numElements;
-      ensure(newIdx);
-      writeBooleansFromArray(address + writerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
-      writerIndex = newIdx;
-
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + numElements;
+    ensure(newIdx);
+    writeBooleansFromArray(address + writerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
+    writerIndex = newIdx;
   }
 
   public void writeCharsWithSize(char[] values) {
-
-      int numBytes = Math.multiplyExact(values.length, 2);
-      writeVarUInt32Small7(numBytes);
-      writeChars(values, 0, values.length);
-
+    int numBytes = Math.multiplyExact(values.length, 2);
+    writeVarUInt32Small7(numBytes);
+    writeChars(values, 0, values.length);
   }
 
   public void writeChars(char[] values) {
@@ -2000,22 +1917,18 @@ public final class MemoryBuffer {
   }
 
   public void writeChars(char[] values, int offset, int numElements) {
-
-      int numBytes = Math.multiplyExact(numElements, 2);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      writeCharsFromArray(address + writerIdx, values, CHAR_ARRAY_OFFSET + offset, numBytes);
-      writerIndex = newIdx;
-
+    int numBytes = Math.multiplyExact(numElements, 2);
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + numBytes;
+    ensure(newIdx);
+    writeCharsFromArray(address + writerIdx, values, CHAR_ARRAY_OFFSET + offset, numBytes);
+    writerIndex = newIdx;
   }
 
   public void writeShortsWithSize(short[] values) {
-
-      int numBytes = Math.multiplyExact(values.length, 2);
-      writeVarUInt32Small7(numBytes);
-      writeShorts(values, 0, values.length);
-
+    int numBytes = Math.multiplyExact(values.length, 2);
+    writeVarUInt32Small7(numBytes);
+    writeShorts(values, 0, values.length);
   }
 
   public void writeShorts(short[] values) {
@@ -2023,22 +1936,18 @@ public final class MemoryBuffer {
   }
 
   public void writeShorts(short[] values, int offset, int numElements) {
-
-      int numBytes = Math.multiplyExact(numElements, 2);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      writeShortsFromArray(address + writerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
-      writerIndex = newIdx;
-
+    int numBytes = Math.multiplyExact(numElements, 2);
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + numBytes;
+    ensure(newIdx);
+    writeShortsFromArray(address + writerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
+    writerIndex = newIdx;
   }
 
   public void writeIntsWithSize(int[] values) {
-
-      int numBytes = Math.multiplyExact(values.length, 4);
-      writeVarUInt32Small7(numBytes);
-      writeInts(values, 0, values.length);
-
+    int numBytes = Math.multiplyExact(values.length, 4);
+    writeVarUInt32Small7(numBytes);
+    writeInts(values, 0, values.length);
   }
 
   public void writeInts(int[] values) {
@@ -2046,22 +1955,18 @@ public final class MemoryBuffer {
   }
 
   public void writeInts(int[] values, int offset, int numElements) {
-
-      int numBytes = Math.multiplyExact(numElements, 4);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      writeIntsFromArray(address + writerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
-      writerIndex = newIdx;
-
+    int numBytes = Math.multiplyExact(numElements, 4);
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + numBytes;
+    ensure(newIdx);
+    writeIntsFromArray(address + writerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
+    writerIndex = newIdx;
   }
 
   public void writeLongsWithSize(long[] values) {
-
-      int numBytes = Math.multiplyExact(values.length, 8);
-      writeVarUInt32Small7(numBytes);
-      writeLongs(values, 0, values.length);
-
+    int numBytes = Math.multiplyExact(values.length, 8);
+    writeVarUInt32Small7(numBytes);
+    writeLongs(values, 0, values.length);
   }
 
   public void writeLongs(long[] values) {
@@ -2069,22 +1974,18 @@ public final class MemoryBuffer {
   }
 
   public void writeLongs(long[] values, int offset, int numElements) {
-
-      int numBytes = Math.multiplyExact(numElements, 8);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      writeLongsFromArray(address + writerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
-      writerIndex = newIdx;
-
+    int numBytes = Math.multiplyExact(numElements, 8);
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + numBytes;
+    ensure(newIdx);
+    writeLongsFromArray(address + writerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
+    writerIndex = newIdx;
   }
 
   public void writeFloatsWithSize(float[] values) {
-
-      int numBytes = Math.multiplyExact(values.length, 4);
-      writeVarUInt32Small7(numBytes);
-      writeFloats(values, 0, values.length);
-
+    int numBytes = Math.multiplyExact(values.length, 4);
+    writeVarUInt32Small7(numBytes);
+    writeFloats(values, 0, values.length);
   }
 
   public void writeFloats(float[] values) {
@@ -2092,22 +1993,18 @@ public final class MemoryBuffer {
   }
 
   public void writeFloats(float[] values, int offset, int numElements) {
-
-      int numBytes = Math.multiplyExact(numElements, 4);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      writeFloatsFromArray(address + writerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
-      writerIndex = newIdx;
-
+    int numBytes = Math.multiplyExact(numElements, 4);
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + numBytes;
+    ensure(newIdx);
+    writeFloatsFromArray(address + writerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
+    writerIndex = newIdx;
   }
 
   public void writeDoublesWithSize(double[] values) {
-
-      int numBytes = Math.multiplyExact(values.length, 8);
-      writeVarUInt32Small7(numBytes);
-      writeDoubles(values, 0, values.length);
-
+    int numBytes = Math.multiplyExact(values.length, 8);
+    writeVarUInt32Small7(numBytes);
+    writeDoubles(values, 0, values.length);
   }
 
   public void writeDoubles(double[] values) {
@@ -2115,14 +2012,12 @@ public final class MemoryBuffer {
   }
 
   public void writeDoubles(double[] values, int offset, int numElements) {
-
-      int numBytes = Math.multiplyExact(numElements, 8);
-      final int writerIdx = writerIndex;
-      final int newIdx = writerIdx + numBytes;
-      ensure(newIdx);
-      writeDoublesFromArray(address + writerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
-      writerIndex = newIdx;
-
+    int numBytes = Math.multiplyExact(numElements, 8);
+    final int writerIdx = writerIndex;
+    final int newIdx = writerIdx + numBytes;
+    ensure(newIdx);
+    writeDoublesFromArray(address + writerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
+    writerIndex = newIdx;
   }
 
   /** For off-heap buffer, this will make a heap buffer internally. */
@@ -2221,7 +2116,6 @@ public final class MemoryBuffer {
   }
 
   public boolean readBoolean() {
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     if (readerIdx > size - 1) {
@@ -2232,7 +2126,6 @@ public final class MemoryBuffer {
   }
 
   public int readUInt8() {
-
     int readerIdx = readerIndex;
     if (readerIdx > size - 1) {
       streamReader.fillBuffer(1);
@@ -2248,7 +2141,6 @@ public final class MemoryBuffer {
   }
 
   public byte readByte() {
-
     int readerIdx = readerIndex;
     if (readerIdx > size - 1) {
       streamReader.fillBuffer(1);
@@ -2258,7 +2150,6 @@ public final class MemoryBuffer {
   }
 
   public char readChar() {
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2271,7 +2162,6 @@ public final class MemoryBuffer {
   }
 
   public short readInt16() {
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2288,7 +2178,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public short _readInt16OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2304,7 +2193,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public short _readInt16OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2316,7 +2204,6 @@ public final class MemoryBuffer {
   }
 
   public int readInt32() {
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2333,7 +2220,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readInt32OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2349,7 +2235,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readInt32OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2361,7 +2246,6 @@ public final class MemoryBuffer {
   }
 
   public long readInt64() {
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2378,7 +2262,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2394,7 +2277,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2427,7 +2309,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedUInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     final int readIdx = readerIndex;
     int diff = size - readIdx;
     if (diff < 4) {
@@ -2450,7 +2331,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedUInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     final int readIdx = readerIndex;
     int diff = size - readIdx;
     if (diff < 4) {
@@ -2473,7 +2353,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     // Duplicate and manual inline for performance.
     // noinspection Duplicates
     final int readIdx = readerIndex;
@@ -2498,7 +2377,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     // noinspection Duplicates
     final int readIdx = readerIndex;
     int diff = size - readIdx;
@@ -2519,7 +2397,6 @@ public final class MemoryBuffer {
   }
 
   public float readFloat32() {
-
     // noinspection Duplicates
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
@@ -2540,7 +2417,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public float _readFloat32OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2556,7 +2432,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public float _readFloat32OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2564,12 +2439,10 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(4 - remaining);
     }
     readerIndex = readerIdx + 4;
-    return Float.intBitsToFloat(
-        Integer.reverseBytes(loadInt(address + readerIdx)));
+    return Float.intBitsToFloat(Integer.reverseBytes(loadInt(address + readerIdx)));
   }
 
   public double readFloat64() {
-
     // noinspection Duplicates
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
@@ -2590,7 +2463,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public double _readFloat64OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2606,7 +2478,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public double _readFloat64OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2614,14 +2485,12 @@ public final class MemoryBuffer {
       streamReader.fillBuffer(8 - remaining);
     }
     readerIndex = readerIdx + 8;
-    return Double.longBitsToDouble(
-        Long.reverseBytes(loadLong(address + readerIdx)));
+    return Double.longBitsToDouble(Long.reverseBytes(loadLong(address + readerIdx)));
   }
 
   /** Reads the 1-5 byte int part of a varint. */
   @CodegenInvoke
   public int readVarInt32() {
-
     if (LITTLE_ENDIAN) {
       return _readVarInt32OnLE();
     } else {
@@ -2634,7 +2503,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readVarInt32OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     // noinspection Duplicates
     int readIdx = readerIndex;
     int result;
@@ -2682,7 +2550,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readVarInt32OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     // noinspection Duplicates
     int readIdx = readerIndex;
     int result;
@@ -2725,7 +2592,6 @@ public final class MemoryBuffer {
   }
 
   public long readVarUint36Small() {
-
     // Android exits above. Keep JVM small-varint bulk reads as direct bulk loads instead of calling
     // `_unsafeGet*` helpers; those helpers carry Android/endian branches and can break inlining.
     // Duplicate and manual inline for performance.
@@ -2835,7 +2701,6 @@ public final class MemoryBuffer {
 
   /** Reads the 1-5 byte int part of a non-negative varint. */
   public int readVarUInt32() {
-
     int readIdx = readerIndex;
     if (size - readIdx < 5) {
       return readVarUInt32Slow();
@@ -2882,7 +2747,6 @@ public final class MemoryBuffer {
    * 127). When the value is equal or greater than 127, the read will be a little slower.
    */
   public int readVarUInt32Small7() {
-
     int readIdx = readerIndex;
     if (size - readIdx > 0) {
       byte v = loadByte(address + readIdx++);
@@ -2899,7 +2763,6 @@ public final class MemoryBuffer {
    * 16384). When the value is equal or greater than 16384, the read will be a little slower.
    */
   public int readVarUInt32Small14() {
-
     int readIdx = readerIndex;
     if (size - readIdx >= 5) {
       int fourByteValue = loadInt(address + readIdx++);
@@ -2947,7 +2810,6 @@ public final class MemoryBuffer {
 
   /** Reads the 1-9 byte int part of a var long. */
   public long readVarInt64() {
-
     return LITTLE_ENDIAN ? _readVarInt64OnLE() : _readVarInt64OnBE();
   }
 
@@ -2955,7 +2817,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readVarInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-
     // Duplicate and manual inline for performance.
     // noinspection Duplicates
     int readIdx = readerIndex;
@@ -2988,7 +2849,6 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readVarInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-
     int readIdx = readerIndex;
     long result;
     if (size - readIdx < 9) {
@@ -3017,7 +2877,6 @@ public final class MemoryBuffer {
 
   /** Reads the 1-9 byte int part of a non-negative var long. */
   public long readVarUInt64() {
-
     int readIdx = readerIndex;
     if (size - readIdx < 9) {
       return readVarUInt64Slow();
@@ -3122,7 +2981,6 @@ public final class MemoryBuffer {
 
   /** Reads the 1-9 byte int part of an aligned varint. */
   public int readAlignedVarUInt32() {
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     if (readerIdx < size - 10) {
@@ -3249,7 +3107,6 @@ public final class MemoryBuffer {
 
   /** Read {@code len} bytes into a long using little-endian order. */
   public long readBytesAsInt64(int len) {
-
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -3319,7 +3176,6 @@ public final class MemoryBuffer {
    * is optimized for small size, it's faster than {@link #readVarUInt32}.
    */
   public int readBinarySize() {
-
     int binarySize;
     int readIdx = readerIndex;
     if (size - readIdx >= 5) {
@@ -3396,15 +3252,13 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readByteArrayPayload(byte[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readTo(values, 0, numBytes);
-        return;
-      }
-      readBytesToArray(address + readerIdx, values, BYTE_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readTo(values, 0, numBytes);
+      return;
+    }
+    readBytesToArray(address + readerIdx, values, BYTE_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   /**
@@ -3413,15 +3267,13 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readBooleanArrayPayload(boolean[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readBooleans(values, 0, numBytes);
-        return;
-      }
-      readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readBooleans(values, 0, numBytes);
+      return;
+    }
+    readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   /**
@@ -3430,15 +3282,13 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readCharArrayPayload(char[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readChars(values, 0, numBytes >>> 1);
-        return;
-      }
-      readCharsToArray(address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readChars(values, 0, numBytes >>> 1);
+      return;
+    }
+    readCharsToArray(address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   /**
@@ -3447,15 +3297,13 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt16ArrayPayload(short[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readShorts(values, 0, numBytes >>> 1);
-        return;
-      }
-      readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readShorts(values, 0, numBytes >>> 1);
+      return;
+    }
+    readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   /**
@@ -3464,15 +3312,13 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt32ArrayPayload(int[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readInts(values, 0, numBytes >>> 2);
-        return;
-      }
-      readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readInts(values, 0, numBytes >>> 2);
+      return;
+    }
+    readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   /**
@@ -3481,15 +3327,13 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt64ArrayPayload(long[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readLongs(values, 0, numBytes >>> 3);
-        return;
-      }
-      readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readLongs(values, 0, numBytes >>> 3);
+      return;
+    }
+    readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   /**
@@ -3498,15 +3342,13 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readFloat32ArrayPayload(float[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readFloats(values, 0, numBytes >>> 2);
-        return;
-      }
-      readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readFloats(values, 0, numBytes >>> 2);
+      return;
+    }
+    readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   /**
@@ -3515,31 +3357,27 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readFloat64ArrayPayload(double[] values, int numBytes) {
-
-      int readerIdx = readerIndex;
-      if (readerIdx > size - numBytes) {
-        streamReader.readDoubles(values, 0, numBytes >>> 3);
-        return;
-      }
-      readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    int readerIdx = readerIndex;
+    if (readerIdx > size - numBytes) {
+      streamReader.readDoubles(values, 0, numBytes >>> 3);
+      return;
+    }
+    readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   public void readBooleans(boolean[] values, int offset, int numElements) {
-
-      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
-          < 0) {
-        throwOOBException();
-      }
-      if (readerIndex > size - numElements) {
-        streamReader.readBooleans(values, offset, numElements);
-        return;
-      }
-      int readerIdx = readerIndex;
-      readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
-      readerIndex = readerIdx + numElements;
-
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException();
+    }
+    if (readerIndex > size - numElements) {
+      streamReader.readBooleans(values, offset, numElements);
+      return;
+    }
+    int readerIdx = readerIndex;
+    readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
+    readerIndex = readerIdx + numElements;
   }
 
   public void readChars(char[] chars, int numElements) {
@@ -3547,20 +3385,18 @@ public final class MemoryBuffer {
   }
 
   public void readChars(char[] chars, int offset, int numElements) {
-
-      if ((offset | numElements | (offset + numElements) | (chars.length - offset - numElements))
-          < 0) {
-        throwOOBException();
-      }
-      int numBytes = Math.multiplyExact(numElements, 2);
-      if (readerIndex > size - numBytes) {
-        streamReader.readChars(chars, offset, numElements);
-        return;
-      }
-      int readerIdx = readerIndex;
-      readCharsToArray(address + readerIdx, chars, CHAR_ARRAY_OFFSET + offset, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    if ((offset | numElements | (offset + numElements) | (chars.length - offset - numElements))
+        < 0) {
+      throwOOBException();
+    }
+    int numBytes = Math.multiplyExact(numElements, 2);
+    if (readerIndex > size - numBytes) {
+      streamReader.readChars(chars, offset, numElements);
+      return;
+    }
+    int readerIdx = readerIndex;
+    readCharsToArray(address + readerIdx, chars, CHAR_ARRAY_OFFSET + offset, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   @CodegenInvoke
@@ -3573,88 +3409,78 @@ public final class MemoryBuffer {
   }
 
   public void readShorts(short[] values, int offset, int numElements) {
-
-      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
-          < 0) {
-        throwOOBException();
-      }
-      int numBytes = Math.multiplyExact(numElements, 2);
-      if (readerIndex > size - numBytes) {
-        streamReader.readShorts(values, offset, numElements);
-        return;
-      }
-      int readerIdx = readerIndex;
-      readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException();
+    }
+    int numBytes = Math.multiplyExact(numElements, 2);
+    if (readerIndex > size - numBytes) {
+      streamReader.readShorts(values, offset, numElements);
+      return;
+    }
+    int readerIdx = readerIndex;
+    readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   public void readInts(int[] values, int offset, int numElements) {
-
-      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
-          < 0) {
-        throwOOBException();
-      }
-      int numBytes = Math.multiplyExact(numElements, 4);
-      if (readerIndex > size - numBytes) {
-        streamReader.readInts(values, offset, numElements);
-        return;
-      }
-      int readerIdx = readerIndex;
-      readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException();
+    }
+    int numBytes = Math.multiplyExact(numElements, 4);
+    if (readerIndex > size - numBytes) {
+      streamReader.readInts(values, offset, numElements);
+      return;
+    }
+    int readerIdx = readerIndex;
+    readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   public void readLongs(long[] values, int offset, int numElements) {
-
-      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
-          < 0) {
-        throwOOBException();
-      }
-      int numBytes = Math.multiplyExact(numElements, 8);
-      if (readerIndex > size - numBytes) {
-        streamReader.readLongs(values, offset, numElements);
-        return;
-      }
-      int readerIdx = readerIndex;
-      readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException();
+    }
+    int numBytes = Math.multiplyExact(numElements, 8);
+    if (readerIndex > size - numBytes) {
+      streamReader.readLongs(values, offset, numElements);
+      return;
+    }
+    int readerIdx = readerIndex;
+    readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   public void readFloats(float[] values, int offset, int numElements) {
-
-      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
-          < 0) {
-        throwOOBException();
-      }
-      int numBytes = Math.multiplyExact(numElements, 4);
-      if (readerIndex > size - numBytes) {
-        streamReader.readFloats(values, offset, numElements);
-        return;
-      }
-      int readerIdx = readerIndex;
-      readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException();
+    }
+    int numBytes = Math.multiplyExact(numElements, 4);
+    if (readerIndex > size - numBytes) {
+      streamReader.readFloats(values, offset, numElements);
+      return;
+    }
+    int readerIdx = readerIndex;
+    readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   public void readDoubles(double[] values, int offset, int numElements) {
-
-      if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
-          < 0) {
-        throwOOBException();
-      }
-      int numBytes = Math.multiplyExact(numElements, 8);
-      if (readerIndex > size - numBytes) {
-        streamReader.readDoubles(values, offset, numElements);
-        return;
-      }
-      int readerIdx = readerIndex;
-      readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
-      readerIndex = readerIdx + numBytes;
-
+    if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
+        < 0) {
+      throwOOBException();
+    }
+    int numBytes = Math.multiplyExact(numElements, 8);
+    if (readerIndex > size - numBytes) {
+      streamReader.readDoubles(values, offset, numElements);
+      return;
+    }
+    int readerIdx = readerIndex;
+    readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
+    readerIndex = readerIdx + numBytes;
   }
 
   public void checkReadableBytes(int minimumReadableBytes) {
@@ -3681,30 +3507,29 @@ public final class MemoryBuffer {
   // ------------------------- Read Methods Finished -------------------------------------
 
   public void copyTo(int offset, MemoryBuffer target, int targetOffset, int numBytes) {
-
-      final byte[] thisHeapRef = this.heapMemory;
-      final byte[] otherHeapRef = target.heapMemory;
-      final long thisPointer = this.address + offset;
-      final long otherPointer = target.address + targetOffset;
-      if ((numBytes | offset | targetOffset) >= 0
-          && thisPointer <= this.addressLimit - numBytes
-          && otherPointer <= target.addressLimit - numBytes) {
-        if (thisHeapRef != null && otherHeapRef != null) {
-          System.arraycopy(thisHeapRef, toIntIndex(thisPointer), otherHeapRef, toIntIndex(otherPointer), numBytes);
-        } else if (sameBufferOverlap(target, offset, targetOffset, numBytes)) {
-          byte[] tmp = new byte[numBytes];
-          sliceAsByteBuffer(offset, numBytes).get(tmp);
-          target.sliceAsByteBuffer(targetOffset, numBytes).put(tmp);
-        } else {
-          target.sliceAsByteBuffer(targetOffset, numBytes).put(sliceAsByteBuffer(offset, numBytes));
-        }
+    final byte[] thisHeapRef = this.heapMemory;
+    final byte[] otherHeapRef = target.heapMemory;
+    final long thisPointer = this.address + offset;
+    final long otherPointer = target.address + targetOffset;
+    if ((numBytes | offset | targetOffset) >= 0
+        && thisPointer <= this.addressLimit - numBytes
+        && otherPointer <= target.addressLimit - numBytes) {
+      if (thisHeapRef != null && otherHeapRef != null) {
+        System.arraycopy(
+            thisHeapRef, toIntIndex(thisPointer), otherHeapRef, toIntIndex(otherPointer), numBytes);
+      } else if (sameBufferOverlap(target, offset, targetOffset, numBytes)) {
+        byte[] tmp = new byte[numBytes];
+        sliceAsByteBuffer(offset, numBytes).get(tmp);
+        target.sliceAsByteBuffer(targetOffset, numBytes).put(tmp);
       } else {
-        throw new IndexOutOfBoundsException(
-            String.format(
-                "offset=%d, targetOffset=%d, numBytes=%d, address=%d, targetAddress=%d",
-                offset, targetOffset, numBytes, this.address, target.address));
+        target.sliceAsByteBuffer(targetOffset, numBytes).put(sliceAsByteBuffer(offset, numBytes));
       }
-
+    } else {
+      throw new IndexOutOfBoundsException(
+          String.format(
+              "offset=%d, targetOffset=%d, numBytes=%d, address=%d, targetAddress=%d",
+              offset, targetOffset, numBytes, this.address, target.address));
+    }
   }
 
   private boolean sameBufferOverlap(
@@ -3730,59 +3555,43 @@ public final class MemoryBuffer {
   }
 
   public void copyToByteArray(int offset, byte[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
-      readBytesToArray(address + offset, target, BYTE_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
+    readBytesToArray(address + offset, target, BYTE_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   public void copyToBooleanArray(int offset, boolean[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
-      readBooleansToArray(address + offset, target, BOOLEAN_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
+    readBooleansToArray(address + offset, target, BOOLEAN_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   public void copyToCharArray(int offset, char[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
-      readCharsToArray(address + offset, target, CHAR_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
+    readCharsToArray(address + offset, target, CHAR_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   public void copyToShortArray(int offset, short[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
-      readShortsToArray(address + offset, target, SHORT_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
+    readShortsToArray(address + offset, target, SHORT_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   public void copyToIntArray(int offset, int[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
-      readIntsToArray(address + offset, target, INT_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
+    readIntsToArray(address + offset, target, INT_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   public void copyToLongArray(int offset, long[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
-      readLongsToArray(address + offset, target, LONG_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
+    readLongsToArray(address + offset, target, LONG_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   public void copyToFloatArray(int offset, float[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
-      readFloatsToArray(address + offset, target, FLOAT_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
+    readFloatsToArray(address + offset, target, FLOAT_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   public void copyToDoubleArray(int offset, double[] target, int targetOffset, int numBytes) {
-
-      checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
-      readDoublesToArray(address + offset, target, DOUBLE_ARRAY_OFFSET + targetOffset, numBytes);
-
+    checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
+    readDoublesToArray(address + offset, target, DOUBLE_ARRAY_OFFSET + targetOffset, numBytes);
   }
 
   private void checkArrayCopy(
@@ -3800,60 +3609,43 @@ public final class MemoryBuffer {
   }
 
   public void copyFromByteArray(int offset, byte[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
-      writeBytesFromArray(address + offset, source, BYTE_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
+    writeBytesFromArray(address + offset, source, BYTE_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public void copyFromBooleanArray(int offset, boolean[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
-      writeBooleansFromArray(
-          address + offset, source, BOOLEAN_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
+    writeBooleansFromArray(address + offset, source, BOOLEAN_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public void copyFromCharArray(int offset, char[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
-      writeCharsFromArray(address + offset, source, CHAR_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
+    writeCharsFromArray(address + offset, source, CHAR_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public void copyFromShortArray(int offset, short[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
-      writeShortsFromArray(address + offset, source, SHORT_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
+    writeShortsFromArray(address + offset, source, SHORT_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public void copyFromIntArray(int offset, int[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
-      writeIntsFromArray(address + offset, source, INT_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
+    writeIntsFromArray(address + offset, source, INT_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public void copyFromLongArray(int offset, long[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
-      writeLongsFromArray(address + offset, source, LONG_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
+    writeLongsFromArray(address + offset, source, LONG_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public void copyFromFloatArray(int offset, float[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
-      writeFloatsFromArray(address + offset, source, FLOAT_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
+    writeFloatsFromArray(address + offset, source, FLOAT_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public void copyFromDoubleArray(int offset, double[] source, int sourceOffset, int numBytes) {
-
-      checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
-      writeDoublesFromArray(address + offset, source, DOUBLE_ARRAY_OFFSET + sourceOffset, numBytes);
-
+    checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
+    writeDoublesFromArray(address + offset, source, DOUBLE_ARRAY_OFFSET + sourceOffset, numBytes);
   }
 
   public byte[] getBytes(int index, int length) {
@@ -4135,7 +3927,6 @@ public final class MemoryBuffer {
 
   public static MemoryBuffer fromDirectByteBuffer(
       ByteBuffer buffer, int size, ForyStreamReader streamReader) {
-
     long offHeapAddress = buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
   }

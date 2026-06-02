@@ -33,7 +33,8 @@ import org.apache.fory.util.ExceptionUtils;
 final class SerializationHookLookup {
   private SerializationHookLookup() {}
 
-  static MethodHandle readResolveHandle(Class<?> type, Method method) throws IllegalAccessException {
+  static MethodHandle readResolveHandle(Class<?> type, Method method)
+      throws IllegalAccessException {
     try {
       return _JDKAccess._trustedLookup(type).unreflect(method);
     } catch (IllegalArgumentException e) {

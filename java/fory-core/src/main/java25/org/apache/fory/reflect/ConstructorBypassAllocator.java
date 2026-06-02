@@ -20,35 +20,31 @@
 package org.apache.fory.reflect;
 
 import java.io.ObjectStreamClass;
-import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
-import java.lang.reflect.InvocationTargetException;
 import org.apache.fory.annotation.Internal;
+import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.util.ExceptionUtils;
 
-/** JDK25 replacement for the JDK8-24 Unsafe allocator. */
+/** JDK25 replacement for the JDK8-24 constructor-bypass allocator. */
 @Internal
-final class UnsafeObjectAllocator {
-  private UnsafeObjectAllocator() {}
+final class ConstructorBypassAllocator {
+  private ConstructorBypassAllocator() {}
 
   static <T> T allocate(Class<T> type) {
-    if (Serializable.class.isAssignableFrom(type)) {
-      try {
-        return type.cast(ObjectStreamClassAccess.newInstance(type));
-      } catch (UnsupportedOperationException e) {
-        throw unsupported(type, e);
-      } catch (InstantiationException e) {
-        throw unsupported(type, e);
-      } catch (InvocationTargetException e) {
-        throw ExceptionUtils.throwException(e.getTargetException());
-      } catch (Throwable e) {
-        throw new ForyException("Failed to create an instance for " + type, e);
-      }
+    try {
+      return type.cast(ObjectStreamClassAccess.newInstance(type));
+    } catch (Throwable e) {
+      throw handleAllocationException(type, e);
     }
-    throw unsupported(type, null);
+  }
+
+  private static RuntimeException handleAllocationException(Class<?> type, Throwable cause) {
+    if (cause instanceof UnsupportedOperationException || cause instanceof InstantiationException) {
+      return unsupported(type, cause);
+    }
+    return new ForyException("Failed to create an instance for " + type, cause);
   }
 
   private static ForyException unsupported(Class<?> type, Throwable cause) {
@@ -63,6 +59,8 @@ final class UnsafeObjectAllocator {
   }
 
   private static final class ObjectStreamClassAccess {
+    private static final ClassValueCache<ObjectStreamClass> CLASSES =
+        ClassValueCache.newClassKeyCache(32);
     private static final MethodHandle NEW_INSTANCE;
     private static final Throwable INIT_ERROR;
 
@@ -85,12 +83,20 @@ final class UnsafeObjectAllocator {
     private static Object newInstance(Class<?> type) throws Throwable {
       MethodHandle handle = NEW_INSTANCE;
       if (handle == null) {
-        throw new ForyException(
-            "JDK25+ Serializable object creation requires java.base/java.lang.invoke to be open "
-                + "to org.apache.fory.core",
-            INIT_ERROR);
+        throw missingLookup();
       }
-      return handle.invoke(ObjectStreamClass.lookupAny(type));
+      return handle.invoke(objectStreamClass(type));
+    }
+
+    private static ObjectStreamClass objectStreamClass(Class<?> type) {
+      return CLASSES.get(type, () -> ObjectStreamClass.lookupAny(type));
+    }
+
+    private static ForyException missingLookup() {
+      return new ForyException(
+          "JDK25+ Serializable object creation requires java.base/java.lang.invoke to be open "
+              + "to org.apache.fory.core",
+          INIT_ERROR);
     }
   }
 }

@@ -21,6 +21,7 @@ package org.apache.fory.integration_tests;
 
 import java.lang.reflect.Field;
 import org.apache.fory.Fory;
+import org.apache.fory.integration_tests.constructor.PrivateConstructorBean;
 import org.apache.fory.integration_tests.model.PrivateFieldBean;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValue;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValueSerializer;
@@ -42,14 +43,21 @@ public class JpmsFieldAccessorTest {
   @Test
   public void testPrivateFinalFieldSerialization() {
     Fory fory =
-        Fory.builder()
-            .withXlang(false)
-            .withCodegen(false)
-            .requireClassRegistration(false)
-            .build();
+        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
     PrivateFieldBean result =
         (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(13)));
     Assert.assertEquals(result.value(), 13);
+  }
+
+  @Test
+  public void testPrivateConstructorBinding() {
+    Fory fory =
+        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
+    PrivateConstructorBean result =
+        (PrivateConstructorBean)
+            fory.deserialize(fory.serialize(PrivateConstructorBean.of("Ada", 37)));
+    Assert.assertEquals(result.name(), "Ada");
+    Assert.assertEquals(result.age(), 37);
   }
 
   @Test

@@ -444,7 +444,7 @@
                         <include name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"/>
                         <include
                             name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/reflect/UnsafeObjectAllocator.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"/>
                         <include name="META-INF/versions/25/module-info.class"/>
                       </patternset>
@@ -477,8 +477,8 @@
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"
                         property="jdk25.hiddenfieldaccessorfactory.present"/>
                     <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/UnsafeObjectAllocator.class"
-                        property="jdk25.unsafeobjectallocator.present"/>
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.class"
+                        property="jdk25.constructorbypassallocator.present"/>
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"
                         property="jdk25.platformstring.present"/>
@@ -513,8 +513,8 @@
                         unless="jdk25.hiddenfieldaccessorfactory.present"
                         message="JDK25 multi-release HiddenFieldAccessorFactory class is missing from the packaged fory-core jar."/>
                     <fail
-                        unless="jdk25.unsafeobjectallocator.present"
-                        message="JDK25 multi-release UnsafeObjectAllocator class is missing from the packaged fory-core jar."/>
+                        unless="jdk25.constructorbypassallocator.present"
+                        message="JDK25 multi-release ConstructorBypassAllocator class is missing from the packaged fory-core jar."/>
                     <fail
                         unless="jdk25.platformstring.present"
                         message="JDK25 multi-release PlatformStringUtils class is missing from the packaged fory-core jar."/>
@@ -559,7 +559,7 @@
                         <include
                             name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.java"/>
                         <include
-                            name="META-INF/versions/25/org/apache/fory/reflect/UnsafeObjectAllocator.java"/>
+                            name="META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"/>
                         <include name="META-INF/versions/25/module-info.java"/>
                       </patternset>
                     </unzip>
@@ -576,8 +576,8 @@
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.java"
                         property="jdk25.hiddenfieldaccessorfactory.source.present"/>
                     <available
-                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/UnsafeObjectAllocator.java"
-                        property="jdk25.unsafeobjectallocator.source.present"/>
+                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"
+                        property="jdk25.constructorbypassallocator.source.present"/>
                     <available
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/module-info.java"
                         property="jdk25.moduleinfo.source.present"/>
@@ -594,8 +594,8 @@
                         unless="jdk25.hiddenfieldaccessorfactory.source.present"
                         message="JDK25 versioned HiddenFieldAccessorFactory source is missing from the source jar."/>
                     <fail
-                        unless="jdk25.unsafeobjectallocator.source.present"
-                        message="JDK25 versioned UnsafeObjectAllocator source is missing from the source jar."/>
+                        unless="jdk25.constructorbypassallocator.source.present"
+                        message="JDK25 versioned ConstructorBypassAllocator source is missing from the source jar."/>
                     <fail
                         unless="jdk25.moduleinfo.source.present"
                         message="JDK25 versioned module-info.java source is missing from the source jar."/>

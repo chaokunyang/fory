@@ -21,11 +21,12 @@ package org.apache.fory.integration_tests.publicserializer;
 
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.serializer.Serializer;
 import org.apache.fory.resolver.TypeResolver;
+import org.apache.fory.serializer.Serializer;
 
 public final class PublicSerializerValueSerializer extends Serializer<PublicSerializerValue> {
-  public PublicSerializerValueSerializer(TypeResolver typeResolver, Class<PublicSerializerValue> type) {
+  public PublicSerializerValueSerializer(
+      TypeResolver typeResolver, Class<PublicSerializerValue> type) {
     super(typeResolver.getConfig(), type);
   }
 

@@ -133,11 +133,11 @@ public class ObjectCreators {
       if (noArgConstructor != null) {
         return new DeclaredNoArgCtrObjectCreator<>(type);
       } else {
-        return new UnsafeObjectCreator<>(type);
+        return new ConstructorBypassObjectCreator<>(type);
       }
     }
     if (noArgConstructor == null) {
-      return new UnsafeObjectCreator<>(type);
+      return new ConstructorBypassObjectCreator<>(type);
     }
     return new DeclaredNoArgCtrObjectCreator<>(type);
   }
@@ -151,8 +151,8 @@ public class ObjectCreators {
       return new UnsupportedObjectCreator<>(
           type, "Android cannot create " + type + " without an accessible no-arg constructor");
     }
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE || JdkVersion.MAJOR_VERSION >= 25) {
-      return new UnsafeObjectCreator<>(type);
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      return new ConstructorBypassObjectCreator<>(type);
     }
     return new ParentNoArgCtrObjectCreator<>(type);
   }
@@ -343,6 +343,10 @@ public class ObjectCreators {
     }
   }
 
+  private static ForyException makeException(Class<?> type, Throwable cause) {
+    return new ForyException("Failed to create instance for " + type, cause);
+  }
+
   private static final class ReflectiveNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
     private final Constructor<T> constructor;
 
@@ -361,7 +365,7 @@ public class ObjectCreators {
       try {
         return constructor.newInstance();
       } catch (Exception e) {
-        throw new ForyException("Failed to create instance using no-arg constructor: " + type, e);
+        throw makeException(type, e);
       }
     }
 
@@ -406,10 +410,8 @@ public class ObjectCreators {
       declaringClasses = match.declaringClasses;
       fieldTypes = match.fieldTypes;
       finalFields = match.finalFields;
-      try {
-        constructor.setAccessible(true);
-      } catch (RuntimeException e) {
-        throw new ForyException("Failed to make constructor accessible for " + type, e);
+      if (handle == null) {
+        makeConstructorAccessible(type, constructor);
       }
     }
 
@@ -458,10 +460,17 @@ public class ObjectCreators {
       return true;
     }
 
+    private static void makeConstructorAccessible(Class<?> type, Constructor<?> constructor) {
+      try {
+        constructor.setAccessible(true);
+      } catch (RuntimeException e) {
+        throw new ForyException("Failed to make constructor accessible for " + type, e);
+      }
+    }
+
     @Override
     public T newInstance() {
-      throw new ForyException(
-          "JDK25 zero-Unsafe mode requires constructor field values to create " + type);
+      throw constructorArgsRequired(type);
     }
 
     @Override
@@ -472,20 +481,25 @@ public class ObjectCreators {
         }
         return (T) handle.invoke(arguments);
       } catch (Throwable e) {
-        throw new ForyException("Failed to create instance using constructor: " + type, e);
+        throw makeException(type, e);
       }
+    }
+
+    private static ForyException constructorArgsRequired(Class<?> type) {
+      return new ForyException(
+          "JDK25 zero-Unsafe mode requires constructor field values to create " + type);
     }
   }
 
-  private static final class UnsafeObjectCreator<T> extends ObjectCreator<T> {
+  private static final class ConstructorBypassObjectCreator<T> extends ObjectCreator<T> {
 
-    public UnsafeObjectCreator(Class<T> type) {
+    public ConstructorBypassObjectCreator(Class<T> type) {
       super(type);
     }
 
     @Override
     public T newInstance() {
-      return UnsafeObjectAllocator.allocate(type);
+      return ConstructorBypassAllocator.allocate(type);
     }
 
     @Override
@@ -507,7 +521,7 @@ public class ObjectCreators {
       try {
         return (T) handle.invoke();
       } catch (Throwable e) {
-        throw new RuntimeException(e);
+        throw makeException(type, e);
       }
     }
 
@@ -558,7 +572,7 @@ public class ObjectCreators {
           return (T) handle.invoke(arguments);
         }
       } catch (Throwable e) {
-        throw new ForyException("Failed to create record instance: " + type, e);
+        throw makeException(type, e);
       }
     }
   }
@@ -572,9 +586,8 @@ public class ObjectCreators {
     public ParentNoArgCtrObjectCreator(Class<T> type) {
       super(type);
       if (JdkVersion.MAJOR_VERSION >= 25) {
-        throw new ForyException(
-            "ReflectionFactory object creation is unavailable in JDK25+ zero-Unsafe mode for "
-                + type);
+        constructor = null;
+        return;
       }
       this.constructor = createSerializationConstructor(type);
     }
@@ -634,11 +647,13 @@ public class ObjectCreators {
 
     @Override
     public T newInstance() {
+      if (constructor == null) {
+        return ConstructorBypassAllocator.allocate(type);
+      }
       try {
         return constructor.newInstance();
       } catch (Exception e) {
-        throw new ForyException(
-            "Failed to create instance, please provide a no-arg constructor for " + type, e);
+        throw makeException(type, e);
       }
     }
 

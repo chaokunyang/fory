@@ -17,18 +17,29 @@
  * under the License.
  */
 
-module org.apache.fory.integration_tests {
-  requires org.apache.fory.core;
-  requires org.apache.fory.format;
-  requires org.apache.fory.test.core;
+package org.apache.fory.integration_tests.constructor;
 
-  // we can't really test any classes from this module because it only contains test-classes
-  requires org.apache.fory.test.suite;
+import org.apache.fory.annotation.ForyConstructor;
 
-  exports org.apache.fory.integration_tests.constructor;
-  exports org.apache.fory.integration_tests.model;
-  exports org.apache.fory.integration_tests.publicserializer;
+public final class PrivateConstructorBean {
+  private final String name;
+  private final int age;
 
-  opens org.apache.fory.integration_tests.model to
-      org.apache.fory.core;
+  @ForyConstructor({"name", "age"})
+  private PrivateConstructorBean(String name, int age) {
+    this.name = name;
+    this.age = age;
+  }
+
+  public static PrivateConstructorBean of(String name, int age) {
+    return new PrivateConstructorBean(name, age);
+  }
+
+  public String name() {
+    return name;
+  }
+
+  public int age() {
+    return age;
+  }
 }

@@ -26,12 +26,12 @@ import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._UnsafeUtils;
 import sun.misc.Unsafe;
 
-/** Internal JDK8-24 allocator used by object creators. */
+/** Internal JDK8-24 constructor-bypass allocator used by object creators. */
 @Internal
-final class UnsafeObjectAllocator {
+final class ConstructorBypassAllocator {
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
 
-  private UnsafeObjectAllocator() {}
+  private ConstructorBypassAllocator() {}
 
   static <T> T allocate(Class<T> type) {
     if (UNSAFE == null || JdkVersion.MAJOR_VERSION >= 25) {

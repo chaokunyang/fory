@@ -25,6 +25,7 @@ import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
@@ -343,8 +344,21 @@ public class ObjectCreators {
     }
   }
 
-  private static ForyException makeException(Class<?> type, Throwable cause) {
-    return new ForyException("Failed to create instance for " + type, cause);
+  private static RuntimeException makeException(Class<?> type, Throwable cause) {
+    Throwable target = unwrapConstructorFailure(cause);
+    // Keep constructor invocation failures outside ForyException so top-level deserialization can
+    // attach the read-object trail before surfacing the error to users.
+    return new RuntimeException("Failed to create instance for " + type, target);
+  }
+
+  private static Throwable unwrapConstructorFailure(Throwable cause) {
+    if (cause instanceof InvocationTargetException) {
+      Throwable target = ((InvocationTargetException) cause).getTargetException();
+      if (target != null) {
+        return target;
+      }
+    }
+    return cause;
   }
 
   private static final class ReflectiveNoArgCtrObjectCreator<T> extends ObjectCreator<T> {

@@ -149,6 +149,97 @@ class ProcessorValidationTest {
   }
 
   @Test
+  fun constructorFieldsAdaptCollections() {
+    val stringType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "String::class.java",
+        kotlinTypeName = "kotlin.String",
+        valueTypeName = "String",
+        typeName = "java.lang.String",
+        typeId = "Types.STRING",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val intType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Int::class.javaPrimitiveType!!",
+        kotlinTypeName = "kotlin.Int",
+        valueTypeName = "Int",
+        typeName = "int32",
+        typeId = "Types.VARINT32",
+        nullable = false,
+        trackingRef = false,
+        primitive = true,
+        unsigned = false,
+      )
+    val mapType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.Map::class.java",
+        kotlinTypeName = "java.util.TreeMap<kotlin.String, kotlin.Int>",
+        valueTypeName = "kotlin.collections.Map<String, Int>",
+        typeName = "java.util.Map",
+        typeId = "Types.MAP",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        collectionFactory = CollectionFactory.TREE_MAP,
+        typeArguments = listOf(stringType, intType),
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "User",
+            qualifiedTypeName = "example.User",
+            serializerName = "User_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "counts",
+                  type = mapType,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "java.util.TreeMap<String, Int>",
+                  constructorParameterName = "counts",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(
+      source.contains("return User(counts = KotlinCollectionAdapters.toTreeMap(field0!!))")
+    )
+    assertTrue(
+      source.contains(
+        "0 -> KotlinCollectionAdapters.toTreeMap((readFieldValue(readContext, fieldInfo) as kotlin.collections.Map<String, Int>))"
+      )
+    )
+    assertTrue(
+      source.contains(
+        "0 -> KotlinCollectionAdapters.toTreeMap((readCompatibleFieldValue(readContext, remoteField, localField) as kotlin.collections.Map<String, Int>))"
+      )
+    )
+    assertTrue(
+      source.contains(
+        "fieldValues[0] = KotlinCollectionAdapters.toTreeMap(run { val copySource0 = value.counts; val copyTarget0 = java.util.LinkedHashMap<Any?, Any?>(copySource0.size);"
+      )
+    )
+    assertFalse(source.contains("fieldValues[0] = copyConstructorFieldValue"))
+  }
+
+  @Test
   fun defaultsUseGeneratedCompatibleRead() {
     val stringType =
       KotlinSourceTypeNode(

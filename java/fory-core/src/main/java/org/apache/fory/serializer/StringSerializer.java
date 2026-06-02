@@ -53,6 +53,8 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       PlatformStringUtils.STRING_VALUE_FIELD_IS_CHARS;
   private static final boolean STRING_VALUE_FIELD_IS_BYTES =
       PlatformStringUtils.STRING_VALUE_FIELD_IS_BYTES;
+  private static final boolean JDK_INTERNAL_FIELD_ACCESS =
+      PlatformStringUtils.JDK_STRING_FIELD_ACCESS;
 
   private static final byte LATIN1 = 0;
   private static final byte UTF16 = 1;
@@ -61,10 +63,6 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   private static final boolean STRING_HAS_COUNT_OFFSET =
       PlatformStringUtils.STRING_HAS_COUNT_OFFSET;
-
-  private static boolean jdkInternalFieldAccess() {
-    return PlatformStringUtils.JDK_STRING_FIELD_ACCESS;
-  }
 
   private final boolean compressString;
   private final boolean writeNumUtf16BytesForUtf8Encoding;
@@ -103,7 +101,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   public static Expression writeStringExpr(
       Expression strSerializer, Expression buffer, Expression str, boolean compressString) {
-    if (!jdkInternalFieldAccess()) {
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
       return new Invoke(strSerializer, "writeString", buffer, str);
     }
     if (STRING_VALUE_FIELD_IS_BYTES) {
@@ -134,7 +132,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   public static Expression readStringExpr(
       Expression strSerializer, Expression buffer, boolean compressString) {
-    if (!jdkInternalFieldAccess()) {
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
       return new Invoke(strSerializer, "readString", STRING_TYPE, buffer);
     }
     if (STRING_VALUE_FIELD_IS_BYTES) {
@@ -301,7 +299,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Invoked by fory JIT
   public void writeString(MemoryBuffer buffer, String value) {
-    if (!jdkInternalFieldAccess()) {
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
       writeStringSlow(buffer, value);
       return;
     }
@@ -335,7 +333,7 @@ public final class StringSerializer extends ImmutableSerializer<String> {
 
   // Invoked by fory JIT
   public String readString(MemoryBuffer buffer) {
-    if (!jdkInternalFieldAccess()) {
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
       return readStringSlow(buffer);
     }
     if (STRING_VALUE_FIELD_IS_BYTES) {

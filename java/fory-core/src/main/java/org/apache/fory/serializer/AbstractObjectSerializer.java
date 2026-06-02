@@ -1303,6 +1303,12 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     checkNoUnresolvedReadRef(readContext, type);
   }
 
+  public static void checkNoUnresolvedReadRef(ReadContext readContext, Class<?> type) {
+    if (consumeSelfRef(readContext)) {
+      throwConstructorCycle(type);
+    }
+  }
+
   protected final Object beginConstructorCopy(CopyContext copyContext, Object originObj) {
     if (!copyContext.copyTrackingRef()) {
       return null;
@@ -1414,12 +1420,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         || name.startsWith("javax.")
         || name.startsWith("jdk.")
         || name.startsWith("sun.");
-  }
-
-  public static void checkNoUnresolvedReadRef(ReadContext readContext, Class<?> type) {
-    if (consumeSelfRef(readContext)) {
-      throwConstructorCycle(type);
-    }
   }
 
   public static void beginConstructorRef(ReadContext readContext) {

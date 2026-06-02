@@ -334,12 +334,13 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     )
     builder.append("    return when (fieldId) {\n")
     for (field in struct.fields) {
-      val expression =
+      val readExpression =
         castReadExpression(
           field,
           "readCompatibleFieldValue(readContext, remoteField, localField)",
           compatible = true,
         )
+      val expression = constructorReadExpression(field, readExpression)
       builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
     }
     builder.append(
@@ -399,12 +400,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       builder
         .append("      fieldValues[")
         .append(field.id)
-        .append("] = copyConstructorFieldValue(copyContext, value, ")
-        .append("value.")
-        .append(field.name)
-        .append(", fieldsById[")
-        .append(field.id)
-        .append("]!!)\n")
+        .append("] = ")
+        .append(constructorCopyExpression(field))
+        .append("\n")
       builder.append("    }\n")
     }
     builder.append(
@@ -548,7 +546,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    return when (fieldId) {\n")
     for (field in struct.fields) {
       val direct = directReadExpression(field)
-      val expression = direct ?: castReadExpression(field, "readFieldValue(readContext, fieldInfo)")
+      val readExpression =
+        direct ?: castReadExpression(field, "readFieldValue(readContext, fieldInfo)")
+      val expression = constructorReadExpression(field, readExpression)
       builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
     }
     builder.append(
@@ -900,6 +900,20 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         )
     }
 
+  private fun constructorCopyExpression(field: KotlinSourceField): String {
+    val expression =
+      when {
+        field.type.primitive || isScalarUnsigned(field) -> "value.${field.name}"
+        isDenseUnsignedArray(field) ->
+          if (field.nullable) "value.${field.name}?.copyOf()" else "value.${field.name}.copyOf()"
+        field.type.isCollectionOrMap() ->
+          copyContainerExpression(field.type, "value.${field.name}", 0)
+        else ->
+          "copyConstructorFieldValue(copyContext, value, value.${field.name}, fieldsById[${field.id}]!!)"
+      }
+    return constructorReadExpression(field, expression)
+  }
+
   private fun writeLocalDeclarations(indent: String = "    ") {
     for (field in struct.fields) {
       builder
@@ -989,12 +1003,16 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       } else {
         "${field.localName}!!"
       }
+    return constructorReadExpression(field, localValue)
+  }
+
+  private fun constructorReadExpression(field: KotlinSourceField, valueExpression: String): String {
     if (field.type.collectionFactory == CollectionFactory.NONE) {
-      return localValue
+      return valueExpression
     }
     val conversion = collectionConversionFunction(field.type.collectionFactory)
-    return if (field.nullable) "$localValue?.let { $conversion(it) }"
-    else "$conversion($localValue)"
+    return if (field.nullable) "($valueExpression)?.let { $conversion(it) }"
+    else "$conversion($valueExpression)"
   }
 
   private fun localVariableType(field: KotlinSourceField): String {

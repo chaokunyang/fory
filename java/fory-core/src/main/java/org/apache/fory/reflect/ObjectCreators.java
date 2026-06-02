@@ -203,16 +203,6 @@ public class ObjectCreators {
         type, (Constructor<T>) annotatedConstructor, annotation.value(), "@ForyConstructor");
   }
 
-  private static boolean isCompilerGeneratedConstructor(Constructor<?> constructor) {
-    if (constructor.isSynthetic()) {
-      return true;
-    }
-    Class<?>[] parameterTypes = constructor.getParameterTypes();
-    return parameterTypes.length > 0
-        && "kotlin.jvm.internal.DefaultConstructorMarker"
-            .equals(parameterTypes[parameterTypes.length - 1].getName());
-  }
-
   static <T> ConstructorMatch<T> explicitConstructor(
       Class<T> type, Constructor<T> constructor, String[] fieldNames, String source) {
     if (isJavaPlatformType(type)) {
@@ -255,6 +245,16 @@ public class ObjectCreators {
               + Arrays.toString(fieldNames));
     }
     return match;
+  }
+
+  private static boolean isCompilerGeneratedConstructor(Constructor<?> constructor) {
+    if (constructor.isSynthetic()) {
+      return true;
+    }
+    Class<?>[] parameterTypes = constructor.getParameterTypes();
+    return parameterTypes.length > 0
+        && "kotlin.jvm.internal.DefaultConstructorMarker"
+            .equals(parameterTypes[parameterTypes.length - 1].getName());
   }
 
   private static boolean isJavaPlatformType(Class<?> type) {

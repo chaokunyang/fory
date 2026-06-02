@@ -224,7 +224,7 @@ public final class Fory implements BaseFory {
               + " after its serializer has been created. Register constructors before calling "
               + "`getSerializer`, `serialize`, `deserialize`, or `copy` for that type.");
     }
-    sharedRegistry.getObjectCreatorRegistry().registerConstructor(type, constructor, fieldNames);
+    sharedRegistry.registerConstructor(type, constructor, fieldNames);
   }
 
   @Override

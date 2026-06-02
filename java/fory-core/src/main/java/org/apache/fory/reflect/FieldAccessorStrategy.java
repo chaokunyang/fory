@@ -165,6 +165,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void copy(Object sourceObject, Object targetObject) {
+      checkObj(sourceObject);
+      checkObj(targetObject);
       switch (accessKind) {
         case BOOLEAN_ACCESS:
           UNSAFE.putBoolean(
@@ -201,6 +203,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void copyObject(Object sourceObject, Object targetObject) {
+      checkObj(sourceObject);
+      checkObj(targetObject);
       if (accessKind == OBJECT_ACCESS) {
         UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
       } else {

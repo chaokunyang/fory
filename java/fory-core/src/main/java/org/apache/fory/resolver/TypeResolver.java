@@ -350,7 +350,7 @@ public abstract class TypeResolver {
    */
   @Internal
   public final <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
-    return sharedRegistry.getObjectCreatorRegistry().getObjectCreator(type);
+    return sharedRegistry.getObjectCreator(type);
   }
 
   /**

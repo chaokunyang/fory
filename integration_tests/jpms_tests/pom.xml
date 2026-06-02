@@ -87,7 +87,6 @@
               <argLine>
                 --sun-misc-unsafe-memory-access=deny
                 --add-opens=java.base/java.lang.invoke=org.apache.fory.core
-                --add-opens=org.apache.fory.core/org.apache.fory.platform.internal=org.apache.fory.integration_tests
                 ${fory.final.field.policy.arg}
               </argLine>
             </configuration>

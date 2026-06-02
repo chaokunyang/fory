@@ -23,7 +23,6 @@ import java.lang.reflect.Field;
 import org.apache.fory.util.Preconditions;
 
 /** Field accessor for primitive types and object types. */
-@SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class FieldAccessor {
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;
@@ -183,10 +182,14 @@ public abstract class FieldAccessor {
     return get(targetObject);
   }
 
-  void checkObj(Object obj) {
-    if (!this.field.getDeclaringClass().isAssignableFrom(obj.getClass())) {
-      throw new IllegalArgumentException("Illegal class " + obj.getClass());
-    }
+  final void checkObj(Object obj) {
+    // Unsafe offset access does not validate the receiver. A wrong receiver is a Fory
+    // programming error, so keep this debug-only instead of adding production hot-path checks.
+    assert field.getDeclaringClass().isInstance(obj) : illegalObject(obj);
+  }
+
+  private String illegalObject(Object obj) {
+    return "Illegal class " + (obj == null ? null : obj.getClass());
   }
 
   @Override

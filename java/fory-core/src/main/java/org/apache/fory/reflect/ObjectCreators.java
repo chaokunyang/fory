@@ -44,13 +44,12 @@ import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.record.RecordUtils;
 
 /**
- * Factory class for creating and caching {@link ObjectCreator} instances.
+ * Factory class for creating {@link ObjectCreator} instances.
  *
  * <p>This class provides a centralized way to obtain optimized object creators for different types.
  * It automatically selects the most appropriate creation strategy based on the target type and
@@ -67,8 +66,10 @@ import org.apache.fory.util.record.RecordUtils;
  *       constructors, and throws when no supported reflective construction path exists
  * </ul>
  *
- * <p>All created ObjectCreator instances are cached using a soft reference cache to improve
- * performance on repeated requests for the same type.
+ * <p>The static {@link #getObjectCreator(Class)} method keeps the legacy process-global cache.
+ * Runtime-owned paths should use {@link
+ * org.apache.fory.resolver.TypeResolver#getObjectCreator(Class)} so constructor registrations and
+ * ObjectStream-compatible creators stay scoped to the Fory runtime.
  *
  * <p><strong>Thread Safety:</strong> This class and all returned ObjectCreator instances are
  * thread-safe and can be safely used across multiple threads concurrently.
@@ -76,8 +77,6 @@ import org.apache.fory.util.record.RecordUtils;
 @SuppressWarnings("unchecked")
 public class ObjectCreators {
   private static final ClassValueCache<ObjectCreator<?>> cache =
-      ClassValueCache.newClassKeySoftCache(8);
-  private static final ClassValueCache<ObjectCreator<?>> objectStreamCache =
       ClassValueCache.newClassKeySoftCache(8);
 
   /**
@@ -97,20 +96,10 @@ public class ObjectCreators {
     return (ObjectCreator<T>) cache.get(type, () -> createObjectCreator(type, null));
   }
 
-  public static <T> ObjectCreator<T> getObjectCreator(TypeResolver typeResolver, Class<T> type) {
-    return typeResolver.getSharedRegistry().getObjectCreatorRegistry().getObjectCreator(type);
-  }
-
-  /**
-   * Returns the creator used by Java ObjectStream-compatible serializers.
-   *
-   * <p>ObjectStream serializers reconstruct an empty instance before applying stream fields.
-   * Serializable class constructors and constructor mappings from {@link ForyConstructor} or {@code
-   * BaseFory.registerConstructor} are not semantically valid for this path.
-   */
+  /** Creates an uncached object creator for runtime-scoped registries. */
   @Internal
-  public static <T> ObjectCreator<T> getObjectStreamCreator(Class<T> type) {
-    return (ObjectCreator<T>) objectStreamCache.get(type, () -> createObjectStreamCreator(type));
+  public static <T> ObjectCreator<T> createObjectCreator(Class<T> type) {
+    return createObjectCreator(type, null);
   }
 
   static <T> ObjectCreator<T> createObjectCreator(
@@ -143,7 +132,16 @@ public class ObjectCreators {
     return new DeclaredNoArgCtrObjectCreator<>(type);
   }
 
-  private static <T> ObjectCreator<T> createObjectStreamCreator(Class<T> type) {
+  /** Creates an uncached constructor-bound object creator for runtime-scoped registries. */
+  @Internal
+  public static <T> ObjectCreator<T> createObjectCreator(
+      Class<T> type, Constructor<T> constructor, String[] fieldNames, String source) {
+    return createObjectCreator(type, explicitConstructor(type, constructor, fieldNames, source));
+  }
+
+  /** Creates an uncached empty-instance creator for Java ObjectStream-compatible serializers. */
+  @Internal
+  public static <T> ObjectCreator<T> createObjectStreamCreator(Class<T> type) {
     if (AndroidSupport.IS_ANDROID) {
       Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type);
       if (noArgConstructor != null) {

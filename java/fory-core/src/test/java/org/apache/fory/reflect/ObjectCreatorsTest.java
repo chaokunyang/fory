@@ -30,6 +30,7 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.ObjectCreators.ParentNoArgCtrObjectCreator;
+import org.apache.fory.resolver.SharedRegistry;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -72,7 +73,7 @@ public class ObjectCreatorsTest {
     if (JdkVersion.MAJOR_VERSION < 9) {
       return;
     }
-    ObjectCreatorRegistry registry = new ObjectCreatorRegistry();
+    SharedRegistry registry = new SharedRegistry();
     Constructor<String> constructor = String.class.getDeclaredConstructor(byte[].class, byte.class);
     Assert.assertThrows(
         ForyException.class,

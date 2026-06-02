@@ -34,7 +34,6 @@ final class ReflectionFieldAccessor extends FieldAccessor {
 
   @Override
   public Object get(Object obj) {
-    checkObj(obj);
     try {
       return field.get(obj);
     } catch (IllegalAccessException | IllegalArgumentException e) {
@@ -44,7 +43,6 @@ final class ReflectionFieldAccessor extends FieldAccessor {
 
   @Override
   public void set(Object obj, Object value) {
-    checkObj(obj);
     try {
       field.set(obj, value);
     } catch (IllegalAccessException | IllegalArgumentException e) {

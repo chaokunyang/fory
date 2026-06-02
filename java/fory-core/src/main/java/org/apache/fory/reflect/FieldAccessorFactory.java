@@ -120,7 +120,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class BooleanGetter extends FieldGetter {
+  private static class BooleanGetter extends FieldGetter {
     private final Predicate getter;
 
     public BooleanGetter(Field field, Predicate getter) {
@@ -141,7 +141,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class ByteGetter extends FieldGetter {
+  private static class ByteGetter extends FieldGetter {
     private final ToByteFunction getter;
 
     public ByteGetter(Field field, ToByteFunction getter) {
@@ -161,7 +161,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class CharGetter extends FieldGetter {
+  private static class CharGetter extends FieldGetter {
     private final ToCharFunction getter;
 
     public CharGetter(Field field, ToCharFunction getter) {
@@ -181,7 +181,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class ShortGetter extends FieldGetter {
+  private static class ShortGetter extends FieldGetter {
     private final ToShortFunction getter;
 
     public ShortGetter(Field field, ToShortFunction getter) {
@@ -201,7 +201,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class IntGetter extends FieldGetter {
+  private static class IntGetter extends FieldGetter {
     private final ToIntFunction getter;
 
     public IntGetter(Field field, ToIntFunction getter) {
@@ -221,7 +221,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class LongGetter extends FieldGetter {
+  private static class LongGetter extends FieldGetter {
     private final ToLongFunction getter;
 
     public LongGetter(Field field, ToLongFunction getter) {
@@ -241,7 +241,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class FloatGetter extends FieldGetter {
+  private static class FloatGetter extends FieldGetter {
     private final ToFloatFunction getter;
 
     public FloatGetter(Field field, ToFloatFunction getter) {
@@ -261,7 +261,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class DoubleGetter extends FieldGetter {
+  private static class DoubleGetter extends FieldGetter {
     private final ToDoubleFunction getter;
 
     public DoubleGetter(Field field, ToDoubleFunction getter) {
@@ -281,7 +281,7 @@ final class FieldAccessorFactory {
     }
   }
 
-  public static class ObjectGetter extends FieldGetter {
+  private static class ObjectGetter extends FieldGetter {
     private final Function getter;
 
     public ObjectGetter(Field field, Function getter) {

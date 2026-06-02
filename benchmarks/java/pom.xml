@@ -270,8 +270,6 @@
                         <include
                           name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"/>
                         <include
-                          name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
-                        <include
                           name="META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"/>
                       </patternset>
                     </unzip>
@@ -294,9 +292,6 @@
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"
                       property="jdk25.benchmark.fieldaccessorstrategy.present"/>
                     <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"
-                      property="jdk25.benchmark.hiddenfieldaccessorfactory.present"/>
-                    <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"
                       property="jdk25.benchmark.platformstring.present"/>
                     <fail
@@ -317,9 +312,6 @@
                     <fail
                       unless="jdk25.benchmark.fieldaccessorstrategy.present"
                       message="JDK25 benchmark jar is missing the versioned FieldAccessorStrategy class."/>
-                    <fail
-                      unless="jdk25.benchmark.hiddenfieldaccessorfactory.present"
-                      message="JDK25 benchmark jar is missing the versioned HiddenFieldAccessorFactory class."/>
                     <fail
                       unless="jdk25.benchmark.platformstring.present"
                       message="JDK25 benchmark jar is missing the versioned PlatformStringUtils class."/>

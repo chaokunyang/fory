@@ -60,6 +60,7 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Put latest-JDK or virtual-thread tests in the latest-JDK test modules with the matching compiler/profile floor, and centralize runtime-version probing in existing compatibility utilities.
 - For JDK25+ zero-Unsafe work, preserve serializer-family selection by type and configuration. Do not switch a type from `ObjectStreamSerializer` or another Fory serializer family to `JavaSerializer`, a JDK stream fallback, or any broad `java.* Serializable` fallback by JDK version or no-arg-constructor shape.
 - JDK25+ zero-Unsafe runtime support is a JPMS named-module design. Fory core must run with `--add-opens=java.base/java.lang.invoke=org.apache.fory.core` so it can obtain the trusted lookup; missing this open is an invalid access configuration, not a reason to open per-package JDK internals or switch serializer/object-creation families. Do not use `ALL-UNNAMED` as the zero-Unsafe verification target.
+- Do not probe JDK25+ trusted-lookup availability and turn `_JDKAccess` field-access booleans false when the required `java.base/java.lang.invoke` open is missing. Keep those access flags true on JDK25+ and let the owning trusted-lookup path raise the configuration error.
 - Keep JDK25+ unsafe-removal implementation invariants in agent/design docs and tests, not user guides. User guides should document user actions such as `--sun-misc-unsafe-memory-access=deny`, `java.base/java.lang.invoke` opens, package opens for user named modules, and public APIs such as `@ForyConstructor` and `BaseFory.registerConstructor(...)`; do not expose internal serializer names, owner-model rationale, or avoided fallback strategies there.
 - JDK25+ zero-Unsafe final-field writes must use a true target-class trusted lookup from the original `IMPL_LOOKUP`, not `IMPL_LOOKUP.in(type)`. JDK26+ normal Fory final-field restoration must pass with `--illegal-final-field-mutation=deny` and must not require `--enable-final-field-mutation`.
 - For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory` or `jdk.internal.reflect.ReflectionFactory`. The shared `ObjectCreators` facade should route ObjectStream-compatible construction through `ParentNoArgCtrObjectCreator`; the replaceable constructor-bypass allocator owns the JDK8-24 Unsafe allocation path and the JDK25+ `ObjectStreamClass.newInstance` path. Serializable classes without a no-arg constructor may use that trusted-lookup owner; non-Serializable classes without a no-arg constructor require `@ForyConstructor`, `BaseFory.registerConstructor(...)`, record construction, or a custom serializer.
@@ -76,6 +77,10 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   non-Serializable superclass no-arg constructor, and private no-arg constructors must be rejected
   instead of made accessible. Package-private no-arg constructors are valid only for same-package
   Serializable subclasses.
+- Runtime object creator caches are `SharedRegistry` state backed by `ConcurrentHashMap`.
+  Registered constructors should store the resulting `ObjectCreator` directly there, not through a
+  soft cache or a separate registry class. Keep ObjectStream-specific creators separate from normal
+  constructor-bound object creators.
 - Root codegen and builder classes that still need Unsafe on JDK8-24 must route symbolic Unsafe
   access through a helper with a Java 25 replacement. Do not leave `_JDKAccess.unsafe()` or
   `sun.misc.Unsafe` references in JDK25-visible classes outside matching `java25` replacements.
@@ -113,8 +118,8 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   with dense access-kind switches, not public primitive/object accessor classes or a JDK25
   `GeneratedAccessor` or hidden-class accessor generation. Do not wrap `VarHandle.get/set` in
   hot-path try/catch blocks and do not call `FieldAccessor.checkObj`; VarHandle validates null and
-  receiver type itself. Root Unsafe offset access still needs explicit receiver validation because
-  Unsafe does not.
+  receiver type itself. Root Unsafe offset access may keep a debug-only `assert` receiver check
+  because Unsafe does not validate the target object; do not add production receiver checks.
 - Keep JDK26 `--illegal-final-field-mutation=deny` scoped to the JPMS runtime tests that prove
   Fory's field-access path. Do not put it in global Maven `JDK_JAVA_OPTIONS`, because build tools
   such as Lombok may perform their own reflective final-field access during compilation.

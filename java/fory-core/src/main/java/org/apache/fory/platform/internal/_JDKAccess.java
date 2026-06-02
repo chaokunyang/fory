@@ -70,27 +70,19 @@ public class _JDKAccess {
       JDK_CONCURRENT_FIELD_ACCESS = false;
       JDK_PROXY_FIELD_ACCESS = false;
     } else if (JdkVersion.MAJOR_VERSION >= 25) {
-      boolean trustedLookupAvailable = trustedLookupAvailable();
-      JDK_INTERNAL_FIELD_ACCESS = trustedLookupAvailable;
-      JDK_LANG_FIELD_ACCESS = trustedLookupAvailable;
-      JDK_COLLECTION_FIELD_ACCESS = trustedLookupAvailable;
-      JDK_CONCURRENT_FIELD_ACCESS = trustedLookupAvailable;
-      JDK_PROXY_FIELD_ACCESS = trustedLookupAvailable;
+      // JDK25+ zero-Unsafe mode requires java.base/java.lang.invoke to be opened to fory-core.
+      // Missing that open is an invalid runtime configuration, not a fallback signal.
+      JDK_INTERNAL_FIELD_ACCESS = true;
+      JDK_LANG_FIELD_ACCESS = true;
+      JDK_COLLECTION_FIELD_ACCESS = true;
+      JDK_CONCURRENT_FIELD_ACCESS = true;
+      JDK_PROXY_FIELD_ACCESS = true;
     } else {
       JDK_INTERNAL_FIELD_ACCESS = true;
       JDK_LANG_FIELD_ACCESS = true;
       JDK_COLLECTION_FIELD_ACCESS = true;
       JDK_CONCURRENT_FIELD_ACCESS = true;
       JDK_PROXY_FIELD_ACCESS = true;
-    }
-  }
-
-  private static boolean trustedLookupAvailable() {
-    try {
-      _Lookup._trustedLookup(Object.class);
-      return true;
-    } catch (Throwable ignored) {
-      return false;
     }
   }
 

@@ -19,6 +19,7 @@
 
 package org.apache.fory.resolver;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Member;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -39,7 +40,8 @@ import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.reflect.ObjectCreatorRegistry;
+import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
@@ -82,7 +84,10 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
-  private final ObjectCreatorRegistry objectCreatorRegistry = new ObjectCreatorRegistry();
+  private final ConcurrentHashMap<Class<?>, ObjectCreator<?>> objectCreatorCache =
+      new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<Class<?>, ObjectCreator<?>> objectStreamCreatorCache =
+      new ConcurrentHashMap<>();
   final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
       new StaticGeneratedSerializerRegistry();
   private final Object metaStringCacheLock = new Object();
@@ -127,8 +132,30 @@ public final class SharedRegistry {
     return existing;
   }
 
-  public ObjectCreatorRegistry getObjectCreatorRegistry() {
-    return objectCreatorRegistry;
+  @SuppressWarnings("unchecked")
+  public <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
+    return (ObjectCreator<T>)
+        objectCreatorCache.computeIfAbsent(type, ObjectCreators::createObjectCreator);
+  }
+
+  /**
+   * Returns the runtime-scoped creator used by Java ObjectStream-compatible serializers.
+   *
+   * <p>ObjectStream reconstruction creates an empty instance before stream fields are read, so
+   * explicit constructor mappings registered for normal object serializers are not semantically
+   * valid for this path.
+   */
+  @SuppressWarnings("unchecked")
+  public <T> ObjectCreator<T> getObjectStreamCreator(Class<T> type) {
+    return (ObjectCreator<T>)
+        objectStreamCreatorCache.computeIfAbsent(type, ObjectCreators::createObjectStreamCreator);
+  }
+
+  public <T> void registerConstructor(
+      Class<T> type, Constructor<T> constructor, String... fieldNames) {
+    objectCreatorCache.put(
+        type,
+        ObjectCreators.createObjectCreator(type, constructor, fieldNames.clone(), "registered"));
   }
 
   TypeInfo cacheRegisteredTypeInfo(Class<?> type, TypeInfo typeInfo) {

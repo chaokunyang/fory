@@ -19,12 +19,7 @@
 
 package org.apache.fory.integration_tests;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
-import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import org.apache.fory.Fory;
 import org.apache.fory.integration_tests.constructor.PrivateConstructorBean;
 import org.apache.fory.integration_tests.model.PrivateFieldBean;
@@ -54,20 +49,6 @@ public class JpmsFieldAccessorTest {
     PrivateFieldBean result =
         (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(13)));
     Assert.assertEquals(result.value(), 13);
-  }
-
-  @Test
-  public void testTrustedLookupFinalWrite() throws Throwable {
-    PrivateFieldBean bean = new PrivateFieldBean(17);
-    MethodHandles.Lookup lookup = trustedLookup(PrivateFieldBean.class);
-    VarHandle handle = lookup.findVarHandle(PrivateFieldBean.class, "value", int.class);
-    handle.set(bean, 19);
-    Assert.assertEquals(bean.value(), 19);
-
-    MethodHandle setter =
-        lookup.findSetter(PrivateFieldBean.class, "value", int.class).asType(setterType());
-    setter.invokeExact(bean, 23);
-    Assert.assertEquals(bean.value(), 23);
   }
 
   @Test
@@ -106,13 +87,4 @@ public class JpmsFieldAccessorTest {
     Assert.assertEquals(result.value, 11);
   }
 
-  private static MethodHandles.Lookup trustedLookup(Class<?> type) throws Exception {
-    Class<?> jdkAccess = Class.forName("org.apache.fory.platform.internal._JDKAccess");
-    Method method = jdkAccess.getMethod("_trustedLookup", Class.class);
-    return (MethodHandles.Lookup) method.invoke(null, type);
-  }
-
-  private static MethodType setterType() {
-    return MethodType.methodType(void.class, PrivateFieldBean.class, int.class);
-  }
 }

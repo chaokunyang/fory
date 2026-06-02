@@ -75,6 +75,7 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
+import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.collection.CollectionSerializers.JDKCompatibleCollectionSerializer;
@@ -990,6 +991,11 @@ public class CollectionSerializersTest extends ForyTestBase {
     if (fory.getConfig().trackingRef()) {
       assertSame(struct2.collection, struct2.set);
     }
+    Map<String, Boolean> synchronizedMap = Collections.synchronizedMap(new HashMap<>());
+    set = Collections.newSetFromMap(synchronizedMap);
+    set.add("a");
+    set.add("b");
+    serDeCheck(fory, set);
   }
 
   @Test
@@ -1052,12 +1058,28 @@ public class CollectionSerializersTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "foryCopyConfig")
-  public void testSetFromMapCopy(Fory fory) {
+  public void testSetFromMapCopy(Fory fory) throws Exception {
     final Set<Object> set = Collections.newSetFromMap(Maps.newConcurrentMap());
     set.add("a");
     set.add("b");
     set.add(Cyclic.create(true));
     copyCheck(fory, set);
+
+    final Map<Object, Boolean> synchronizedMap = Collections.synchronizedMap(new HashMap<>());
+    final Set<Object> synchronizedSet = Collections.newSetFromMap(synchronizedMap);
+    synchronizedSet.add("a");
+    synchronizedSet.add("b");
+    synchronizedSet.add(Cyclic.create(true));
+    Set<?> copied = fory.copy(synchronizedSet);
+    assertEquals(copied, synchronizedSet);
+    if (MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
+      assertEquals(setFromMapBackingMap(copied).getClass(), synchronizedMap.getClass());
+    }
+  }
+
+  private static Map<?, Boolean> setFromMapBackingMap(Set<?> set) throws Exception {
+    Field mapField = set.getClass().getDeclaredField("m");
+    return (Map<?, Boolean>) FieldAccessor.createAccessor(mapField).getObject(set);
   }
 
   @Test(dataProvider = "javaFory")

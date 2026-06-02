@@ -82,23 +82,24 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   such as the Java/Kotlin/Scala install sections and README.
 - JDK25+ zero-Unsafe final-field writes must use a true target-class trusted lookup from the original `IMPL_LOOKUP`, not `IMPL_LOOKUP.in(type)`. JDK26+ normal Fory final-field restoration must pass with `--illegal-final-field-mutation=deny` and must not require `--enable-final-field-mutation`.
 - For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory`, `jdk.unsupported`, or an
-  Unsafe-backed object instantiator. The shared `ObjectInstantiators` facade should route normal JVM
-  no-constructor construction through `ParentNoArgCtrInstantiator`, whose JDK25+ path owns
-  trusted-lookup access to `jdk.internal.reflect.ReflectionFactory` in `java.base`. This must not
-  require `--add-opens=java.base/jdk.internal.reflect=...`; the only JDK25+ platform open remains
-  `java.base/java.lang.invoke=org.apache.fory.core`. ReflectionFactory serialization constructors
-  also support non-Serializable ordinary classes; the normal object-instantiation path must not
-  reject them with ObjectStream-only parent-constructor checks. GraalVM JDK25+ native-image
-  Serializable empty-instance construction is the narrow exception: direct ReflectionFactory
-  serialization constructors can produce `Object` there, so it uses a cached `ObjectStreamClass`
-  and a private `ObjectStreamClass.newInstance` MethodHandle from `_JDKAccess._trustedLookup`. If
-  the instantiator is retained in the native-image heap, the MethodHandle owner may be initialized at
-  build time but the per-type `ObjectStreamClass` descriptor must be cached only at image runtime.
-  `ForyGraalVMFeature` must register the matching serialization constructor target class for each
-  Serializable hierarchy member so runtime-lazy `ObjectStreamClass.lookupAny` can build descriptors
-  for JDK classes such as `TreeMap` and `TreeSet`. Classes unsupported by ReflectionFactory itself
-  require an accessible no-arg constructor, a record canonical constructor path, or a custom
-  serializer.
+  Unsafe-backed object instantiator. Normal JVM no-constructor construction must use the
+  `ObjectInstantiators` ReflectionFactory bypass path with `Object` as the template constructor, so
+  normal Fory field restoration does not inherit ObjectStream-only first-non-Serializable-superclass
+  constructor validation. ObjectStream-compatible serializers own the separate
+  `ParentNoArgCtrInstantiator` path and must keep Java serialization parent-constructor rules. The
+  JDK25+ ReflectionFactory path uses trusted-lookup access to `jdk.internal.reflect.ReflectionFactory`
+  in `java.base` and must not require `--add-opens=java.base/jdk.internal.reflect=...`; the only
+  JDK25+ platform open remains `java.base/java.lang.invoke=org.apache.fory.core`. GraalVM JDK25+
+  native-image Serializable empty-instance construction is the narrow exception: direct
+  ReflectionFactory serialization constructors can produce `Object` there, so it uses a cached
+  `ObjectStreamClass` and a private `ObjectStreamClass.newInstance` MethodHandle from
+  `_JDKAccess._trustedLookup`. If the instantiator is retained in the native-image heap, the
+  MethodHandle owner may be initialized at build time but the per-type `ObjectStreamClass` descriptor
+  must be cached only at image runtime. `ForyGraalVMFeature` must register the matching serialization
+  constructor target class for each Serializable hierarchy member so runtime-lazy
+  `ObjectStreamClass.lookupAny` can build descriptors for JDK classes such as `TreeMap` and
+  `TreeSet`. Classes unsupported by ReflectionFactory itself require an accessible no-arg
+  constructor, a record canonical constructor path, or a custom serializer.
 - `UnsafeObjectInstantiator` is the JDK8-24 Unsafe owner only. It must be a top-level instantiator
   with a Java25 multi-release stub that contains no Unsafe, ObjectStream, ReflectionFactory, or
   constructor-bypass implementation.

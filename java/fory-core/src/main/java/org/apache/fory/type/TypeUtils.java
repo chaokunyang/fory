@@ -872,9 +872,8 @@ public class TypeUtils {
         || ctx.getCustomTypeRegistry().isExtraSupportedType(typeRef)) {
       return false;
     }
-    // Bean shape detection is independent of the later object-creation strategy. Construction may
-    // use a no-arg constructor, record/constructor-field metadata, or the platform empty-instance
-    // owner selected by TypeResolver.
+    // Bean shape detection is independent of the later object-creation strategy. Records use the
+    // record path; ordinary beans are created later by TypeResolver's object-instantiator owner.
     // bean class can be static nested class, but can't be not a non-static inner class
     if (cls.getEnclosingClass() != null && !Modifier.isStatic(cls.getModifiers())) {
       return false;

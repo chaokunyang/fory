@@ -100,6 +100,13 @@ public class _JDKAccess {
     return lookupCache.get(objectClass, () -> _Lookup._trustedLookup(objectClass));
   }
 
+  public static String jdk25AccessMessage() {
+    return "JDK25 zero-Unsafe mode requires java.base/java.lang.invoke to be open to Fory. "
+        + "Use --add-opens=java.base/java.lang.invoke=ALL-UNNAMED when Fory is on the "
+        + "classpath, or --add-opens=java.base/java.lang.invoke=org.apache.fory.core when "
+        + "Fory is on the module path.";
+  }
+
   public static <T> T tryMakeFunction(
       Lookup lookup, MethodHandle handle, Class<T> functionInterface) {
     try {

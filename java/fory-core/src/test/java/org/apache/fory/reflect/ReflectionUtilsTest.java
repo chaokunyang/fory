@@ -113,18 +113,8 @@ public class ReflectionUtilsTest {
   }
 
   @Test
-  public void testGetNoArgConstructor() throws Throwable {
+  public void testGetNoArgConstructor() {
     Constructor ctr = ReflectionUtils.getNoArgConstructor(NoArgConstructor1.class);
     Assert.assertNull(ctr);
-
-    // ReflectionFactory serialization constructors are invoked directly by
-    // ParentNoArgCtrInstantiator.
-    // MethodHandle handle = lookup.unreflectConstructor(ctr);
-    // System.out.println(ctr);
-    // System.out.println(handle);
-    // org.apache.fory.reflect.ReflectionUtilsTest$NoArgConstructor1@4d339552
-    // System.out.println(ctr.newInstance());
-    // java.lang.Object@f0f2775
-    // System.out.println(handle.invoke());
   }
 }

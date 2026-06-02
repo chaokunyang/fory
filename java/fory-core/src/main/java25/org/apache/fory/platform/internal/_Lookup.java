@@ -108,7 +108,6 @@ class _Lookup {
   }
 
   private static String trustedLookupMessage() {
-    return "JDK25 zero-Unsafe mode requires java.base/java.lang.invoke to be open to "
-        + "org.apache.fory.core";
+    return _JDKAccess.jdk25AccessMessage();
   }
 }

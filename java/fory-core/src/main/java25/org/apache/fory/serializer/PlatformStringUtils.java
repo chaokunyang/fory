@@ -91,8 +91,7 @@ final class PlatformStringUtils {
                 : stringLookup.findVarHandle(String.class, "offset", int.class));
       } catch (Throwable e) {
         throw new IllegalStateException(
-            "JDK25+ string internals require java.base/java.lang.invoke to be open to "
-                + "org.apache.fory.core",
+            "JDK25+ string internals are inaccessible. " + _JDKAccess.jdk25AccessMessage(),
             e);
       }
     } catch (NoSuchFieldException e) {

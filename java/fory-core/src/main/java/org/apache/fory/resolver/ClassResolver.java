@@ -50,6 +50,7 @@ import java.util.Date;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -1518,6 +1519,9 @@ public class ClassResolver extends TypeResolver {
         serializerClass = ChildContainerSerializers.getMapSerializerClass(cls);
         if (serializerClass != null) {
           return serializerClass;
+        }
+        if (!isCrossLanguage() && cls == IdentityHashMap.class) {
+          return MapSerializers.IdentityHashMapSerializer.class;
         }
         if (Externalizable.class.isAssignableFrom(cls)
             || requireJavaSerialization(cls)

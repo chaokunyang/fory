@@ -37,7 +37,6 @@ final class SourceField {
   final String readAccess;
   final AccessKind writeAccessKind;
   final String writeAccess;
-  final boolean finalField;
   final boolean hasForyField;
   final int foryFieldId;
   final boolean nullable;
@@ -58,7 +57,6 @@ final class SourceField {
       String readAccess,
       AccessKind writeAccessKind,
       String writeAccess,
-      boolean finalField,
       boolean hasForyField,
       int foryFieldId,
       boolean nullable,
@@ -77,7 +75,6 @@ final class SourceField {
     this.readAccess = readAccess;
     this.writeAccessKind = writeAccessKind;
     this.writeAccess = writeAccess;
-    this.finalField = finalField;
     this.hasForyField = hasForyField;
     this.foryFieldId = foryFieldId;
     this.nullable = nullable;

@@ -348,6 +348,7 @@
                       <classpath>
                         <pathelement location="${project.build.directory}/${uberjar.name}.jar"/>
                       </classpath>
+                      <jvmarg value="--add-opens=java.base/java.lang.invoke=ALL-UNNAMED"/>
                       <jvmarg value="--sun-misc-unsafe-memory-access=deny"/>
                     </java>
                   </target>

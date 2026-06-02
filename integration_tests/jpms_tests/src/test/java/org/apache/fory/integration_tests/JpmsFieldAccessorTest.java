@@ -20,6 +20,10 @@
 package org.apache.fory.integration_tests;
 
 import java.lang.reflect.Field;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import org.apache.fory.Fory;
 import org.apache.fory.integration_tests.model.NonSerializableNoNoArgBean;
 import org.apache.fory.integration_tests.model.PrivateFieldBean;
@@ -64,11 +68,34 @@ public class JpmsFieldAccessorTest {
         Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
     byte[] bytes = fory.serialize(new NonSerializableNoNoArgBean(5, 13));
     NonSerializableNoNoArgBean.resetParentConstructorCalls();
-    NonSerializableNoNoArgBean result =
-        (NonSerializableNoNoArgBean) fory.deserialize(bytes);
+    NonSerializableNoNoArgBean result = (NonSerializableNoNoArgBean) fory.deserialize(bytes);
     Assert.assertEquals(result.parentValue(), 5);
     Assert.assertEquals(result.value(), 13);
     Assert.assertEquals(NonSerializableNoNoArgBean.parentConstructorCalls(), 0);
+  }
+
+  @Test
+  public void testSetFromMapJdkFieldRestore() throws Exception {
+    if (JDK_MAJOR_VERSION < 25) {
+      return;
+    }
+    Fory fory =
+        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
+    Map<String, Boolean> backingMap = Collections.synchronizedMap(new HashMap<>());
+    Set<String> set = Collections.newSetFromMap(backingMap);
+    set.add("alpha");
+    set.add("beta");
+
+    Set<?> result = (Set<?>) fory.deserialize(fory.serialize(set));
+    Assert.assertEquals(result, set);
+    Field mapField = result.getClass().getDeclaredField("m");
+    Object restoredMap = FieldAccessor.createAccessor(mapField).getObject(result);
+    Assert.assertEquals(restoredMap.getClass().getName(), backingMap.getClass().getName());
+
+    Set<?> copied = fory.copy(set);
+    Assert.assertEquals(copied, set);
+    Object copiedMap = FieldAccessor.createAccessor(mapField).getObject(copied);
+    Assert.assertEquals(copiedMap.getClass().getName(), backingMap.getClass().getName());
   }
 
   @Test

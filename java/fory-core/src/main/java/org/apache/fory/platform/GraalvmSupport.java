@@ -118,6 +118,7 @@ public class GraalvmSupport {
     registerDefaultSerializerClass(CollectionSerializers.DefaultJavaCollectionSerializer.class);
     registerDefaultSerializerClass(CollectionSerializer.class);
     registerDefaultSerializerClass(MapSerializers.JDKCompatibleMapSerializer.class);
+    registerDefaultSerializerClass(MapSerializers.IdentityHashMapSerializer.class);
     registerDefaultSerializerClass(MapSerializers.DefaultJavaMapSerializer.class);
     registerDefaultSerializerClass(MapSerializer.class);
     registerDefaultSerializerClass(CodegenSerializer.LazyInitBeanSerializer.class);

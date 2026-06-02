@@ -116,54 +116,6 @@ public class ForyStructProcessorTest {
   }
 
   @Test
-  public void testStaticFinalFields() throws Exception {
-    CompilationResult result =
-        compile(
-            "test.FinalFieldStruct",
-            "package test;\n"
-                + "import org.apache.fory.annotation.ForyStruct;\n"
-                + "@ForyStruct public class FinalFieldStruct {\n"
-                + "  private final String name;\n"
-                + "  private final int age;\n"
-                + "  public String note;\n"
-                + "  public FinalFieldStruct(String name, int age) {\n"
-                + "    this.name = name;\n"
-                + "    this.age = age;\n"
-                + "  }\n"
-                + "  public String getName() { return name; }\n"
-                + "  public int getAge() { return age; }\n"
-                + "}\n");
-    Assert.assertTrue(result.success, result.diagnostics());
-    String generatedSource =
-        result.generatedSource("test/FinalFieldStruct_ForyNativeSerializer.java");
-    Assert.assertFalse(generatedSource.contains("constructorFieldBits"), generatedSource);
-    Assert.assertTrue(generatedSource.contains("setGeneratedFieldValue"), generatedSource);
-    try (URLClassLoader loader = result.classLoader()) {
-      Class<?> type = loader.loadClass("test.FinalFieldStruct");
-      Object value = type.getConstructor(String.class, int.class).newInstance("fory", 12);
-      setField(type, value, "note", "static");
-      Fory fory =
-          Fory.builder()
-              .withXlang(false)
-              .withClassLoader(loader)
-              .withCodegen(false)
-              .requireClassRegistration(false)
-              .build();
-      Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
-      Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
-
-      Object roundTrip = fory.deserialize(fory.serialize(value));
-      Assert.assertEquals(invoke(type, roundTrip, "getName"), "fory");
-      Assert.assertEquals(invoke(type, roundTrip, "getAge"), 12);
-      Assert.assertEquals(getField(type, roundTrip, "note"), "static");
-      Object copied = fory.copy(value);
-      Assert.assertEquals(invoke(type, copied, "getName"), "fory");
-      Assert.assertEquals(invoke(type, copied, "getAge"), 12);
-      Assert.assertEquals(getField(type, copied, "note"), "static");
-    }
-  }
-
-  @Test
   public void testForyDebugAnnotationEmitsGeneratedFieldTracing() throws Exception {
     CompilationResult result =
         compile(

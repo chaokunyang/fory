@@ -57,7 +57,6 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
@@ -579,32 +578,27 @@ public class CollectionSerializers {
   public static final class SetFromMapSerializer extends CollectionSerializer<Set<?>> {
     private static final List EMPTY_COLLECTION_STUB = new ArrayList<>();
 
-    private static final class JvmSetFromMapAccess {
+    private static final class SetFromMapAccess {
       private static final FieldAccessor MAP_ACCESSOR;
+      private static final FieldAccessor KEY_SET_ACCESSOR;
 
       static {
         try {
           Class<?> type = Class.forName("java.util.Collections$SetFromMap");
-          Field mapField = type.getDeclaredField("m");
-          MAP_ACCESSOR = FieldAccessor.createAccessor(mapField);
+          MAP_ACCESSOR = FieldAccessor.createAccessor(type.getDeclaredField("m"));
+          KEY_SET_ACCESSOR = FieldAccessor.createAccessor(type.getDeclaredField("s"));
         } catch (final Exception e) {
           throw new RuntimeException(e);
         }
       }
-    }
 
-    private static final class LegacySetFromMapAccess {
-      private static final FieldAccessor M_ACCESSOR;
-      private static final FieldAccessor S_ACCESSOR;
+      static Map<?, Boolean> map(Set<?> set) {
+        return (Map<?, Boolean>) MAP_ACCESSOR.getObject(set);
+      }
 
-      static {
-        try {
-          Class<?> type = Class.forName("java.util.Collections$SetFromMap");
-          M_ACCESSOR = FieldAccessor.createAccessor(type.getDeclaredField("m"));
-          S_ACCESSOR = FieldAccessor.createAccessor(type.getDeclaredField("s"));
-        } catch (final Exception e) {
-          throw new RuntimeException(e);
-        }
+      static void restore(Set<?> set, Map<?, Boolean> map) {
+        MAP_ACCESSOR.putObject(set, map);
+        KEY_SET_ACCESSOR.putObject(set, map.keySet());
       }
     }
 
@@ -627,17 +621,17 @@ public class CollectionSerializers {
       } else {
         if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
           throw new UnsupportedOperationException(
-              "This runtime cannot read legacy SetFromMap payloads that require hidden JDK field "
+              "This runtime cannot read SetFromMap backing-map payloads that require hidden JDK field "
                   + "restoration");
         }
-        Map map = (Map) mapSerializer.read(readContext);
+        Map<?, Boolean> map = (Map<?, Boolean>) mapSerializer.read(readContext);
         try {
           set = Collections.newSetFromMap(new HashMap<>());
-          LegacySetFromMapAccess.M_ACCESSOR.putObject(set, map);
-          LegacySetFromMapAccess.S_ACCESSOR.putObject(set, map.keySet());
+          SetFromMapAccess.restore(set, map);
         } catch (Throwable e) {
           throw new UnsupportedOperationException(
-              "This runtime cannot restore legacy SetFromMap payloads through final JDK fields", e);
+              "This runtime cannot restore SetFromMap backing-map payloads through final JDK fields",
+              e);
         }
         setNumElements(0);
       }
@@ -648,21 +642,20 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       assert !config.isXlang();
+      return Collections.newSetFromMap(new HashMap(originCollection.size()));
+    }
+
+    @Override
+    public Set<?> copy(CopyContext copyContext, Set<?> originCollection) {
       if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
-        if (JdkVersion.MAJOR_VERSION >= 25) {
-          throw unsupportedJdk25SetFromMap(null);
-        }
-        return Collections.newSetFromMap(new HashMap(originCollection.size()));
+        return (Set<?>) super.copy(copyContext, originCollection);
       }
-      Map<?, Boolean> map =
-          (Map<?, Boolean>) JvmSetFromMapAccess.MAP_ACCESSOR.getObject(originCollection);
-      MapLikeSerializer mapSerializer =
-          (MapLikeSerializer) typeResolver.getSerializer(map.getClass());
-      if (JdkVersion.MAJOR_VERSION >= 25 && !mapSerializer.supportCodegenHook) {
-        throw unsupportedJdk25SetFromMap(map.getClass());
-      }
-      Map newMap = mapSerializer.newMap(copyContext, map);
-      return Collections.newSetFromMap(newMap);
+      Map<?, Boolean> map = SetFromMapAccess.map(originCollection);
+      Set<?> result = Collections.newSetFromMap(new HashMap<>());
+      copyContext.reference(originCollection, result);
+      Map<?, Boolean> newMap = copyContext.copyObject(map);
+      SetFromMapAccess.restore(result, newMap);
+      return result;
     }
 
     @Override
@@ -671,9 +664,6 @@ public class CollectionSerializers {
       Map<?, Boolean> map;
       TypeInfo typeInfo;
       if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
-        if (JdkVersion.MAJOR_VERSION >= 25) {
-          throw unsupportedJdk25SetFromMap(null);
-        }
         HashMap source = new HashMap<>(value.size());
         for (Object element : value) {
           source.put(element, Boolean.TRUE);
@@ -681,15 +671,10 @@ public class CollectionSerializers {
         map = source;
         typeInfo = typeResolver.getTypeInfo(HashMap.class);
       } else {
-        map = (Map<?, Boolean>) JvmSetFromMapAccess.MAP_ACCESSOR.getObject(value);
+        map = SetFromMapAccess.map(value);
         typeInfo = typeResolver.getTypeInfo(map.getClass());
       }
       MapLikeSerializer mapSerializer = (MapLikeSerializer) typeInfo.getSerializer();
-      // The legacy payload restores Collections$SetFromMap by writing its final JDK fields.
-      // JDK25 zero-Unsafe mode cannot do that, so unsupported backing maps must fail before write.
-      if (JdkVersion.MAJOR_VERSION >= 25 && !mapSerializer.supportCodegenHook) {
-        throw unsupportedJdk25SetFromMap(map.getClass());
-      }
       typeResolver.writeTypeInfo(writeContext, typeInfo);
       if (mapSerializer.supportCodegenHook) {
         buffer.writeBoolean(true);
@@ -700,16 +685,6 @@ public class CollectionSerializers {
         mapSerializer.write(writeContext, map);
         return EMPTY_COLLECTION_STUB;
       }
-    }
-
-    private static UnsupportedOperationException unsupportedJdk25SetFromMap(Class<?> mapType) {
-      String mapDescription = mapType == null ? "an inaccessible backing map" : mapType.getName();
-      return new UnsupportedOperationException(
-          "JDK25+ zero-Unsafe mode cannot serialize Collections.newSetFromMap backed by "
-              + mapDescription
-              + " because that would require hidden final JDK field restoration. Use a backing "
-              + "map with public-constructor serialization support or register a custom "
-              + "serializer.");
     }
   }
 

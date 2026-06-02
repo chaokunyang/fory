@@ -34,6 +34,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -116,6 +117,24 @@ public class MapSerializers {
     @Override
     public Map newMap(Map map) {
       return new LinkedHashMap(map.size());
+    }
+  }
+
+  public static final class IdentityHashMapSerializer
+      extends JDKCompatibleMapSerializer<IdentityHashMap> {
+    public IdentityHashMapSerializer(TypeResolver typeResolver) {
+      super(typeResolver, IdentityHashMap.class);
+    }
+
+    @Override
+    public IdentityHashMap copy(CopyContext copyContext, IdentityHashMap value) {
+      IdentityHashMap copy = new IdentityHashMap(value.size());
+      copyContext.reference(value, copy);
+      for (Object entryObject : value.entrySet()) {
+        Entry entry = (Entry) entryObject;
+        copy.put(copyContext.copyObject(entry.getKey()), copyContext.copyObject(entry.getValue()));
+      }
+      return copy;
     }
   }
 

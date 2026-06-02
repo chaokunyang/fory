@@ -25,6 +25,7 @@ import static org.testng.Assert.assertNotSame;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import lombok.Data;
 import org.apache.fory.Fory;
@@ -204,6 +205,34 @@ public class ObjectSerializerTest extends ForyTestBase {
     }
   }
 
+  public static class PrivateNoArgParent {
+    static int noArgCalls;
+    private final String parentName;
+
+    private PrivateNoArgParent() {
+      noArgCalls++;
+      parentName = "no-arg";
+    }
+
+    PrivateNoArgParent(String parentName) {
+      this.parentName = parentName;
+    }
+
+    String parentName() {
+      return parentName;
+    }
+  }
+
+  public static final class SerializablePrivateParentBean extends PrivateNoArgParent
+      implements Serializable {
+    private String childName;
+
+    public SerializablePrivateParentBean(String parentName, String childName) {
+      super(parentName);
+      this.childName = childName;
+    }
+  }
+
   @Test
   public void testFinalNoArgRestore() {
     FinalNoArgBean value = new FinalNoArgBean(7, "source", 9);
@@ -278,6 +307,30 @@ public class ObjectSerializerTest extends ForyTestBase {
     FinalPostCtorBean newValue = roundTripWithSerializer(fory, serializer, value);
     assertEquals(newValue.id, value.id);
     assertEquals(newValue.label, value.label);
+  }
+
+  @Test
+  public void testNormalObjectSerializerBypassesObjectStreamParentRules() {
+    SerializablePrivateParentBean value = new SerializablePrivateParentBean("parent", "child");
+    for (boolean codegen : new boolean[] {false, true}) {
+      PrivateNoArgParent.noArgCalls = 0;
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .withRefTracking(true)
+              .withCodegen(codegen)
+              .requireClassRegistration(false)
+              .build();
+      Serializer<?> serializer =
+          fory.getTypeResolver().getTypeInfo(SerializablePrivateParentBean.class).getSerializer();
+      Assert.assertFalse(
+          serializer instanceof ObjectStreamSerializer, serializer.getClass().getName());
+      SerializablePrivateParentBean newValue =
+          (SerializablePrivateParentBean) fory.deserialize(fory.serialize(value));
+      assertEquals(newValue.parentName(), value.parentName());
+      assertEquals(newValue.childName, value.childName);
+      assertEquals(PrivateNoArgParent.noArgCalls, 0);
+    }
   }
 
   private static <T> T roundTripWithSerializer(Fory fory, Serializer<T> serializer, T value) {

@@ -117,7 +117,7 @@ public class ObjectInstantiators {
     }
     if (noArgConstructor == null) {
       if (JdkVersion.MAJOR_VERSION >= 25) {
-        return new ParentNoArgCtrInstantiator<>(type);
+        return new ReflectionFactoryInstantiator<>(type);
       }
       return new UnsafeObjectInstantiator<>(type);
     }
@@ -337,6 +337,48 @@ public class ObjectInstantiators {
     }
   }
 
+  static final class ReflectionFactoryInstantiator<T> extends ObjectInstantiator<T> {
+    private static final Constructor<?> OBJECT_CONSTRUCTOR = objectConstructor();
+    private final Constructor<T> constructor;
+
+    ReflectionFactoryInstantiator(Class<T> type) {
+      super(type);
+      constructor = createBypassConstructor(type);
+    }
+
+    private static Constructor<?> objectConstructor() {
+      try {
+        return Object.class.getDeclaredConstructor();
+      } catch (NoSuchMethodException e) {
+        throw new ExceptionInInitializerError(e);
+      }
+    }
+
+    private static <T> Constructor<T> createBypassConstructor(Class<T> type) {
+      try {
+        return (Constructor<T>)
+            ReflectionFactoryAccess.newConstructorForSerialization(type, OBJECT_CONSTRUCTOR);
+      } catch (Throwable e) {
+        throw new ForyException(
+            "Failed to create constructor-bypassing instantiator for " + type, e);
+      }
+    }
+
+    @Override
+    public T newInstance() {
+      try {
+        return constructor.newInstance();
+      } catch (Exception e) {
+        throw makeException(type, e);
+      }
+    }
+
+    @Override
+    public T newInstanceWithArguments(Object... arguments) {
+      throw new UnsupportedOperationException();
+    }
+  }
+
   public static final class ParentNoArgCtrInstantiator<T> extends ObjectInstantiator<T> {
     private final Constructor<T> constructor;
 
@@ -359,10 +401,7 @@ public class ObjectInstantiators {
     private static Constructor<?> findSerializationConstructor(Class<?> type)
         throws NoSuchMethodException {
       if (!Serializable.class.isAssignableFrom(type)) {
-        // ReflectionFactory can synthesize serialization constructors for ordinary classes too.
-        // Use Object as the template so normal Fory object creation keeps empty-instance
-        // semantics and never depends on the target class hierarchy exposing a no-arg constructor.
-        return Object.class.getDeclaredConstructor();
+        throw new ForyException("ObjectStream instantiation requires Serializable type " + type);
       }
       Class<?> current = type.getSuperclass();
       // Java ObjectStream reconstruction skips every Serializable class constructor and invokes
@@ -409,43 +448,43 @@ public class ObjectInstantiators {
     public T newInstanceWithArguments(Object... arguments) {
       throw new UnsupportedOperationException();
     }
+  }
 
-    private static final class ReflectionFactoryAccess {
-      private static final Object REFLECTION_FACTORY;
-      private static final MethodHandle NEW_CONSTRUCTOR_FOR_SERIALIZATION;
+  private static final class ReflectionFactoryAccess {
+    private static final Object REFLECTION_FACTORY;
+    private static final MethodHandle NEW_CONSTRUCTOR_FOR_SERIALIZATION;
 
-      static {
-        try {
-          Class<?> reflectionFactoryClass = reflectionFactoryClass();
-          MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(reflectionFactoryClass);
-          MethodHandle getReflectionFactory =
-              lookup.findStatic(
-                  reflectionFactoryClass,
-                  "getReflectionFactory",
-                  MethodType.methodType(reflectionFactoryClass));
-          REFLECTION_FACTORY = getReflectionFactory.invoke();
-          NEW_CONSTRUCTOR_FOR_SERIALIZATION =
-              lookup.findVirtual(
-                  reflectionFactoryClass,
-                  "newConstructorForSerialization",
-                  MethodType.methodType(Constructor.class, Class.class, Constructor.class));
-        } catch (Throwable e) {
-          throw new ExceptionInInitializerError(e);
-        }
+    static {
+      try {
+        Class<?> reflectionFactoryClass = reflectionFactoryClass();
+        MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(reflectionFactoryClass);
+        MethodHandle getReflectionFactory =
+            lookup.findStatic(
+                reflectionFactoryClass,
+                "getReflectionFactory",
+                MethodType.methodType(reflectionFactoryClass));
+        REFLECTION_FACTORY = getReflectionFactory.invoke();
+        NEW_CONSTRUCTOR_FOR_SERIALIZATION =
+            lookup.findVirtual(
+                reflectionFactoryClass,
+                "newConstructorForSerialization",
+                MethodType.methodType(Constructor.class, Class.class, Constructor.class));
+      } catch (Throwable e) {
+        throw new ExceptionInInitializerError(e);
       }
+    }
 
-      private static Class<?> reflectionFactoryClass() throws ClassNotFoundException {
-        if (JdkVersion.MAJOR_VERSION >= 25) {
-          return Class.forName("jdk.internal.reflect.ReflectionFactory");
-        }
-        return Class.forName("sun.reflect.ReflectionFactory");
+    private static Class<?> reflectionFactoryClass() throws ClassNotFoundException {
+      if (JdkVersion.MAJOR_VERSION >= 25) {
+        return Class.forName("jdk.internal.reflect.ReflectionFactory");
       }
+      return Class.forName("sun.reflect.ReflectionFactory");
+    }
 
-      private static Constructor<?> newConstructorForSerialization(
-          Class<?> type, Constructor<?> parentConstructor) throws Throwable {
-        return (Constructor<?>)
-            NEW_CONSTRUCTOR_FOR_SERIALIZATION.invoke(REFLECTION_FACTORY, type, parentConstructor);
-      }
+    private static Constructor<?> newConstructorForSerialization(
+        Class<?> type, Constructor<?> parentConstructor) throws Throwable {
+      return (Constructor<?>)
+          NEW_CONSTRUCTOR_FOR_SERIALIZATION.invoke(REFLECTION_FACTORY, type, parentConstructor);
     }
   }
 }

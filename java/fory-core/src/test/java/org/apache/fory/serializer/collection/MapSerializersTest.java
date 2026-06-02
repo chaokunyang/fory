@@ -40,6 +40,7 @@ import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -176,14 +177,15 @@ public class MapSerializersTest extends ForyTestBase {
     // testTreeMap
     TreeMap<String, String> map =
         new TreeMap<>(
-            (s1, s2) -> {
-              int delta = s1.length() - s2.length();
-              if (delta == 0) {
-                return s1.compareTo(s2);
-              } else {
-                return delta;
-              }
-            });
+            (Comparator<? super String> & Serializable)
+                (s1, s2) -> {
+                  int delta = s1.length() - s2.length();
+                  if (delta == 0) {
+                    return s1.compareTo(s2);
+                  } else {
+                    return delta;
+                  }
+                });
     map.put("str1", "1");
     map.put("str2", "1");
     assertEquals(map, serDe(fory, map));
@@ -379,14 +381,15 @@ public class MapSerializersTest extends ForyTestBase {
             .build();
     TreeMap<String, String> map =
         new TreeMap<>(
-            (s1, s2) -> {
-              int delta = s1.length() - s2.length();
-              if (delta == 0) {
-                return s1.compareTo(s2);
-              } else {
-                return delta;
-              }
-            });
+            (Comparator<? super String> & Serializable)
+                (s1, s2) -> {
+                  int delta = s1.length() - s2.length();
+                  if (delta == 0) {
+                    return s1.compareTo(s2);
+                  } else {
+                    return delta;
+                  }
+                });
     map.put("str1", "1");
     map.put("str2", "1");
     assertEquals(map, serDe(fory, map));
@@ -398,19 +401,58 @@ public class MapSerializersTest extends ForyTestBase {
   public void testTreeMap(Fory fory) {
     TreeMap<String, String> map =
         new TreeMap<>(
-            (s1, s2) -> {
-              int delta = s1.length() - s2.length();
-              if (delta == 0) {
-                return s1.compareTo(s2);
-              } else {
-                return delta;
-              }
-            });
+            (Comparator<? super String> & Serializable)
+                (s1, s2) -> {
+                  int delta = s1.length() - s2.length();
+                  if (delta == 0) {
+                    return s1.compareTo(s2);
+                  } else {
+                    return delta;
+                  }
+                });
     map.put("str1", "1");
     map.put("str2", "1");
     copyCheck(fory, map);
     BeanForMap beanForMap = new BeanForMap();
     copyCheck(fory, beanForMap);
+  }
+
+  @Test
+  public void testIdentityHashMapSerializer() {
+    Fory fory =
+        builder().withXlang(false).withRefTracking(true).requireClassRegistration(false).build();
+    Assert.assertEquals(
+        fory.getTypeResolver().getSerializerClass(IdentityHashMap.class),
+        MapSerializers.IdentityHashMapSerializer.class);
+    Assert.assertTrue(
+        MapSerializers.JDKCompatibleMapSerializer.class.isAssignableFrom(
+            MapSerializers.IdentityHashMapSerializer.class));
+
+    IdentityHashMap<Object, Object> map = newIdentityHashMap();
+    IdentityHashMap<?, ?> restored = (IdentityHashMap<?, ?>) serDe(fory, map);
+    assertIdentityHashMap(restored);
+
+    IdentityHashMap<?, ?> copied = fory.copy(map);
+    Assert.assertNotSame(copied, map);
+    assertIdentityHashMap(copied);
+  }
+
+  private static IdentityHashMap<Object, Object> newIdentityHashMap() {
+    IdentityHashMap<Object, Object> map = new IdentityHashMap<>();
+    map.put(new String("a"), "first");
+    map.put(new String("a"), "second");
+    return map;
+  }
+
+  private static void assertIdentityHashMap(IdentityHashMap<?, ?> map) {
+    Assert.assertEquals(map.size(), 2);
+    int equalAKeys = 0;
+    for (Object key : map.keySet()) {
+      if ("a".equals(key)) {
+        equalAKeys++;
+      }
+    }
+    Assert.assertEquals(equalAKeys, 2);
   }
 
   @Test

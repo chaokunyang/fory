@@ -88,10 +88,7 @@ public final class InstanceFieldAccessors {
 
   private static IllegalStateException accessFailure(Field field, Throwable cause) {
     return new IllegalStateException(
-        "Cannot access field "
-            + field
-            + ". JDK25 zero-Unsafe mode requires java.base/java.lang.invoke to be open "
-            + "to org.apache.fory.core",
+        "Cannot access field " + field + ". " + _JDKAccess.jdk25AccessMessage(),
         cause);
   }
 

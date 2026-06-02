@@ -320,11 +320,7 @@ final class StaticSerializerSourceWriter {
     for (SourceField field : struct.fields) {
       builder.append("        case ").append(field.id).append(":\n");
       if (canEmitDirectReadField(field)) {
-        if (field.finalField) {
-          appendFinalDirectRead(field, "value", "fieldInfo");
-        } else {
-          appendDirectRead(field);
-        }
+        appendDirectRead(field);
       } else {
         String fieldValueName = "fieldValue" + field.id;
         if (hasDirectReadField()) {
@@ -337,17 +333,10 @@ final class StaticSerializerSourceWriter {
         } else {
           fieldValueName = "fieldValue";
         }
-        builder.append("          ");
-        if (field.finalField) {
-          builder
-              .append("setGeneratedFieldValue(value, fieldInfo, ")
-              .append(field.castExpression(fieldValueName))
-              .append(");\n");
-        } else {
-          builder
-              .append(field.writeStatement("value", field.castExpression(fieldValueName)))
-              .append("\n");
-        }
+        builder
+            .append("          ")
+            .append(field.writeStatement("value", field.castExpression(fieldValueName)))
+            .append("\n");
       }
       builder.append("          break;\n");
     }
@@ -477,75 +466,6 @@ final class StaticSerializerSourceWriter {
       return;
     }
     builder.append("          ").append(field.writeStatement("value", exactRead)).append("\n");
-  }
-
-  private void appendFinalDirectRead(SourceField field, String targetName, String fieldInfoName) {
-    if (canEmitDirectStringField(field)) {
-      builder
-          .append("          setGeneratedFieldValue(")
-          .append(targetName)
-          .append(", ")
-          .append(fieldInfoName)
-          .append(", readContext.readString());\n");
-      return;
-    }
-    if (canEmitDirectArrayField(field)) {
-      builder.append("          readContext.preserveRefId(-1);\n");
-      builder
-          .append("          setGeneratedFieldValue(")
-          .append(targetName)
-          .append(", ")
-          .append(fieldInfoName)
-          .append(", ")
-          .append(field.castExpression("readContext.readNonRef(fieldInfo.typeInfo)"))
-          .append(");\n");
-      return;
-    }
-    String exactRead = exactPrimitiveReadExpression(field);
-    if (exactRead == null) {
-      appendFinalPrimitiveReadSwitch(field, targetName, fieldInfoName);
-      return;
-    }
-    builder
-        .append("          setGeneratedFieldValue(")
-        .append(targetName)
-        .append(", ")
-        .append(fieldInfoName)
-        .append(", ")
-        .append(exactRead)
-        .append(");\n");
-  }
-
-  private void appendFinalPrimitiveReadSwitch(
-      SourceField field, String targetName, String fieldInfoName) {
-    builder.append("          switch (fieldInfo.dispatchId) {\n");
-    String[][] cases = primitiveReadCases(field);
-    for (String[] readCase : cases) {
-      builder.append("            case DispatchId.").append(readCase[0]).append(":\n");
-      builder
-          .append("              setGeneratedFieldValue(")
-          .append(targetName)
-          .append(", ")
-          .append(fieldInfoName)
-          .append(", ")
-          .append(readCase[1])
-          .append(");\n");
-      builder.append("              break;\n");
-    }
-    builder.append("            default:\n");
-    builder
-        .append("              Object fieldValue")
-        .append(field.id)
-        .append(" = readBuildInFieldValue(readContext, fieldInfo);\n");
-    builder
-        .append("              setGeneratedFieldValue(")
-        .append(targetName)
-        .append(", ")
-        .append(fieldInfoName)
-        .append(", ")
-        .append(field.castExpression("fieldValue" + field.id))
-        .append(");\n");
-    builder.append("          }\n");
   }
 
   private void appendPrimitiveReadSwitch(SourceField field) {
@@ -913,19 +833,10 @@ final class StaticSerializerSourceWriter {
           .append(field.id)
           .append("]);\n");
       appendDebugRemoteRead("after read", "remoteField", 10);
-      builder.append("          ");
-      if (field.finalField) {
-        builder
-            .append("setGeneratedFieldValue(value, fieldsById[")
-            .append(field.id)
-            .append("], ")
-            .append(field.castExpression("fieldValue"))
-            .append(");\n");
-      } else {
-        builder
-            .append(field.writeStatement("value", field.castExpression("fieldValue")))
-            .append("\n");
-      }
+      builder
+          .append("          ")
+          .append(field.writeStatement("value", field.castExpression("fieldValue")))
+          .append("\n");
       builder.append("        } else {\n");
       appendDebugRemoteRead("before skip", "remoteField", 10);
       builder.append("          skipField(readContext, remoteField);\n");
@@ -1085,23 +996,17 @@ final class StaticSerializerSourceWriter {
       builder.append("    ").append(struct.typeName).append(" copied = newBean();\n");
       builder.append("    copyContext.reference(value, copied);\n");
       for (SourceField field : struct.fields) {
-        String copiedExpression =
-            field.castExpression(
-                "copyFieldValue(copyContext, "
-                    + field.readExpression("value")
-                    + ", fieldsById["
-                    + field.id
-                    + "])");
         builder
             .append("    ")
             .append(
-                field.finalField
-                    ? "setGeneratedFieldValue(copied, fieldsById["
-                        + field.id
-                        + "], "
-                        + copiedExpression
-                        + ");"
-                    : field.writeStatement("copied", copiedExpression))
+                field.writeStatement(
+                    "copied",
+                    field.castExpression(
+                        "copyFieldValue(copyContext, "
+                            + field.readExpression("value")
+                            + ", fieldsById["
+                            + field.id
+                            + "])")))
             .append("\n");
       }
       builder.append("    return copied;\n");

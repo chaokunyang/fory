@@ -144,12 +144,11 @@ public class DefineClass {
     if (cause instanceof Error) {
       throw (Error) cause;
     }
-    return new IllegalStateException(
-        "Cannot define hidden nestmate for "
-            + neighbor.getName()
-            + ". JDK25+ generated serializers require java.base/java.lang.invoke to be open to "
-            + "org.apache.fory.core.",
-        cause);
+    String message = "Cannot define hidden nestmate for " + neighbor.getName() + ".";
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      message += " " + _JDKAccess.jdk25AccessMessage();
+    }
+    return new IllegalStateException(message, cause);
   }
 
   private static final class HiddenClassDefiner {

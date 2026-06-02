@@ -81,8 +81,8 @@ public final class ExceptionSerializers {
         throw new ForyException(
             "Throwable serialization for JDK type "
                 + type.getName()
-                + " with subclass fields requires JDK internal field access. On JDK25+, open "
-                + "java.base/java.lang.invoke to org.apache.fory.core.");
+                + " with subclass fields requires JDK internal field access. "
+                + jdkFieldAccessMessage());
       }
       // Native-image runtime must rebuild slot serializers once so field accessors and
       // descriptors are created against the runtime heap layout instead of reusing
@@ -140,7 +140,7 @@ public final class ExceptionSerializers {
             "Deserializing Throwable type "
                 + type.getName()
                 + " without a String message constructor requires JDK internal field access. "
-                + "On JDK25+, open java.base/java.lang.invoke to org.apache.fory.core.");
+                + jdkFieldAccessMessage());
       }
       int refId = readContext.lastPreservedRefId();
       if (refId >= 0) {
@@ -154,8 +154,8 @@ public final class ExceptionSerializers {
         throw new ForyException(
             "Deserializing cyclic Throwable references for type "
                 + type.getName()
-                + " requires JDK internal field access. On JDK25+, open java.base/java.lang.invoke "
-                + "to org.apache.fory.core.");
+                + " requires JDK internal field access. "
+                + jdkFieldAccessMessage());
       }
       T obj = newThrowableWithMessage(detailMessage);
       readContext.reference(obj);
@@ -221,6 +221,13 @@ public final class ExceptionSerializers {
     private void writeNumClassLayers(MemoryBuffer buffer, Serializer[] slotsSerializers) {
       buffer.writeVarUInt32Small7(slotsSerializers.length);
     }
+  }
+
+  private static String jdkFieldAccessMessage() {
+    if (!AndroidSupport.IS_ANDROID && JdkVersion.MAJOR_VERSION >= 25) {
+      return _JDKAccess.jdk25AccessMessage();
+    }
+    return "This Throwable shape is unsupported on runtimes without JDK internal field access.";
   }
 
   public static final class StackTraceElementSerializer extends Serializer<StackTraceElement> {

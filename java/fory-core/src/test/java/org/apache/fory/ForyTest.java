@@ -108,6 +108,33 @@ public class ForyTest extends ForyTestBase {
     Assert.assertSame(fory.copy(comparator), comparator);
   }
 
+  @Test
+  public void testRegistrationFreezesOnUse() {
+    byte[] bytes = newNativeFory().serialize(1);
+
+    Fory writer = newNativeFory();
+    writer.serialize(1);
+    assertRegistrationFrozen(writer);
+
+    Fory reader = newNativeFory();
+    reader.deserialize(bytes);
+    assertRegistrationFrozen(reader);
+
+    Fory copier = newNativeFory();
+    copier.copy(1);
+    assertRegistrationFrozen(copier);
+  }
+
+  private static Fory newNativeFory() {
+    return Fory.builder().withXlang(false).requireClassRegistration(false).build();
+  }
+
+  private static void assertRegistrationFrozen(Fory fory) {
+    assertThrows(ForyException.class, () -> fory.register(BeanA.class));
+    assertThrows(
+        ForyException.class, () -> fory.registerSerializer(BeanA.class, ObjectSerializer.class));
+  }
+
   @Test(dataProvider = "crossLanguageReferenceTrackingConfig")
   public void primitivesTest(boolean referenceTracking, boolean xlang) {
     Fory fory1 =

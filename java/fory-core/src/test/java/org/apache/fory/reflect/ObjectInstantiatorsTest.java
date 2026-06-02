@@ -27,8 +27,7 @@ import java.util.concurrent.ArrayBlockingQueue;
 import org.apache.fory.TestUtils;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.reflect.ObjectInstantiators.ParentNoArgCtrInstantiator;
+import org.apache.fory.reflect.ObjectInstantiators.ReflectionFactoryInstantiator;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -64,25 +63,19 @@ public class ObjectInstantiatorsTest {
 
   @Test
   public void testObjectInstantiator() {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      return;
-    }
-    ParentNoArgCtrInstantiator<ArrayBlockingQueue> instantiator =
-        new ParentNoArgCtrInstantiator<>(ArrayBlockingQueue.class);
+    ReflectionFactoryInstantiator<ArrayBlockingQueue> instantiator =
+        new ReflectionFactoryInstantiator<>(ArrayBlockingQueue.class);
     Assert.assertEquals(instantiator.newInstance().getClass(), ArrayBlockingQueue.class);
     Assert.assertEquals(
-        new ParentNoArgCtrInstantiator<>(NoCtrTestClass.class).newInstance().getClass(),
+        new ReflectionFactoryInstantiator<>(NoCtrTestClass.class).newInstance().getClass(),
         NoCtrTestClass.class);
   }
 
   @Test
   public void testNonSerializableInstantiator() {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      return;
-    }
     NonSerializableParentWithoutNoArg.constructorCalls = 0;
-    ParentNoArgCtrInstantiator<NonSerializableChildWithoutNoArg> instantiator =
-        new ParentNoArgCtrInstantiator<>(NonSerializableChildWithoutNoArg.class);
+    ReflectionFactoryInstantiator<NonSerializableChildWithoutNoArg> instantiator =
+        new ReflectionFactoryInstantiator<>(NonSerializableChildWithoutNoArg.class);
     NonSerializableChildWithoutNoArg instance = instantiator.newInstance();
     Assert.assertEquals(instance.getClass(), NonSerializableChildWithoutNoArg.class);
     Assert.assertEquals(NonSerializableParentWithoutNoArg.constructorCalls, 0);

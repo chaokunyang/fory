@@ -28,20 +28,34 @@ import sun.misc.Unsafe;
 
 /** Internal JDK8-24 constructor-bypass allocator used by object creators. */
 @Internal
-final class ConstructorBypassAllocator {
+final class ConstructorBypassAllocator<T> {
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
+  private static final boolean UNSAFE_ALLOCATION_AVAILABLE =
+      UNSAFE != null && JdkVersion.MAJOR_VERSION < 25;
 
-  private ConstructorBypassAllocator() {}
+  private final Class<T> type;
 
-  static <T> T allocate(Class<T> type) {
-    if (UNSAFE == null || JdkVersion.MAJOR_VERSION >= 25) {
-      throw new ForyException(
-          "Constructor-bypassing Unsafe allocation is unsupported in this runtime for " + type);
+  ConstructorBypassAllocator(Class<T> type) {
+    this.type = type;
+  }
+
+  T allocate() {
+    if (!UNSAFE_ALLOCATION_AVAILABLE) {
+      throw unsupported(type);
     }
     try {
       return (T) UNSAFE.allocateInstance(type);
     } catch (InstantiationException e) {
-      throw new ForyException("Failed to allocate instance for " + type, e);
+      throw allocationFailed(type, e);
     }
+  }
+
+  private static ForyException unsupported(Class<?> type) {
+    return new ForyException(
+        "Constructor-bypassing Unsafe allocation is unsupported in this runtime for " + type);
+  }
+
+  private static ForyException allocationFailed(Class<?> type, InstantiationException cause) {
+    return new ForyException("Failed to allocate instance for " + type, cause);
   }
 }

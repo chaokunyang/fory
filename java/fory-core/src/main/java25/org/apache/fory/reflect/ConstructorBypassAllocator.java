@@ -23,18 +23,23 @@ import java.io.ObjectStreamClass;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import org.apache.fory.annotation.Internal;
-import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.internal._JDKAccess;
 
 /** JDK25 replacement for the JDK8-24 constructor-bypass allocator. */
 @Internal
-final class ConstructorBypassAllocator {
-  private ConstructorBypassAllocator() {}
+final class ConstructorBypassAllocator<T> {
+  private final Class<T> type;
+  private final ObjectStreamClass objectStreamClass;
 
-  static <T> T allocate(Class<T> type) {
+  ConstructorBypassAllocator(Class<T> type) {
+    this.type = type;
+    objectStreamClass = ObjectStreamClass.lookupAny(type);
+  }
+
+  T allocate() {
     try {
-      return type.cast(ObjectStreamClassAccess.newInstance(type));
+      return type.cast(ObjectStreamClassAccess.newInstance(objectStreamClass));
     } catch (Throwable e) {
       throw handleAllocationException(type, e);
     }
@@ -59,8 +64,6 @@ final class ConstructorBypassAllocator {
   }
 
   private static final class ObjectStreamClassAccess {
-    private static final ClassValueCache<ObjectStreamClass> CLASSES =
-        ClassValueCache.newClassKeyCache(32);
     private static final MethodHandle NEW_INSTANCE;
     private static final Throwable INIT_ERROR;
 
@@ -80,16 +83,12 @@ final class ConstructorBypassAllocator {
       INIT_ERROR = error;
     }
 
-    private static Object newInstance(Class<?> type) throws Throwable {
+    private static Object newInstance(ObjectStreamClass objectStreamClass) throws Throwable {
       MethodHandle handle = NEW_INSTANCE;
       if (handle == null) {
         throw missingLookup();
       }
-      return handle.invoke(objectStreamClass(type));
-    }
-
-    private static ObjectStreamClass objectStreamClass(Class<?> type) {
-      return CLASSES.get(type, () -> ObjectStreamClass.lookupAny(type));
+      return handle.invoke(objectStreamClass);
     }
 
     private static ForyException missingLookup() {

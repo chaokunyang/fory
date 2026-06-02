@@ -492,14 +492,16 @@ public class ObjectCreators {
   }
 
   private static final class ConstructorBypassObjectCreator<T> extends ObjectCreator<T> {
+    private final ConstructorBypassAllocator<T> allocator;
 
     public ConstructorBypassObjectCreator(Class<T> type) {
       super(type);
+      allocator = new ConstructorBypassAllocator<>(type);
     }
 
     @Override
     public T newInstance() {
-      return ConstructorBypassAllocator.allocate(type);
+      return allocator.allocate();
     }
 
     @Override
@@ -582,14 +584,17 @@ public class ObjectCreators {
     private static volatile Method newConstructorForSerializationMethod;
 
     private final Constructor<T> constructor;
+    private final ConstructorBypassAllocator<T> allocator;
 
     public ParentNoArgCtrObjectCreator(Class<T> type) {
       super(type);
       if (JdkVersion.MAJOR_VERSION >= 25) {
         constructor = null;
+        allocator = new ConstructorBypassAllocator<>(type);
         return;
       }
       this.constructor = createSerializationConstructor(type);
+      allocator = null;
     }
 
     private static <T> Constructor<T> createSerializationConstructor(Class<T> type) {
@@ -647,8 +652,9 @@ public class ObjectCreators {
 
     @Override
     public T newInstance() {
-      if (constructor == null) {
-        return ConstructorBypassAllocator.allocate(type);
+      ConstructorBypassAllocator<T> constructorBypassAllocator = allocator;
+      if (constructorBypassAllocator != null) {
+        return constructorBypassAllocator.allocate();
       }
       try {
         return constructor.newInstance();

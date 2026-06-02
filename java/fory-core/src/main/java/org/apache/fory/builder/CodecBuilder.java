@@ -216,7 +216,7 @@ public abstract class CodecBuilder {
     if (isRecord) {
       return getRecordFieldValue(inputBeanExpr, descriptor);
     }
-    if (duplicatedFields.contains(fieldName) || !Modifier.isPublic(beanClass.getModifiers())) {
+    if (duplicatedFields.contains(fieldName) || !sourcePublicAccessible(beanClass)) {
       return unsafeAccessField(inputBeanExpr, beanClass, descriptor);
     }
     if (!sourcePublicAccessible(rawType)) {
@@ -473,7 +473,7 @@ public abstract class CodecBuilder {
     }
     if (!d.isFinalField()
         && Modifier.isPublic(d.getModifiers())
-        && Modifier.isPublic(d.getRawType().getModifiers())) {
+        && sourcePublicAccessible(d.getRawType())) {
       if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
         value = tryInlineCast(value, d.getTypeRef());
       }

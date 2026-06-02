@@ -220,6 +220,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
     descriptorDispatchId = new HashMap<>();
   }
 
+  void setSamePackageAccess(boolean samePackageAccess) {
+    ctx.setSamePackageAccess(samePackageAccess);
+  }
+
   // Must be static to be shared across the whole process life.
   private static final Map<String, Map<String, Integer>> idGenerator = new ConcurrentHashMap<>();
 
@@ -962,6 +966,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         // TODO(chaokunyang) add jdk17+ unexported class check.
         // non-public class can't be accessed in generated class.
         serializerClass = Serializer.class;
+      } else if (isHiddenClass(serializerClass)) {
+        // Hidden generated serializers are represented by their Class object but cannot be named
+        // or loaded from Java source, so generated fields must use the stable Serializer type.
+        serializerClass = Serializer.class;
       } else {
         ClassLoader beanClassClassLoader = beanClass.getClassLoader();
         if (beanClassClassLoader == null) {
@@ -1023,6 +1031,14 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
       serializerMap.put(cls, serializerRef);
     }
     return serializerRef;
+  }
+
+  private static boolean isHiddenClass(Class<?> cls) {
+    try {
+      return (Boolean) Class.class.getMethod("isHidden").invoke(cls);
+    } catch (ReflectiveOperationException | RuntimeException e) {
+      return false;
+    }
   }
 
   protected Expression getOrCreateStringSerializer() {

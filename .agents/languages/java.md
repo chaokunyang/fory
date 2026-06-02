@@ -81,17 +81,24 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   user explicitly asks for one. Keep the `java.base/java.lang.invoke` open in install-facing docs
   such as the Java/Kotlin/Scala install sections and README.
 - JDK25+ zero-Unsafe final-field writes must use a true target-class trusted lookup from the original `IMPL_LOOKUP`, not `IMPL_LOOKUP.in(type)`. JDK26+ normal Fory final-field restoration must pass with `--illegal-final-field-mutation=deny` and must not require `--enable-final-field-mutation`.
-- For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory`,
-  `jdk.unsupported`, `ObjectStreamClass.newInstance`, or an Unsafe-backed object instantiator.
-  The shared `ObjectInstantiators` facade should route supported no-constructor construction
-  through `ParentNoArgCtrInstantiator`, whose JDK25+ path owns trusted-lookup access to
-  `jdk.internal.reflect.ReflectionFactory` in `java.base`. This must not require
-  `--add-opens=java.base/jdk.internal.reflect=...`; the only JDK25+ platform open remains
+- For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory`, `jdk.unsupported`, or an
+  Unsafe-backed object instantiator. The shared `ObjectInstantiators` facade should route normal JVM
+  no-constructor construction through `ParentNoArgCtrInstantiator`, whose JDK25+ path owns
+  trusted-lookup access to `jdk.internal.reflect.ReflectionFactory` in `java.base`. This must not
+  require `--add-opens=java.base/jdk.internal.reflect=...`; the only JDK25+ platform open remains
   `java.base/java.lang.invoke=org.apache.fory.core`. ReflectionFactory serialization constructors
   also support non-Serializable ordinary classes; the normal object-instantiation path must not
-  reject them with ObjectStream-only parent-constructor checks. Classes unsupported by
-  ReflectionFactory itself require an accessible no-arg constructor, a record canonical constructor
-  path, or a custom serializer.
+  reject them with ObjectStream-only parent-constructor checks. GraalVM JDK25+ native-image
+  Serializable empty-instance construction is the narrow exception: direct ReflectionFactory
+  serialization constructors can produce `Object` there, so it uses a cached `ObjectStreamClass`
+  and a private `ObjectStreamClass.newInstance` MethodHandle from `_JDKAccess._trustedLookup`. If
+  the instantiator is retained in the native-image heap, the MethodHandle owner may be initialized at
+  build time but the per-type `ObjectStreamClass` descriptor must be cached only at image runtime.
+  `ForyGraalVMFeature` must register the matching serialization constructor target class for each
+  Serializable hierarchy member so runtime-lazy `ObjectStreamClass.lookupAny` can build descriptors
+  for JDK classes such as `TreeMap` and `TreeSet`. Classes unsupported by ReflectionFactory itself
+  require an accessible no-arg constructor, a record canonical constructor path, or a custom
+  serializer.
 - `UnsafeObjectInstantiator` is the JDK8-24 Unsafe owner only. It must be a top-level instantiator
   with a Java25 multi-release stub that contains no Unsafe, ObjectStream, ReflectionFactory, or
   constructor-bypass implementation.
@@ -185,12 +192,30 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   private instance helpers to static bridge methods whose receiver parameter uses the original
   binary class name, which fails hidden-class verification. Use non-private final split helpers on
   that path.
+- Runtime codegen must not emit Janino source that names bootstrap JDK implementation classes in
+  concealed or non-source-public packages. Generated source in the unnamed module cannot access
+  those classes even when Fory's trusted field-access path can read/write their fields; use
+  `ObjectSerializer` for those object-copy/field paths.
 - Keep JDK26 `--illegal-final-field-mutation=deny` scoped to the JPMS runtime tests that prove
   Fory's field-access path. Do not put it in global Maven `JDK_JAVA_OPTIONS`, because build tools
   such as Lombok may perform their own reflective final-field access during compilation.
-- JDK25+ collection serializers must fail unsupported `Collections.newSetFromMap` backing maps
-  before writing or copying. Do not rewrite them to `HashMap`, because that changes equality
-  semantics and can drop entries.
+- JDK25+ collection serializers can restore JDK private/final collection fields through the
+  required trusted lookup. Do not add JDK25-only unsupported branches for `Collections.newSetFromMap`
+  or similar JDK wrappers when the normal JDK field-access owner can preserve the existing payload.
+- Keep all private `Collections$SetFromMap` field access in one `SetFromMapAccess` owner helper.
+  The non-codegen payload branch is the backing-map payload path used to preserve backing-map
+  object/reference semantics, not a legacy fallback.
+- Do not add a new built-in class to the auto-assigned `registerInternalSerializer` sequence unless
+  it has an explicit stable internal type id. Use `ClassResolver#getSerializerClass` for native-only
+  serializer selection when the class was not previously internally registered; shifting built-in
+  type ids breaks Java native-mode binary compatibility.
+- When a native-only serializer is selected for a class that was already routed through a different
+  serializer family, do not shift built-in type ids. Preserve the existing payload only if it was
+  semantically valid; otherwise use the owning semantic serializer path and cover the behavior with
+  focused tests.
+- When `ClassResolver#getSerializerClass` selects a serializer that is not internally registered,
+  add that serializer class to `GraalvmSupport`'s default serializer metadata so native-image can
+  construct it without shifting Java native-mode type ids.
 - Do not add or restore constructor-binding APIs such as `@ForyConstructor` or
   `BaseFory.registerConstructor(...)`. Java parameter names, `-parameters`, and
   `@ConstructorProperties` are not a Fory object-creation contract. Runtime serializers for
@@ -199,6 +224,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Source-generated constructor serializers must own their constructor metadata at generation time
   and call constructors directly. They must not depend on runtime `ObjectInstantiator` constructor-field
   metadata or varargs constructor calls.
+- Java annotation-processor static serializers do not own ordinary-class constructor metadata.
+  Reject ordinary non-record final fields instead of generating descriptor-based final-field
+  mutation; records and Kotlin KSP primary-constructor serializers are the constructor-owned paths.
 - Generated JVM copy code may direct-copy immutable scalar values, but Java `Collection`/`Map`
   subclasses must be copied through `CopyContext.copyObject(...)` so collection/map serializers own
   concrete type, comparator, wrapper, and reference behavior.
@@ -206,11 +234,19 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   `cause` and `suppressedExceptions` sentinels directly before exposing the object. Do not call
   `initCause` or `addSuppressed` on a constructor-bypassed `Throwable` whose sentinels are still
   absent.
-- For JDK25+ CI, do not run core runtime tests from raw Maven reactor `target/classes`. Those classes bypass `META-INF/versions/25` and exercise the JDK8-24 root implementation. Build/install the multi-release artifact first, then verify the zero-Unsafe path through the JPMS module-path suite where `org.apache.fory.core` is the real access target.
+- For JDK25+ CI, do not run core runtime tests from raw Maven reactor `target/classes`. Those
+  classes bypass `META-INF/versions/25` and exercise the JDK8-24 root implementation. Classpath
+  Surefire tests must use a test-only classes directory overlaid with Java16 and Java25 replacement
+  classes and without `module-info.class`, so the run stays unnamed while exercising the
+  zero-Unsafe classes. JPMS tests still own named-module coverage where `org.apache.fory.core` is
+  the real access target.
 - After shading Janino into `fory-core`, refresh the JPMS module descriptor package table from the
   final jar before install. Otherwise named-module codegen cannot load concealed shaded Janino
   packages even though the classes are present in the jar.
-- Do not make GraalVM native-image JDK25+ pass by opening `java.lang.invoke` to `ALL-UNNAMED`. Keep zero-Unsafe verification on JPMS JVM tests unless the native-image path itself runs Fory as a named module and the produced binary passes.
+- GraalVM native-image tests that run Fory on the classpath may target
+  `java.base/java.lang.invoke=ALL-UNNAMED`; that is the classpath launch shape, not a named-module
+  proof. Keep named-module zero-Unsafe verification in JPMS tests unless a native-image path itself
+  runs Fory as `org.apache.fory.core`.
 
 ## Key Modules
 

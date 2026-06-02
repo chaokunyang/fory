@@ -19,6 +19,7 @@
 
 package org.apache.fory.reflect;
 
+import java.io.ObjectStreamClass;
 import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -102,7 +103,14 @@ public class ObjectInstantiators {
       if (noArgConstructor != null) {
         return new DeclaredNoArgCtrInstantiator<>(type);
       } else if (JdkVersion.MAJOR_VERSION >= 25) {
-        return new ParentNoArgCtrInstantiator<>(type);
+        if (Serializable.class.isAssignableFrom(type)) {
+          return new ObjectStreamInstantiator<>(type);
+        }
+        return new UnsupportedObjectInstantiator<>(
+            type,
+            "GraalVM native image on JDK25+ cannot create "
+                + type
+                + " without an accessible no-arg constructor or Serializable metadata");
       } else {
         return new UnsafeObjectInstantiator<>(type);
       }
@@ -131,6 +139,9 @@ public class ObjectInstantiators {
     }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION < 25) {
       return new UnsafeObjectInstantiator<>(type);
+    }
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION >= 25) {
+      return new ObjectStreamInstantiator<>(type);
     }
     return new ParentNoArgCtrInstantiator<>(type);
   }
@@ -264,6 +275,64 @@ public class ObjectInstantiators {
         }
       } catch (Throwable e) {
         throw makeException(type, e);
+      }
+    }
+  }
+
+  public static final class ObjectStreamInstantiator<T> extends ObjectInstantiator<T> {
+    private volatile ObjectStreamClass objectStreamClass;
+
+    public ObjectStreamInstantiator(Class<T> type) {
+      super(type);
+      if (!GraalvmSupport.isGraalBuildTime()) {
+        objectStreamClass = ObjectStreamClass.lookupAny(type);
+      }
+    }
+
+    @Override
+    public T newInstance() {
+      try {
+        return type.cast(ObjectStreamAccess.newInstance(objectStreamClass()));
+      } catch (Throwable e) {
+        throw makeException(type, e);
+      }
+    }
+
+    @Override
+    public T newInstanceWithArguments(Object... arguments) {
+      throw new UnsupportedOperationException();
+    }
+
+    private ObjectStreamClass objectStreamClass() {
+      ObjectStreamClass localObjectStreamClass = objectStreamClass;
+      if (localObjectStreamClass == null) {
+        // Static Fory instances can be built into GraalVM native images. A build-time
+        // ObjectStreamClass can retain GraalVM's bad ReflectionFactory constructor, so cache the
+        // descriptor only after the image reaches runtime.
+        localObjectStreamClass = ObjectStreamClass.lookupAny(type);
+        objectStreamClass = localObjectStreamClass;
+      }
+      return localObjectStreamClass;
+    }
+  }
+
+  private static final class ObjectStreamAccess {
+    private static final MethodHandle NEW_INSTANCE = newInstanceHandle();
+
+    private static Object newInstance(ObjectStreamClass objectStreamClass) throws Throwable {
+      return NEW_INSTANCE.invoke(objectStreamClass);
+    }
+
+    private static MethodHandle newInstanceHandle() {
+      try {
+        // GraalVM JDK25+ native image handles ObjectStreamClass allocation through its
+        // serialization metadata. Direct ReflectionFactory serialization constructors can produce
+        // Object instances there, so Serializable empty-instance creation must use this owner path.
+        return _JDKAccess._trustedLookup(ObjectStreamClass.class)
+            .findVirtual(
+                ObjectStreamClass.class, "newInstance", MethodType.methodType(Object.class));
+      } catch (Throwable e) {
+        throw new ExceptionInInitializerError(e);
       }
     }
   }

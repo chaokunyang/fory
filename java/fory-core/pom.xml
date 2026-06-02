@@ -40,6 +40,7 @@
     <maven.compiler.target>8</maven.compiler.target>
     <fory.java.rootdir>${basedir}/..</fory.java.rootdir>
     <fory.mr.classes>${project.build.directory}/multi-release-classes</fory.mr.classes>
+    <fory.jdk25.test.classes>${project.build.directory}/jdk25-test-classes</fory.jdk25.test.classes>
   </properties>
 
   <dependencies>
@@ -148,37 +149,37 @@
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
             <executions>
               <execution>
                 <id>compile-java9-module-info</id>
                 <phase>process-classes</phase>
                 <goals>
-                  <goal>compile</goal>
+                  <goal>run</goal>
                 </goals>
                 <configuration>
-                  <release>9</release>
-                  <proc>none</proc>
-                  <compileSourceRoots>
-                    <compileSourceRoot>${project.basedir}/src/main/java9</compileSourceRoot>
-                  </compileSourceRoots>
-                  <includes>
-                    <include>module-info.java</include>
-                  </includes>
-                  <outputDirectory>${fory.mr.classes}/9</outputDirectory>
-                  <compilerArgs combine.self="override">
-                    <arg>--patch-module</arg>
-                    <arg>org.apache.fory.core=${project.build.outputDirectory}</arg>
-                  </compilerArgs>
+                  <target>
+                    <mkdir dir="${fory.mr.classes}/9"/>
+                    <pathconvert property="compile.module.path" refid="maven.compile.classpath"
+                                 pathsep="${path.separator}"/>
+                    <javac srcdir="${project.basedir}/src/main/java9"
+                           destdir="${fory.mr.classes}/9"
+                           includeantruntime="false"
+                           fork="true"
+                           executable="${java.home}/bin/javac"
+                           debug="true">
+                      <include name="module-info.java"/>
+                      <compilerarg value="--release"/>
+                      <compilerarg value="9"/>
+                      <compilerarg value="--module-path"/>
+                      <compilerarg path="${compile.module.path}"/>
+                      <compilerarg value="--patch-module"/>
+                      <compilerarg value="org.apache.fory.core=${project.build.outputDirectory}"/>
+                    </javac>
+                  </target>
                 </configuration>
               </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <version>3.1.0</version>
-            <executions>
               <execution>
                 <id>inject-multi-release-classes</id>
                 <phase>package</phase>
@@ -209,31 +210,40 @@
         <plugins>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
             <executions>
               <execution>
                 <id>compile-java16-sources</id>
                 <phase>process-classes</phase>
                 <goals>
-                  <goal>compile</goal>
+                  <goal>run</goal>
                 </goals>
                 <configuration>
-                  <source>16</source>
-                  <target>16</target>
-                  <proc>none</proc>
-                  <compileSourceRoots>
-                    <compileSourceRoot>${project.basedir}/src/main/java16</compileSourceRoot>
-                  </compileSourceRoots>
-                  <includes>
-                    <include>**/*.java</include>
-                  </includes>
-                  <outputDirectory>${fory.mr.classes}/16</outputDirectory>
-                  <compilerArgs combine.self="override">
-                    <arg>--add-modules</arg>
-                    <arg>jdk.incubator.vector</arg>
-                    <arg>--patch-module</arg>
-                    <arg>org.apache.fory.core=${project.build.outputDirectory}</arg>
-                  </compilerArgs>
+                  <target>
+                    <delete dir="${fory.mr.classes}/16"/>
+                    <mkdir dir="${fory.mr.classes}/16"/>
+                    <pathconvert property="compile.module.path" refid="maven.compile.classpath"
+                                 pathsep="${path.separator}"/>
+                    <javac srcdir="${project.basedir}/src/main/java16"
+                           destdir="${fory.mr.classes}/16"
+                           includeantruntime="false"
+                           fork="true"
+                           executable="${java.home}/bin/javac"
+                           debug="true">
+                      <include name="**/*.java"/>
+                      <compilerarg value="--source"/>
+                      <compilerarg value="16"/>
+                      <compilerarg value="--target"/>
+                      <compilerarg value="16"/>
+                      <compilerarg value="--module-path"/>
+                      <compilerarg path="${compile.module.path}"/>
+                      <compilerarg value="--add-modules"/>
+                      <compilerarg value="jdk.incubator.vector"/>
+                      <compilerarg value="--patch-module"/>
+                      <compilerarg value="org.apache.fory.core=${project.build.outputDirectory}"/>
+                    </javac>
+                  </target>
                 </configuration>
               </execution>
             </executions>
@@ -263,62 +273,100 @@
           </plugin>
           <plugin>
             <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
             <executions>
               <execution>
                 <id>compile-jdk25-classes</id>
                 <phase>process-classes</phase>
                 <goals>
-                  <goal>compile</goal>
+                  <goal>run</goal>
                 </goals>
                 <configuration>
-                  <release>22</release>
-                  <proc>none</proc>
-                  <compileSourceRoots>
-                    <compileSourceRoot>${project.basedir}/src/main/java25</compileSourceRoot>
-                  </compileSourceRoots>
-                  <includes>
-                    <include>org/**/*.java</include>
-                  </includes>
-                  <outputDirectory>${fory.mr.classes}/25</outputDirectory>
-                  <compilerArgs combine.self="override">
-                    <arg>-sourcepath</arg>
-                    <arg></arg>
-                  </compilerArgs>
+                  <target>
+                    <delete dir="${fory.mr.classes}/25"/>
+                    <mkdir dir="${fory.mr.classes}/25"/>
+                    <javac srcdir="${project.basedir}/src/main/java25"
+                           destdir="${fory.mr.classes}/25"
+                           includeantruntime="false"
+                           fork="true"
+                           executable="${java.home}/bin/javac"
+                           debug="true">
+                      <include name="org/**/*.java"/>
+                      <classpath>
+                        <path refid="maven.compile.classpath"/>
+                        <pathelement location="${project.build.outputDirectory}"/>
+                      </classpath>
+                      <compilerarg value="--release"/>
+                      <compilerarg value="22"/>
+                      <compilerarg value="-sourcepath"/>
+                      <compilerarg value=""/>
+                    </javac>
+                  </target>
                 </configuration>
               </execution>
               <execution>
                 <id>compile-jdk25-module-info</id>
                 <phase>process-classes</phase>
                 <goals>
-                  <goal>compile</goal>
+                  <goal>run</goal>
                 </goals>
                 <configuration>
-                  <source>22</source>
-                  <target>22</target>
-                  <proc>none</proc>
-                  <compileSourceRoots>
-                    <compileSourceRoot>${project.basedir}/src/main/java25</compileSourceRoot>
-                  </compileSourceRoots>
-                  <includes>
-                    <include>module-info.java</include>
-                  </includes>
-                  <outputDirectory>${fory.mr.classes}/25</outputDirectory>
-                  <compilerArgs combine.self="override">
-                    <arg>--add-modules</arg>
-                    <arg>jdk.incubator.vector</arg>
-                    <arg>--patch-module</arg>
-                    <arg>org.apache.fory.core=${project.build.outputDirectory}${path.separator}${fory.mr.classes}/25</arg>
-                  </compilerArgs>
+                  <target>
+                    <pathconvert property="compile.module.path" refid="maven.compile.classpath"
+                                 pathsep="${path.separator}"/>
+                    <javac srcdir="${project.basedir}/src/main/java25"
+                           destdir="${fory.mr.classes}/25"
+                           includeantruntime="false"
+                           fork="true"
+                           executable="${java.home}/bin/javac"
+                           debug="true">
+                      <include name="module-info.java"/>
+                      <compilerarg value="--source"/>
+                      <compilerarg value="22"/>
+                      <compilerarg value="--target"/>
+                      <compilerarg value="22"/>
+                      <compilerarg value="--module-path"/>
+                      <compilerarg path="${compile.module.path}"/>
+                      <compilerarg value="--add-modules"/>
+                      <compilerarg value="jdk.incubator.vector"/>
+                      <compilerarg value="--patch-module"/>
+                      <compilerarg value="org.apache.fory.core=${project.build.outputDirectory}${path.separator}${fory.mr.classes}/25"/>
+                    </javac>
+                  </target>
                 </configuration>
               </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-antrun-plugin</artifactId>
-            <version>3.1.0</version>
-            <executions>
+              <execution>
+                <id>prepare-jdk25-test-classes</id>
+                <phase>process-test-classes</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <delete dir="${fory.jdk25.test.classes}"/>
+                    <mkdir dir="${fory.jdk25.test.classes}"/>
+                    <!-- Surefire runs from classes directories, not the packaged multi-release jar.
+                         Overlay versioned classes and omit module-info.class so JDK25+ classpath
+                         tests stay unnamed while exercising the zero-Unsafe implementations. -->
+                    <copy todir="${fory.jdk25.test.classes}">
+                      <fileset dir="${project.build.outputDirectory}">
+                        <exclude name="module-info.class"/>
+                      </fileset>
+                    </copy>
+                    <copy todir="${fory.jdk25.test.classes}" overwrite="true">
+                      <fileset dir="${fory.mr.classes}/16">
+                        <exclude name="module-info.class"/>
+                      </fileset>
+                    </copy>
+                    <copy todir="${fory.jdk25.test.classes}" overwrite="true">
+                      <fileset dir="${fory.mr.classes}/25">
+                        <exclude name="module-info.class"/>
+                      </fileset>
+                    </copy>
+                  </target>
+                </configuration>
+              </execution>
               <execution>
                 <id>verify-jdk25-multi-release-jar</id>
                 <phase>verify</phase>
@@ -399,6 +447,13 @@
                 </configuration>
               </execution>
             </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-surefire-plugin</artifactId>
+            <configuration>
+              <classesDirectory>${fory.jdk25.test.classes}</classesDirectory>
+            </configuration>
           </plugin>
         </plugins>
       </build>

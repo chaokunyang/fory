@@ -296,6 +296,7 @@ public class _JDKAccess {
   }
 
   private static volatile Method getModuleMethod;
+  private static volatile Method isExportedMethod;
 
   public static Object getModule(Class<?> cls) {
     Preconditions.checkArgument(JdkVersion.MAJOR_VERSION >= 9);
@@ -308,6 +309,30 @@ public class _JDKAccess {
     }
     try {
       return getModuleMethod.invoke(cls);
+    } catch (IllegalAccessException | InvocationTargetException e) {
+      throw ExceptionUtils.throwException(e);
+    }
+  }
+
+  public static boolean isExported(Class<?> cls) {
+    if (JdkVersion.MAJOR_VERSION < 9) {
+      return true;
+    }
+    if (cls.isArray()) {
+      return isExported(cls.getComponentType());
+    }
+    if (cls.isPrimitive()) {
+      return true;
+    }
+    try {
+      if (isExportedMethod == null) {
+        Class<?> moduleClass = Class.forName("java.lang.Module");
+        isExportedMethod = moduleClass.getDeclaredMethod("isExported", String.class);
+      }
+      Package pkg = cls.getPackage();
+      return (Boolean) isExportedMethod.invoke(getModule(cls), pkg == null ? "" : pkg.getName());
+    } catch (ClassNotFoundException | NoSuchMethodException e) {
+      throw new RuntimeException(e);
     } catch (IllegalAccessException | InvocationTargetException e) {
       throw ExceptionUtils.throwException(e);
     }

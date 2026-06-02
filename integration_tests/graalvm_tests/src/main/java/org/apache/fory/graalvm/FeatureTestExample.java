@@ -19,6 +19,7 @@
 
 package org.apache.fory.graalvm;
 
+import java.io.Serializable;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
@@ -47,7 +48,9 @@ public class FeatureTestExample {
     String getValue();
   }
 
-  public static class TestInvocationHandler implements InvocationHandler {
+  public static class TestInvocationHandler implements InvocationHandler, Serializable {
+    private static final long serialVersionUID = 1L;
+
     private final String value;
 
     public TestInvocationHandler(String value) {
@@ -98,6 +101,7 @@ public class FeatureTestExample {
 
     // Test proxy serialization
     TestInterface proxy =
+        (TestInterface)
             Proxy.newProxyInstance(
                 TestInterface.class.getClassLoader(),
                 new Class[] {TestInterface.class},

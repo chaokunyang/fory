@@ -154,11 +154,13 @@ public final class Fory implements BaseFory {
 
   @Override
   public void register(Class<?> cls) {
+    checkRegisterAllowed();
     getTypeResolver().register(cls);
   }
 
   @Override
   public void register(Class<?> cls, int id) {
+    checkRegisterAllowed();
     getTypeResolver().register(cls, Integer.toUnsignedLong(id));
   }
 
@@ -168,6 +170,7 @@ public final class Fory implements BaseFory {
    */
   @Override
   public void register(Class<?> cls, String typeName) {
+    checkRegisterAllowed();
     int idx = typeName.lastIndexOf('.');
     String namespace = "";
     if (idx > 0) {
@@ -178,21 +181,25 @@ public final class Fory implements BaseFory {
   }
 
   public void register(Class<?> cls, String namespace, String typeName) {
+    checkRegisterAllowed();
     getTypeResolver().register(cls, namespace, typeName);
   }
 
   @Override
   public void register(String className) {
+    checkRegisterAllowed();
     getTypeResolver().register(className);
   }
 
   @Override
   public void register(String className, int classId) {
+    checkRegisterAllowed();
     getTypeResolver().register(className, Integer.toUnsignedLong(classId));
   }
 
   @Override
   public void register(String className, String namespace, String typeName) {
+    checkRegisterAllowed();
     getTypeResolver().register(className, namespace, typeName);
   }
 
@@ -202,6 +209,7 @@ public final class Fory implements BaseFory {
     if (installedModules.containsKey(module)) {
       return;
     }
+    checkRegisterAllowed();
     installedModules.put(module, Boolean.TRUE);
     try {
       module.install(this);
@@ -213,50 +221,59 @@ public final class Fory implements BaseFory {
 
   @Override
   public void registerUnion(Class<?> cls, int id, Serializer<?> serializer) {
+    checkRegisterAllowed();
     getTypeResolver().registerUnion(cls, Integer.toUnsignedLong(id), serializer);
   }
 
   @Override
   public void registerUnion(
       Class<?> cls, String namespace, String typeName, Serializer<?> serializer) {
+    checkRegisterAllowed();
     getTypeResolver().registerUnion(cls, namespace, typeName, serializer);
   }
 
   @Override
   public <T> void registerSerializer(Class<T> type, Class<? extends Serializer> serializerClass) {
+    checkRegisterAllowed();
     getTypeResolver().registerSerializer(type, serializerClass);
   }
 
   @Override
   public void registerSerializer(Class<?> type, Serializer<?> serializer) {
+    checkRegisterAllowed();
     getTypeResolver().registerSerializer(type, serializer);
   }
 
   @Override
   public void registerSerializer(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
+    checkRegisterAllowed();
     getTypeResolver().registerSerializer(type, serializerCreator.apply(typeResolver));
   }
 
   @Override
   public <T> void registerSerializerAndType(
       Class<T> type, Class<? extends Serializer> serializerClass) {
+    checkRegisterAllowed();
     getTypeResolver().registerSerializerAndType(type, serializerClass);
   }
 
   @Override
   public void registerSerializerAndType(Class<?> type, Serializer<?> serializer) {
+    checkRegisterAllowed();
     getTypeResolver().registerSerializerAndType(type, serializer);
   }
 
   @Override
   public void registerSerializerAndType(
       Class<?> type, Function<TypeResolver, Serializer<?>> serializerCreator) {
+    checkRegisterAllowed();
     getTypeResolver().registerSerializerAndType(type, serializerCreator.apply(typeResolver));
   }
 
   @Override
   public void registerSerializerFactory(SerializerFactory serializerFactory) {
+    checkRegisterAllowed();
     typeResolver.registerSerializerFactory(serializerFactory);
   }
 

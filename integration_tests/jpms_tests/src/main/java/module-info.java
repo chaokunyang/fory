@@ -27,7 +27,4 @@ module org.apache.fory.integration_tests {
 
   exports org.apache.fory.integration_tests.model;
   exports org.apache.fory.integration_tests.publicserializer;
-
-  opens org.apache.fory.integration_tests.model to
-      org.apache.fory.core;
 }

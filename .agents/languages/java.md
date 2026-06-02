@@ -59,10 +59,18 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - If changes touch GraalVM bootstrap, serializer retention, native-image metadata, or `ObjectStreamSerializer` GraalVM behavior, verify the native-image build and run the produced binary; a plain Java compile is insufficient.
 - Put latest-JDK or virtual-thread tests in the latest-JDK test modules with the matching compiler/profile floor, and centralize runtime-version probing in existing compatibility utilities.
 - For JDK25+ zero-Unsafe work, preserve serializer-family selection by type and configuration. Do not switch a type from `ObjectStreamSerializer` or another Fory serializer family to `JavaSerializer`, a JDK stream fallback, or any broad `java.* Serializable` fallback by JDK version or no-arg-constructor shape.
-- JDK25+ zero-Unsafe runtime support is a JPMS named-module design. Fory core must run with `--add-opens=java.base/java.lang.invoke=org.apache.fory.core` so it can create a true trusted lookup through the private `MethodHandles.Lookup` constructor; missing this open is an invalid access configuration, not a reason to open per-package JDK internals or switch serializer/object-creation families. Do not use `ALL-UNNAMED` as the zero-Unsafe verification target.
+- JDK25+ zero-Unsafe runtime support must distinguish launch shape. When Fory is on the module
+  path, use `--add-opens=java.base/java.lang.invoke=org.apache.fory.core`; when Fory is on the
+  classpath, use `--add-opens=java.base/java.lang.invoke=ALL-UNNAMED`. Missing this open is an
+  invalid access configuration, not a reason to open per-package JDK internals or switch
+  serializer/object-creation families. JPMS tests that validate named-module access should keep the
+  `org.apache.fory.core` target.
 - Do not probe JDK25+ trusted-lookup availability and turn `_JDKAccess` field-access booleans false when the required `java.base/java.lang.invoke` open is missing. Keep those access flags true on JDK25+ and let the owning trusted-lookup path raise the configuration error.
 - Keep JDK25+ unsafe-removal implementation invariants in agent/design docs and tests, not user guides. User guides should document user actions such as `--sun-misc-unsafe-memory-access=deny` and `java.base/java.lang.invoke` opens; do not expose internal serializer names, owner-model rationale, or avoided fallback strategies there.
-- JDK25+ user docs must not require application module package opens for Fory private-field access. The only required JPMS open is `java.base/java.lang.invoke` to `org.apache.fory.core`; application module package opens are not part of this design.
+- JDK25+ user docs must not require application module package opens for Fory private-field access.
+  The only required platform open is `java.base/java.lang.invoke`, targeted to `ALL-UNNAMED` for
+  classpath runs or `org.apache.fory.core` for module-path runs; application module package opens
+  are not part of this design.
 - JDK25+ final-field user docs must not tell ordinary classes to implement
   `java.io.Serializable`. Fory supports ordinary non-Serializable classes; mention
   `Serializable` only for JDK serialization hook examples or `java.*` serializability checks.

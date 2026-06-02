@@ -162,23 +162,6 @@ For ordinary application classes, Fory can use generated serializers and avoid J
 serialization-compatible path; prefer a Fory custom serializer for hot classes when the hook-based
 path is too expensive.
 
-## Final Fields And Constructors
-
-Records are deserialized through their canonical constructor. Ordinary classes use Fory's normal
-object-creation path and field setting, including final fields when the runtime supports it:
-
-```java
-public final class User {
-  private final String name;
-  private final int age;
-
-  public User(String name, int age) {
-    this.name = name;
-    this.age = age;
-  }
-}
-```
-
 ## JDK Serialization Hooks
 
 Java native mode supports the JDK serialization hooks that are part of many existing Java object
@@ -188,9 +171,6 @@ models:
 - `writeReplace` and `readResolve`
 - `readObjectNoData`
 - `Externalizable`
-
-Fory native serialization remains stable across supported JDK versions when writers and readers use
-the same Fory version and runtime configuration.
 
 ```java
 import java.io.IOException;

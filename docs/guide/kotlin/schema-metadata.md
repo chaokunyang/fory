@@ -35,8 +35,7 @@ import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.VarInt
 
 @ForyStruct
-data class User
-constructor(
+data class User(
   @ForyField(id = 1)
   val id: @Fixed UInt,
 
@@ -59,8 +58,7 @@ and maps:
 
 ```kotlin
 @ForyStruct
-data class NullabilityExample
-constructor(
+data class NullabilityExample(
   @ForyField(id = 1)
   val names: List<String>,
 
@@ -83,8 +81,7 @@ Kotlin generated serializers preserve `@Ref` metadata for fields, list elements,
 import org.apache.fory.annotation.Ref
 
 @ForyStruct
-data class Node
-constructor(
+data class Node(
   @ForyField(id = 1)
   val children: List<@Ref Node>,
 

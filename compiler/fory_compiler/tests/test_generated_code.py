@@ -224,15 +224,21 @@ def test_rust_nested_container_ref_uses_correct_pointer_type():
     )
 
     rust_output = render_files(generate_files(schema, RustGenerator))
+
     assert (
-        "pub groups: ::std::vec::Vec<::std::vec::Vec<::std::sync::Arc<Node>>>"
+        "pub groups: ::std::vec::Vec<::std::vec::Vec<::std::sync::Arc<Node>>>,"
+        in rust_output
+    )
+    assert "::std::vec::Vec<::std::vec::Vec<::std::rc::Rc<Node>>>" not in rust_output
+    assert (
+        "pub nodes: ::std::collections::HashMap<::std::string::String, "
+        "::std::collections::HashMap<::std::string::String, ::std::sync::Arc<Node>>>,"
         in rust_output
     )
     assert (
-        "pub nodes: ::std::collections::HashMap<"
-        "::std::string::String, "
-        "::std::collections::HashMap<::std::string::String, ::std::sync::Arc<Node>>>"
-        in rust_output
+        "::std::collections::HashMap<::std::string::String, "
+        "::std::collections::HashMap<::std::string::String, ::std::rc::Rc<Node>>>"
+        not in rust_output
     )
 
 

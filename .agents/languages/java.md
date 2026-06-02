@@ -65,7 +65,7 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - JDK25+ zero-Unsafe final-field writes must use a true target-class trusted lookup from the original `IMPL_LOOKUP`, not `IMPL_LOOKUP.in(type)`. JDK26+ normal Fory final-field restoration must pass with `--illegal-final-field-mutation=deny` and must not require `--enable-final-field-mutation`.
 - For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory` or `jdk.internal.reflect.ReflectionFactory`. The shared `ObjectCreators` facade should route ObjectStream-compatible construction through `ParentNoArgCtrObjectCreator`; the replaceable constructor-bypass allocator owns the JDK8-24 Unsafe allocation path and the JDK25+ `ObjectStreamClass.newInstance` path. Serializable classes without a no-arg constructor may use that trusted-lookup owner; non-Serializable classes without a no-arg constructor require `@ForyConstructor`, `BaseFory.registerConstructor(...)`, record construction, or a custom serializer.
 - In JDK25+ constructor-bypass allocation, the allocator is per type: pass the target class to the allocator constructor, cache `ObjectStreamClass.lookupAny(...)` in that instance, and expose an instance `allocate()` method. Let `ObjectStreamClass.newInstance` validate unsupported classes. Do not add redundant `Serializable` prechecks or per-call descriptor lookups, and keep exception/message construction in cold helper methods.
-- Keep the Java25 `_Lookup` and `DefineClass` overlays unless a future refactor can merge them without exposing Unsafe to the JDK25 class graph or replacing direct hidden-class APIs with reflective wrappers. Root `_Lookup` uses Unsafe for the JDK8-24 trusted-lookup fast path, while Java25 `_Lookup` uses the required `java.lang.invoke` open. Root `DefineClass` targets Java 8 bytecode and cannot directly reference `Lookup#defineHiddenClass` or `Lookup.ClassOption.NESTMATE`; Java25 `DefineClass` owns that direct API use.
+- Keep the Java25 `_Lookup` overlay unless a future refactor can merge it without exposing Unsafe to the JDK25 class graph. Root `_Lookup` uses Unsafe for the JDK8-24 trusted-lookup fast path, while Java25 `_Lookup` uses the required `java.lang.invoke` open. `DefineClass` is root-owned; when it needs hidden nestmate class definition, it must use cached method handles and reflective `Lookup.ClassOption.NESTMATE` loading so Java 8 through Java 14 can still load the root class safely.
 - Treat `ByteArrayOutputStream` and `ByteArrayInputStream` as ordinary streams on every JDK. Do
   not restore private-buffer wrapping for JDK8-24 performance, because that reintroduces
   `java.base/java.io` private-field ownership and module-open requirements.
@@ -140,10 +140,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   `FieldAccessor.createAccessor(...)` and a static-init cast. This keeps platform dispatch out of
   generated read/write hot paths and avoids `FieldAccessor` virtual dispatch on final/private field
   get/set calls.
-- Do not move the JDK25 `DefineClass.defineHiddenNestmate(...)` implementation to `java9`.
-  `Lookup#defineClass` is a Java 9 normal class-definition API, not hidden-nestmate definition; the
-  dynamic nestmate API is `Lookup#defineHiddenClass(..., NESTMATE)`, so Java 9 through Java 14
-  cannot use that path.
+- `DefineClass#defineHiddenNestmate` belongs in the root `DefineClass` owner. Do not add a Java25
+  overlay only to call `Lookup#defineHiddenClass` directly, and do not move it to `java9` because
+  `Lookup#defineClass` defines normal package classes, not hidden nestmates. Root code must avoid
+  direct `Lookup.ClassOption` linkage and cache the method-handle/option-array setup off the hot
+  path.
 - Keep JDK26 `--illegal-final-field-mutation=deny` scoped to the JPMS runtime tests that prove
   Fory's field-access path. Do not put it in global Maven `JDK_JAVA_OPTIONS`, because build tools
   such as Lombok may perform their own reflective final-field access during compilation.

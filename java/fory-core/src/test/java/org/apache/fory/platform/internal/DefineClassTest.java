@@ -69,4 +69,32 @@ public class DefineClassTest {
           className, null, DefineClassTest.class.getClassLoader(), null, bytecodes);
     }
   }
+
+  @Test
+  public void testDefineHiddenNestmate() throws Exception {
+    if (JdkVersion.MAJOR_VERSION < 15) {
+      return;
+    }
+    String pkg = DefineClassTest.class.getPackage().getName();
+    CompileUnit unit =
+        new CompileUnit(
+            pkg,
+            "HiddenNestmateA",
+            ("package "
+                + pkg
+                + ";\n"
+                + "public class HiddenNestmateA {\n"
+                + "  public static String hello() { return \"HIDDEN\"; }\n"
+                + "}"));
+    byte[] bytecodes =
+        JaninoUtils.toBytecode(Thread.currentThread().getContextClassLoader(), unit)
+            .values()
+            .iterator()
+            .next();
+
+    Class<?> clz = DefineClass.defineHiddenNestmate(DefineClassTest.class, bytecodes);
+
+    Assert.assertEquals(clz.getMethod("hello").invoke(null), "HIDDEN");
+    Assert.assertEquals(Class.class.getMethod("getNestHost").invoke(clz), DefineClassTest.class);
+  }
 }

@@ -21,7 +21,9 @@ package org.apache.fory.platform.internal;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
+import java.lang.reflect.Array;
 import java.security.ProtectionDomain;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.platform.AndroidSupport;
@@ -32,6 +34,7 @@ import org.apache.fory.util.Preconditions;
 @Internal
 public class DefineClass {
   private static volatile MethodHandle classloaderDefineClassHandle;
+  private static volatile HiddenClassDefiner hiddenClassDefiner;
 
   public static Class<?> defineClass(
       String className,
@@ -80,7 +83,83 @@ public class DefineClass {
   }
 
   public static Class<?> defineHiddenNestmate(Class<?> neighbor, byte[] bytecodes) {
-    throw new UnsupportedOperationException(
-        "Hidden nestmate class definition requires the JDK25 multi-release DefineClass");
+    Preconditions.checkNotNull(neighbor);
+    Preconditions.checkNotNull(bytecodes);
+    if (JdkVersion.MAJOR_VERSION < 15) {
+      throw hiddenClassUnsupported(null);
+    }
+    try {
+      Lookup lookup = _Lookup.privateLookupIn(neighbor, MethodHandles.lookup());
+      return hiddenClassDefiner().define(lookup, bytecodes);
+    } catch (Throwable e) {
+      throw hiddenClassFailure(neighbor, e);
+    }
+  }
+
+  private static HiddenClassDefiner hiddenClassDefiner() {
+    HiddenClassDefiner definer = hiddenClassDefiner;
+    if (definer == null) {
+      synchronized (DefineClass.class) {
+        definer = hiddenClassDefiner;
+        if (definer == null) {
+          definer = loadHiddenClassDefiner();
+          hiddenClassDefiner = definer;
+        }
+      }
+    }
+    return definer;
+  }
+
+  private static HiddenClassDefiner loadHiddenClassDefiner() {
+    try {
+      // Keep JDK15+ hidden-class symbols out of the root constant pool so Java 8 through Java 14
+      // can load this class; defineHiddenNestmate is the only path that needs them.
+      Class<?> optionType = Class.forName("java.lang.invoke.MethodHandles$Lookup$ClassOption");
+      Object nestmate = Enum.valueOf(optionType.asSubclass(Enum.class), "NESTMATE");
+      Object options = Array.newInstance(optionType, 1);
+      Array.set(options, 0, nestmate);
+      MethodHandle defineHiddenClass =
+          MethodHandles.publicLookup()
+              .findVirtual(
+                  Lookup.class,
+                  "defineHiddenClass",
+                  MethodType.methodType(
+                      Lookup.class, byte[].class, boolean.class, options.getClass()))
+              .asFixedArity();
+      return new HiddenClassDefiner(defineHiddenClass, options);
+    } catch (ReflectiveOperationException | RuntimeException e) {
+      throw hiddenClassUnsupported(e);
+    }
+  }
+
+  private static UnsupportedOperationException hiddenClassUnsupported(Throwable cause) {
+    return new UnsupportedOperationException(
+        "Hidden nestmate class definition requires JDK15+ Lookup#defineHiddenClass", cause);
+  }
+
+  private static RuntimeException hiddenClassFailure(Class<?> neighbor, Throwable cause) {
+    if (cause instanceof RuntimeException) {
+      return (RuntimeException) cause;
+    }
+    if (cause instanceof Error) {
+      throw (Error) cause;
+    }
+    return new IllegalStateException(
+        "Cannot define hidden nestmate for " + neighbor.getName() + ".", cause);
+  }
+
+  private static final class HiddenClassDefiner {
+    private final MethodHandle defineHiddenClass;
+    private final Object nestmateOptions;
+
+    private HiddenClassDefiner(MethodHandle defineHiddenClass, Object nestmateOptions) {
+      this.defineHiddenClass = defineHiddenClass;
+      this.nestmateOptions = nestmateOptions;
+    }
+
+    private Class<?> define(Lookup lookup, byte[] bytecodes) throws Throwable {
+      return ((Lookup) defineHiddenClass.invoke(lookup, bytecodes, true, nestmateOptions))
+          .lookupClass();
+    }
   }
 }

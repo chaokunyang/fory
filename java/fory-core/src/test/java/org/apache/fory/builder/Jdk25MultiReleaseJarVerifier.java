@@ -47,7 +47,6 @@ public final class Jdk25MultiReleaseJarVerifier {
     "module-info.class",
     "org/apache/fory/memory/LittleEndian.class",
     "org/apache/fory/memory/MemoryBuffer.class",
-    "org/apache/fory/platform/internal/DefineClass.class",
     "org/apache/fory/platform/internal/_Lookup.class",
     "org/apache/fory/platform/internal/_UnsafeUtils.class",
     "org/apache/fory/builder/UnsafeCodegenSupport.class",

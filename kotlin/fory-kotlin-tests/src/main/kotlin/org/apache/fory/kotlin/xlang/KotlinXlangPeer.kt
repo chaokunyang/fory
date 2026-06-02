@@ -126,6 +126,7 @@ public data class KotlinSchemaSurface
   "noRefUsers",
   "chunks",
   "chunksByName",
+  "nestedSortedNames",
 )
 constructor(
   @ForyField(id = 1) val nullableNames: List<String?>?,
@@ -140,6 +141,7 @@ constructor(
   @ForyField(id = 10) val noRefUsers: List<KotlinUser>,
   @ForyField(id = 11) val chunks: List<@ArrayType ByteArray>,
   @ForyField(id = 12) val chunksByName: Map<String, @ArrayType ByteArray>,
+  @ForyField(id = 13) val nestedSortedNames: List<TreeSet<String>>,
 )
 
 @ForyStruct
@@ -341,6 +343,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
       noRefUsers = emptyList(),
       chunks = listOf(byteArrayOf(1, 2), byteArrayOf(3, 4)),
       chunksByName = mapOf("left" to byteArrayOf(5, 6)),
+      nestedSortedNames = listOf(TreeSet(listOf("blue", "green"))),
     )
   val decodedSchemaSurface =
     fory.deserialize(fory.serialize(schemaSurface), KotlinSchemaSurface::class.java)
@@ -362,6 +365,25 @@ private fun staticSerializerRoundTrip(dataFile: String) {
     checkNotNull(decodedSchemaSurface.chunksByName["left"]) contentEquals
       schemaSurface.chunksByName["left"]!!
   )
+  check(decodedSchemaSurface.nestedSortedNames == schemaSurface.nestedSortedNames)
+  check(decodedSchemaSurface.nestedSortedNames[0].javaClass == TreeSet::class.java)
+  val copiedSchemaSurface = fory.copy(schemaSurface)
+  check(copiedSchemaSurface.bytesAsArray !== schemaSurface.bytesAsArray)
+  check(copiedSchemaSurface.chunks !== schemaSurface.chunks)
+  check(copiedSchemaSurface.chunks[0] !== schemaSurface.chunks[0])
+  check(copiedSchemaSurface.chunksByName !== schemaSurface.chunksByName)
+  check(
+    checkNotNull(copiedSchemaSurface.chunksByName["left"]) !== schemaSurface.chunksByName["left"]
+  )
+  check(copiedSchemaSurface.nestedSortedNames !== schemaSurface.nestedSortedNames)
+  check(copiedSchemaSurface.nestedSortedNames[0] !== schemaSurface.nestedSortedNames[0])
+  check(copiedSchemaSurface.nestedSortedNames[0].javaClass == TreeSet::class.java)
+  schemaSurface.bytesAsArray[0] = 99.toByte()
+  schemaSurface.chunks[0][0] = 98.toByte()
+  checkNotNull(schemaSurface.chunksByName["left"])[0] = 97.toByte()
+  check(copiedSchemaSurface.bytesAsArray[0] == 1.toByte())
+  check(copiedSchemaSurface.chunks[0][0] == 1.toByte())
+  check(checkNotNull(copiedSchemaSurface.chunksByName["left"])[0] == 5.toByte())
   val schemaDescriptors =
     checkNotNull(
         fory.getSerializer(KotlinSchemaSurface::class.java) as? StaticGeneratedStructSerializer<*>

@@ -174,6 +174,59 @@ class ProcessorValidationTest {
         primitive = true,
         unsigned = false,
       )
+    val intArrayType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "IntArray::class.java",
+        kotlinTypeName = "kotlin.IntArray",
+        valueTypeName = "IntArray",
+        typeName = "int[]",
+        typeId = "Types.INT32_ARRAY",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        componentType = intType,
+      )
+    val setType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.Set::class.java",
+        kotlinTypeName = "java.util.TreeSet<kotlin.String>",
+        valueTypeName = "kotlin.collections.Set<String>",
+        typeName = "java.util.Set",
+        typeId = "Types.SET",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        collectionFactory = CollectionFactory.TREE_SET,
+        typeArguments = listOf(stringType),
+      )
+    val listType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.List::class.java",
+        kotlinTypeName = "java.util.List<java.util.TreeSet<kotlin.String>>",
+        valueTypeName = "kotlin.collections.List<java.util.TreeSet<String>>",
+        typeName = "java.util.List",
+        typeId = "Types.LIST",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        typeArguments = listOf(setType),
+      )
+    val arrayListType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.List::class.java",
+        kotlinTypeName = "java.util.List<kotlin.IntArray>",
+        valueTypeName = "kotlin.collections.List<IntArray>",
+        typeName = "java.util.List",
+        typeId = "Types.LIST",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        typeArguments = listOf(intArrayType),
+      )
     val mapType =
       KotlinSourceTypeNode(
         rawClassExpression = "java.util.Map::class.java",
@@ -211,6 +264,34 @@ class ProcessorValidationTest {
                   nullable = false,
                   propertyTypeName = "java.util.TreeMap<String, Int>",
                   constructorParameterName = "counts",
+                ),
+                KotlinSourceField(
+                  id = 1,
+                  name = "names",
+                  type = listType,
+                  hasForyField = true,
+                  foryFieldId = 2,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "java.util.List<java.util.TreeSet<String>>",
+                  constructorParameterName = "names",
+                ),
+                KotlinSourceField(
+                  id = 2,
+                  name = "arrays",
+                  type = arrayListType,
+                  hasForyField = true,
+                  foryFieldId = 3,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "java.util.List<IntArray>",
+                  constructorParameterName = "arrays",
                 )
               ),
             originatingFiles = emptyList(),
@@ -219,11 +300,21 @@ class ProcessorValidationTest {
         .write()
 
     assertTrue(
-      source.contains("return User(counts = KotlinCollectionAdapters.toTreeMap(field0!!))")
+      source.contains(
+        "return User(counts = KotlinCollectionAdapters.toTreeMap(field0!!), names = run { val readSource0 = (field1!! as Collection<*>);"
+      )
+    )
+    assertTrue(
+      source.contains("KotlinCollectionAdapters.toTreeSet((readElement0 as Collection<*>))")
     )
     assertTrue(
       source.contains(
         "0 -> KotlinCollectionAdapters.toTreeMap((readFieldValue(readContext, fieldInfo) as kotlin.collections.Map<String, Int>))"
+      )
+    )
+    assertTrue(
+      source.contains(
+        "1 -> run { val readSource0 = ((readFieldValue(readContext, fieldInfo) as kotlin.collections.List<java.util.TreeSet<String>>) as Collection<*>);"
       )
     )
     assertTrue(
@@ -233,9 +324,21 @@ class ProcessorValidationTest {
     )
     assertTrue(
       source.contains(
+        "1 -> run { val readSource0 = ((readCompatibleFieldValue(readContext, remoteField, localField) as kotlin.collections.List<java.util.TreeSet<String>>) as Collection<*>);"
+      )
+    )
+    assertTrue(
+      source.contains(
         "fieldValues[0] = KotlinCollectionAdapters.toTreeMap(run { val copySource0 = value.counts; val copyTarget0 = java.util.LinkedHashMap<Any?, Any?>(copySource0.size);"
       )
     )
+    assertTrue(
+      source.contains(
+        "fieldValues[1] = run { val copySource0 = value.names; val copyTarget0 = java.util.ArrayList<Any?>(copySource0.size); for (copyElement0 in copySource0) { copyTarget0.add(KotlinCollectionAdapters.toTreeSet(run { val copySource2 = copyElement0;"
+      )
+    )
+    assertTrue(source.contains("fieldValues[2] = run { val copySource0 = value.arrays;"))
+    assertTrue(source.contains("copyTarget0.add(copyElement0.copyOf())"))
     assertFalse(source.contains("fieldValues[0] = copyConstructorFieldValue"))
   }
 

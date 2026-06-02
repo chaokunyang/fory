@@ -907,7 +907,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         isDenseUnsignedArray(field) ->
           if (field.nullable) "value.${field.name}?.copyOf()" else "value.${field.name}.copyOf()"
         field.type.isCollectionOrMap() ->
-          copyContainerExpression(field.type, "value.${field.name}", 0)
+          return copyContainerExpression(field.type, "value.${field.name}", 0)
         else ->
           "copyConstructorFieldValue(copyContext, value, value.${field.name}, fieldsById[${field.id}]!!)"
       }
@@ -1007,12 +1007,106 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   }
 
   private fun constructorReadExpression(field: KotlinSourceField, valueExpression: String): String {
-    if (field.type.collectionFactory == CollectionFactory.NONE) {
+    return collectionReadExpression(field.type, valueExpression, 0, erasedInput = false)
+  }
+
+  private fun collectionReadExpression(
+    type: KotlinSourceTypeNode,
+    valueExpression: String,
+    depth: Int,
+    erasedInput: Boolean
+  ): String {
+    if (!type.isCollectionOrMap()) {
       return valueExpression
     }
-    val conversion = collectionConversionFunction(field.type.collectionFactory)
-    return if (field.nullable) "($valueExpression)?.let { $conversion(it) }"
-    else "$conversion($valueExpression)"
+    if (type.nullable) {
+      val value = "readValue$depth"
+      return "$valueExpression?.let { $value -> ${collectionReadExpression(type.copy(nullable = false), value, depth + 1, erasedInput)} }"
+    }
+    val adapted =
+      if (type.typeArguments.any { needsCollectionReadAdaptation(it) }) {
+        readContainerExpression(type, valueExpression, depth)
+      } else {
+        valueExpression
+      }
+    return applyCollectionFactory(type, adapted, erasedInput && adapted == valueExpression)
+  }
+
+  private fun needsCollectionReadAdaptation(type: KotlinSourceTypeNode): Boolean =
+    type.collectionFactory != CollectionFactory.NONE ||
+      (type.isCollectionOrMap() && type.typeArguments.any { needsCollectionReadAdaptation(it) })
+
+  private fun readContainerExpression(
+    type: KotlinSourceTypeNode,
+    expression: String,
+    depth: Int
+  ): String {
+    val source = "readSource$depth"
+    val target = "readTarget$depth"
+    val valueType = type.valueTypeName.removeSuffix("?")
+    return when (type.typeId) {
+      "Types.LIST" -> {
+        val element = "readElement$depth"
+        val adaptedElement = readElementExpression(type.typeArguments[0], element, depth + 1)
+        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = java.util.ArrayList<Any?>($source.size); for ($element in $source) { $target.add($adaptedElement) }; $target as $valueType }"
+      }
+      "Types.SET" -> {
+        val element = "readElement$depth"
+        val adaptedElement = readElementExpression(type.typeArguments[0], element, depth + 1)
+        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = java.util.LinkedHashSet<Any?>($source.size); for ($element in $source) { $target.add($adaptedElement) }; $target as $valueType }"
+      }
+      "Types.MAP" -> {
+        val entry = "readEntry$depth"
+        val adaptedKey = readElementExpression(type.typeArguments[0], "$entry.key", depth + 1)
+        val adaptedValue = readElementExpression(type.typeArguments[1], "$entry.value", depth + 2)
+        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = java.util.LinkedHashMap<Any?, Any?>($source.size); for ($entry in $source.entries) { $target[$adaptedKey] = $adaptedValue }; $target as $valueType }"
+      }
+      else -> expression
+    }
+  }
+
+  private fun readElementExpression(
+    type: KotlinSourceTypeNode,
+    expression: String,
+    depth: Int
+  ): String {
+    if (!needsCollectionReadAdaptation(type)) {
+      return expression
+    }
+    return collectionReadExpression(type, expression, depth, erasedInput = true)
+  }
+
+  private fun erasedCollectionExpression(type: KotlinSourceTypeNode, expression: String): String =
+    when (type.typeId) {
+      "Types.LIST",
+      "Types.SET" -> "($expression as Collection<*>)"
+      "Types.MAP" -> "($expression as Map<*, *>)"
+      else -> expression
+    }
+
+  private fun typedCollectionExpression(type: KotlinSourceTypeNode, expression: String): String {
+    if (!type.isCollectionOrMap()) {
+      return expression
+    }
+    return "(${erasedCollectionExpression(type, expression)} as ${type.valueTypeName.removeSuffix("?")})"
+  }
+
+  private fun applyCollectionFactory(
+    type: KotlinSourceTypeNode,
+    valueExpression: String,
+    erasedInput: Boolean = false
+  ): String {
+    if (type.collectionFactory == CollectionFactory.NONE) {
+      return valueExpression
+    }
+    val conversion = collectionConversionFunction(type.collectionFactory)
+    if (!erasedInput) {
+      return "$conversion($valueExpression)"
+    }
+    return typedCollectionExpression(
+      type,
+      "$conversion(${erasedCollectionExpression(type, valueExpression)})"
+    )
   }
 
   private fun localVariableType(field: KotlinSourceField): String {
@@ -1095,25 +1189,27 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     val source = "copySource$depth"
     val target = "copyTarget$depth"
     val valueType = type.valueTypeName.removeSuffix("?")
-    return when (type.typeId) {
-      "Types.LIST" -> {
-        val element = "copyElement$depth"
-        val copiedElement = copyElementExpression(type.typeArguments[0], element, depth + 1)
-        "run { val $source = $expression; val $target = java.util.ArrayList<Any?>($source.size); for ($element in $source) { $target.add($copiedElement) }; $target as $valueType }"
+    val copied =
+      when (type.typeId) {
+        "Types.LIST" -> {
+          val element = "copyElement$depth"
+          val copiedElement = copyElementExpression(type.typeArguments[0], element, depth + 1)
+          "run { val $source = $expression; val $target = java.util.ArrayList<Any?>($source.size); for ($element in $source) { $target.add($copiedElement) }; $target as $valueType }"
+        }
+        "Types.SET" -> {
+          val element = "copyElement$depth"
+          val copiedElement = copyElementExpression(type.typeArguments[0], element, depth + 1)
+          "run { val $source = $expression; val $target = java.util.LinkedHashSet<Any?>($source.size); for ($element in $source) { $target.add($copiedElement) }; $target as $valueType }"
+        }
+        "Types.MAP" -> {
+          val entry = "copyEntry$depth"
+          val copiedKey = copyElementExpression(type.typeArguments[0], "$entry.key", depth + 1)
+          val copiedValue = copyElementExpression(type.typeArguments[1], "$entry.value", depth + 2)
+          "run { val $source = $expression; val $target = java.util.LinkedHashMap<Any?, Any?>($source.size); for ($entry in $source.entries) { $target[$copiedKey] = $copiedValue }; $target as $valueType }"
+        }
+        else -> "copyContext.copyObject($expression) as $valueType"
       }
-      "Types.SET" -> {
-        val element = "copyElement$depth"
-        val copiedElement = copyElementExpression(type.typeArguments[0], element, depth + 1)
-        "run { val $source = $expression; val $target = java.util.LinkedHashSet<Any?>($source.size); for ($element in $source) { $target.add($copiedElement) }; $target as $valueType }"
-      }
-      "Types.MAP" -> {
-        val entry = "copyEntry$depth"
-        val copiedKey = copyElementExpression(type.typeArguments[0], "$entry.key", depth + 1)
-        val copiedValue = copyElementExpression(type.typeArguments[1], "$entry.value", depth + 2)
-        "run { val $source = $expression; val $target = java.util.LinkedHashMap<Any?, Any?>($source.size); for ($entry in $source.entries) { $target[$copiedKey] = $copiedValue }; $target as $valueType }"
-      }
-      else -> "copyContext.copyObject($expression) as $valueType"
-    }
+    return applyCollectionFactory(type, copied)
   }
 
   private fun copyElementExpression(
@@ -1125,15 +1221,41 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       val value = "copyValue$depth"
       return "$expression?.let { $value -> ${copyElementExpression(type.copy(nullable = false), value, depth + 1)} }"
     }
-    if (
-      type.primitive || type.unsigned || type.typeId == "Types.STRING" || type.componentType != null
-    ) {
+    val arrayCopy = copyArrayExpression(type, expression)
+    if (arrayCopy != null) {
+      return arrayCopy
+    }
+    if (type.primitive || type.unsigned || type.typeId == "Types.STRING") {
       return expression
     }
     if (type.isCollectionOrMap()) {
       return copyContainerExpression(type, expression, depth + 1)
     }
     return "(copyContext.copyObject($expression) as ${type.valueTypeName.removeSuffix("?")})"
+  }
+
+  private fun copyArrayExpression(type: KotlinSourceTypeNode, expression: String): String? {
+    val valueType = type.valueTypeName.removeSuffix("?")
+    if (type.typeId == "Types.BINARY" && valueType == "ByteArray") {
+      return "$expression.copyOf()"
+    }
+    if (type.componentType == null) {
+      return null
+    }
+    return when (valueType) {
+      "BooleanArray",
+      "ByteArray",
+      "ShortArray",
+      "IntArray",
+      "LongArray",
+      "FloatArray",
+      "DoubleArray",
+      "UByteArray",
+      "UShortArray",
+      "UIntArray",
+      "ULongArray" -> "$expression.copyOf()"
+      else -> "(copyContext.copyObject($expression) as $valueType)"
+    }
   }
 
   private fun fromJavaCompatExpr(

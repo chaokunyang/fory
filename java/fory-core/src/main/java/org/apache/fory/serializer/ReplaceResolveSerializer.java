@@ -76,9 +76,9 @@ public class ReplaceResolveSerializer extends Serializer {
         writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
         readResolveMethod = JavaSerializer.getReadResolveMethod(cls);
       } else if (Serializable.class.isAssignableFrom(cls)) {
-        if (_JDKAccess.isSerializationHookLookupAvailable()) {
-          writeReplaceMethod = _JDKAccess.getSerializationWriteReplaceMethod(cls);
-          readResolveMethod = _JDKAccess.getSerializationReadResolveMethod(cls);
+        if (SerializationHookLookup.isAvailable()) {
+          writeReplaceMethod = SerializationHookLookup.getWriteReplaceMethod(cls);
+          readResolveMethod = SerializationHookLookup.getReadResolveMethod(cls);
         } else {
           writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
           readResolveMethod = JavaSerializer.getReadResolveMethod(cls);

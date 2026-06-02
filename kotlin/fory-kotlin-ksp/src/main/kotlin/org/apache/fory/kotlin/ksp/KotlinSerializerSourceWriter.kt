@@ -26,6 +26,9 @@ import java.nio.charset.StandardCharsets
 
 internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStruct) {
   private val builder = StringBuilder(32768)
+  private val hasComparatorGuards = struct.fields.any { needsComparatorGuard(it.type) }
+
+  private data class ContainerTarget(val init: String, val result: String)
 
   fun writeTo(codeGenerator: CodeGenerator) {
     val dependencies =
@@ -128,6 +131,12 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     }
     builder.append("      return Collections.unmodifiableList(descriptors)\n")
     builder.append("    }\n")
+    if (hasComparatorGuards) {
+      builder.append("    private val NATURAL_ORDER_COMPARATOR: java.util.Comparator<*> =\n")
+      builder.append(
+        "      java.util.Comparator.naturalOrder<Comparable<Any>>() as java.util.Comparator<*>\n"
+      )
+    }
     builder.append("  }\n\n")
     builder.append("  override fun getGeneratedDescriptors(): List<Descriptor> = DESCRIPTORS\n\n")
   }
@@ -224,6 +233,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       .append("  override fun write(writeContext: WriteContext, value: ")
       .append(struct.typeName)
       .append(") {\n")
+    writeComparatorPreflight()
     builder.append("    val buffer = writeContext.buffer\n")
     builder.append("    if (typeResolver.checkClassVersion()) {\n")
     builder.append("      buffer.writeInt32(classVersionHash)\n")
@@ -249,6 +259,19 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("      }\n")
     builder.append("    }\n")
     builder.append("  }\n\n")
+    if (hasComparatorGuards) {
+      builder.append(
+        "  private fun requireXlangNaturalOrdering(typeName: String, comparator: java.util.Comparator<*>?) {\n"
+      )
+      builder.append("    if (comparator != null && comparator !== NATURAL_ORDER_COMPARATOR) {\n")
+      builder.append("      throw UnsupportedOperationException(\n")
+      builder.append(
+        "        \"Xlang serialization of \$typeName with a custom comparator is unsupported because the xlang container wire format does not encode comparators\"\n"
+      )
+      builder.append("      )\n")
+      builder.append("    }\n")
+      builder.append("  }\n\n")
+    }
 
     builder
       .append("  private fun readCompatibleConstructor(readContext: ReadContext): ")
@@ -558,6 +581,191 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("  }\n\n")
   }
 
+  private fun writeComparatorPreflight() {
+    if (!hasComparatorGuards) {
+      return
+    }
+    for (field in struct.fields) {
+      appendComparatorGuard(
+        field.type,
+        "value.${field.name}",
+        "    ",
+        "${struct.qualifiedTypeName}.${field.name}",
+        "guard${field.id}",
+        0,
+      )
+    }
+  }
+
+  private fun needsComparatorGuard(type: KotlinSourceTypeNode): Boolean =
+    when {
+      type.nullable -> needsComparatorGuard(type.copy(nullable = false))
+      type.collectionFactory == CollectionFactory.TREE_SET ||
+        type.collectionFactory == CollectionFactory.CONCURRENT_SKIP_LIST_SET ||
+        type.collectionFactory == CollectionFactory.TREE_MAP ||
+        type.collectionFactory == CollectionFactory.CONCURRENT_SKIP_LIST_MAP -> true
+      type.typeId == "Types.LIST" || type.typeId == "Types.SET" ->
+        type.typeArguments.any { needsComparatorGuard(it) }
+      type.typeId == "Types.MAP" -> type.typeArguments.any { needsComparatorGuard(it) }
+      else -> false
+    }
+
+  private fun appendComparatorGuard(
+    type: KotlinSourceTypeNode,
+    expression: String,
+    indent: String,
+    path: String,
+    prefix: String,
+    depth: Int,
+  ) {
+    if (!needsComparatorGuard(type)) {
+      return
+    }
+    if (type.nullable) {
+      val nullableValue = "${prefix}Value$depth"
+      builder
+        .append(indent)
+        .append("val ")
+        .append(nullableValue)
+        .append(" = ")
+        .append(expression)
+        .append("\n")
+      builder.append(indent).append("if (").append(nullableValue).append(" != null) {\n")
+      appendComparatorGuard(
+        type.copy(nullable = false),
+        nullableValue,
+        "$indent  ",
+        path,
+        prefix,
+        depth + 1,
+      )
+      builder.append(indent).append("}\n")
+      return
+    }
+    when (type.collectionFactory) {
+      CollectionFactory.TREE_SET,
+      CollectionFactory.CONCURRENT_SKIP_LIST_SET ->
+        builder
+          .append(indent)
+          .append("requireXlangNaturalOrdering(\"")
+          .append(escape(path))
+          .append("\", (")
+          .append(expression)
+          .append(" as java.util.SortedSet<*>).comparator())\n")
+      CollectionFactory.TREE_MAP,
+      CollectionFactory.CONCURRENT_SKIP_LIST_MAP ->
+        builder
+          .append(indent)
+          .append("requireXlangNaturalOrdering(\"")
+          .append(escape(path))
+          .append("\", (")
+          .append(expression)
+          .append(" as java.util.SortedMap<*, *>).comparator())\n")
+      else -> {}
+    }
+    when (type.typeId) {
+      "Types.LIST" -> {
+        val element = type.typeArguments[0]
+        if (!needsComparatorGuard(element)) {
+          return
+        }
+        val source = "${prefix}List$depth"
+        val index = "${prefix}Index$depth"
+        val elementName = "${prefix}Element$depth"
+        builder
+          .append(indent)
+          .append("val ")
+          .append(source)
+          .append(" = ")
+          .append(expression)
+          .append("\n")
+        builder
+          .append(indent)
+          .append("if (")
+          .append(source)
+          .append(" is java.util.RandomAccess) {\n")
+        builder.append(indent).append("  var ").append(index).append(" = 0\n")
+        builder
+          .append(indent)
+          .append("  ")
+          .append("while (")
+          .append(index)
+          .append(" < ")
+          .append(source)
+          .append(".size) {\n")
+        appendComparatorGuard(
+          element,
+          "$source[$index]",
+          "$indent    ",
+          "$path element",
+          prefix,
+          depth + 1,
+        )
+        builder.append(indent).append("    ").append(index).append("++\n")
+        builder.append(indent).append("  }\n")
+        builder.append(indent).append("} else {\n")
+        builder
+          .append(indent)
+          .append("  for (")
+          .append(elementName)
+          .append(" in ")
+          .append(source)
+          .append(") {\n")
+        appendComparatorGuard(
+          element,
+          elementName,
+          "$indent    ",
+          "$path element",
+          prefix,
+          depth + 1,
+        )
+        builder.append(indent).append("  }\n")
+        builder.append(indent).append("}\n")
+      }
+      "Types.SET" -> {
+        val element = type.typeArguments[0]
+        if (!needsComparatorGuard(element)) {
+          return
+        }
+        val elementName = "${prefix}Element$depth"
+        builder
+          .append(indent)
+          .append("for (")
+          .append(elementName)
+          .append(" in ")
+          .append(expression)
+          .append(") {\n")
+        appendComparatorGuard(
+          element,
+          elementName,
+          "$indent  ",
+          "$path element",
+          prefix,
+          depth + 1,
+        )
+        builder.append(indent).append("}\n")
+      }
+      "Types.MAP" -> {
+        val key = type.typeArguments[0]
+        val value = type.typeArguments[1]
+        if (!needsComparatorGuard(key) && !needsComparatorGuard(value)) {
+          return
+        }
+        val entry = "${prefix}Entry$depth"
+        builder
+          .append(indent)
+          .append("for (")
+          .append(entry)
+          .append(" in ")
+          .append(expression)
+          .append(".entries) {\n")
+        appendComparatorGuard(key, "$entry.key", "$indent  ", "$path key", prefix, depth + 1)
+        appendComparatorGuard(value, "$entry.value", "$indent  ", "$path value", prefix, depth + 2)
+        builder.append(indent).append("}\n")
+      }
+    }
+  }
+
   private fun writeMutableReadBody() {
     builder.append("    val value = ").append(struct.typeName).append("()\n")
     builder.append("    if (readContext.hasPreservedRefId()) {\n")
@@ -811,7 +1019,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       return
     }
     for (field in struct.fields) {
-      if (field.type.primitive || isScalarUnsigned(field)) {
+      if (isDirectCopyValue(field.type)) {
         builder
           .append("    val ")
           .append(field.localName)
@@ -861,7 +1069,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    copyContext.reference(value, copy)\n")
     for (field in struct.fields) {
       builder.append("    copy.").append(field.name).append(" = ")
-      if (field.type.primitive || isScalarUnsigned(field)) {
+      if (isDirectCopyValue(field.type)) {
         builder.append("value.").append(field.name).append("\n")
       } else if (isDenseUnsignedArray(field)) {
         builder.append("value.").append(field.name)
@@ -888,7 +1096,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
 
   private fun copyExpression(field: KotlinSourceField): String =
     when {
-      field.type.primitive || isScalarUnsigned(field) -> "value.${field.name}"
+      isDirectCopyValue(field.type) -> "value.${field.name}"
       isDenseUnsignedArray(field) ->
         if (field.nullable) "value.${field.name}?.copyOf()" else "value.${field.name}.copyOf()"
       field.type.isCollectionOrMap() ->
@@ -903,7 +1111,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   private fun constructorCopyExpression(field: KotlinSourceField): String {
     val expression =
       when {
-        field.type.primitive || isScalarUnsigned(field) -> "value.${field.name}"
+        isDirectCopyValue(field.type) -> "value.${field.name}"
         isDenseUnsignedArray(field) ->
           if (field.nullable) "value.${field.name}?.copyOf()" else "value.${field.name}.copyOf()"
         field.type.isCollectionOrMap() ->
@@ -1023,13 +1231,10 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       val value = "readValue$depth"
       return "$valueExpression?.let { $value -> ${collectionReadExpression(type.copy(nullable = false), value, depth + 1, erasedInput)} }"
     }
-    val adapted =
-      if (type.typeArguments.any { needsCollectionReadAdaptation(it) }) {
-        readContainerExpression(type, valueExpression, depth)
-      } else {
-        valueExpression
-      }
-    return applyCollectionFactory(type, adapted, erasedInput && adapted == valueExpression)
+    if (type.typeArguments.any { needsCollectionReadAdaptation(it) }) {
+      return readContainerExpression(type, valueExpression, depth)
+    }
+    return applyCollectionFactory(type, valueExpression, erasedInput)
   }
 
   private fun needsCollectionReadAdaptation(type: KotlinSourceTypeNode): Boolean =
@@ -1043,23 +1248,25 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   ): String {
     val source = "readSource$depth"
     val target = "readTarget$depth"
-    val valueType = type.valueTypeName.removeSuffix("?")
     return when (type.typeId) {
       "Types.LIST" -> {
         val element = "readElement$depth"
         val adaptedElement = readElementExpression(type.typeArguments[0], element, depth + 1)
-        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = java.util.ArrayList<Any?>($source.size); for ($element in $source) { $target.add($adaptedElement) }; $target as $valueType }"
+        val targetBuild = readTarget(type, source, target)
+        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = ${targetBuild.init}; for ($element in $source) { $target.add($adaptedElement) }; ${targetBuild.result} }"
       }
       "Types.SET" -> {
         val element = "readElement$depth"
         val adaptedElement = readElementExpression(type.typeArguments[0], element, depth + 1)
-        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = java.util.LinkedHashSet<Any?>($source.size); for ($element in $source) { $target.add($adaptedElement) }; $target as $valueType }"
+        val targetBuild = readTarget(type, source, target)
+        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = ${targetBuild.init}; for ($element in $source) { $target.add($adaptedElement) }; ${targetBuild.result} }"
       }
       "Types.MAP" -> {
         val entry = "readEntry$depth"
         val adaptedKey = readElementExpression(type.typeArguments[0], "$entry.key", depth + 1)
         val adaptedValue = readElementExpression(type.typeArguments[1], "$entry.value", depth + 2)
-        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = java.util.LinkedHashMap<Any?, Any?>($source.size); for ($entry in $source.entries) { $target[$adaptedKey] = $adaptedValue }; $target as $valueType }"
+        val targetBuild = readTarget(type, source, target)
+        "run { val $source = ${erasedCollectionExpression(type, expression)}; val $target = ${targetBuild.init}; for ($entry in $source.entries) { $target[$adaptedKey] = $adaptedValue }; ${targetBuild.result} }"
       }
       else -> expression
     }
@@ -1107,6 +1314,61 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       type,
       "$conversion(${erasedCollectionExpression(type, valueExpression)})"
     )
+  }
+
+  private fun readTarget(
+    type: KotlinSourceTypeNode,
+    source: String,
+    target: String
+  ): ContainerTarget {
+    val valueType = type.valueTypeName.removeSuffix("?")
+    fun castTarget(): String = "$target as $valueType"
+    return when (type.typeId) {
+      "Types.LIST" ->
+        when (type.collectionFactory) {
+          CollectionFactory.LINKED_LIST ->
+            ContainerTarget("java.util.LinkedList<Any?>()", castTarget())
+          CollectionFactory.COPY_ON_WRITE_ARRAY_LIST ->
+            ContainerTarget(
+              "java.util.ArrayList<Any?>($source.size)",
+              "java.util.concurrent.CopyOnWriteArrayList($target) as $valueType"
+            )
+          else -> ContainerTarget("java.util.ArrayList<Any?>($source.size)", castTarget())
+        }
+      "Types.SET" ->
+        when (type.collectionFactory) {
+          CollectionFactory.HASH_SET ->
+            ContainerTarget("java.util.HashSet<Any?>($source.size)", castTarget())
+          CollectionFactory.TREE_SET -> ContainerTarget("java.util.TreeSet<Any?>()", castTarget())
+          CollectionFactory.COPY_ON_WRITE_ARRAY_SET ->
+            ContainerTarget(
+              "java.util.LinkedHashSet<Any?>($source.size)",
+              "java.util.concurrent.CopyOnWriteArraySet($target) as $valueType"
+            )
+          CollectionFactory.CONCURRENT_SKIP_LIST_SET ->
+            ContainerTarget("java.util.concurrent.ConcurrentSkipListSet<Any?>()", castTarget())
+          else -> ContainerTarget("java.util.LinkedHashSet<Any?>($source.size)", castTarget())
+        }
+      "Types.MAP" ->
+        when (type.collectionFactory) {
+          CollectionFactory.HASH_MAP ->
+            ContainerTarget("java.util.HashMap<Any?, Any?>($source.size)", castTarget())
+          CollectionFactory.TREE_MAP ->
+            ContainerTarget("java.util.TreeMap<Any?, Any?>()", castTarget())
+          CollectionFactory.CONCURRENT_HASH_MAP ->
+            ContainerTarget(
+              "java.util.concurrent.ConcurrentHashMap<Any?, Any?>($source.size)",
+              castTarget()
+            )
+          CollectionFactory.CONCURRENT_SKIP_LIST_MAP ->
+            ContainerTarget(
+              "java.util.concurrent.ConcurrentSkipListMap<Any?, Any?>()",
+              castTarget()
+            )
+          else -> ContainerTarget("java.util.LinkedHashMap<Any?, Any?>($source.size)", castTarget())
+        }
+      else -> ContainerTarget("null", castTarget())
+    }
   }
 
   private fun localVariableType(field: KotlinSourceField): String {
@@ -1177,6 +1439,46 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
   private fun KotlinSourceTypeNode.isCollectionOrMap(): Boolean =
     typeId == "Types.LIST" || typeId == "Types.SET" || typeId == "Types.MAP"
 
+  private fun isDirectCopyValue(type: KotlinSourceTypeNode): Boolean =
+    type.typeArguments.isEmpty() &&
+      type.componentType == null &&
+      when (type.typeId) {
+        "Types.BOOL",
+        "Types.INT8",
+        "Types.UINT8",
+        "Types.INT16",
+        "Types.UINT16",
+        "Types.INT32",
+        "Types.VARINT32",
+        "Types.UINT32",
+        "Types.VAR_UINT32",
+        "Types.INT64",
+        "Types.VARINT64",
+        "Types.TAGGED_INT64",
+        "Types.UINT64",
+        "Types.VAR_UINT64",
+        "Types.TAGGED_UINT64",
+        "Types.FLOAT32",
+        "Types.FLOAT64",
+        "Types.STRING",
+        "Types.DATE",
+        "Types.TIMESTAMP",
+        "Types.DURATION",
+        "Types.DECIMAL",
+        "Types.FLOAT16",
+        "Types.BFLOAT16" -> true
+        else -> false
+      }
+
+  private fun copiesWithContainerSerializer(type: KotlinSourceTypeNode): Boolean =
+    when (type.collectionFactory) {
+      CollectionFactory.NONE,
+      CollectionFactory.MUTABLE_LIST,
+      CollectionFactory.MUTABLE_SET,
+      CollectionFactory.MUTABLE_MAP -> false
+      else -> true
+    }
+
   private fun copyContainerExpression(
     type: KotlinSourceTypeNode,
     expression: String,
@@ -1186,30 +1488,51 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       val source = "copySource$depth"
       return "$expression?.let { $source -> ${copyContainerExpression(type.copy(nullable = false), source, depth + 1)} }"
     }
+    if (copiesWithContainerSerializer(type)) {
+      return "(copyContext.copyObject($expression) as ${type.valueTypeName.removeSuffix("?")})"
+    }
     val source = "copySource$depth"
     val target = "copyTarget$depth"
-    val valueType = type.valueTypeName.removeSuffix("?")
     val copied =
       when (type.typeId) {
         "Types.LIST" -> {
           val element = "copyElement$depth"
           val copiedElement = copyElementExpression(type.typeArguments[0], element, depth + 1)
-          "run { val $source = $expression; val $target = java.util.ArrayList<Any?>($source.size); for ($element in $source) { $target.add($copiedElement) }; $target as $valueType }"
+          val targetBuild = copyTarget(type, source, target)
+          "run { val $source = $expression; val $target = ${targetBuild.init}; copyContext.reference<Any>($source, $target); for ($element in $source) { $target.add($copiedElement) }; ${targetBuild.result} }"
         }
         "Types.SET" -> {
           val element = "copyElement$depth"
           val copiedElement = copyElementExpression(type.typeArguments[0], element, depth + 1)
-          "run { val $source = $expression; val $target = java.util.LinkedHashSet<Any?>($source.size); for ($element in $source) { $target.add($copiedElement) }; $target as $valueType }"
+          val targetBuild = copyTarget(type, source, target)
+          "run { val $source = $expression; val $target = ${targetBuild.init}; copyContext.reference<Any>($source, $target); for ($element in $source) { $target.add($copiedElement) }; ${targetBuild.result} }"
         }
         "Types.MAP" -> {
           val entry = "copyEntry$depth"
           val copiedKey = copyElementExpression(type.typeArguments[0], "$entry.key", depth + 1)
           val copiedValue = copyElementExpression(type.typeArguments[1], "$entry.value", depth + 2)
-          "run { val $source = $expression; val $target = java.util.LinkedHashMap<Any?, Any?>($source.size); for ($entry in $source.entries) { $target[$copiedKey] = $copiedValue }; $target as $valueType }"
+          val targetBuild = copyTarget(type, source, target)
+          "run { val $source = $expression; val $target = ${targetBuild.init}; copyContext.reference<Any>($source, $target); for ($entry in $source.entries) { $target[$copiedKey] = $copiedValue }; ${targetBuild.result} }"
         }
-        else -> "copyContext.copyObject($expression) as $valueType"
+        else -> "copyContext.copyObject($expression) as ${type.valueTypeName.removeSuffix("?")}"
       }
-    return applyCollectionFactory(type, copied)
+    return copied
+  }
+
+  private fun copyTarget(
+    type: KotlinSourceTypeNode,
+    source: String,
+    target: String
+  ): ContainerTarget {
+    val valueType = type.valueTypeName.removeSuffix("?")
+    fun castTarget(): String = "$target as $valueType"
+    return when (type.typeId) {
+      "Types.LIST" -> ContainerTarget("java.util.ArrayList<Any?>($source.size)", castTarget())
+      "Types.SET" -> ContainerTarget("java.util.LinkedHashSet<Any?>($source.size)", castTarget())
+      "Types.MAP" ->
+        ContainerTarget("java.util.LinkedHashMap<Any?, Any?>($source.size)", castTarget())
+      else -> ContainerTarget("null", castTarget())
+    }
   }
 
   private fun copyElementExpression(
@@ -1225,7 +1548,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     if (arrayCopy != null) {
       return arrayCopy
     }
-    if (type.primitive || type.unsigned || type.typeId == "Types.STRING") {
+    if (isDirectCopyValue(type)) {
       return expression
     }
     if (type.isCollectionOrMap()) {

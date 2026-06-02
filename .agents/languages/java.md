@@ -76,6 +76,13 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Root codegen and builder classes that still need Unsafe on JDK8-24 must route symbolic Unsafe
   access through a helper with a Java 25 replacement. Do not leave `_JDKAccess.unsafe()` or
   `sun.misc.Unsafe` references in JDK25-visible classes outside matching `java25` replacements.
+- Java 25 multi-release classes never run on Android. Do not keep `AndroidSupport.IS_ANDROID`
+  branches or imports under `src/main/java25`; Android compatibility belongs to the root sources.
+- String zero-copy construction is serializer-owned behavior. Keep private `String` constructor
+  lambda factories in `StringSerializer`, keep `PlatformStringUtils`
+  focused on field and array access, keep serialization hook discovery in serializer-owned code,
+  and keep `_JDKAccess` limited to JDK lookup, module, function factory, and access-flag
+  primitives.
 - JDK25+ collection serializers must fail unsupported `Collections.newSetFromMap` backing maps
   before writing or copying. Do not rewrite them to `HashMap`, because that changes equality
   semantics and can drop entries.
@@ -89,6 +96,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   reject copied constructor arguments that still retain the marker, then construct and reference the
   real copy. Do not implement a separate raw-field pre-scan or leave a generated path without the
   marker guard.
+- Generated JVM copy code may direct-copy immutable scalar values, but Java `Collection`/`Map`
+  subclasses must be copied through `CopyContext.copyObject(...)` so collection/map serializers own
+  concrete type, comparator, wrapper, and reference behavior.
 - When a `Throwable` is created without running `Throwable` constructors, restore the private
   `cause` and `suppressedExceptions` sentinels directly before exposing the object. Do not call
   `initCause` or `addSuppressed` on a constructor-bypassed `Throwable` whose sentinels are still

@@ -21,6 +21,9 @@
 
 package org.apache.fory.kotlin.xlang
 
+import java.math.BigDecimal
+import java.time.Instant
+import java.time.LocalDate
 import java.util.TreeMap
 import java.util.TreeSet
 import java.util.concurrent.ConcurrentHashMap
@@ -38,6 +41,7 @@ import org.apache.fory.annotation.ForyUnion
 import org.apache.fory.annotation.ForyUnknownCase
 import org.apache.fory.annotation.Ref
 import org.apache.fory.exception.ForyException
+import org.apache.fory.exception.SerializationException
 import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.ForyKotlin
 import org.apache.fory.kotlin.VarInt
@@ -45,7 +49,9 @@ import org.apache.fory.kotlin.register
 import org.apache.fory.memory.MemoryUtils
 import org.apache.fory.serializer.StaticGeneratedStructSerializer
 import org.apache.fory.serializer.kotlin.KotlinSerializers
+import org.apache.fory.type.BFloat16
 import org.apache.fory.type.BFloat16Array
+import org.apache.fory.type.Float16
 import org.apache.fory.type.Float16Array
 import org.apache.fory.type.Types
 import org.apache.fory.type.union.UnknownCase
@@ -224,11 +230,25 @@ constructor(
 
 @ForyStruct
 public data class KotlinDurationAndHalfArrays
-@ForyConstructor("duration", "float16s", "bfloat16s")
+@ForyConstructor(
+  "duration",
+  "date",
+  "instant",
+  "decimal",
+  "float16",
+  "bfloat16",
+  "float16s",
+  "bfloat16s",
+)
 constructor(
   @ForyField(id = 1) val duration: kotlin.time.Duration,
-  @ForyField(id = 2) val float16s: Float16Array,
-  @ForyField(id = 3) val bfloat16s: BFloat16Array,
+  @ForyField(id = 2) val date: LocalDate,
+  @ForyField(id = 3) val instant: Instant,
+  @ForyField(id = 4) val decimal: BigDecimal,
+  @ForyField(id = 5) val float16: Float16,
+  @ForyField(id = 6) val bfloat16: BFloat16,
+  @ForyField(id = 7) val float16s: Float16Array,
+  @ForyField(id = 8) val bfloat16s: BFloat16Array,
 )
 
 @ForyStruct
@@ -424,6 +444,23 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   decoded.mutableCounts["round-trip-mutable-map"] = 14L
   check(decoded.sortedNames.javaClass == TreeSet::class.java)
   check(decoded.concurrentCounts.javaClass == ConcurrentHashMap::class.java)
+  val reverseCounts = TreeMap<String, Int>(java.util.Collections.reverseOrder<String>())
+  reverseCounts.putAll(mapOf("x" to 7, "y" to 8))
+  val reverseSortedNames = TreeSet<String>(java.util.Collections.reverseOrder<String>())
+  reverseSortedNames.addAll(listOf("e", "f"))
+  val copyCollections = collections.copy(counts = reverseCounts, sortedNames = reverseSortedNames)
+  try {
+    fory.serialize(copyCollections)
+    error("Kotlin concrete sorted collections with custom comparators were serialized")
+  } catch (e: SerializationException) {
+    check(e.cause is UnsupportedOperationException)
+  }
+  val copiedCollections = fory.copy(copyCollections)
+  check(copiedCollections == copyCollections)
+  check(copiedCollections.counts !== copyCollections.counts)
+  check(checkNotNull(copiedCollections.counts.comparator()).compare("a", "b") > 0)
+  check(copiedCollections.sortedNames !== copyCollections.sortedNames)
+  check(checkNotNull(copiedCollections.sortedNames.comparator()).compare("a", "b") > 0)
 
   val unsignedCollections =
     KotlinUnsignedCollections(
@@ -504,6 +541,11 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   val durationAndHalfArrays =
     KotlinDurationAndHalfArrays(
       duration = (-500).milliseconds,
+      date = LocalDate.of(2026, 6, 2),
+      instant = Instant.parse("2026-06-02T04:00:00Z"),
+      decimal = BigDecimal("12345.6789"),
+      float16 = Float16.valueOf(1.5f),
+      bfloat16 = BFloat16.valueOf(-2.5f),
       float16s = Float16Array.of(1.0f, -2.0f),
       bfloat16s = BFloat16Array.of(3.0f, -4.0f),
     )
@@ -513,8 +555,19 @@ private fun staticSerializerRoundTrip(dataFile: String) {
       KotlinDurationAndHalfArrays::class.java,
     )
   check(decodedDurationAndHalfArrays.duration == durationAndHalfArrays.duration)
+  check(decodedDurationAndHalfArrays.date == durationAndHalfArrays.date)
+  check(decodedDurationAndHalfArrays.instant == durationAndHalfArrays.instant)
+  check(decodedDurationAndHalfArrays.decimal == durationAndHalfArrays.decimal)
+  check(decodedDurationAndHalfArrays.float16 == durationAndHalfArrays.float16)
+  check(decodedDurationAndHalfArrays.bfloat16 == durationAndHalfArrays.bfloat16)
   check(decodedDurationAndHalfArrays.float16s == durationAndHalfArrays.float16s)
   check(decodedDurationAndHalfArrays.bfloat16s == durationAndHalfArrays.bfloat16s)
+  val copiedDurationAndHalfArrays = fory.copy(durationAndHalfArrays)
+  check(copiedDurationAndHalfArrays.date === durationAndHalfArrays.date)
+  check(copiedDurationAndHalfArrays.instant === durationAndHalfArrays.instant)
+  check(copiedDurationAndHalfArrays.decimal === durationAndHalfArrays.decimal)
+  check(copiedDurationAndHalfArrays.float16 === durationAndHalfArrays.float16)
+  check(copiedDurationAndHalfArrays.bfloat16 === durationAndHalfArrays.bfloat16)
   try {
     fory.serialize(durationAndHalfArrays.copy(duration = Duration.INFINITE))
     error("Infinite Kotlin xlang duration was serialized")

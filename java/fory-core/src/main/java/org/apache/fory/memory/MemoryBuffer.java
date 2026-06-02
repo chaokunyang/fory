@@ -30,7 +30,7 @@ import org.apache.fory.io.AbstractStreamReader;
 import org.apache.fory.io.ForyStreamReader;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.platform.internal._UnsafeUtils;
 import sun.misc.Unsafe;
 
 /**
@@ -66,7 +66,7 @@ import sun.misc.Unsafe;
  */
 public final class MemoryBuffer {
   public static final int BUFFER_GROW_STEP_THRESHOLD = 100 * 1024 * 1024;
-  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
   private static final boolean LITTLE_ENDIAN = NativeByteOrder.IS_LITTLE_ENDIAN;
   private static final boolean UNALIGNED = !AndroidSupport.IS_ANDROID && unaligned();
   private static final int BOOLEAN_ARRAY_OFFSET;

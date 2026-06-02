@@ -1,7 +1,7 @@
 package org.apache.fory.memory;
 
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.platform.internal._UnsafeUtils;
 import sun.misc.Unsafe;
 
 /*
@@ -24,7 +24,7 @@ import sun.misc.Unsafe;
  */
 
 public class LittleEndian {
-  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
   private static final int BYTE_ARRAY_OFFSET;
 
   // Keep arrayBaseOffset as a direct static-field store for GraalVM native-image recomputation.

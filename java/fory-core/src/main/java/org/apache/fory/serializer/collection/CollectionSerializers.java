@@ -77,6 +77,18 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class CollectionSerializers {
+  private static final Comparator NATURAL_ORDER_COMPARATOR = Comparator.naturalOrder();
+
+  private static void requireXlangNaturalOrdering(Class<?> type, Comparator<?> comparator) {
+    if (comparator != null && comparator != NATURAL_ORDER_COMPARATOR) {
+      throw new UnsupportedOperationException(
+          "Xlang serialization of "
+              + type.getName()
+              + " with a custom comparator is unsupported because the xlang set wire format "
+              + "does not encode comparators");
+    }
+  }
+
   private static void throwBinarySizeLimitExceeded(long size, int maxBinarySize) {
     throw new DeserializationException(
         "Binary payload size " + size + " exceeds max binary size " + maxBinarySize);
@@ -245,6 +257,9 @@ public class CollectionSerializers {
 
     @Override
     public Collection onCollectionWrite(WriteContext writeContext, T value) {
+      if (config.isXlang()) {
+        requireXlangNaturalOrdering(type, value.comparator());
+      }
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
       if (config.isXlang()) {
@@ -258,12 +273,11 @@ public class CollectionSerializers {
     @SuppressWarnings("unchecked")
     @Override
     public T newCollection(ReadContext readContext) {
-      assert !config.isXlang();
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
       T collection;
-      Comparator comparator = (Comparator) readContext.readRef();
+      Comparator comparator = config.isXlang() ? null : (Comparator) readContext.readRef();
       if (type == TreeSet.class) {
         collection = (T) new TreeSet(comparator);
       } else {
@@ -517,6 +531,9 @@ public class CollectionSerializers {
     @Override
     public CollectionSnapshot onCollectionWrite(
         WriteContext writeContext, ConcurrentSkipListSet value) {
+      if (config.isXlang()) {
+        requireXlangNaturalOrdering(type, value.comparator());
+      }
       CollectionSnapshot snapshot = super.onCollectionWrite(writeContext, value);
       if (config.isXlang()) {
         return snapshot;
@@ -530,7 +547,11 @@ public class CollectionSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readCollectionSize(buffer);
       setNumElements(numElements);
-      assert !config.isXlang();
+      if (config.isXlang()) {
+        ConcurrentSkipListSet skipListSet = new ConcurrentSkipListSet();
+        readContext.reference(skipListSet);
+        return skipListSet;
+      }
       int refId = readContext.lastPreservedRefId();
       // It's possible that comparator/elements has circular ref to set.
       Comparator comparator = (Comparator) readContext.readRef();

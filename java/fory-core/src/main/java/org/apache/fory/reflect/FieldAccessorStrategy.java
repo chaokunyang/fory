@@ -30,12 +30,13 @@ import org.apache.fory.collection.Tuple2;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.platform.internal._UnsafeUtils;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
 final class FieldAccessorStrategy {
-  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
 
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;

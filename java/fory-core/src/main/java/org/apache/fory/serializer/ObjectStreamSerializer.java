@@ -686,8 +686,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     private final Consumer readObjectNoDataFunc;
 
     private StreamTypeInfo(Class<?> type) {
-      // _JDKAccess owns version-specific discovery of serialization hooks without requiring
-      // ObjectStreamClass private-field access or a java.io package open.
       Method writeMethod = null;
       Method readMethod = null;
       Method noDataMethod = null;
@@ -696,9 +694,9 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         readMethod = JavaSerializer.getReadRefMethod(type, false);
         noDataMethod = JavaSerializer.getReadRefNoData(type, false);
       } else {
-        writeMethod = _JDKAccess.getSerializationWriteObjectMethod(type);
-        readMethod = _JDKAccess.getSerializationReadObjectMethod(type);
-        noDataMethod = _JDKAccess.getSerializationReadObjectNoDataMethod(type);
+        writeMethod = SerializationHookLookup.getWriteObjectMethod(type);
+        readMethod = SerializationHookLookup.getReadObjectMethod(type);
+        noDataMethod = SerializationHookLookup.getReadObjectNoDataMethod(type);
         if (writeMethod == null) {
           writeMethod = JavaSerializer.getWriteObjectMethod(type, false);
         }
@@ -715,7 +713,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       this.defaultReadObjectHandle =
           AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
               ? null
-              : _JDKAccess.getSerializationDefaultReadObjectHandle(type);
+              : SerializationHookLookup.getDefaultReadObjectHandle(type);
       if (AndroidSupport.IS_ANDROID) {
         makeAccessible(writeObjectMethod);
         makeAccessible(readObjectMethod);

@@ -23,8 +23,15 @@ import static org.apache.fory.type.TypeUtils.STRING_TYPE;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_ASCII_MASK;
 import static org.apache.fory.util.StringUtils.MULTI_CHARS_NON_LATIN_MASK;
 
+import java.lang.invoke.CallSite;
+import java.lang.invoke.LambdaMetafactory;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles.Lookup;
+import java.lang.invoke.MethodType;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.codegen.Expression;
 import org.apache.fory.codegen.Expression.Invoke;
@@ -37,6 +44,7 @@ import org.apache.fory.memory.LittleEndian;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.MathUtils;
 import org.apache.fory.util.Preconditions;
 
@@ -57,12 +65,22 @@ public final class StringSerializer extends ImmutableSerializer<String> {
       PlatformStringUtils.JDK_STRING_FIELD_ACCESS;
 
   private static final byte LATIN1 = 0;
+  private static final Byte LATIN1_BOXED = LATIN1;
   private static final byte UTF16 = 1;
+  private static final Byte UTF16_BOXED = UTF16;
   private static final byte UTF8 = 2;
   private static final int DEFAULT_BUFFER_SIZE = 1024;
 
   private static final boolean STRING_HAS_COUNT_OFFSET =
       PlatformStringUtils.STRING_HAS_COUNT_OFFSET;
+  private static final Lookup STRING_LOOKUP =
+      JDK_INTERNAL_FIELD_ACCESS ? _JDKAccess._trustedLookup(String.class) : null;
+  private static final BiFunction<char[], Boolean, String> CHARS_STRING_ZERO_COPY_CTR =
+      JDK_INTERNAL_FIELD_ACCESS ? getCharsStringZeroCopyCtr() : null;
+  private static final BiFunction<byte[], Byte, String> BYTES_STRING_ZERO_COPY_CTR =
+      JDK_INTERNAL_FIELD_ACCESS ? getBytesStringZeroCopyCtr() : null;
+  private static final Function<byte[], String> LATIN_BYTES_STRING_ZERO_COPY_CTR =
+      JDK_INTERNAL_FIELD_ACCESS ? getLatinBytesStringZeroCopyCtr() : null;
 
   private final boolean compressString;
   private final boolean writeNumUtf16BytesForUtf8Encoding;
@@ -874,13 +892,126 @@ public final class StringSerializer extends ImmutableSerializer<String> {
   }
 
   public static String newCharsStringZeroCopy(char[] data) {
-    return PlatformStringUtils.newCharsStringZeroCopy(data);
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
+      return new String(data);
+    }
+    if (!STRING_VALUE_FIELD_IS_CHARS) {
+      throw new IllegalStateException("String value isn't char[], current java isn't supported");
+    }
+    return CHARS_STRING_ZERO_COPY_CTR.apply(data, Boolean.TRUE);
   }
 
   // coder param first to make inline call args
   // `(buffer.readByte(), buffer.readBytesWithSizeEmbedded())` work.
   public static String newBytesStringZeroCopy(byte coder, byte[] data) {
-    return PlatformStringUtils.newBytesStringZeroCopy(coder, data);
+    if (!JDK_INTERNAL_FIELD_ACCESS) {
+      return newBytesStringSlow(coder, data);
+    }
+    if (coder == LATIN1) {
+      if (LATIN_BYTES_STRING_ZERO_COPY_CTR != null) {
+        return LATIN_BYTES_STRING_ZERO_COPY_CTR.apply(data);
+      }
+      return BYTES_STRING_ZERO_COPY_CTR.apply(data, LATIN1_BOXED);
+    } else if (coder == UTF16) {
+      return BYTES_STRING_ZERO_COPY_CTR.apply(data, UTF16_BOXED);
+    } else {
+      return BYTES_STRING_ZERO_COPY_CTR.apply(data, coder);
+    }
+  }
+
+  private static String newBytesStringSlow(byte coder, byte[] data) {
+    if (coder == LATIN1) {
+      return new String(data, StandardCharsets.ISO_8859_1);
+    } else if (coder == UTF16) {
+      char[] chars = new char[data.length >> 1];
+      for (int i = 0, j = 0; i < data.length; i += 2) {
+        chars[j++] = (char) ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8));
+      }
+      return new String(chars);
+    } else {
+      return new String(data, StandardCharsets.UTF_8);
+    }
+  }
+
+  private static BiFunction<char[], Boolean, String> getCharsStringZeroCopyCtr() {
+    if (!STRING_VALUE_FIELD_IS_CHARS) {
+      return null;
+    }
+    MethodHandle handle = getJavaStringZeroCopyCtrHandle();
+    if (handle == null) {
+      return null;
+    }
+    try {
+      CallSite callSite =
+          LambdaMetafactory.metafactory(
+              STRING_LOOKUP,
+              "apply",
+              MethodType.methodType(BiFunction.class),
+              handle.type().generic(),
+              handle,
+              handle.type());
+      return (BiFunction) callSite.getTarget().invokeExact();
+    } catch (Throwable e) {
+      return null;
+    }
+  }
+
+  private static BiFunction<byte[], Byte, String> getBytesStringZeroCopyCtr() {
+    if (!STRING_VALUE_FIELD_IS_BYTES) {
+      return null;
+    }
+    MethodHandle handle = getJavaStringZeroCopyCtrHandle();
+    if (handle == null) {
+      return null;
+    }
+    try {
+      MethodType instantiatedMethodType =
+          MethodType.methodType(handle.type().returnType(), new Class[] {byte[].class, Byte.class});
+      CallSite callSite =
+          LambdaMetafactory.metafactory(
+              STRING_LOOKUP,
+              "apply",
+              MethodType.methodType(BiFunction.class),
+              handle.type().generic(),
+              handle,
+              instantiatedMethodType);
+      return (BiFunction) callSite.getTarget().invokeExact();
+    } catch (Throwable e) {
+      return null;
+    }
+  }
+
+  private static Function<byte[], String> getLatinBytesStringZeroCopyCtr() {
+    if (!STRING_VALUE_FIELD_IS_BYTES || STRING_LOOKUP == null) {
+      return null;
+    }
+    try {
+      Class<?> clazz = Class.forName("java.lang.StringCoding");
+      Lookup caller = STRING_LOOKUP.in(clazz);
+      MethodHandle handle =
+          caller.findStatic(
+              clazz, "newStringLatin1", MethodType.methodType(String.class, byte[].class));
+      return _JDKAccess.makeFunction(caller, handle, Function.class);
+    } catch (Throwable e) {
+      return null;
+    }
+  }
+
+  private static MethodHandle getJavaStringZeroCopyCtrHandle() {
+    if (STRING_LOOKUP == null) {
+      return null;
+    }
+    try {
+      if (STRING_VALUE_FIELD_IS_CHARS) {
+        return STRING_LOOKUP.findConstructor(
+            String.class, MethodType.methodType(void.class, char[].class, boolean.class));
+      } else {
+        return STRING_LOOKUP.findConstructor(
+            String.class, MethodType.methodType(void.class, byte[].class, byte.class));
+      }
+    } catch (Exception e) {
+      return null;
+    }
   }
 
   private static void writeCharsUTF16BEToHeap(

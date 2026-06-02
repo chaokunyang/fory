@@ -19,17 +19,19 @@
 
 package org.apache.fory.serializer;
 
-import java.nio.charset.StandardCharsets;
+import java.lang.reflect.Field;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.platform.internal._UnsafeUtils;
+import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
 /** Platform-owned string internals used by {@link StringSerializer}. */
 final class PlatformStringUtils {
-  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
   private static final int BYTE_ARRAY_OFFSET;
   private static final int CHAR_ARRAY_OFFSET;
 
@@ -45,30 +47,116 @@ final class PlatformStringUtils {
     }
   }
 
-  static final boolean JDK_STRING_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_STRING_FIELD_ACCESS;
+  private static final StringFields STRING_FIELDS = stringFields();
+
+  static final boolean JDK_STRING_FIELD_ACCESS = STRING_FIELDS.fieldAccess;
   static final boolean STRING_VALUE_FIELD_IS_CHARS =
-      JDK_STRING_FIELD_ACCESS && _JDKAccess.STRING_VALUE_FIELD_IS_CHARS;
+      JDK_STRING_FIELD_ACCESS && STRING_FIELDS.valueFieldIsChars;
   static final boolean STRING_VALUE_FIELD_IS_BYTES =
-      JDK_STRING_FIELD_ACCESS && _JDKAccess.STRING_VALUE_FIELD_IS_BYTES;
-  static final boolean STRING_HAS_COUNT_OFFSET =
-      JDK_STRING_FIELD_ACCESS && _JDKAccess.STRING_HAS_COUNT_OFFSET;
+      JDK_STRING_FIELD_ACCESS && STRING_FIELDS.valueFieldIsBytes;
+  static final boolean STRING_HAS_COUNT_OFFSET = JDK_STRING_FIELD_ACCESS && STRING_FIELDS.counted;
 
-  private static final long STRING_VALUE_FIELD_OFFSET =
-      JDK_STRING_FIELD_ACCESS ? _JDKAccess.STRING_VALUE_FIELD_OFFSET : -1;
-  private static final long STRING_CODER_FIELD_OFFSET =
-      JDK_STRING_FIELD_ACCESS ? _JDKAccess.STRING_CODER_FIELD_OFFSET : -1;
-  private static final long STRING_COUNT_FIELD_OFFSET =
-      JDK_STRING_FIELD_ACCESS ? _JDKAccess.STRING_COUNT_FIELD_OFFSET : -1;
-  private static final long STRING_OFFSET_FIELD_OFFSET =
-      JDK_STRING_FIELD_ACCESS ? _JDKAccess.STRING_OFFSET_FIELD_OFFSET : -1;
-
-  private static final byte LATIN1 = 0;
-  private static final byte UTF16 = 1;
+  private static final long STRING_VALUE_FIELD_OFFSET = STRING_FIELDS.valueOffset;
+  private static final long STRING_CODER_FIELD_OFFSET = STRING_FIELDS.coderOffset;
+  private static final long STRING_COUNT_FIELD_OFFSET = STRING_FIELDS.countOffset;
+  private static final long STRING_OFFSET_FIELD_OFFSET = STRING_FIELDS.offsetOffset;
 
   private PlatformStringUtils() {}
+
+  private static StringFields stringFields() {
+    if (AndroidSupport.IS_ANDROID
+        || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+        || !_JDKAccess.JDK_INTERNAL_FIELD_ACCESS) {
+      return StringFields.noAccess();
+    }
+    try {
+      Field valueField = String.class.getDeclaredField("value");
+      boolean valueFieldIsChars = valueField.getType() == char[].class;
+      boolean valueFieldIsBytes = valueField.getType() == byte[].class;
+      long valueOffset = UNSAFE.objectFieldOffset(valueField);
+      Field countField = getStringFieldNullable("count");
+      Field offsetField = getStringFieldNullable("offset");
+      boolean counted = false;
+      long countOffset = -1;
+      long offsetOffset = -1;
+      if (countField != null || offsetField != null) {
+        Preconditions.checkArgument(
+            countField != null && offsetField != null, "Current jdk not supported");
+        Preconditions.checkArgument(
+            countField.getType() == int.class && offsetField.getType() == int.class,
+            "Current jdk not supported");
+        counted = true;
+        countOffset = UNSAFE.objectFieldOffset(countField);
+        offsetOffset = UNSAFE.objectFieldOffset(offsetField);
+      }
+      long coderOffset = valueFieldIsBytes ? StringCoderField.OFFSET : -1;
+      return new StringFields(
+          true,
+          valueFieldIsChars,
+          valueFieldIsBytes,
+          counted,
+          valueOffset,
+          coderOffset,
+          countOffset,
+          offsetOffset);
+    } catch (NoSuchFieldException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static Field getStringFieldNullable(String fieldName) {
+    try {
+      return String.class.getDeclaredField(fieldName);
+    } catch (NoSuchFieldException e) {
+      return null;
+    }
+  }
+
+  private static class StringCoderField {
+    private static final long OFFSET;
+
+    static {
+      try {
+        OFFSET = UNSAFE.objectFieldOffset(String.class.getDeclaredField("coder"));
+      } catch (NoSuchFieldException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+
+  private static final class StringFields {
+    private final boolean fieldAccess;
+    private final boolean valueFieldIsChars;
+    private final boolean valueFieldIsBytes;
+    private final boolean counted;
+    private final long valueOffset;
+    private final long coderOffset;
+    private final long countOffset;
+    private final long offsetOffset;
+
+    private StringFields(
+        boolean fieldAccess,
+        boolean valueFieldIsChars,
+        boolean valueFieldIsBytes,
+        boolean counted,
+        long valueOffset,
+        long coderOffset,
+        long countOffset,
+        long offsetOffset) {
+      this.fieldAccess = fieldAccess;
+      this.valueFieldIsChars = valueFieldIsChars;
+      this.valueFieldIsBytes = valueFieldIsBytes;
+      this.counted = counted;
+      this.valueOffset = valueOffset;
+      this.coderOffset = coderOffset;
+      this.countOffset = countOffset;
+      this.offsetOffset = offsetOffset;
+    }
+
+    private static StringFields noAccess() {
+      return new StringFields(false, false, false, false, -1, -1, -1, -1);
+    }
+  }
 
   static Object getStringValue(String value) {
     return UNSAFE.getObject(value, STRING_VALUE_FIELD_OFFSET);
@@ -84,34 +172,6 @@ final class PlatformStringUtils {
 
   static int getStringCount(String value) {
     return UNSAFE.getInt(value, STRING_COUNT_FIELD_OFFSET);
-  }
-
-  static String newCharsStringZeroCopy(char[] data) {
-    if (!JDK_STRING_FIELD_ACCESS) {
-      return new String(data);
-    }
-    return _JDKAccess.newCharsStringZeroCopy(data);
-  }
-
-  static String newBytesStringZeroCopy(byte coder, byte[] data) {
-    if (!JDK_STRING_FIELD_ACCESS) {
-      return newBytesStringSlow(coder, data);
-    }
-    return _JDKAccess.newBytesStringZeroCopy(coder, data);
-  }
-
-  private static String newBytesStringSlow(byte coder, byte[] data) {
-    if (coder == LATIN1) {
-      return new String(data, StandardCharsets.ISO_8859_1);
-    } else if (coder == UTF16) {
-      char[] chars = new char[data.length >> 1];
-      for (int i = 0, j = 0; i < data.length; i += 2) {
-        chars[j++] = (char) ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8));
-      }
-      return new String(chars);
-    } else {
-      return new String(data, StandardCharsets.UTF_8);
-    }
   }
 
   static long getCharsLong(char[] chars, int charIndex) {

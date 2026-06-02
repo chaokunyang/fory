@@ -23,13 +23,13 @@ import org.apache.fory.annotation.Internal;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.platform.internal._UnsafeUtils;
 import sun.misc.Unsafe;
 
 /** Internal JDK8-24 allocator used by object creators. */
 @Internal
 final class UnsafeObjectAllocator {
-  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _JDKAccess.UNSAFE;
+  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
 
   private UnsafeObjectAllocator() {}
 

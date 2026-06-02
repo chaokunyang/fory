@@ -146,6 +146,161 @@ class ProcessorValidationTest {
     assertTrue(!source.contains("return User(name = field0!!)"))
     assertTrue(source.contains("constructorFieldIds = if (objectCreator.hasConstructorFields())"))
     assertTrue(source.contains("objectCreator.newInstanceWithArguments(*constructorArgs"))
+    assertTrue(source.contains("fieldValues[0] = value.name"))
+    assertFalse(source.contains("copyConstructorFieldValue(copyContext, value, value.name"))
+    assertFalse(source.contains("NATURAL_ORDER_COMPARATOR"))
+    assertFalse(source.contains("requireXlangNaturalOrdering"))
+  }
+
+  @Test
+  fun copyUsesDirectScalarValues() {
+    fun scalar(name: String, typeName: String, typeId: String) =
+      KotlinSourceTypeNode(
+        rawClassExpression = "$typeName::class.java",
+        kotlinTypeName = typeName,
+        valueTypeName = name,
+        typeName = typeName,
+        typeId = typeId,
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+
+    val fields =
+      listOf(
+        KotlinSourceField(
+          id = 0,
+          name = "date",
+          type = scalar("java.time.LocalDate", "java.time.LocalDate", "Types.DATE"),
+          hasForyField = true,
+          foryFieldId = 1,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "java.time.LocalDate",
+        ),
+        KotlinSourceField(
+          id = 1,
+          name = "instant",
+          type = scalar("java.time.Instant", "java.time.Instant", "Types.TIMESTAMP"),
+          hasForyField = true,
+          foryFieldId = 2,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "java.time.Instant",
+        ),
+        KotlinSourceField(
+          id = 2,
+          name = "duration",
+          type = scalar("kotlin.time.Duration", "java.time.Duration", "Types.DURATION"),
+          hasForyField = true,
+          foryFieldId = 3,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "kotlin.time.Duration",
+        ),
+        KotlinSourceField(
+          id = 3,
+          name = "decimal",
+          type = scalar("java.math.BigDecimal", "java.math.BigDecimal", "Types.DECIMAL"),
+          hasForyField = true,
+          foryFieldId = 4,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "java.math.BigDecimal",
+        ),
+        KotlinSourceField(
+          id = 4,
+          name = "float16",
+          type =
+            scalar("org.apache.fory.type.Float16", "org.apache.fory.type.Float16", "Types.FLOAT16"),
+          hasForyField = true,
+          foryFieldId = 5,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "org.apache.fory.type.Float16",
+        ),
+        KotlinSourceField(
+          id = 5,
+          name = "bfloat16",
+          type =
+            scalar(
+              "org.apache.fory.type.BFloat16",
+              "org.apache.fory.type.BFloat16",
+              "Types.BFLOAT16",
+            ),
+          hasForyField = true,
+          foryFieldId = 6,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "org.apache.fory.type.BFloat16",
+        ),
+        KotlinSourceField(
+          id = 6,
+          name = "child",
+          type =
+            KotlinSourceTypeNode(
+              rawClassExpression = "example.Child::class.java",
+              kotlinTypeName = "example.Child",
+              valueTypeName = "Child",
+              typeName = "example.Child",
+              typeId = null,
+              nullable = false,
+              trackingRef = false,
+              primitive = false,
+              unsigned = false,
+            ),
+          hasForyField = true,
+          foryFieldId = 7,
+          trackingRef = false,
+          dynamic = "AUTO",
+          arrayType = false,
+          hasDefault = false,
+          nullable = false,
+          propertyTypeName = "Child",
+        ),
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "Scalars",
+            qualifiedTypeName = "example.Scalars",
+            serializerName = "Scalars_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields = fields,
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    for (field in fields.take(6)) {
+      assertTrue(source.contains("fieldValues[${field.id}] = value.${field.name}"))
+      assertFalse(
+        source.contains("copyConstructorFieldValue(copyContext, value, value.${field.name}")
+      )
+    }
+    assertTrue(
+      source.contains("fieldValues[6] = copyConstructorFieldValue(copyContext, value, value.child")
+    )
   }
 
   @Test
@@ -241,6 +396,20 @@ class ProcessorValidationTest {
         collectionFactory = CollectionFactory.TREE_MAP,
         typeArguments = listOf(stringType, intType),
       )
+    val nestedMapType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "java.util.Map::class.java",
+        kotlinTypeName = "java.util.TreeMap<kotlin.String, java.util.TreeSet<kotlin.String>>",
+        valueTypeName = "java.util.TreeMap<String, java.util.TreeSet<String>>",
+        typeName = "java.util.Map",
+        typeId = "Types.MAP",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+        collectionFactory = CollectionFactory.TREE_MAP,
+        typeArguments = listOf(stringType, setType),
+      )
     val source =
       KotlinSerializerSourceWriter(
           KotlinSourceStruct(
@@ -292,6 +461,20 @@ class ProcessorValidationTest {
                   nullable = false,
                   propertyTypeName = "java.util.List<IntArray>",
                   constructorParameterName = "arrays",
+                ),
+                KotlinSourceField(
+                  id = 3,
+                  name = "nestedCounts",
+                  type = nestedMapType,
+                  hasForyField = true,
+                  foryFieldId = 4,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "java.util.TreeMap<String, java.util.TreeSet<String>>",
+                  constructorParameterName = "nestedCounts",
                 )
               ),
             originatingFiles = emptyList(),
@@ -329,17 +512,40 @@ class ProcessorValidationTest {
     )
     assertTrue(
       source.contains(
-        "fieldValues[0] = KotlinCollectionAdapters.toTreeMap(run { val copySource0 = value.counts; val copyTarget0 = java.util.LinkedHashMap<Any?, Any?>(copySource0.size);"
+        "nestedCounts = run { val readSource0 = (field3!! as Map<*, *>); val readTarget0 = java.util.TreeMap<Any?, Any?>();"
+      )
+    )
+    assertTrue(
+      source.contains("KotlinCollectionAdapters.toTreeSet((readEntry0.value as Collection<*>))")
+    )
+    val comparatorGuardIndex = source.indexOf("requireXlangNaturalOrdering(\"example.User.counts\"")
+    assertTrue(comparatorGuardIndex >= 0)
+    assertTrue(comparatorGuardIndex < source.indexOf("val buffer = writeContext.buffer"))
+    assertTrue(source.contains("requireXlangNaturalOrdering(\"example.User.names element\""))
+    assertTrue(source.contains("requireXlangNaturalOrdering(\"example.User.nestedCounts value\""))
+    assertTrue(source.contains("private val NATURAL_ORDER_COMPARATOR"))
+    assertTrue(source.contains("if (guard1List0 is java.util.RandomAccess)"))
+    assertTrue(source.contains("for (guard1Element0 in guard1List0)"))
+    assertTrue(
+      source.contains(
+        "fieldValues[0] = (copyContext.copyObject(value.counts) as kotlin.collections.Map<String, Int>)"
       )
     )
     assertTrue(
       source.contains(
-        "fieldValues[1] = run { val copySource0 = value.names; val copyTarget0 = java.util.ArrayList<Any?>(copySource0.size); for (copyElement0 in copySource0) { copyTarget0.add(KotlinCollectionAdapters.toTreeSet(run { val copySource2 = copyElement0;"
+        "fieldValues[1] = run { val copySource0 = value.names; val copyTarget0 = java.util.ArrayList<Any?>(copySource0.size); copyContext.reference<Any>(copySource0, copyTarget0); for (copyElement0 in copySource0) { copyTarget0.add((copyContext.copyObject(copyElement0) as kotlin.collections.Set<String>))"
+      )
+    )
+    assertTrue(
+      source.contains(
+        "fieldValues[3] = (copyContext.copyObject(value.nestedCounts) as java.util.TreeMap<String, java.util.TreeSet<String>>)"
       )
     )
     assertTrue(source.contains("fieldValues[2] = run { val copySource0 = value.arrays;"))
     assertTrue(source.contains("copyTarget0.add(copyElement0.copyOf())"))
     assertFalse(source.contains("fieldValues[0] = copyConstructorFieldValue"))
+    assertFalse(source.contains("fieldValues[0] = KotlinCollectionAdapters.toTreeMap(run"))
+    assertFalse(source.contains("java.util.TreeMap<Any?, Any?>((copySource0.comparator()"))
   }
 
   @Test

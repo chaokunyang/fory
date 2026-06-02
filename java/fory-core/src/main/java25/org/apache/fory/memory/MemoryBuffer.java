@@ -30,7 +30,6 @@ import java.util.Arrays;
 import org.apache.fory.annotation.CodegenInvoke;
 import org.apache.fory.io.AbstractStreamReader;
 import org.apache.fory.io.ForyStreamReader;
-import org.apache.fory.platform.AndroidSupport;
 
 /**
  * A class for operations on memory managed by Fory. The buffer may be backed by heap memory (byte
@@ -220,11 +219,9 @@ public final class MemoryBuffer {
 
   public void initByteBuffer(ByteBuffer buffer, int size) {
     if (buffer.isDirect()) {
-      if (AndroidSupport.IS_ANDROID) {
-        MemoryOps.throwDirectByteBufferUnsupported();
-      } else {
+
         initOffHeapBuffer(0, size, buffer);
-      }
+
     } else if (buffer.hasArray()) {
       initHeapBuffer(buffer.array(), buffer.arrayOffset(), size);
     } else {
@@ -264,9 +261,7 @@ public final class MemoryBuffer {
   }
 
   public void initHeapBuffer(byte[] buffer, int offset, int length) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.initHeapBuffer(this, buffer, offset, length);
-    } else {
+
       if (buffer == null) {
         throw new NullPointerException("buffer");
       }
@@ -278,7 +273,7 @@ public final class MemoryBuffer {
       this.address = startPos;
       this.size = length;
       this.addressLimit = startPos + length;
-    }
+
   }
 
   private byte loadByte(long pos) {
@@ -744,9 +739,7 @@ public final class MemoryBuffer {
       throw new IllegalArgumentException("read only buffer");
     }
     final int targetPos = target.position();
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.get(this, offset, target, numBytes);
-    } else if (target.isDirect()) {
+    if (target.isDirect()) {
       final long sourceAddr = address + offset;
       if (sourceAddr <= addressLimit - numBytes) {
         ByteBuffer duplicate = target.duplicate();
@@ -770,9 +763,7 @@ public final class MemoryBuffer {
       throwOOBException();
     }
     final int sourcePos = source.position();
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.put(this, offset, source, numBytes);
-    } else if (source.isDirect()) {
+    if (source.isDirect()) {
       final long targetAddr = address + offset;
       if (targetAddr <= addressLimit - numBytes) {
         ByteBuffer duplicate = source.duplicate();
@@ -821,9 +812,7 @@ public final class MemoryBuffer {
   }
 
   public byte getByte(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getByte(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 1);
     return loadByte(pos);
@@ -832,46 +821,36 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public byte _unsafeGetByte(int index) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeGetByte(this, index);
-    }
+
     return loadByte(address + index);
   }
 
   public void putByte(int index, int b) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putByte(this, index, b);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 1);
       storeByte(pos, (byte) b);
-    }
+
   }
 
   public void putByte(int index, byte b) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putByte(this, index, b);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 1);
       storeByte(pos, b);
-    }
+
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutByte(int index, byte b) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.unsafePutByte(this, index, b);
-    } else {
+
       storeByte(address + index, b);
-    }
+
   }
 
   public boolean getBoolean(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getBoolean(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 1);
     return loadByte(pos) != 0;
@@ -880,34 +859,26 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public boolean _unsafeGetBoolean(int index) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeGetBoolean(this, index);
-    }
+
     return loadByte(address + index) != 0;
   }
 
   public void putBoolean(int index, boolean value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putBoolean(this, index, value);
-    } else {
+
       storeByte(address + index, (value ? (byte) 1 : (byte) 0));
-    }
+
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutBoolean(int index, boolean value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putBoolean(this, index, value);
-    } else {
+
       storeByte(address + index, (value ? (byte) 1 : (byte) 0));
-    }
+
   }
 
   public char getChar(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getChar(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 2);
     char c = loadChar(pos);
@@ -917,43 +888,35 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public char _unsafeGetChar(int index) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeGetChar(this, index);
-    }
+
     char c = loadChar(address + index);
     return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
   }
 
   public void putChar(int index, char value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putChar(this, index, value);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 2);
       if (!LITTLE_ENDIAN) {
         value = Character.reverseBytes(value);
       }
       storeChar(pos, value);
-    }
+
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutChar(int index, char value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.unsafePutChar(this, index, value);
-    } else {
+
       if (!LITTLE_ENDIAN) {
         value = Character.reverseBytes(value);
       }
       storeChar(address + index, value);
-    }
+
   }
 
   public short getInt16(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getInt16(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 2);
     short v = loadShort(pos);
@@ -961,24 +924,20 @@ public final class MemoryBuffer {
   }
 
   public void putInt16(int index, short value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt16(this, index, value);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 2);
       if (!LITTLE_ENDIAN) {
         value = Short.reverseBytes(value);
       }
       storeShort(pos, value);
-    }
+
   }
 
   // CHECKSTYLE.OFF:MethodName
   public short _unsafeGetInt16(int index) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeGetInt16(this, index);
-    }
+
     short v = loadShort(address + index);
     return LITTLE_ENDIAN ? v : Short.reverseBytes(v);
   }
@@ -986,20 +945,16 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt16(int index, short value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.unsafePutInt16(this, index, value);
-    } else {
+
       if (!LITTLE_ENDIAN) {
         value = Short.reverseBytes(value);
       }
       storeShort(address + index, value);
-    }
+
   }
 
   public int getInt32(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getInt32(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 4);
     int v = loadInt(pos);
@@ -1007,24 +962,20 @@ public final class MemoryBuffer {
   }
 
   public void putInt32(int index, int value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt32(this, index, value);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 4);
       if (!LITTLE_ENDIAN) {
         value = Integer.reverseBytes(value);
       }
       storeInt(pos, value);
-    }
+
   }
 
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeGetInt32(int index) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeGetInt32(this, index);
-    }
+
     int v = loadInt(address + index);
     return LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
   }
@@ -1032,20 +983,16 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt32(int index, int value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.unsafePutInt32(this, index, value);
-    } else {
+
       if (!LITTLE_ENDIAN) {
         value = Integer.reverseBytes(value);
       }
       storeInt(address + index, value);
-    }
+
   }
 
   public long getInt64(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getInt64(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 8);
     long v = loadLong(pos);
@@ -1053,24 +1000,20 @@ public final class MemoryBuffer {
   }
 
   public void putInt64(int index, long value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putInt64(this, index, value);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 8);
       if (!LITTLE_ENDIAN) {
         value = Long.reverseBytes(value);
       }
       storeLong(pos, value);
-    }
+
   }
 
   // CHECKSTYLE.OFF:MethodName
   public long _unsafeGetInt64(int index) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeGetInt64(this, index);
-    }
+
     long v = loadLong(address + index);
     return LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
@@ -1078,20 +1021,16 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public void _unsafePutInt64(int index, long value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.unsafePutInt64(this, index, value);
-    } else {
+
       if (!LITTLE_ENDIAN) {
         value = Long.reverseBytes(value);
       }
       storeLong(address + index, value);
-    }
+
   }
 
   public float getFloat32(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getFloat32(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 4);
     int v = loadInt(pos);
@@ -1102,9 +1041,7 @@ public final class MemoryBuffer {
   }
 
   public void putFloat32(int index, float value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putFloat32(this, index, value);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 4);
       int v = Float.floatToRawIntBits(value);
@@ -1112,13 +1049,11 @@ public final class MemoryBuffer {
         v = Integer.reverseBytes(v);
       }
       storeInt(pos, v);
-    }
+
   }
 
   public double getFloat64(int index) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.getFloat64(this, index);
-    }
+
     final long pos = address + index;
     checkPosition(index, pos, 8);
     long v = loadLong(pos);
@@ -1129,9 +1064,7 @@ public final class MemoryBuffer {
   }
 
   public void putFloat64(int index, double value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.putFloat64(this, index, value);
-    } else {
+
       final long pos = address + index;
       checkPosition(index, pos, 8);
       long v = Double.doubleToRawLongBits(value);
@@ -1139,7 +1072,7 @@ public final class MemoryBuffer {
         v = Long.reverseBytes(v);
       }
       storeLong(pos, v);
-    }
+
   }
 
   // Check should be done outside to avoid this method got into the critical path.
@@ -1210,30 +1143,26 @@ public final class MemoryBuffer {
   }
 
   public void writeBoolean(boolean value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeBoolean(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 1;
       ensure(newIdx);
       final long pos = address + writerIdx;
       storeByte(pos, (byte) (value ? 1 : 0));
       writerIndex = newIdx;
-    }
+
   }
 
   // CHECKSTYLE.OFF:MethodName
   public void _unsafeWriteByte(byte value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.unsafeWriteByte(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 1;
       final long pos = address + writerIdx;
       storeByte(pos, value);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeUInt8(int value) {
@@ -1241,16 +1170,14 @@ public final class MemoryBuffer {
   }
 
   public void writeByte(byte value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeByte(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 1;
       ensure(newIdx);
       final long pos = address + writerIdx;
       storeByte(pos, value);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeByte(int value) {
@@ -1258,9 +1185,7 @@ public final class MemoryBuffer {
   }
 
   public void writeChar(char value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeChar(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 2;
       ensure(newIdx);
@@ -1270,13 +1195,11 @@ public final class MemoryBuffer {
       }
       storeChar(pos, value);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeInt16(short value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeInt16(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 2;
       ensure(newIdx);
@@ -1285,13 +1208,11 @@ public final class MemoryBuffer {
       }
       storeShort(address + writerIdx, value);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeInt32(int value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeInt32(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 4;
       ensure(newIdx);
@@ -1300,13 +1221,11 @@ public final class MemoryBuffer {
       }
       storeInt(address + writerIdx, value);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeInt64(long value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeInt64(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 8;
       ensure(newIdx);
@@ -1315,13 +1234,11 @@ public final class MemoryBuffer {
       }
       storeLong(address + writerIdx, value);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeFloat32(float value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeFloat32(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 4;
       ensure(newIdx);
@@ -1331,13 +1248,11 @@ public final class MemoryBuffer {
       }
       storeInt(address + writerIdx, v);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeFloat64(double value) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeFloat64(this, value);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + 8;
       ensure(newIdx);
@@ -1347,7 +1262,7 @@ public final class MemoryBuffer {
       }
       storeLong(address + writerIdx, v);
       writerIndex = newIdx;
-    }
+
   }
 
   /**
@@ -1355,9 +1270,7 @@ public final class MemoryBuffer {
    * to save one bit.
    */
   public int writeVarInt32(int v) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.writeVarInt32(this, v);
-    }
+
     ensure(writerIndex + 8);
     // Zigzag encoding: maps negative values to positive values
     // This works entirely in int without conversion to long
@@ -1374,9 +1287,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarInt32(int v) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeWriteVarInt32(this, v);
-    }
+
     // Zigzag encoding ensures negatives close to zero are encoded in few bytes
     int varintBytes = _unsafePutVarUInt32(writerIndex, (v << 1) ^ (v >> 31));
     writerIndex += varintBytes;
@@ -1389,9 +1300,7 @@ public final class MemoryBuffer {
    * @return The number of bytes written.
    */
   public int writeVarUInt32(int v) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.writeVarUInt32(this, v);
-    }
+
     // ensure at least 8 bytes are writable at once, so jvm-jit
     // generated code is smaller. Otherwise, the reference writer fast path
     // may be `callee is too large`/`already compiled into a big method`
@@ -1408,9 +1317,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarUInt32(int v) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeWriteVarUInt32(this, v);
-    }
+
     int varintBytes = _unsafePutVarUInt32(writerIndex, v);
     writerIndex += varintBytes;
     return varintBytes;
@@ -1421,9 +1328,7 @@ public final class MemoryBuffer {
    * 127). When the value is equal or greater than 127, the write will be a little slower.
    */
   public int writeVarUInt32Small7(int value) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.writeVarUInt32Small7(this, value);
-    }
+
     ensure(writerIndex + 8);
     if (value >>> 7 == 0) {
       storeByte(address + writerIndex++, (byte) value);
@@ -1478,9 +1383,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafePutVarUInt32(int index, int value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafePutVarUInt32(this, index, value);
-    }
+
     byte[] heap = heapMemory;
     if (heap != null) {
       return putVarUInt32Heap(heap, (int) (address + index), value);
@@ -1600,9 +1503,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafePutVarUint36Small(int index, long value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafePutVarUint36Small(this, index, value);
-    }
+
     long encoded = (value & 0x7F);
     if (value >>> 7 == 0) {
       storeByte(address + index, (byte) value);
@@ -1673,9 +1574,7 @@ public final class MemoryBuffer {
    * @return The number of bytes written.
    */
   public int writeVarUInt32Aligned(int value) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.writeVarUInt32Aligned(this, value);
-    }
+
     // Mask first 6 bits,
     // bit 7 `unset` indicates have next padding bytes,
     // bit 8 `set` indicates have next data bytes.
@@ -1868,9 +1767,7 @@ public final class MemoryBuffer {
    * #writeVarUInt64} to save one bit.
    */
   public int writeVarInt64(long value) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.writeVarInt64(this, value);
-    }
+
     ensure(writerIndex + 9);
     return _unsafeWriteVarUInt64((value << 1) ^ (value >> 63));
   }
@@ -1879,16 +1776,12 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteVarInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeWriteVarInt64(this, value);
-    }
+
     return _unsafeWriteVarUInt64((value << 1) ^ (value >> 63));
   }
 
   public int writeVarUInt64(long value) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.writeVarUInt64(this, value);
-    }
+
     // Var long encoding algorithm is based kryo UnsafeMemoryOutput.writeVarInt64.
     // var long are written using little endian byte order.
     ensure(writerIndex + 9);
@@ -1899,9 +1792,7 @@ public final class MemoryBuffer {
   @CodegenInvoke
   public int _unsafeWriteVarUInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeWriteVarUInt64(this, value);
-    }
+
     final int writerIndex = this.writerIndex;
     int varInt;
     varInt = (int) (value & 0x7F);
@@ -1984,9 +1875,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteTaggedUInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeWriteTaggedUInt64(this, value);
-    }
+
     final int writerIndex = this.writerIndex;
     final long pos = address + writerIndex;
     final byte[] heapMemory = this.heapMemory;
@@ -2017,9 +1906,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _unsafeWriteTaggedInt64(long value) {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.unsafeWriteTaggedInt64(this, value);
-    }
+
     final int writerIndex = this.writerIndex;
     final long pos = address + writerIndex;
     final byte[] heapMemory = this.heapMemory;
@@ -2073,21 +1960,17 @@ public final class MemoryBuffer {
   }
 
   public void writeBytesWithSize(byte[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeBytesWithSize(this, values);
-    } else {
+
       writeVarUInt32Small7(values.length);
       writeBytes(values, 0, values.length);
-    }
+
   }
 
   public void writeBooleansWithSize(boolean[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeBooleansWithSize(this, values);
-    } else {
+
       writeVarUInt32Small7(values.length);
       writeBooleans(values, 0, values.length);
-    }
+
   }
 
   public void writeBooleans(boolean[] values) {
@@ -2095,25 +1978,21 @@ public final class MemoryBuffer {
   }
 
   public void writeBooleans(boolean[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeBooleans(this, values, offset, numElements);
-    } else {
+
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numElements;
       ensure(newIdx);
       writeBooleansFromArray(address + writerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeCharsWithSize(char[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeCharsWithSize(this, values);
-    } else {
+
       int numBytes = Math.multiplyExact(values.length, 2);
       writeVarUInt32Small7(numBytes);
       writeChars(values, 0, values.length);
-    }
+
   }
 
   public void writeChars(char[] values) {
@@ -2121,26 +2000,22 @@ public final class MemoryBuffer {
   }
 
   public void writeChars(char[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeChars(this, values, offset, numElements);
-    } else {
+
       int numBytes = Math.multiplyExact(numElements, 2);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
       writeCharsFromArray(address + writerIdx, values, CHAR_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeShortsWithSize(short[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeShortsWithSize(this, values);
-    } else {
+
       int numBytes = Math.multiplyExact(values.length, 2);
       writeVarUInt32Small7(numBytes);
       writeShorts(values, 0, values.length);
-    }
+
   }
 
   public void writeShorts(short[] values) {
@@ -2148,26 +2023,22 @@ public final class MemoryBuffer {
   }
 
   public void writeShorts(short[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeShorts(this, values, offset, numElements);
-    } else {
+
       int numBytes = Math.multiplyExact(numElements, 2);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
       writeShortsFromArray(address + writerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeIntsWithSize(int[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeIntsWithSize(this, values);
-    } else {
+
       int numBytes = Math.multiplyExact(values.length, 4);
       writeVarUInt32Small7(numBytes);
       writeInts(values, 0, values.length);
-    }
+
   }
 
   public void writeInts(int[] values) {
@@ -2175,26 +2046,22 @@ public final class MemoryBuffer {
   }
 
   public void writeInts(int[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeInts(this, values, offset, numElements);
-    } else {
+
       int numBytes = Math.multiplyExact(numElements, 4);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
       writeIntsFromArray(address + writerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeLongsWithSize(long[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeLongsWithSize(this, values);
-    } else {
+
       int numBytes = Math.multiplyExact(values.length, 8);
       writeVarUInt32Small7(numBytes);
       writeLongs(values, 0, values.length);
-    }
+
   }
 
   public void writeLongs(long[] values) {
@@ -2202,26 +2069,22 @@ public final class MemoryBuffer {
   }
 
   public void writeLongs(long[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeLongs(this, values, offset, numElements);
-    } else {
+
       int numBytes = Math.multiplyExact(numElements, 8);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
       writeLongsFromArray(address + writerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeFloatsWithSize(float[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeFloatsWithSize(this, values);
-    } else {
+
       int numBytes = Math.multiplyExact(values.length, 4);
       writeVarUInt32Small7(numBytes);
       writeFloats(values, 0, values.length);
-    }
+
   }
 
   public void writeFloats(float[] values) {
@@ -2229,26 +2092,22 @@ public final class MemoryBuffer {
   }
 
   public void writeFloats(float[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeFloats(this, values, offset, numElements);
-    } else {
+
       int numBytes = Math.multiplyExact(numElements, 4);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
       writeFloatsFromArray(address + writerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
-    }
+
   }
 
   public void writeDoublesWithSize(double[] values) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeDoublesWithSize(this, values);
-    } else {
+
       int numBytes = Math.multiplyExact(values.length, 8);
       writeVarUInt32Small7(numBytes);
       writeDoubles(values, 0, values.length);
-    }
+
   }
 
   public void writeDoubles(double[] values) {
@@ -2256,16 +2115,14 @@ public final class MemoryBuffer {
   }
 
   public void writeDoubles(double[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.writeDoubles(this, values, offset, numElements);
-    } else {
+
       int numBytes = Math.multiplyExact(numElements, 8);
       final int writerIdx = writerIndex;
       final int newIdx = writerIdx + numBytes;
       ensure(newIdx);
       writeDoublesFromArray(address + writerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
       writerIndex = newIdx;
-    }
+
   }
 
   /** For off-heap buffer, this will make a heap buffer internally. */
@@ -2364,9 +2221,7 @@ public final class MemoryBuffer {
   }
 
   public boolean readBoolean() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readBoolean(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     if (readerIdx > size - 1) {
@@ -2377,9 +2232,7 @@ public final class MemoryBuffer {
   }
 
   public int readUInt8() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readUInt8(this);
-    }
+
     int readerIdx = readerIndex;
     if (readerIdx > size - 1) {
       streamReader.fillBuffer(1);
@@ -2395,9 +2248,7 @@ public final class MemoryBuffer {
   }
 
   public byte readByte() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readByte(this);
-    }
+
     int readerIdx = readerIndex;
     if (readerIdx > size - 1) {
       streamReader.fillBuffer(1);
@@ -2407,9 +2258,7 @@ public final class MemoryBuffer {
   }
 
   public char readChar() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readChar(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2422,9 +2271,7 @@ public final class MemoryBuffer {
   }
 
   public short readInt16() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt16(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2441,9 +2288,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public short _readInt16OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt16(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2459,9 +2304,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public short _readInt16OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt16(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2473,9 +2316,7 @@ public final class MemoryBuffer {
   }
 
   public int readInt32() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt32(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2492,9 +2333,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readInt32OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt32(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2510,9 +2349,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readInt32OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt32(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2524,9 +2361,7 @@ public final class MemoryBuffer {
   }
 
   public long readInt64() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt64(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2543,9 +2378,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt64(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2561,9 +2394,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readInt64(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2596,9 +2427,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedUInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readTaggedUInt64(this);
-    }
+
     final int readIdx = readerIndex;
     int diff = size - readIdx;
     if (diff < 4) {
@@ -2621,9 +2450,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedUInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readTaggedUInt64(this);
-    }
+
     final int readIdx = readerIndex;
     int diff = size - readIdx;
     if (diff < 4) {
@@ -2646,9 +2473,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readTaggedInt64(this);
-    }
+
     // Duplicate and manual inline for performance.
     // noinspection Duplicates
     final int readIdx = readerIndex;
@@ -2673,9 +2498,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readTaggedInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readTaggedInt64(this);
-    }
+
     // noinspection Duplicates
     final int readIdx = readerIndex;
     int diff = size - readIdx;
@@ -2696,9 +2519,7 @@ public final class MemoryBuffer {
   }
 
   public float readFloat32() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readFloat32(this);
-    }
+
     // noinspection Duplicates
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
@@ -2719,9 +2540,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public float _readFloat32OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readFloat32(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2737,9 +2556,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public float _readFloat32OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readFloat32(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2752,9 +2569,7 @@ public final class MemoryBuffer {
   }
 
   public double readFloat64() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readFloat64(this);
-    }
+
     // noinspection Duplicates
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
@@ -2775,9 +2590,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public double _readFloat64OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readFloat64(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2793,9 +2606,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public double _readFloat64OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readFloat64(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -2810,9 +2621,7 @@ public final class MemoryBuffer {
   /** Reads the 1-5 byte int part of a varint. */
   @CodegenInvoke
   public int readVarInt32() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarInt32(this);
-    }
+
     if (LITTLE_ENDIAN) {
       return _readVarInt32OnLE();
     } else {
@@ -2825,9 +2634,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readVarInt32OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarInt32(this);
-    }
+
     // noinspection Duplicates
     int readIdx = readerIndex;
     int result;
@@ -2875,9 +2682,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public int _readVarInt32OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarInt32(this);
-    }
+
     // noinspection Duplicates
     int readIdx = readerIndex;
     int result;
@@ -2920,9 +2725,7 @@ public final class MemoryBuffer {
   }
 
   public long readVarUint36Small() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarUint36Small(this);
-    }
+
     // Android exits above. Keep JVM small-varint bulk reads as direct bulk loads instead of calling
     // `_unsafeGet*` helpers; those helpers carry Android/endian branches and can break inlining.
     // Duplicate and manual inline for performance.
@@ -3032,9 +2835,7 @@ public final class MemoryBuffer {
 
   /** Reads the 1-5 byte int part of a non-negative varint. */
   public int readVarUInt32() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarUInt32(this);
-    }
+
     int readIdx = readerIndex;
     if (size - readIdx < 5) {
       return readVarUInt32Slow();
@@ -3081,9 +2882,7 @@ public final class MemoryBuffer {
    * 127). When the value is equal or greater than 127, the read will be a little slower.
    */
   public int readVarUInt32Small7() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarUInt32(this);
-    }
+
     int readIdx = readerIndex;
     if (size - readIdx > 0) {
       byte v = loadByte(address + readIdx++);
@@ -3100,9 +2899,7 @@ public final class MemoryBuffer {
    * 16384). When the value is equal or greater than 16384, the read will be a little slower.
    */
   public int readVarUInt32Small14() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarUInt32(this);
-    }
+
     int readIdx = readerIndex;
     if (size - readIdx >= 5) {
       int fourByteValue = loadInt(address + readIdx++);
@@ -3150,9 +2947,7 @@ public final class MemoryBuffer {
 
   /** Reads the 1-9 byte int part of a var long. */
   public long readVarInt64() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarInt64(this);
-    }
+
     return LITTLE_ENDIAN ? _readVarInt64OnLE() : _readVarInt64OnBE();
   }
 
@@ -3160,9 +2955,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readVarInt64OnLE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarInt64(this);
-    }
+
     // Duplicate and manual inline for performance.
     // noinspection Duplicates
     int readIdx = readerIndex;
@@ -3195,9 +2988,7 @@ public final class MemoryBuffer {
   // CHECKSTYLE.OFF:MethodName
   public long _readVarInt64OnBE() {
     // CHECKSTYLE.ON:MethodName
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarInt64(this);
-    }
+
     int readIdx = readerIndex;
     long result;
     if (size - readIdx < 9) {
@@ -3226,9 +3017,7 @@ public final class MemoryBuffer {
 
   /** Reads the 1-9 byte int part of a non-negative var long. */
   public long readVarUInt64() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readVarUInt64(this);
-    }
+
     int readIdx = readerIndex;
     if (size - readIdx < 9) {
       return readVarUInt64Slow();
@@ -3333,9 +3122,7 @@ public final class MemoryBuffer {
 
   /** Reads the 1-9 byte int part of an aligned varint. */
   public int readAlignedVarUInt32() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readAlignedVarUInt32(this);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     if (readerIdx < size - 10) {
@@ -3462,9 +3249,7 @@ public final class MemoryBuffer {
 
   /** Read {@code len} bytes into a long using little-endian order. */
   public long readBytesAsInt64(int len) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readBytesAsInt64(this, len);
-    }
+
     int readerIdx = readerIndex;
     // use subtract to avoid overflow
     int remaining = size - readerIdx;
@@ -3534,9 +3319,7 @@ public final class MemoryBuffer {
    * is optimized for small size, it's faster than {@link #readVarUInt32}.
    */
   public int readBinarySize() {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.readBinarySize(this);
-    }
+
     int binarySize;
     int readIdx = readerIndex;
     if (size - readIdx >= 5) {
@@ -3613,9 +3396,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readByteArrayPayload(byte[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readByteArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readTo(values, 0, numBytes);
@@ -3623,7 +3404,7 @@ public final class MemoryBuffer {
       }
       readBytesToArray(address + readerIdx, values, BYTE_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   /**
@@ -3632,9 +3413,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readBooleanArrayPayload(boolean[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readBooleanArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readBooleans(values, 0, numBytes);
@@ -3642,7 +3421,7 @@ public final class MemoryBuffer {
       }
       readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   /**
@@ -3651,9 +3430,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readCharArrayPayload(char[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readCharArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readChars(values, 0, numBytes >>> 1);
@@ -3661,7 +3438,7 @@ public final class MemoryBuffer {
       }
       readCharsToArray(address + readerIdx, values, CHAR_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   /**
@@ -3670,9 +3447,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt16ArrayPayload(short[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readInt16ArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readShorts(values, 0, numBytes >>> 1);
@@ -3680,7 +3455,7 @@ public final class MemoryBuffer {
       }
       readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   /**
@@ -3689,9 +3464,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt32ArrayPayload(int[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readInt32ArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readInts(values, 0, numBytes >>> 2);
@@ -3699,7 +3472,7 @@ public final class MemoryBuffer {
       }
       readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   /**
@@ -3708,9 +3481,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readInt64ArrayPayload(long[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readInt64ArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readLongs(values, 0, numBytes >>> 3);
@@ -3718,7 +3489,7 @@ public final class MemoryBuffer {
       }
       readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   /**
@@ -3727,9 +3498,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readFloat32ArrayPayload(float[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readFloat32ArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readFloats(values, 0, numBytes >>> 2);
@@ -3737,7 +3506,7 @@ public final class MemoryBuffer {
       }
       readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   /**
@@ -3746,9 +3515,7 @@ public final class MemoryBuffer {
    * prefix.
    */
   public void readFloat64ArrayPayload(double[] values, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readFloat64ArrayPayload(this, values, numBytes);
-    } else {
+
       int readerIdx = readerIndex;
       if (readerIdx > size - numBytes) {
         streamReader.readDoubles(values, 0, numBytes >>> 3);
@@ -3756,13 +3523,11 @@ public final class MemoryBuffer {
       }
       readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   public void readBooleans(boolean[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readBooleans(this, values, offset, numElements);
-    } else {
+
       if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
           < 0) {
         throwOOBException();
@@ -3774,7 +3539,7 @@ public final class MemoryBuffer {
       int readerIdx = readerIndex;
       readBooleansToArray(address + readerIdx, values, BOOLEAN_ARRAY_OFFSET + offset, numElements);
       readerIndex = readerIdx + numElements;
-    }
+
   }
 
   public void readChars(char[] chars, int numElements) {
@@ -3782,9 +3547,7 @@ public final class MemoryBuffer {
   }
 
   public void readChars(char[] chars, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readChars(this, chars, offset, numElements);
-    } else {
+
       if ((offset | numElements | (offset + numElements) | (chars.length - offset - numElements))
           < 0) {
         throwOOBException();
@@ -3797,7 +3560,7 @@ public final class MemoryBuffer {
       int readerIdx = readerIndex;
       readCharsToArray(address + readerIdx, chars, CHAR_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   @CodegenInvoke
@@ -3810,9 +3573,7 @@ public final class MemoryBuffer {
   }
 
   public void readShorts(short[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readShorts(this, values, offset, numElements);
-    } else {
+
       if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
           < 0) {
         throwOOBException();
@@ -3825,13 +3586,11 @@ public final class MemoryBuffer {
       int readerIdx = readerIndex;
       readShortsToArray(address + readerIdx, values, SHORT_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   public void readInts(int[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readInts(this, values, offset, numElements);
-    } else {
+
       if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
           < 0) {
         throwOOBException();
@@ -3844,13 +3603,11 @@ public final class MemoryBuffer {
       int readerIdx = readerIndex;
       readIntsToArray(address + readerIdx, values, INT_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   public void readLongs(long[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readLongs(this, values, offset, numElements);
-    } else {
+
       if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
           < 0) {
         throwOOBException();
@@ -3863,13 +3620,11 @@ public final class MemoryBuffer {
       int readerIdx = readerIndex;
       readLongsToArray(address + readerIdx, values, LONG_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   public void readFloats(float[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readFloats(this, values, offset, numElements);
-    } else {
+
       if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
           < 0) {
         throwOOBException();
@@ -3882,13 +3637,11 @@ public final class MemoryBuffer {
       int readerIdx = readerIndex;
       readFloatsToArray(address + readerIdx, values, FLOAT_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   public void readDoubles(double[] values, int offset, int numElements) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.readDoubles(this, values, offset, numElements);
-    } else {
+
       if ((offset | numElements | (offset + numElements) | (values.length - offset - numElements))
           < 0) {
         throwOOBException();
@@ -3901,7 +3654,7 @@ public final class MemoryBuffer {
       int readerIdx = readerIndex;
       readDoublesToArray(address + readerIdx, values, DOUBLE_ARRAY_OFFSET + offset, numBytes);
       readerIndex = readerIdx + numBytes;
-    }
+
   }
 
   public void checkReadableBytes(int minimumReadableBytes) {
@@ -3928,9 +3681,7 @@ public final class MemoryBuffer {
   // ------------------------- Read Methods Finished -------------------------------------
 
   public void copyTo(int offset, MemoryBuffer target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyTo(this, offset, target, targetOffset, numBytes);
-    } else {
+
       final byte[] thisHeapRef = this.heapMemory;
       final byte[] otherHeapRef = target.heapMemory;
       final long thisPointer = this.address + offset;
@@ -3953,7 +3704,7 @@ public final class MemoryBuffer {
                 "offset=%d, targetOffset=%d, numBytes=%d, address=%d, targetAddress=%d",
                 offset, targetOffset, numBytes, this.address, target.address));
       }
-    }
+
   }
 
   private boolean sameBufferOverlap(
@@ -3979,75 +3730,59 @@ public final class MemoryBuffer {
   }
 
   public void copyToByteArray(int offset, byte[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToByteArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
       readBytesToArray(address + offset, target, BYTE_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   public void copyToBooleanArray(int offset, boolean[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToBooleanArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 0);
       readBooleansToArray(address + offset, target, BOOLEAN_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   public void copyToCharArray(int offset, char[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToCharArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
       readCharsToArray(address + offset, target, CHAR_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   public void copyToShortArray(int offset, short[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToShortArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 1);
       readShortsToArray(address + offset, target, SHORT_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   public void copyToIntArray(int offset, int[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToIntArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
       readIntsToArray(address + offset, target, INT_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   public void copyToLongArray(int offset, long[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToLongArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
       readLongsToArray(address + offset, target, LONG_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   public void copyToFloatArray(int offset, float[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToFloatArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 2);
       readFloatsToArray(address + offset, target, FLOAT_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   public void copyToDoubleArray(int offset, double[] target, int targetOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyToDoubleArray(this, offset, target, targetOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, targetOffset, target.length, numBytes, 3);
       readDoublesToArray(address + offset, target, DOUBLE_ARRAY_OFFSET + targetOffset, numBytes);
-    }
+
   }
 
   private void checkArrayCopy(
@@ -4065,76 +3800,60 @@ public final class MemoryBuffer {
   }
 
   public void copyFromByteArray(int offset, byte[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromByteArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
       writeBytesFromArray(address + offset, source, BYTE_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public void copyFromBooleanArray(int offset, boolean[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromBooleanArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 0);
       writeBooleansFromArray(
           address + offset, source, BOOLEAN_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public void copyFromCharArray(int offset, char[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromCharArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
       writeCharsFromArray(address + offset, source, CHAR_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public void copyFromShortArray(int offset, short[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromShortArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 1);
       writeShortsFromArray(address + offset, source, SHORT_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public void copyFromIntArray(int offset, int[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromIntArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
       writeIntsFromArray(address + offset, source, INT_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public void copyFromLongArray(int offset, long[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromLongArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
       writeLongsFromArray(address + offset, source, LONG_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public void copyFromFloatArray(int offset, float[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromFloatArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 2);
       writeFloatsFromArray(address + offset, source, FLOAT_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public void copyFromDoubleArray(int offset, double[] source, int sourceOffset, int numBytes) {
-    if (AndroidSupport.IS_ANDROID) {
-      MemoryOps.copyFromDoubleArray(this, offset, source, sourceOffset, numBytes);
-    } else {
+
       checkArrayCopy(offset, sourceOffset, source.length, numBytes, 3);
       writeDoublesFromArray(address + offset, source, DOUBLE_ARRAY_OFFSET + sourceOffset, numBytes);
-    }
+
   }
 
   public byte[] getBytes(int index, int length) {
@@ -4222,9 +3941,7 @@ public final class MemoryBuffer {
     if (len == 0) {
       return buf2 != null;
     }
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.equalTo(this, buf2, offset1, offset2, len);
-    }
+
     final long pos1 = address + offset1;
     final long pos2 = buf2.address + offset2;
     checkArgument(pos1 < addressLimit);
@@ -4249,9 +3966,7 @@ public final class MemoryBuffer {
     if (len == 0) {
       return true;
     }
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.equalTo(this, bytes, bytesOffset, offset, len);
-    }
+
     final long pos = address + offset;
     return unsafeEqualTo(this, heapMemory, pos, this, bytes, BYTE_ARRAY_OFFSET + bytesOffset, len);
   }
@@ -4405,9 +4120,7 @@ public final class MemoryBuffer {
    * @param buffer a direct buffer or heap buffer
    */
   public static MemoryBuffer fromByteBuffer(ByteBuffer buffer) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.fromByteBuffer(buffer);
-    } else if (buffer.isDirect()) {
+    if (buffer.isDirect()) {
       return new MemoryBuffer(buffer.position(), buffer.remaining(), buffer);
     } else if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
@@ -4422,9 +4135,7 @@ public final class MemoryBuffer {
 
   public static MemoryBuffer fromDirectByteBuffer(
       ByteBuffer buffer, int size, ForyStreamReader streamReader) {
-    if (AndroidSupport.IS_ANDROID) {
-      return MemoryOps.directByteBufferUnsupported();
-    }
+
     long offHeapAddress = buffer.position();
     return new MemoryBuffer(offHeapAddress, size, buffer, streamReader);
   }

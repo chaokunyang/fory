@@ -20,30 +20,32 @@
 package org.apache.fory.serializer;
 
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.VarHandle;
+import java.lang.reflect.Field;
 import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.NativeByteOrder;
-import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
+import org.apache.fory.util.Preconditions;
 
 /** JDK25 string internals used by {@link StringSerializer}. */
 final class PlatformStringUtils {
-  static final boolean JDK_STRING_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_STRING_FIELD_ACCESS;
-  static final boolean STRING_VALUE_FIELD_IS_CHARS =
-      JDK_STRING_FIELD_ACCESS && _JDKAccess.STRING_VALUE_FIELD_IS_CHARS;
-  static final boolean STRING_VALUE_FIELD_IS_BYTES =
-      JDK_STRING_FIELD_ACCESS && _JDKAccess.STRING_VALUE_FIELD_IS_BYTES;
-  static final boolean STRING_HAS_COUNT_OFFSET =
-      JDK_STRING_FIELD_ACCESS && _JDKAccess.STRING_HAS_COUNT_OFFSET;
+  private static final StringHandles STRING_HANDLES = stringHandles();
 
-  private static final byte LATIN1 = 0;
-  private static final byte UTF16 = 1;
+  static final boolean JDK_STRING_FIELD_ACCESS = STRING_HANDLES.fieldAccess;
+  static final boolean STRING_VALUE_FIELD_IS_CHARS =
+      JDK_STRING_FIELD_ACCESS && STRING_HANDLES.valueFieldIsChars;
+  static final boolean STRING_VALUE_FIELD_IS_BYTES =
+      JDK_STRING_FIELD_ACCESS && STRING_HANDLES.valueFieldIsBytes;
+  static final boolean STRING_HAS_COUNT_OFFSET = JDK_STRING_FIELD_ACCESS && STRING_HANDLES.counted;
+
+  private static final VarHandle STRING_VALUE_HANDLE = STRING_HANDLES.value;
+  private static final VarHandle STRING_CODER_HANDLE = STRING_HANDLES.coder;
+  private static final VarHandle STRING_COUNT_HANDLE = STRING_HANDLES.count;
+  private static final VarHandle STRING_OFFSET_HANDLE = STRING_HANDLES.offset;
+
   private static final VarHandle BYTE_ARRAY_LONG =
       MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.nativeOrder());
   private static final VarHandle BYTE_ARRAY_CHAR =
@@ -51,47 +53,127 @@ final class PlatformStringUtils {
 
   private PlatformStringUtils() {}
 
+  private static StringHandles stringHandles() {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE || !_JDKAccess.JDK_INTERNAL_FIELD_ACCESS) {
+      return StringHandles.noAccess();
+    }
+    try {
+      Field valueField = String.class.getDeclaredField("value");
+      boolean valueFieldIsChars = valueField.getType() == char[].class;
+      boolean valueFieldIsBytes = valueField.getType() == byte[].class;
+      Field countField = getStringFieldNullable("count");
+      Field offsetField = getStringFieldNullable("offset");
+      boolean counted = false;
+      if (countField != null || offsetField != null) {
+        Preconditions.checkArgument(
+            countField != null && offsetField != null, "Current jdk not supported");
+        Preconditions.checkArgument(
+            countField.getType() == int.class && offsetField.getType() == int.class,
+            "Current jdk not supported");
+        counted = true;
+      }
+      try {
+        Lookup stringLookup = _JDKAccess._trustedLookup(String.class);
+        return new StringHandles(
+            true,
+            valueFieldIsChars,
+            valueFieldIsBytes,
+            counted,
+            stringLookup.findVarHandle(String.class, "value", valueField.getType()),
+            valueFieldIsBytes
+                ? stringLookup.findVarHandle(String.class, "coder", byte.class)
+                : null,
+            countField == null
+                ? null
+                : stringLookup.findVarHandle(String.class, "count", int.class),
+            offsetField == null
+                ? null
+                : stringLookup.findVarHandle(String.class, "offset", int.class));
+      } catch (Throwable ignored) {
+        return StringHandles.noAccess();
+      }
+    } catch (NoSuchFieldException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private static Field getStringFieldNullable(String fieldName) {
+    try {
+      return String.class.getDeclaredField(fieldName);
+    } catch (NoSuchFieldException e) {
+      return null;
+    }
+  }
+
+  private static final class StringHandles {
+    private final boolean fieldAccess;
+    private final boolean valueFieldIsChars;
+    private final boolean valueFieldIsBytes;
+    private final boolean counted;
+    private final VarHandle value;
+    private final VarHandle coder;
+    private final VarHandle count;
+    private final VarHandle offset;
+
+    private StringHandles(
+        boolean fieldAccess,
+        boolean valueFieldIsChars,
+        boolean valueFieldIsBytes,
+        boolean counted,
+        VarHandle value,
+        VarHandle coder,
+        VarHandle count,
+        VarHandle offset) {
+      this.fieldAccess = fieldAccess;
+      this.valueFieldIsChars = valueFieldIsChars;
+      this.valueFieldIsBytes = valueFieldIsBytes;
+      this.counted = counted;
+      this.value = value;
+      this.coder = coder;
+      this.count = count;
+      this.offset = offset;
+    }
+
+    private static StringHandles noAccess() {
+      return new StringHandles(false, false, false, false, null, null, null, null);
+    }
+  }
+
   static Object getStringValue(String value) {
-    return _JDKAccess.getStringValue(value);
+    checkStringAccess("String.value");
+    return STRING_VALUE_HANDLE.get(value);
   }
 
   static byte getStringCoder(String value) {
-    return _JDKAccess.getStringCoder(value);
+    checkStringAccess("String.coder");
+    if (STRING_CODER_HANDLE == null) {
+      throw new UnsupportedOperationException("String.coder is not available on this JDK");
+    }
+    return (byte) STRING_CODER_HANDLE.get(value);
   }
 
   static int getStringOffset(String value) {
-    return _JDKAccess.getStringOffset(value);
+    checkStringAccess("String.offset");
+    if (STRING_OFFSET_HANDLE == null) {
+      throw new UnsupportedOperationException("String.offset is not available on this JDK");
+    }
+    return (int) STRING_OFFSET_HANDLE.get(value);
   }
 
   static int getStringCount(String value) {
-    return _JDKAccess.getStringCount(value);
-  }
-
-  static String newCharsStringZeroCopy(char[] data) {
-    if (!JDK_STRING_FIELD_ACCESS) {
-      return new String(data);
+    checkStringAccess("String.count");
+    if (STRING_COUNT_HANDLE == null) {
+      throw new UnsupportedOperationException("String.count is not available on this JDK");
     }
-    return _JDKAccess.newCharsStringZeroCopy(data);
+    return (int) STRING_COUNT_HANDLE.get(value);
   }
 
-  static String newBytesStringZeroCopy(byte coder, byte[] data) {
+  private static void checkStringAccess(String target) {
     if (!JDK_STRING_FIELD_ACCESS) {
-      return newBytesStringSlow(coder, data);
-    }
-    return _JDKAccess.newBytesStringZeroCopy(coder, data);
-  }
-
-  private static String newBytesStringSlow(byte coder, byte[] data) {
-    if (coder == LATIN1) {
-      return new String(data, StandardCharsets.ISO_8859_1);
-    } else if (coder == UTF16) {
-      char[] chars = new char[data.length >> 1];
-      for (int i = 0, j = 0; i < data.length; i += 2) {
-        chars[j++] = (char) ((data[i] & 0xff) | ((data[i + 1] & 0xff) << 8));
-      }
-      return new String(chars);
-    } else {
-      return new String(data, StandardCharsets.UTF_8);
+      throw new UnsupportedOperationException(
+          target
+              + " private access is unavailable; open java.base/java.lang.invoke to "
+              + "org.apache.fory.core");
     }
   }
 

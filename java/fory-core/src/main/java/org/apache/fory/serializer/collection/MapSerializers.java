@@ -65,6 +65,17 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class MapSerializers {
+  private static final Comparator NATURAL_ORDER_COMPARATOR = Comparator.naturalOrder();
+
+  private static void requireXlangNaturalOrdering(Class<?> type, Comparator<?> comparator) {
+    if (comparator != null && comparator != NATURAL_ORDER_COMPARATOR) {
+      throw new UnsupportedOperationException(
+          "Xlang serialization of "
+              + type.getName()
+              + " with a custom comparator is unsupported because the xlang map wire format "
+              + "does not encode comparators");
+    }
+  }
 
   public static final class HashMapSerializer extends MapSerializer<HashMap> {
     public HashMapSerializer(TypeResolver typeResolver) {
@@ -153,6 +164,9 @@ public class MapSerializers {
 
     @Override
     public Map onMapWrite(WriteContext writeContext, T value) {
+      if (config.isXlang()) {
+        requireXlangNaturalOrdering(type, value.comparator());
+      }
       MemoryBuffer buffer = writeContext.getBuffer();
       buffer.writeVarUInt32Small7(value.size());
       if (config.isXlang()) {
@@ -166,11 +180,10 @@ public class MapSerializers {
     @SuppressWarnings("unchecked")
     @Override
     public Map newMap(ReadContext readContext) {
-      assert !config.isXlang();
       MemoryBuffer buffer = readContext.getBuffer();
       setNumElements(readMapSize(buffer));
       T map;
-      Comparator comparator = (Comparator) readContext.readRef();
+      Comparator comparator = config.isXlang() ? null : (Comparator) readContext.readRef();
       if (type == TreeMap.class) {
         map = (T) new TreeMap(comparator);
       } else {
@@ -312,6 +325,9 @@ public class MapSerializers {
 
     @Override
     public MapSnapshot onMapWrite(WriteContext writeContext, ConcurrentSkipListMap value) {
+      if (config.isXlang()) {
+        requireXlangNaturalOrdering(type, value.comparator());
+      }
       MapSnapshot snapshot = super.onMapWrite(writeContext, value);
       if (config.isXlang()) {
         return snapshot;
@@ -325,7 +341,7 @@ public class MapSerializers {
       MemoryBuffer buffer = readContext.getBuffer();
       int numElements = readMapSize(buffer);
       setNumElements(numElements);
-      Comparator comparator = (Comparator) readContext.readRef();
+      Comparator comparator = config.isXlang() ? null : (Comparator) readContext.readRef();
       ConcurrentSkipListMap map = new ConcurrentSkipListMap(comparator);
       readContext.reference(map);
       return map;

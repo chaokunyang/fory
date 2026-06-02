@@ -110,6 +110,10 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Root codegen and builder classes that still need Unsafe on JDK8-24 must route symbolic Unsafe
   access through a helper with a Java 25 replacement. Do not leave `_JDKAccess.unsafe()` or
   `sun.misc.Unsafe` references in JDK25-visible classes outside matching `java25` replacements.
+- `ObjectCodecBuilder` primitive generated-code paths must keep one primitive field traversal and
+  dispatch owner. Select direct Unsafe `(base, absoluteAddress)` versus indexed `MemoryBuffer`
+  `(buffer, intIndex)` access at codegen setup time; do not duplicate the primitive switch or emit a
+  per-field JDK-version branch. JDK25+ generated serializers must not reference `sun.misc.Unsafe`.
 - `_UnsafeUtils` is the JDK8-24 Unsafe owner only. It must have a Java25 replacement with no
   `sun.misc.Unsafe` fields, methods, constructors, imports, or descriptors, and MR-JAR plus
   benchmark checks must require that replacement so JDK25+ never links `jdk.unsupported` through

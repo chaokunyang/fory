@@ -44,6 +44,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import org.apache.fory.Fory;
@@ -254,141 +255,79 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   private List<Expression> serializePrimitivesUnCompressed(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      return serializeRawPrimitivesIndexed(bean, buffer, primitiveGroups, totalSize);
-    }
     List<Expression> expressions = new ArrayList<>();
-    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
-    Literal totalSizeLiteral = new Literal(totalSize, PRIMITIVE_INT_TYPE);
-    // After this grow, following writes can be unsafe without checks.
+    Literal totalSizeLiteral = Literal.ofInt(totalSize);
+    // After this grow, following writes can use unchecked low-level access.
     expressions.add(new Invoke(buffer, "grow", totalSizeLiteral));
-    // Must grow first, otherwise may get invalid address.
-    Expression base = new Invoke(buffer, "getHeapMemory", "base", PRIMITIVE_BYTE_ARRAY_TYPE);
-    Expression writerAddr =
-        new Invoke(buffer, "_unsafeWriterAddress", "writerAddr", PRIMITIVE_LONG_TYPE);
-    expressions.add(base);
-    expressions.add(writerAddr);
-    int acc = 0;
-    for (List<Descriptor> group : primitiveGroups) {
-      ListExpression groupExpressions = new ListExpression();
-      // use Reference to cut-off expr dependency.
-      for (Descriptor descriptor : group) {
-        int dispatchId = getNumericDescriptorDispatchId(descriptor);
-        // `bean` will be replaced by `Reference` to cut-off expr dependency.
-        Expression fieldValue = getFieldValue(bean, descriptor);
-        if (fieldValue instanceof Inlineable) {
-          ((Inlineable) fieldValue).inline();
-        }
-        if (dispatchId == DispatchId.BOOL) {
-          groupExpressions.add(unsafePutBoolean(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          groupExpressions.add(unsafePut(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          groupExpressions.add(
-              unsafePut(
-                  base, getWriterPos(writerAddr, acc), primitiveByteValue(fieldValue, descriptor)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          groupExpressions.add(unsafePutChar(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          groupExpressions.add(unsafePutShort(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          groupExpressions.add(
-              unsafePutShort(
-                  base,
-                  getWriterPos(writerAddr, acc),
-                  primitiveShortValue(fieldValue, descriptor)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16 || dispatchId == DispatchId.BFLOAT16) {
-          groupExpressions.add(
-              unsafePutShort(
-                  base,
-                  getWriterPos(writerAddr, acc),
-                  new Invoke(fieldValue, "toBits", SHORT_TYPE)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT32) {
-          groupExpressions.add(unsafePutInt(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          groupExpressions.add(
-              unsafePutInt(
-                  base, getWriterPos(writerAddr, acc), primitiveIntValue(fieldValue, descriptor)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          groupExpressions.add(unsafePutLong(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 8;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          groupExpressions.add(unsafePutFloat(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          groupExpressions.add(unsafePutDouble(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 8;
-        } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-        }
-      }
-      if (hasFewFields() || numPrimitiveFields < 4) {
-        expressions.add(groupExpressions);
-      } else {
-        expressions.add(
-            objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, base, writerAddr), groupExpressions, "writeFields"));
-      }
+    PrimitiveWriteAccess access;
+    if (useIndexedAccess()) {
+      Expression writerIndex = new Invoke(buffer, "writerIndex", "writerIndex", PRIMITIVE_INT_TYPE);
+      expressions.add(writerIndex);
+      access = new BufferWriteAccess(buffer, writerIndex);
+    } else {
+      // Must grow first, otherwise may get invalid address.
+      Expression base = new Invoke(buffer, "getHeapMemory", "base", PRIMITIVE_BYTE_ARRAY_TYPE);
+      Expression writerAddr =
+          new Invoke(buffer, "_unsafeWriterAddress", "writerAddr", PRIMITIVE_LONG_TYPE);
+      expressions.add(base);
+      expressions.add(writerAddr);
+      access = new UnsafeWriteAccess(buffer, base, writerAddr);
     }
-    Expression increaseWriterIndex =
-        new Invoke(
-            buffer,
-            "_increaseWriterIndexUnsafe",
-            new Literal(totalSizeLiteral, PRIMITIVE_INT_TYPE));
-    expressions.add(increaseWriterIndex);
+    writePrimitiveGroups(expressions, bean, buffer, primitiveGroups, () -> access, false);
+    expressions.add(new Invoke(buffer, "_increaseWriterIndexUnsafe", totalSizeLiteral));
     return expressions;
   }
 
   private List<Expression> serializePrimitivesCompressed(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      return serializeCompressedIndexed(bean, buffer, primitiveGroups, totalSize);
-    }
     List<Expression> expressions = new ArrayList<>();
-    // int/long may need extra one-byte for writing.
-    int extraSize = 0;
-    for (List<Descriptor> group : primitiveGroups) {
-      for (Descriptor d : group) {
-        int id = getNumericDescriptorDispatchId(d);
-        if (id == DispatchId.INT32
-            || id == DispatchId.VARINT32
-            || id == DispatchId.VAR_UINT32
-            || id == DispatchId.UINT32) {
-          // varint may be written as 5bytes, use 8bytes for written as long to reduce cost.
-          extraSize += 4;
-        } else if (id == DispatchId.INT64
-            || id == DispatchId.VARINT64
-            || id == DispatchId.TAGGED_INT64
-            || id == DispatchId.VAR_UINT64
-            || id == DispatchId.TAGGED_UINT64
-            || id == DispatchId.UINT64) {
-          extraSize += 1; // long use 1~9 bytes.
-        }
-      }
-    }
+    // int/long may need extra bytes for compressed writing.
+    int extraSize = extraPrimitiveSize(primitiveGroups);
     int growSize = totalSize + extraSize;
-    // After this grow, following writes can be unsafe without checks.
+    // After this grow, following writes can use unchecked low-level access.
     expressions.add(new Invoke(buffer, "grow", Literal.ofInt(growSize)));
-    // Must grow first, otherwise may get invalid address.
-    Expression base = new Invoke(buffer, "getHeapMemory", "base", PRIMITIVE_BYTE_ARRAY_TYPE);
-    expressions.add(base);
+    if (useIndexedAccess()) {
+      writePrimitiveGroups(
+          expressions,
+          bean,
+          buffer,
+          primitiveGroups,
+          () ->
+              new BufferWriteAccess(
+                  buffer, new Invoke(buffer, "writerIndex", "writerIndex", PRIMITIVE_INT_TYPE)),
+          true);
+    } else {
+      // Must grow first, otherwise may get invalid address.
+      Expression base = new Invoke(buffer, "getHeapMemory", "base", PRIMITIVE_BYTE_ARRAY_TYPE);
+      expressions.add(base);
+      writePrimitiveGroups(
+          expressions,
+          bean,
+          buffer,
+          primitiveGroups,
+          () ->
+              new UnsafeWriteAccess(
+                  buffer,
+                  base,
+                  new Invoke(buffer, "_unsafeWriterAddress", "writerAddr", PRIMITIVE_LONG_TYPE)),
+          true);
+    }
+    return expressions;
+  }
+
+  private void writePrimitiveGroups(
+      List<Expression> expressions,
+      Expression bean,
+      Expression buffer,
+      List<List<Descriptor>> primitiveGroups,
+      WriteAccessFactory accessFactory,
+      boolean compressed) {
     int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
+    int rawAcc = 0;
     for (List<Descriptor> group : primitiveGroups) {
       ListExpression groupExpressions = new ListExpression();
-      Expression writerAddr =
-          new Invoke(buffer, "_unsafeWriterAddress", "writerAddr", PRIMITIVE_LONG_TYPE);
-      // use Reference to cut-off expr dependency.
-      int acc = 0;
-      boolean compressStarted = false;
+      PrimitiveWriteAccess access = accessFactory.get();
+      PrimitiveWriteState state = new PrimitiveWriteState(compressed ? 0 : rawAcc);
       for (Descriptor descriptor : group) {
         int dispatchId = getNumericDescriptorDispatchId(descriptor);
         // `bean` will be replaced by `Reference` to cut-off expr dependency.
@@ -396,210 +335,144 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         if (fieldValue instanceof Inlineable) {
           ((Inlineable) fieldValue).inline();
         }
-        if (dispatchId == DispatchId.BOOL) {
-          groupExpressions.add(unsafePutBoolean(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          groupExpressions.add(unsafePut(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          groupExpressions.add(
-              unsafePut(
-                  base, getWriterPos(writerAddr, acc), primitiveByteValue(fieldValue, descriptor)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          groupExpressions.add(unsafePutChar(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          groupExpressions.add(unsafePutShort(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          groupExpressions.add(
-              unsafePutShort(
-                  base,
-                  getWriterPos(writerAddr, acc),
-                  primitiveShortValue(fieldValue, descriptor)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16 || dispatchId == DispatchId.BFLOAT16) {
-          groupExpressions.add(
-              unsafePutShort(
-                  base,
-                  getWriterPos(writerAddr, acc),
-                  new Invoke(fieldValue, "toBits", SHORT_TYPE)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          groupExpressions.add(unsafePutFloat(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          groupExpressions.add(unsafePutDouble(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 8;
-        } else if (dispatchId == DispatchId.INT32) {
-          groupExpressions.add(unsafePutInt(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          groupExpressions.add(
-              unsafePutInt(
-                  base, getWriterPos(writerAddr, acc), primitiveIntValue(fieldValue, descriptor)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          groupExpressions.add(unsafePutLong(base, getWriterPos(writerAddr, acc), fieldValue));
-          acc += 8;
-        } else if (dispatchId == DispatchId.VARINT32) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "_unsafeWriteVarInt32", fieldValue));
-        } else if (dispatchId == DispatchId.VAR_UINT32) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(
-              new Invoke(
-                  buffer, "_unsafeWriteVarUInt32", primitiveIntValue(fieldValue, descriptor)));
-        } else if (dispatchId == DispatchId.VARINT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeVarInt64", fieldValue));
-        } else if (dispatchId == DispatchId.TAGGED_INT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeTaggedInt64", fieldValue));
-        } else if (dispatchId == DispatchId.VAR_UINT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeVarUInt64", fieldValue));
-        } else if (dispatchId == DispatchId.TAGGED_UINT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeTaggedUInt64", fieldValue));
+        if (compressed) {
+          writeCompressed(
+              groupExpressions, buffer, access, descriptor, dispatchId, fieldValue, state);
         } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+          writeFixed(groupExpressions, access, descriptor, dispatchId, fieldValue, state);
         }
       }
-      if (!compressStarted) {
-        // int/long are sorted in the last.
-        addIncWriterIndexExpr(groupExpressions, buffer, acc);
+      if (compressed) {
+        if (!state.compressStarted) {
+          // int/long are sorted in the last.
+          addIncWriterIndexExpr(groupExpressions, buffer, state.acc);
+        }
+      } else {
+        rawAcc = state.acc;
       }
       if (hasFewFields() || numPrimitiveFields < 4) {
         expressions.add(groupExpressions);
       } else {
         expressions.add(
             objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, buffer, base), groupExpressions, "writeFields"));
+                compressed ? access.compressedScope(bean) : access.fixedScope(bean),
+                groupExpressions,
+                "writeFields"));
       }
     }
-    return expressions;
   }
 
-  private List<Expression> serializeRawPrimitivesIndexed(
-      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
-    List<Expression> expressions = new ArrayList<>();
-    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
-    Literal totalSizeLiteral = new Literal(totalSize, PRIMITIVE_INT_TYPE);
-    expressions.add(new Invoke(buffer, "grow", totalSizeLiteral));
-    Expression writerIndex = new Invoke(buffer, "writerIndex", "writerIndex", PRIMITIVE_INT_TYPE);
-    expressions.add(writerIndex);
-    int acc = 0;
-    for (List<Descriptor> group : primitiveGroups) {
-      ListExpression groupExpressions = new ListExpression();
-      for (Descriptor descriptor : group) {
-        int dispatchId = getNumericDescriptorDispatchId(descriptor);
-        Expression fieldValue = getFieldValue(bean, descriptor);
-        if (fieldValue instanceof Inlineable) {
-          ((Inlineable) fieldValue).inline();
-        }
-        if (dispatchId == DispatchId.BOOL) {
-          groupExpressions.add(
-              bufferPutBoolean(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          groupExpressions.add(bufferPutByte(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          groupExpressions.add(
-              bufferPutByte(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  primitiveByteValue(fieldValue, descriptor)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          groupExpressions.add(bufferPutChar(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          groupExpressions.add(
-              bufferPutInt16(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          groupExpressions.add(
-              bufferPutInt16(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  primitiveShortValue(fieldValue, descriptor)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16 || dispatchId == DispatchId.BFLOAT16) {
-          groupExpressions.add(
-              bufferPutInt16(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  new Invoke(fieldValue, "toBits", SHORT_TYPE)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT32) {
-          groupExpressions.add(
-              bufferPutInt32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          groupExpressions.add(
-              bufferPutInt32(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  primitiveIntValue(fieldValue, descriptor)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          groupExpressions.add(
-              bufferPutInt64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 8;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          groupExpressions.add(
-              bufferPutFloat32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          groupExpressions.add(
-              bufferPutFloat64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 8;
-        } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-        }
-      }
-      if (hasFewFields() || numPrimitiveFields < 4) {
-        expressions.add(groupExpressions);
-      } else {
+  private void writeCompressed(
+      ListExpression expressions,
+      Expression buffer,
+      PrimitiveWriteAccess access,
+      Descriptor descriptor,
+      int dispatchId,
+      Expression fieldValue,
+      PrimitiveWriteState state) {
+    switch (dispatchId) {
+      case DispatchId.VARINT32:
+        startCompressed(expressions, buffer, state);
+        expressions.add(new Invoke(buffer, "_unsafeWriteVarInt32", fieldValue));
+        return;
+      case DispatchId.VAR_UINT32:
+        startCompressed(expressions, buffer, state);
         expressions.add(
-            objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, buffer, writerIndex), groupExpressions, "writeFields"));
-      }
+            new Invoke(buffer, "_unsafeWriteVarUInt32", primitiveIntValue(fieldValue, descriptor)));
+        return;
+      case DispatchId.VARINT64:
+        startCompressed(expressions, buffer, state);
+        expressions.add(new Invoke(buffer, "writeVarInt64", fieldValue));
+        return;
+      case DispatchId.TAGGED_INT64:
+        startCompressed(expressions, buffer, state);
+        expressions.add(new Invoke(buffer, "writeTaggedInt64", fieldValue));
+        return;
+      case DispatchId.VAR_UINT64:
+        startCompressed(expressions, buffer, state);
+        expressions.add(new Invoke(buffer, "writeVarUInt64", fieldValue));
+        return;
+      case DispatchId.TAGGED_UINT64:
+        startCompressed(expressions, buffer, state);
+        expressions.add(new Invoke(buffer, "writeTaggedUInt64", fieldValue));
+        return;
+      default:
+        writeFixed(expressions, access, descriptor, dispatchId, fieldValue, state);
     }
-    Expression increaseWriterIndex =
-        new Invoke(
-            buffer,
-            "_increaseWriterIndexUnsafe",
-            new Literal(totalSizeLiteral, PRIMITIVE_INT_TYPE));
-    expressions.add(increaseWriterIndex);
-    return expressions;
   }
 
-  private List<Expression> serializeCompressedIndexed(
-      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
-    List<Expression> expressions = new ArrayList<>();
+  private void startCompressed(
+      ListExpression expressions, Expression buffer, PrimitiveWriteState state) {
+    if (!state.compressStarted) {
+      addIncWriterIndexExpr(expressions, buffer, state.acc);
+      state.compressStarted = true;
+    }
+  }
+
+  private void writeFixed(
+      ListExpression expressions,
+      PrimitiveWriteAccess access,
+      Descriptor descriptor,
+      int dispatchId,
+      Expression fieldValue,
+      PrimitiveWriteState state) {
+    switch (dispatchId) {
+      case DispatchId.BOOL:
+        expressions.add(access.putBoolean(state.acc, fieldValue));
+        state.acc += 1;
+        return;
+      case DispatchId.INT8:
+        expressions.add(access.putByte(state.acc, fieldValue));
+        state.acc += 1;
+        return;
+      case DispatchId.UINT8:
+        expressions.add(access.putByte(state.acc, primitiveByteValue(fieldValue, descriptor)));
+        state.acc += 1;
+        return;
+      case DispatchId.CHAR:
+        expressions.add(access.putChar(state.acc, fieldValue));
+        state.acc += 2;
+        return;
+      case DispatchId.INT16:
+        expressions.add(access.putInt16(state.acc, fieldValue));
+        state.acc += 2;
+        return;
+      case DispatchId.UINT16:
+        expressions.add(access.putInt16(state.acc, primitiveShortValue(fieldValue, descriptor)));
+        state.acc += 2;
+        return;
+      case DispatchId.FLOAT16:
+      case DispatchId.BFLOAT16:
+        expressions.add(access.putInt16(state.acc, new Invoke(fieldValue, "toBits", SHORT_TYPE)));
+        state.acc += 2;
+        return;
+      case DispatchId.INT32:
+        expressions.add(access.putInt32(state.acc, fieldValue));
+        state.acc += 4;
+        return;
+      case DispatchId.UINT32:
+        expressions.add(access.putInt32(state.acc, primitiveIntValue(fieldValue, descriptor)));
+        state.acc += 4;
+        return;
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        expressions.add(access.putInt64(state.acc, fieldValue));
+        state.acc += 8;
+        return;
+      case DispatchId.FLOAT32:
+        expressions.add(access.putFloat32(state.acc, fieldValue));
+        state.acc += 4;
+        return;
+      case DispatchId.FLOAT64:
+        expressions.add(access.putFloat64(state.acc, fieldValue));
+        state.acc += 8;
+        return;
+      default:
+        throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+    }
+  }
+
+  private int extraPrimitiveSize(List<List<Descriptor>> primitiveGroups) {
     int extraSize = 0;
     for (List<Descriptor> group : primitiveGroups) {
       for (Descriptor d : group) {
@@ -608,6 +481,7 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
             || id == DispatchId.VARINT32
             || id == DispatchId.VAR_UINT32
             || id == DispatchId.UINT32) {
+          // varint may be written as 5 bytes; reserve 4 extra bytes over the fixed size.
           extraSize += 4;
         } else if (id == DispatchId.INT64
             || id == DispatchId.VARINT64
@@ -615,136 +489,182 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
             || id == DispatchId.VAR_UINT64
             || id == DispatchId.TAGGED_UINT64
             || id == DispatchId.UINT64) {
+          // long uses 1~9 bytes; reserve one byte over the fixed size.
           extraSize += 1;
         }
       }
     }
-    int growSize = totalSize + extraSize;
-    expressions.add(new Invoke(buffer, "grow", Literal.ofInt(growSize)));
-    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
-    for (List<Descriptor> group : primitiveGroups) {
-      ListExpression groupExpressions = new ListExpression();
-      Expression writerIndex = new Invoke(buffer, "writerIndex", "writerIndex", PRIMITIVE_INT_TYPE);
-      int acc = 0;
-      boolean compressStarted = false;
-      for (Descriptor descriptor : group) {
-        int dispatchId = getNumericDescriptorDispatchId(descriptor);
-        Expression fieldValue = getFieldValue(bean, descriptor);
-        if (fieldValue instanceof Inlineable) {
-          ((Inlineable) fieldValue).inline();
-        }
-        if (dispatchId == DispatchId.BOOL) {
-          groupExpressions.add(
-              bufferPutBoolean(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          groupExpressions.add(bufferPutByte(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          groupExpressions.add(
-              bufferPutByte(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  primitiveByteValue(fieldValue, descriptor)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          groupExpressions.add(bufferPutChar(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          groupExpressions.add(
-              bufferPutInt16(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          groupExpressions.add(
-              bufferPutInt16(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  primitiveShortValue(fieldValue, descriptor)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16 || dispatchId == DispatchId.BFLOAT16) {
-          groupExpressions.add(
-              bufferPutInt16(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  new Invoke(fieldValue, "toBits", SHORT_TYPE)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          groupExpressions.add(
-              bufferPutFloat32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          groupExpressions.add(
-              bufferPutFloat64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 8;
-        } else if (dispatchId == DispatchId.INT32) {
-          groupExpressions.add(
-              bufferPutInt32(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          groupExpressions.add(
-              bufferPutInt32(
-                  buffer,
-                  getBufferIndex(writerIndex, acc),
-                  primitiveIntValue(fieldValue, descriptor)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          groupExpressions.add(
-              bufferPutInt64(buffer, getBufferIndex(writerIndex, acc), fieldValue));
-          acc += 8;
-        } else if (dispatchId == DispatchId.VARINT32) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "_unsafeWriteVarInt32", fieldValue));
-        } else if (dispatchId == DispatchId.VAR_UINT32) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(
-              new Invoke(
-                  buffer, "_unsafeWriteVarUInt32", primitiveIntValue(fieldValue, descriptor)));
-        } else if (dispatchId == DispatchId.VARINT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeVarInt64", fieldValue));
-        } else if (dispatchId == DispatchId.TAGGED_INT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeTaggedInt64", fieldValue));
-        } else if (dispatchId == DispatchId.VAR_UINT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeVarUInt64", fieldValue));
-        } else if (dispatchId == DispatchId.TAGGED_UINT64) {
-          if (!compressStarted) {
-            addIncWriterIndexExpr(groupExpressions, buffer, acc);
-            compressStarted = true;
-          }
-          groupExpressions.add(new Invoke(buffer, "writeTaggedUInt64", fieldValue));
-        } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-        }
-      }
-      if (!compressStarted) {
-        addIncWriterIndexExpr(groupExpressions, buffer, acc);
-      }
-      if (hasFewFields() || numPrimitiveFields < 4) {
-        expressions.add(groupExpressions);
-      } else {
-        expressions.add(
-            objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, buffer, writerIndex), groupExpressions, "writeFields"));
-      }
+    return extraSize;
+  }
+
+  private boolean useIndexedAccess() {
+    return JdkVersion.MAJOR_VERSION >= 25;
+  }
+
+  private interface WriteAccessFactory {
+    PrimitiveWriteAccess get();
+  }
+
+  private static final class PrimitiveWriteState {
+    private int acc;
+    private boolean compressStarted;
+
+    private PrimitiveWriteState(int acc) {
+      this.acc = acc;
     }
-    return expressions;
+  }
+
+  private abstract class PrimitiveWriteAccess {
+    protected final Expression buffer;
+    protected final Expression cursor;
+
+    private PrimitiveWriteAccess(Expression buffer, Expression cursor) {
+      this.buffer = buffer;
+      this.cursor = cursor;
+    }
+
+    abstract Expression putByte(int acc, Expression value);
+
+    abstract Expression putBoolean(int acc, Expression value);
+
+    abstract Expression putChar(int acc, Expression value);
+
+    abstract Expression putInt16(int acc, Expression value);
+
+    abstract Expression putInt32(int acc, Expression value);
+
+    abstract Expression putInt64(int acc, Expression value);
+
+    abstract Expression putFloat32(int acc, Expression value);
+
+    abstract Expression putFloat64(int acc, Expression value);
+
+    abstract Set<Expression> fixedScope(Expression bean);
+
+    abstract Set<Expression> compressedScope(Expression bean);
+  }
+
+  private final class UnsafeWriteAccess extends PrimitiveWriteAccess {
+    private final Expression base;
+
+    private UnsafeWriteAccess(Expression buffer, Expression base, Expression writerAddr) {
+      super(buffer, writerAddr);
+      this.base = base;
+    }
+
+    private Expression pos(int acc) {
+      return getWriterPos(cursor, acc);
+    }
+
+    @Override
+    Expression putByte(int acc, Expression value) {
+      return unsafePut(base, pos(acc), value);
+    }
+
+    @Override
+    Expression putBoolean(int acc, Expression value) {
+      return unsafePutBoolean(base, pos(acc), value);
+    }
+
+    @Override
+    Expression putChar(int acc, Expression value) {
+      return unsafePutChar(base, pos(acc), value);
+    }
+
+    @Override
+    Expression putInt16(int acc, Expression value) {
+      return unsafePutShort(base, pos(acc), value);
+    }
+
+    @Override
+    Expression putInt32(int acc, Expression value) {
+      return unsafePutInt(base, pos(acc), value);
+    }
+
+    @Override
+    Expression putInt64(int acc, Expression value) {
+      return unsafePutLong(base, pos(acc), value);
+    }
+
+    @Override
+    Expression putFloat32(int acc, Expression value) {
+      return unsafePutFloat(base, pos(acc), value);
+    }
+
+    @Override
+    Expression putFloat64(int acc, Expression value) {
+      return unsafePutDouble(base, pos(acc), value);
+    }
+
+    @Override
+    Set<Expression> fixedScope(Expression bean) {
+      return ofHashSet(bean, base, cursor);
+    }
+
+    @Override
+    Set<Expression> compressedScope(Expression bean) {
+      return ofHashSet(bean, buffer, base);
+    }
+  }
+
+  private final class BufferWriteAccess extends PrimitiveWriteAccess {
+    private BufferWriteAccess(Expression buffer, Expression writerIndex) {
+      super(buffer, writerIndex);
+    }
+
+    private Expression index(int acc) {
+      return getBufferIndex(cursor, acc);
+    }
+
+    @Override
+    Expression putByte(int acc, Expression value) {
+      return bufferPutByte(buffer, index(acc), value);
+    }
+
+    @Override
+    Expression putBoolean(int acc, Expression value) {
+      return bufferPutBoolean(buffer, index(acc), value);
+    }
+
+    @Override
+    Expression putChar(int acc, Expression value) {
+      return bufferPutChar(buffer, index(acc), value);
+    }
+
+    @Override
+    Expression putInt16(int acc, Expression value) {
+      return bufferPutInt16(buffer, index(acc), value);
+    }
+
+    @Override
+    Expression putInt32(int acc, Expression value) {
+      return bufferPutInt32(buffer, index(acc), value);
+    }
+
+    @Override
+    Expression putInt64(int acc, Expression value) {
+      return bufferPutInt64(buffer, index(acc), value);
+    }
+
+    @Override
+    Expression putFloat32(int acc, Expression value) {
+      return bufferPutFloat32(buffer, index(acc), value);
+    }
+
+    @Override
+    Expression putFloat64(int acc, Expression value) {
+      return bufferPutFloat64(buffer, index(acc), value);
+    }
+
+    @Override
+    Set<Expression> fixedScope(Expression bean) {
+      return ofHashSet(bean, buffer, cursor);
+    }
+
+    @Override
+    Set<Expression> compressedScope(Expression bean) {
+      return ofHashSet(bean, buffer, cursor);
+    }
   }
 
   private Expression bufferPutByte(Expression buffer, Expression index, Expression value) {
@@ -1066,502 +986,377 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
 
   private List<Expression> deserializeUnCompressedPrimitives(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      return deserializeRawIndexed(bean, buffer, primitiveGroups, totalSize);
-    }
     List<Expression> expressions = new ArrayList<>();
-    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
     Literal totalSizeLiteral = Literal.ofInt(totalSize);
-    // After this check, following read can be totally unsafe without checks
+    // After this check, following reads can use unchecked low-level access.
     expressions.add(new Invoke(buffer, "checkReadableBytes", totalSizeLiteral));
-    Expression heapBuffer =
-        new Invoke(buffer, "getHeapMemory", "heapBuffer", PRIMITIVE_BYTE_ARRAY_TYPE);
-    Expression readerAddr =
-        new Invoke(buffer, "getUnsafeReaderAddress", "readerAddr", PRIMITIVE_LONG_TYPE);
-    expressions.add(heapBuffer);
-    expressions.add(readerAddr);
-    int acc = 0;
-    for (List<Descriptor> group : primitiveGroups) {
-      ListExpression groupExpressions = new ListExpression();
-      for (Descriptor descriptor : group) {
-        int dispatchId = getNumericDescriptorDispatchId(descriptor);
-        Expression fieldValue;
-        if (dispatchId == DispatchId.BOOL) {
-          fieldValue = unsafeGetBoolean(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          fieldValue = unsafeGet(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          fieldValue =
-              new StaticInvoke(
-                  Byte.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  unsafeGet(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          fieldValue = unsafeGetChar(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          fieldValue = unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Short.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Float16.class,
-                  "fromBits",
-                  TypeRef.of(Float16.class),
-                  unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.BFLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  BFloat16.class,
-                  "fromBits",
-                  TypeRef.of(BFloat16.class),
-                  unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT32) {
-          fieldValue = unsafeGetInt(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          fieldValue =
-              new StaticInvoke(
-                  Integer.class,
-                  "toUnsignedLong",
-                  descriptor.getTypeRef(),
-                  unsafeGetInt(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          fieldValue = unsafeGetLong(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 8;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          fieldValue = unsafeGetFloat(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          fieldValue = unsafeGetDouble(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 8;
-        } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-        }
-        // `bean` will be replaced by `Reference` to cut-off expr dependency.
-        groupExpressions.add(setFieldValue(bean, descriptor, fieldValue));
-      }
-      if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
-        expressions.add(groupExpressions);
-      } else {
-        expressions.add(
-            objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, heapBuffer, readerAddr), groupExpressions, "readFields"));
-      }
+    PrimitiveReadAccess access;
+    if (useIndexedAccess()) {
+      Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
+      expressions.add(readerIndex);
+      access = new BufferReadAccess(buffer, readerIndex);
+    } else {
+      Expression heapBuffer =
+          new Invoke(buffer, "getHeapMemory", "heapBuffer", PRIMITIVE_BYTE_ARRAY_TYPE);
+      Expression readerAddr =
+          new Invoke(buffer, "getUnsafeReaderAddress", "readerAddr", PRIMITIVE_LONG_TYPE);
+      expressions.add(heapBuffer);
+      expressions.add(readerAddr);
+      access = new UnsafeReadAccess(buffer, heapBuffer, readerAddr);
     }
-    Expression increaseReaderIndex =
-        new Invoke(
-            buffer, "increaseReaderIndex", new Literal(totalSizeLiteral, PRIMITIVE_INT_TYPE));
-    expressions.add(increaseReaderIndex);
+    readPrimitiveGroups(expressions, bean, buffer, primitiveGroups, ignored -> access, false);
+    expressions.add(new Invoke(buffer, "increaseReaderIndex", totalSizeLiteral));
     return expressions;
   }
 
   private List<Expression> deserializeCompressedPrimitives(
       Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups) {
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      return deserializeCompressedIndexed(bean, buffer, primitiveGroups);
-    }
     List<Expression> expressions = new ArrayList<>();
+    if (useIndexedAccess()) {
+      readPrimitiveGroups(
+          expressions,
+          bean,
+          buffer,
+          primitiveGroups,
+          readExpressions -> {
+            Expression readerIndex =
+                new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
+            readExpressions.add(readerIndex);
+            return new BufferReadAccess(buffer, readerIndex);
+          },
+          true);
+    } else {
+      readPrimitiveGroups(
+          expressions,
+          bean,
+          buffer,
+          primitiveGroups,
+          readExpressions -> {
+            // checkReadableBytes first, `fillBuffer` may create a new heap buffer.
+            Expression heapBuffer =
+                new Invoke(buffer, "getHeapMemory", "heapBuffer", PRIMITIVE_BYTE_ARRAY_TYPE);
+            readExpressions.add(heapBuffer);
+            Expression readerAddr =
+                new Invoke(buffer, "getUnsafeReaderAddress", "readerAddr", PRIMITIVE_LONG_TYPE);
+            return new UnsafeReadAccess(buffer, heapBuffer, readerAddr);
+          },
+          true);
+    }
+    return expressions;
+  }
+
+  private void readPrimitiveGroups(
+      List<Expression> expressions,
+      Expression bean,
+      Expression buffer,
+      List<List<Descriptor>> primitiveGroups,
+      ReadAccessFactory accessFactory,
+      boolean compressed) {
     int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
+    int rawAcc = 0;
     for (List<Descriptor> group : primitiveGroups) {
-      // After this check, following read can be totally unsafe without checks.
-      // checkReadableBytes first, `fillBuffer` may create a new heap buffer.
-      ReplaceStub checkReadableBytesStub = new ReplaceStub();
-      expressions.add(checkReadableBytesStub);
-      Expression heapBuffer =
-          new Invoke(buffer, "getHeapMemory", "heapBuffer", PRIMITIVE_BYTE_ARRAY_TYPE);
-      expressions.add(heapBuffer);
+      ReplaceStub checkReadableBytesStub = null;
+      if (compressed) {
+        // After this check, following reads can use unchecked low-level access.
+        checkReadableBytesStub = new ReplaceStub();
+        expressions.add(checkReadableBytesStub);
+      }
+      PrimitiveReadAccess access = accessFactory.get(expressions);
       ListExpression groupExpressions = new ListExpression();
-      Expression readerAddr =
-          new Invoke(buffer, "getUnsafeReaderAddress", "readerAddr", PRIMITIVE_LONG_TYPE);
-      int acc = 0;
-      boolean compressStarted = false;
+      PrimitiveReadState state = new PrimitiveReadState(compressed ? 0 : rawAcc);
       for (Descriptor descriptor : group) {
         int dispatchId = getNumericDescriptorDispatchId(descriptor);
-        Expression fieldValue;
-        if (dispatchId == DispatchId.BOOL) {
-          fieldValue = unsafeGetBoolean(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          fieldValue = unsafeGet(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          fieldValue =
-              new StaticInvoke(
-                  Byte.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  unsafeGet(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          fieldValue = unsafeGetChar(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          fieldValue = unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Short.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Float16.class,
-                  "fromBits",
-                  TypeRef.of(Float16.class),
-                  unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.BFLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  BFloat16.class,
-                  "fromBits",
-                  TypeRef.of(BFloat16.class),
-                  unsafeGetShort(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          fieldValue = unsafeGetFloat(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          fieldValue = unsafeGetDouble(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 8;
-        } else if (dispatchId == DispatchId.INT32) {
-          fieldValue = unsafeGetInt(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          fieldValue =
-              new StaticInvoke(
-                  Integer.class,
-                  "toUnsignedLong",
-                  descriptor.getTypeRef(),
-                  unsafeGetInt(heapBuffer, getReaderAddress(readerAddr, acc)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          fieldValue = unsafeGetLong(heapBuffer, getReaderAddress(readerAddr, acc));
-          acc += 8;
-        } else if (dispatchId == DispatchId.VARINT32) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = readVarInt32(buffer);
-        } else if (dispatchId == DispatchId.VAR_UINT32) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue =
-              new StaticInvoke(
-                  Integer.class,
-                  "toUnsignedLong",
-                  descriptor.getTypeRef(),
-                  new Invoke(buffer, "readVarUInt32", PRIMITIVE_INT_TYPE));
-        } else if (dispatchId == DispatchId.VARINT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readVarInt64", PRIMITIVE_LONG_TYPE);
-        } else if (dispatchId == DispatchId.TAGGED_INT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readTaggedInt64", PRIMITIVE_LONG_TYPE);
-        } else if (dispatchId == DispatchId.VAR_UINT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readVarUInt64", PRIMITIVE_LONG_TYPE);
-        } else if (dispatchId == DispatchId.TAGGED_UINT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readTaggedUInt64", PRIMITIVE_LONG_TYPE);
-        } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-        }
+        Expression fieldValue =
+            compressed
+                ? readCompressed(groupExpressions, buffer, access, descriptor, dispatchId, state)
+                : readFixed(access, descriptor, dispatchId, state);
         // `bean` will be replaced by `Reference` to cut-off expr dependency.
         groupExpressions.add(setFieldValue(bean, descriptor, fieldValue));
       }
-      if (acc != 0) {
-        checkReadableBytesStub.setTargetObject(
-            new Invoke(buffer, "checkReadableBytes", Literal.ofInt(acc)));
-      }
-      if (!compressStarted) {
-        addIncReaderIndexExpr(groupExpressions, buffer, acc);
+      if (compressed) {
+        if (state.acc != 0) {
+          checkReadableBytesStub.setTargetObject(
+              new Invoke(buffer, "checkReadableBytes", Literal.ofInt(state.acc)));
+        }
+        if (!state.compressStarted) {
+          addIncReaderIndexExpr(groupExpressions, buffer, state.acc);
+        }
+      } else {
+        rawAcc = state.acc;
       }
       if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
         expressions.add(groupExpressions);
       } else {
         expressions.add(
             objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, buffer, heapBuffer), groupExpressions, "readFields"));
+                compressed ? access.compressedScope(bean) : access.fixedScope(bean),
+                groupExpressions,
+                "readFields"));
       }
     }
-    return expressions;
   }
 
-  private List<Expression> deserializeRawIndexed(
-      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups, int totalSize) {
-    List<Expression> expressions = new ArrayList<>();
-    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
-    Literal totalSizeLiteral = Literal.ofInt(totalSize);
-    expressions.add(new Invoke(buffer, "checkReadableBytes", totalSizeLiteral));
-    Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
-    expressions.add(readerIndex);
-    int acc = 0;
-    for (List<Descriptor> group : primitiveGroups) {
-      ListExpression groupExpressions = new ListExpression();
-      for (Descriptor descriptor : group) {
-        int dispatchId = getNumericDescriptorDispatchId(descriptor);
-        Expression fieldValue;
-        if (dispatchId == DispatchId.BOOL) {
-          fieldValue = bufferGetBoolean(buffer, getBufferIndex(readerIndex, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          fieldValue = bufferGetByte(buffer, getBufferIndex(readerIndex, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          fieldValue =
-              new StaticInvoke(
-                  Byte.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  bufferGetByte(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          fieldValue = bufferGetChar(buffer, getBufferIndex(readerIndex, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          fieldValue = bufferGetInt16(buffer, getBufferIndex(readerIndex, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Short.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Float16.class,
-                  "fromBits",
-                  TypeRef.of(Float16.class),
-                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.BFLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  BFloat16.class,
-                  "fromBits",
-                  TypeRef.of(BFloat16.class),
-                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT32) {
-          fieldValue = bufferGetInt32(buffer, getBufferIndex(readerIndex, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          fieldValue =
-              new StaticInvoke(
-                  Integer.class,
-                  "toUnsignedLong",
-                  descriptor.getTypeRef(),
-                  bufferGetInt32(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          fieldValue = bufferGetInt64(buffer, getBufferIndex(readerIndex, acc));
-          acc += 8;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          fieldValue = bufferGetFloat32(buffer, getBufferIndex(readerIndex, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          fieldValue = bufferGetFloat64(buffer, getBufferIndex(readerIndex, acc));
-          acc += 8;
-        } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-        }
-        groupExpressions.add(setFieldValue(bean, descriptor, fieldValue));
-      }
-      if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
-        expressions.add(groupExpressions);
-      } else {
-        expressions.add(
-            objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, buffer, readerIndex), groupExpressions, "readFields"));
-      }
+  private Expression readCompressed(
+      ListExpression expressions,
+      Expression buffer,
+      PrimitiveReadAccess access,
+      Descriptor descriptor,
+      int dispatchId,
+      PrimitiveReadState state) {
+    switch (dispatchId) {
+      case DispatchId.VARINT32:
+        startReadCompressed(expressions, buffer, state);
+        return readVarInt32(buffer);
+      case DispatchId.VAR_UINT32:
+        startReadCompressed(expressions, buffer, state);
+        return new StaticInvoke(
+            Integer.class,
+            "toUnsignedLong",
+            descriptor.getTypeRef(),
+            new Invoke(buffer, "readVarUInt32", PRIMITIVE_INT_TYPE));
+      case DispatchId.VARINT64:
+        startReadCompressed(expressions, buffer, state);
+        return new Invoke(buffer, "readVarInt64", PRIMITIVE_LONG_TYPE);
+      case DispatchId.TAGGED_INT64:
+        startReadCompressed(expressions, buffer, state);
+        return new Invoke(buffer, "readTaggedInt64", PRIMITIVE_LONG_TYPE);
+      case DispatchId.VAR_UINT64:
+        startReadCompressed(expressions, buffer, state);
+        return new Invoke(buffer, "readVarUInt64", PRIMITIVE_LONG_TYPE);
+      case DispatchId.TAGGED_UINT64:
+        startReadCompressed(expressions, buffer, state);
+        return new Invoke(buffer, "readTaggedUInt64", PRIMITIVE_LONG_TYPE);
+      default:
+        return readFixed(access, descriptor, dispatchId, state);
     }
-    Expression increaseReaderIndex =
-        new Invoke(
-            buffer, "increaseReaderIndex", new Literal(totalSizeLiteral, PRIMITIVE_INT_TYPE));
-    expressions.add(increaseReaderIndex);
-    return expressions;
   }
 
-  private List<Expression> deserializeCompressedIndexed(
-      Expression bean, Expression buffer, List<List<Descriptor>> primitiveGroups) {
-    List<Expression> expressions = new ArrayList<>();
-    int numPrimitiveFields = getNumPrimitiveFields(primitiveGroups);
-    for (List<Descriptor> group : primitiveGroups) {
-      ReplaceStub checkReadableBytesStub = new ReplaceStub();
-      expressions.add(checkReadableBytesStub);
-      Expression readerIndex = new Invoke(buffer, "readerIndex", "readerIndex", PRIMITIVE_INT_TYPE);
-      expressions.add(readerIndex);
-      ListExpression groupExpressions = new ListExpression();
-      int acc = 0;
-      boolean compressStarted = false;
-      for (Descriptor descriptor : group) {
-        int dispatchId = getNumericDescriptorDispatchId(descriptor);
-        Expression fieldValue;
-        if (dispatchId == DispatchId.BOOL) {
-          fieldValue = bufferGetBoolean(buffer, getBufferIndex(readerIndex, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.INT8) {
-          fieldValue = bufferGetByte(buffer, getBufferIndex(readerIndex, acc));
-          acc += 1;
-        } else if (dispatchId == DispatchId.UINT8) {
-          fieldValue =
-              new StaticInvoke(
-                  Byte.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  bufferGetByte(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 1;
-        } else if (dispatchId == DispatchId.CHAR) {
-          fieldValue = bufferGetChar(buffer, getBufferIndex(readerIndex, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.INT16) {
-          fieldValue = bufferGetInt16(buffer, getBufferIndex(readerIndex, acc));
-          acc += 2;
-        } else if (dispatchId == DispatchId.UINT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Short.class,
-                  "toUnsignedInt",
-                  descriptor.getTypeRef(),
-                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  Float16.class,
-                  "fromBits",
-                  TypeRef.of(Float16.class),
-                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.BFLOAT16) {
-          fieldValue =
-              new StaticInvoke(
-                  BFloat16.class,
-                  "fromBits",
-                  TypeRef.of(BFloat16.class),
-                  bufferGetInt16(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 2;
-        } else if (dispatchId == DispatchId.FLOAT32) {
-          fieldValue = bufferGetFloat32(buffer, getBufferIndex(readerIndex, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.FLOAT64) {
-          fieldValue = bufferGetFloat64(buffer, getBufferIndex(readerIndex, acc));
-          acc += 8;
-        } else if (dispatchId == DispatchId.INT32) {
-          fieldValue = bufferGetInt32(buffer, getBufferIndex(readerIndex, acc));
-          acc += 4;
-        } else if (dispatchId == DispatchId.UINT32) {
-          fieldValue =
-              new StaticInvoke(
-                  Integer.class,
-                  "toUnsignedLong",
-                  descriptor.getTypeRef(),
-                  bufferGetInt32(buffer, getBufferIndex(readerIndex, acc)));
-          acc += 4;
-        } else if (dispatchId == DispatchId.INT64 || dispatchId == DispatchId.UINT64) {
-          fieldValue = bufferGetInt64(buffer, getBufferIndex(readerIndex, acc));
-          acc += 8;
-        } else if (dispatchId == DispatchId.VARINT32) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = readVarInt32(buffer);
-        } else if (dispatchId == DispatchId.VAR_UINT32) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue =
-              new StaticInvoke(
-                  Integer.class,
-                  "toUnsignedLong",
-                  descriptor.getTypeRef(),
-                  new Invoke(buffer, "readVarUInt32", PRIMITIVE_INT_TYPE));
-        } else if (dispatchId == DispatchId.VARINT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readVarInt64", PRIMITIVE_LONG_TYPE);
-        } else if (dispatchId == DispatchId.TAGGED_INT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readTaggedInt64", PRIMITIVE_LONG_TYPE);
-        } else if (dispatchId == DispatchId.VAR_UINT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readVarUInt64", PRIMITIVE_LONG_TYPE);
-        } else if (dispatchId == DispatchId.TAGGED_UINT64) {
-          if (!compressStarted) {
-            compressStarted = true;
-            addIncReaderIndexExpr(groupExpressions, buffer, acc);
-          }
-          fieldValue = new Invoke(buffer, "readTaggedUInt64", PRIMITIVE_LONG_TYPE);
-        } else {
-          throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
-        }
-        groupExpressions.add(setFieldValue(bean, descriptor, fieldValue));
-      }
-      if (acc != 0) {
-        checkReadableBytesStub.setTargetObject(
-            new Invoke(buffer, "checkReadableBytes", Literal.ofInt(acc)));
-      }
-      if (!compressStarted) {
-        addIncReaderIndexExpr(groupExpressions, buffer, acc);
-      }
-      if (hasFewFields() || numPrimitiveFields < 4 || isRecord) {
-        expressions.add(groupExpressions);
-      } else {
-        expressions.add(
-            objectCodecOptimizer.invokeGenerated(
-                ofHashSet(bean, buffer, readerIndex), groupExpressions, "readFields"));
-      }
+  private void startReadCompressed(
+      ListExpression expressions, Expression buffer, PrimitiveReadState state) {
+    if (!state.compressStarted) {
+      state.compressStarted = true;
+      addIncReaderIndexExpr(expressions, buffer, state.acc);
     }
-    return expressions;
+  }
+
+  private Expression readFixed(
+      PrimitiveReadAccess access, Descriptor descriptor, int dispatchId, PrimitiveReadState state) {
+    int acc = state.acc;
+    switch (dispatchId) {
+      case DispatchId.BOOL:
+        state.acc = acc + 1;
+        return access.getBoolean(acc);
+      case DispatchId.INT8:
+        state.acc = acc + 1;
+        return access.getByte(acc);
+      case DispatchId.UINT8:
+        state.acc = acc + 1;
+        return new StaticInvoke(
+            Byte.class, "toUnsignedInt", descriptor.getTypeRef(), access.getByte(acc));
+      case DispatchId.CHAR:
+        state.acc = acc + 2;
+        return access.getChar(acc);
+      case DispatchId.INT16:
+        state.acc = acc + 2;
+        return access.getInt16(acc);
+      case DispatchId.UINT16:
+        state.acc = acc + 2;
+        return new StaticInvoke(
+            Short.class, "toUnsignedInt", descriptor.getTypeRef(), access.getInt16(acc));
+      case DispatchId.FLOAT16:
+        state.acc = acc + 2;
+        return new StaticInvoke(
+            Float16.class, "fromBits", TypeRef.of(Float16.class), access.getInt16(acc));
+      case DispatchId.BFLOAT16:
+        state.acc = acc + 2;
+        return new StaticInvoke(
+            BFloat16.class, "fromBits", TypeRef.of(BFloat16.class), access.getInt16(acc));
+      case DispatchId.INT32:
+        state.acc = acc + 4;
+        return access.getInt32(acc);
+      case DispatchId.UINT32:
+        state.acc = acc + 4;
+        return new StaticInvoke(
+            Integer.class, "toUnsignedLong", descriptor.getTypeRef(), access.getInt32(acc));
+      case DispatchId.INT64:
+      case DispatchId.UINT64:
+        state.acc = acc + 8;
+        return access.getInt64(acc);
+      case DispatchId.FLOAT32:
+        state.acc = acc + 4;
+        return access.getFloat32(acc);
+      case DispatchId.FLOAT64:
+        state.acc = acc + 8;
+        return access.getFloat64(acc);
+      default:
+        throw new IllegalStateException("Unsupported dispatchId: " + dispatchId);
+    }
+  }
+
+  private interface ReadAccessFactory {
+    PrimitiveReadAccess get(List<Expression> expressions);
+  }
+
+  private static final class PrimitiveReadState {
+    private int acc;
+    private boolean compressStarted;
+
+    private PrimitiveReadState(int acc) {
+      this.acc = acc;
+    }
+  }
+
+  private abstract class PrimitiveReadAccess {
+    protected final Expression buffer;
+    protected final Expression cursor;
+
+    private PrimitiveReadAccess(Expression buffer, Expression cursor) {
+      this.buffer = buffer;
+      this.cursor = cursor;
+    }
+
+    abstract Expression getByte(int acc);
+
+    abstract Expression getBoolean(int acc);
+
+    abstract Expression getChar(int acc);
+
+    abstract Expression getInt16(int acc);
+
+    abstract Expression getInt32(int acc);
+
+    abstract Expression getInt64(int acc);
+
+    abstract Expression getFloat32(int acc);
+
+    abstract Expression getFloat64(int acc);
+
+    abstract Set<Expression> fixedScope(Expression bean);
+
+    abstract Set<Expression> compressedScope(Expression bean);
+  }
+
+  private final class UnsafeReadAccess extends PrimitiveReadAccess {
+    private final Expression heapBuffer;
+
+    private UnsafeReadAccess(Expression buffer, Expression heapBuffer, Expression readerAddr) {
+      super(buffer, readerAddr);
+      this.heapBuffer = heapBuffer;
+    }
+
+    private Expression pos(int acc) {
+      return getReaderAddress(cursor, acc);
+    }
+
+    @Override
+    Expression getByte(int acc) {
+      return unsafeGet(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Expression getBoolean(int acc) {
+      return unsafeGetBoolean(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Expression getChar(int acc) {
+      return unsafeGetChar(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Expression getInt16(int acc) {
+      return unsafeGetShort(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Expression getInt32(int acc) {
+      return unsafeGetInt(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Expression getInt64(int acc) {
+      return unsafeGetLong(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Expression getFloat32(int acc) {
+      return unsafeGetFloat(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Expression getFloat64(int acc) {
+      return unsafeGetDouble(heapBuffer, pos(acc));
+    }
+
+    @Override
+    Set<Expression> fixedScope(Expression bean) {
+      return ofHashSet(bean, heapBuffer, cursor);
+    }
+
+    @Override
+    Set<Expression> compressedScope(Expression bean) {
+      return ofHashSet(bean, buffer, heapBuffer);
+    }
+  }
+
+  private final class BufferReadAccess extends PrimitiveReadAccess {
+    private BufferReadAccess(Expression buffer, Expression readerIndex) {
+      super(buffer, readerIndex);
+    }
+
+    private Expression index(int acc) {
+      return getBufferIndex(cursor, acc);
+    }
+
+    @Override
+    Expression getByte(int acc) {
+      return bufferGetByte(buffer, index(acc));
+    }
+
+    @Override
+    Expression getBoolean(int acc) {
+      return bufferGetBoolean(buffer, index(acc));
+    }
+
+    @Override
+    Expression getChar(int acc) {
+      return bufferGetChar(buffer, index(acc));
+    }
+
+    @Override
+    Expression getInt16(int acc) {
+      return bufferGetInt16(buffer, index(acc));
+    }
+
+    @Override
+    Expression getInt32(int acc) {
+      return bufferGetInt32(buffer, index(acc));
+    }
+
+    @Override
+    Expression getInt64(int acc) {
+      return bufferGetInt64(buffer, index(acc));
+    }
+
+    @Override
+    Expression getFloat32(int acc) {
+      return bufferGetFloat32(buffer, index(acc));
+    }
+
+    @Override
+    Expression getFloat64(int acc) {
+      return bufferGetFloat64(buffer, index(acc));
+    }
+
+    @Override
+    Set<Expression> fixedScope(Expression bean) {
+      return ofHashSet(bean, buffer, cursor);
+    }
+
+    @Override
+    Set<Expression> compressedScope(Expression bean) {
+      return ofHashSet(bean, buffer, cursor);
+    }
   }
 
   private void addIncReaderIndexExpr(ListExpression expressions, Expression buffer, int diff) {

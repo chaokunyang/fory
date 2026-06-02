@@ -813,6 +813,8 @@ public final class MemoryBuffer {
     return loadByte(pos);
   }
 
+  // In the Java25 overlay, `_unsafe*` preserves the root MemoryBuffer unchecked-access naming.
+  // These methods use indexed array, ByteBuffer, and VarHandle access, not sun.misc.Unsafe.
   // CHECKSTYLE.OFF:MethodName
   public byte _unsafeGetByte(int index) {
     // CHECKSTYLE.ON:MethodName

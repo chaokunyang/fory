@@ -26,13 +26,13 @@ public final class Jdk25MrJarCheck {
   private Jdk25MrJarCheck() {}
 
   public static void main(String[] args) {
-    verifyClass(MemoryBuffer.class);
+    verifyVersionedClass(MemoryBuffer.class);
     verifyMissing("org.apache.fory.platform.UnsafeOps");
-    Class<?> jdkAccess = verifyClass("org.apache.fory.platform.internal._JDKAccess");
-    verifyClass("org.apache.fory.reflect.FieldAccessorStrategy");
-    verifyClass("org.apache.fory.serializer.PlatformStringUtils");
-    if (getUnsafeField(jdkAccess) != null) {
-      throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe-backed _JDKAccess");
+    Class<?> jdkAccess = verifyRootClass("org.apache.fory.platform.internal._JDKAccess");
+    verifyVersionedClass("org.apache.fory.reflect.FieldAccessorStrategy");
+    verifyVersionedClass("org.apache.fory.serializer.PlatformStringUtils");
+    if (hasUnsafeField(jdkAccess)) {
+      throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe-owning _JDKAccess");
     }
   }
 
@@ -48,14 +48,19 @@ public final class Jdk25MrJarCheck {
   private static Class<?> verifyClass(String className) {
     try {
       Class<?> cls = Class.forName(className);
-      verifyClass(cls);
       return cls;
     } catch (ClassNotFoundException e) {
       throw new IllegalStateException("JDK25 benchmark jar is missing " + className, e);
     }
   }
 
-  private static void verifyClass(Class<?> cls) {
+  private static Class<?> verifyVersionedClass(String className) {
+    Class<?> cls = verifyClass(className);
+    verifyVersionedClass(cls);
+    return cls;
+  }
+
+  private static void verifyVersionedClass(Class<?> cls) {
     String resourceName = cls.getSimpleName() + ".class";
     String resource = String.valueOf(cls.getResource(resourceName));
     if (!resource.contains("benchmarks.jar!") || !resource.contains("!/META-INF/versions/25/")) {
@@ -63,13 +68,22 @@ public final class Jdk25MrJarCheck {
     }
   }
 
-  private static Object getUnsafeField(Class<?> jdkAccess) {
-    try {
-      return jdkAccess.getField("UNSAFE").get(null);
-    } catch (NoSuchFieldException expected) {
-      return null;
-    } catch (ReflectiveOperationException e) {
-      throw new IllegalStateException("Failed to inspect _JDKAccess.UNSAFE", e);
+  private static Class<?> verifyRootClass(String className) {
+    Class<?> cls = verifyClass(className);
+    String resourceName = cls.getSimpleName() + ".class";
+    String resource = String.valueOf(cls.getResource(resourceName));
+    if (!resource.contains("benchmarks.jar!") || resource.contains("!/META-INF/versions/25/")) {
+      throw new IllegalStateException("JDK25 benchmark jar loaded versioned class for " + cls);
     }
+    return cls;
+  }
+
+  private static boolean hasUnsafeField(Class<?> jdkAccess) {
+    for (java.lang.reflect.Field field : jdkAccess.getDeclaredFields()) {
+      if (field.getName().equals("UNSAFE") || field.getType().getName().equals("sun.misc.Unsafe")) {
+        return true;
+      }
+    }
+    return false;
   }
 }

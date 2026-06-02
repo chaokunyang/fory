@@ -140,41 +140,19 @@ final class PlatformStringUtils {
   }
 
   static Object getStringValue(String value) {
-    checkStringAccess("String.value");
     return STRING_VALUE_HANDLE.get(value);
   }
 
   static byte getStringCoder(String value) {
-    checkStringAccess("String.coder");
-    if (STRING_CODER_HANDLE == null) {
-      throw new UnsupportedOperationException("String.coder is not available on this JDK");
-    }
     return (byte) STRING_CODER_HANDLE.get(value);
   }
 
   static int getStringOffset(String value) {
-    checkStringAccess("String.offset");
-    if (STRING_OFFSET_HANDLE == null) {
-      throw new UnsupportedOperationException("String.offset is not available on this JDK");
-    }
     return (int) STRING_OFFSET_HANDLE.get(value);
   }
 
   static int getStringCount(String value) {
-    checkStringAccess("String.count");
-    if (STRING_COUNT_HANDLE == null) {
-      throw new UnsupportedOperationException("String.count is not available on this JDK");
-    }
     return (int) STRING_COUNT_HANDLE.get(value);
-  }
-
-  private static void checkStringAccess(String target) {
-    if (!JDK_STRING_FIELD_ACCESS) {
-      throw new UnsupportedOperationException(
-          target
-              + " private access is unavailable; open java.base/java.lang.invoke to "
-              + "org.apache.fory.core");
-    }
   }
 
   static long getCharsLong(char[] chars, int charIndex) {

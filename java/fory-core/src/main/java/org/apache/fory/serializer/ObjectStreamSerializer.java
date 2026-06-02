@@ -697,15 +697,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
         writeMethod = SerializationHookLookup.getWriteObjectMethod(type);
         readMethod = SerializationHookLookup.getReadObjectMethod(type);
         noDataMethod = SerializationHookLookup.getReadObjectNoDataMethod(type);
-        if (writeMethod == null) {
-          writeMethod = JavaSerializer.getWriteObjectMethod(type, false);
-        }
-        if (readMethod == null) {
-          readMethod = JavaSerializer.getReadRefMethod(type, false);
-        }
-        if (noDataMethod == null) {
-          noDataMethod = JavaSerializer.getReadRefNoData(type, false);
-        }
       }
       this.writeObjectMethod = writeMethod;
       this.readObjectMethod = readMethod;

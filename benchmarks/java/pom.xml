@@ -266,8 +266,6 @@
                         <include
                           name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
                         <include
-                          name="META-INF/versions/25/org/apache/fory/platform/internal/_JDKAccess.class"/>
-                        <include
                           name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"/>
                         <include
                           name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
@@ -287,9 +285,6 @@
                     <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"
                       property="jdk25.benchmark.memorybuffer.present"/>
-                    <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_JDKAccess.class"
-                      property="jdk25.benchmark.jdkaccess.present"/>
                     <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"
                       property="jdk25.benchmark.fieldaccessorstrategy.present"/>
@@ -311,9 +306,6 @@
                     <fail
                       unless="jdk25.benchmark.memorybuffer.present"
                       message="JDK25 benchmark jar is missing the versioned MemoryBuffer class."/>
-                    <fail
-                      unless="jdk25.benchmark.jdkaccess.present"
-                      message="JDK25 benchmark jar is missing the versioned _JDKAccess class."/>
                     <fail
                       unless="jdk25.benchmark.fieldaccessorstrategy.present"
                       message="JDK25 benchmark jar is missing the versioned FieldAccessorStrategy class."/>

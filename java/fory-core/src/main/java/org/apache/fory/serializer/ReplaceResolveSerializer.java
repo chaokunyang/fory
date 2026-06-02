@@ -76,13 +76,8 @@ public class ReplaceResolveSerializer extends Serializer {
         writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
         readResolveMethod = JavaSerializer.getReadResolveMethod(cls);
       } else if (Serializable.class.isAssignableFrom(cls)) {
-        if (SerializationHookLookup.isAvailable()) {
-          writeReplaceMethod = SerializationHookLookup.getWriteReplaceMethod(cls);
-          readResolveMethod = SerializationHookLookup.getReadResolveMethod(cls);
-        } else {
-          writeReplaceMethod = JavaSerializer.getWriteReplaceMethod(cls);
-          readResolveMethod = JavaSerializer.getReadResolveMethod(cls);
-        }
+        writeReplaceMethod = SerializationHookLookup.getWriteReplaceMethod(cls);
+        readResolveMethod = SerializationHookLookup.getReadResolveMethod(cls);
       } else {
         // FIXME class with `writeReplace` method defined should be Serializable,
         //  but hessian ignores this check and many existing system are using hessian,

@@ -19,9 +19,14 @@
 
 package org.apache.fory.serializer;
 
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import org.apache.fory.collection.ClassValueCache;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.ExceptionUtils;
 
@@ -50,24 +55,27 @@ final class SerializationHookLookup {
       Method defaultReadObject = null;
       Method writeReplace = null;
       Method readResolve = null;
-      try {
-        Class<?> factoryClass = Class.forName("sun.reflect.ReflectionFactory");
-        Method getReflectionFactory = factoryClass.getDeclaredMethod("getReflectionFactory");
-        reflectionFactory = getReflectionFactory.invoke(null);
-        writeObject = factoryClass.getDeclaredMethod("writeObjectForSerialization", Class.class);
-        readObject = factoryClass.getDeclaredMethod("readObjectForSerialization", Class.class);
-        readObjectNoData =
-            factoryClass.getDeclaredMethod("readObjectNoDataForSerialization", Class.class);
+      if (JdkVersion.MAJOR_VERSION < 25) {
         try {
-          defaultReadObject =
-              factoryClass.getDeclaredMethod("defaultReadObjectForSerialization", Class.class);
-        } catch (NoSuchMethodException e) {
+          Class<?> factoryClass = Class.forName("sun.reflect.ReflectionFactory");
+          Method getReflectionFactory = factoryClass.getDeclaredMethod("getReflectionFactory");
+          reflectionFactory = getReflectionFactory.invoke(null);
+          writeObject = factoryClass.getDeclaredMethod("writeObjectForSerialization", Class.class);
+          readObject = factoryClass.getDeclaredMethod("readObjectForSerialization", Class.class);
+          readObjectNoData =
+              factoryClass.getDeclaredMethod("readObjectNoDataForSerialization", Class.class);
+          try {
+            defaultReadObject =
+                factoryClass.getDeclaredMethod("defaultReadObjectForSerialization", Class.class);
+          } catch (NoSuchMethodException e) {
+            ExceptionUtils.ignore(e);
+          }
+          writeReplace =
+              factoryClass.getDeclaredMethod("writeReplaceForSerialization", Class.class);
+          readResolve = factoryClass.getDeclaredMethod("readResolveForSerialization", Class.class);
+        } catch (Throwable e) {
           ExceptionUtils.ignore(e);
         }
-        writeReplace = factoryClass.getDeclaredMethod("writeReplaceForSerialization", Class.class);
-        readResolve = factoryClass.getDeclaredMethod("readResolveForSerialization", Class.class);
-      } catch (Throwable e) {
-        ExceptionUtils.ignore(e);
       }
       REFLECTION_FACTORY = reflectionFactory;
       WRITE_OBJECT = writeObject;
@@ -96,16 +104,101 @@ final class SerializationHookLookup {
     return handle == null ? null : MethodHandles.reflectAs(Method.class, handle);
   }
 
+  private static final ClassValueCache<DirectMethods> directMethodsCache =
+      ClassValueCache.newClassKeyCache(32);
+
+  private static DirectMethods directMethods(Class<?> type) {
+    // JavaSerializer intentionally supports non-Serializable compatibility hooks. Serializable
+    // stream hooks must keep ObjectStreamClass inheritance rules, especially for private
+    // superclass writeReplace/readResolve methods.
+    return directMethodsCache.get(type, () -> new DirectMethods(type));
+  }
+
+  private static final class DirectMethods {
+    private final Method writeObject;
+    private final Method readObject;
+    private final Method readObjectNoData;
+    private final Method writeReplace;
+    private final Method readResolve;
+
+    private DirectMethods(Class<?> type) {
+      writeObject = getPrivateMethod(type, "writeObject", void.class, ObjectOutputStream.class);
+      readObject = getPrivateMethod(type, "readObject", void.class, ObjectInputStream.class);
+      readObjectNoData = getPrivateMethod(type, "readObjectNoData", void.class);
+      writeReplace = getInheritableObjectMethod(type, "writeReplace");
+      readResolve = getInheritableObjectMethod(type, "readResolve");
+    }
+  }
+
+  private static Method getPrivateMethod(
+      Class<?> type, String methodName, Class<?> returnType, Class<?>... parameterTypes) {
+    try {
+      Method method = type.getDeclaredMethod(methodName, parameterTypes);
+      int modifiers = method.getModifiers();
+      if (Modifier.isPrivate(modifiers)
+          && !Modifier.isStatic(modifiers)
+          && method.getReturnType() == returnType) {
+        return method;
+      }
+    } catch (NoSuchMethodException | SecurityException e) {
+      ExceptionUtils.ignore(e);
+    }
+    return null;
+  }
+
+  private static Method getInheritableObjectMethod(Class<?> type, String methodName) {
+    Class<?> cls = type;
+    while (cls != null) {
+      try {
+        Method method = cls.getDeclaredMethod(methodName);
+        int modifiers = method.getModifiers();
+        if (!Modifier.isStatic(modifiers)
+            && method.getParameterTypes().length == 0
+            && method.getReturnType() == Object.class
+            && isInheritable(type, cls, modifiers)) {
+          return method;
+        }
+        return null;
+      } catch (NoSuchMethodException e) {
+        ExceptionUtils.ignore(e);
+      } catch (SecurityException e) {
+        return null;
+      }
+      cls = cls.getSuperclass();
+    }
+    return null;
+  }
+
+  private static boolean isInheritable(Class<?> type, Class<?> declaringClass, int modifiers) {
+    if (Modifier.isPrivate(modifiers)) {
+      return type == declaringClass;
+    }
+    if (Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers)) {
+      return true;
+    }
+    return type.getClassLoader() == declaringClass.getClassLoader()
+        && packageName(type).equals(packageName(declaringClass));
+  }
+
+  private static String packageName(Class<?> type) {
+    String className = type.getName();
+    int packageEnd = className.lastIndexOf('.');
+    return packageEnd < 0 ? "" : className.substring(0, packageEnd);
+  }
+
   static Method getWriteObjectMethod(Class<?> type) {
-    return getMethod(type, Methods.WRITE_OBJECT);
+    Method method = getMethod(type, Methods.WRITE_OBJECT);
+    return method == null ? directMethods(type).writeObject : method;
   }
 
   static Method getReadObjectMethod(Class<?> type) {
-    return getMethod(type, Methods.READ_OBJECT);
+    Method method = getMethod(type, Methods.READ_OBJECT);
+    return method == null ? directMethods(type).readObject : method;
   }
 
   static Method getReadObjectNoDataMethod(Class<?> type) {
-    return getMethod(type, Methods.READ_OBJECT_NO_DATA);
+    Method method = getMethod(type, Methods.READ_OBJECT_NO_DATA);
+    return method == null ? directMethods(type).readObjectNoData : method;
   }
 
   static MethodHandle getDefaultReadObjectHandle(Class<?> type) {
@@ -113,19 +206,12 @@ final class SerializationHookLookup {
   }
 
   static Method getWriteReplaceMethod(Class<?> type) {
-    return getMethod(type, Methods.WRITE_REPLACE);
+    Method method = getMethod(type, Methods.WRITE_REPLACE);
+    return method == null ? directMethods(type).writeReplace : method;
   }
 
   static Method getReadResolveMethod(Class<?> type) {
-    return getMethod(type, Methods.READ_RESOLVE);
-  }
-
-  static boolean isAvailable() {
-    return Methods.REFLECTION_FACTORY != null
-        && Methods.WRITE_OBJECT != null
-        && Methods.READ_OBJECT != null
-        && Methods.READ_OBJECT_NO_DATA != null
-        && Methods.WRITE_REPLACE != null
-        && Methods.READ_RESOLVE != null;
+    Method method = getMethod(type, Methods.READ_RESOLVE);
+    return method == null ? directMethods(type).readResolve : method;
   }
 }

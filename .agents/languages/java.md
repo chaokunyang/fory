@@ -83,6 +83,12 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   focused on field and array access, keep serialization hook discovery in serializer-owned code,
   and keep `_JDKAccess` limited to JDK lookup, module, function factory, and access-flag
   primitives.
+- JDK25+ serialization hook access must use the required trusted lookup from
+  `java.base/java.lang.invoke=org.apache.fory.core`. Keep `sun.reflect.ReflectionFactory` as a
+  JDK8-24 optimization only, and do not add per-type reflective escapes for hook invocation.
+- JDK25+ `PlatformStringUtils` getter methods sit behind `StringSerializer` static-final access
+  gates. Do not add per-call access checks in those getters; missing module opens should fail at
+  trusted-lookup initialization or cold setup, not inside string hot paths.
 - JDK25+ collection serializers must fail unsupported `Collections.newSetFromMap` backing maps
   before writing or copying. Do not rewrite them to `HashMap`, because that changes equality
   semantics and can drop entries.

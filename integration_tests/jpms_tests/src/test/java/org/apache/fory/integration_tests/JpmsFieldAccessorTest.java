@@ -21,6 +21,7 @@ package org.apache.fory.integration_tests;
 
 import java.lang.reflect.Field;
 import org.apache.fory.Fory;
+import org.apache.fory.integration_tests.model.NonSerializableNoNoArgBean;
 import org.apache.fory.integration_tests.model.PrivateFieldBean;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValue;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValueSerializer;
@@ -52,6 +53,22 @@ public class JpmsFieldAccessorTest {
     PrivateFieldBean result =
         (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(13)));
     Assert.assertEquals(result.value(), 13);
+  }
+
+  @Test
+  public void testNonSerializableNoNoArgSerialization() {
+    if (JDK_MAJOR_VERSION < 25) {
+      return;
+    }
+    Fory fory =
+        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
+    byte[] bytes = fory.serialize(new NonSerializableNoNoArgBean(5, 13));
+    NonSerializableNoNoArgBean.resetParentConstructorCalls();
+    NonSerializableNoNoArgBean result =
+        (NonSerializableNoNoArgBean) fory.deserialize(bytes);
+    Assert.assertEquals(result.parentValue(), 5);
+    Assert.assertEquals(result.value(), 13);
+    Assert.assertEquals(NonSerializableNoNoArgBean.parentConstructorCalls(), 0);
   }
 
   @Test

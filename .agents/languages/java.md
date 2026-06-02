@@ -69,9 +69,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   through `ParentNoArgCtrInstantiator`, whose JDK25+ path owns trusted-lookup access to
   `jdk.internal.reflect.ReflectionFactory` in `java.base`. This must not require
   `--add-opens=java.base/jdk.internal.reflect=...`; the only JDK25+ platform open remains
-  `java.base/java.lang.invoke=org.apache.fory.core`. Classes unsupported by the serialization
-  constructor model require an accessible no-arg constructor, a record canonical constructor path,
-  or a custom serializer.
+  `java.base/java.lang.invoke=org.apache.fory.core`. ReflectionFactory serialization constructors
+  also support non-Serializable ordinary classes; the normal object-instantiation path must not
+  reject them with ObjectStream-only parent-constructor checks. Classes unsupported by
+  ReflectionFactory itself require an accessible no-arg constructor, a record canonical constructor
+  path, or a custom serializer.
 - `UnsafeObjectInstantiator` is the JDK8-24 Unsafe owner only. It must be a top-level instantiator
   with a Java25 multi-release stub that contains no Unsafe, ObjectStream, ReflectionFactory, or
   constructor-bypass implementation.

@@ -43,6 +43,25 @@ public class ObjectInstantiatorsTest {
     }
   }
 
+  static class NonSerializableParentWithoutNoArg {
+    static int constructorCalls;
+    int parentValue;
+
+    NonSerializableParentWithoutNoArg(int parentValue) {
+      constructorCalls++;
+      this.parentValue = parentValue;
+    }
+  }
+
+  static class NonSerializableChildWithoutNoArg extends NonSerializableParentWithoutNoArg {
+    int childValue;
+
+    NonSerializableChildWithoutNoArg(int parentValue, int childValue) {
+      super(parentValue);
+      this.childValue = childValue;
+    }
+  }
+
   @Test
   public void testObjectInstantiator() {
     if (JdkVersion.MAJOR_VERSION >= 25) {
@@ -54,6 +73,21 @@ public class ObjectInstantiatorsTest {
     Assert.assertEquals(
         new ParentNoArgCtrInstantiator<>(NoCtrTestClass.class).newInstance().getClass(),
         NoCtrTestClass.class);
+  }
+
+  @Test
+  public void testNonSerializableInstantiator() {
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      return;
+    }
+    NonSerializableParentWithoutNoArg.constructorCalls = 0;
+    ParentNoArgCtrInstantiator<NonSerializableChildWithoutNoArg> instantiator =
+        new ParentNoArgCtrInstantiator<>(NonSerializableChildWithoutNoArg.class);
+    NonSerializableChildWithoutNoArg instance = instantiator.newInstance();
+    Assert.assertEquals(instance.getClass(), NonSerializableChildWithoutNoArg.class);
+    Assert.assertEquals(NonSerializableParentWithoutNoArg.constructorCalls, 0);
+    Assert.assertEquals(instance.parentValue, 0);
+    Assert.assertEquals(instance.childValue, 0);
   }
 
   @Test

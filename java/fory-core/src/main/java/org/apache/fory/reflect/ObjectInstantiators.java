@@ -289,6 +289,12 @@ public class ObjectInstantiators {
 
     private static Constructor<?> findSerializationConstructor(Class<?> type)
         throws NoSuchMethodException {
+      if (!Serializable.class.isAssignableFrom(type)) {
+        // ReflectionFactory can synthesize serialization constructors for ordinary classes too.
+        // Use Object as the template so normal Fory object creation keeps empty-instance
+        // semantics and never depends on the target class hierarchy exposing a no-arg constructor.
+        return Object.class.getDeclaredConstructor();
+      }
       Class<?> current = type.getSuperclass();
       // Java ObjectStream reconstruction skips every Serializable class constructor and invokes
       // only the first non-Serializable superclass no-arg constructor.

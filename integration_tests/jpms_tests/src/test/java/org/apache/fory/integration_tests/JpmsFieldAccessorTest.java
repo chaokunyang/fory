@@ -26,11 +26,15 @@ import org.apache.fory.integration_tests.model.PrivateFieldBean;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValue;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValueSerializer;
 import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.serializer.CodegenSerializer.LazyInitBeanSerializer;
+import org.apache.fory.serializer.Serializer;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class JpmsFieldAccessorTest {
   private static final int JDK_MAJOR_VERSION = Runtime.version().feature();
+  private static final String INSTANCE_ACCESSOR =
+      "org.apache.fory.reflect.InstanceFieldAccessors$InstanceAccessor";
 
   @Test
   public void testPrivateFieldAccess() throws Exception {
@@ -49,6 +53,24 @@ public class JpmsFieldAccessorTest {
     PrivateFieldBean result =
         (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(13)));
     Assert.assertEquals(result.value(), 13);
+  }
+
+  @Test
+  public void testCodegenFinalFieldAccess() throws Exception {
+    if (JDK_MAJOR_VERSION < 25) {
+      return;
+    }
+    Fory fory =
+        Fory.builder().withXlang(false).withCodegen(true).requireClassRegistration(false).build();
+    PrivateFieldBean result =
+        (PrivateFieldBean) fory.deserialize(fory.serialize(new PrivateFieldBean(17)));
+    Assert.assertEquals(result.value(), 17);
+
+    Class<?> serializerClass = serializerClass(fory, PrivateFieldBean.class);
+    Assert.assertTrue((Boolean) Class.class.getMethod("isHidden").invoke(serializerClass));
+    Assert.assertSame(
+        Class.class.getMethod("getNestHost").invoke(serializerClass), PrivateFieldBean.class);
+    assertAccessorField(serializerClass, "value");
   }
 
   @Test
@@ -87,4 +109,21 @@ public class JpmsFieldAccessorTest {
     Assert.assertEquals(result.value, 11);
   }
 
+  private static Class<?> serializerClass(Fory fory, Class<?> type) {
+    Serializer<?> serializer = fory.getTypeResolver().getSerializer(type);
+    if (serializer instanceof LazyInitBeanSerializer) {
+      return ((LazyInitBeanSerializer<?>) serializer).getGeneratedSerializerClass();
+    }
+    return serializer.getClass();
+  }
+
+  private static void assertAccessorField(Class<?> serializerClass, String fieldName) {
+    for (Field field : serializerClass.getDeclaredFields()) {
+      if (field.getName().contains(fieldName + "_accessor_")) {
+        Assert.assertEquals(field.getType().getName(), INSTANCE_ACCESSOR);
+        return;
+      }
+    }
+    Assert.fail("Missing generated accessor field for " + fieldName + " in " + serializerClass);
+  }
 }

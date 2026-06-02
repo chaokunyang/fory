@@ -177,6 +177,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   `initCause` or `addSuppressed` on a constructor-bypassed `Throwable` whose sentinels are still
   absent.
 - For JDK25+ CI, do not run core runtime tests from raw Maven reactor `target/classes`. Those classes bypass `META-INF/versions/25` and exercise the JDK8-24 root implementation. Build/install the multi-release artifact first, then verify the zero-Unsafe path through the JPMS module-path suite where `org.apache.fory.core` is the real access target.
+- After shading Janino into `fory-core`, refresh the JPMS module descriptor package table from the
+  final jar before install. Otherwise named-module codegen cannot load concealed shaded Janino
+  packages even though the classes are present in the jar.
 - Do not make GraalVM native-image JDK25+ pass by opening `java.lang.invoke` to `ALL-UNNAMED`. Keep zero-Unsafe verification on JPMS JVM tests unless the native-image path itself runs Fory as a named module and the produced binary passes.
 
 ## Key Modules

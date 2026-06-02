@@ -57,6 +57,12 @@ import org.apache.fory.io.ForyStreamReader;
  * <p>Warning: The instance of this class should not be held at GraalVM build time; build-time heap
  * buffers do not represent the runtime heap layout.
  *
+ * <p>In the Java 25 multi-release implementation, absolute random-access get/put methods are
+ * internal fast paths. Callers must pass legal indices and ranges; read/write entry points perform
+ * logical {@link MemoryBuffer} range validation before reaching these methods. The implementation
+ * relies on {@link VarHandle}, array, and {@link ByteBuffer} access only for JVM memory safety and
+ * does not repeat root Unsafe-style logical bounds checks.
+ *
  * <p>Note(chaokunyang): Buffer operations are very common, and jvm inline and branch elimination is
  * not reliable even in c2 compiler, so we try to inline and avoid checks as we can manually. jvm
  * jit may stop inline for some reasons: NodeCountInliningCutoff,
@@ -697,57 +703,48 @@ public final class MemoryBuffer {
   //                    Random Access get() and put() methods
   // ------------------------------------------------------------------------
 
-  private void checkPosition(long index, long pos, long length) {
-    if (BoundsChecking.BOUNDS_CHECKING_ENABLED) {
-      if (index < 0 || pos > addressLimit - length) {
-        throwOOBException();
-      }
-    }
-  }
-
+  /** Copies from a caller-validated absolute buffer index into {@code dst}. */
   public void get(int index, byte[] dst) {
     get(index, dst, 0, dst.length);
   }
 
+  /**
+   * Copies from a caller-validated absolute buffer range into {@code dst}.
+   *
+   * <p>This Java 25 path intentionally does not duplicate {@link MemoryBuffer} range checks; callers
+   * that derive {@code index}, {@code offset}, or {@code length} from wire data must validate them
+   * before calling this method.
+   */
   public void get(int index, byte[] dst, int offset, int length) {
+    final long pos = address + index;
     final byte[] heapMemory = this.heapMemory;
     if (heapMemory != null) {
       // Keep heap-to-heap bulk copies on the JDK intrinsic path.
       System.arraycopy(heapMemory, heapOffset + index, dst, offset, length);
     } else {
-      final long pos = address + index;
-      if ((index
-              | offset
-              | length
-              | (offset + length)
-              | (dst.length - (offset + length))
-              | addressLimit - length - pos)
-          < 0) {
-        throwOOBException();
-      }
       readBytesToArray(pos, dst, BYTE_ARRAY_OFFSET + offset, length);
     }
   }
 
+  /**
+   * Copies from a caller-validated absolute buffer range into {@code target}.
+   *
+   * <p>Logical range validation belongs to the caller. This method relies on the backing Java array
+   * or {@link ByteBuffer} accessors only to prevent invalid JVM memory access.
+   */
   public void get(int offset, ByteBuffer target, int numBytes) {
-    if ((offset | numBytes | (offset + numBytes)) < 0) {
-      throwOOBException();
-    }
-    if (target.remaining() < numBytes) {
-      throwOOBException();
-    }
-    if (target.isReadOnly()) {
-      throw new IllegalArgumentException("read only buffer");
-    }
     final int targetPos = target.position();
     if (target.isDirect()) {
-      final long sourceAddr = address + offset;
-      if (sourceAddr <= addressLimit - numBytes) {
-        ByteBuffer duplicate = target.duplicate();
-        ByteBufferUtil.position(duplicate, targetPos);
-        duplicate.put(sliceAsByteBuffer(offset, numBytes));
+      ByteBuffer duplicate = target.duplicate();
+      ByteBufferUtil.position(duplicate, targetPos);
+      if (heapMemory != null) {
+        duplicate.put(heapMemory, heapOffset + offset, numBytes);
       } else {
-        throwOOBException();
+        ByteBuffer source = nativeOffHeapBuffer.duplicate();
+        int sourcePos = toIntIndex(address + offset);
+        ByteBufferUtil.position(source, sourcePos);
+        source.limit(sourcePos + numBytes);
+        duplicate.put(source.slice());
       }
     } else {
       assert target.hasArray();
@@ -758,25 +755,26 @@ public final class MemoryBuffer {
     }
   }
 
+  /**
+   * Copies from {@code source} into a caller-validated absolute buffer range.
+   *
+   * <p>Logical range validation belongs to the caller. This method relies on the backing Java array
+   * or {@link ByteBuffer} accessors only to prevent invalid JVM memory access.
+   */
   public void put(int offset, ByteBuffer source, int numBytes) {
-    final int remaining = source.remaining();
-    if ((offset | numBytes | (offset + numBytes) | (remaining - numBytes)) < 0) {
-      throwOOBException();
-    }
     final int sourcePos = source.position();
     if (source.isDirect()) {
-      final long targetAddr = address + offset;
-      if (targetAddr <= addressLimit - numBytes) {
-        ByteBuffer duplicate = source.duplicate();
-        ByteBufferUtil.position(duplicate, sourcePos);
-        duplicate.limit(sourcePos + numBytes);
-        if (heapMemory != null) {
-          duplicate.get(heapMemory, heapOffset + offset, numBytes);
-        } else {
-          sliceAsByteBuffer(offset, numBytes).put(duplicate.slice());
-        }
+      ByteBuffer duplicate = source.duplicate();
+      ByteBufferUtil.position(duplicate, sourcePos);
+      duplicate.limit(sourcePos + numBytes);
+      if (heapMemory != null) {
+        duplicate.get(heapMemory, heapOffset + offset, numBytes);
       } else {
-        throwOOBException();
+        ByteBuffer target = nativeOffHeapBuffer.duplicate();
+        int targetPos = toIntIndex(address + offset);
+        ByteBufferUtil.position(target, targetPos);
+        target.limit(targetPos + numBytes);
+        target.slice().put(duplicate.slice());
       }
     } else {
       assert source.hasArray();
@@ -787,34 +785,31 @@ public final class MemoryBuffer {
     }
   }
 
+  /** Copies {@code src} into a caller-validated absolute buffer index. */
   public void put(int index, byte[] src) {
     put(index, src, 0, src.length);
   }
 
+  /**
+   * Copies {@code src} into a caller-validated absolute buffer range.
+   *
+   * <p>This Java 25 path intentionally does not duplicate {@link MemoryBuffer} range checks; callers
+   * that derive {@code index}, {@code offset}, or {@code length} from wire data must validate them
+   * before calling this method.
+   */
   public void put(int index, byte[] src, int offset, int length) {
+    final long pos = address + index;
     final byte[] heapMemory = this.heapMemory;
     if (heapMemory != null) {
       // Keep heap-to-heap bulk copies on the JDK intrinsic path.
       System.arraycopy(src, offset, heapMemory, heapOffset + index, length);
     } else {
-      final long pos = address + index;
-      // check the byte array offset and length
-      if ((index
-              | offset
-              | length
-              | (offset + length)
-              | (src.length - (offset + length))
-              | addressLimit - length - pos)
-          < 0) {
-        throwOOBException();
-      }
       writeBytesFromArray(pos, src, BYTE_ARRAY_OFFSET + offset, length);
     }
   }
 
   public byte getByte(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 1);
     return loadByte(pos);
   }
 
@@ -826,13 +821,11 @@ public final class MemoryBuffer {
 
   public void putByte(int index, int b) {
     final long pos = address + index;
-    checkPosition(index, pos, 1);
     storeByte(pos, (byte) b);
   }
 
   public void putByte(int index, byte b) {
     final long pos = address + index;
-    checkPosition(index, pos, 1);
     storeByte(pos, b);
   }
 
@@ -844,7 +837,6 @@ public final class MemoryBuffer {
 
   public boolean getBoolean(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 1);
     return loadByte(pos) != 0;
   }
 
@@ -855,7 +847,8 @@ public final class MemoryBuffer {
   }
 
   public void putBoolean(int index, boolean value) {
-    storeByte(address + index, (value ? (byte) 1 : (byte) 0));
+    final long pos = address + index;
+    storeByte(pos, (value ? (byte) 1 : (byte) 0));
   }
 
   // CHECKSTYLE.OFF:MethodName
@@ -866,7 +859,6 @@ public final class MemoryBuffer {
 
   public char getChar(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 2);
     char c = loadChar(pos);
     return LITTLE_ENDIAN ? c : Character.reverseBytes(c);
   }
@@ -880,7 +872,6 @@ public final class MemoryBuffer {
 
   public void putChar(int index, char value) {
     final long pos = address + index;
-    checkPosition(index, pos, 2);
     if (!LITTLE_ENDIAN) {
       value = Character.reverseBytes(value);
     }
@@ -898,14 +889,12 @@ public final class MemoryBuffer {
 
   public short getInt16(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 2);
     short v = loadShort(pos);
     return LITTLE_ENDIAN ? v : Short.reverseBytes(v);
   }
 
   public void putInt16(int index, short value) {
     final long pos = address + index;
-    checkPosition(index, pos, 2);
     if (!LITTLE_ENDIAN) {
       value = Short.reverseBytes(value);
     }
@@ -930,14 +919,12 @@ public final class MemoryBuffer {
 
   public int getInt32(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 4);
     int v = loadInt(pos);
     return LITTLE_ENDIAN ? v : Integer.reverseBytes(v);
   }
 
   public void putInt32(int index, int value) {
     final long pos = address + index;
-    checkPosition(index, pos, 4);
     if (!LITTLE_ENDIAN) {
       value = Integer.reverseBytes(value);
     }
@@ -962,14 +949,12 @@ public final class MemoryBuffer {
 
   public long getInt64(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 8);
     long v = loadLong(pos);
     return LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
   public void putInt64(int index, long value) {
     final long pos = address + index;
-    checkPosition(index, pos, 8);
     if (!LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
     }
@@ -994,7 +979,6 @@ public final class MemoryBuffer {
 
   public float getFloat32(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 4);
     int v = loadInt(pos);
     if (!LITTLE_ENDIAN) {
       v = Integer.reverseBytes(v);
@@ -1004,7 +988,6 @@ public final class MemoryBuffer {
 
   public void putFloat32(int index, float value) {
     final long pos = address + index;
-    checkPosition(index, pos, 4);
     int v = Float.floatToRawIntBits(value);
     if (!LITTLE_ENDIAN) {
       v = Integer.reverseBytes(v);
@@ -1014,7 +997,6 @@ public final class MemoryBuffer {
 
   public double getFloat64(int index) {
     final long pos = address + index;
-    checkPosition(index, pos, 8);
     long v = loadLong(pos);
     if (!LITTLE_ENDIAN) {
       v = Long.reverseBytes(v);
@@ -1024,7 +1006,6 @@ public final class MemoryBuffer {
 
   public void putFloat64(int index, double value) {
     final long pos = address + index;
-    checkPosition(index, pos, 8);
     long v = Double.doubleToRawLongBits(value);
     if (!LITTLE_ENDIAN) {
       v = Long.reverseBytes(v);

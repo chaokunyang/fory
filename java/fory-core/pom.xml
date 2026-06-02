@@ -570,5 +570,44 @@
         </plugins>
       </build>
     </profile>
+    <profile>
+      <id>refresh-module-packages</id>
+      <activation>
+        <jdk>[9,)</jdk>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-antrun-plugin</artifactId>
+            <version>3.1.0</version>
+            <executions>
+              <execution>
+                <id>refresh-module-packages</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>run</goal>
+                </goals>
+                <configuration>
+                  <target>
+                    <!-- Shading relocates Janino after module-info is compiled, and multi-release
+                         classes are injected after shade. Refresh the descriptor package table
+                         from the final jar so JPMS can load concealed shaded codegen packages from
+                         org.apache.fory.core. -->
+                    <exec executable="${java.home}/bin/jar" failonerror="true">
+                      <arg value="--update"/>
+                      <arg value="--file"/>
+                      <arg value="${project.build.directory}/${project.build.finalName}.jar"/>
+                      <arg value="--module-version"/>
+                      <arg value="${project.version}"/>
+                    </exec>
+                  </target>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
   </profiles>
 </project>

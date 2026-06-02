@@ -61,6 +61,7 @@ install_pyfory() {
 }
 
 JDKS=(
+"zulu26.30.11-ca-crac-jdk26.0.1-linux_x64"
 "zulu25.30.17-ca-jdk25.0.1-linux_x64"
 "zulu21.28.85-ca-jdk21.0.0-linux_x64"
 "zulu17.44.17-ca-crac-jdk17.0.8-linux_x64"

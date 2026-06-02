@@ -164,16 +164,19 @@ Per-entry-point trust table *(registration mechanism + defaults documented; trus
 ## §14 Open questions for the maintainers
 
 **Wave 1 — scope & the registration framing:**
+
 1. Confirm Fory is modeled as an **in-process library** with no ambient I/O (no sockets/processes/network) — the negative-side-effects inventory in §5. Proposed: yes. → §2/§5.
 2. **The core ruling:** with `requireClassRegistration(true)` (default), is "only registered types are instantiated from untrusted bytes" a property Fory **commits to** (so a bypass is `VALID`/security-critical)? And is a finding that requires `requireClassRegistration(false)` correctly `OUT-OF-MODEL: non-default-build`? Proposed: yes to both. → §8/§5a/§13.
 3. Confirm `examples/`/`benchmarks/`/`integration_tests/` are out of scope. → §3.
 
 **Wave 2 — language profiles & inputs:**
+
 4. **Per-language memory safety:** for which implementations does Fory claim "malformed input → clean error, not memory corruption"? Is the **C++** decoder the primary memory-safety surface to fuzz, and does it carry the same guarantee? → §5/§8.
 5. Beyond `maxDepth`, are there bounds on total allocation / declared collection sizes / output size against a hostile payload, or is that explicitly the caller's concern? Where is the resource/DoS line? → §8/§11a.
 6. In **xlang** mode, what does Fory assume about the peer — is a hostile/malformed peer schema in scope, or is the peer a trusted endpoint? Proposed: peer trusted; type-confusion is the integrator's concern. → §7/§9.
 
 **Wave 3 — disclaimers & non-findings:**
+
 7. Confirm Fory disclaims payload integrity/authenticity/confidentiality (no MAC/sig/encryption) and is not a sandbox for registered types' own logic. → §9.
 8. Any other recurring scanner/fuzzer false positives the PMC already knows about, to seed §11a (e.g. reflection/Unsafe usage, codegen)? → §11a.
 9. **Meta:** Fory has no in-repo `SECURITY.md` and an `AGENTS.md` that is a developer/agent guide. This engagement adds `SECURITY.md` + `THREAT_MODEL.md` and wires `AGENTS.md → SECURITY.md → THREAT_MODEL.md`. Confirm the model should live in-repo (as proposed) vs. on the website, and who owns revisions. The existing config-guide "Security" section becomes a pointer to this model. → §1.

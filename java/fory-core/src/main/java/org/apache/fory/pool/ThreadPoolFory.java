@@ -20,6 +20,7 @@
 package org.apache.fory.pool;
 
 import java.io.OutputStream;
+import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -150,6 +151,20 @@ public class ThreadPoolFory extends AbstractThreadSafeFory {
     synchronized (callbackLock) {
       for (Fory fory : pooledFory) {
         callback.accept(fory);
+      }
+    }
+  }
+
+  @Override
+  public <T> void registerConstructor(
+      Class<T> type, Constructor<T> constructor, String... fieldNames) {
+    String[] copiedFieldNames = fieldNames.clone();
+    synchronized (callbackLock) {
+      for (Fory fory : pooledFory) {
+        checkRegisterConstructorAllowed(fory, type);
+      }
+      for (Fory fory : pooledFory) {
+        fory.registerConstructor(type, constructor, copiedFieldNames);
       }
     }
   }

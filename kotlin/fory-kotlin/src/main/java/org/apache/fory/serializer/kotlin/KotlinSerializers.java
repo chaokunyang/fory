@@ -125,38 +125,20 @@ public class KotlinSerializers {
 
       // Ranges and Progressions.
       registerIfAbsent(resolver, kotlin.ranges.CharRange.class);
-      resolver.registerSerializer(kotlin.ranges.CharRange.class, new CharRangeSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.CharProgression.class);
-      resolver.registerSerializer(
-          kotlin.ranges.CharProgression.class, new CharProgressionSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.IntRange.class);
-      resolver.registerSerializer(kotlin.ranges.IntRange.class, new IntRangeSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.IntProgression.class);
-      resolver.registerSerializer(
-          kotlin.ranges.IntProgression.class, new IntProgressionSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.LongRange.class);
-      resolver.registerSerializer(kotlin.ranges.LongRange.class, new LongRangeSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.LongProgression.class);
-      resolver.registerSerializer(
-          kotlin.ranges.LongProgression.class, new LongProgressionSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.UIntRange.class);
-      resolver.registerSerializer(kotlin.ranges.UIntRange.class, new UIntRangeSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.UIntProgression.class);
-      resolver.registerSerializer(
-          kotlin.ranges.UIntProgression.class, new UIntProgressionSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.ULongRange.class);
-      resolver.registerSerializer(kotlin.ranges.ULongRange.class, new ULongRangeSerializer(config));
       registerIfAbsent(resolver, kotlin.ranges.ULongProgression.class);
-      resolver.registerSerializer(
-          kotlin.ranges.ULongProgression.class, new ULongProgressionSerializer(config));
 
       // Built-in classes.
       registerIfAbsent(resolver, kotlin.Pair.class);
-      resolver.registerSerializer(kotlin.Pair.class, new PairSerializer(config));
       registerIfAbsent(resolver, kotlin.Triple.class);
-      resolver.registerSerializer(kotlin.Triple.class, new TripleSerializer(config));
       registerIfAbsent(resolver, kotlin.Result.class);
-      resolver.registerSerializer(kotlin.Result.class, new ResultSerializer(config));
       registerIfAbsent(resolver, Result.Failure.class);
 
       // kotlin.random

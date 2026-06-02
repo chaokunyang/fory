@@ -184,7 +184,8 @@ public final class User {
 }
 ```
 
-For third-party classes that cannot be annotated, register the constructor during runtime setup:
+For third-party classes that cannot be annotated, register the constructor during runtime setup
+before requesting serializers or starting serialization, deserialization, or copy operations:
 
 ```java
 import java.lang.reflect.Constructor;
@@ -195,6 +196,9 @@ fory.registerConstructor(User.class, constructor, "name", "age");
 
 The field names are the binding contract. For ordinary classes, Fory does not infer constructor
 bindings from Java parameter names, `-parameters`, or `@ConstructorProperties`.
+Explicit constructor mappings must bind at least one field. Leave ordinary no-argument constructors
+unannotated and unregistered. Do not register constructors for Java platform classes; Fory owns
+their built-in serializers.
 
 When no explicit constructor mapping is provided, normal classes with final fields use Fory's normal
 object creation and field setting. On JDK25+ with Unsafe memory access denied, Fory reports an error
@@ -206,9 +210,11 @@ mutation flag. See
 [Troubleshooting](troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens) for the required JVM
 flags.
 
-Constructor-bound objects cannot receive a constructor argument that refers directly to the same
-object under construction. Model those cycles through non-constructor fields or use a custom
-serializer.
+Constructor-bound objects cannot receive a constructor argument that retains a direct or nested
+back-reference to the same object under construction. Field serializers may transform or omit data
+during copy; Fory rejects only back-references that remain in the copied constructor arguments. Model
+those cycles through non-constructor fields or use a custom serializer that removes the constructor
+argument cycle.
 
 ## JDK Serialization Hooks
 

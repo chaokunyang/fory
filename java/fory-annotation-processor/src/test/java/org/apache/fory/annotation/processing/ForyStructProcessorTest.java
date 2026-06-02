@@ -42,6 +42,7 @@ import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
 import org.apache.fory.exception.DeserializationException;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.meta.FieldInfo;
 import org.apache.fory.meta.TypeDef;
@@ -213,6 +214,43 @@ public class ForyStructProcessorTest {
       Assert.assertEquals(invoke(type, roundTrip, "getName"), "registered");
       Assert.assertEquals(invoke(type, roundTrip, "getAge"), 34);
       Assert.assertEquals(getField(type, roundTrip, "note"), "ctor");
+    }
+  }
+
+  @Test
+  public void testStaticCtorCopyBackref() throws Exception {
+    CompilationResult result =
+        compile(
+            "test.StaticCtorBackref",
+            "package test;\n"
+                + "import org.apache.fory.annotation.ForyConstructor;\n"
+                + "import org.apache.fory.annotation.ForyStruct;\n"
+                + "@ForyStruct public class StaticCtorBackref {\n"
+                + "  public Object self;\n"
+                + "  @ForyConstructor(\"self\")\n"
+                + "  public StaticCtorBackref(Object self) { this.self = self; }\n"
+                + "}\n");
+    Assert.assertTrue(result.success, result.diagnostics());
+    String generatedSource =
+        result.generatedSource("test/StaticCtorBackref_ForyNativeSerializer.java");
+    Assert.assertTrue(generatedSource.contains("beginConstructorCopy(copyContext, value)"));
+    Assert.assertTrue(generatedSource.contains("checkNoConstructorCopyBackrefs("));
+    try (URLClassLoader loader = result.classLoader()) {
+      Class<?> type = loader.loadClass("test.StaticCtorBackref");
+      Object value = type.getConstructor(Object.class).newInstance((Object) null);
+      setField(type, value, "self", value);
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .withClassLoader(loader)
+              .withCodegen(false)
+              .withRefTracking(true)
+              .withRefCopy(true)
+              .requireClassRegistration(false)
+              .build();
+      Object serializer = fory.getTypeResolver().getTypeInfo(type).getSerializer();
+      Assert.assertTrue(serializer instanceof StaticGeneratedStructSerializer);
+      Assert.assertThrows(ForyException.class, () -> fory.copy(value));
     }
   }
 

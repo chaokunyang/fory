@@ -163,7 +163,7 @@ install_jdk25_fory_artifacts() {
   use_jdk "zulu25.30.17-ca-jdk25.0.1-linux_x64"
   export JDK_JAVA_OPTIONS="$(jdk25_javac_options)"
   cd "$ROOT"/java
-  mvn -T10 -B --no-transfer-progress clean install -DskipTests -Dmaven.compiler.parameters=true -pl '!:fory-testsuite'
+  mvn -T10 -B --no-transfer-progress clean install -DskipTests -pl '!:fory-testsuite'
   echo "Verify JDK25 benchmark multi-release jar"
   cd "$ROOT"/benchmarks/java
   mvn -T10 -B --no-transfer-progress -Pjmh -DskipTests install
@@ -237,7 +237,7 @@ jdk17_plus_tests() {
     # JDK25+ must be tested from the packaged multi-release artifact. Raw
     # reactor test classes bypass META-INF/versions/25 and exercise the
     # JDK8-24 root implementation instead.
-    mvn -T10 --batch-mode --no-transfer-progress clean install -DskipTests -Dmaven.compiler.parameters=true
+    mvn -T10 --batch-mode --no-transfer-progress clean install -DskipTests
   else
     mvn -T10 --batch-mode --no-transfer-progress install
   fi

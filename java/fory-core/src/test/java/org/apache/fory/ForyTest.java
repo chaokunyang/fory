@@ -73,6 +73,7 @@ import org.apache.fory.serializer.EnumSerializerTest;
 import org.apache.fory.serializer.ExceptionSerializers;
 import org.apache.fory.serializer.ObjectSerializer;
 import org.apache.fory.serializer.Serializer;
+import org.apache.fory.serializer.Serializers;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.Struct;
 import org.apache.fory.type.Descriptor;
@@ -94,6 +95,18 @@ public class ForyTest extends ForyTestBase {
     byte[] bytes = fory.serialize(7);
     bytes[0] |= 0x02;
     assertThrows(IllegalArgumentException.class, () -> fory.deserialize(bytes, Integer.class));
+  }
+
+  @Test
+  public void testReverseComparatorSerializer() {
+    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
+    Comparator<?> comparator = Comparator.reverseOrder();
+    Serializer<?> serializer =
+        fory.getTypeResolver().getTypeInfo(comparator.getClass()).getSerializer();
+    assertTrue(serializer instanceof Serializers.ReverseComparatorSerializer);
+    Object roundTrip = fory.deserialize(fory.serialize(comparator));
+    Assert.assertSame(roundTrip, Comparator.reverseOrder());
+    Assert.assertSame(fory.copy(comparator), comparator);
   }
 
   @Test(dataProvider = "crossLanguageReferenceTrackingConfig")

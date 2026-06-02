@@ -144,10 +144,8 @@ public final class ExceptionSerializers {
       if (stackTrace != null) {
         obj.setStackTrace(stackTrace);
       }
-      if (cause != null) {
-        obj.initCause(cause);
-      }
-      addSuppressedExceptions(obj, suppressedExceptions);
+      ThrowableAccessors.setCause(obj, cause);
+      ThrowableAccessors.setSuppressedExceptions(obj, suppressedExceptions);
       readAndSetFields(readContext, obj, slotsSerializers, config);
       return obj;
     }
@@ -571,14 +569,37 @@ public final class ExceptionSerializers {
 
   private static final class ThrowableAccessors {
     private static final FieldAccessor DETAIL_MESSAGE_ACCESSOR;
+    private static final FieldAccessor CAUSE_ACCESSOR;
+    private static final FieldAccessor SUPPRESSED_ACCESSOR;
+    private static final Object DEFAULT_SUPPRESSED_EXCEPTIONS;
 
     static {
       try {
         Field detailMessageField = Throwable.class.getDeclaredField("detailMessage");
         DETAIL_MESSAGE_ACCESSOR = FieldAccessor.createAccessor(detailMessageField);
+        Field causeField = Throwable.class.getDeclaredField("cause");
+        CAUSE_ACCESSOR = FieldAccessor.createAccessor(causeField);
+        Field suppressedField = Throwable.class.getDeclaredField("suppressedExceptions");
+        SUPPRESSED_ACCESSOR = FieldAccessor.createAccessor(suppressedField);
+        DEFAULT_SUPPRESSED_EXCEPTIONS = SUPPRESSED_ACCESSOR.getObject(new Throwable());
       } catch (Exception e) {
         throw new RuntimeException(e);
       }
+    }
+
+    private static void setCause(Throwable throwable, Throwable cause) {
+      // Constructor-bypassing Throwable creation does not run Throwable field initializers.
+      // Restore the sentinels directly; initCause would reject the absent cause sentinel.
+      CAUSE_ACCESSOR.putObject(throwable, cause == null ? throwable : cause);
+    }
+
+    private static void setSuppressedExceptions(
+        Throwable throwable, List<Throwable> suppressedExceptions) {
+      SUPPRESSED_ACCESSOR.putObject(
+          throwable,
+          suppressedExceptions.isEmpty()
+              ? DEFAULT_SUPPRESSED_EXCEPTIONS
+              : new ArrayList<>(suppressedExceptions));
     }
   }
 

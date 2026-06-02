@@ -113,6 +113,9 @@ internal fun constructorBindingError(
   fieldNames: List<String>,
   targetName: String,
 ): String? {
+  if (fieldNames.isEmpty()) {
+    return "@ForyConstructor on $targetName must declare at least one field name"
+  }
   if (parameterNames.size != fieldNames.size) {
     return "@ForyConstructor on $targetName must declare one field name for each primary constructor parameter"
   }
@@ -303,6 +306,13 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
         parseVarFields(declaration) ?: return null,
       )
     }
+    if (constructorFields == null) {
+      logger.error(
+        "Kotlin KSP constructor-backed @ForyStruct requires @ForyConstructor field mappings",
+        primaryConstructor,
+      )
+      return null
+    }
     val propertiesByName = declaration.getAllProperties().associateBy { it.simpleName.asString() }
     val fields =
       parseCtorFields(declaration, primaryConstructor, propertiesByName, constructorFields)
@@ -375,17 +385,16 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
     declaration: KSClassDeclaration,
     primaryConstructor: KSFunctionDeclaration,
     propertiesByName: Map<String, KSPropertyDeclaration>,
-    constructorFields: List<String>?,
+    constructorFields: List<String>,
   ): List<KotlinSourceField>? {
     val fields = mutableListOf<KotlinSourceField>()
     val foryIds = hashSetOf<Int>()
     var nextId = 0
-    val explicitConstructor = constructorFields != null
     for ((index, parameter) in primaryConstructor.parameters.withIndex()) {
       val parameterName = parameter.name?.asString() ?: continue
-      val fieldName = constructorFields?.get(index) ?: parameterName
+      val fieldName = constructorFields[index]
       val property = propertiesByName[fieldName]
-      if (property == null || (!explicitConstructor && !parameter.isVal && !parameter.isVar)) {
+      if (property == null) {
         logger.error(
           "Constructor parameter $parameterName is not bound to an accessible schema property",
           parameter
@@ -396,7 +405,7 @@ internal class ForyKotlinSymbolProcessor(private val environment: SymbolProcesso
       val parameterType = parameter.type.resolve()
       val fieldTypeName = kotlinSourceTypeName(fieldType)
       val parameterTypeName = kotlinSourceTypeName(parameterType)
-      if (explicitConstructor && fieldTypeName != parameterTypeName) {
+      if (fieldTypeName != parameterTypeName) {
         logger.error(
           "@ForyConstructor field $fieldName type $fieldTypeName must match primary constructor parameter $parameterName type $parameterTypeName",
           parameter,

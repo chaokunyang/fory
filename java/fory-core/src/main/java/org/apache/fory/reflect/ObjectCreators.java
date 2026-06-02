@@ -19,6 +19,7 @@
 
 package org.apache.fory.reflect;
 
+import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.invoke.MethodType;
@@ -34,6 +35,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.apache.fory.annotation.ForyConstructor;
+import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
 import org.apache.fory.exception.ForyException;
@@ -74,6 +76,8 @@ import org.apache.fory.util.record.RecordUtils;
 public class ObjectCreators {
   private static final ClassValueCache<ObjectCreator<?>> cache =
       ClassValueCache.newClassKeySoftCache(8);
+  private static final ClassValueCache<ObjectCreator<?>> objectStreamCache =
+      ClassValueCache.newClassKeySoftCache(8);
 
   /**
    * Returns an optimized ObjectCreator for the given type.
@@ -94,6 +98,18 @@ public class ObjectCreators {
 
   public static <T> ObjectCreator<T> getObjectCreator(TypeResolver typeResolver, Class<T> type) {
     return typeResolver.getSharedRegistry().getObjectCreatorRegistry().getObjectCreator(type);
+  }
+
+  /**
+   * Returns the creator used by Java ObjectStream-compatible serializers.
+   *
+   * <p>ObjectStream serializers reconstruct an empty instance before applying stream fields.
+   * Serializable class constructors and constructor mappings from {@link ForyConstructor} or {@code
+   * BaseFory.registerConstructor} are not semantically valid for this path.
+   */
+  @Internal
+  public static <T> ObjectCreator<T> getObjectStreamCreator(Class<T> type) {
+    return (ObjectCreator<T>) objectStreamCache.get(type, () -> createObjectStreamCreator(type));
   }
 
   static <T> ObjectCreator<T> createObjectCreator(
@@ -126,6 +142,21 @@ public class ObjectCreators {
     return new DeclaredNoArgCtrObjectCreator<>(type);
   }
 
+  private static <T> ObjectCreator<T> createObjectStreamCreator(Class<T> type) {
+    if (AndroidSupport.IS_ANDROID) {
+      Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type);
+      if (noArgConstructor != null) {
+        return new ReflectiveNoArgCtrObjectCreator<>(type, noArgConstructor);
+      }
+      return new UnsupportedObjectCreator<>(
+          type, "Android cannot create " + type + " without an accessible no-arg constructor");
+    }
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE || JdkVersion.MAJOR_VERSION >= 25) {
+      return new UnsafeObjectCreator<>(type);
+    }
+    return new ParentNoArgCtrObjectCreator<>(type);
+  }
+
   static final class ConstructorMatch<T> {
     private final Constructor<T> constructor;
     private final String[] fieldNames;
@@ -156,7 +187,7 @@ public class ObjectCreators {
     ForyConstructor annotation = null;
     for (Constructor<?> constructor : type.getDeclaredConstructors()) {
       ForyConstructor currentAnnotation = constructor.getAnnotation(ForyConstructor.class);
-      if (currentAnnotation == null) {
+      if (currentAnnotation == null || isCompilerGeneratedConstructor(constructor)) {
         continue;
       }
       if (annotatedConstructor != null) {
@@ -172,11 +203,34 @@ public class ObjectCreators {
         type, (Constructor<T>) annotatedConstructor, annotation.value(), "@ForyConstructor");
   }
 
+  private static boolean isCompilerGeneratedConstructor(Constructor<?> constructor) {
+    if (constructor.isSynthetic()) {
+      return true;
+    }
+    Class<?>[] parameterTypes = constructor.getParameterTypes();
+    return parameterTypes.length > 0
+        && "kotlin.jvm.internal.DefaultConstructorMarker"
+            .equals(parameterTypes[parameterTypes.length - 1].getName());
+  }
+
   static <T> ConstructorMatch<T> explicitConstructor(
       Class<T> type, Constructor<T> constructor, String[] fieldNames, String source) {
+    if (isJavaPlatformType(type)) {
+      throw new ForyException(
+          source
+              + " constructor binding is not supported for Java platform type "
+              + type.getName());
+    }
     if (constructor.getDeclaringClass() != type) {
       throw new ForyException(
           source + " constructor " + constructor + " does not belong to " + type);
+    }
+    if (fieldNames.length == 0) {
+      throw new ForyException(
+          source
+              + " constructor "
+              + constructor
+              + " must map at least one field. Leave ordinary no-arg constructors unbound.");
     }
     if (fieldNames.length != constructor.getParameterCount()) {
       throw new ForyException(
@@ -201,6 +255,10 @@ public class ObjectCreators {
               + Arrays.toString(fieldNames));
     }
     return match;
+  }
+
+  private static boolean isJavaPlatformType(Class<?> type) {
+    return type.getName().startsWith("java.");
   }
 
   private static Field[] fieldsByExplicitNames(
@@ -531,16 +589,7 @@ public class ObjectCreators {
               reflectionFactoryClass.getMethod(
                   "newConstructorForSerialization", Class.class, Constructor.class);
         }
-        Constructor<?> parentConstructor = findPublicNoArgConstructor(type);
-        if (parentConstructor == null) {
-          parentConstructor = Object.class.getDeclaredConstructor();
-        } else {
-          try {
-            parentConstructor.newInstance();
-          } catch (Throwable ignored) {
-            parentConstructor = Object.class.getDeclaredConstructor();
-          }
-        }
+        Constructor<?> parentConstructor = findSerializationConstructor(type);
         return (Constructor<T>)
             newConstructorForSerializationMethod.invoke(reflectionFactory, type, parentConstructor);
       } catch (Throwable e) {
@@ -549,20 +598,38 @@ public class ObjectCreators {
       }
     }
 
-    private static Constructor<?> findPublicNoArgConstructor(Class<?> type) {
+    private static Constructor<?> findSerializationConstructor(Class<?> type)
+        throws NoSuchMethodException {
       Class<?> current = type.getSuperclass();
-      while (current != null && current != Object.class) {
-        try {
-          Constructor<?> constructor = current.getDeclaredConstructor();
-          if (Modifier.isPublic(constructor.getModifiers())) {
-            return constructor;
-          }
-        } catch (NoSuchMethodException ignored) {
-          // Continue searching
-        }
+      // Java ObjectStream reconstruction skips every Serializable class constructor and invokes
+      // only the first non-Serializable superclass no-arg constructor.
+      while (current != null && Serializable.class.isAssignableFrom(current)) {
         current = current.getSuperclass();
       }
-      return null;
+      if (current == null) {
+        current = Object.class;
+      }
+      Constructor<?> constructor = current.getDeclaredConstructor();
+      if (!validSerializationConstructor(type, current, constructor)) {
+        throw new ForyException(
+            "First non-Serializable superclass "
+                + current.getName()
+                + " does not expose a valid no-arg constructor for "
+                + type);
+      }
+      return constructor;
+    }
+
+    private static boolean validSerializationConstructor(
+        Class<?> type, Class<?> constructorClass, Constructor<?> constructor) {
+      int modifiers = constructor.getModifiers();
+      if (Modifier.isPublic(modifiers) || Modifier.isProtected(modifiers)) {
+        return true;
+      }
+      if (Modifier.isPrivate(modifiers)) {
+        return false;
+      }
+      return ReflectionUtils.getPackage(type).equals(ReflectionUtils.getPackage(constructorClass));
     }
 
     @Override

@@ -19,7 +19,6 @@
 
 module org.apache.fory.integration_tests {
 
-    requires org.apache.fory.benchmark;
     requires org.apache.fory.core;
     requires org.apache.fory.format;
     requires org.apache.fory.test.core;
@@ -29,5 +28,5 @@ module org.apache.fory.integration_tests {
 
     exports org.apache.fory.integration_tests.model;
     exports org.apache.fory.integration_tests.publicserializer;
-    opens org.apache.fory.integration_tests.model to org.apache.fory.core, org.apache.fory.format;
+    opens org.apache.fory.integration_tests.model to org.apache.fory.core;
 }

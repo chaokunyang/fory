@@ -59,8 +59,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.fory.builder.UnsafeCodegenSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.ObjectCreator;
 import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -1520,7 +1520,7 @@ public interface Expression {
             functionName = "newInstance";
             args = "";
           } else {
-            target = ctx.type(_JDKAccess.class) + ".unsafe()";
+            target = UnsafeCodegenSupport.unsafeInitCode();
             functionName = "allocateInstance";
             args = clzName + ".class";
           }

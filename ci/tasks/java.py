@@ -56,7 +56,7 @@ JDKS = {
     "21": "zulu21.28.85-ca-jdk21.0.0-linux_x64",
     "24": "zulu24.32.13-ca-fx-jdk24.0.2-linux_x64",
     "25": "zulu25.30.17-ca-jdk25.0.1-linux_x64",
-    "26": "zulu26.28.89-ca-jdk26.0.0-linux_x64",
+    "26": "zulu26.30.11-ca-crac-jdk26.0.1-linux_x64",
 }
 
 
@@ -151,7 +151,7 @@ def install_jdk25_fory_artifacts():
         common.cd_project_subdir("java")
         common.exec_cmd(
             "mvn -T10 -B --no-transfer-progress clean install -DskipTests "
-            "-Dmaven.compiler.parameters=true -pl '!:fory-testsuite'"
+            "-pl '!:fory-testsuite'"
         )
         logging.info("Verify JDK25 benchmark multi-release jar")
         common.cd_project_subdir("benchmarks/java")
@@ -268,8 +268,7 @@ def run_jdk17_plus(java_version="17"):
         # reactor test classes bypass META-INF/versions/25 and exercise the
         # JDK8-24 root implementation instead.
         common.exec_cmd(
-            "mvn -T10 --batch-mode --no-transfer-progress clean install "
-            "-DskipTests -Dmaven.compiler.parameters=true"
+            "mvn -T10 --batch-mode --no-transfer-progress clean install -DskipTests"
         )
         os.environ.pop("JDK_JAVA_OPTIONS", None)
         logging.info(f"Executing JDK{java_version} JPMS tests")

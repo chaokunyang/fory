@@ -65,7 +65,7 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
@@ -162,17 +162,17 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   /**
    * Safe wrapper for ObjectStreamClass.lookup that handles GraalVM native image limitations. In
    * GraalVM native image, ObjectStreamClass.lookup may fail for certain classes like Throwable due
-   * to missing SerializationConstructorAccessor. This method catches such errors and returns null,
-   * allowing the serializer to use alternative approaches like Unsafe.allocateInstance.
+   * to missing SerializationConstructorAccessor. This method catches such errors and returns null
+   * so the serializer can use its constructor-bypassing object creator.
    */
   private static ObjectStreamClass safeObjectStreamClassLookup(Class<?> type) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       try {
         return ObjectStreamClass.lookup(type);
       } catch (Throwable e) {
-        // In GraalVM native image, ObjectStreamClass.lookup may fail for certain classes
-        // due to missing SerializationConstructorAccessor. We catch this and return null
-        // to allow fallback to Unsafe-based object creation.
+        // In GraalVM native image, ObjectStreamClass.lookup may fail for certain classes due to
+        // missing SerializationConstructorAccessor. Returning null keeps stream reconstruction on
+        // the serializer-owned object creator path.
         LOG.warn(
             "ObjectStreamClass.lookup failed for {} in GraalVM native image: {}",
             type.getName(),
@@ -186,7 +186,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   public ObjectStreamSerializer(TypeResolver typeResolver, Class<?> type) {
-    super(typeResolver, type, createObjectStreamCreator(typeResolver, type));
+    super(typeResolver, type, ObjectCreators.getObjectStreamCreator(type));
     if (!Serializable.class.isAssignableFrom(type)) {
       throw new IllegalArgumentException(
           String.format("Class %s should implement %s.", type, Serializable.class));
@@ -213,12 +213,6 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     }
     Collections.reverse(slotsInfoList);
     slotsInfos = slotsInfoList.toArray(new SlotInfo[0]);
-  }
-
-  /** Creates an ObjectCreator for Java ObjectStream-compatible reconstruction. */
-  private static <T> ObjectCreator<T> createObjectStreamCreator(
-      TypeResolver typeResolver, Class<T> type) {
-    return typeResolver.getObjectCreator(type);
   }
 
   @Override

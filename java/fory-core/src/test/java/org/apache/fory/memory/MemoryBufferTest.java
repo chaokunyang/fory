@@ -85,7 +85,7 @@ public class MemoryBufferTest {
   }
 
   @Test
-  public void testFromDirectByteBufferRejectsHeapBuffer() {
+  public void testDirectBufferRejectsHeap() {
     assertThrows(
         IllegalArgumentException.class,
         () -> MemoryBuffer.fromDirectByteBuffer(ByteBuffer.allocate(8), 8, null));
@@ -612,7 +612,7 @@ public class MemoryBufferTest {
   }
 
   @Test
-  public void testReadVarUInt32RejectsMalformedFifthByte() {
+  public void testReadVarUInt32RejectsFifthByte() {
     byte[] malformed = new byte[] {(byte) 0x80, (byte) 0x80, (byte) 0x80, (byte) 0x80, 0x10};
     assertThrows(IllegalArgumentException.class, () -> MemoryUtils.wrap(malformed).readVarUInt32());
     assertThrows(

@@ -44,7 +44,6 @@
                             <goal>compile</goal>
                         </goals>
                         <configuration>
-                            <javaParameters>true</javaParameters>
                             <sourceDirs>
                                 <sourceDir>${project.basedir}/src/main/kotlin</sourceDir>
                                 <sourceDir>${project.basedir}/src/main/java</sourceDir>
@@ -61,7 +60,6 @@
                             <goal>test-compile</goal>
                         </goals>
                         <configuration>
-                            <javaParameters>true</javaParameters>
                             <sourceDirs>
                                 <sourceDir>${project.basedir}/src/test/kotlin</sourceDir>
                             </sourceDirs>

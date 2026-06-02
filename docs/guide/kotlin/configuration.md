@@ -103,6 +103,8 @@ On JDK25+ with Unsafe memory access denied, Kotlin classes with final constructo
 an explicit constructor mapping when Fory must call the primary constructor. Annotate the
 constructor with `@ForyConstructor`, register the constructor with `registerConstructor(...)`, use a
 generated serializer that carries explicit constructor metadata, or provide a custom serializer.
+Register constructors during setup before requesting serializers or starting serialization,
+deserialization, or copy operations.
 
 ```kotlin
 import org.apache.fory.annotation.ForyConstructor
@@ -113,22 +115,9 @@ class User @ForyConstructor("name", "age") constructor(
 )
 ```
 
-For generated serializers and tooling that read Java parameter metadata, enable Java parameter
-metadata for Kotlin compilation:
-
-```kotlin
-kotlin {
-    compilerOptions {
-        javaParameters = true
-    }
-}
-```
-
-For Maven builds, configure the Kotlin Maven plugin with:
-
-```xml
-<javaParameters>true</javaParameters>
-```
+KSP-generated `@ForyStruct` serializers that call a primary constructor require the same explicit
+`@ForyConstructor` mapping. Mutable no-argument `@ForyStruct` classes can instead expose serialized
+`var` properties with `@ForyField`.
 
 The JVM also needs the module opens and final-field mutation option listed in
 [Java Troubleshooting](../java/troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens).

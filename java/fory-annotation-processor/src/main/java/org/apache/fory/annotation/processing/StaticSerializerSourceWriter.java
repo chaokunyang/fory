@@ -1308,6 +1308,7 @@ final class StaticSerializerSourceWriter {
         .append(struct.typeName)
         .append(" value) {\n");
     builder.append("    Object[] fieldValues = new Object[DESCRIPTORS.size()];\n");
+    builder.append("    Object pendingMarker = beginConstructorCopy(copyContext, value);\n");
     for (SourceField field : struct.fields) {
       builder.append("    if (hasField(constructorFieldBits, ").append(field.id).append(")) {\n");
       builder
@@ -1320,6 +1321,8 @@ final class StaticSerializerSourceWriter {
           .append("]);\n");
       builder.append("    }\n");
     }
+    builder.append(
+        "    checkNoConstructorCopyBackrefs(fieldValues, constructorFieldIds, pendingMarker);\n");
     builder
         .append("    ")
         .append(struct.typeName)

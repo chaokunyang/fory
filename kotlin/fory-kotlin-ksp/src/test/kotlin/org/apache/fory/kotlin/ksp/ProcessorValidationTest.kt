@@ -22,6 +22,7 @@ package org.apache.fory.kotlin.ksp
 import com.google.devtools.ksp.symbol.ClassKind
 import com.google.devtools.ksp.symbol.Modifier
 import org.testng.Assert.assertEquals
+import org.testng.Assert.assertFalse
 import org.testng.Assert.assertNull
 import org.testng.Assert.assertTrue
 import org.testng.annotations.Test
@@ -83,6 +84,10 @@ class ProcessorValidationTest {
       "@ForyConstructor on example.User must declare one field name for each primary constructor parameter",
     )
     assertEquals(
+      constructorBindingError(emptyList(), emptyList(), "example.User"),
+      "@ForyConstructor on example.User must declare at least one field name",
+    )
+    assertEquals(
       constructorBindingError(listOf("name", "age"), listOf("name", "name"), "example.User"),
       "@ForyConstructor on example.User declares duplicate field name name",
     )
@@ -141,6 +146,63 @@ class ProcessorValidationTest {
     assertTrue(!source.contains("return User(name = field0!!)"))
     assertTrue(source.contains("constructorFieldIds = if (objectCreator.hasConstructorFields())"))
     assertTrue(source.contains("objectCreator.newInstanceWithArguments(*constructorArgs"))
+  }
+
+  @Test
+  fun defaultsUseGeneratedCompatibleRead() {
+    val stringType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "String::class.java",
+        kotlinTypeName = "kotlin.String",
+        valueTypeName = "String",
+        typeName = "java.lang.String",
+        typeId = "Types.STRING",
+        nullable = false,
+        trackingRef = false,
+        primitive = false,
+        unsigned = false,
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "User",
+            qualifiedTypeName = "example.User",
+            serializerName = "User_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "name",
+                  type = stringType,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = false,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = true,
+                  nullable = false,
+                  propertyTypeName = "String",
+                  constructorParameterName = "name",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+    val compatibleStart = source.indexOf("override fun readCompatible")
+    val copyStart = source.indexOf("override fun copy")
+    val compatibleSource = source.substring(compatibleStart, copyStart)
+
+    assertFalse(compatibleSource.contains("return readCompatibleConstructor(readContext)"))
+    assertTrue(compatibleSource.contains("return readCompatibleDefaultConstructor(readContext)"))
+    assertTrue(compatibleSource.contains("beginConstructorRef(readContext)"))
+    assertTrue(compatibleSource.contains("checkNoUnresolvedReadRef(readContext)"))
+    assertTrue(compatibleSource.contains("referenceConstructorRef(readContext, constructed)"))
+    assertTrue(compatibleSource.contains("endConstructorRef(readContext)"))
+    assertTrue(compatibleSource.contains("missingDefaultMask"))
+    assertTrue(compatibleSource.contains("val constructed = when (missingDefaultMask)"))
   }
 
   @Test

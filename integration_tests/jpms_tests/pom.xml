@@ -42,11 +42,6 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.fory</groupId>
-      <artifactId>benchmark</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.fory</groupId>
       <artifactId>fory-core</artifactId>
       <version>${project.version}</version>
     </dependency>

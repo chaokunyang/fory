@@ -34,7 +34,6 @@ import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.net.URL;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.time.Duration;
@@ -62,7 +61,6 @@ import java.util.OptionalInt;
 import java.util.Set;
 import java.util.SortedMap;
 import java.util.SortedSet;
-import java.util.StringTokenizer;
 import java.util.TimeZone;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -106,7 +104,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.ByteBufferUtil;
 import org.apache.fory.memory.MemoryBuffer;
-import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.ClassSpec;
 import org.apache.fory.meta.EncodedMetaString;
 import org.apache.fory.meta.Encoders;
@@ -141,7 +138,6 @@ import org.apache.fory.serializer.Serializers;
 import org.apache.fory.serializer.Shareable;
 import org.apache.fory.serializer.SqlTimeSerializers;
 import org.apache.fory.serializer.TimeSerializers;
-import org.apache.fory.serializer.URLSerializer;
 import org.apache.fory.serializer.UnknownClass;
 import org.apache.fory.serializer.UnknownClass.UnknownEmptyStruct;
 import org.apache.fory.serializer.UnknownClass.UnknownStruct;
@@ -1475,15 +1471,6 @@ public class ClassResolver extends TypeResolver {
         return TimeSerializers.ZoneIdSerializer.class;
       } else if (TimeZone.class.isAssignableFrom(cls)) {
         return TimeSerializers.TimeZoneSerializer.class;
-      } else if (cls == URL.class) {
-        return URLSerializer.class;
-      } else if (cls == StringTokenizer.class) {
-        if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
-          throw new UnsupportedOperationException(
-              "StringTokenizer serialization requires JDK internal field access. On JDK25+, open "
-                  + "java.base/java.lang.invoke to org.apache.fory.core.");
-        }
-        return Serializers.StringTokenizerSerializer.class;
       } else if (ByteBuffer.class.isAssignableFrom(cls)) {
         return BufferSerializers.ByteBufferSerializer.class;
       }

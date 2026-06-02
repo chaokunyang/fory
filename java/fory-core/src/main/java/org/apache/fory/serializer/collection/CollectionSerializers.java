@@ -620,12 +620,18 @@ public class CollectionSerializers {
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       assert !config.isXlang();
       if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+        if (JdkVersion.MAJOR_VERSION >= 25) {
+          throw unsupportedJdk25SetFromMap(null);
+        }
         return Collections.newSetFromMap(new HashMap(originCollection.size()));
       }
       Map<?, Boolean> map =
           (Map<?, Boolean>) JvmSetFromMapAccess.MAP_ACCESSOR.getObject(originCollection);
       MapLikeSerializer mapSerializer =
           (MapLikeSerializer) typeResolver.getSerializer(map.getClass());
+      if (JdkVersion.MAJOR_VERSION >= 25 && !mapSerializer.supportCodegenHook) {
+        throw unsupportedJdk25SetFromMap(map.getClass());
+      }
       Map newMap = mapSerializer.newMap(copyContext, map);
       return Collections.newSetFromMap(newMap);
     }
@@ -636,6 +642,9 @@ public class CollectionSerializers {
       Map<?, Boolean> map;
       TypeInfo typeInfo;
       if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+        if (JdkVersion.MAJOR_VERSION >= 25) {
+          throw unsupportedJdk25SetFromMap(null);
+        }
         HashMap source = new HashMap<>(value.size());
         for (Object element : value) {
           source.put(element, Boolean.TRUE);
@@ -648,15 +657,9 @@ public class CollectionSerializers {
       }
       MapLikeSerializer mapSerializer = (MapLikeSerializer) typeInfo.getSerializer();
       // The legacy payload restores Collections$SetFromMap by writing its final JDK fields.
-      // JDK25 zero-Unsafe mode cannot do that, so emit the public-constructor shape instead.
+      // JDK25 zero-Unsafe mode cannot do that, so unsupported backing maps must fail before write.
       if (JdkVersion.MAJOR_VERSION >= 25 && !mapSerializer.supportCodegenHook) {
-        HashMap source = new HashMap<>(value.size());
-        for (Object element : value) {
-          source.put(element, Boolean.TRUE);
-        }
-        map = source;
-        typeInfo = typeResolver.getTypeInfo(HashMap.class);
-        mapSerializer = (MapLikeSerializer) typeInfo.getSerializer();
+        throw unsupportedJdk25SetFromMap(map.getClass());
       }
       typeResolver.writeTypeInfo(writeContext, typeInfo);
       if (mapSerializer.supportCodegenHook) {
@@ -668,6 +671,16 @@ public class CollectionSerializers {
         mapSerializer.write(writeContext, map);
         return EMPTY_COLLECTION_STUB;
       }
+    }
+
+    private static UnsupportedOperationException unsupportedJdk25SetFromMap(Class<?> mapType) {
+      String mapDescription = mapType == null ? "an inaccessible backing map" : mapType.getName();
+      return new UnsupportedOperationException(
+          "JDK25+ zero-Unsafe mode cannot serialize Collections.newSetFromMap backed by "
+              + mapDescription
+              + " because that would require hidden final JDK field restoration. Use a backing "
+              + "map with public-constructor serialization support or register a custom "
+              + "serializer.");
     }
   }
 

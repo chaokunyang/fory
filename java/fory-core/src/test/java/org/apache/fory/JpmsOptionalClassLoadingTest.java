@@ -36,6 +36,10 @@ public class JpmsOptionalClassLoadingTest {
     if (JdkVersion.MAJOR_VERSION < 9) {
       throw new SkipException("Skip on jdk" + JdkVersion.MAJOR_VERSION);
     }
+    if (JdkVersion.MAJOR_VERSION >= 25) {
+      throw new SkipException(
+          "JDK25+ optional-module coverage runs in integration_tests/jpms_tests with packaged MR-JAR");
+    }
     Process process =
         new ProcessBuilder(
                 TestUtils.javaCommand(

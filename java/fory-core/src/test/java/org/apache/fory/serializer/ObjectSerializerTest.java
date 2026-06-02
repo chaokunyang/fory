@@ -28,6 +28,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
+import java.util.AbstractList;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
@@ -35,12 +38,17 @@ import org.apache.fory.TestUtils;
 import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.annotation.ForyField;
 import org.apache.fory.builder.CodecUtils;
+import org.apache.fory.context.CopyContext;
+import org.apache.fory.context.ReadContext;
+import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.resolver.RefMode;
 import org.apache.fory.test.bean.Cyclic;
+import org.apache.fory.type.Types;
 import org.apache.fory.util.Preconditions;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -240,6 +248,65 @@ public class ObjectSerializerTest extends ForyTestBase {
     private ConstructorBackrefRoot root;
   }
 
+  public static final class ConstructorCustomRoot {
+    private final ConstructorCustomHolder holder;
+
+    @ForyConstructor("holder")
+    public ConstructorCustomRoot(ConstructorCustomHolder holder) {
+      this.holder = holder;
+    }
+  }
+
+  public static final class ConstructorCustomHolder {
+    private final String label;
+    private ConstructorCustomRoot root;
+
+    public ConstructorCustomHolder(String label) {
+      this.label = label;
+    }
+  }
+
+  public static final class ConstructorCustomHolderSerializer
+      extends Serializer<ConstructorCustomHolder> {
+    public ConstructorCustomHolderSerializer(Fory fory) {
+      super(fory.getConfig(), ConstructorCustomHolder.class, true, false);
+    }
+
+    @Override
+    public void write(WriteContext writeContext, ConstructorCustomHolder value) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ConstructorCustomHolder read(ReadContext readContext) {
+      throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public ConstructorCustomHolder copy(CopyContext copyContext, ConstructorCustomHolder value) {
+      return new ConstructorCustomHolder(value.label);
+    }
+  }
+
+  public static final class ConstructorContainerBackrefRoot extends AbstractList<Object> {
+    private List<Object> self;
+
+    @ForyConstructor("self")
+    public ConstructorContainerBackrefRoot(List<Object> self) {
+      this.self = self;
+    }
+
+    @Override
+    public Object get(int index) {
+      return self.get(index);
+    }
+
+    @Override
+    public int size() {
+      return self == null ? 0 : self.size();
+    }
+  }
+
   public static final class RegisteredCtorBean {
     @ForyField(id = 0)
     private final String name;
@@ -251,6 +318,21 @@ public class ObjectSerializerTest extends ForyTestBase {
       this.name = name;
       this.age = age;
     }
+  }
+
+  public static final class EmptyConstructorBinding {
+    private int id;
+
+    @ForyConstructor({})
+    public EmptyConstructorBinding() {}
+
+    private EmptyConstructorBinding(int id) {
+      this.id = id;
+    }
+  }
+
+  public static final class EmptyRegisteredCtorBean {
+    public EmptyRegisteredCtorBean() {}
   }
 
   public static final class FinalNoArgBean {
@@ -429,6 +511,59 @@ public class ObjectSerializerTest extends ForyTestBase {
   }
 
   @Test
+  public void testRegisterConstructorAfterSerializer() throws Exception {
+    Constructor<RegisteredCtorBean> constructor =
+        RegisteredCtorBean.class.getDeclaredConstructor(int.class, String.class);
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    fory.getSerializer(RegisteredCtorBean.class);
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () -> fory.registerConstructor(RegisteredCtorBean.class, constructor, "age", "name"));
+  }
+
+  @Test
+  public void testEmptyRegisteredCtorRejected() throws Exception {
+    Constructor<EmptyRegisteredCtorBean> constructor =
+        EmptyRegisteredCtorBean.class.getDeclaredConstructor();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () -> fory.registerConstructor(EmptyRegisteredCtorBean.class, constructor));
+  }
+
+  @Test
+  public void testEmptyAnnotatedCtorRejected() {
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () ->
+            new ObjectSerializer<>(
+                newConstructorBindingFory(false).getTypeResolver(), EmptyConstructorBinding.class));
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () -> {
+          Fory fory = newConstructorBindingFory(true);
+          TypeDef typeDef = fory.getTypeResolver().getTypeDef(EmptyConstructorBinding.class, true);
+          new CompatibleSerializer<>(
+              fory.getTypeResolver(), EmptyConstructorBinding.class, typeDef);
+        });
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () -> newConstructorBindingFory(false).copy(new EmptyConstructorBinding(1)));
+  }
+
+  @Test
   public void testCtorInterveningRef() {
     Fory fory =
         Fory.builder()
@@ -545,6 +680,44 @@ public class ObjectSerializerTest extends ForyTestBase {
   }
 
   @Test
+  public void testContainerCtorBackrefRejected() {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      return;
+    }
+    ConstructorContainerBackrefRoot value = new ConstructorContainerBackrefRoot(null);
+    value.self = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    ObjectSerializer<ConstructorContainerBackrefRoot> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), ConstructorContainerBackrefRoot.class);
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> {
+          context.writeRefOrNull(value);
+          serializer.write(context, value);
+        });
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () ->
+            withReadContext(
+                fory,
+                buffer,
+                context -> {
+                  byte tag = context.readRefOrNull();
+                  Preconditions.checkArgument(tag == Fory.REF_VALUE_FLAG);
+                  context.preserveRefId();
+                  return serializer.read(context);
+                }));
+  }
+
+  @Test
   public void testConstructorFieldCycle() {
     ConstructorCycle value = new ConstructorCycle("root");
     value.next = value;
@@ -604,7 +777,7 @@ public class ObjectSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testConstructorFieldCycleBeforeFinalCodegen() {
+  public void testCtorCycleBeforeFinalCodegen() {
     ConstructorCycleBeforeFinal value = new ConstructorCycleBeforeFinal("root");
     value.next = value;
     Fory fory =
@@ -648,7 +821,7 @@ public class ObjectSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testConstructorFieldCycleBeforeFinalCompatible() {
+  public void testCtorCycleBeforeFinalCompat() {
     ConstructorCycleBeforeFinal value = new ConstructorCycleBeforeFinal("root");
     value.next = value;
     Fory fory =
@@ -672,7 +845,7 @@ public class ObjectSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testConstructorFieldCycleCompatibleNonCodegen() {
+  public void testCtorCycleCompatNoCodegen() {
     ConstructorCycleBeforeFinal value = new ConstructorCycleBeforeFinal("root");
     value.next = value;
     Fory fory =
@@ -693,7 +866,7 @@ public class ObjectSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testConstructorFieldBackrefCompatibleRejected() {
+  public void testCtorBackrefCompatRejected() {
     if (JdkVersion.MAJOR_VERSION < 25) {
       return;
     }
@@ -731,6 +904,132 @@ public class ObjectSerializerTest extends ForyTestBase {
                   context.preserveRefId();
                   return serializer.read(context);
                 }));
+  }
+
+  @Test
+  public void testContainerCtorBackrefCompatRejected() {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      return;
+    }
+    ConstructorContainerBackrefRoot value = new ConstructorContainerBackrefRoot(null);
+    value.self = value;
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCompatible(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    TypeDef typeDef =
+        fory.getTypeResolver().getTypeDef(ConstructorContainerBackrefRoot.class, true);
+    CompatibleSerializer<ConstructorContainerBackrefRoot> serializer =
+        new CompatibleSerializer<>(
+            fory.getTypeResolver(), ConstructorContainerBackrefRoot.class, typeDef);
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> {
+          context.writeRefOrNull(value);
+          serializer.write(context, value);
+        });
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () ->
+            withReadContext(
+                fory,
+                buffer,
+                context -> {
+                  byte tag = context.readRefOrNull();
+                  Preconditions.checkArgument(tag == Fory.REF_VALUE_FLAG);
+                  context.preserveRefId();
+                  return serializer.read(context);
+                }));
+  }
+
+  @Test
+  public void testCompatArrayCtorBackrefRejected() {
+    Object marker = new Object();
+    Fory fory =
+        Fory.builder()
+            .withXlang(false)
+            .withRefTracking(true)
+            .withCodegen(false)
+            .requireClassRegistration(false)
+            .build();
+    MemoryBuffer buffer = MemoryUtils.buffer(32);
+    withWriteContext(
+        fory,
+        buffer,
+        context -> {
+          context.writeRefOrNull(marker);
+          context.writeRefOrNull(marker);
+        });
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () ->
+            withReadContext(
+                fory,
+                buffer,
+                context -> {
+                  byte tag = context.readRefOrNull();
+                  Preconditions.checkArgument(tag == Fory.REF_VALUE_FLAG);
+                  context.preserveRefId();
+                  AbstractObjectSerializer.beginConstructorRef(context);
+                  try {
+                    Object value =
+                        CompatibleCollectionArrayReader.read(
+                            context,
+                            RefMode.TRACKING,
+                            CompatibleCollectionArrayReader.READ_ARRAY_TO_LIST,
+                            Types.INT32_ARRAY,
+                            Types.INT32,
+                            List.class);
+                    return AbstractObjectSerializer.ctorFieldValue(
+                        context, value, ConstructorContainerBackrefRoot.class);
+                  } finally {
+                    AbstractObjectSerializer.endConstructorRef(context);
+                  }
+                }));
+  }
+
+  @Test(dataProvider = "foryCopyConfig")
+  public void testCtorBackrefCopyRejected(Fory fory) {
+    ConstructorBackrefChild child = new ConstructorBackrefChild();
+    ConstructorBackrefRoot value = new ConstructorBackrefRoot(child);
+    child.root = value;
+    ObjectSerializer<ConstructorBackrefRoot> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), ConstructorBackrefRoot.class);
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () -> withCopyContext(fory, context -> serializer.copy(context, value)));
+  }
+
+  @Test(dataProvider = "foryCopyConfig")
+  public void testContainerCtorBackrefCopyRejected(Fory fory) {
+    ConstructorContainerBackrefRoot value = new ConstructorContainerBackrefRoot(new ArrayList<>());
+    value.self.add(value);
+    ObjectSerializer<ConstructorContainerBackrefRoot> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), ConstructorContainerBackrefRoot.class);
+    Assert.assertThrows(
+        org.apache.fory.exception.ForyException.class,
+        () -> withCopyContext(fory, context -> serializer.copy(context, value)));
+  }
+
+  @Test(dataProvider = "foryCopyConfig")
+  public void testCtorCopyUsesSerializer(Fory fory) {
+    ConstructorCustomHolder holder = new ConstructorCustomHolder("custom");
+    ConstructorCustomRoot value = new ConstructorCustomRoot(holder);
+    holder.root = value;
+    fory.registerSerializer(
+        ConstructorCustomHolder.class, new ConstructorCustomHolderSerializer(fory));
+    ObjectSerializer<ConstructorCustomRoot> serializer =
+        new ObjectSerializer<>(fory.getTypeResolver(), ConstructorCustomRoot.class);
+    ConstructorCustomRoot copy = withCopyContext(fory, context -> serializer.copy(context, value));
+    assertNotSame(copy.holder, holder);
+    assertEquals(copy.holder.label, "custom");
+    Assert.assertNull(copy.holder.root);
   }
 
   @Test(dataProvider = "foryCopyConfig")
@@ -782,6 +1081,16 @@ public class ObjectSerializerTest extends ForyTestBase {
     Assert.assertNotSame(value.second, value);
   }
 
+  private static Fory newConstructorBindingFory(boolean compatible) {
+    return Fory.builder()
+        .withXlang(false)
+        .withRefTracking(true)
+        .withCompatible(compatible)
+        .withCodegen(false)
+        .requireClassRegistration(false)
+        .build();
+  }
+
   @Data
   public static class A {
     Integer f1;
@@ -810,7 +1119,7 @@ public class ObjectSerializerTest extends ForyTestBase {
   }
 
   @Test
-  public void testAndroidObjectSerializerReflectionPaths() throws Exception {
+  public void testAndroidReflectionPaths() throws Exception {
     ProcessBuilder processBuilder =
         new ProcessBuilder(TestUtils.javaCommand(AndroidObjectSerializerProbe.class))
             .redirectErrorStream(true);

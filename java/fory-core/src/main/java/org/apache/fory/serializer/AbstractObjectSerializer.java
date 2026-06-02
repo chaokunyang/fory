@@ -19,11 +19,16 @@
 
 package org.apache.fory.serializer;
 
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import org.apache.fory.Fory;
 import org.apache.fory.collection.IntArray;
@@ -77,6 +82,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private final Class<?>[] objectCreatorConstructorFieldDeclaringClasses;
   private final Class<?>[] objectCreatorConstructorFieldTypes;
   private final boolean[] objectCreatorConstructorFieldFinal;
+  private volatile int[] copyConstructorFieldIndexes;
+  private volatile boolean[] copyConstructorFieldMask;
   private SerializationFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
 
@@ -549,6 +556,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       RefReader refReader,
       SerializationFieldInfo fieldInfo,
       MemoryBuffer buffer) {
+    trackConstructorRefRead(readContext, buffer);
     int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object value;
@@ -920,12 +928,12 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     if (fieldInfos == null) {
       fieldInfos = buildFieldsInfo();
     }
-    int[] constructorFieldIndexes = buildConstructorFieldIndexes(fieldInfos);
-    boolean[] constructorFieldMask =
-        buildConstructorFieldMask(fieldInfos.length, constructorFieldIndexes);
-    checkNoSelfConstructorField(originObj, fieldInfos, constructorFieldMask);
+    int[] constructorFieldIndexes = copyConstructorFieldIndexes(fieldInfos);
+    boolean[] constructorFieldMask = copyConstructorFieldMask(fieldInfos, constructorFieldIndexes);
+    Object pendingMarker = beginConstructorCopy(copyContext, originObj);
     Object[] fieldValues =
         copyFieldValues(copyContext, originObj, fieldInfos, constructorFieldMask, true);
+    checkNoConstructorCopyBackrefs(fieldValues, constructorFieldIndexes, pendingMarker);
     T newObj =
         objectCreator.newInstanceWithArguments(
             constructorArgs(
@@ -935,16 +943,23 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     return newObj;
   }
 
-  private void checkNoSelfConstructorField(
-      T originObj, SerializationFieldInfo[] fieldInfos, boolean[] constructorFieldMask) {
-    for (int i = 0; i < fieldInfos.length; i++) {
-      if (constructorFieldMask[i] && !fieldInfos[i].isPrimitiveField) {
-        Object fieldValue = fieldInfos[i].fieldAccessor.getObject(originObj);
-        if (fieldValue == originObj) {
-          throwConstructorCycle(type);
-        }
-      }
+  private int[] copyConstructorFieldIndexes(SerializationFieldInfo[] fieldInfos) {
+    int[] indexes = copyConstructorFieldIndexes;
+    if (indexes == null) {
+      indexes = buildConstructorFieldIndexes(fieldInfos);
+      copyConstructorFieldIndexes = indexes;
     }
+    return indexes;
+  }
+
+  private boolean[] copyConstructorFieldMask(
+      SerializationFieldInfo[] fieldInfos, int[] constructorFieldIndexes) {
+    boolean[] mask = copyConstructorFieldMask;
+    if (mask == null) {
+      mask = buildConstructorFieldMask(fieldInfos.length, constructorFieldIndexes);
+      copyConstructorFieldMask = mask;
+    }
+    return mask;
   }
 
   private Object[] copyFieldValues(CopyContext copyContext, T originObj) {
@@ -1286,6 +1301,119 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
 
   protected final void checkNoUnresolvedReadRef(ReadContext readContext) {
     checkNoUnresolvedReadRef(readContext, type);
+  }
+
+  protected final Object beginConstructorCopy(CopyContext copyContext, Object originObj) {
+    if (!copyContext.copyTrackingRef()) {
+      return null;
+    }
+    Object pendingMarker = new ConstructorCopyPending();
+    copyContext.reference(originObj, pendingMarker);
+    return pendingMarker;
+  }
+
+  protected final void checkNoConstructorCopyBackrefs(
+      Object[] fieldValues, int[] constructorFieldIndexes, Object pendingMarker) {
+    if (pendingMarker == null) {
+      return;
+    }
+    IdentityHashMap<Object, Boolean> seen = null;
+    for (int constructorFieldIndex : constructorFieldIndexes) {
+      if (constructorFieldIndex >= 0) {
+        seen =
+            checkNoConstructorCopyBackref(
+                fieldValues[constructorFieldIndex], pendingMarker, type, seen);
+      }
+    }
+  }
+
+  private static IdentityHashMap<Object, Boolean> checkNoConstructorCopyBackref(
+      Object fieldValue,
+      Object pendingMarker,
+      Class<?> type,
+      IdentityHashMap<Object, Boolean> seen) {
+    if (fieldValue == null || isConstructorBackrefLeaf(fieldValue.getClass())) {
+      return seen;
+    }
+    if (fieldValue == pendingMarker) {
+      throwConstructorCycle(type);
+    }
+    if (seen == null) {
+      seen = new IdentityHashMap<>();
+    } else if (seen.containsKey(fieldValue)) {
+      return seen;
+    }
+    seen.put(fieldValue, Boolean.TRUE);
+    Class<?> fieldClass = fieldValue.getClass();
+    if (fieldClass.isArray()) {
+      if (!fieldClass.getComponentType().isPrimitive()) {
+        int length = Array.getLength(fieldValue);
+        for (int i = 0; i < length; i++) {
+          seen = checkNoConstructorCopyBackref(Array.get(fieldValue, i), pendingMarker, type, seen);
+        }
+      }
+      return seen;
+    }
+    if (fieldValue instanceof Optional) {
+      Optional<?> optional = (Optional<?>) fieldValue;
+      if (optional.isPresent()) {
+        seen = checkNoConstructorCopyBackref(optional.get(), pendingMarker, type, seen);
+      }
+      return seen;
+    }
+    if (fieldValue instanceof AtomicReference) {
+      return checkNoConstructorCopyBackref(
+          ((AtomicReference<?>) fieldValue).get(), pendingMarker, type, seen);
+    }
+    if (fieldValue instanceof Iterable) {
+      for (Object element : (Iterable<?>) fieldValue) {
+        seen = checkNoConstructorCopyBackref(element, pendingMarker, type, seen);
+      }
+      return seen;
+    }
+    if (fieldValue instanceof Map) {
+      for (Map.Entry<?, ?> entry : ((Map<?, ?>) fieldValue).entrySet()) {
+        seen = checkNoConstructorCopyBackref(entry.getKey(), pendingMarker, type, seen);
+        seen = checkNoConstructorCopyBackref(entry.getValue(), pendingMarker, type, seen);
+      }
+      return seen;
+    }
+    if (fieldValue instanceof Map.Entry) {
+      Map.Entry<?, ?> entry = (Map.Entry<?, ?>) fieldValue;
+      seen = checkNoConstructorCopyBackref(entry.getKey(), pendingMarker, type, seen);
+      return checkNoConstructorCopyBackref(entry.getValue(), pendingMarker, type, seen);
+    }
+    if (isJdkClass(fieldClass)) {
+      return seen;
+    }
+    for (Descriptor descriptor : Descriptor.getDescriptors(fieldClass)) {
+      if (descriptor.getRawType().isPrimitive() || descriptor.getField() == null) {
+        continue;
+      }
+      Object value = FieldAccessor.createAccessor(descriptor.getField()).getObject(fieldValue);
+      seen = checkNoConstructorCopyBackref(value, pendingMarker, type, seen);
+    }
+    return seen;
+  }
+
+  private static final class ConstructorCopyPending {}
+
+  private static boolean isConstructorBackrefLeaf(Class<?> fieldClass) {
+    return fieldClass.isPrimitive()
+        || fieldClass.isEnum()
+        || fieldClass == Class.class
+        || fieldClass == String.class
+        || Number.class.isAssignableFrom(fieldClass)
+        || fieldClass == Boolean.class
+        || fieldClass == Character.class;
+  }
+
+  private static boolean isJdkClass(Class<?> fieldClass) {
+    String name = fieldClass.getName();
+    return name.startsWith("java.")
+        || name.startsWith("javax.")
+        || name.startsWith("jdk.")
+        || name.startsWith("sun.");
   }
 
   public static void checkNoUnresolvedReadRef(ReadContext readContext, Class<?> type) {

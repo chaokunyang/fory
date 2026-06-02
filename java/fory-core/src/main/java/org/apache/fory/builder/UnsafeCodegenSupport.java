@@ -71,9 +71,9 @@ public final class UnsafeCodegenSupport {
     return "sun.misc.Unsafe";
   }
 
-  static String unsafeInitCode() {
+  public static String unsafeInitCode() {
     checkUnsafeSupported();
-    return "(sun.misc.Unsafe) " + UnsafeCodegenSupport.class.getName() + ".unsafe()";
+    return "((sun.misc.Unsafe) " + UnsafeCodegenSupport.class.getName() + ".unsafe())";
   }
 
   private static void checkUnsafeSupported() {

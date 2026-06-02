@@ -39,7 +39,7 @@ public final class UnsafeCodegenSupport {
     throw unsupported();
   }
 
-  static String unsafeInitCode() {
+  public static String unsafeInitCode() {
     throw unsupported();
   }
 

@@ -340,9 +340,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       Object originObject,
       Object fieldValue,
       SerializationFieldInfo fieldInfo) {
-    if (fieldValue == originObject) {
-      throwConstructorCycle(type);
-    }
     return copyFieldValue(copyContext, fieldValue, fieldInfo);
   }
 

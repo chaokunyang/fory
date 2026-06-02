@@ -45,7 +45,8 @@ public final class ObjectCreatorRegistry {
       Class<T> type, Constructor<T> constructor, String... fieldNames) {
     ObjectCreators.ConstructorMatch<T> match =
         ObjectCreators.explicitConstructor(type, constructor, fieldNames.clone(), "registered");
+    ObjectCreator<T> objectCreator = ObjectCreators.createObjectCreator(type, match);
     constructorMatches.put(type, match);
-    objectCreatorCache.put(type, ObjectCreators.createObjectCreator(type, match));
+    objectCreatorCache.put(type, objectCreator);
   }
 }

@@ -55,8 +55,8 @@ import org.apache.fory.platform.AndroidSupport;
  * part as separate class, and use composition in this class. In this way, all fields can be final
  * and access will be much faster.
  *
- * <p>Warning: The instance of this class should not be hold on graalvm build time, the heap unsafe
- * offset are not correct in runtime since graalvm will change array base offset.
+ * <p>Warning: The instance of this class should not be held at GraalVM build time; build-time heap
+ * buffers do not represent the runtime heap layout.
  *
  * <p>Note(chaokunyang): Buffer operations are very common, and jvm inline and branch elimination is
  * not reliable even in c2 compiler, so we try to inline and avoid checks as we can manually. jvm
@@ -122,8 +122,8 @@ public final class MemoryBuffer {
   final ForyStreamReader streamReader;
 
   // Android branches in this class are intentional method-boundary exits.
-  // Do not delete them or fold them into the JVM Unsafe path: each branch must make exactly one
-  // MemoryOps call, while MemoryOps owns Android heap index math and reader/writer updates.
+  // Do not delete them or fold them into the JVM path: each branch must make exactly one MemoryOps
+  // call, while MemoryOps owns Android heap index math and reader/writer updates.
 
   /**
    * Creates a new memory buffer that represents the memory of the byte array.
@@ -716,7 +716,7 @@ public final class MemoryBuffer {
   public void get(int index, byte[] dst, int offset, int length) {
     final byte[] heapMemory = this.heapMemory;
     if (heapMemory != null) {
-      // System.arraycopy faster for some jdk than Unsafe.
+      // Keep heap-to-heap bulk copies on the JDK intrinsic path.
       System.arraycopy(heapMemory, heapOffset + index, dst, offset, length);
     } else {
       final long pos = address + index;
@@ -802,7 +802,7 @@ public final class MemoryBuffer {
   public void put(int index, byte[] src, int offset, int length) {
     final byte[] heapMemory = this.heapMemory;
     if (heapMemory != null) {
-      // System.arraycopy faster for some jdk than Unsafe.
+      // Keep heap-to-heap bulk copies on the JDK intrinsic path.
       System.arraycopy(src, offset, heapMemory, heapOffset + index, length);
     } else {
       final long pos = address + index;
@@ -2923,7 +2923,7 @@ public final class MemoryBuffer {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.readVarUint36Small(this);
     }
-    // Android exits above. Keep JVM small-varint bulk reads as raw Unsafe loads instead of calling
+    // Android exits above. Keep JVM small-varint bulk reads as direct bulk loads instead of calling
     // `_unsafeGet*` helpers; those helpers carry Android/endian branches and can break inlining.
     // Duplicate and manual inline for performance.
     // noinspection Duplicates

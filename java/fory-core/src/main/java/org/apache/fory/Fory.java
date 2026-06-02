@@ -216,6 +216,14 @@ public final class Fory implements BaseFory {
   public <T> void registerConstructor(
       Class<T> type, Constructor<T> constructor, String... fieldNames) {
     checkRegisterAllowed();
+    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
+    if (typeInfo != null && typeInfo.getSerializer() != null) {
+      throw new ForyException(
+          "Cannot register constructor for "
+              + type.getName()
+              + " after its serializer has been created. Register constructors before calling "
+              + "`getSerializer`, `serialize`, `deserialize`, or `copy` for that type.");
+    }
     sharedRegistry.getObjectCreatorRegistry().registerConstructor(type, constructor, fieldNames);
   }
 

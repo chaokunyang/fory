@@ -30,8 +30,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.util.Comparator;
 import java.util.Currency;
-import java.util.StringTokenizer;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,13 +48,13 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
@@ -596,88 +596,6 @@ public class Serializers {
     }
   }
 
-  public static final class StringTokenizerSerializer extends Serializer<StringTokenizer>
-      implements Shareable {
-    public StringTokenizerSerializer(Config config) {
-      super(config, StringTokenizer.class);
-    }
-
-    @Override
-    public void write(WriteContext writeContext, StringTokenizer value) {
-      checkStringTokenizerAccess();
-      MemoryBuffer buffer = writeContext.getBuffer();
-      writeContext.writeRef(Accessors.STR.getObject(value));
-      writeContext.writeRef(Accessors.DELIMITERS.getObject(value));
-      buffer.writeBoolean(Accessors.RET_DELIMS.getBoolean(value));
-      buffer.writeVarInt32(Accessors.CURRENT_POSITION.getInt(value));
-      buffer.writeVarInt32(Accessors.NEW_POSITION.getInt(value));
-      buffer.writeBoolean(Accessors.DELIMS_CHANGED.getBoolean(value));
-    }
-
-    @Override
-    public StringTokenizer read(ReadContext readContext) {
-      checkStringTokenizerAccess();
-      String str = (String) readContext.readRef();
-      String delimiters = (String) readContext.readRef();
-      boolean retDelims = readContext.getBuffer().readBoolean();
-      StringTokenizer tokenizer = new StringTokenizer(str, delimiters, retDelims);
-      restoreState(readContext.getBuffer(), tokenizer);
-      return tokenizer;
-    }
-
-    @Override
-    public StringTokenizer copy(CopyContext copyContext, StringTokenizer value) {
-      checkStringTokenizerAccess();
-      StringTokenizer tokenizer =
-          new StringTokenizer(
-              (String) Accessors.STR.getObject(value),
-              (String) Accessors.DELIMITERS.getObject(value),
-              Accessors.RET_DELIMS.getBoolean(value));
-      Accessors.CURRENT_POSITION.putInt(tokenizer, Accessors.CURRENT_POSITION.getInt(value));
-      Accessors.NEW_POSITION.putInt(tokenizer, Accessors.NEW_POSITION.getInt(value));
-      Accessors.DELIMS_CHANGED.putBoolean(tokenizer, Accessors.DELIMS_CHANGED.getBoolean(value));
-      return tokenizer;
-    }
-
-    private static void restoreState(MemoryBuffer buffer, StringTokenizer tokenizer) {
-      Accessors.CURRENT_POSITION.putInt(tokenizer, buffer.readVarInt32());
-      Accessors.NEW_POSITION.putInt(tokenizer, buffer.readVarInt32());
-      Accessors.DELIMS_CHANGED.putBoolean(tokenizer, buffer.readBoolean());
-    }
-
-    private static void checkStringTokenizerAccess() {
-      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
-        throw stringTokenizerAccessError();
-      }
-    }
-
-    private static UnsupportedOperationException stringTokenizerAccessError() {
-      return new UnsupportedOperationException(
-          "StringTokenizer serialization requires JDK internal field access. On JDK25+, open "
-              + "java.base/java.lang.invoke to org.apache.fory.core.");
-    }
-
-    private static final class Accessors {
-      private static final FieldAccessor CURRENT_POSITION =
-          FieldAccessor.createAccessor(
-              ReflectionUtils.getField(StringTokenizer.class, "currentPosition"));
-      private static final FieldAccessor NEW_POSITION =
-          FieldAccessor.createAccessor(
-              ReflectionUtils.getField(StringTokenizer.class, "newPosition"));
-      private static final FieldAccessor STR =
-          FieldAccessor.createAccessor(ReflectionUtils.getField(StringTokenizer.class, "str"));
-      private static final FieldAccessor DELIMITERS =
-          FieldAccessor.createAccessor(
-              ReflectionUtils.getField(StringTokenizer.class, "delimiters"));
-      private static final FieldAccessor RET_DELIMS =
-          FieldAccessor.createAccessor(
-              ReflectionUtils.getField(StringTokenizer.class, "retDelims"));
-      private static final FieldAccessor DELIMS_CHANGED =
-          FieldAccessor.createAccessor(
-              ReflectionUtils.getField(StringTokenizer.class, "delimsChanged"));
-    }
-  }
-
   public static final class AtomicBooleanSerializer extends Serializer<AtomicBoolean>
       implements Shareable {
 
@@ -905,15 +823,34 @@ public class Serializers {
     }
   }
 
+  public static final class ReverseComparatorSerializer extends ImmutableSerializer<Comparator>
+      implements Shareable {
+    private static final byte ORIGINAL_REPLACE_RESOLVE_PAYLOAD = 0;
+
+    public ReverseComparatorSerializer(Config config) {
+      super(config, (Class<Comparator>) Comparator.reverseOrder().getClass());
+    }
+
+    @Override
+    public void write(WriteContext writeContext, Comparator value) {
+      writeContext.getBuffer().writeByte(ORIGINAL_REPLACE_RESOLVE_PAYLOAD);
+    }
+
+    @Override
+    public Comparator read(ReadContext readContext) {
+      byte payload = readContext.getBuffer().readByte();
+      if (payload != ORIGINAL_REPLACE_RESOLVE_PAYLOAD) {
+        throw new ForyException("Unexpected reverse comparator payload flag " + payload);
+      }
+      return Comparator.reverseOrder();
+    }
+  }
+
   public static void registerDefaultSerializers(TypeResolver resolver) {
     Config config = resolver.getConfig();
     resolver.registerInternalSerializer(Class.class, new ClassSerializer(config));
     resolver.registerInternalSerializer(StringBuilder.class, new StringBuilderSerializer(config));
     resolver.registerInternalSerializer(StringBuffer.class, new StringBufferSerializer(config));
-    // Keep this internal type id reserved even when JDK collection internals are not open;
-    // otherwise payloads written with access enabled decode later collection ids incorrectly.
-    resolver.registerInternalSerializer(
-        StringTokenizer.class, new StringTokenizerSerializer(config));
     resolver.registerInternalSerializer(BigInteger.class, new BigIntegerSerializer(config));
     resolver.registerInternalSerializer(BigDecimal.class, new DecimalSerializer(config));
     resolver.registerInternalSerializer(AtomicBoolean.class, new AtomicBooleanSerializer(config));
@@ -926,5 +863,7 @@ public class Serializers {
     resolver.registerInternalSerializer(Pattern.class, new RegexSerializer(config));
     resolver.registerInternalSerializer(UUID.class, new UUIDSerializer(config));
     resolver.registerInternalSerializer(Object.class, new EmptyObjectSerializer(config));
+    resolver.registerInternalSerializer(
+        Comparator.reverseOrder().getClass(), new ReverseComparatorSerializer(config));
   }
 }

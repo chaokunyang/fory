@@ -21,6 +21,8 @@ package org.apache.fory.integration_tests;
 
 import static org.apache.fory.integration_tests.TestUtils.serDeCheck;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +30,9 @@ import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
 import org.apache.fory.annotation.ForyConstructor;
+import org.apache.fory.exception.CopyException;
+import org.apache.fory.exception.SerializationException;
+import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.test.bean.CollectionFields;
 import org.apache.fory.test.bean.MapFields;
 import org.testng.Assert;
@@ -91,6 +96,24 @@ public class ImmutableCollectionSerializersTest {
     collectionFields.map = Map.of("1", "2");
     collectionFields.map2 = Map.of("1", "2", "3", "4");
     serDeCheck(fory, collectionFields);
+  }
+
+  @Test
+  public void testSetFromMapIdentityJdk25() {
+    if (JdkVersion.MAJOR_VERSION < 25) {
+      return;
+    }
+    Fory fory = Fory.builder().withXlang(false).build();
+    fory.register(IdentityHashMap.class);
+    Set<String> set = Collections.newSetFromMap(new IdentityHashMap<>());
+    set.add(new String("a"));
+    set.add(new String("a"));
+    Assert.assertEquals(set.size(), 2);
+    SerializationException exception =
+        Assert.expectThrows(SerializationException.class, () -> fory.serialize(set));
+    Assert.assertTrue(exception.getCause() instanceof UnsupportedOperationException);
+    CopyException copyException = Assert.expectThrows(CopyException.class, () -> fory.copy(set));
+    Assert.assertTrue(copyException.getCause() instanceof UnsupportedOperationException);
   }
 
   @Data

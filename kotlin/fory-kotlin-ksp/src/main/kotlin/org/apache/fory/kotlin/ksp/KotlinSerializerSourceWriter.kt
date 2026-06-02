@@ -393,6 +393,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       .append(struct.typeName)
       .append(" {\n")
     builder.append("    val fieldValues = arrayOfNulls<Any?>(DESCRIPTORS.size)\n")
+    builder.append("    val pendingMarker = beginConstructorCopy(copyContext, value)\n")
     for (field in struct.fields) {
       builder.append("    if (hasField(constructorFieldBits!!, ").append(field.id).append(")) {\n")
       builder
@@ -406,6 +407,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         .append("]!!)\n")
       builder.append("    }\n")
     }
+    builder.append(
+      "    checkNoConstructorCopyBackrefs(fieldValues, constructorFieldIds!!, pendingMarker)\n"
+    )
     builder.append("    val copied = newConstructorObject(fieldValues)\n")
     builder.append("    copyContext.reference(value, copied)\n")
     for (field in struct.fields) {
@@ -590,73 +594,116 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    if (sameSchemaCompatible) {\n")
     builder.append("      return readSchemaConsistent(readContext)\n")
     builder.append("    }\n")
-    builder.append("    if (constructorFieldIds != null) {\n")
-    builder.append("      return readCompatibleConstructor(readContext)\n")
-    builder.append("    }\n")
+    if (
+      struct.construction == KotlinStructConstruction.CONSTRUCTOR &&
+        struct.fields.any { it.hasDefault }
+    ) {
+      builder.append("    return readCompatibleDefaultConstructor(readContext)\n")
+      builder.append("  }\n\n")
+      writeCompatibleDefaultConstructorRead()
+      return
+    }
+    if (struct.construction == KotlinStructConstruction.CONSTRUCTOR) {
+      builder.append("    if (constructorFieldIds != null) {\n")
+      builder.append("      return readCompatibleConstructor(readContext)\n")
+      builder.append("    }\n")
+    }
     if (struct.construction == KotlinStructConstruction.MUTABLE) {
       writeMutableCompatibleReadBody()
       builder.append("  }\n\n")
       return
     }
-    writePresenceVars()
-    writeLocalDeclarations()
-    builder.append("    for (i in remoteFields.indices) {\n")
-    builder.append("      val remoteField = remoteFields[i]\n")
-    builder.append("      when (remoteField.matchedId) {\n")
+    writeCompatibleValueReadBody("    ", constructorRefs = false)
+    builder.append("  }\n\n")
+  }
+
+  private fun writeCompatibleDefaultConstructorRead() {
+    builder
+      .append("  private fun readCompatibleDefaultConstructor(readContext: ReadContext): ")
+      .append(struct.typeName)
+      .append(" {\n")
+    builder.append("    beginConstructorRef(readContext)\n")
+    builder.append("    try {\n")
+    writeCompatibleValueReadBody("      ", constructorRefs = true)
+    builder.append("    } finally {\n")
+    builder.append("      endConstructorRef(readContext)\n")
+    builder.append("    }\n")
+    builder.append("  }\n\n")
+  }
+
+  private fun writeCompatibleValueReadBody(indent: String, constructorRefs: Boolean) {
+    writePresenceVars(indent)
+    writeLocalDeclarations(indent)
+    builder.append(indent).append("for (i in remoteFields.indices) {\n")
+    builder.append(indent).append("  val remoteField = remoteFields[i]\n")
+    builder.append(indent).append("  when (remoteField.matchedId) {\n")
     for (field in struct.fields) {
-      builder.append("        ").append(field.id).append(" -> {\n")
-      builder.append("          val localField = fieldsById[").append(field.id).append("]!!\n")
-      builder.append("          if (canReadRemoteField(remoteField, localField)) {\n")
+      builder.append(indent).append("    ").append(field.id).append(" -> {\n")
       builder
-        .append("            ")
+        .append(indent)
+        .append("      val localField = fieldsById[")
+        .append(field.id)
+        .append("]!!\n")
+      builder.append(indent).append("      if (canReadRemoteField(remoteField, localField)) {\n")
+      val readExpression = "readCompatibleFieldValue(readContext, remoteField, localField)"
+      val constructorReadExpression =
+        if (constructorRefs) "ctorFieldValue(readContext, $readExpression, type)"
+        else readExpression
+      builder
+        .append(indent)
+        .append("        ")
         .append(field.localName)
         .append(" = ")
         .append(
           castReadExpression(
             field,
-            "readCompatibleFieldValue(readContext, remoteField, localField)",
+            constructorReadExpression,
             compatible = true,
           )
         )
         .append("\n")
-      builder.append("            ")
+      builder.append(indent).append("        ")
       appendPresenceSet(field)
       builder.append("\n")
-      builder.append("          } else {\n")
-      builder.append("            skipField(readContext, remoteField)\n")
-      builder.append("          }\n")
-      builder.append("        }\n")
+      builder.append(indent).append("      } else {\n")
+      builder.append(indent).append("        skipField(readContext, remoteField)\n")
+      builder.append(indent).append("      }\n")
+      builder.append(indent).append("    }\n")
     }
-    builder.append("        else -> skipField(readContext, remoteField)\n")
-    builder.append("      }\n")
-    builder.append("    }\n")
-    builder.append("    var missingDefaultMask = 0L\n")
+    builder.append(indent).append("    else -> skipField(readContext, remoteField)\n")
+    builder.append(indent).append("  }\n")
+    builder.append(indent).append("}\n")
+    builder.append(indent).append("var missingDefaultMask = 0L\n")
     val defaultFields = struct.fields.filter { it.hasDefault }
     for (field in struct.fields) {
       if (!field.hasDefault && field.nullable) {
         continue
       }
-      builder.append("    if (")
+      builder.append(indent).append("if (")
       appendPresenceMissing(field)
       builder.append(") {\n")
       when {
         field.hasDefault ->
           builder
-            .append("      missingDefaultMask = missingDefaultMask or ")
+            .append(indent)
+            .append("  missingDefaultMask = missingDefaultMask or ")
             .append(1L shl defaultFields.indexOf(field))
             .append("L\n")
         else ->
           builder
-            .append("      throw DeserializationException(\"Required Kotlin field ")
+            .append(indent)
+            .append("  throw DeserializationException(\"Required Kotlin field ")
             .append(struct.qualifiedTypeName)
             .append('.')
             .append(field.name)
             .append(" is missing in compatible xlang payload\")\n")
       }
-      builder.append("    }\n")
+      builder.append(indent).append("}\n")
     }
-    writeDefaultDispatch()
-    builder.append("  }\n\n")
+    if (constructorRefs) {
+      builder.append(indent).append("checkNoUnresolvedReadRef(readContext)\n")
+    }
+    writeDefaultDispatch(indent, constructorRefs)
   }
 
   private fun writeMutableCompatibleReadBody() {
@@ -713,11 +760,11 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    return value\n")
   }
 
-  private fun writePresenceVars() {
+  private fun writePresenceVars(indent: String = "    ") {
     val maxId = struct.fields.maxOfOrNull { it.id } ?: -1
     val chunks = maxId / java.lang.Long.SIZE + 1
     for (index in 0 until chunks) {
-      builder.append("    var presentMask").append(index).append(" = 0L\n")
+      builder.append(indent).append("var presentMask").append(index).append(" = 0L\n")
     }
   }
 
@@ -853,10 +900,11 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
         )
     }
 
-  private fun writeLocalDeclarations() {
+  private fun writeLocalDeclarations(indent: String = "    ") {
     for (field in struct.fields) {
       builder
-        .append("    var ")
+        .append(indent)
+        .append("var ")
         .append(field.localName)
         .append(": ")
         .append(localVariableType(field))
@@ -866,15 +914,27 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     }
   }
 
-  private fun writeDefaultDispatch() {
+  private fun writeDefaultDispatch(indent: String = "    ", referenceConstructor: Boolean = false) {
     val defaultFields = struct.fields.filter { it.hasDefault }
     if (defaultFields.isEmpty()) {
-      builder.append("    return ")
-      appendConstructorCall(defaultMask = 0L)
-      builder.append("\n")
+      if (referenceConstructor) {
+        builder.append(indent).append("val constructed = ")
+        appendConstructorCall(defaultMask = 0L)
+        builder.append("\n")
+        builder.append(indent).append("referenceConstructorRef(readContext, constructed)\n")
+        builder.append(indent).append("return constructed\n")
+      } else {
+        builder.append(indent).append("return ")
+        appendConstructorCall(defaultMask = 0L)
+        builder.append("\n")
+      }
       return
     }
-    builder.append("    return when (missingDefaultMask) {\n")
+    if (referenceConstructor) {
+      builder.append(indent).append("val constructed = when (missingDefaultMask) {\n")
+    } else {
+      builder.append(indent).append("return when (missingDefaultMask) {\n")
+    }
     val combinations = 1L shl defaultFields.size
     for (combination in 0 until combinations) {
       var mask = 0L
@@ -883,15 +943,20 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
           mask = mask or (1L shl i)
         }
       }
-      builder.append("      ").append(mask).append("L -> ")
+      builder.append(indent).append("  ").append(mask).append("L -> ")
       appendConstructorCall(defaultMask = mask)
       builder.append("\n")
     }
     builder.append(
-      "      else -> throw DeserializationException(\"Unsupported Kotlin default argument mask \${missingDefaultMask} for "
+      indent +
+        "  else -> throw DeserializationException(\"Unsupported Kotlin default argument mask \${missingDefaultMask} for "
     )
     builder.append(struct.qualifiedTypeName).append("\")\n")
-    builder.append("    }\n")
+    builder.append(indent).append("}\n")
+    if (referenceConstructor) {
+      builder.append(indent).append("referenceConstructorRef(readContext, constructed)\n")
+      builder.append(indent).append("return constructed\n")
+    }
   }
 
   private fun appendConstructorCall(defaultMask: Long) {

@@ -20,9 +20,10 @@
 package org.apache.fory.integration_tests;
 
 import java.io.Serializable;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
 import org.apache.fory.Fory;
-import org.apache.fory.benchmark.data.MediaContent;
-import org.apache.fory.benchmark.data.Sample;
 import org.apache.fory.platform.JdkVersion;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -30,21 +31,13 @@ import org.testng.annotations.Test;
 public class ForyTest {
 
   @Test
-  public void testMediaContent() {
-    Sample object = new Sample().populate(false);
+  public void testClasspathBeanGraph() {
+    ClasspathBean object =
+        new ClasspathBean(
+            "graph", Arrays.asList(new ClasspathItem("left", 1), new ClasspathItem("right", 2)));
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
     byte[] data = fory.serialize(object);
-    Sample sample = (Sample) fory.deserialize(data);
-    Assert.assertEquals(sample, object);
-  }
-
-  @Test
-  public void testSample() {
-    MediaContent object = new MediaContent().populate(false);
-    Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
-    byte[] data = fory.serialize(object);
-    MediaContent mediaContent = (MediaContent) fory.deserialize(data);
-    Assert.assertEquals(mediaContent, object);
+    Assert.assertEquals(fory.deserialize(data), object);
   }
 
   @Test
@@ -87,6 +80,58 @@ public class ForyTest {
     @Override
     public int hashCode() {
       return name.hashCode() * 31 + age;
+    }
+  }
+
+  static final class ClasspathBean implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private String name;
+    private List<ClasspathItem> items;
+
+    private ClasspathBean(String name, List<ClasspathItem> items) {
+      this.name = name;
+      this.items = items;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof ClasspathBean)) {
+        return false;
+      }
+      ClasspathBean other = (ClasspathBean) obj;
+      return Objects.equals(name, other.name) && Objects.equals(items, other.items);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(name, items);
+    }
+  }
+
+  static final class ClasspathItem implements Serializable {
+    private static final long serialVersionUID = 1L;
+
+    private String name;
+    private int count;
+
+    private ClasspathItem(String name, int count) {
+      this.name = name;
+      this.count = count;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+      if (!(obj instanceof ClasspathItem)) {
+        return false;
+      }
+      ClasspathItem other = (ClasspathItem) obj;
+      return count == other.count && Objects.equals(name, other.name);
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(name, count);
     }
   }
 }

@@ -75,7 +75,9 @@ public class LittleEndian {
     if (AndroidSupport.IS_ANDROID) {
       return MemoryOps.getInt64(o, index);
     }
-    long v = UNSAFE.getLong(o, BYTE_ARRAY_OFFSET + index);
+    // Unsafe object offsets are long. Keep the cast so JDK8-compiled bytecode calls
+    // getLong(Object, long) when the artifact runs on JDK9+.
+    long v = UNSAFE.getLong(o, (long) BYTE_ARRAY_OFFSET + index);
     return NativeByteOrder.IS_LITTLE_ENDIAN ? v : Long.reverseBytes(v);
   }
 
@@ -87,6 +89,7 @@ public class LittleEndian {
     if (!NativeByteOrder.IS_LITTLE_ENDIAN) {
       value = Long.reverseBytes(value);
     }
-    UNSAFE.putLong(o, BYTE_ARRAY_OFFSET + index, value);
+    // See getInt64: the cast controls the Unsafe method descriptor in bytecode.
+    UNSAFE.putLong(o, (long) BYTE_ARRAY_OFFSET + index, value);
   }
 }

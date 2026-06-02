@@ -94,10 +94,13 @@ public interface BaseFory {
    * Register an explicit constructor-to-field mapping for {@code type}.
    *
    * <p>The constructor arguments are populated from {@code fieldNames} in order. This is useful for
-   * third-party classes that cannot annotate a constructor with {@code @ForyConstructor}.
+   * third-party classes that cannot annotate a constructor with {@code @ForyConstructor}. {@code
+   * fieldNames} must contain at least one field; ordinary no-argument constructors should not be
+   * registered because they do not need constructor-to-field binding. Java platform classes are
+   * owned by built-in serializers and cannot use explicit constructor binding.
    *
-   * <p>Call this during setup before top-level serialization, deserialization, or copy operations
-   * start.
+   * <p>Call this during setup before serializers for {@code type} are requested and before
+   * top-level serialization, deserialization, or copy operations start.
    */
   <T> void registerConstructor(Class<T> type, Constructor<T> constructor, String... fieldNames);
 

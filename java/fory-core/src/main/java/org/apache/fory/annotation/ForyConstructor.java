@@ -34,6 +34,9 @@ public @interface ForyConstructor {
   /**
    * Field names in constructor argument order.
    *
+   * <p>At least one field must be listed. Ordinary no-argument constructors should not be annotated
+   * because they do not need constructor-to-field binding.
+   *
    * <p>Every name must refer to one non-static serialized field declared by the target class or a
    * superclass. Duplicate field names in a class hierarchy are not bindable by this annotation.
    */

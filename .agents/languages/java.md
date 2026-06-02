@@ -46,6 +46,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   `MemoryOps` call, keep JVM bulk loads/stores local with raw Unsafe operations instead of routing
   through branchful `_unsafeGet*` or `_unsafePut*` helpers. Add or preserve source comments that
   explain this inlining invariant when editing these methods.
+- Unsafe object-offset arithmetic must stay `long` before calls such as `getLong(Object, long)` or
+  `putLong(Object, long)`. An all-`int` expression can compile under JDK8 to a bytecode descriptor
+  that fails with `NoSuchMethodError` on JDK9+.
 - In primitive-array swap-endian readers, do not loop through `MemoryBuffer._unsafeGet*` helpers.
   Copy the payload through the typed payload API, then swap destination values locally so the path
   stays stream-safe and avoids Android-dispatch helper drift.
@@ -56,7 +59,37 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Keep JDK25+ unsafe-removal implementation invariants in agent/design docs and tests, not user guides. User guides should document user actions such as `--sun-misc-unsafe-memory-access=deny`, `java.base/java.lang.invoke` opens, JDK26+ `--enable-final-field-mutation`, package opens for user named modules, and public APIs such as `@ForyConstructor` and `BaseFory.registerConstructor(...)`; do not expose internal serializer names, owner-model rationale, or avoided fallback strategies there.
 - For JDK25+ zero-Unsafe final-field behavior, distinguish JDK25 from JDK26+: JDK25 has no final-field mutation flag requirement, while JDK26+ requires `--enable-final-field-mutation` for post-construction final-field writes.
 - For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory` or `jdk.internal.reflect.ReflectionFactory`. Serializable classes without a no-arg constructor may use `ObjectStreamClass.newInstance` through the trusted lookup owner; non-Serializable classes without a no-arg constructor require `@ForyConstructor`, `BaseFory.registerConstructor(...)`, record construction, or a custom serializer.
+- Treat `ByteArrayOutputStream` and `ByteArrayInputStream` as ordinary streams on every JDK. Do
+  not restore private-buffer wrapping for JDK8-24 performance, because that reintroduces
+  `java.base/java.io` private-field ownership and module-open requirements.
+- `ObjectStreamSerializer` must use its stream-specific object creator path and must not use
+  `TypeResolver.getObjectCreator`. `@ForyConstructor` and registered constructor mappings require
+  field values up front, while ObjectStream reconstruction creates the object before stream fields
+  are read. This path must not invoke Serializable class constructors, including no-arg
+  constructors; the JDK8-24 ReflectionFactory template constructor must be the first
+  non-Serializable superclass no-arg constructor, and private no-arg constructors must be rejected
+  instead of made accessible. Package-private no-arg constructors are valid only for same-package
+  Serializable subclasses.
+- Root codegen and builder classes that still need Unsafe on JDK8-24 must route symbolic Unsafe
+  access through a helper with a Java 25 replacement. Do not leave `_JDKAccess.unsafe()` or
+  `sun.misc.Unsafe` references in JDK25-visible classes outside matching `java25` replacements.
+- JDK25+ collection serializers must fail unsupported `Collections.newSetFromMap` backing maps
+  before writing or copying. Do not rewrite them to `HashMap`, because that changes equality
+  semantics and can drop entries.
+- Do not enable Java or Kotlin parameter-name metadata (`-parameters`, `maven.compiler.parameters`, or Kotlin `javaParameters`) to make constructor binding work. Constructor binding must be driven by explicit field mappings from `@ForyConstructor`, `BaseFory.registerConstructor(...)`, or generated metadata.
 - Constructor-bound serializers must cache constructor field metadata during serializer initialization. Do not call defensive-copy metadata getters such as `getConstructorFieldTypes()` from per-object read paths.
+- Explicit constructor binding is for user and third-party classes, not Java platform types. Do not use
+  `java.*` internals such as `String` fields as constructor-binding test data; JDK built-in classes
+  are owned by their serializers.
+- Runtime serializers and generated serializers must use the same constructor-copy lifecycle:
+  install a pending marker before copying constructor-bound fields, run field serializers normally,
+  reject copied constructor arguments that still retain the marker, then construct and reference the
+  real copy. Do not implement a separate raw-field pre-scan or leave a generated path without the
+  marker guard.
+- When a `Throwable` is created without running `Throwable` constructors, restore the private
+  `cause` and `suppressedExceptions` sentinels directly before exposing the object. Do not call
+  `initCause` or `addSuppressed` on a constructor-bypassed `Throwable` whose sentinels are still
+  absent.
 - For JDK25+ CI, do not run core runtime tests from raw Maven reactor `target/classes`. Those classes bypass `META-INF/versions/25` and exercise the JDK8-24 root implementation. Build/install the multi-release artifact first, then verify the zero-Unsafe path through the JPMS module-path suite where `org.apache.fory.core` is the real access target.
 - Do not make GraalVM native-image JDK25+ pass by opening `java.lang.invoke` to `ALL-UNNAMED`. Keep zero-Unsafe verification on JPMS JVM tests unless the native-image path itself runs Fory as a named module and the produced binary passes.
 
@@ -108,4 +141,4 @@ mvn -T16 test -Dtest=org.apache.fory.TestClass#testMethod
 - Set `ENABLE_FORY_GENERATED_CLASS_UNIQUE_ID=false` when you need stable generated class names.
 - When debugging Java tests or runtime behavior, set `FORY_LOG_LEVEL=INFO` unless a narrower
   level is required.
-- In IntelliJ IDEA, use a JDK 11+ project SDK and disable `--release` if it blocks `sun.misc.Unsafe` access.
+- In IntelliJ IDEA, use the same JDK and module flags as the Maven profile you are debugging.

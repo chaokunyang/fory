@@ -423,135 +423,15 @@
                 </goals>
                 <configuration>
                   <target>
-                    <property
-                        name="jdk25.mrjar.check.dir"
-                        value="${project.build.directory}/jdk25-mrjar-check"/>
-                    <delete dir="${jdk25.mrjar.check.dir}"/>
-                    <mkdir dir="${jdk25.mrjar.check.dir}"/>
-                    <!-- Java 16 vector classes are versioned-only, so this profile checks only
-                         the JDK25 replacement classes. -->
-                    <unzip
-                        src="${project.build.directory}/${project.build.finalName}.jar"
-                        dest="${jdk25.mrjar.check.dir}">
-                      <patternset>
-                        <include name="org/apache/fory/platform/UnsafeOps.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/memory/LittleEndian.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/platform/internal/DefineClass.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/platform/internal/_Lookup.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/builder/UnsafeCodegenSupport.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"/>
-                        <include
-                            name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.class"/>
-                        <include name="META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"/>
-                        <include name="META-INF/versions/25/module-info.class"/>
-                      </patternset>
-                    </unzip>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/org/apache/fory/platform/UnsafeOps.class"
-                        property="jdk25.root.unsafeops.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/UnsafeOps.class"
-                        property="jdk25.unsafeops.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/memory/LittleEndian.class"
-                        property="jdk25.littleendian.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"
-                        property="jdk25.memorybuffer.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/DefineClass.class"
-                        property="jdk25.defineclass.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_Lookup.class"
-                        property="jdk25.lookup.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"
-                        property="jdk25.unsafeutils.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/builder/UnsafeCodegenSupport.class"
-                        property="jdk25.builder.unsafecodegen.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"
-                        property="jdk25.fieldaccessorstrategy.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"
-                        property="jdk25.hiddenfieldaccessorfactory.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.class"
-                        property="jdk25.constructorbypassallocator.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"
-                        property="jdk25.platformstring.present"/>
-                    <available
-                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/module-info.class"
-                        property="jdk25.moduleinfo.present"/>
-                    <fail
-                        if="jdk25.root.unsafeops.present"
-                        message="Root UnsafeOps class must not be packaged in fory-core."/>
-                    <fail
-                        if="jdk25.unsafeops.present"
-                        message="JDK25 multi-release UnsafeOps class must not be packaged in fory-core."/>
-                    <fail
-                        unless="jdk25.littleendian.present"
-                        message="JDK25 multi-release LittleEndian class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.memorybuffer.present"
-                        message="JDK25 multi-release MemoryBuffer class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.defineclass.present"
-                        message="JDK25 multi-release DefineClass class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.lookup.present"
-                        message="JDK25 multi-release _Lookup class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.unsafeutils.present"
-                        message="JDK25 multi-release _UnsafeUtils class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.builder.unsafecodegen.present"
-                        message="JDK25 multi-release UnsafeCodegenSupport class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.fieldaccessorstrategy.present"
-                        message="JDK25 multi-release FieldAccessorStrategy class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.hiddenfieldaccessorfactory.present"
-                        message="JDK25 multi-release HiddenFieldAccessorFactory class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.constructorbypassallocator.present"
-                        message="JDK25 multi-release ConstructorBypassAllocator class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.platformstring.present"
-                        message="JDK25 multi-release PlatformStringUtils class is missing from the packaged fory-core jar."/>
-                    <fail
-                        unless="jdk25.moduleinfo.present"
-                        message="JDK25 multi-release module-info.class is missing from the packaged fory-core jar."/>
-                    <exec
-                        executable="${java.home}/bin/jdeps"
-                        failonerror="true"
-                        outputproperty="jdk25.jdeps.output">
-                      <arg value="--multi-release"/>
-                      <arg value="25"/>
-                      <arg value="--ignore-missing-deps"/>
-                      <arg value="-include"/>
-                      <arg value="org\.apache\.fory\..*"/>
-                      <arg value="-verbose:class"/>
+                    <java
+                        classname="org.apache.fory.builder.Jdk25MultiReleaseJarVerifier"
+                        fork="true"
+                        failonerror="true">
+                      <classpath>
+                        <pathelement location="${project.build.testOutputDirectory}"/>
+                      </classpath>
                       <arg value="${project.build.directory}/${project.build.finalName}.jar"/>
-                    </exec>
-                    <condition property="jdk25.jdeps.sunmisc.present">
-                      <contains string="${jdk25.jdeps.output}" substring="-&gt; sun.misc"/>
-                    </condition>
-                    <condition property="jdk25.jdeps.jdkinternalreflect.present">
-                      <contains string="${jdk25.jdeps.output}" substring="-&gt; jdk.internal.reflect"/>
-                    </condition>
-                    <fail
-                        if="jdk25.jdeps.sunmisc.present"
-                        message="JDK25 multi-release fory-core jar must not expose sun.misc dependencies in the resolved class graph."/>
-                    <fail
-                        if="jdk25.jdeps.jdkinternalreflect.present"
-                        message="JDK25 multi-release fory-core jar must not expose jdk.internal.reflect dependencies in the resolved class graph."/>
+                    </java>
                   </target>
                 </configuration>
               </execution>

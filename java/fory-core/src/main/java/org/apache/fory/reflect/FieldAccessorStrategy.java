@@ -135,11 +135,11 @@ final class FieldAccessorStrategy {
     }
   }
 
-  private abstract static class UnsafeAccessor extends FieldAccessor {
+  private abstract static class InstanceAccessor extends FieldAccessor {
     protected final long fieldOffset;
     private final int accessKind;
 
-    UnsafeAccessor(Field field) {
+    InstanceAccessor(Field field) {
       super(field);
       fieldOffset = fieldOffset(field);
       accessKind = accessKind(field);
@@ -188,7 +188,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive boolean accessor. */
-  public static class BooleanAccessor extends UnsafeAccessor {
+  public static class BooleanAccessor extends InstanceAccessor {
     public BooleanAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == boolean.class);
@@ -218,7 +218,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive byte accessor. */
-  public static class ByteAccessor extends UnsafeAccessor {
+  public static class ByteAccessor extends InstanceAccessor {
     public ByteAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == byte.class);
@@ -248,7 +248,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive char accessor. */
-  public static class CharAccessor extends UnsafeAccessor {
+  public static class CharAccessor extends InstanceAccessor {
     public CharAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == char.class);
@@ -278,7 +278,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive short accessor. */
-  public static class ShortAccessor extends UnsafeAccessor {
+  public static class ShortAccessor extends InstanceAccessor {
     public ShortAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == short.class);
@@ -308,7 +308,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive int accessor. */
-  public static class IntAccessor extends UnsafeAccessor {
+  public static class IntAccessor extends InstanceAccessor {
     public IntAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == int.class);
@@ -338,7 +338,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive long accessor. */
-  public static class LongAccessor extends UnsafeAccessor {
+  public static class LongAccessor extends InstanceAccessor {
     public LongAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == long.class);
@@ -368,7 +368,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive float accessor. */
-  public static class FloatAccessor extends UnsafeAccessor {
+  public static class FloatAccessor extends InstanceAccessor {
     public FloatAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == float.class);
@@ -398,7 +398,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Primitive double accessor. */
-  public static class DoubleAccessor extends UnsafeAccessor {
+  public static class DoubleAccessor extends InstanceAccessor {
     public DoubleAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(field.getType() == double.class);
@@ -428,7 +428,7 @@ final class FieldAccessorStrategy {
   }
 
   /** Object accessor. */
-  public static class ObjectAccessor extends UnsafeAccessor {
+  public static class ObjectAccessor extends InstanceAccessor {
     public ObjectAccessor(Field field) {
       super(field);
       Preconditions.checkArgument(!TypeUtils.isPrimitive(field.getType()));

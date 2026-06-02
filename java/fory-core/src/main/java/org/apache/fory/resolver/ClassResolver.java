@@ -1867,12 +1867,12 @@ public class ClassResolver extends TypeResolver {
       RecordUtils.getRecordConstructor(cls);
       RecordUtils.getRecordComponents(cls);
     }
-    if (needsGraalvmObjectCreator(cls, serializerClass)) {
-      getObjectCreator(cls);
+    if (needsGraalvmObjectInstantiator(cls, serializerClass)) {
+      getObjectInstantiator(cls);
     }
   }
 
-  private boolean needsGraalvmObjectCreator(
+  private boolean needsGraalvmObjectInstantiator(
       Class<?> cls, Class<? extends Serializer> serializerClass) {
     if (cls.isArray()) {
       return false;

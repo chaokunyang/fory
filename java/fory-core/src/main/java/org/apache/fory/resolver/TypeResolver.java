@@ -77,7 +77,7 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.serializer.CodegenSerializer;
@@ -343,14 +343,15 @@ public abstract class TypeResolver {
       Class<?> type, String namespace, String typeName, Serializer<?> serializer);
 
   /**
-   * Returns the runtime-scoped object creator for {@code type}.
+   * Returns the runtime-scoped object instantiator for {@code type}.
    *
-   * <p>The creator respects constructor mappings registered through {@code Fory} and annotations on
-   * the target type.
+   * <p>The instantiator follows the normal Java object model used by Fory serializers. Records use
+   * their canonical constructor, while ordinary classes use supported empty construction followed
+   * by field restoration.
    */
   @Internal
-  public final <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
-    return sharedRegistry.getObjectCreator(type);
+  public final <T> ObjectInstantiator<T> getObjectInstantiator(Class<T> type) {
+    return sharedRegistry.getObjectInstantiator(type);
   }
 
   /**

@@ -28,12 +28,12 @@ import org.apache.fory.TestUtils;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.reflect.ObjectCreators.ParentNoArgCtrObjectCreator;
+import org.apache.fory.reflect.ObjectInstantiators.ParentNoArgCtrInstantiator;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
 @SuppressWarnings("rawtypes")
-public class ObjectCreatorsTest {
+public class ObjectInstantiatorsTest {
 
   static class NoCtrTestClass {
     int f1;
@@ -44,22 +44,22 @@ public class ObjectCreatorsTest {
   }
 
   @Test
-  public void testObjectCreator() {
+  public void testObjectInstantiator() {
     if (JdkVersion.MAJOR_VERSION >= 25) {
       return;
     }
-    ParentNoArgCtrObjectCreator<ArrayBlockingQueue> creator =
-        new ParentNoArgCtrObjectCreator<>(ArrayBlockingQueue.class);
-    Assert.assertEquals(creator.newInstance().getClass(), ArrayBlockingQueue.class);
+    ParentNoArgCtrInstantiator<ArrayBlockingQueue> instantiator =
+        new ParentNoArgCtrInstantiator<>(ArrayBlockingQueue.class);
+    Assert.assertEquals(instantiator.newInstance().getClass(), ArrayBlockingQueue.class);
     Assert.assertEquals(
-        new ParentNoArgCtrObjectCreator<>(NoCtrTestClass.class).newInstance().getClass(),
+        new ParentNoArgCtrInstantiator<>(NoCtrTestClass.class).newInstance().getClass(),
         NoCtrTestClass.class);
   }
 
   @Test
-  public void testAndroidObjectCreators() throws Exception {
+  public void testAndroidObjectInstantiators() throws Exception {
     Process process =
-        new ProcessBuilder(TestUtils.javaCommand(AndroidObjectCreatorProbe.class))
+        new ProcessBuilder(TestUtils.javaCommand(AndroidObjectInstantiatorProbe.class))
             .redirectErrorStream(true)
             .start();
     String output = readFully(process.getInputStream());
@@ -76,22 +76,22 @@ public class ObjectCreatorsTest {
     return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
   }
 
-  public static final class AndroidObjectCreatorProbe {
+  public static final class AndroidObjectInstantiatorProbe {
     public static void main(String[] args) {
       System.setProperty("java.vm.name", "Dalvik");
       System.setProperty("java.runtime.name", "Android Runtime");
       check(AndroidSupport.IS_ANDROID, "AndroidSupport should detect Dalvik runtime");
 
-      ObjectCreator<AndroidPrivateNoArg> creator =
-          ObjectCreators.getObjectCreator(AndroidPrivateNoArg.class);
-      AndroidPrivateNoArg instance = creator.newInstance();
+      ObjectInstantiator<AndroidPrivateNoArg> instantiator =
+          ObjectInstantiators.getObjectInstantiator(AndroidPrivateNoArg.class);
+      AndroidPrivateNoArg instance = instantiator.newInstance();
       check(instance.value == 7, "Android reflective constructor should initialize fields");
 
-      ObjectCreator<AndroidNoNoArg> unsupported =
-          ObjectCreators.getObjectCreator(AndroidNoNoArg.class);
+      ObjectInstantiator<AndroidNoNoArg> unsupported =
+          ObjectInstantiators.getObjectInstantiator(AndroidNoNoArg.class);
       try {
         unsupported.newInstance();
-        throw new AssertionError("Android creator without no-arg constructor should fail");
+        throw new AssertionError("Android instantiator without no-arg constructor should fail");
       } catch (ForyException expected) {
         check(
             expected.getMessage().contains("without an accessible no-arg constructor"),

@@ -462,7 +462,7 @@ class ProcessorValidationTest {
 
     assertTrue(
       source.contains(
-        "return User(counts = (fieldValues[0] as kotlin.collections.Map<String, Int>), names = (fieldValues[1] as kotlin.collections.List<java.util.TreeSet<String>>), arrays = (fieldValues[2] as kotlin.collections.List<IntArray>), nestedCounts = (fieldValues[3] as java.util.TreeMap<String, java.util.TreeSet<String>>))"
+        "return User(counts = (fieldValues[0] as java.util.TreeMap<String, Int>), names = (fieldValues[1] as java.util.List<java.util.TreeSet<String>>), arrays = (fieldValues[2] as java.util.List<IntArray>), nestedCounts = (fieldValues[3] as java.util.TreeMap<String, java.util.TreeSet<String>>))"
       )
     )
     assertTrue(
@@ -867,6 +867,8 @@ class ProcessorValidationTest {
     assertTrue(source.contains("presentMask0 = presentMask0 or (1L shl 0)"))
     assertTrue(source.contains("Required Kotlin field example.Node.id is missing"))
     assertTrue(source.contains("copyContext.reference(value, copy)"))
+    assertFalse(source.contains("readCompatibleConstructor("))
+    assertFalse(source.contains("newConstructorObject("))
     assertTrue(!source.contains("return Node(parent ="))
   }
 

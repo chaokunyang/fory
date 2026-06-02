@@ -118,7 +118,7 @@ public class ReflectionUtilsTest {
     Assert.assertNull(ctr);
 
     // ReflectionFactory serialization constructors are invoked directly by
-    // ParentNoArgCtrObjectCreator.
+    // ParentNoArgCtrInstantiator.
     // MethodHandle handle = lookup.unreflectConstructor(ctr);
     // System.out.println(ctr);
     // System.out.println(handle);

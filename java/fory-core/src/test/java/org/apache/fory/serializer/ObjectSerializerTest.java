@@ -21,7 +21,6 @@ package org.apache.fory.serializer;
 
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotSame;
-import static org.testng.Assert.assertSame;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

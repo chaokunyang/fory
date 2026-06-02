@@ -52,7 +52,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
@@ -74,10 +74,13 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ChildContainerSerializers {
-  private static final ObjectCreator<Object> FIELD_ONLY_CREATOR = new FieldOnlyCreator();
+  // Child-container slot serializers populate fields on the container instance created by the
+  // concrete container serializer. Parent slots do not own object construction.
+  private static final ObjectInstantiator<Object> FIELD_ONLY_INSTANTIATOR =
+      new FieldOnlyInstantiator();
 
-  private static final class FieldOnlyCreator extends ObjectCreator<Object> {
-    private FieldOnlyCreator() {
+  private static final class FieldOnlyInstantiator extends ObjectInstantiator<Object> {
+    private FieldOnlyInstantiator() {
       super(Object.class);
     }
 
@@ -644,7 +647,7 @@ public class ChildContainerSerializers {
         slotsSerializer =
             new CompatibleLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false, slotCreator());
+        slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false, slotInstantiator());
       }
       serializers.add(slotsSerializer);
       cls = (Class<T>) cls.getSuperclass();
@@ -654,8 +657,8 @@ public class ChildContainerSerializers {
     return serializers.toArray(new Serializer[0]);
   }
 
-  private static <T> ObjectCreator<T> slotCreator() {
-    return (ObjectCreator<T>) FIELD_ONLY_CREATOR;
+  private static <T> ObjectInstantiator<T> slotInstantiator() {
+    return (ObjectInstantiator<T>) FIELD_ONLY_INSTANTIATOR;
   }
 
   private static void readAndSetFields(

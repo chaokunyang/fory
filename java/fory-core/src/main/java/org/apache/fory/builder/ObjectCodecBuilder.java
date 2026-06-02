@@ -901,9 +901,10 @@ public class ObjectCodecBuilder extends BaseObjectCodecBuilder {
         FieldsCollector collector = (FieldsCollector) bean;
         bean = createRecord(collector.recordValuesMap);
       } else {
-        typeResolver.getObjectCreator(beanClass); // trigger cache and make error raised early
+        typeResolver.getObjectInstantiator(beanClass); // trigger cache and make error raised early
         bean =
-            new Invoke(getObjectCreator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, bean);
+            new Invoke(
+                getObjectInstantiator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, bean);
       }
     }
     expressions.add(new Expression.Return(bean));

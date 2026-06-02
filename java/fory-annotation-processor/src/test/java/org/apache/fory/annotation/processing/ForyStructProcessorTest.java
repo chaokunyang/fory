@@ -134,7 +134,8 @@ public class ForyStructProcessorTest {
                 + "  public int getAge() { return age; }\n"
                 + "}\n");
     Assert.assertTrue(result.success, result.diagnostics());
-    String generatedSource = result.generatedSource("test/FinalFieldStruct_ForyNativeSerializer.java");
+    String generatedSource =
+        result.generatedSource("test/FinalFieldStruct_ForyNativeSerializer.java");
     Assert.assertFalse(generatedSource.contains("constructorFieldBits"), generatedSource);
     Assert.assertTrue(generatedSource.contains("setGeneratedFieldValue"), generatedSource);
     try (URLClassLoader loader = result.classLoader()) {

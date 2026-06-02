@@ -176,14 +176,14 @@ public class MapSerializersTest extends ForyTestBase {
     // testTreeMap
     TreeMap<String, String> map =
         new TreeMap<>(
-                (s1, s2) -> {
-                  int delta = s1.length() - s2.length();
-                  if (delta == 0) {
-                    return s1.compareTo(s2);
-                  } else {
-                    return delta;
-                  }
-                });
+            (s1, s2) -> {
+              int delta = s1.length() - s2.length();
+              if (delta == 0) {
+                return s1.compareTo(s2);
+              } else {
+                return delta;
+              }
+            });
     map.put("str1", "1");
     map.put("str2", "1");
     assertEquals(map, serDe(fory, map));
@@ -379,14 +379,14 @@ public class MapSerializersTest extends ForyTestBase {
             .build();
     TreeMap<String, String> map =
         new TreeMap<>(
-                (s1, s2) -> {
-                  int delta = s1.length() - s2.length();
-                  if (delta == 0) {
-                    return s1.compareTo(s2);
-                  } else {
-                    return delta;
-                  }
-                });
+            (s1, s2) -> {
+              int delta = s1.length() - s2.length();
+              if (delta == 0) {
+                return s1.compareTo(s2);
+              } else {
+                return delta;
+              }
+            });
     map.put("str1", "1");
     map.put("str2", "1");
     assertEquals(map, serDe(fory, map));
@@ -398,14 +398,14 @@ public class MapSerializersTest extends ForyTestBase {
   public void testTreeMap(Fory fory) {
     TreeMap<String, String> map =
         new TreeMap<>(
-                (s1, s2) -> {
-                  int delta = s1.length() - s2.length();
-                  if (delta == 0) {
-                    return s1.compareTo(s2);
-                  } else {
-                    return delta;
-                  }
-                });
+            (s1, s2) -> {
+              int delta = s1.length() - s2.length();
+              if (delta == 0) {
+                return s1.compareTo(s2);
+              } else {
+                return delta;
+              }
+            });
     map.put("str1", "1");
     map.put("str2", "1");
     copyCheck(fory, map);

@@ -26,20 +26,20 @@ import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._UnsafeUtils;
 import sun.misc.Unsafe;
 
-/** Internal JDK8-24 constructor-bypass allocator used by object creators. */
+/** JDK8-24 Unsafe-backed instantiator for classes without an invocable constructor. */
+@SuppressWarnings("unchecked")
 @Internal
-final class ConstructorBypassAllocator<T> {
+final class UnsafeObjectInstantiator<T> extends ObjectInstantiator<T> {
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
   private static final boolean UNSAFE_ALLOCATION_AVAILABLE =
       UNSAFE != null && JdkVersion.MAJOR_VERSION < 25;
 
-  private final Class<T> type;
-
-  ConstructorBypassAllocator(Class<T> type) {
-    this.type = type;
+  UnsafeObjectInstantiator(Class<T> type) {
+    super(type);
   }
 
-  T allocate() {
+  @Override
+  public T newInstance() {
     if (!UNSAFE_ALLOCATION_AVAILABLE) {
       throw unsupported(type);
     }
@@ -48,6 +48,11 @@ final class ConstructorBypassAllocator<T> {
     } catch (InstantiationException e) {
       throw allocationFailed(type, e);
     }
+  }
+
+  @Override
+  public T newInstanceWithArguments(Object... arguments) {
+    throw new UnsupportedOperationException();
   }
 
   private static ForyException unsupported(Class<?> type) {

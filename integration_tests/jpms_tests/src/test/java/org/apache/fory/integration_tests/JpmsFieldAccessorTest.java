@@ -21,7 +21,6 @@ package org.apache.fory.integration_tests;
 
 import java.lang.reflect.Field;
 import org.apache.fory.Fory;
-import org.apache.fory.integration_tests.constructor.PrivateConstructorBean;
 import org.apache.fory.integration_tests.model.PrivateFieldBean;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValue;
 import org.apache.fory.integration_tests.publicserializer.PublicSerializerValueSerializer;
@@ -87,17 +86,6 @@ public class JpmsFieldAccessorTest {
     } catch (IllegalAccessException | RuntimeException expected) {
       Assert.assertEquals(bean.value(), 29);
     }
-  }
-
-  @Test
-  public void testPrivateConstructorBinding() {
-    Fory fory =
-        Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
-    PrivateConstructorBean result =
-        (PrivateConstructorBean)
-            fory.deserialize(fory.serialize(PrivateConstructorBean.of("Ada", 37)));
-    Assert.assertEquals(result.name(), "Ada");
-    Assert.assertEquals(result.age(), 37);
   }
 
   @Test

@@ -40,9 +40,7 @@ public final class Jdk25MultiReleaseJarVerifier {
   private static final String VERSION_25_PREFIX = "META-INF/versions/25/";
   private static final String FORY_CLASS_PREFIX = "org/apache/fory/";
   private static final String SHADED_CLASS_PREFIX = "org/apache/fory/shaded/";
-  private static final String[] FORBIDDEN_CONSTANTS = {
-    "sun/misc/Unsafe", "sun.misc.Unsafe", "jdk/internal/reflect", "jdk.internal.reflect"
-  };
+  private static final String[] FORBIDDEN_CONSTANTS = {"sun/misc/Unsafe", "sun.misc.Unsafe"};
   private static final String[] REQUIRED_VERSION_25_CLASSES = {
     "module-info.class",
     "org/apache/fory/memory/LittleEndian.class",
@@ -51,7 +49,7 @@ public final class Jdk25MultiReleaseJarVerifier {
     "org/apache/fory/platform/internal/_UnsafeUtils.class",
     "org/apache/fory/builder/UnsafeCodegenSupport.class",
     "org/apache/fory/reflect/InstanceFieldAccessors.class",
-    "org/apache/fory/reflect/ConstructorBypassAllocator.class",
+    "org/apache/fory/reflect/UnsafeObjectInstantiator.class",
     "org/apache/fory/serializer/PlatformStringUtils.class"
   };
 

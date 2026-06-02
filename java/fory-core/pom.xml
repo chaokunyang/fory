@@ -470,7 +470,7 @@
                         <include
                             name="META-INF/versions/25/org/apache/fory/reflect/InstanceFieldAccessors.java"/>
                         <include
-                            name="META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"/>
+                            name="META-INF/versions/25/org/apache/fory/reflect/UnsafeObjectInstantiator.java"/>
                         <include name="META-INF/versions/25/module-info.java"/>
                       </patternset>
                     </unzip>
@@ -487,8 +487,8 @@
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/InstanceFieldAccessors.java"
                         property="jdk25.instancefieldaccessors.source.present"/>
                     <available
-                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"
-                        property="jdk25.constructorbypassallocator.source.present"/>
+                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/UnsafeObjectInstantiator.java"
+                        property="jdk25.unsafeobjectinstantiator.source.present"/>
                     <available
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/module-info.java"
                         property="jdk25.moduleinfo.source.present"/>
@@ -505,8 +505,8 @@
                         unless="jdk25.instancefieldaccessors.source.present"
                         message="JDK25 versioned InstanceFieldAccessors source is missing from the source jar."/>
                     <fail
-                        unless="jdk25.constructorbypassallocator.source.present"
-                        message="JDK25 versioned ConstructorBypassAllocator source is missing from the source jar."/>
+                        unless="jdk25.unsafeobjectinstantiator.source.present"
+                        message="JDK25 versioned UnsafeObjectInstantiator source is missing from the source jar."/>
                     <fail
                         unless="jdk25.moduleinfo.source.present"
                         message="JDK25 versioned module-info.java source is missing from the source jar."/>

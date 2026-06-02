@@ -46,7 +46,7 @@ import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.reflect.ObjectCreators;
+import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.type.Descriptor;
 import org.testng.SkipException;
@@ -180,7 +180,7 @@ public class TestUtils {
 
   public static <T> T unsafeCopy(T obj) {
     @SuppressWarnings("unchecked")
-    T newInstance = (T) ObjectCreators.getObjectCreator(obj.getClass()).newInstance();
+    T newInstance = (T) ObjectInstantiators.getObjectInstantiator(obj.getClass()).newInstance();
     for (Field field : ReflectionUtils.getFields(obj.getClass(), true)) {
       if (!Modifier.isStatic(field.getModifiers())) {
         // Don't cache accessors by `obj.getClass()` using WeakHashMap, the `field` will reference

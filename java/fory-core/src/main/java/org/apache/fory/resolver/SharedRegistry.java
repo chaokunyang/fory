@@ -39,8 +39,8 @@ import org.apache.fory.meta.MetaString;
 import org.apache.fory.meta.MetaStringEncoder;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
+import org.apache.fory.reflect.ObjectInstantiator;
+import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.type.Descriptor;
 import org.apache.fory.type.DescriptorGrouper;
@@ -83,9 +83,9 @@ public final class SharedRegistry {
       new ConcurrentIdentityMap<>();
   final ConcurrentIdentityMap<Class<?>, Serializer<?>> registeredSerializerCache =
       new ConcurrentIdentityMap<>();
-  private final ConcurrentHashMap<Class<?>, ObjectCreator<?>> objectCreatorCache =
+  private final ConcurrentHashMap<Class<?>, ObjectInstantiator<?>> objectInstantiatorCache =
       new ConcurrentHashMap<>();
-  private final ConcurrentHashMap<Class<?>, ObjectCreator<?>> objectStreamCreatorCache =
+  private final ConcurrentHashMap<Class<?>, ObjectInstantiator<?>> objectStreamInstantiatorCache =
       new ConcurrentHashMap<>();
   final StaticGeneratedSerializerRegistry staticGeneratedSerializerRegistry =
       new StaticGeneratedSerializerRegistry();
@@ -132,22 +132,18 @@ public final class SharedRegistry {
   }
 
   @SuppressWarnings("unchecked")
-  public <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
-    return (ObjectCreator<T>)
-        objectCreatorCache.computeIfAbsent(type, ObjectCreators::createObjectCreator);
+  public <T> ObjectInstantiator<T> getObjectInstantiator(Class<T> type) {
+    return (ObjectInstantiator<T>)
+        objectInstantiatorCache.computeIfAbsent(
+            type, ObjectInstantiators::createObjectInstantiator);
   }
 
-  /**
-   * Returns the runtime-scoped creator used by Java ObjectStream-compatible serializers.
-   *
-   * <p>ObjectStream reconstruction creates an empty instance before stream fields are read, so
-   * explicit constructor mappings registered for normal object serializers are not semantically
-   * valid for this path.
-   */
+  /** Returns the runtime-scoped instantiator used by Java ObjectStream-compatible serializers. */
   @SuppressWarnings("unchecked")
-  public <T> ObjectCreator<T> getObjectStreamCreator(Class<T> type) {
-    return (ObjectCreator<T>)
-        objectStreamCreatorCache.computeIfAbsent(type, ObjectCreators::createObjectStreamCreator);
+  public <T> ObjectInstantiator<T> getObjectStreamInstantiator(Class<T> type) {
+    return (ObjectInstantiator<T>)
+        objectStreamInstantiatorCache.computeIfAbsent(
+            type, ObjectInstantiators::createObjectStreamInstantiator);
   }
 
   TypeInfo cacheRegisteredTypeInfo(Class<?> type, TypeInfo typeInfo) {

@@ -60,8 +60,8 @@ import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.InstanceFieldAccessors.InstanceAccessor;
-import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
+import org.apache.fory.reflect.ObjectInstantiator;
+import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.TypeInfo;
@@ -611,8 +611,9 @@ public abstract class CodecBuilder {
       return new Expression.NewInstance(beanType);
     } else {
       if (JdkVersion.MAJOR_VERSION >= 25) {
-        cacheObjectCreator(beanClass); // trigger cache
-        Invoke newInstance = new Invoke(getObjectCreator(beanClass), "newInstance", OBJECT_TYPE);
+        cacheObjectInstantiator(beanClass); // trigger cache
+        Invoke newInstance =
+            new Invoke(getObjectInstantiator(beanClass), "newInstance", OBJECT_TYPE);
         return sourcePublicAccessible(beanClass) ? new Cast(newInstance, beanType) : newInstance;
       }
       Invoke newInstance = unsafeInvoke("allocateInstance", OBJECT_TYPE, beanClassExpr());
@@ -620,21 +621,21 @@ public abstract class CodecBuilder {
     }
   }
 
-  protected void cacheObjectCreator(Class<?> type) {
-    ObjectCreators.getObjectCreator(type);
+  protected void cacheObjectInstantiator(Class<?> type) {
+    ObjectInstantiators.getObjectInstantiator(type);
   }
 
-  protected Expression getObjectCreator(Class<?> type) {
-    cacheObjectCreator(type);
+  protected Expression getObjectInstantiator(Class<?> type) {
+    cacheObjectInstantiator(type);
     return getOrCreateField(
         true,
-        ObjectCreator.class,
-        ctx.newName("objectCreator_" + type.getSimpleName()),
+        ObjectInstantiator.class,
+        ctx.newName("objectInstantiator_" + type.getSimpleName()),
         () ->
             new StaticInvoke(
-                ObjectCreators.class,
-                "getObjectCreator",
-                TypeRef.of(ObjectCreator.class),
+                ObjectInstantiators.class,
+                "getObjectInstantiator",
+                TypeRef.of(ObjectInstantiator.class),
                 staticBeanClassExpr()));
   }
 

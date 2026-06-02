@@ -61,8 +61,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.fory.builder.UnsafeCodegenSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
+import org.apache.fory.reflect.ObjectInstantiator;
+import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.type.TypeUtils;
@@ -1505,18 +1505,18 @@ public interface Expression {
           String functionName;
           String args;
           if (JdkVersion.MAJOR_VERSION >= 25) {
-            String creator = ctx.newName("objectCreator");
+            String instantiator = ctx.newName("objectInstantiator");
             codeBuilder
                 .append(
                     ExpressionUtils.callFunc(
-                        ctx.type(ObjectCreator.class),
-                        creator,
-                        ctx.type(ObjectCreators.class),
-                        "getObjectCreator",
+                        ctx.type(ObjectInstantiator.class),
+                        instantiator,
+                        ctx.type(ObjectInstantiators.class),
+                        "getObjectInstantiator",
                         clzName + ".class",
                         false))
                 .append('\n');
-            target = creator;
+            target = instantiator;
             functionName = "newInstance";
             args = "";
           } else {

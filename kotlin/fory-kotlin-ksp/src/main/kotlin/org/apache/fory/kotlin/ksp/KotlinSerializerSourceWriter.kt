@@ -276,6 +276,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       builder.append("    }\n")
       builder.append("  }\n\n")
     }
+    if (struct.construction != KotlinStructConstruction.CONSTRUCTOR) {
+      return
+    }
 
     builder
       .append("  private fun readCompatibleConstructor(readContext: ReadContext): ")
@@ -1152,10 +1155,10 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
 
   private fun constructorFieldValueExpression(field: KotlinSourceField): String {
     val source = "fieldValues[${field.id}]"
-    if (field.type.valueTypeName == "Any?") {
+    if (field.propertyTypeName == "Any?") {
       return source
     }
-    return "($source as ${field.type.valueTypeName})"
+    return "($source as ${field.propertyTypeName})"
   }
 
   private fun constructorValueExpression(field: KotlinSourceField): String {

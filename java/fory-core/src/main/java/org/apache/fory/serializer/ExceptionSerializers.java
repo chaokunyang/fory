@@ -45,8 +45,8 @@ import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
+import org.apache.fory.reflect.ObjectInstantiator;
+import org.apache.fory.reflect.ObjectInstantiators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.TypeResolver;
 
@@ -54,12 +54,15 @@ import org.apache.fory.resolver.TypeResolver;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class ExceptionSerializers {
   private static final Set<Class<?>> THROWABLE_SUPER_CLASSES = ofHashSet(Throwable.class);
-  private static final ObjectCreator<Object> FIELD_ONLY_CREATOR = new FieldOnlyCreator();
+  // Throwable slot serializers populate fields on the throwable allocated by ExceptionSerializer.
+  // They must not resolve constructors for each serialized superclass layer.
+  private static final ObjectInstantiator<Object> FIELD_ONLY_INSTANTIATOR =
+      new FieldOnlyInstantiator();
 
   private ExceptionSerializers() {}
 
-  private static final class FieldOnlyCreator extends ObjectCreator<Object> {
-    private FieldOnlyCreator() {
+  private static final class FieldOnlyInstantiator extends ObjectInstantiator<Object> {
+    private FieldOnlyInstantiator() {
       super(Object.class);
     }
 
@@ -77,7 +80,7 @@ public final class ExceptionSerializers {
   public static final class ExceptionSerializer<T extends Throwable> extends Serializer<T> {
     private final Config config;
     private final TypeResolver typeResolver;
-    private final ObjectCreator<T> objectCreator;
+    private final ObjectInstantiator<T> objectInstantiator;
     private final Constructor<T> messageConstructor;
     private volatile Serializer[] slotsSerializers;
     private volatile boolean rebuildSlotsSerializersAtRuntime;
@@ -87,9 +90,9 @@ public final class ExceptionSerializers {
       this.config = typeResolver.getConfig();
       this.typeResolver = typeResolver;
       messageConstructor = getOptionalMessageConstructor(type);
-      objectCreator =
+      objectInstantiator =
           messageConstructor == null && MemoryUtils.JDK_LANG_FIELD_ACCESS
-              ? createThrowableObjectCreator(typeResolver, type)
+              ? createThrowableObjectInstantiator(typeResolver, type)
               : null;
       slotsSerializers = buildSlotsSerializers(typeResolver, type);
       if (!MemoryUtils.JDK_LANG_FIELD_ACCESS
@@ -198,7 +201,7 @@ public final class ExceptionSerializers {
                 + " without a String message constructor because it requires Unsafe allocation "
                 + "or unsupported private-field access.");
       }
-      return objectCreator.newInstance();
+      return objectInstantiator.newInstance();
     }
 
     private T newThrowableWithMessage(String detailMessage) {
@@ -380,15 +383,15 @@ public final class ExceptionSerializers {
     }
   }
 
-  private static <T extends Throwable> ObjectCreator<T> createThrowableObjectCreator(
+  private static <T extends Throwable> ObjectInstantiator<T> createThrowableObjectInstantiator(
       TypeResolver typeResolver, Class<T> type) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE || JdkVersion.MAJOR_VERSION >= 25) {
-      return typeResolver.getObjectCreator(type);
+      return typeResolver.getObjectInstantiator(type);
     }
     if (ReflectionUtils.getCtrHandle(type, false) != null) {
-      return typeResolver.getObjectCreator(type);
+      return typeResolver.getObjectInstantiator(type);
     }
-    return new ObjectCreators.ParentNoArgCtrObjectCreator<>(type);
+    return new ObjectInstantiators.ParentNoArgCtrInstantiator<>(type);
   }
 
   private static <T extends Throwable> Constructor<T> getOptionalMessageConstructor(Class<T> type) {
@@ -441,7 +444,8 @@ public final class ExceptionSerializers {
         slotsSerializer =
             new CompatibleLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer = new ObjectSerializer<>(typeResolver, type, false, fieldOnlyCreator());
+        slotsSerializer =
+            new ObjectSerializer<>(typeResolver, type, false, fieldOnlyInstantiator());
       }
       serializers.add(slotsSerializer);
       type = (Class<T>) type.getSuperclass();
@@ -451,8 +455,8 @@ public final class ExceptionSerializers {
     return serializers.toArray(new Serializer[0]);
   }
 
-  private static <T> ObjectCreator<T> fieldOnlyCreator() {
-    return (ObjectCreator<T>) FIELD_ONLY_CREATOR;
+  private static <T> ObjectInstantiator<T> fieldOnlyInstantiator() {
+    return (ObjectInstantiator<T>) FIELD_ONLY_INSTANTIATOR;
   }
 
   private static void readAndSetFields(

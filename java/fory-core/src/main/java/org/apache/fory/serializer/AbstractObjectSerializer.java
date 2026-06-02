@@ -43,7 +43,7 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.RefMode;
@@ -78,7 +78,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   protected final Config config;
   protected final TypeResolver typeResolver;
   protected final boolean isRecord;
-  protected final ObjectCreator<T> objectCreator;
+  protected final ObjectInstantiator<T> objectInstantiator;
   private SerializationFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
 
@@ -87,20 +87,20 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.config = null;
     this.typeResolver = null;
     this.isRecord = false;
-    this.objectCreator = null;
+    this.objectInstantiator = null;
   }
 
   public AbstractObjectSerializer(TypeResolver typeResolver, Class<T> type) {
-    this(typeResolver, type, typeResolver.getObjectCreator(type));
+    this(typeResolver, type, typeResolver.getObjectInstantiator(type));
   }
 
   public AbstractObjectSerializer(
-      TypeResolver typeResolver, Class<T> type, ObjectCreator<T> objectCreator) {
+      TypeResolver typeResolver, Class<T> type, ObjectInstantiator<T> objectInstantiator) {
     super(typeResolver.getConfig(), type);
     this.config = typeResolver.getConfig();
     this.typeResolver = typeResolver;
     this.isRecord = RecordUtils.isRecord(type);
-    this.objectCreator = objectCreator;
+    this.objectInstantiator = objectInstantiator;
   }
 
   static void writeField(
@@ -506,8 +506,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
         break;
       case TRACKING:
         generics.pushGenericType(fieldInfo.genericType, readContext.getDepth());
-        fieldValue =
-            readContainerFieldValueRef(readContext, typeResolver, refReader, fieldInfo);
+        fieldValue = readContainerFieldValueRef(readContext, typeResolver, refReader, fieldInfo);
         generics.popGenericType(readContext.getDepth());
         break;
       default:
@@ -885,7 +884,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     Object[] fieldValues = copyFieldValues(copyContext, originObj);
     fieldValues = RecordUtils.remapping(copyRecordInfo, fieldValues);
     try {
-      T t = objectCreator.newInstanceWithArguments(fieldValues);
+      T t = objectInstantiator.newInstanceWithArguments(fieldValues);
       Arrays.fill(copyRecordInfo.getRecordComponents(), null);
       copyContext.reference(originObj, t);
       return t;
@@ -1084,7 +1083,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   protected T newBean() {
-    return objectCreator.newInstance();
+    return objectInstantiator.newInstance();
   }
 
   protected final void checkNoUnresolvedReadRef(ReadContext readContext) {

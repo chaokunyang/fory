@@ -33,7 +33,7 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.struct.Fingerprint;
@@ -71,15 +71,15 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
   }
 
   public ObjectSerializer(TypeResolver typeResolver, Class<T> cls, boolean resolveParent) {
-    this(typeResolver, cls, resolveParent, typeResolver.getObjectCreator(cls));
+    this(typeResolver, cls, resolveParent, typeResolver.getObjectInstantiator(cls));
   }
 
   public ObjectSerializer(
       TypeResolver typeResolver,
       Class<T> cls,
       boolean resolveParent,
-      ObjectCreator<T> objectCreator) {
-    super(typeResolver, cls, objectCreator);
+      ObjectInstantiator<T> objectInstantiator) {
+    super(typeResolver, cls, objectInstantiator);
     // avoid recursive building serializers.
     // Use `setSerializerIfAbsent` to avoid overwriting existing serializer for class when used
     // as data serializer.
@@ -212,7 +212,7 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     if (isRecord) {
       Object[] fields = readFields(readContext);
       fields = RecordUtils.remapping(recordInfo, fields);
-      T obj = objectCreator.newInstanceWithArguments(fields);
+      T obj = objectInstantiator.newInstanceWithArguments(fields);
       Arrays.fill(recordInfo.getRecordComponents(), null);
       return obj;
     }

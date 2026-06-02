@@ -21,9 +21,10 @@ package org.apache.fory.reflect;
 
 import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
@@ -32,98 +33,106 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.record.RecordUtils;
 
 /**
- * Factory class for creating {@link ObjectCreator} instances.
+ * Factory class for creating {@link ObjectInstantiator} instances.
  *
- * <p>This class provides a centralized way to obtain optimized object creators for different types.
- * It automatically selects the most appropriate creation strategy based on the target type and
- * runtime environment:
+ * <p>This class provides a centralized way to obtain optimized object instantiators for different
+ * types. It automatically selects the most appropriate creation strategy based on the target type
+ * and runtime environment:
  *
  * <ul>
- *   <li><strong>Record types:</strong> Uses {@link RecordObjectCreator} with MethodHandle for
+ *   <li><strong>Record types:</strong> Uses {@link RecordObjectInstantiator} with MethodHandle for
  *       parameterized constructor invocation
  *   <li><strong>Classes with no-arg constructors:</strong> Uses {@link
- *       DeclaredNoArgCtrObjectCreator} with MethodHandle for fast invocation
- *   <li><strong>Classes without accessible constructors:</strong> Uses a private
- *       constructor-bypassing creator on runtimes where that is still supported
+ *       DeclaredNoArgCtrInstantiator} with MethodHandle for fast invocation
+ *   <li><strong>Classes without accessible constructors:</strong> Uses JDK8-24 Unsafe allocation or
+ *       serialization constructor creation through the runtime ReflectionFactory owner
  *   <li><strong>Android compatibility:</strong> Uses reflection for records and no-arg
  *       constructors, and throws when no supported reflective construction path exists
  * </ul>
  *
- * <p>The static {@link #getObjectCreator(Class)} method keeps the legacy process-global cache.
- * Runtime-owned paths should use {@link
- * org.apache.fory.resolver.TypeResolver#getObjectCreator(Class)} so ObjectStream-compatible
- * creators stay scoped to the Fory runtime.
+ * <p>The static {@link #getObjectInstantiator(Class)} method keeps the process-global construction
+ * cache. Runtime-owned paths should use {@link
+ * org.apache.fory.resolver.TypeResolver#getObjectInstantiator(Class)} so ObjectStream-compatible
+ * instantiators stay scoped to the Fory runtime.
  *
- * <p><strong>Thread Safety:</strong> This class and all returned ObjectCreator instances are
+ * <p><strong>Thread Safety:</strong> This class and all returned ObjectInstantiator instances are
  * thread-safe and can be safely used across multiple threads concurrently.
  */
 @SuppressWarnings("unchecked")
-public class ObjectCreators {
-  private static final ClassValueCache<ObjectCreator<?>> cache =
+public class ObjectInstantiators {
+  private static final ClassValueCache<ObjectInstantiator<?>> cache =
       ClassValueCache.newClassKeySoftCache(8);
 
   /**
-   * Returns an optimized ObjectCreator for the given type.
+   * Returns an optimized ObjectInstantiator for the given type.
    *
    * <p>This method automatically selects the most appropriate creation strategy based on the type
    * characteristics and caches the result for future use. The selection logic prioritizes
    * performance and platform compatibility.
    *
-   * @param <T> the type for which to create an ObjectCreator
+   * @param <T> the type for which to create an ObjectInstantiator
    * @param type the Class object representing the target type
-   * @return a cached ObjectCreator instance optimized for the given type
+   * @return a cached ObjectInstantiator instance optimized for the given type
    * @throws ForyException if the type cannot be instantiated (e.g., missing no-arg constructor in
    *     GraalVM native image)
    */
-  public static <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
-    return (ObjectCreator<T>) cache.get(type, () -> createObjectCreator(type));
+  public static <T> ObjectInstantiator<T> getObjectInstantiator(Class<T> type) {
+    return (ObjectInstantiator<T>) cache.get(type, () -> createObjectInstantiator(type));
   }
 
-  /** Creates an uncached object creator for runtime-scoped registries. */
+  /** Creates an uncached object instantiator for runtime-scoped registries. */
   @Internal
-  public static <T> ObjectCreator<T> createObjectCreator(Class<T> type) {
+  public static <T> ObjectInstantiator<T> createObjectInstantiator(Class<T> type) {
     if (RecordUtils.isRecord(type)) {
-      return new RecordObjectCreator<>(type);
+      return new RecordObjectInstantiator<>(type);
     }
     Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type);
     if (AndroidSupport.IS_ANDROID) {
       if (noArgConstructor != null) {
-        return new ReflectiveNoArgCtrObjectCreator<>(type, noArgConstructor);
+        return new ReflectiveNoArgCtrInstantiator<>(type, noArgConstructor);
       }
-      return new UnsupportedObjectCreator<>(
+      return new UnsupportedObjectInstantiator<>(
           type, "Android cannot create " + type + " without an accessible no-arg constructor");
     }
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       if (noArgConstructor != null) {
-        return new DeclaredNoArgCtrObjectCreator<>(type);
+        return new DeclaredNoArgCtrInstantiator<>(type);
+      } else if (JdkVersion.MAJOR_VERSION >= 25) {
+        return new ParentNoArgCtrInstantiator<>(type);
       } else {
-        return new ConstructorBypassObjectCreator<>(type);
+        return new UnsafeObjectInstantiator<>(type);
       }
     }
     if (noArgConstructor == null) {
-      return new ConstructorBypassObjectCreator<>(type);
+      if (JdkVersion.MAJOR_VERSION >= 25) {
+        return new ParentNoArgCtrInstantiator<>(type);
+      }
+      return new UnsafeObjectInstantiator<>(type);
     }
-    return new DeclaredNoArgCtrObjectCreator<>(type);
+    return new DeclaredNoArgCtrInstantiator<>(type);
   }
 
-  /** Creates an uncached empty-instance creator for Java ObjectStream-compatible serializers. */
+  /**
+   * Creates an uncached empty-instance instantiator for Java ObjectStream-compatible serializers.
+   */
   @Internal
-  public static <T> ObjectCreator<T> createObjectStreamCreator(Class<T> type) {
+  public static <T> ObjectInstantiator<T> createObjectStreamInstantiator(Class<T> type) {
     if (AndroidSupport.IS_ANDROID) {
       Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type);
       if (noArgConstructor != null) {
-        return new ReflectiveNoArgCtrObjectCreator<>(type, noArgConstructor);
+        return new ReflectiveNoArgCtrInstantiator<>(type, noArgConstructor);
       }
-      return new UnsupportedObjectCreator<>(
+      return new UnsupportedObjectInstantiator<>(
           type, "Android cannot create " + type + " without an accessible no-arg constructor");
     }
-    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return new ConstructorBypassObjectCreator<>(type);
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE && JdkVersion.MAJOR_VERSION < 25) {
+      return new UnsafeObjectInstantiator<>(type);
     }
-    return new ParentNoArgCtrObjectCreator<>(type);
+    return new ParentNoArgCtrInstantiator<>(type);
   }
 
   private static RuntimeException makeException(Class<?> type, Throwable cause) {
@@ -143,10 +152,10 @@ public class ObjectCreators {
     return cause;
   }
 
-  private static final class ReflectiveNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
+  private static final class ReflectiveNoArgCtrInstantiator<T> extends ObjectInstantiator<T> {
     private final Constructor<T> constructor;
 
-    private ReflectiveNoArgCtrObjectCreator(Class<T> type, Constructor<T> constructor) {
+    private ReflectiveNoArgCtrInstantiator(Class<T> type, Constructor<T> constructor) {
       super(type);
       this.constructor = constructor;
       try {
@@ -171,10 +180,10 @@ public class ObjectCreators {
     }
   }
 
-  private static final class UnsupportedObjectCreator<T> extends ObjectCreator<T> {
+  private static final class UnsupportedObjectInstantiator<T> extends ObjectInstantiator<T> {
     private final String message;
 
-    private UnsupportedObjectCreator(Class<T> type, String message) {
+    private UnsupportedObjectInstantiator(Class<T> type, String message) {
       super(type);
       this.message = message;
     }
@@ -190,29 +199,10 @@ public class ObjectCreators {
     }
   }
 
-  private static final class ConstructorBypassObjectCreator<T> extends ObjectCreator<T> {
-    private final ConstructorBypassAllocator<T> allocator;
-
-    public ConstructorBypassObjectCreator(Class<T> type) {
-      super(type);
-      allocator = new ConstructorBypassAllocator<>(type);
-    }
-
-    @Override
-    public T newInstance() {
-      return allocator.allocate();
-    }
-
-    @Override
-    public T newInstanceWithArguments(Object... arguments) {
-      throw new UnsupportedOperationException();
-    }
-  }
-
-  public static final class DeclaredNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
+  public static final class DeclaredNoArgCtrInstantiator<T> extends ObjectInstantiator<T> {
     private final MethodHandle handle;
 
-    public DeclaredNoArgCtrObjectCreator(Class<T> type) {
+    public DeclaredNoArgCtrInstantiator(Class<T> type) {
       super(type);
       handle = ReflectionUtils.getCtrHandle(type, true);
     }
@@ -232,11 +222,11 @@ public class ObjectCreators {
     }
   }
 
-  public static final class RecordObjectCreator<T> extends ObjectCreator<T> {
+  public static final class RecordObjectInstantiator<T> extends ObjectInstantiator<T> {
     private final MethodHandle handle;
     private final Constructor<?> constructor;
 
-    public RecordObjectCreator(Class<T> type) {
+    public RecordObjectInstantiator(Class<T> type) {
       super(type);
       Tuple2<Constructor, MethodHandle> tuple2 = RecordUtils.getRecordConstructor(type);
       constructor = tuple2.f0;
@@ -278,37 +268,19 @@ public class ObjectCreators {
     }
   }
 
-  public static final class ParentNoArgCtrObjectCreator<T> extends ObjectCreator<T> {
-    private static volatile Object reflectionFactory;
-    private static volatile Method newConstructorForSerializationMethod;
-
+  public static final class ParentNoArgCtrInstantiator<T> extends ObjectInstantiator<T> {
     private final Constructor<T> constructor;
-    private final ConstructorBypassAllocator<T> allocator;
 
-    public ParentNoArgCtrObjectCreator(Class<T> type) {
+    public ParentNoArgCtrInstantiator(Class<T> type) {
       super(type);
-      if (JdkVersion.MAJOR_VERSION >= 25) {
-        constructor = null;
-        allocator = new ConstructorBypassAllocator<>(type);
-        return;
-      }
       this.constructor = createSerializationConstructor(type);
-      allocator = null;
     }
 
     private static <T> Constructor<T> createSerializationConstructor(Class<T> type) {
       try {
-        if (reflectionFactory == null) {
-          Class<?> reflectionFactoryClass = Class.forName("sun.reflect.ReflectionFactory");
-          Method getReflectionFactory = reflectionFactoryClass.getMethod("getReflectionFactory");
-          reflectionFactory = getReflectionFactory.invoke(null);
-          newConstructorForSerializationMethod =
-              reflectionFactoryClass.getMethod(
-                  "newConstructorForSerialization", Class.class, Constructor.class);
-        }
         Constructor<?> parentConstructor = findSerializationConstructor(type);
         return (Constructor<T>)
-            newConstructorForSerializationMethod.invoke(reflectionFactory, type, parentConstructor);
+            ReflectionFactoryAccess.newConstructorForSerialization(type, parentConstructor);
       } catch (Throwable e) {
         throw new ForyException(
             "Failed to create instance, please provide a no-arg constructor for " + type, e);
@@ -351,10 +323,6 @@ public class ObjectCreators {
 
     @Override
     public T newInstance() {
-      ConstructorBypassAllocator<T> constructorBypassAllocator = allocator;
-      if (constructorBypassAllocator != null) {
-        return constructorBypassAllocator.allocate();
-      }
       try {
         return constructor.newInstance();
       } catch (Exception e) {
@@ -365,6 +333,44 @@ public class ObjectCreators {
     @Override
     public T newInstanceWithArguments(Object... arguments) {
       throw new UnsupportedOperationException();
+    }
+
+    private static final class ReflectionFactoryAccess {
+      private static final Object REFLECTION_FACTORY;
+      private static final MethodHandle NEW_CONSTRUCTOR_FOR_SERIALIZATION;
+
+      static {
+        try {
+          Class<?> reflectionFactoryClass = reflectionFactoryClass();
+          MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(reflectionFactoryClass);
+          MethodHandle getReflectionFactory =
+              lookup.findStatic(
+                  reflectionFactoryClass,
+                  "getReflectionFactory",
+                  MethodType.methodType(reflectionFactoryClass));
+          REFLECTION_FACTORY = getReflectionFactory.invoke();
+          NEW_CONSTRUCTOR_FOR_SERIALIZATION =
+              lookup.findVirtual(
+                  reflectionFactoryClass,
+                  "newConstructorForSerialization",
+                  MethodType.methodType(Constructor.class, Class.class, Constructor.class));
+        } catch (Throwable e) {
+          throw new ExceptionInInitializerError(e);
+        }
+      }
+
+      private static Class<?> reflectionFactoryClass() throws ClassNotFoundException {
+        if (JdkVersion.MAJOR_VERSION >= 25) {
+          return Class.forName("jdk.internal.reflect.ReflectionFactory");
+        }
+        return Class.forName("sun.reflect.ReflectionFactory");
+      }
+
+      private static Constructor<?> newConstructorForSerialization(
+          Class<?> type, Constructor<?> parentConstructor) throws Throwable {
+        return (Constructor<?>)
+            NEW_CONSTRUCTOR_FOR_SERIALIZATION.invoke(REFLECTION_FACTORY, type, parentConstructor);
+      }
     }
   }
 }

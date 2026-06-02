@@ -23,6 +23,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import org.apache.fory.collection.ClassValueCache;
@@ -40,39 +41,42 @@ final class SerializationHookLookup {
 
   private static final class Methods {
     private static final Object REFLECTION_FACTORY;
-    private static final Method WRITE_OBJECT;
-    private static final Method READ_OBJECT;
-    private static final Method READ_OBJECT_NO_DATA;
-    private static final Method DEFAULT_READ_OBJECT;
-    private static final Method WRITE_REPLACE;
-    private static final Method READ_RESOLVE;
+    private static final MethodHandle WRITE_OBJECT;
+    private static final MethodHandle READ_OBJECT;
+    private static final MethodHandle READ_OBJECT_NO_DATA;
+    private static final MethodHandle DEFAULT_READ_OBJECT;
+    private static final MethodHandle WRITE_REPLACE;
+    private static final MethodHandle READ_RESOLVE;
 
     static {
       Object reflectionFactory = null;
-      Method writeObject = null;
-      Method readObject = null;
-      Method readObjectNoData = null;
-      Method defaultReadObject = null;
-      Method writeReplace = null;
-      Method readResolve = null;
+      MethodHandle writeObject = null;
+      MethodHandle readObject = null;
+      MethodHandle readObjectNoData = null;
+      MethodHandle defaultReadObject = null;
+      MethodHandle writeReplace = null;
+      MethodHandle readResolve = null;
       if (JdkVersion.MAJOR_VERSION < 25) {
         try {
           Class<?> factoryClass = Class.forName("sun.reflect.ReflectionFactory");
-          Method getReflectionFactory = factoryClass.getDeclaredMethod("getReflectionFactory");
-          reflectionFactory = getReflectionFactory.invoke(null);
-          writeObject = factoryClass.getDeclaredMethod("writeObjectForSerialization", Class.class);
-          readObject = factoryClass.getDeclaredMethod("readObjectForSerialization", Class.class);
+          MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(factoryClass);
+          MethodHandle getReflectionFactory =
+              lookup.findStatic(
+                  factoryClass, "getReflectionFactory", MethodType.methodType(factoryClass));
+          reflectionFactory = getReflectionFactory.invoke();
+          MethodType hookType = MethodType.methodType(MethodHandle.class, Class.class);
+          writeObject = lookup.findVirtual(factoryClass, "writeObjectForSerialization", hookType);
+          readObject = lookup.findVirtual(factoryClass, "readObjectForSerialization", hookType);
           readObjectNoData =
-              factoryClass.getDeclaredMethod("readObjectNoDataForSerialization", Class.class);
+              lookup.findVirtual(factoryClass, "readObjectNoDataForSerialization", hookType);
           try {
             defaultReadObject =
-                factoryClass.getDeclaredMethod("defaultReadObjectForSerialization", Class.class);
-          } catch (NoSuchMethodException e) {
+                lookup.findVirtual(factoryClass, "defaultReadObjectForSerialization", hookType);
+          } catch (NoSuchMethodException | IllegalAccessException e) {
             ExceptionUtils.ignore(e);
           }
-          writeReplace =
-              factoryClass.getDeclaredMethod("writeReplaceForSerialization", Class.class);
-          readResolve = factoryClass.getDeclaredMethod("readResolveForSerialization", Class.class);
+          writeReplace = lookup.findVirtual(factoryClass, "writeReplaceForSerialization", hookType);
+          readResolve = lookup.findVirtual(factoryClass, "readResolveForSerialization", hookType);
         } catch (Throwable e) {
           ExceptionUtils.ignore(e);
         }
@@ -87,7 +91,7 @@ final class SerializationHookLookup {
     }
   }
 
-  private static MethodHandle getHandle(Class<?> type, Method factoryMethod) {
+  private static MethodHandle getHandle(Class<?> type, MethodHandle factoryMethod) {
     if (Methods.REFLECTION_FACTORY == null || factoryMethod == null) {
       return null;
     }
@@ -99,7 +103,7 @@ final class SerializationHookLookup {
     }
   }
 
-  private static Method getMethod(Class<?> type, Method factoryMethod) {
+  private static Method getMethod(Class<?> type, MethodHandle factoryMethod) {
     MethodHandle handle = getHandle(type, factoryMethod);
     return handle == null ? null : MethodHandles.reflectAs(Method.class, handle);
   }

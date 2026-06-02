@@ -216,7 +216,8 @@ public final class StaticCompatibleCodecBuilder extends ObjectCodecBuilder {
       ctx.clearExprState();
       Reference values = new Reference(recordValues, objectArrayTypeRef, false);
       Code.ExprCode newRecord =
-          new Invoke(getObjectCreator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, values)
+          new Invoke(
+                  getObjectInstantiator(beanClass), "newInstanceWithArguments", OBJECT_TYPE, values)
               .genCode(ctx);
       if (StringUtils.isNotBlank(newRecord.code())) {
         code.append(newRecord.code()).append('\n');

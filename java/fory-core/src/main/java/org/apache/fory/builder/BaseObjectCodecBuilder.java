@@ -121,7 +121,7 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.reflect.ObjectCreator;
+import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
@@ -280,22 +280,22 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
   }
 
   @Override
-  protected void cacheObjectCreator(Class<?> type) {
-    typeResolver.getObjectCreator(type);
+  protected void cacheObjectInstantiator(Class<?> type) {
+    typeResolver.getObjectInstantiator(type);
   }
 
   @Override
-  protected Expression getObjectCreator(Class<?> type) {
-    cacheObjectCreator(type);
+  protected Expression getObjectInstantiator(Class<?> type) {
+    cacheObjectInstantiator(type);
     return getOrCreateField(
         false,
-        ObjectCreator.class,
-        ctx.newName("objectCreator_" + type.getSimpleName()),
+        ObjectInstantiator.class,
+        ctx.newName("objectInstantiator_" + type.getSimpleName()),
         () ->
             new Invoke(
                 typeResolverRef,
-                "getObjectCreator",
-                TypeRef.of(ObjectCreator.class),
+                "getObjectInstantiator",
+                TypeRef.of(ObjectInstantiator.class),
                 getClassExpr(type)));
   }
 

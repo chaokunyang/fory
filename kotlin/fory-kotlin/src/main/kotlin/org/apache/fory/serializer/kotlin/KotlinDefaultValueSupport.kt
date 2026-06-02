@@ -31,7 +31,7 @@ import org.apache.fory.collection.ClassValueCache
 import org.apache.fory.logging.Logger
 import org.apache.fory.logging.LoggerFactory
 import org.apache.fory.platform.AndroidSupport
-import org.apache.fory.reflect.ObjectCreators
+import org.apache.fory.reflect.ObjectInstantiators
 import org.apache.fory.util.DefaultValueUtils
 
 /**
@@ -181,7 +181,7 @@ internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport
   }
 
   private fun newDefaultInstance(clazz: Class<*>): Any? {
-    return ObjectCreators.getObjectCreator(clazz).newInstance()
+    return ObjectInstantiators.getObjectInstantiator(clazz).newInstance()
   }
 
   private fun newPublicDefaultInstance(

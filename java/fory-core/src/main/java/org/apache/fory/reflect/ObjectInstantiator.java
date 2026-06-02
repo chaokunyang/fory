@@ -22,24 +22,24 @@ package org.apache.fory.reflect;
 import javax.annotation.concurrent.ThreadSafe;
 
 /**
- * Abstract base class for creating instances of a given type.
+ * Abstract base class for instantiating instances of a given type.
  *
  * <p>This class provides a unified interface for object instantiation across different creation
  * strategies such as constructor invocation, unsafe allocation, and record creation.
  * Implementations handle various scenarios including no-arg constructors, parameterized
  * constructors for records, and platform-specific optimizations.
  *
- * <p><strong>Thread Safety:</strong> All implementations of ObjectCreator are thread-safe and can
- * be safely used across multiple threads concurrently. The underlying creation mechanisms
+ * <p><strong>Thread Safety:</strong> All implementations of ObjectInstantiator are thread-safe and
+ * can be safely used across multiple threads concurrently. The underlying instantiation mechanisms
  * (MethodHandle, Constructor, and supported constructor-bypassing allocation) are all thread-safe.
  *
- * @param <T> the type of objects this creator can instantiate
+ * @param <T> the type of objects this instantiator can instantiate
  */
 @ThreadSafe
-public abstract class ObjectCreator<T> {
+public abstract class ObjectInstantiator<T> {
   protected final Class<T> type;
 
-  protected ObjectCreator(Class<T> type) {
+  protected ObjectInstantiator(Class<T> type) {
     this.type = type;
   }
 
@@ -48,7 +48,8 @@ public abstract class ObjectCreator<T> {
    *
    * @return a new instance of type T
    * @throws RuntimeException if instance creation fails
-   * @throws UnsupportedOperationException if this creator doesn't support parameterless creation
+   * @throws UnsupportedOperationException if this instantiator doesn't support parameterless
+   *     creation
    */
   public abstract T newInstance();
 
@@ -61,7 +62,8 @@ public abstract class ObjectCreator<T> {
    * @param arguments the arguments to pass to the constructor
    * @return a new instance of type T
    * @throws RuntimeException if instance creation fails
-   * @throws UnsupportedOperationException if this creator doesn't support parameterized creation
+   * @throws UnsupportedOperationException if this instantiator doesn't support parameterized
+   *     creation
    */
   public abstract T newInstanceWithArguments(Object... arguments);
 }

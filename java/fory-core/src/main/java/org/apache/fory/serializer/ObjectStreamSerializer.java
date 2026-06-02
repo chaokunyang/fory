@@ -162,7 +162,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
    * Safe wrapper for ObjectStreamClass.lookup that handles GraalVM native image limitations. In
    * GraalVM native image, ObjectStreamClass.lookup may fail for certain classes like Throwable due
    * to missing SerializationConstructorAccessor. This method catches such errors and returns null
-   * so the serializer can use its constructor-bypassing object creator.
+   * so the serializer can use its constructor-bypassing object instantiator.
    */
   private static ObjectStreamClass safeObjectStreamClassLookup(Class<?> type) {
     if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
@@ -171,7 +171,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
       } catch (Throwable e) {
         // In GraalVM native image, ObjectStreamClass.lookup may fail for certain classes due to
         // missing SerializationConstructorAccessor. Returning null keeps stream reconstruction on
-        // the serializer-owned object creator path.
+        // the serializer-owned object instantiator path.
         LOG.warn(
             "ObjectStreamClass.lookup failed for {} in GraalVM native image: {}",
             type.getName(),
@@ -185,7 +185,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   }
 
   public ObjectStreamSerializer(TypeResolver typeResolver, Class<?> type) {
-    super(typeResolver, type, typeResolver.getSharedRegistry().getObjectStreamCreator(type));
+    super(typeResolver, type, typeResolver.getSharedRegistry().getObjectStreamInstantiator(type));
     if (!Serializable.class.isAssignableFrom(type)) {
       throw new IllegalArgumentException(
           String.format("Class %s should implement %s.", type, Serializable.class));
@@ -269,7 +269,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
   @Override
   public Object read(ReadContext readContext) {
     MemoryBuffer buffer = readContext.getBuffer();
-    Object obj = objectCreator.newInstance();
+    Object obj = objectInstantiator.newInstance();
     readContext.reference(obj);
     int numClasses = buffer.readInt16();
     int slotIndex = 0;
@@ -420,7 +420,7 @@ public class ObjectStreamSerializer extends AbstractObjectSerializer {
     if (!canCopyWithDefaultReadObject()) {
       return super.copy(copyContext, value);
     }
-    Object copy = objectCreator.newInstance();
+    Object copy = objectInstantiator.newInstance();
     copyContext.reference(value, copy);
     try {
       for (SlotInfo slotInfo : slotsInfos) {

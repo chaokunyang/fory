@@ -116,6 +116,11 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - `FieldAccessor` owns field-accessor dispatch. `RecordFieldAccessors` owns record field access,
   and `InstanceFieldAccessors` owns non-record instance field access. Do not reintroduce a
   `FieldAccessorFactory` layer.
+- Android non-record reflection field access belongs inside the root `InstanceFieldAccessors`
+  owner. Do not keep a standalone `ReflectionFieldAccessor`; Java25 never needs that path, and
+  record reflection fallback remains record-owned in `RecordFieldAccessors`. Keep `sun.misc.Unsafe`
+  fields and descriptors below the JVM-only nested instance accessor so Android can load the owner
+  and take the reflection branch.
 - JDK25+ `InstanceFieldAccessors` owns instance field access only. Do not add static-field handling
   or per-write reflection fallback there, and do not expose public `FieldAccessor` static-field
   factories. Static special cases such as Scala `MODULE$` belong to the owning serializer and should

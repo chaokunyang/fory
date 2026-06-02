@@ -27,6 +27,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
+import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
@@ -35,8 +36,6 @@ import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
 final class InstanceFieldAccessors {
-  private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
-
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;
   private static final int CHAR_ACCESS = 3;
@@ -51,21 +50,13 @@ final class InstanceFieldAccessors {
 
   static FieldAccessor createAccessor(Field field) {
     Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
+    if (AndroidSupport.IS_ANDROID) {
+      return new ReflectionAccessor(field);
+    }
     if (GraalvmSupport.isGraalBuildTime()) {
       return new GeneratedAccessor(field);
     }
     return new InstanceAccessor(field);
-  }
-
-  private static long fieldOffset(Field field) {
-    if (AndroidSupport.IS_ANDROID) {
-      return -1;
-    }
-    if (GraalvmSupport.isGraalBuildTime()) {
-      // Field offsets are rewritten by GraalVM and are not stable during native-image build time.
-      return -1;
-    }
-    return UNSAFE.objectFieldOffset(field);
   }
 
   private static int accessKind(Field field) {
@@ -90,7 +81,38 @@ final class InstanceFieldAccessors {
     return OBJECT_ACCESS;
   }
 
+  private static final class ReflectionAccessor extends FieldAccessor {
+    private ReflectionAccessor(Field field) {
+      super(field);
+      try {
+        field.setAccessible(true);
+      } catch (RuntimeException e) {
+        throw new ForyException("Failed to make field accessible: " + field, e);
+      }
+    }
+
+    @Override
+    public Object get(Object obj) {
+      try {
+        return field.get(obj);
+      } catch (IllegalAccessException | IllegalArgumentException e) {
+        throw new ForyException("Failed to read field reflectively: " + field, e);
+      }
+    }
+
+    @Override
+    public void set(Object obj, Object value) {
+      try {
+        field.set(obj, value);
+      } catch (IllegalAccessException | IllegalArgumentException e) {
+        throw new ForyException("Failed to write field reflectively: " + field, e);
+      }
+    }
+  }
+
   static final class InstanceAccessor extends FieldAccessor {
+    private static final Unsafe UNSAFE = _UnsafeUtils.UNSAFE;
+
     private final long fieldOffset;
     private final int accessKind;
 
@@ -98,6 +120,10 @@ final class InstanceFieldAccessors {
       super(field);
       fieldOffset = fieldOffset(field);
       accessKind = accessKind(field);
+    }
+
+    private static long fieldOffset(Field field) {
+      return UNSAFE.objectFieldOffset(field);
     }
 
     @Override

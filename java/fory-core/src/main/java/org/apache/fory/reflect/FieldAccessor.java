@@ -21,7 +21,6 @@ package org.apache.fory.reflect;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.util.Preconditions;
 import org.apache.fory.util.record.RecordUtils;
 
@@ -217,11 +216,6 @@ public abstract class FieldAccessor {
     Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
     if (RecordUtils.isRecord(field.getDeclaringClass())) {
       return RecordFieldAccessors.createAccessor(field);
-    }
-    if (AndroidSupport.IS_ANDROID) {
-      // Android field access must stay reflection-owned: no Unsafe offsets, trusted lookups,
-      // generated accessors, or primitive-specific reflection subclasses.
-      return new ReflectionFieldAccessor(field);
     }
     return InstanceFieldAccessors.createAccessor(field);
   }

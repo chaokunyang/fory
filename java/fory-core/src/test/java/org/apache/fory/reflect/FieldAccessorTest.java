@@ -143,7 +143,8 @@ public class FieldAccessorTest {
       Field field = AndroidFields.class.getDeclaredField(fieldName);
       FieldAccessor accessor = FieldAccessor.createAccessor(field);
       check(
-          accessor instanceof ReflectionFieldAccessor, "Expected reflection accessor for " + field);
+          accessor.getClass().getEnclosingClass() == InstanceFieldAccessors.class,
+          "Expected instance accessor owner for " + field);
       checkEquals(accessor.get(fields), expected, "initial " + fieldName);
       accessor.set(fields, replacement);
       checkEquals(accessor.get(fields), replacement, "updated " + fieldName);

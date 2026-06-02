@@ -30,7 +30,6 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
 import org.apache.fory.reflect.FieldAccessor;
-import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.type.DescriptorGrouper;
@@ -43,37 +42,14 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public abstract class CompatibleLayerSerializerBase<T> extends AbstractObjectSerializer<T> {
-  // Layer serializers are field-only views over an already-created subclass instance. A real
-  // object instantiator would move construction ownership into each superclass slot serializer.
-  private static final ObjectInstantiator<Object> FIELD_ONLY_INSTANTIATOR =
-      new FieldOnlyInstantiator();
-
-  private static final class FieldOnlyInstantiator extends ObjectInstantiator<Object> {
-    private FieldOnlyInstantiator() {
-      super(Object.class);
-    }
-
-    @Override
-    public Object newInstance() {
-      throw new UnsupportedOperationException("Layer serializers do not create objects");
-    }
-
-    @Override
-    public Object newInstanceWithArguments(Object... arguments) {
-      throw new UnsupportedOperationException("Layer serializers do not create objects");
-    }
-  }
-
   protected TypeDef layerTypeDef;
   protected Class<?> layerMarkerClass;
   protected SerializationFieldInfo[] allFields = new SerializationFieldInfo[0];
 
   public CompatibleLayerSerializerBase(TypeResolver typeResolver, Class<T> type) {
-    super(typeResolver, type, fieldOnlyInstantiator());
-  }
-
-  private static <T> ObjectInstantiator<T> fieldOnlyInstantiator() {
-    return (ObjectInstantiator<T>) FIELD_ONLY_INSTANTIATOR;
+    // Layer serializers are field-only views over an already-created subclass instance. Null keeps
+    // object construction with the concrete serializer owner.
+    super(typeResolver, type, null);
   }
 
   public final void setLayerSerializerMeta(TypeDef layerTypeDef, Class<?> layerMarkerClass) {

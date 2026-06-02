@@ -70,9 +70,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(AbstractObjectSerializer.class);
   private static final Object SELF_REFERENCE = new Object();
   // Constructor-bound objects reserve a ref id before constructor arguments are read, but the
-  // object cannot be referenced semantically until the constructor returns. ReadContext calls the
-  // tracker from tryPreserveRefId so nested collection/map/array elements cannot hide an unresolved
-  // self-reference inside a constructor argument.
+  // object cannot be referenced semantically until the constructor returns. Generated constructor
+  // serializers call the tracker before reading ref-tracking constructor-phase fields so nested
+  // collection/map/array elements cannot hide unresolved self-references.
   private static final Object CONSTRUCTOR_REF_IDS = new Object();
   private static final Object UNRESOLVED_CONSTRUCTOR_REF_IDS = new Object();
   protected final Config config;
@@ -1083,7 +1083,15 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   }
 
   protected T newBean() {
-    return objectInstantiator.newInstance();
+    ObjectInstantiator<T> instantiator = objectInstantiator;
+    if (instantiator == null) {
+      throw objectCreationUnsupported();
+    }
+    return instantiator.newInstance();
+  }
+
+  private ForyException objectCreationUnsupported() {
+    return new ForyException("Serializer for " + type.getName() + " does not create objects");
   }
 
   protected final void checkNoUnresolvedReadRef(ReadContext readContext) {

@@ -30,7 +30,6 @@ import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeInfoHolder;
 import org.apache.fory.resolver.TypeResolver;
-import org.apache.fory.serializer.AbstractObjectSerializer;
 import org.apache.fory.serializer.PrimitiveSerializers.LongSerializer;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.StringSerializer;
@@ -343,12 +342,6 @@ public final class ReadContext {
 
   /** Delegates to {@link RefReader#tryPreserveRefId(MemoryBuffer)} on the current buffer. */
   public int tryPreserveRefId() {
-    if (refReader.hasPreservedRefId()) {
-      // Constructor-bound objects cannot satisfy self-references until construction finishes.
-      // The guard keeps ordinary ref reads on the direct path after standard serializers bind
-      // their object before reading fields.
-      AbstractObjectSerializer.trackConstructorRefRead(this, buffer);
-    }
     return refReader.tryPreserveRefId(buffer);
   }
 
@@ -499,7 +492,7 @@ public final class ReadContext {
   public String readStringRef() {
     MemoryBuffer buffer = this.buffer;
     if (stringSerializer.needToWriteRef()) {
-      int nextReadRefId = tryPreserveRefId();
+      int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         String obj = stringSerializer.read(this);
         refReader.setReadRef(nextReadRefId, obj);
@@ -533,7 +526,8 @@ public final class ReadContext {
    * directly.
    */
   public Object readRef() {
-    int nextReadRefId = tryPreserveRefId();
+    MemoryBuffer buffer = this.buffer;
+    int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(this);
       Object o = readNonRef(typeInfo);
@@ -545,7 +539,7 @@ public final class ReadContext {
 
   /** Variant of {@link #readRef()} that uses already resolved {@link TypeInfo}. */
   public Object readRef(TypeInfo typeInfo) {
-    int nextReadRefId = tryPreserveRefId();
+    int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object o = readNonRef(typeInfo);
       refReader.setReadRef(nextReadRefId, o);
@@ -556,7 +550,7 @@ public final class ReadContext {
 
   /** Variant of {@link #readRef()} that reuses a cached type-info holder. */
   public Object readRef(TypeInfoHolder classInfoHolder) {
-    int nextReadRefId = tryPreserveRefId();
+    int nextReadRefId = refReader.tryPreserveRefId(buffer);
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       TypeInfo typeInfo = typeResolver.readTypeInfo(this, classInfoHolder);
       Object o = readNonRef(typeInfo);
@@ -569,7 +563,7 @@ public final class ReadContext {
   /** Reads a nullable object using an already chosen serializer. */
   public <T> T readRef(Serializer<T> serializer) {
     if (serializer.needToWriteRef()) {
-      int nextReadRefId = tryPreserveRefId();
+      int nextReadRefId = refReader.tryPreserveRefId(buffer);
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         Object o = readNonRef(serializer);
         refReader.setReadRef(nextReadRefId, o);

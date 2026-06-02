@@ -60,8 +60,7 @@ import org.apache.fory.kotlin.Fixed
 import org.apache.fory.kotlin.VarInt
 
 @ForyStruct
-data class User
-constructor(
+data class User(
   @ForyField(id = 1)
   val id: @Fixed UInt,
 
@@ -82,10 +81,8 @@ them.
 
 The processor generates serializers for public or internal, concrete,
 non-generic classes in named packages. A supported class must have a primary
-constructor whose serialized parameters are `val` or `var` properties with the
-same names as the constructor parameters. `data class` is the common case, but it
-is not required. Mutable no-argument structs can instead expose serialized `var`
-properties with `@ForyField`.
+constructor whose serialized parameters are `val` or `var` properties. `data
+class` is the common case, but it is not required.
 
 Internal Kotlin struct classes are supported when KSP runs in the same Kotlin
 module that owns the struct. The generated Kotlin serializer is also internal,
@@ -118,8 +115,7 @@ inside collections and maps.
 
 ```kotlin
 @ForyStruct
-data class NullabilityExample
-constructor(
+data class NullabilityExample(
   @ForyField(id = 1)
   val a: List<String>,
 

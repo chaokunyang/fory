@@ -50,6 +50,33 @@ Apache Fory™ provides blazingly fast Java object serialization with JIT compil
 - **Deep Copy**: Efficient deep cloning of complex object graphs with reference preservation
 - **Security**: Class registration and configurable deserialization policies
 
+## Installation
+
+### Maven
+
+```xml
+<dependency>
+  <groupId>org.apache.fory</groupId>
+  <artifactId>fory-core</artifactId>
+  <version>1.1.0</version>
+</dependency>
+```
+
+### Gradle
+
+```kotlin
+implementation("org.apache.fory:fory-core:1.1.0")
+```
+
+### JDK25+
+
+On JDK25+, put Fory on the module path and open `java.lang.invoke` to the Fory
+core module:
+
+```bash
+--add-opens=java.base/java.lang.invoke=org.apache.fory.core
+```
+
 ## Quick Start
 
 Note that Fory creation is not cheap, the **Fory instances should be reused between serializations** instead of creating it every time. You should keep Fory as a static global variable, or instance variable of some singleton object or limited objects.

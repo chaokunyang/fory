@@ -20,8 +20,6 @@
 package org.apache.fory.serializer;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -45,7 +43,6 @@ import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.FieldGroups.SerializationFieldInfo;
 import org.apache.fory.serializer.converter.FieldConverters;
 import org.apache.fory.type.Descriptor;
-import org.apache.fory.type.DescriptorBuilder;
 import org.apache.fory.type.DescriptorGrouper;
 import org.apache.fory.util.StringUtils;
 
@@ -175,25 +172,7 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
   }
 
   protected final List<Descriptor> runtimeDescriptors(List<Descriptor> descriptors) {
-    return typeResolver.normalizeFieldDescriptors(type, true, attachFields(descriptors));
-  }
-
-  private List<Descriptor> attachFields(List<Descriptor> descriptors) {
-    Map<String, Field> fields = new HashMap<>();
-    for (Field field : Descriptor.getFields(type)) {
-      fields.put(field.getDeclaringClass().getName() + "." + field.getName(), field);
-    }
-    List<Descriptor> result = new ArrayList<>(descriptors.size());
-    for (Descriptor descriptor : descriptors) {
-      if (descriptor.getField() != null || !Modifier.isFinal(descriptor.getModifier())) {
-        result.add(descriptor);
-        continue;
-      }
-      Field field = fields.get(fieldKey(descriptor));
-      result.add(
-          field == null ? descriptor : new DescriptorBuilder(descriptor).field(field).build());
-    }
-    return result;
+    return typeResolver.normalizeFieldDescriptors(type, true, descriptors);
   }
 
   private static boolean hasSourceOnlyMetadata(List<Descriptor> descriptors) {
@@ -292,14 +271,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
       return;
     }
     throw new ForyException("Generated field " + fieldInfo.getName() + " is not writable");
-  }
-
-  protected final Object copyConstructorFieldValue(
-      CopyContext copyContext,
-      Object originObject,
-      Object fieldValue,
-      SerializationFieldInfo fieldInfo) {
-    return copyFieldValue(copyContext, fieldValue, fieldInfo);
   }
 
   protected final void writeBuildInFieldValue(

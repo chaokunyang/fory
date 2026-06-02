@@ -125,9 +125,58 @@ class ProcessorValidationTest {
     assertTrue(source.contains("return User(userName = (fieldValues[0] as String))"))
     assertTrue(!source.contains("return User(name = field0!!)"))
     assertTrue(source.contains("fieldValues[0] = value.name"))
-    assertFalse(source.contains("copyConstructorFieldValue(copyContext, value, value.name"))
     assertFalse(source.contains("NATURAL_ORDER_COMPARATOR"))
     assertFalse(source.contains("requireXlangNaturalOrdering"))
+    assertFalse(source.contains("trackConstructorRefRead(readContext, buffer)"))
+  }
+
+  @Test
+  fun tracksCtorRefs() {
+    val childType =
+      KotlinSourceTypeNode(
+        rawClassExpression = "Child::class.java",
+        kotlinTypeName = "example.Child",
+        valueTypeName = "Child",
+        typeName = "example.Child",
+        typeId = null,
+        nullable = false,
+        trackingRef = true,
+        primitive = false,
+        unsigned = false,
+      )
+    val source =
+      KotlinSerializerSourceWriter(
+          KotlinSourceStruct(
+            packageName = "example",
+            typeName = "Node",
+            qualifiedTypeName = "example.Node",
+            serializerName = "Node_ForySerializer",
+            serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            fields =
+              listOf(
+                KotlinSourceField(
+                  id = 0,
+                  name = "child",
+                  type = childType,
+                  hasForyField = true,
+                  foryFieldId = 1,
+                  trackingRef = true,
+                  dynamic = "AUTO",
+                  arrayType = false,
+                  hasDefault = false,
+                  nullable = false,
+                  propertyTypeName = "Child",
+                  constructorParameterName = "child",
+                )
+              ),
+            originatingFiles = emptyList(),
+          )
+        )
+        .write()
+
+    assertTrue(source.contains("private fun readSchemaConstructorField"))
+    assertTrue(source.contains("private fun readCompatibleConstructorField"))
+    assertTrue(source.contains("trackConstructorRefRead(readContext, buffer)"))
   }
 
   @Test
@@ -272,13 +321,8 @@ class ProcessorValidationTest {
 
     for (field in fields.take(6)) {
       assertTrue(source.contains("fieldValues[${field.id}] = value.${field.name}"))
-      assertFalse(
-        source.contains("copyConstructorFieldValue(copyContext, value, value.${field.name}")
-      )
     }
-    assertTrue(
-      source.contains("fieldValues[6] = copyConstructorFieldValue(copyContext, value, value.child")
-    )
+    assertTrue(source.contains("fieldValues[6] = copyFieldValue(copyContext, value.child"))
   }
 
   @Test
@@ -404,7 +448,7 @@ class ProcessorValidationTest {
                   type = mapType,
                   hasForyField = true,
                   foryFieldId = 1,
-                  trackingRef = false,
+                  trackingRef = true,
                   dynamic = "AUTO",
                   arrayType = false,
                   hasDefault = false,
@@ -470,9 +514,10 @@ class ProcessorValidationTest {
     )
     assertTrue(
       source.contains(
-        "0 -> KotlinCollectionAdapters.toTreeMap((readFieldValue(readContext, fieldInfo) as kotlin.collections.Map<String, Int>))"
+        "KotlinCollectionAdapters.toTreeMap((readFieldValue(readContext, fieldInfo) as kotlin.collections.Map<String, Int>))"
       )
     )
+    assertTrue(source.contains("0 -> {\n        trackConstructorRefRead(readContext, buffer)"))
     assertTrue(
       source.contains(
         "1 -> run { val readSource0 = ((readFieldValue(readContext, fieldInfo) as kotlin.collections.List<java.util.TreeSet<String>>) as Collection<*>);"
@@ -480,7 +525,7 @@ class ProcessorValidationTest {
     )
     assertTrue(
       source.contains(
-        "0 -> KotlinCollectionAdapters.toTreeMap((readCompatibleFieldValue(readContext, remoteField, localField) as kotlin.collections.Map<String, Int>))"
+        "KotlinCollectionAdapters.toTreeMap((readCompatibleFieldValue(readContext, remoteField, localField) as kotlin.collections.Map<String, Int>))"
       )
     )
     assertTrue(
@@ -521,7 +566,6 @@ class ProcessorValidationTest {
     )
     assertTrue(source.contains("fieldValues[2] = run { val copySource0 = value.arrays;"))
     assertTrue(source.contains("copyTarget0.add(copyElement0.copyOf())"))
-    assertFalse(source.contains("fieldValues[0] = copyConstructorFieldValue"))
     assertFalse(source.contains("fieldValues[0] = KotlinCollectionAdapters.toTreeMap(run"))
     assertFalse(source.contains("java.util.TreeMap<Any?, Any?>((copySource0.comparator()"))
   }
@@ -536,7 +580,7 @@ class ProcessorValidationTest {
         typeName = "java.lang.String",
         typeId = "Types.STRING",
         nullable = false,
-        trackingRef = false,
+        trackingRef = true,
         primitive = false,
         unsigned = false,
       )
@@ -556,7 +600,7 @@ class ProcessorValidationTest {
                   type = stringType,
                   hasForyField = true,
                   foryFieldId = 1,
-                  trackingRef = false,
+                  trackingRef = true,
                   dynamic = "AUTO",
                   arrayType = false,
                   hasDefault = true,
@@ -577,6 +621,9 @@ class ProcessorValidationTest {
     assertTrue(compatibleSource.contains("return readCompatibleDefaultConstructor(readContext)"))
     assertTrue(compatibleSource.contains("beginConstructorRef(readContext)"))
     assertTrue(compatibleSource.contains("checkNoUnresolvedReadRef(readContext)"))
+    assertTrue(
+      compatibleSource.contains("trackConstructorRefRead(readContext, readContext.buffer)")
+    )
     assertTrue(compatibleSource.contains("referenceConstructorRef(readContext, constructed)"))
     assertTrue(compatibleSource.contains("endConstructorRef(readContext)"))
     assertTrue(compatibleSource.contains("missingDefaultMask"))

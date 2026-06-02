@@ -57,7 +57,6 @@ import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
-import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.reflect.ReflectionUtils;
@@ -123,6 +122,15 @@ public class CollectionSerializers {
     }
   }
 
+  private static UnsupportedOperationException unsupportedBoundedQueueWrite(Class<?> type) {
+    return new UnsupportedOperationException(
+        "Serializing or copying "
+            + type.getName()
+            + " requires access to its exact capacity field. This runtime can deserialize existing "
+            + "payloads for this type, but cannot serialize or copy it without JDK concurrent "
+            + "field access.");
+  }
+
   public static final class ArrayListSerializer extends CollectionSerializer<ArrayList> {
     public ArrayListSerializer(TypeResolver typeResolver) {
       super(typeResolver, ArrayList.class, true);
@@ -172,7 +180,7 @@ public class CollectionSerializers {
         super.write(writeContext, value);
       } else {
         Object[] array =
-            !MemoryUtils.JDK_COLLECTION_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
+            !MemoryUtils.JDK_COLLECTION_FIELD_ACCESS
                 ? value.toArray()
                 : (Object[]) ArrayAccess.ACCESSOR.getObject(value);
         writeContext.writeRef(array);
@@ -617,7 +625,7 @@ public class CollectionSerializers {
         set = Collections.newSetFromMap(mapSerializer.newMap(readContext));
         setNumElements(mapSerializer.getAndClearNumElements());
       } else {
-        if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+        if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
           throw new UnsupportedOperationException(
               "This runtime cannot read legacy SetFromMap payloads that require hidden JDK field "
                   + "restoration");
@@ -640,7 +648,7 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       assert !config.isXlang();
-      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         if (JdkVersion.MAJOR_VERSION >= 25) {
           throw unsupportedJdk25SetFromMap(null);
         }
@@ -662,7 +670,7 @@ public class CollectionSerializers {
       MemoryBuffer buffer = writeContext.getBuffer();
       Map<?, Boolean> map;
       TypeInfo typeInfo;
-      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+      if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         if (JdkVersion.MAJOR_VERSION >= 25) {
           throw unsupportedJdk25SetFromMap(null);
         }
@@ -932,8 +940,8 @@ public class CollectionSerializers {
     }
 
     private static int getCapacity(ArrayBlockingQueue queue) {
-      if (!MemoryUtils.JDK_CONCURRENT_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-        return queue.size() + queue.remainingCapacity();
+      if (!MemoryUtils.JDK_CONCURRENT_FIELD_ACCESS) {
+        throw unsupportedBoundedQueueWrite(ArrayBlockingQueue.class);
       }
       Object[] items = (Object[]) ItemsAccess.ACCESSOR.getObject(queue);
       return items.length;
@@ -999,8 +1007,8 @@ public class CollectionSerializers {
     }
 
     private static int getCapacity(LinkedBlockingQueue queue) {
-      if (!MemoryUtils.JDK_CONCURRENT_FIELD_ACCESS || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-        return queue.size() + queue.remainingCapacity();
+      if (!MemoryUtils.JDK_CONCURRENT_FIELD_ACCESS) {
+        throw unsupportedBoundedQueueWrite(LinkedBlockingQueue.class);
       }
       return CapacityAccess.ACCESSOR.getInt(queue);
     }

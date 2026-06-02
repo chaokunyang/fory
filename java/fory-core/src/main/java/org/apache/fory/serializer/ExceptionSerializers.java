@@ -54,28 +54,8 @@ import org.apache.fory.resolver.TypeResolver;
 @SuppressWarnings({"rawtypes", "unchecked"})
 public final class ExceptionSerializers {
   private static final Set<Class<?>> THROWABLE_SUPER_CLASSES = ofHashSet(Throwable.class);
-  // Throwable slot serializers populate fields on the throwable allocated by ExceptionSerializer.
-  // They must not resolve constructors for each serialized superclass layer.
-  private static final ObjectInstantiator<Object> FIELD_ONLY_INSTANTIATOR =
-      new FieldOnlyInstantiator();
 
   private ExceptionSerializers() {}
-
-  private static final class FieldOnlyInstantiator extends ObjectInstantiator<Object> {
-    private FieldOnlyInstantiator() {
-      super(Object.class);
-    }
-
-    @Override
-    public Object newInstance() {
-      throw new UnsupportedOperationException("Throwable layer serializers do not create objects");
-    }
-
-    @Override
-    public Object newInstanceWithArguments(Object... arguments) {
-      throw new UnsupportedOperationException("Throwable layer serializers do not create objects");
-    }
-  }
 
   public static final class ExceptionSerializer<T extends Throwable> extends Serializer<T> {
     private final Config config;
@@ -444,8 +424,9 @@ public final class ExceptionSerializers {
         slotsSerializer =
             new CompatibleLayerSerializer(typeResolver, type, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer =
-            new ObjectSerializer<>(typeResolver, type, false, fieldOnlyInstantiator());
+        // Throwable slot serializers populate fields on the throwable allocated by
+        // ExceptionSerializer.
+        slotsSerializer = new ObjectSerializer<>(typeResolver, type, false, null);
       }
       serializers.add(slotsSerializer);
       type = (Class<T>) type.getSuperclass();
@@ -453,10 +434,6 @@ public final class ExceptionSerializers {
     }
     Collections.reverse(serializers);
     return serializers.toArray(new Serializer[0]);
-  }
-
-  private static <T> ObjectInstantiator<T> fieldOnlyInstantiator() {
-    return (ObjectInstantiator<T>) FIELD_ONLY_INSTANTIATOR;
   }
 
   private static void readAndSetFields(

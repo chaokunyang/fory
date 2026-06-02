@@ -97,18 +97,6 @@ val fory: ThreadSafeFory = ForyKotlin.builder()
 
 All configuration options from Fory Java are available. See [Java Configuration](../java/configuration.md) for the complete list.
 
-## JDK25+ Zero-Unsafe Mode
-
-On JDK25+ with Unsafe memory access denied, Kotlin classes follow the same final-field rules as Java
-native serialization. Ordinary runtime serializers use Fory's supported object-creation path and
-field setting; KSP-generated `@ForyStruct` serializers call source-visible primary constructors
-directly. Fory does not expose constructor-mapping APIs for normal Kotlin classes. If a class cannot
-be created by supported Java mechanisms, use an accessible no-argument constructor, a generated
-`@ForyStruct` serializer, or a custom serializer.
-
-The JVM also needs the module opens listed in
-[Java Troubleshooting](../java/troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens).
-
 Common options for Kotlin native-mode payloads:
 
 ```kotlin

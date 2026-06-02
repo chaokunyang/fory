@@ -52,7 +52,6 @@ import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.reflect.ObjectInstantiator;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.TypeResolver;
@@ -74,27 +73,6 @@ import org.apache.fory.util.Preconditions;
  */
 @SuppressWarnings({"unchecked", "rawtypes"})
 public class ChildContainerSerializers {
-  // Child-container slot serializers populate fields on the container instance created by the
-  // concrete container serializer. Parent slots do not own object construction.
-  private static final ObjectInstantiator<Object> FIELD_ONLY_INSTANTIATOR =
-      new FieldOnlyInstantiator();
-
-  private static final class FieldOnlyInstantiator extends ObjectInstantiator<Object> {
-    private FieldOnlyInstantiator() {
-      super(Object.class);
-    }
-
-    @Override
-    public Object newInstance() {
-      throw new UnsupportedOperationException("Child-container slots do not create objects");
-    }
-
-    @Override
-    public Object newInstanceWithArguments(Object... arguments) {
-      throw new UnsupportedOperationException("Child-container slots do not create objects");
-    }
-  }
-
   public static Class<? extends Serializer> getCollectionSerializerClass(Class<?> cls) {
     if (ChildCollectionSerializer.superClasses.contains(cls)
         || ChildSortedSetSerializer.superClasses.contains(cls)
@@ -647,7 +625,9 @@ public class ChildContainerSerializers {
         slotsSerializer =
             new CompatibleLayerSerializer(typeResolver, cls, layerTypeDef, layerMarkerClass);
       } else {
-        slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false, slotInstantiator());
+        // Slot serializers only populate fields on the container instance created by the concrete
+        // container serializer.
+        slotsSerializer = new ObjectSerializer<>(typeResolver, cls, false, null);
       }
       serializers.add(slotsSerializer);
       cls = (Class<T>) cls.getSuperclass();
@@ -655,10 +635,6 @@ public class ChildContainerSerializers {
     }
     Collections.reverse(serializers);
     return serializers.toArray(new Serializer[0]);
-  }
-
-  private static <T> ObjectInstantiator<T> slotInstantiator() {
-    return (ObjectInstantiator<T>) FIELD_ONLY_INSTANTIATOR;
   }
 
   private static void readAndSetFields(

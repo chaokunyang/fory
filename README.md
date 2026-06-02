@@ -142,6 +142,13 @@ Gradle:
 implementation "org.apache.fory:fory-core:1.1.0"
 ```
 
+On JDK25+, put Fory on the module path and open `java.lang.invoke` to the Fory
+core module:
+
+```bash
+--add-opens=java.base/java.lang.invoke=org.apache.fory.core
+```
+
 **Scala**
 
 sbt:

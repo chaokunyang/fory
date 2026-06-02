@@ -260,14 +260,15 @@ public class CollectionSerializersTest extends ForyTestBase {
     // Test serialize Comparator
     TreeSet<String> set =
         new TreeSet<>(
-            (s1, s2) -> {
-              int delta = s1.length() - s2.length();
-              if (delta == 0) {
-                return s1.compareTo(s2);
-              } else {
-                return delta;
-              }
-            });
+            (Comparator<? super String> & Serializable)
+                (s1, s2) -> {
+                  int delta = s1.length() - s2.length();
+                  if (delta == 0) {
+                    return s1.compareTo(s2);
+                  } else {
+                    return delta;
+                  }
+                });
     set.add("str11");
     set.add("str2");
     assertEquals(set, serDe(fory, set));

@@ -21,34 +21,22 @@ package org.apache.fory.memory;
 
 import java.nio.ByteBuffer;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 
 /** Memory utils for fory. */
 public class MemoryUtils {
-  // JDK25+ internal-field access must be backed by supported access in the multi-release classes.
-  // The JDK25+ replacement obtains a trusted lookup through java.base/java.lang.invoke instead of
-  // requiring per-package JDK opens or jdk.unsupported.
+  // Android does not expose these private JDK fields. GraalVM native image support is decided by
+  // the accessor owner instead of being disabled globally here.
   public static final boolean JDK_INTERNAL_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_INTERNAL_FIELD_ACCESS;
   public static final boolean JDK_LANG_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_LANG_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_LANG_FIELD_ACCESS;
   public static final boolean JDK_COLLECTION_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_COLLECTION_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_COLLECTION_FIELD_ACCESS;
   public static final boolean JDK_CONCURRENT_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_CONCURRENT_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_CONCURRENT_FIELD_ACCESS;
   public static final boolean JDK_PROXY_FIELD_ACCESS =
-      !AndroidSupport.IS_ANDROID
-          && !GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-          && _JDKAccess.JDK_PROXY_FIELD_ACCESS;
+      !AndroidSupport.IS_ANDROID && _JDKAccess.JDK_PROXY_FIELD_ACCESS;
 
   public static MemoryBuffer buffer(int size) {
     return wrap(new byte[size]);

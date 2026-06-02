@@ -362,6 +362,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append(
       "  private fun readCompatibleConstructorField(readContext: ReadContext, remoteField: StaticGeneratedStructSerializer.RemoteFieldInfo, localField: SerializationFieldInfo, fieldId: Int): Any? {\n"
     )
+    builder.append("    val buffer = readContext.buffer\n")
     builder.append("    return when (fieldId) {\n")
     for (field in struct.fields) {
       val readExpression =
@@ -371,7 +372,14 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
           compatible = true,
         )
       val expression = constructorReadExpression(field, readExpression)
-      builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
+      if (field.trackingRef) {
+        builder.append("      ").append(field.id).append(" -> {\n")
+        builder.append("        trackConstructorRefRead(readContext, buffer)\n")
+        builder.append("        ").append(expression).append("\n")
+        builder.append("      }\n")
+      } else {
+        builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
+      }
     }
     builder.append(
       "      else -> throw IllegalStateException(\"Unknown generated field id \${fieldId}\")\n"
@@ -550,7 +558,14 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       val readExpression =
         direct ?: castReadExpression(field, "readFieldValue(readContext, fieldInfo)")
       val expression = constructorReadExpression(field, readExpression)
-      builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
+      if (field.trackingRef) {
+        builder.append("      ").append(field.id).append(" -> {\n")
+        builder.append("        trackConstructorRefRead(readContext, buffer)\n")
+        builder.append("        ").append(expression).append("\n")
+        builder.append("      }\n")
+      } else {
+        builder.append("      ").append(field.id).append(" -> ").append(expression).append("\n")
+      }
     }
     builder.append(
       "      else -> throw IllegalStateException(\"Unknown generated field id \${fieldId}\")\n"
@@ -833,8 +848,13 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       builder.append(indent).append("      if (canReadRemoteField(remoteField, localField)) {\n")
       val readExpression = "readCompatibleFieldValue(readContext, remoteField, localField)"
       val constructorReadExpression =
-        if (constructorRefs) "ctorFieldValue(readContext, $readExpression, type)"
-        else readExpression
+        if (constructorRefs && field.trackingRef) {
+          "run { trackConstructorRefRead(readContext, readContext.buffer); ctorFieldValue(readContext, $readExpression, type) }"
+        } else if (constructorRefs) {
+          "ctorFieldValue(readContext, $readExpression, type)"
+        } else {
+          readExpression
+        }
       builder
         .append(indent)
         .append("        ")
@@ -1049,8 +1069,7 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
           if (field.nullable) "value.${field.name}?.copyOf()" else "value.${field.name}.copyOf()"
         field.type.isCollectionOrMap() ->
           return copyContainerExpression(field.type, "value.${field.name}", 0)
-        else ->
-          "copyConstructorFieldValue(copyContext, value, value.${field.name}, fieldsById[${field.id}]!!)"
+        else -> "copyFieldValue(copyContext, value.${field.name}, fieldsById[${field.id}]!!)"
       }
     return constructorReadExpression(field, expression)
   }

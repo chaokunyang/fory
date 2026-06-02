@@ -148,32 +148,16 @@ Fory fory = Fory.builder()
 fory.registerSerializer(MyClass.class, new MyClassSerializer(fory.getTypeResolver()));
 ```
 
-### JDK25+ zero-Unsafe mode and module opens
+### JDK25+ access errors
 
-When running on JDK25+ with Unsafe memory access denied, or on a later JDK where denied Unsafe
-memory access becomes the default, start the JVM with:
-
-```bash
---sun-misc-unsafe-memory-access=deny
-```
-
-Run Fory as named modules on the module path and open `java.base/java.lang.invoke` to the Fory core
-module:
+On JDK25+, if an error names `java.base/java.lang.invoke`, put Fory on the module path and open
+`java.lang.invoke` to the Fory core module:
 
 ```bash
 --add-opens=java.base/java.lang.invoke=org.apache.fory.core
 ```
 
-If this open is missing, Fory reports an error that names `java.base/java.lang.invoke`.
-
-Fory does not require `--enable-final-field-mutation` for normal final-field restoration on JDK26
-and later. With the `java.base/java.lang.invoke` open above, Fory uses trusted lookup field handles
-instead of ordinary reflective final-field mutation. Named application modules that contain private
-fields still need to open the application package to `org.apache.fory.core`.
-
-The vectorized Arrow APIs in `fory-format` depend on Apache Arrow's memory layer. With the current
-Arrow dependency, those APIs are unavailable when `--sun-misc-unsafe-memory-access=deny` is set
-because Arrow initializes its own `sun.misc.Unsafe` memory access internally.
+Fory does not require application package opens for private-field access.
 
 ## Performance Issues
 

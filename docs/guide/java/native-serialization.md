@@ -165,19 +165,19 @@ path is too expensive.
 ## Final Fields And Constructors
 
 Records are deserialized through their canonical constructor. Ordinary classes use Fory's normal
-object-creation path and field setting, including final fields when the runtime supports it. Fory
-does not expose a constructor-mapping annotation or a constructor-registration API for ordinary
-classes, and Java parameter-name metadata such as `-parameters` or `@ConstructorProperties` is not a
-Fory object-creation contract.
+object-creation path and field setting, including final fields when the runtime supports it:
 
-If an ordinary class cannot be created by supported Java mechanisms, use an accessible no-argument
-constructor, model it as a record when canonical-constructor semantics are appropriate, or register a
-custom serializer. On JDK25+ with Unsafe memory access denied, use the
-`java.base/java.lang.invoke` open shown in troubleshooting for supported final-field and JDK access
-paths. Fory does not require `--enable-final-field-mutation` for ordinary final-field restoration on
-JDK26+. See
-[Troubleshooting](troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens) for the required JVM
-flags.
+```java
+public final class User {
+  private final String name;
+  private final int age;
+
+  public User(String name, int age) {
+    this.name = name;
+    this.age = age;
+  }
+}
+```
 
 ## JDK Serialization Hooks
 

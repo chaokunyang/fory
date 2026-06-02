@@ -109,9 +109,14 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - JDK25+ final-instance field mutation should use the same trusted-lookup `VarHandle` owner path as
   non-final field mutation. Do not add a final-field-only `MethodHandle` setter path or ordinary
   reflective `Field.set*` fallback.
-- Do not call `FieldAccessor.checkObj` in the JDK25+ VarHandle field-access hot path. VarHandle
-  validates null and receiver type itself, while root Unsafe offset access still needs explicit
-  receiver validation because Unsafe does not.
+- JDK25+ `FieldAccessorStrategy` should use one final trusted-lookup `VarHandle` instance accessor
+  with dense access-kind switches, not public primitive/object accessor classes or a JDK25
+  `GeneratedAccessor`. Do not wrap `VarHandle.get/set` in hot-path try/catch blocks and do not call
+  `FieldAccessor.checkObj`; VarHandle validates null and receiver type itself. Root Unsafe offset
+  access still needs explicit receiver validation because Unsafe does not.
+- Keep JDK26 `--illegal-final-field-mutation=deny` scoped to the JPMS runtime tests that prove
+  Fory's field-access path. Do not put it in global Maven `JDK_JAVA_OPTIONS`, because build tools
+  such as Lombok may perform their own reflective final-field access during compilation.
 - JDK25+ collection serializers must fail unsupported `Collections.newSetFromMap` backing maps
   before writing or copying. Do not rewrite them to `HashMap`, because that changes equality
   semantics and can drop entries.

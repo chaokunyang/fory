@@ -31,7 +31,6 @@ import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.platform.internal._UnsafeUtils;
-import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
@@ -49,6 +48,14 @@ final class FieldAccessorStrategy {
   private static final int OBJECT_ACCESS = 9;
 
   private FieldAccessorStrategy() {}
+
+  static FieldAccessor createAccessor(Field field) {
+    Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
+    if (GraalvmSupport.isGraalBuildTime()) {
+      return new GeneratedAccessor(field);
+    }
+    return new InstanceAccessor(field);
+  }
 
   private static long fieldOffset(Field field) {
     if (AndroidSupport.IS_ANDROID) {
@@ -83,60 +90,8 @@ final class FieldAccessorStrategy {
     return OBJECT_ACCESS;
   }
 
-  private static void copyField(
-      long fieldOffset,
-      int accessKind,
-      Object sourceObject,
-      Object targetObject,
-      FieldAccessor accessor) {
-    switch (accessKind) {
-      case BOOLEAN_ACCESS:
-        UNSAFE.putBoolean(targetObject, fieldOffset, UNSAFE.getBoolean(sourceObject, fieldOffset));
-        return;
-      case BYTE_ACCESS:
-        UNSAFE.putByte(targetObject, fieldOffset, UNSAFE.getByte(sourceObject, fieldOffset));
-        return;
-      case CHAR_ACCESS:
-        UNSAFE.putChar(targetObject, fieldOffset, UNSAFE.getChar(sourceObject, fieldOffset));
-        return;
-      case SHORT_ACCESS:
-        UNSAFE.putShort(targetObject, fieldOffset, UNSAFE.getShort(sourceObject, fieldOffset));
-        return;
-      case INT_ACCESS:
-        UNSAFE.putInt(targetObject, fieldOffset, UNSAFE.getInt(sourceObject, fieldOffset));
-        return;
-      case LONG_ACCESS:
-        UNSAFE.putLong(targetObject, fieldOffset, UNSAFE.getLong(sourceObject, fieldOffset));
-        return;
-      case FLOAT_ACCESS:
-        UNSAFE.putFloat(targetObject, fieldOffset, UNSAFE.getFloat(sourceObject, fieldOffset));
-        return;
-      case DOUBLE_ACCESS:
-        UNSAFE.putDouble(targetObject, fieldOffset, UNSAFE.getDouble(sourceObject, fieldOffset));
-        return;
-      case OBJECT_ACCESS:
-        UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
-        return;
-      default:
-        accessor.putObject(targetObject, accessor.getObject(sourceObject));
-    }
-  }
-
-  private static void copyObjectField(
-      long fieldOffset,
-      int accessKind,
-      Object sourceObject,
-      Object targetObject,
-      FieldAccessor accessor) {
-    if (accessKind == OBJECT_ACCESS) {
-      UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
-    } else {
-      accessor.putObject(targetObject, accessor.getObject(sourceObject));
-    }
-  }
-
-  private abstract static class InstanceAccessor extends FieldAccessor {
-    protected final long fieldOffset;
+  static final class InstanceAccessor extends FieldAccessor {
+    private final long fieldOffset;
     private final int accessKind;
 
     InstanceAccessor(Field field) {
@@ -146,52 +101,111 @@ final class FieldAccessorStrategy {
     }
 
     @Override
+    public Object get(Object obj) {
+      checkObj(obj);
+      switch (accessKind) {
+        case BOOLEAN_ACCESS:
+          return UNSAFE.getBoolean(obj, fieldOffset);
+        case BYTE_ACCESS:
+          return UNSAFE.getByte(obj, fieldOffset);
+        case CHAR_ACCESS:
+          return UNSAFE.getChar(obj, fieldOffset);
+        case SHORT_ACCESS:
+          return UNSAFE.getShort(obj, fieldOffset);
+        case INT_ACCESS:
+          return UNSAFE.getInt(obj, fieldOffset);
+        case LONG_ACCESS:
+          return UNSAFE.getLong(obj, fieldOffset);
+        case FLOAT_ACCESS:
+          return UNSAFE.getFloat(obj, fieldOffset);
+        case DOUBLE_ACCESS:
+          return UNSAFE.getDouble(obj, fieldOffset);
+        case OBJECT_ACCESS:
+          return UNSAFE.getObject(obj, fieldOffset);
+        default:
+          throw new IllegalStateException("Unsupported access kind " + accessKind);
+      }
+    }
+
+    @Override
+    public void set(Object obj, Object value) {
+      checkObj(obj);
+      switch (accessKind) {
+        case BOOLEAN_ACCESS:
+          UNSAFE.putBoolean(obj, fieldOffset, (Boolean) value);
+          return;
+        case BYTE_ACCESS:
+          UNSAFE.putByte(obj, fieldOffset, (Byte) value);
+          return;
+        case CHAR_ACCESS:
+          UNSAFE.putChar(obj, fieldOffset, (Character) value);
+          return;
+        case SHORT_ACCESS:
+          UNSAFE.putShort(obj, fieldOffset, (Short) value);
+          return;
+        case INT_ACCESS:
+          UNSAFE.putInt(obj, fieldOffset, (Integer) value);
+          return;
+        case LONG_ACCESS:
+          UNSAFE.putLong(obj, fieldOffset, (Long) value);
+          return;
+        case FLOAT_ACCESS:
+          UNSAFE.putFloat(obj, fieldOffset, (Float) value);
+          return;
+        case DOUBLE_ACCESS:
+          UNSAFE.putDouble(obj, fieldOffset, (Double) value);
+          return;
+        case OBJECT_ACCESS:
+          UNSAFE.putObject(obj, fieldOffset, value);
+          return;
+        default:
+          throw new IllegalStateException("Unsupported access kind " + accessKind);
+      }
+    }
+
+    @Override
     public void copy(Object sourceObject, Object targetObject) {
-      copyField(fieldOffset, accessKind, sourceObject, targetObject, this);
+      switch (accessKind) {
+        case BOOLEAN_ACCESS:
+          UNSAFE.putBoolean(
+              targetObject, fieldOffset, UNSAFE.getBoolean(sourceObject, fieldOffset));
+          return;
+        case BYTE_ACCESS:
+          UNSAFE.putByte(targetObject, fieldOffset, UNSAFE.getByte(sourceObject, fieldOffset));
+          return;
+        case CHAR_ACCESS:
+          UNSAFE.putChar(targetObject, fieldOffset, UNSAFE.getChar(sourceObject, fieldOffset));
+          return;
+        case SHORT_ACCESS:
+          UNSAFE.putShort(targetObject, fieldOffset, UNSAFE.getShort(sourceObject, fieldOffset));
+          return;
+        case INT_ACCESS:
+          UNSAFE.putInt(targetObject, fieldOffset, UNSAFE.getInt(sourceObject, fieldOffset));
+          return;
+        case LONG_ACCESS:
+          UNSAFE.putLong(targetObject, fieldOffset, UNSAFE.getLong(sourceObject, fieldOffset));
+          return;
+        case FLOAT_ACCESS:
+          UNSAFE.putFloat(targetObject, fieldOffset, UNSAFE.getFloat(sourceObject, fieldOffset));
+          return;
+        case DOUBLE_ACCESS:
+          UNSAFE.putDouble(targetObject, fieldOffset, UNSAFE.getDouble(sourceObject, fieldOffset));
+          return;
+        case OBJECT_ACCESS:
+          UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
+          return;
+        default:
+          super.copy(sourceObject, targetObject);
+      }
     }
 
     @Override
     public void copyObject(Object sourceObject, Object targetObject) {
-      copyObjectField(fieldOffset, accessKind, sourceObject, targetObject, this);
-    }
-  }
-
-  static FieldAccessor createAccessor(Field field) {
-    Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
-    if (GraalvmSupport.isGraalBuildTime()) {
-      return new GeneratedAccessor(field);
-    }
-    if (field.getType() == boolean.class) {
-      return new BooleanAccessor(field);
-    } else if (field.getType() == byte.class) {
-      return new ByteAccessor(field);
-    } else if (field.getType() == char.class) {
-      return new CharAccessor(field);
-    } else if (field.getType() == short.class) {
-      return new ShortAccessor(field);
-    } else if (field.getType() == int.class) {
-      return new IntAccessor(field);
-    } else if (field.getType() == long.class) {
-      return new LongAccessor(field);
-    } else if (field.getType() == float.class) {
-      return new FloatAccessor(field);
-    } else if (field.getType() == double.class) {
-      return new DoubleAccessor(field);
-    } else {
-      return new ObjectAccessor(field);
-    }
-  }
-
-  /** Primitive boolean accessor. */
-  public static class BooleanAccessor extends InstanceAccessor {
-    public BooleanAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == boolean.class);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      return getBoolean(obj);
+      if (accessKind == OBJECT_ACCESS) {
+        UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
+      } else {
+        super.copyObject(sourceObject, targetObject);
+      }
     }
 
     @Override
@@ -201,27 +215,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putBoolean(obj, (Boolean) value);
-    }
-
-    @Override
     public void putBoolean(Object obj, boolean value) {
       checkObj(obj);
       UNSAFE.putBoolean(obj, fieldOffset, value);
-    }
-  }
-
-  /** Primitive byte accessor. */
-  public static class ByteAccessor extends InstanceAccessor {
-    public ByteAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == byte.class);
-    }
-
-    @Override
-    public Byte get(Object obj) {
-      return getByte(obj);
     }
 
     @Override
@@ -231,27 +227,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putByte(obj, (Byte) value);
-    }
-
-    @Override
     public void putByte(Object obj, byte value) {
       checkObj(obj);
       UNSAFE.putByte(obj, fieldOffset, value);
-    }
-  }
-
-  /** Primitive char accessor. */
-  public static class CharAccessor extends InstanceAccessor {
-    public CharAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == char.class);
-    }
-
-    @Override
-    public Character get(Object obj) {
-      return getChar(obj);
     }
 
     @Override
@@ -261,27 +239,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putChar(obj, (Character) value);
-    }
-
-    @Override
     public void putChar(Object obj, char value) {
       checkObj(obj);
       UNSAFE.putChar(obj, fieldOffset, value);
-    }
-  }
-
-  /** Primitive short accessor. */
-  public static class ShortAccessor extends InstanceAccessor {
-    public ShortAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == short.class);
-    }
-
-    @Override
-    public Short get(Object obj) {
-      return getShort(obj);
     }
 
     @Override
@@ -291,27 +251,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putShort(obj, (Short) value);
-    }
-
-    @Override
     public void putShort(Object obj, short value) {
       checkObj(obj);
       UNSAFE.putShort(obj, fieldOffset, value);
-    }
-  }
-
-  /** Primitive int accessor. */
-  public static class IntAccessor extends InstanceAccessor {
-    public IntAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == int.class);
-    }
-
-    @Override
-    public Integer get(Object obj) {
-      return getInt(obj);
     }
 
     @Override
@@ -321,27 +263,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putInt(obj, (Integer) value);
-    }
-
-    @Override
     public void putInt(Object obj, int value) {
       checkObj(obj);
       UNSAFE.putInt(obj, fieldOffset, value);
-    }
-  }
-
-  /** Primitive long accessor. */
-  public static class LongAccessor extends InstanceAccessor {
-    public LongAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == long.class);
-    }
-
-    @Override
-    public Long get(Object obj) {
-      return getLong(obj);
     }
 
     @Override
@@ -351,27 +275,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putLong(obj, (Long) value);
-    }
-
-    @Override
     public void putLong(Object obj, long value) {
       checkObj(obj);
       UNSAFE.putLong(obj, fieldOffset, value);
-    }
-  }
-
-  /** Primitive float accessor. */
-  public static class FloatAccessor extends InstanceAccessor {
-    public FloatAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == float.class);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      return getFloat(obj);
     }
 
     @Override
@@ -381,27 +287,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putFloat(obj, (Float) value);
-    }
-
-    @Override
     public void putFloat(Object obj, float value) {
       checkObj(obj);
       UNSAFE.putFloat(obj, fieldOffset, value);
-    }
-  }
-
-  /** Primitive double accessor. */
-  public static class DoubleAccessor extends InstanceAccessor {
-    public DoubleAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == double.class);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      return getDouble(obj);
     }
 
     @Override
@@ -411,34 +299,9 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putDouble(obj, (Double) value);
-    }
-
-    @Override
     public void putDouble(Object obj, double value) {
       checkObj(obj);
       UNSAFE.putDouble(obj, fieldOffset, value);
-    }
-  }
-
-  /** Object accessor. */
-  public static class ObjectAccessor extends InstanceAccessor {
-    public ObjectAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(!TypeUtils.isPrimitive(field.getType()));
-    }
-
-    @Override
-    public Object get(Object obj) {
-      checkObj(obj);
-      return UNSAFE.getObject(obj, fieldOffset);
-    }
-
-    @Override
-    public void set(Object obj, Object value) {
-      checkObj(obj);
-      UNSAFE.putObject(obj, fieldOffset, value);
     }
   }
 

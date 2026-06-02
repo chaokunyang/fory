@@ -84,15 +84,8 @@ def jdk25_access_options(fory_targets="org.apache.fory.core"):
     ]
 
 
-def jdk26_final_field_options(fory_targets="org.apache.fory.core"):
-    return [f"--enable-final-field-mutation={fory_targets}"]
-
-
 def jdk25_plus_options(java_version, fory_targets="org.apache.fory.core"):
-    options = jdk25_access_options(fory_targets)
-    if int(java_version) >= 26:
-        options.extend(jdk26_final_field_options(fory_targets))
-    return options
+    return jdk25_access_options(fory_targets)
 
 
 def jdk25_javac_options():

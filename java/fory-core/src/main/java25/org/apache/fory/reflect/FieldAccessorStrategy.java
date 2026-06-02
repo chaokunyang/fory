@@ -22,46 +22,51 @@ package org.apache.fory.reflect;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
-import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
 
 final class FieldAccessorStrategy {
+  private static final int BOOLEAN_ACCESS = 1;
+  private static final int BYTE_ACCESS = 2;
+  private static final int CHAR_ACCESS = 3;
+  private static final int SHORT_ACCESS = 4;
+  private static final int INT_ACCESS = 5;
+  private static final int LONG_ACCESS = 6;
+  private static final int FLOAT_ACCESS = 7;
+  private static final int DOUBLE_ACCESS = 8;
+  private static final int OBJECT_ACCESS = 9;
+
   private FieldAccessorStrategy() {}
 
   static FieldAccessor createAccessor(Field field) {
     Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
-    if (GraalvmSupport.isGraalBuildTime() || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
-      return new GeneratedAccessor(field);
-    }
     FieldAccessor hiddenAccessor = HiddenFieldAccessorFactory.create(field);
     if (hiddenAccessor != null) {
       return hiddenAccessor;
     }
-    return createVarHandleAccessor(field);
+    return new InstanceAccessor(field);
   }
 
-  private static FieldAccessor createVarHandleAccessor(Field field) {
-    if (field.getType() == boolean.class) {
-      return new BooleanAccessor(field);
-    } else if (field.getType() == byte.class) {
-      return new ByteAccessor(field);
-    } else if (field.getType() == char.class) {
-      return new CharAccessor(field);
-    } else if (field.getType() == short.class) {
-      return new ShortAccessor(field);
-    } else if (field.getType() == int.class) {
-      return new IntAccessor(field);
-    } else if (field.getType() == long.class) {
-      return new LongAccessor(field);
-    } else if (field.getType() == float.class) {
-      return new FloatAccessor(field);
-    } else if (field.getType() == double.class) {
-      return new DoubleAccessor(field);
-    } else {
-      return new ObjectAccessor(field);
+  private static int accessKind(Field field) {
+    Class<?> fieldType = field.getType();
+    if (fieldType == boolean.class) {
+      return BOOLEAN_ACCESS;
+    } else if (fieldType == byte.class) {
+      return BYTE_ACCESS;
+    } else if (fieldType == char.class) {
+      return CHAR_ACCESS;
+    } else if (fieldType == short.class) {
+      return SHORT_ACCESS;
+    } else if (fieldType == int.class) {
+      return INT_ACCESS;
+    } else if (fieldType == long.class) {
+      return LONG_ACCESS;
+    } else if (fieldType == float.class) {
+      return FLOAT_ACCESS;
+    } else if (fieldType == double.class) {
+      return DOUBLE_ACCESS;
     }
+    return OBJECT_ACCESS;
   }
 
   private static VarHandle fieldHandle(Field field) {
@@ -85,29 +90,119 @@ final class FieldAccessorStrategy {
         cause);
   }
 
-  private static RuntimeException accessorFailure(Field field, Throwable cause) {
-    return new RuntimeException("Failed to access field: " + field, cause);
-  }
-
-  private abstract static class InstanceAccessor extends FieldAccessor {
-    protected final VarHandle handle;
+  static final class InstanceAccessor extends FieldAccessor {
+    private final VarHandle handle;
+    private final int accessKind;
 
     InstanceAccessor(Field field) {
       super(field);
       handle = fieldHandle(field);
-    }
-  }
-
-  /** Primitive boolean accessor. */
-  public static class BooleanAccessor extends InstanceAccessor {
-    public BooleanAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == boolean.class);
+      accessKind = accessKind(field);
     }
 
     @Override
     public Object get(Object obj) {
-      return getBoolean(obj);
+      switch (accessKind) {
+        case BOOLEAN_ACCESS:
+          return (boolean) handle.get(obj);
+        case BYTE_ACCESS:
+          return (byte) handle.get(obj);
+        case CHAR_ACCESS:
+          return (char) handle.get(obj);
+        case SHORT_ACCESS:
+          return (short) handle.get(obj);
+        case INT_ACCESS:
+          return (int) handle.get(obj);
+        case LONG_ACCESS:
+          return (long) handle.get(obj);
+        case FLOAT_ACCESS:
+          return (float) handle.get(obj);
+        case DOUBLE_ACCESS:
+          return (double) handle.get(obj);
+        case OBJECT_ACCESS:
+          return handle.get(obj);
+        default:
+          throw new IllegalStateException("Unsupported access kind " + accessKind);
+      }
+    }
+
+    @Override
+    public void set(Object obj, Object value) {
+      switch (accessKind) {
+        case BOOLEAN_ACCESS:
+          handle.set(obj, (Boolean) value);
+          return;
+        case BYTE_ACCESS:
+          handle.set(obj, (Byte) value);
+          return;
+        case CHAR_ACCESS:
+          handle.set(obj, (Character) value);
+          return;
+        case SHORT_ACCESS:
+          handle.set(obj, (Short) value);
+          return;
+        case INT_ACCESS:
+          handle.set(obj, (Integer) value);
+          return;
+        case LONG_ACCESS:
+          handle.set(obj, (Long) value);
+          return;
+        case FLOAT_ACCESS:
+          handle.set(obj, (Float) value);
+          return;
+        case DOUBLE_ACCESS:
+          handle.set(obj, (Double) value);
+          return;
+        case OBJECT_ACCESS:
+          handle.set(obj, value);
+          return;
+        default:
+          throw new IllegalStateException("Unsupported access kind " + accessKind);
+      }
+    }
+
+    @Override
+    public void copy(Object sourceObject, Object targetObject) {
+      switch (accessKind) {
+        case BOOLEAN_ACCESS:
+          handle.set(targetObject, (boolean) handle.get(sourceObject));
+          return;
+        case BYTE_ACCESS:
+          handle.set(targetObject, (byte) handle.get(sourceObject));
+          return;
+        case CHAR_ACCESS:
+          handle.set(targetObject, (char) handle.get(sourceObject));
+          return;
+        case SHORT_ACCESS:
+          handle.set(targetObject, (short) handle.get(sourceObject));
+          return;
+        case INT_ACCESS:
+          handle.set(targetObject, (int) handle.get(sourceObject));
+          return;
+        case LONG_ACCESS:
+          handle.set(targetObject, (long) handle.get(sourceObject));
+          return;
+        case FLOAT_ACCESS:
+          handle.set(targetObject, (float) handle.get(sourceObject));
+          return;
+        case DOUBLE_ACCESS:
+          handle.set(targetObject, (double) handle.get(sourceObject));
+          return;
+        case OBJECT_ACCESS:
+          handle.set(targetObject, handle.get(sourceObject));
+          return;
+        default:
+          throw new IllegalStateException("Unsupported access kind " + accessKind);
+      }
+    }
+
+    @Override
+    public void copyObject(Object sourceObject, Object targetObject) {
+      if (accessKind == OBJECT_ACCESS) {
+        handle.set(targetObject, handle.get(sourceObject));
+      } else {
+        super.copyObject(sourceObject, targetObject);
+      }
     }
 
     @Override
@@ -116,30 +211,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putBoolean(obj, (Boolean) value);
-    }
-
-    @Override
     public void putBoolean(Object obj, boolean value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Primitive byte accessor. */
-  public static class ByteAccessor extends InstanceAccessor {
-    public ByteAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == byte.class);
-    }
-
-    @Override
-    public Byte get(Object obj) {
-      return getByte(obj);
+      handle.set(obj, value);
     }
 
     @Override
@@ -148,30 +221,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putByte(obj, (Byte) value);
-    }
-
-    @Override
     public void putByte(Object obj, byte value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Primitive char accessor. */
-  public static class CharAccessor extends InstanceAccessor {
-    public CharAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == char.class);
-    }
-
-    @Override
-    public Character get(Object obj) {
-      return getChar(obj);
+      handle.set(obj, value);
     }
 
     @Override
@@ -180,30 +231,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putChar(obj, (Character) value);
-    }
-
-    @Override
     public void putChar(Object obj, char value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Primitive short accessor. */
-  public static class ShortAccessor extends InstanceAccessor {
-    public ShortAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == short.class);
-    }
-
-    @Override
-    public Short get(Object obj) {
-      return getShort(obj);
+      handle.set(obj, value);
     }
 
     @Override
@@ -212,30 +241,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putShort(obj, (Short) value);
-    }
-
-    @Override
     public void putShort(Object obj, short value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Primitive int accessor. */
-  public static class IntAccessor extends InstanceAccessor {
-    public IntAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == int.class);
-    }
-
-    @Override
-    public Integer get(Object obj) {
-      return getInt(obj);
+      handle.set(obj, value);
     }
 
     @Override
@@ -244,30 +251,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putInt(obj, (Integer) value);
-    }
-
-    @Override
     public void putInt(Object obj, int value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Primitive long accessor. */
-  public static class LongAccessor extends InstanceAccessor {
-    public LongAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == long.class);
-    }
-
-    @Override
-    public Long get(Object obj) {
-      return getLong(obj);
+      handle.set(obj, value);
     }
 
     @Override
@@ -276,30 +261,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putLong(obj, (Long) value);
-    }
-
-    @Override
     public void putLong(Object obj, long value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Primitive float accessor. */
-  public static class FloatAccessor extends InstanceAccessor {
-    public FloatAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == float.class);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      return getFloat(obj);
+      handle.set(obj, value);
     }
 
     @Override
@@ -308,30 +271,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putFloat(obj, (Float) value);
-    }
-
-    @Override
     public void putFloat(Object obj, float value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Primitive double accessor. */
-  public static class DoubleAccessor extends InstanceAccessor {
-    public DoubleAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(field.getType() == double.class);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      return getDouble(obj);
+      handle.set(obj, value);
     }
 
     @Override
@@ -340,207 +281,8 @@ final class FieldAccessorStrategy {
     }
 
     @Override
-    public void set(Object obj, Object value) {
-      putDouble(obj, (Double) value);
-    }
-
-    @Override
     public void putDouble(Object obj, double value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  /** Object accessor. */
-  public static class ObjectAccessor extends InstanceAccessor {
-    public ObjectAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(!TypeUtils.isPrimitive(field.getType()));
-    }
-
-    @Override
-    public Object get(Object obj) {
-      return handle.get(obj);
-    }
-
-    @Override
-    public void set(Object obj, Object value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-  }
-
-  static final class GeneratedAccessor extends InstanceAccessor {
-    GeneratedAccessor(Field field) {
-      super(field);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      try {
-        return handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void set(Object obj, Object value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public boolean getBoolean(Object obj) {
-      try {
-        return (boolean) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putBoolean(Object obj, boolean value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public byte getByte(Object obj) {
-      try {
-        return (byte) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putByte(Object obj, byte value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public char getChar(Object obj) {
-      try {
-        return (char) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putChar(Object obj, char value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public short getShort(Object obj) {
-      try {
-        return (short) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putShort(Object obj, short value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public int getInt(Object obj) {
-      try {
-        return (int) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putInt(Object obj, int value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public long getLong(Object obj) {
-      try {
-        return (long) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putLong(Object obj, long value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public float getFloat(Object obj) {
-      try {
-        return (float) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putFloat(Object obj, float value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public double getDouble(Object obj) {
-      try {
-        return (double) handle.get(obj);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
-    }
-
-    @Override
-    public void putDouble(Object obj, double value) {
-      try {
-        handle.set(obj, value);
-      } catch (RuntimeException e) {
-        throw accessorFailure(field, e);
-      }
+      handle.set(obj, value);
     }
   }
 }

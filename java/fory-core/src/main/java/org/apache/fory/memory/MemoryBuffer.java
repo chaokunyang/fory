@@ -106,20 +106,20 @@ public final class MemoryBuffer {
   /** Limits each raw Unsafe copy to let large copies hit safepoint polls between chunks. */
   private static final long UNSAFE_COPY_THRESHOLD = 1024L * 1024L;
 
+  private static final long BUFFER_ADDRESS_FIELD_OFFSET =
+      AndroidSupport.IS_ANDROID ? -1 : bufferAddressFieldOffset();
+
   // Global allocator instance that can be customized
   private static volatile MemoryAllocator globalAllocator = new DefaultMemoryAllocator();
 
-  private static final class DirectBufferAccess {
-    private static final long BUFFER_ADDRESS_FIELD_OFFSET;
-
-    static {
-      try {
-        Field addressField = Buffer.class.getDeclaredField("address");
-        BUFFER_ADDRESS_FIELD_OFFSET = UNSAFE.objectFieldOffset(addressField);
-        checkArgument(BUFFER_ADDRESS_FIELD_OFFSET != 0);
-      } catch (NoSuchFieldException e) {
-        throw new IllegalStateException(e);
-      }
+  private static long bufferAddressFieldOffset() {
+    try {
+      Field addressField = Buffer.class.getDeclaredField("address");
+      long offset = UNSAFE.objectFieldOffset(addressField);
+      checkArgument(offset != 0);
+      return offset;
+    } catch (NoSuchFieldException e) {
+      throw new IllegalStateException(e);
     }
   }
 
@@ -281,7 +281,7 @@ public final class MemoryBuffer {
     checkNotNull(buffer, "buffer is null");
     checkArgument(buffer.isDirect(), "Can't get address of a non-direct ByteBuffer.");
     try {
-      return UNSAFE.getLong(buffer, DirectBufferAccess.BUFFER_ADDRESS_FIELD_OFFSET);
+      return UNSAFE.getLong(buffer, BUFFER_ADDRESS_FIELD_OFFSET);
     } catch (Throwable t) {
       throw new Error("Could not access direct byte buffer address field.", t);
     }

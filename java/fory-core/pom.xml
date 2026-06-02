@@ -440,6 +440,7 @@
                         <include name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/platform/internal/DefineClass.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/platform/internal/_Lookup.class"/>
+                        <include name="META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/builder/UnsafeCodegenSupport.class"/>
                         <include name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"/>
                         <include
@@ -467,6 +468,9 @@
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_Lookup.class"
                         property="jdk25.lookup.present"/>
+                    <available
+                        file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"
+                        property="jdk25.unsafeutils.present"/>
                     <available
                         file="${jdk25.mrjar.check.dir}/META-INF/versions/25/org/apache/fory/builder/UnsafeCodegenSupport.class"
                         property="jdk25.builder.unsafecodegen.present"/>
@@ -504,6 +508,9 @@
                         unless="jdk25.lookup.present"
                         message="JDK25 multi-release _Lookup class is missing from the packaged fory-core jar."/>
                     <fail
+                        unless="jdk25.unsafeutils.present"
+                        message="JDK25 multi-release _UnsafeUtils class is missing from the packaged fory-core jar."/>
+                    <fail
                         unless="jdk25.builder.unsafecodegen.present"
                         message="JDK25 multi-release UnsafeCodegenSupport class is missing from the packaged fory-core jar."/>
                     <fail
@@ -521,6 +528,30 @@
                     <fail
                         unless="jdk25.moduleinfo.present"
                         message="JDK25 multi-release module-info.class is missing from the packaged fory-core jar."/>
+                    <exec
+                        executable="${java.home}/bin/jdeps"
+                        failonerror="true"
+                        outputproperty="jdk25.jdeps.output">
+                      <arg value="--multi-release"/>
+                      <arg value="25"/>
+                      <arg value="--ignore-missing-deps"/>
+                      <arg value="-include"/>
+                      <arg value="org\.apache\.fory\..*"/>
+                      <arg value="-verbose:class"/>
+                      <arg value="${project.build.directory}/${project.build.finalName}.jar"/>
+                    </exec>
+                    <condition property="jdk25.jdeps.sunmisc.present">
+                      <contains string="${jdk25.jdeps.output}" substring="-&gt; sun.misc"/>
+                    </condition>
+                    <condition property="jdk25.jdeps.jdkinternalreflect.present">
+                      <contains string="${jdk25.jdeps.output}" substring="-&gt; jdk.internal.reflect"/>
+                    </condition>
+                    <fail
+                        if="jdk25.jdeps.sunmisc.present"
+                        message="JDK25 multi-release fory-core jar must not expose sun.misc dependencies in the resolved class graph."/>
+                    <fail
+                        if="jdk25.jdeps.jdkinternalreflect.present"
+                        message="JDK25 multi-release fory-core jar must not expose jdk.internal.reflect dependencies in the resolved class graph."/>
                   </target>
                 </configuration>
               </execution>
@@ -555,6 +586,8 @@
                         <include
                             name="META-INF/versions/25/org/apache/fory/builder/UnsafeCodegenSupport.java"/>
                         <include
+                            name="META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.java"/>
+                        <include
                             name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.java"/>
                         <include
                             name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.java"/>
@@ -569,6 +602,9 @@
                     <available
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/builder/UnsafeCodegenSupport.java"
                         property="jdk25.builder.unsafecodegen.source.present"/>
+                    <available
+                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.java"
+                        property="jdk25.unsafeutils.source.present"/>
                     <available
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.java"
                         property="jdk25.fieldaccessorstrategy.source.present"/>
@@ -587,6 +623,9 @@
                     <fail
                         unless="jdk25.builder.unsafecodegen.source.present"
                         message="JDK25 versioned UnsafeCodegenSupport source is missing from the source jar."/>
+                    <fail
+                        unless="jdk25.unsafeutils.source.present"
+                        message="JDK25 versioned _UnsafeUtils source is missing from the source jar."/>
                     <fail
                         unless="jdk25.fieldaccessorstrategy.source.present"
                         message="JDK25 versioned FieldAccessorStrategy source is missing from the source jar."/>

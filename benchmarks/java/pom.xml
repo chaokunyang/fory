@@ -266,6 +266,8 @@
                         <include
                           name="META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"/>
                         <include
+                          name="META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"/>
+                        <include
                           name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"/>
                         <include
                           name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.class"/>
@@ -285,6 +287,9 @@
                     <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/memory/MemoryBuffer.class"
                       property="jdk25.benchmark.memorybuffer.present"/>
+                    <available
+                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"
+                      property="jdk25.benchmark.unsafeutils.present"/>
                     <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"
                       property="jdk25.benchmark.fieldaccessorstrategy.present"/>
@@ -307,6 +312,9 @@
                       unless="jdk25.benchmark.memorybuffer.present"
                       message="JDK25 benchmark jar is missing the versioned MemoryBuffer class."/>
                     <fail
+                      unless="jdk25.benchmark.unsafeutils.present"
+                      message="JDK25 benchmark jar is missing the versioned _UnsafeUtils class."/>
+                    <fail
                       unless="jdk25.benchmark.fieldaccessorstrategy.present"
                       message="JDK25 benchmark jar is missing the versioned FieldAccessorStrategy class."/>
                     <fail
@@ -315,6 +323,32 @@
                     <fail
                       unless="jdk25.benchmark.platformstring.present"
                       message="JDK25 benchmark jar is missing the versioned PlatformStringUtils class."/>
+                    <exec
+                      executable="${java.home}/bin/jdeps"
+                      failonerror="true"
+                      outputproperty="jdk25.benchmark.jdeps.output">
+                      <arg value="--multi-release"/>
+                      <arg value="25"/>
+                      <arg value="--ignore-missing-deps"/>
+                      <arg value="-include"/>
+                      <arg value="org\.apache\.fory\..*"/>
+                      <arg value="-verbose:class"/>
+                      <arg value="${project.build.directory}/${uberjar.name}.jar"/>
+                    </exec>
+                    <condition property="jdk25.benchmark.jdeps.sunmisc.present">
+                      <contains string="${jdk25.benchmark.jdeps.output}" substring="-&gt; sun.misc"/>
+                    </condition>
+                    <condition property="jdk25.benchmark.jdeps.jdkinternalreflect.present">
+                      <contains
+                        string="${jdk25.benchmark.jdeps.output}"
+                        substring="-&gt; jdk.internal.reflect"/>
+                    </condition>
+                    <fail
+                      if="jdk25.benchmark.jdeps.sunmisc.present"
+                      message="JDK25 benchmark jar must not expose sun.misc dependencies in the resolved class graph."/>
+                    <fail
+                      if="jdk25.benchmark.jdeps.jdkinternalreflect.present"
+                      message="JDK25 benchmark jar must not expose jdk.internal.reflect dependencies in the resolved class graph."/>
                     <java
                       classname="org.apache.fory.benchmark.Jdk25MrJarCheck"
                       fork="true"

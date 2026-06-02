@@ -29,11 +29,11 @@ public final class Jdk25MrJarCheck {
     verifyVersionedClass(MemoryBuffer.class);
     verifyMissing("org.apache.fory.platform.UnsafeOps");
     Class<?> jdkAccess = verifyRootClass("org.apache.fory.platform.internal._JDKAccess");
+    Class<?> unsafeUtils = verifyVersionedClass("org.apache.fory.platform.internal._UnsafeUtils");
     verifyVersionedClass("org.apache.fory.reflect.FieldAccessorStrategy");
     verifyVersionedClass("org.apache.fory.serializer.PlatformStringUtils");
-    if (hasUnsafeField(jdkAccess)) {
-      throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe-owning _JDKAccess");
-    }
+    verifyNoUnsafeDescriptors(jdkAccess);
+    verifyNoUnsafeDescriptors(unsafeUtils);
   }
 
   private static void verifyMissing(String className) {
@@ -78,12 +78,34 @@ public final class Jdk25MrJarCheck {
     return cls;
   }
 
-  private static boolean hasUnsafeField(Class<?> jdkAccess) {
-    for (java.lang.reflect.Field field : jdkAccess.getDeclaredFields()) {
-      if (field.getName().equals("UNSAFE") || field.getType().getName().equals("sun.misc.Unsafe")) {
+  private static void verifyNoUnsafeDescriptors(Class<?> cls) {
+    for (java.lang.reflect.Field field : cls.getDeclaredFields()) {
+      if (isUnsafeType(field.getType())) {
+        throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe field in " + cls);
+      }
+    }
+    for (java.lang.reflect.Method method : cls.getDeclaredMethods()) {
+      if (isUnsafeType(method.getReturnType()) || hasUnsafeType(method.getParameterTypes())) {
+        throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe method in " + cls);
+      }
+    }
+    for (java.lang.reflect.Constructor<?> constructor : cls.getDeclaredConstructors()) {
+      if (hasUnsafeType(constructor.getParameterTypes())) {
+        throw new IllegalStateException("JDK25 benchmark jar loaded Unsafe constructor in " + cls);
+      }
+    }
+  }
+
+  private static boolean hasUnsafeType(Class<?>[] types) {
+    for (Class<?> type : types) {
+      if (isUnsafeType(type)) {
         return true;
       }
     }
     return false;
+  }
+
+  private static boolean isUnsafeType(Class<?> type) {
+    return type.getName().equals("sun.misc.Unsafe");
   }
 }

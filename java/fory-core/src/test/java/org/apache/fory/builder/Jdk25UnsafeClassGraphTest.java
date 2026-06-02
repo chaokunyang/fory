@@ -32,15 +32,17 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.testng.annotations.Test;
 
-public class BuilderUnsafeClassGraphTest {
-  private static final Path ROOT_BUILDER = Paths.get("src/main/java/org/apache/fory/builder");
-  private static final Path JAVA25_BUILDER = Paths.get("src/main/java25/org/apache/fory/builder");
+public class Jdk25UnsafeClassGraphTest {
+  private static final Path ROOT_SOURCES = Paths.get("src/main/java/org/apache/fory");
+  private static final Path JAVA25_SOURCES = Paths.get("src/main/java25/org/apache/fory");
   private static final Pattern ROOT_UNSAFE_REFERENCE =
       Pattern.compile(
           "import\\s+sun\\.misc\\.Unsafe|"
               + "sun\\.misc\\.Unsafe|"
               + "\\bUnsafe\\.class\\b|"
+              + "_UnsafeUtils\\.UNSAFE|"
               + "_JDKAccess\\.UNSAFE|"
+              + "Class\\.forName\\(\"sun\\.misc\\.Unsafe\"\\)|"
               + "TypeRef\\.of\\(Unsafe");
   private static final Pattern JAVA25_UNSAFE_REFERENCE =
       Pattern.compile(
@@ -54,7 +56,7 @@ public class BuilderUnsafeClassGraphTest {
   @Test
   public void testUnsafeOwner() throws IOException {
     List<String> violations = new ArrayList<>();
-    try (Stream<Path> paths = Files.walk(ROOT_BUILDER)) {
+    try (Stream<Path> paths = Files.walk(ROOT_SOURCES)) {
       paths
           .filter(path -> path.toString().endsWith(".java"))
           .forEach(
@@ -64,8 +66,8 @@ public class BuilderUnsafeClassGraphTest {
                   if (!ROOT_UNSAFE_REFERENCE.matcher(source).find()) {
                     return;
                   }
-                  Path relative = ROOT_BUILDER.relativize(path);
-                  Path replacement = JAVA25_BUILDER.resolve(relative);
+                  Path relative = ROOT_SOURCES.relativize(path);
+                  Path replacement = JAVA25_SOURCES.resolve(relative);
                   if (!Files.exists(replacement)) {
                     violations.add(relative.toString().replace('\\', '/'));
                   }
@@ -76,13 +78,13 @@ public class BuilderUnsafeClassGraphTest {
     }
     assertTrue(
         violations.isEmpty(),
-        "Root builder classes that mention Unsafe must have Java 25 replacements: " + violations);
+        "Root classes that mention Unsafe must have Java 25 replacements: " + violations);
   }
 
   @Test
   public void testJava25OwnerIsClean() throws IOException {
     List<String> violations = new ArrayList<>();
-    try (Stream<Path> paths = Files.walk(JAVA25_BUILDER)) {
+    try (Stream<Path> paths = Files.walk(JAVA25_SOURCES)) {
       paths
           .filter(path -> path.toString().endsWith(".java"))
           .forEach(
@@ -90,7 +92,7 @@ public class BuilderUnsafeClassGraphTest {
                 try {
                   String source = new String(Files.readAllBytes(path), StandardCharsets.UTF_8);
                   if (JAVA25_UNSAFE_REFERENCE.matcher(source).find()) {
-                    violations.add(JAVA25_BUILDER.relativize(path).toString().replace('\\', '/'));
+                    violations.add(JAVA25_SOURCES.relativize(path).toString().replace('\\', '/'));
                   }
                 } catch (IOException e) {
                   throw new RuntimeException(e);
@@ -99,6 +101,6 @@ public class BuilderUnsafeClassGraphTest {
     }
     assertTrue(
         violations.isEmpty(),
-        "Java 25 builder replacements must not reference sun.misc.Unsafe: " + violations);
+        "Java 25 replacements must not reference sun.misc.Unsafe: " + violations);
   }
 }

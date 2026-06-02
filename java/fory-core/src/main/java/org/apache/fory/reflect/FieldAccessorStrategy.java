@@ -50,6 +50,91 @@ final class FieldAccessorStrategy {
 
   private FieldAccessorStrategy() {}
 
+  private static long fieldOffset(Field field) {
+    if (AndroidSupport.IS_ANDROID) {
+      return -1;
+    }
+    if (GraalvmSupport.isGraalBuildTime()) {
+      // Field offsets are rewritten by GraalVM and are not stable during native-image build time.
+      return -1;
+    }
+    return UNSAFE.objectFieldOffset(field);
+  }
+
+  private static int accessKind(Field field) {
+    Class<?> fieldType = field.getType();
+    if (fieldType == boolean.class) {
+      return BOOLEAN_ACCESS;
+    } else if (fieldType == byte.class) {
+      return BYTE_ACCESS;
+    } else if (fieldType == char.class) {
+      return CHAR_ACCESS;
+    } else if (fieldType == short.class) {
+      return SHORT_ACCESS;
+    } else if (fieldType == int.class) {
+      return INT_ACCESS;
+    } else if (fieldType == long.class) {
+      return LONG_ACCESS;
+    } else if (fieldType == float.class) {
+      return FLOAT_ACCESS;
+    } else if (fieldType == double.class) {
+      return DOUBLE_ACCESS;
+    }
+    return OBJECT_ACCESS;
+  }
+
+  private static void copyField(
+      long fieldOffset,
+      int accessKind,
+      Object sourceObject,
+      Object targetObject,
+      FieldAccessor accessor) {
+    switch (accessKind) {
+      case BOOLEAN_ACCESS:
+        UNSAFE.putBoolean(targetObject, fieldOffset, UNSAFE.getBoolean(sourceObject, fieldOffset));
+        return;
+      case BYTE_ACCESS:
+        UNSAFE.putByte(targetObject, fieldOffset, UNSAFE.getByte(sourceObject, fieldOffset));
+        return;
+      case CHAR_ACCESS:
+        UNSAFE.putChar(targetObject, fieldOffset, UNSAFE.getChar(sourceObject, fieldOffset));
+        return;
+      case SHORT_ACCESS:
+        UNSAFE.putShort(targetObject, fieldOffset, UNSAFE.getShort(sourceObject, fieldOffset));
+        return;
+      case INT_ACCESS:
+        UNSAFE.putInt(targetObject, fieldOffset, UNSAFE.getInt(sourceObject, fieldOffset));
+        return;
+      case LONG_ACCESS:
+        UNSAFE.putLong(targetObject, fieldOffset, UNSAFE.getLong(sourceObject, fieldOffset));
+        return;
+      case FLOAT_ACCESS:
+        UNSAFE.putFloat(targetObject, fieldOffset, UNSAFE.getFloat(sourceObject, fieldOffset));
+        return;
+      case DOUBLE_ACCESS:
+        UNSAFE.putDouble(targetObject, fieldOffset, UNSAFE.getDouble(sourceObject, fieldOffset));
+        return;
+      case OBJECT_ACCESS:
+        UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
+        return;
+      default:
+        accessor.putObject(targetObject, accessor.getObject(sourceObject));
+    }
+  }
+
+  private static void copyObjectField(
+      long fieldOffset,
+      int accessKind,
+      Object sourceObject,
+      Object targetObject,
+      FieldAccessor accessor) {
+    if (accessKind == OBJECT_ACCESS) {
+      UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
+    } else {
+      accessor.putObject(targetObject, accessor.getObject(sourceObject));
+    }
+  }
+
   private abstract static class UnsafeAccessor extends FieldAccessor {
     protected final long fieldOffset;
     private final int accessKind;
@@ -60,82 +145,14 @@ final class FieldAccessorStrategy {
       accessKind = accessKind(field);
     }
 
-    private static long fieldOffset(Field field) {
-      if (AndroidSupport.IS_ANDROID) {
-        return -1;
-      }
-      if (GraalvmSupport.isGraalBuildTime()) {
-        // Field offsets are rewritten by GraalVM and are not stable during native-image build time.
-        return -1;
-      }
-      return UNSAFE.objectFieldOffset(field);
-    }
-
-    private static int accessKind(Field field) {
-      Class<?> fieldType = field.getType();
-      if (fieldType == boolean.class) {
-        return BOOLEAN_ACCESS;
-      } else if (fieldType == byte.class) {
-        return BYTE_ACCESS;
-      } else if (fieldType == char.class) {
-        return CHAR_ACCESS;
-      } else if (fieldType == short.class) {
-        return SHORT_ACCESS;
-      } else if (fieldType == int.class) {
-        return INT_ACCESS;
-      } else if (fieldType == long.class) {
-        return LONG_ACCESS;
-      } else if (fieldType == float.class) {
-        return FLOAT_ACCESS;
-      } else if (fieldType == double.class) {
-        return DOUBLE_ACCESS;
-      }
-      return OBJECT_ACCESS;
-    }
-
     @Override
     public void copy(Object sourceObject, Object targetObject) {
-      switch (accessKind) {
-        case BOOLEAN_ACCESS:
-          UNSAFE.putBoolean(
-              targetObject, fieldOffset, UNSAFE.getBoolean(sourceObject, fieldOffset));
-          return;
-        case BYTE_ACCESS:
-          UNSAFE.putByte(targetObject, fieldOffset, UNSAFE.getByte(sourceObject, fieldOffset));
-          return;
-        case CHAR_ACCESS:
-          UNSAFE.putChar(targetObject, fieldOffset, UNSAFE.getChar(sourceObject, fieldOffset));
-          return;
-        case SHORT_ACCESS:
-          UNSAFE.putShort(targetObject, fieldOffset, UNSAFE.getShort(sourceObject, fieldOffset));
-          return;
-        case INT_ACCESS:
-          UNSAFE.putInt(targetObject, fieldOffset, UNSAFE.getInt(sourceObject, fieldOffset));
-          return;
-        case LONG_ACCESS:
-          UNSAFE.putLong(targetObject, fieldOffset, UNSAFE.getLong(sourceObject, fieldOffset));
-          return;
-        case FLOAT_ACCESS:
-          UNSAFE.putFloat(targetObject, fieldOffset, UNSAFE.getFloat(sourceObject, fieldOffset));
-          return;
-        case DOUBLE_ACCESS:
-          UNSAFE.putDouble(targetObject, fieldOffset, UNSAFE.getDouble(sourceObject, fieldOffset));
-          return;
-        case OBJECT_ACCESS:
-          UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
-          return;
-        default:
-          putObject(targetObject, getObject(sourceObject));
-      }
+      copyField(fieldOffset, accessKind, sourceObject, targetObject, this);
     }
 
     @Override
     public void copyObject(Object sourceObject, Object targetObject) {
-      if (accessKind == OBJECT_ACCESS) {
-        UNSAFE.putObject(targetObject, fieldOffset, UNSAFE.getObject(sourceObject, fieldOffset));
-      } else {
-        putObject(targetObject, getObject(sourceObject));
-      }
+      copyObjectField(fieldOffset, accessKind, sourceObject, targetObject, this);
     }
   }
 

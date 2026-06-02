@@ -89,7 +89,7 @@ final class PlatformStringUtils {
         countOffset = UNSAFE.objectFieldOffset(countField);
         offsetOffset = UNSAFE.objectFieldOffset(offsetField);
       }
-      long coderOffset = valueFieldIsBytes ? StringCoderField.OFFSET : -1;
+      long coderOffset = valueFieldIsBytes ? stringCoderFieldOffset() : -1;
       return new StringFields(
           true,
           valueFieldIsChars,
@@ -112,15 +112,11 @@ final class PlatformStringUtils {
     }
   }
 
-  private static class StringCoderField {
-    private static final long OFFSET;
-
-    static {
-      try {
-        OFFSET = UNSAFE.objectFieldOffset(String.class.getDeclaredField("coder"));
-      } catch (NoSuchFieldException e) {
-        throw new RuntimeException(e);
-      }
+  private static long stringCoderFieldOffset() {
+    try {
+      return UNSAFE.objectFieldOffset(String.class.getDeclaredField("coder"));
+    } catch (NoSuchFieldException e) {
+      throw new RuntimeException(e);
     }
   }
 

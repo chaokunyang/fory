@@ -21,7 +21,7 @@ package org.apache.fory.benchmark;
 
 import org.openjdk.jmh.Main;
 
-public class Benchmark {
+public class JmhBenchmarkMain {
   // run from cmd:
   // cd .. && mvn -T10 install -DskipTests -Dcheckstyle.skip -Dlicense.skip -Dmaven.javadoc.skip
   // mvn exec:java -Dexec.args="-f 0 -wi 1 -i 1 -t 1 -w 1s -r 1s -rf csv"

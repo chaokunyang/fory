@@ -79,6 +79,15 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Root codegen and builder classes that still need Unsafe on JDK8-24 must route symbolic Unsafe
   access through a helper with a Java 25 replacement. Do not leave `_JDKAccess.unsafe()` or
   `sun.misc.Unsafe` references in JDK25-visible classes outside matching `java25` replacements.
+- `_UnsafeUtils` is the JDK8-24 Unsafe owner only. It must have a Java25 replacement with no
+  `sun.misc.Unsafe` fields, methods, constructors, imports, or descriptors, and MR-JAR plus
+  benchmark checks must require that replacement so JDK25+ never links `jdk.unsupported` through
+  this utility.
+- Multi-release replacement is class-file exact. Replacing `Foo.class` does not replace
+  `Foo$Bar.class`; root nested classes that contain Unsafe descriptors must either be eliminated,
+  moved under an exact replaceable owner, or have their direct Unsafe operations moved to the
+  already-overlaid top-level class. JDK25 package checks must run class-level `jdeps` over Fory
+  classes so nested leaks are caught without rejecting shaded third-party benchmark dependencies.
 - Java 25 multi-release classes never run on Android. Do not keep `AndroidSupport.IS_ANDROID`
   branches or imports under `src/main/java25`; Android compatibility belongs to the root sources.
 - String zero-copy construction is serializer-owned behavior. Keep private `String` constructor

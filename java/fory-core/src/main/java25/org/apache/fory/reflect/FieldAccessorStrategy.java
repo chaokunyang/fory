@@ -40,10 +40,6 @@ final class FieldAccessorStrategy {
 
   static FieldAccessor createAccessor(Field field) {
     Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
-    FieldAccessor hiddenAccessor = HiddenFieldAccessorFactory.create(field);
-    if (hiddenAccessor != null) {
-      return hiddenAccessor;
-    }
     return new InstanceAccessor(field);
   }
 

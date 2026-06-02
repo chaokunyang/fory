@@ -111,9 +111,10 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   reflective `Field.set*` fallback.
 - JDK25+ `FieldAccessorStrategy` should use one final trusted-lookup `VarHandle` instance accessor
   with dense access-kind switches, not public primitive/object accessor classes or a JDK25
-  `GeneratedAccessor`. Do not wrap `VarHandle.get/set` in hot-path try/catch blocks and do not call
-  `FieldAccessor.checkObj`; VarHandle validates null and receiver type itself. Root Unsafe offset
-  access still needs explicit receiver validation because Unsafe does not.
+  `GeneratedAccessor` or hidden-class accessor generation. Do not wrap `VarHandle.get/set` in
+  hot-path try/catch blocks and do not call `FieldAccessor.checkObj`; VarHandle validates null and
+  receiver type itself. Root Unsafe offset access still needs explicit receiver validation because
+  Unsafe does not.
 - Keep JDK26 `--illegal-final-field-mutation=deny` scoped to the JPMS runtime tests that prove
   Fory's field-access path. Do not put it in global Maven `JDK_JAVA_OPTIONS`, because build tools
   such as Lombok may perform their own reflective final-field access during compilation.

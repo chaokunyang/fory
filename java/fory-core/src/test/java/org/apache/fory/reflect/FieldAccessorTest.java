@@ -27,7 +27,6 @@ import java.nio.charset.StandardCharsets;
 import lombok.AllArgsConstructor;
 import org.apache.fory.TestUtils;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessorStrategy.GeneratedAccessor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
@@ -84,10 +83,6 @@ public class FieldAccessorTest {
     FieldAccessor finalAccessor =
         FieldAccessor.createAccessor(HiddenFields.class.getDeclaredField("finalValue"));
     Assert.assertEquals(finalAccessor.getLong(fields), 3L);
-    if (JdkVersion.MAJOR_VERSION >= 25) {
-      Assert.assertTrue(isHidden(intAccessor.getClass()));
-      Assert.assertTrue(isHidden(objectAccessor.getClass()));
-    }
   }
 
   @Test
@@ -102,10 +97,6 @@ public class FieldAccessorTest {
         FieldAccessor.createAccessor(FinalFields.class.getDeclaredField("objectValue"));
     objectAccessor.putObject(fields, "b");
     Assert.assertEquals(objectAccessor.getObject(fields), "b");
-  }
-
-  private static boolean isHidden(Class<?> cls) throws Exception {
-    return (Boolean) Class.class.getMethod("isHidden").invoke(cls);
   }
 
   @Test

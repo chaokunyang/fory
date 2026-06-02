@@ -470,8 +470,6 @@
                         <include
                             name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.java"/>
                         <include
-                            name="META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.java"/>
-                        <include
                             name="META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"/>
                         <include name="META-INF/versions/25/module-info.java"/>
                       </patternset>
@@ -488,9 +486,6 @@
                     <available
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.java"
                         property="jdk25.fieldaccessorstrategy.source.present"/>
-                    <available
-                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/HiddenFieldAccessorFactory.java"
-                        property="jdk25.hiddenfieldaccessorfactory.source.present"/>
                     <available
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"
                         property="jdk25.constructorbypassallocator.source.present"/>
@@ -509,9 +504,6 @@
                     <fail
                         unless="jdk25.fieldaccessorstrategy.source.present"
                         message="JDK25 versioned FieldAccessorStrategy source is missing from the source jar."/>
-                    <fail
-                        unless="jdk25.hiddenfieldaccessorfactory.source.present"
-                        message="JDK25 versioned HiddenFieldAccessorFactory source is missing from the source jar."/>
                     <fail
                         unless="jdk25.constructorbypassallocator.source.present"
                         message="JDK25 versioned ConstructorBypassAllocator source is missing from the source jar."/>

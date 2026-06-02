@@ -52,7 +52,6 @@ public final class Jdk25MultiReleaseJarVerifier {
     "org/apache/fory/platform/internal/_UnsafeUtils.class",
     "org/apache/fory/builder/UnsafeCodegenSupport.class",
     "org/apache/fory/reflect/FieldAccessorStrategy.class",
-    "org/apache/fory/reflect/HiddenFieldAccessorFactory.class",
     "org/apache/fory/reflect/ConstructorBypassAllocator.class",
     "org/apache/fory/serializer/PlatformStringUtils.class"
   };

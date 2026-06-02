@@ -22,7 +22,6 @@ package org.apache.fory.reflect;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Constructor;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ArrayBlockingQueue;
 import org.apache.fory.TestUtils;
@@ -30,7 +29,6 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.ObjectCreators.ParentNoArgCtrObjectCreator;
-import org.apache.fory.resolver.SharedRegistry;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -66,19 +64,6 @@ public class ObjectCreatorsTest {
             .start();
     String output = readFully(process.getInputStream());
     Assert.assertEquals(process.waitFor(), 0, output);
-  }
-
-  @Test
-  public void testFailedCtorRegNotPublished() throws Exception {
-    if (JdkVersion.MAJOR_VERSION < 9) {
-      return;
-    }
-    SharedRegistry registry = new SharedRegistry();
-    Constructor<String> constructor = String.class.getDeclaredConstructor(byte[].class, byte.class);
-    Assert.assertThrows(
-        ForyException.class,
-        () -> registry.registerConstructor(String.class, constructor, "value", "coder"));
-    Assert.assertFalse(registry.getObjectCreator(String.class).hasConstructorFields());
   }
 
   private static String readFully(InputStream inputStream) throws IOException {

@@ -136,9 +136,24 @@
                 <configuration>
                   <target>
                     <mkdir dir="${project.build.directory}/jpms-classes/java11"/>
+                    <condition
+                        property="fory.core.module.jar"
+                        value="${project.basedir}/../fory-core/target/fory-core-${project.version}.jar"
+                        else="${settings.localRepository}/org/apache/fory/fory-core/${project.version}/fory-core-${project.version}.jar">
+                      <available
+                          file="${project.basedir}/../fory-core/target/fory-core-${project.version}.jar"/>
+                    </condition>
+                    <path id="fory.core.compile.path">
+                      <pathelement location="${project.basedir}/../fory-core/target/classes"/>
+                      <pathelement
+                          location="${settings.localRepository}/org/apache/fory/fory-core/${project.version}/fory-core-${project.version}.jar"/>
+                    </path>
                     <path id="compile.module.path.elements">
-                      <pathelement location="${project.basedir}/../fory-core/target/jpms-classes/java9"/>
-                      <path refid="maven.compile.classpath"/>
+                      <pathelement location="${fory.core.module.jar}"/>
+                      <difference>
+                        <path refid="maven.compile.classpath"/>
+                        <path refid="fory.core.compile.path"/>
+                      </difference>
                     </path>
                     <pathconvert property="compile.module.path" refid="compile.module.path.elements"
                                  pathsep="${path.separator}"/>

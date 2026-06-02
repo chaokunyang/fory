@@ -172,7 +172,7 @@ internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport
     seen[clazz] = true
     try {
       if (!AndroidSupport.IS_ANDROID) {
-        return newDefaultInstance(clazz, seen)
+        return newDefaultInstance(clazz)
       }
       return newPublicDefaultInstance(clazz, seen)
     } finally {
@@ -180,17 +180,8 @@ internal class KotlinDefaultValueSupport : DefaultValueUtils.DefaultValueSupport
     }
   }
 
-  private fun newDefaultInstance(clazz: Class<*>, seen: IdentityHashMap<Class<*>, Boolean>): Any? {
-    val creator = ObjectCreators.getObjectCreator(clazz)
-    if (!creator.hasConstructorFields()) {
-      return creator.newInstance()
-    }
-    val parameterTypes = creator.getConstructorFieldTypes()
-    val args = arrayOfNulls<Any>(parameterTypes.size)
-    for (i in parameterTypes.indices) {
-      args[i] = getDefaultValueForType(parameterTypes[i], seen) ?: return null
-    }
-    return creator.newInstanceWithArguments(*args)
+  private fun newDefaultInstance(clazz: Class<*>): Any? {
+    return ObjectCreators.getObjectCreator(clazz).newInstance()
   }
 
   private fun newPublicDefaultInstance(

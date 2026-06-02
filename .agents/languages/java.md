@@ -61,29 +61,26 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - For JDK25+ zero-Unsafe work, preserve serializer-family selection by type and configuration. Do not switch a type from `ObjectStreamSerializer` or another Fory serializer family to `JavaSerializer`, a JDK stream fallback, or any broad `java.* Serializable` fallback by JDK version or no-arg-constructor shape.
 - JDK25+ zero-Unsafe runtime support is a JPMS named-module design. Fory core must run with `--add-opens=java.base/java.lang.invoke=org.apache.fory.core` so it can obtain the trusted lookup; missing this open is an invalid access configuration, not a reason to open per-package JDK internals or switch serializer/object-creation families. Do not use `ALL-UNNAMED` as the zero-Unsafe verification target.
 - Do not probe JDK25+ trusted-lookup availability and turn `_JDKAccess` field-access booleans false when the required `java.base/java.lang.invoke` open is missing. Keep those access flags true on JDK25+ and let the owning trusted-lookup path raise the configuration error.
-- Keep JDK25+ unsafe-removal implementation invariants in agent/design docs and tests, not user guides. User guides should document user actions such as `--sun-misc-unsafe-memory-access=deny`, `java.base/java.lang.invoke` opens, package opens for user named modules, and public APIs such as `@ForyConstructor` and `BaseFory.registerConstructor(...)`; do not expose internal serializer names, owner-model rationale, or avoided fallback strategies there.
+- Keep JDK25+ unsafe-removal implementation invariants in agent/design docs and tests, not user guides. User guides should document user actions such as `--sun-misc-unsafe-memory-access=deny`, `java.base/java.lang.invoke` opens, and package opens for user named modules; do not expose internal serializer names, owner-model rationale, or avoided fallback strategies there.
 - JDK25+ zero-Unsafe final-field writes must use a true target-class trusted lookup from the original `IMPL_LOOKUP`, not `IMPL_LOOKUP.in(type)`. JDK26+ normal Fory final-field restoration must pass with `--illegal-final-field-mutation=deny` and must not require `--enable-final-field-mutation`.
-- For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory` or `jdk.internal.reflect.ReflectionFactory`. The shared `ObjectCreators` facade should route ObjectStream-compatible construction through `ParentNoArgCtrObjectCreator`; the replaceable constructor-bypass allocator owns the JDK8-24 Unsafe allocation path and the JDK25+ `ObjectStreamClass.newInstance` path. Serializable classes without a no-arg constructor may use that trusted-lookup owner; non-Serializable classes without a no-arg constructor require `@ForyConstructor`, `BaseFory.registerConstructor(...)`, record construction, or a custom serializer.
+- For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory` or `jdk.internal.reflect.ReflectionFactory`. The shared `ObjectCreators` facade should route ObjectStream-compatible construction through `ParentNoArgCtrObjectCreator`; the replaceable constructor-bypass allocator owns the JDK8-24 Unsafe allocation path and the JDK25+ `ObjectStreamClass.newInstance` path. Classes without a no-arg constructor may use that trusted-lookup owner; unsupported classes require a record canonical constructor path or a custom serializer.
 - In JDK25+ constructor-bypass allocation, the allocator is per type: pass the target class to the allocator constructor, cache `ObjectStreamClass.lookupAny(...)` in that instance, and expose an instance `allocate()` method. Let `ObjectStreamClass.newInstance` validate unsupported classes. Do not add redundant `Serializable` prechecks or per-call descriptor lookups, and keep exception/message construction in cold helper methods.
 - Keep the Java25 `_Lookup` overlay unless a future refactor can merge it without exposing Unsafe to the JDK25 class graph. Root `_Lookup` uses Unsafe for the JDK8-24 trusted-lookup fast path, while Java25 `_Lookup` uses the required `java.lang.invoke` open. `DefineClass` is root-owned; when Java25+ generated serializers need hidden nestmate class definition, it must use cached method handles and reflective `Lookup.ClassOption.NESTMATE` loading so Java 8 through Java 14 can still load the root class safely.
 - Treat `ByteArrayOutputStream` and `ByteArrayInputStream` as ordinary streams on every JDK. Do
   not restore private-buffer wrapping for JDK8-24 performance, because that reintroduces
   `java.base/java.io` private-field ownership and module-open requirements.
 - `ObjectStreamSerializer` must use its stream-specific object creator path and must not use
-  `TypeResolver.getObjectCreator`. `@ForyConstructor` and registered constructor mappings require
-  field values up front, while ObjectStream reconstruction creates the object before stream fields
-  are read. This path must not invoke Serializable class constructors, including no-arg
+  `TypeResolver.getObjectCreator`. ObjectStream reconstruction creates the object before stream
+  fields are read. This path must not invoke Serializable class constructors, including no-arg
   constructors; the JDK8-24 ReflectionFactory template constructor must be the first
   non-Serializable superclass no-arg constructor, and private no-arg constructors must be rejected
   instead of made accessible. Package-private no-arg constructors are valid only for same-package
   Serializable subclasses.
 - Runtime object creator caches are `SharedRegistry` state backed by `ConcurrentHashMap`.
-  Registered constructors should store the resulting `ObjectCreator` directly there, not through a
-  soft cache or a separate registry class. Keep ObjectStream-specific creators separate from normal
-  constructor-bound object creators.
+  Keep ObjectStream-specific creators separate from normal object creators.
 - Generated Fory object serializers must initialize object-creator fields through
-  `TypeResolver.getObjectCreator(Class)`, so generated code respects records, `@ForyConstructor`,
-  and `BaseFory.registerConstructor(...)`. Do not emit generated calls to
+  `TypeResolver.getObjectCreator(Class)`, so generated code respects runtime-scoped object creators.
+  Do not emit generated calls to
   `ObjectCreators.getObjectCreator(TypeResolver, Class)` or bypass the runtime-scoped owner; format
   builders without a Fory runtime context may use the base `ObjectCreators.getObjectCreator(Class)`
   construction default.
@@ -159,16 +156,14 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - JDK25+ collection serializers must fail unsupported `Collections.newSetFromMap` backing maps
   before writing or copying. Do not rewrite them to `HashMap`, because that changes equality
   semantics and can drop entries.
-- Do not enable Java or Kotlin parameter-name metadata (`-parameters`, `maven.compiler.parameters`, or Kotlin `javaParameters`) to make constructor binding work. Constructor binding must be driven by explicit field mappings from `@ForyConstructor`, `BaseFory.registerConstructor(...)`, or generated metadata.
-- Constructor-bound serializers must cache constructor field metadata during serializer initialization. Do not call defensive-copy metadata getters such as `getConstructorFieldTypes()` from per-object read paths.
-- Explicit constructor binding is for user and third-party classes, not Java platform types. Do not use
-  `java.*` internals such as `String` fields as constructor-binding test data; JDK built-in classes
-  are owned by their serializers.
-- Runtime serializers and generated serializers must use the same constructor-copy lifecycle:
-  install a pending marker before copying constructor-bound fields, run field serializers normally,
-  reject copied constructor arguments that still retain the marker, then construct and reference the
-  real copy. Do not implement a separate raw-field pre-scan or leave a generated path without the
-  marker guard.
+- Do not add or restore constructor-binding APIs such as `@ForyConstructor` or
+  `BaseFory.registerConstructor(...)`. Java parameter names, `-parameters`, and
+  `@ConstructorProperties` are not a Fory object-creation contract. Runtime serializers for
+  ordinary classes must create an empty instance through `TypeResolver.getObjectCreator(Class)` and
+  set fields; records and source-generated Kotlin serializers are the constructor-owned paths.
+- Source-generated constructor serializers must own their constructor metadata at generation time
+  and call constructors directly. They must not depend on runtime `ObjectCreator` constructor-field
+  metadata or varargs constructor calls.
 - Generated JVM copy code may direct-copy immutable scalar values, but Java `Collection`/`Map`
   subclasses must be copied through `CopyContext.copyObject(...)` so collection/map serializers own
   concrete type, comparator, wrapper, and reference behavior.

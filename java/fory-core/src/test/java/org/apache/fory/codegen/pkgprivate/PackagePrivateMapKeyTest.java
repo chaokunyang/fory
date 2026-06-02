@@ -29,7 +29,6 @@ import java.util.Map;
 import java.util.Set;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
-import org.apache.fory.annotation.ForyConstructor;
 import org.testng.annotations.Test;
 
 /** Regression test for codegen CompileException when map key/value types are package-private. */
@@ -70,7 +69,6 @@ class ReproNode implements Serializable {
   Set<ReproNode> children;
   Map<ReproType, Set<ReproNode>> parents;
 
-  @ForyConstructor({"type", "id"})
   ReproNode(ReproType type, String id) {
     this(type, id, new HashSet<>(), new EnumMap<>(ReproType.class));
   }
@@ -92,7 +90,6 @@ class ReproContainer implements Serializable {
     this(new EnumMap<>(ReproType.class), version);
   }
 
-  @ForyConstructor({"nodes", "version"})
   ReproContainer(Map<ReproType, Map<String, ReproNode>> nodes, String version) {
     this.nodes = nodes;
     this.version = version;

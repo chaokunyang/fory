@@ -307,9 +307,7 @@ final class CompatibleCollectionArrayReader {
       int elementTypeId,
       Class<?> targetType) {
     RefReader refReader = readContext.getRefReader();
-    MemoryBuffer buffer = readContext.getBuffer();
-    AbstractObjectSerializer.trackConstructorRefRead(readContext, buffer);
-    int nextReadRefId = refReader.tryPreserveRefId(buffer);
+    int nextReadRefId = readContext.tryPreserveRefId();
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object value = readNotNull(readContext, readMode, arrayTypeId, elementTypeId, targetType);
       refReader.setReadRef(nextReadRefId, value);

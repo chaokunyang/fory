@@ -61,8 +61,7 @@ import javax.tools.StandardLocation;
 
 @SupportedAnnotationTypes({
   "org.apache.fory.annotation.ForyStruct",
-  "org.apache.fory.annotation.ForyDebug",
-  "org.apache.fory.annotation.ForyConstructor"
+  "org.apache.fory.annotation.ForyDebug"
 })
 public final class ForyStructProcessor extends AbstractProcessor {
   private static final String ARRAY_TYPE = "org.apache.fory.annotation.ArrayType";

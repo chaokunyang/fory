@@ -88,9 +88,6 @@ final class StaticSerializerSourceWriter {
     builder.append("  private final SerializationFieldInfo[] allFields;\n");
     builder.append("  private final int[] allFieldIds;\n");
     builder.append("  private final SerializationFieldInfo[] fieldsById;\n");
-    builder.append("  private final int[] constructorFieldIds;\n");
-    builder.append("  private final long[] constructorFieldBits;\n");
-    builder.append("  private final Class<?>[] constructorFieldTypes;\n");
     builder.append("  private final int classVersionHash;\n");
     builder.append("  private final boolean sameSchemaCompatible;\n\n");
   }
@@ -143,9 +140,6 @@ final class StaticSerializerSourceWriter {
     builder.append("    this.allFields = null;\n");
     builder.append("    this.allFieldIds = null;\n");
     builder.append("    this.fieldsById = null;\n");
-    builder.append("    this.constructorFieldIds = null;\n");
-    builder.append("    this.constructorFieldBits = null;\n");
-    builder.append("    this.constructorFieldTypes = null;\n");
     builder.append("    this.classVersionHash = 0;\n");
     builder.append("    this.sameSchemaCompatible = false;\n");
     builder.append("  }\n\n");
@@ -177,12 +171,6 @@ final class StaticSerializerSourceWriter {
     builder.append("    for (int i = 0; i < allFields.length; i++) {\n");
     builder.append("      this.fieldsById[allFieldIds[i]] = allFields[i];\n");
     builder.append("    }\n");
-    builder.append(
-        "    this.constructorFieldIds = objectCreator.hasConstructorFields() ? buildConstructorFieldIds(DESCRIPTORS) : null;\n");
-    builder.append(
-        "    this.constructorFieldBits = buildConstructorFieldBits(DESCRIPTORS.size(), constructorFieldIds);\n");
-    builder.append(
-        "    this.constructorFieldTypes = constructorFieldIds != null ? constructorFieldTypes() : null;\n");
     builder.append(
         "    this.classVersionHash = typeResolver.checkClassVersion() ? computeClassVersionHash(DESCRIPTORS) : 0;\n");
     builder.append("    this.sameSchemaCompatible = ").append(sameSchemaExpression).append(";\n");
@@ -247,9 +235,6 @@ final class StaticSerializerSourceWriter {
       appendRecordConstructorArguments("field");
       builder.append(");\n");
     } else {
-      builder.append("    if (constructorFieldIds != null) {\n");
-      builder.append("      return readSchemaConsistentConstructor(readContext);\n");
-      builder.append("    }\n");
       builder.append("    ").append(struct.typeName).append(" value = newBean();\n");
       builder.append("    readContext.reference(value);\n");
       builder.append("    readFields(readContext, value);\n");
@@ -307,7 +292,6 @@ final class StaticSerializerSourceWriter {
       writeReadRecordGroup("", "allFields", "allFieldIds", "readFieldValue");
     } else {
       writeReadBeanGroup("", "allFields", "allFieldIds", "readFieldValue");
-      writeConstructorRead();
     }
   }
 
@@ -373,170 +357,6 @@ final class StaticSerializerSourceWriter {
         .append(idsName)
         .append("[i]);\n");
     builder.append("      }\n");
-    builder.append("    }\n");
-    builder.append("  }\n\n");
-  }
-
-  private void writeConstructorRead() {
-    builder
-        .append("  private ")
-        .append(struct.typeName)
-        .append(" readSchemaConsistentConstructor(ReadContext readContext) {\n");
-    builder.append("    Object[] fieldValues = new Object[DESCRIPTORS.size()];\n");
-    builder.append("    long[] bufferedFields = newFieldBits(DESCRIPTORS.size());\n");
-    builder.append("    beginConstructorRef(readContext);\n");
-    builder.append("    try {\n");
-    builder.append("      int remaining = countConstructorFields(constructorFieldBits);\n");
-    builder.append("      ").append(struct.typeName).append(" value = null;\n");
-    builder.append("      if (remaining == 0) {\n");
-    builder.append("        value = newConstructorObject(fieldValues);\n");
-    builder.append("        referenceConstructorRef(readContext, value);\n");
-    builder.append("      }\n");
-    builder.append("      for (int i = 0; i < allFields.length; i++) {\n");
-    builder.append("        SerializationFieldInfo fieldInfo = allFields[i];\n");
-    builder.append("        int fieldId = allFieldIds[i];\n");
-    builder.append("        if (hasField(constructorFieldBits, fieldId)) {\n");
-    builder.append(
-        "          fieldValues[fieldId] = ctorFieldValue(readContext, readFieldValue(readContext, fieldInfo), type);\n");
-    builder.append("          remaining--;\n");
-    builder.append("          if (remaining == 0) {\n");
-    builder.append("            checkNoUnresolvedReadRef(readContext);\n");
-    builder.append("            value = newConstructorObject(fieldValues);\n");
-    builder.append("            referenceConstructorRef(readContext, value);\n");
-    builder.append("            setBufferedFields(value, fieldValues, bufferedFields);\n");
-    builder.append("          }\n");
-    builder.append("        } else if (value == null) {\n");
-    builder.append(
-        "          fieldValues[fieldId] = bufferFieldValue(readContext, readFieldValue(readContext, fieldInfo), type);\n");
-    builder.append("          markField(bufferedFields, fieldId);\n");
-    builder.append("        } else {\n");
-    builder.append("          readAndSetField(readContext, value, fieldInfo, fieldId);\n");
-    builder.append("        }\n");
-    builder.append("      }\n");
-    builder.append("      if (value == null) {\n");
-    builder.append("        checkNoUnresolvedReadRef(readContext);\n");
-    builder.append("        value = newConstructorObject(fieldValues);\n");
-    builder.append("        referenceConstructorRef(readContext, value);\n");
-    builder.append("        setBufferedFields(value, fieldValues, bufferedFields);\n");
-    builder.append("      }\n");
-    builder.append("      return value;\n");
-    builder.append("    } finally {\n");
-    builder.append("      endConstructorRef(readContext);\n");
-    builder.append("    }\n");
-    builder.append("  }\n\n");
-
-    builder
-        .append("  private ")
-        .append(struct.typeName)
-        .append(" readCompatibleConstructor(ReadContext readContext) {\n");
-    builder.append("    Object[] fieldValues = new Object[DESCRIPTORS.size()];\n");
-    builder.append("    long[] bufferedFields = newFieldBits(DESCRIPTORS.size());\n");
-    builder.append("    beginConstructorRef(readContext);\n");
-    builder.append("    try {\n");
-    builder.append("      int remaining = countConstructorFields(constructorFieldBits);\n");
-    builder.append("      ").append(struct.typeName).append(" value = null;\n");
-    builder.append("      if (remaining == 0) {\n");
-    builder.append("        value = newConstructorObject(fieldValues);\n");
-    builder.append("        referenceConstructorRef(readContext, value);\n");
-    builder.append("      }\n");
-    builder.append("      for (int i = 0; i < remoteFields.size(); i++) {\n");
-    builder.append("        RemoteFieldInfo remoteField = remoteFields.get(i);\n");
-    builder.append("        int fieldId = remoteField.matchedId;\n");
-    builder.append("        if (fieldId < 0) {\n");
-    builder.append("          skipField(readContext, remoteField);\n");
-    builder.append("          continue;\n");
-    builder.append("        }\n");
-    builder.append("        SerializationFieldInfo localField = fieldsById[fieldId];\n");
-    builder.append("        if (!canReadRemoteField(remoteField, localField)) {\n");
-    builder.append("          skipField(readContext, remoteField);\n");
-    builder.append("          continue;\n");
-    builder.append("        }\n");
-    builder.append(
-        "        Object fieldValue = readCompatibleFieldValue(readContext, remoteField, localField);\n");
-    builder.append("        if (hasField(constructorFieldBits, fieldId)) {\n");
-    builder.append(
-        "          fieldValues[fieldId] = ctorFieldValue(readContext, fieldValue, type);\n");
-    builder.append("          remaining--;\n");
-    builder.append("          if (remaining == 0) {\n");
-    builder.append("            checkNoUnresolvedReadRef(readContext);\n");
-    builder.append("            value = newConstructorObject(fieldValues);\n");
-    builder.append("            referenceConstructorRef(readContext, value);\n");
-    builder.append("            setBufferedFields(value, fieldValues, bufferedFields);\n");
-    builder.append("          }\n");
-    builder.append("        } else if (value == null) {\n");
-    builder.append(
-        "          fieldValues[fieldId] = bufferFieldValue(readContext, fieldValue, type);\n");
-    builder.append("          markField(bufferedFields, fieldId);\n");
-    builder.append("        } else {\n");
-    builder.append("          setFieldById(value, localField, fieldId, fieldValue);\n");
-    builder.append("        }\n");
-    builder.append("      }\n");
-    builder.append("      if (value == null) {\n");
-    builder.append("        checkNoUnresolvedReadRef(readContext);\n");
-    builder.append("        value = newConstructorObject(fieldValues);\n");
-    builder.append("        referenceConstructorRef(readContext, value);\n");
-    builder.append("        setBufferedFields(value, fieldValues, bufferedFields);\n");
-    builder.append("      }\n");
-    builder.append("      return value;\n");
-    builder.append("    } finally {\n");
-    builder.append("      endConstructorRef(readContext);\n");
-    builder.append("    }\n");
-    builder.append("  }\n\n");
-
-    builder
-        .append("  private ")
-        .append(struct.typeName)
-        .append(" newConstructorObject(Object[] fieldValues) {\n");
-    builder
-        .append("    return (")
-        .append(struct.typeName)
-        .append(
-            ") objectCreator.newInstanceWithArguments(constructorArgs(fieldValues, constructorFieldIds, constructorFieldTypes));\n");
-    builder.append("  }\n\n");
-
-    builder
-        .append("  private void readAndSetField(ReadContext readContext, ")
-        .append(struct.typeName)
-        .append(" value, SerializationFieldInfo fieldInfo, int fieldId) {\n");
-    builder.append("    Object fieldValue = readFieldValue(readContext, fieldInfo);\n");
-    builder.append("    setFieldById(value, fieldInfo, fieldId, fieldValue);\n");
-    builder.append("  }\n\n");
-
-    builder
-        .append("  private void setBufferedFields(")
-        .append(struct.typeName)
-        .append(" value, Object[] fieldValues, long[] bufferedFields) {\n");
-    builder.append("    for (int fieldId = 0; fieldId < fieldsById.length; fieldId++) {\n");
-    builder.append("      if (hasField(bufferedFields, fieldId)) {\n");
-    builder.append(
-        "        setFieldById(value, fieldsById[fieldId], fieldId, resolveBufferedValue(fieldValues[fieldId], value));\n");
-    builder.append("      }\n");
-    builder.append("    }\n");
-    builder.append("  }\n\n");
-
-    builder
-        .append("  private void setFieldById(")
-        .append(struct.typeName)
-        .append(" value, SerializationFieldInfo fieldInfo, int fieldId, Object fieldValue) {\n");
-    builder.append("    switch (fieldId) {\n");
-    for (SourceField field : struct.fields) {
-      builder.append("      case ").append(field.id).append(":\n");
-      builder.append("        ");
-      if (field.finalField) {
-        builder
-            .append("setGeneratedFieldValue(value, fieldInfo, ")
-            .append(field.castExpression("fieldValue"))
-            .append(");\n");
-      } else {
-        builder
-            .append(field.writeStatement("value", field.castExpression("fieldValue")))
-            .append("\n");
-      }
-      builder.append("        return;\n");
-    }
-    builder.append("      default:\n");
-    builder.append(
-        "        throw new IllegalStateException(\"Unknown generated field id \" + fieldId);\n");
     builder.append("    }\n");
     builder.append("  }\n\n");
   }
@@ -1019,9 +839,6 @@ final class StaticSerializerSourceWriter {
       appendRecordConstructorArguments("field");
       builder.append(");\n");
     } else {
-      builder.append("    if (constructorFieldIds != null) {\n");
-      builder.append("      return readCompatibleConstructor(readContext);\n");
-      builder.append("    }\n");
       builder.append("    ").append(struct.typeName).append(" value = newBean();\n");
       builder.append("    readContext.reference(value);\n");
       builder.append("    for (int i = 0; i < remoteFields.size(); i++) {\n");
@@ -1237,11 +1054,6 @@ final class StaticSerializerSourceWriter {
     builder.append("    if (immutable) {\n");
     builder.append("      return value;\n");
     builder.append("    }\n");
-    if (!struct.record) {
-      builder.append("    if (constructorFieldIds != null) {\n");
-      builder.append("      return copyConstructorObject(copyContext, value);\n");
-      builder.append("    }\n");
-    }
     if (struct.record) {
       for (SourceField field : struct.fields) {
         builder
@@ -1294,63 +1106,6 @@ final class StaticSerializerSourceWriter {
       }
       builder.append("    return copied;\n");
     }
-    builder.append("  }\n\n");
-    if (!struct.record) {
-      writeConstructorCopy();
-    }
-  }
-
-  private void writeConstructorCopy() {
-    builder
-        .append("  private ")
-        .append(struct.typeName)
-        .append(" copyConstructorObject(CopyContext copyContext, ")
-        .append(struct.typeName)
-        .append(" value) {\n");
-    builder.append("    Object[] fieldValues = new Object[DESCRIPTORS.size()];\n");
-    builder.append("    Object pendingMarker = beginConstructorCopy(copyContext, value);\n");
-    for (SourceField field : struct.fields) {
-      builder.append("    if (hasField(constructorFieldBits, ").append(field.id).append(")) {\n");
-      builder
-          .append("      fieldValues[")
-          .append(field.id)
-          .append("] = copyConstructorFieldValue(copyContext, value, ")
-          .append(field.readExpression("value"))
-          .append(", fieldsById[")
-          .append(field.id)
-          .append("]);\n");
-      builder.append("    }\n");
-    }
-    builder.append(
-        "    checkNoConstructorCopyBackrefs(fieldValues, constructorFieldIds, pendingMarker);\n");
-    builder
-        .append("    ")
-        .append(struct.typeName)
-        .append(" copied = newConstructorObject(fieldValues);\n");
-    builder.append("    copyContext.reference(value, copied);\n");
-    for (SourceField field : struct.fields) {
-      builder.append("    if (!hasField(constructorFieldBits, ").append(field.id).append(")) {\n");
-      String copiedExpression =
-          field.castExpression(
-              "copyFieldValue(copyContext, "
-                  + field.readExpression("value")
-                  + ", fieldsById["
-                  + field.id
-                  + "])");
-      builder.append("      ");
-      if (field.finalField) {
-        builder
-            .append("setGeneratedFieldValue(copied, fieldsById[")
-            .append(field.id)
-            .append("], ")
-            .append(copiedExpression)
-            .append(");\n");
-      } else {
-        builder.append(field.writeStatement("copied", copiedExpression)).append("\n");
-      }
-      builder.append("    }\n");
-    }
-    builder.append("    return copied;\n");
     builder.append("  }\n\n");
   }
 

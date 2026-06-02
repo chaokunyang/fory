@@ -31,9 +31,6 @@ import org.apache.fory.logging.Logger;
 import org.apache.fory.logging.LoggerFactory;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeDef;
-import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.reflect.FieldAccessor;
 import org.apache.fory.resolver.ClassResolver;
 import org.apache.fory.resolver.RefMode;
@@ -68,11 +65,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(CompatibleSerializer.class);
 
   private final SerializationFieldInfo[] allFields;
-  private final int[] constructorFieldIndexes;
-  private final boolean[] constructorFieldMask;
-  private final String[] constructorFieldNames;
-  private final Class<?>[] constructorFieldDeclaringClasses;
-  private final Class<?>[] constructorFieldTypes;
   private final CompatibleCollectionArrayReader.ReadAction[] allCompatibleReadActions;
   private final boolean hasCompatibleCollectionArrayRead;
   private final RecordInfo recordInfo;
@@ -144,40 +136,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     }
     this.hasDefaultValues = hasDefaultValues;
     this.defaultValueFields = defaultValueFields;
-    if (!isRecord && objectCreator.hasConstructorFields()) {
-      constructorFieldIndexes =
-          buildConstructorFieldIndexes(
-              allFields,
-              true,
-              defaultFieldNames(defaultValueFields),
-              defaultDeclaringClasses(defaultValueFields));
-      constructorFieldMask = buildConstructorFieldMask(allFields.length, constructorFieldIndexes);
-      constructorFieldNames = constructorFieldNames();
-      constructorFieldDeclaringClasses = constructorFieldDeclaringClasses();
-      constructorFieldTypes = constructorFieldTypes();
-    } else {
-      constructorFieldIndexes = null;
-      constructorFieldMask = null;
-      constructorFieldNames = null;
-      constructorFieldDeclaringClasses = null;
-      constructorFieldTypes = null;
-    }
-  }
-
-  private static String[] defaultFieldNames(DefaultValueUtils.DefaultValueField[] fields) {
-    String[] names = new String[fields.length];
-    for (int i = 0; i < fields.length; i++) {
-      names[i] = fields[i].getFieldName();
-    }
-    return names;
-  }
-
-  private static Class<?>[] defaultDeclaringClasses(DefaultValueUtils.DefaultValueField[] fields) {
-    Class<?>[] declaringClasses = new Class[fields.length];
-    for (int i = 0; i < fields.length; i++) {
-      declaringClasses[i] = fields[i].getDeclaringClass();
-    }
-    return declaringClasses;
   }
 
   /** Used by generated compatible serializers for top-level list/array compatible field reads. */
@@ -270,43 +228,10 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
     if (!hasDefaultValues) {
       return newBean();
     }
-    T obj =
-        AndroidSupport.IS_ANDROID
-                || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE
-                || JdkVersion.MAJOR_VERSION >= 25
-            ? newBean()
-            : typeResolver.getObjectCreator(type).newInstance();
+    T obj = newBean();
     // Set default values for missing fields in Scala case classes
     DefaultValueUtils.setDefaultValues(obj, defaultValueFields);
     return obj;
-  }
-
-  private Object[] compatibleConstructorArgs(Object[] fieldValues) {
-    Object[] args = new Object[constructorFieldIndexes.length];
-    for (int i = 0; i < constructorFieldIndexes.length; i++) {
-      int index = constructorFieldIndexes[i];
-      if (index >= 0) {
-        args[i] = fieldValues[index];
-      } else {
-        Class<?> declaringClass =
-            constructorFieldDeclaringClasses == null ? null : constructorFieldDeclaringClasses[i];
-        args[i] =
-            defaultConstructorValue(
-                constructorFieldNames[i], declaringClass, constructorFieldTypes[i]);
-      }
-    }
-    return args;
-  }
-
-  private Object defaultConstructorValue(
-      String fieldName, Class<?> declaringClass, Class<?> fieldType) {
-    for (DefaultValueUtils.DefaultValueField defaultValueField : defaultValueFields) {
-      if (defaultValueField.getFieldName().equals(fieldName)
-          && (declaringClass == null || defaultValueField.getDeclaringClass() == declaringClass)) {
-        return defaultValueField.getDefaultValue();
-      }
-    }
-    return AbstractObjectSerializer.defaultConstructorValue(fieldType);
   }
 
   @Override
@@ -323,10 +248,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       Arrays.fill(recordInfo.getRecordComponents(), null);
       return t;
     }
-    if (objectCreator.hasConstructorFields()) {
-      Object[] fieldValues = new Object[allFields.length];
-      return readConstructorObject(readContext, fieldValues);
-    }
     T targetObject = newInstance();
     if (readContext.hasPreservedRefId()) {
       readContext.reference(targetObject);
@@ -337,85 +258,6 @@ public class CompatibleSerializer<T> extends AbstractObjectSerializer<T> {
       readFields(readContext, targetObject);
     }
     return targetObject;
-  }
-
-  private T readConstructorObject(ReadContext readContext, Object[] fieldValues) {
-    beginConstructorRef(readContext);
-    try {
-      boolean[] bufferedNonConstructorFields = new boolean[allFields.length];
-      int remainingConstructorFields = countConstructorFields();
-      T targetObject = null;
-      if (remainingConstructorFields == 0) {
-        targetObject = createConstructorObject(fieldValues);
-        referenceConstructorRef(readContext, targetObject);
-        setNonConstructorDefaultValues(targetObject);
-      }
-      MemoryBuffer buffer = readContext.getBuffer();
-      RefReader refReader = readContext.getRefReader();
-      Generics generics = readContext.getGenerics();
-      for (int i = 0; i < allFields.length; i++) {
-        SerializationFieldInfo fieldInfo = allFields[i];
-        CompatibleCollectionArrayReader.ReadAction action =
-            compatibleCollectionArrayReadAction(allCompatibleReadActions, i);
-        if (constructorFieldMask[i]) {
-          fieldValues[i] =
-              ctorFieldValue(
-                  readContext,
-                  readFieldValue(readContext, refReader, generics, fieldInfo, buffer, action),
-                  type);
-          remainingConstructorFields--;
-          if (remainingConstructorFields == 0) {
-            checkNoUnresolvedReadRef(readContext);
-            targetObject = createConstructorObject(fieldValues);
-            referenceConstructorRef(readContext, targetObject);
-            setNonConstructorDefaultValues(targetObject);
-            setBufferedNonConstructorFields(
-                targetObject, fieldValues, bufferedNonConstructorFields);
-          }
-        } else if (targetObject == null) {
-          fieldValues[i] =
-              bufferFieldValue(
-                  readContext,
-                  readFieldValue(readContext, refReader, generics, fieldInfo, buffer, action),
-                  type);
-          bufferedNonConstructorFields[i] = true;
-        } else {
-          readField(readContext, targetObject, refReader, generics, fieldInfo, buffer, action);
-        }
-      }
-      return targetObject;
-    } finally {
-      endConstructorRef(readContext);
-    }
-  }
-
-  private int countConstructorFields() {
-    int count = 0;
-    for (boolean constructorField : constructorFieldMask) {
-      if (constructorField) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  private T createConstructorObject(Object[] fieldValues) {
-    return objectCreator.newInstanceWithArguments(compatibleConstructorArgs(fieldValues));
-  }
-
-  private void setNonConstructorDefaultValues(T targetObject) {
-    DefaultValueUtils.setDefaultValues(
-        targetObject, defaultValueFields, constructorFieldNames, constructorFieldDeclaringClasses);
-  }
-
-  private void setBufferedNonConstructorFields(
-      T targetObject, Object[] fieldValues, boolean[] bufferedNonConstructorFields) {
-    for (int i = 0; i < allFields.length; i++) {
-      if (bufferedNonConstructorFields[i]) {
-        setFieldValue(
-            targetObject, allFields[i], resolveBufferedValue(fieldValues[i], targetObject));
-      }
-    }
   }
 
   private void setFieldValue(T targetObject, SerializationFieldInfo fieldInfo, Object fieldValue) {

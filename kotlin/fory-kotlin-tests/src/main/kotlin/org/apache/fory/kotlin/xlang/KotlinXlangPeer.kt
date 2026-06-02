@@ -34,7 +34,6 @@ import org.apache.fory.BaseFory
 import org.apache.fory.Fory
 import org.apache.fory.annotation.ArrayType
 import org.apache.fory.annotation.ForyCase
-import org.apache.fory.annotation.ForyConstructor
 import org.apache.fory.annotation.ForyField
 import org.apache.fory.annotation.ForyStruct
 import org.apache.fory.annotation.ForyUnion
@@ -58,7 +57,6 @@ import org.apache.fory.type.union.UnknownCase
 
 @ForyStruct
 public data class KotlinUser
-@ForyConstructor("id", "name", "score")
 constructor(
   @ForyField(id = 1) val id: @Fixed UInt,
   @ForyField(id = 2) val name: String = "anonymous",
@@ -66,16 +64,7 @@ constructor(
 )
 
 @ForyStruct
-public data class KotlinRegisteredSwap
-@ForyConstructor("left", "right")
-constructor(
-  @ForyField(id = 1) val left: String,
-  @ForyField(id = 2) val right: String,
-)
-
-@ForyStruct
 internal data class KotlinInternalUser
-@ForyConstructor("id", "name")
 constructor(
   @ForyField(id = 1) val id: UInt,
   @ForyField(id = 2) val name: String = "internal",
@@ -83,17 +72,6 @@ constructor(
 
 @ForyStruct
 public data class KotlinConcreteCollections
-@ForyConstructor(
-  "names",
-  "values",
-  "tags",
-  "counts",
-  "mutableNames",
-  "mutableTags",
-  "mutableCounts",
-  "sortedNames",
-  "concurrentCounts",
-)
 constructor(
   @ForyField(id = 1) val names: ArrayList<String>,
   @ForyField(id = 2) val values: java.util.LinkedList<Int>,
@@ -108,7 +86,6 @@ constructor(
 
 @ForyStruct
 public data class KotlinUnsignedCollections
-@ForyConstructor("ids", "optionalIds", "totals", "byName", "namesById")
 constructor(
   @ForyField(id = 1) val ids: List<UInt>,
   @ForyField(id = 2) val optionalIds: List<UInt?>,
@@ -119,21 +96,6 @@ constructor(
 
 @ForyStruct
 public data class KotlinSchemaSurface
-@ForyConstructor(
-  "nullableNames",
-  "dynamicList",
-  "dynamicValues",
-  "bytesAsArray",
-  "bits",
-  "unsignedLongs",
-  "fieldSiteId",
-  "denseIds",
-  "noRefUser",
-  "noRefUsers",
-  "chunks",
-  "chunksByName",
-  "nestedSortedNames",
-)
 constructor(
   @ForyField(id = 1) val nullableNames: List<String?>?,
   @ForyField(id = 2) val dynamicList: List<*>,
@@ -152,20 +114,6 @@ constructor(
 
 @ForyStruct
 public data class KotlinDenseArrays
-@ForyConstructor(
-  "ubytes",
-  "ushorts",
-  "uints",
-  "ulongs",
-  "ints",
-  "longs",
-  "bytes",
-  "shorts",
-  "floats",
-  "doubles",
-  "booleans",
-  "nullableUInts",
-)
 constructor(
   @ForyField(id = 1) val ubytes: UByteArray,
   @ForyField(id = 2) val ushorts: UShortArray,
@@ -183,12 +131,10 @@ constructor(
 
 @ForyStruct
 public data class KotlinNullableCompatibleWriter
-@ForyConstructor("anchor")
 constructor(@ForyField(id = 1) val anchor: String)
 
 @ForyStruct
 public data class KotlinNullableCompatibleReader
-@ForyConstructor("anchor", "maybeBoolean", "maybeInt", "maybeLong", "maybeUInt", "maybeULong")
 constructor(
   @ForyField(id = 1) val anchor: String,
   @ForyField(id = 2) val maybeBoolean: Boolean?,
@@ -200,12 +146,10 @@ constructor(
 
 @ForyStruct
 public data class KotlinDefaultCompatibleWriter
-@ForyConstructor("id")
 constructor(@ForyField(id = 1) val id: Int)
 
 @ForyStruct
 public data class KotlinDefaultCompatibleReader
-@ForyConstructor("id", "name")
 constructor(
   @ForyField(id = 1) val id: Int,
   @ForyField(id = 2) val name: String = "generated-default",
@@ -213,7 +157,6 @@ constructor(
 
 @ForyStruct
 public data class KotlinDefaultRefWriter
-@ForyConstructor("id", "next")
 constructor(
   @ForyField(id = 1) val id: Int,
   @Ref @ForyField(id = 2) var next: KotlinDefaultRefWriter?,
@@ -221,7 +164,6 @@ constructor(
 
 @ForyStruct
 public data class KotlinDefaultRefReader
-@ForyConstructor("id", "name", "next")
 constructor(
   @ForyField(id = 1) val id: Int,
   @ForyField(id = 3) val name: String = "generated-default",
@@ -230,16 +172,6 @@ constructor(
 
 @ForyStruct
 public data class KotlinDurationAndHalfArrays
-@ForyConstructor(
-  "duration",
-  "date",
-  "instant",
-  "decimal",
-  "float16",
-  "bfloat16",
-  "float16s",
-  "bfloat16s",
-)
 constructor(
   @ForyField(id = 1) val duration: kotlin.time.Duration,
   @ForyField(id = 2) val date: LocalDate,
@@ -260,7 +192,6 @@ public class KotlinMutableNode() {
 
 @ForyStruct
 public class KotlinCtorBackrefRoot
-@ForyConstructor("child")
 constructor(@ForyField(id = 1) val child: KotlinCtorBackrefChild)
 
 @ForyStruct
@@ -295,14 +226,7 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   checkNoArgRegisterReceivers()
 
   val fory = newFory()
-  fory.registerConstructor(
-    KotlinRegisteredSwap::class.java,
-    KotlinRegisteredSwap::class.java.getDeclaredConstructor(String::class.java, String::class.java),
-    "right",
-    "left",
-  )
   fory.register<KotlinUser>("kotlin", "KotlinUser")
-  fory.register<KotlinRegisteredSwap>("kotlin", "KotlinRegisteredSwap")
   fory.register<KotlinInternalUser>("kotlin", "KotlinInternalUser")
   fory.register<KotlinConcreteCollections>("kotlin", "KotlinConcreteCollections")
   fory.register<KotlinUnsignedCollections>("kotlin", "KotlinUnsignedCollections")
@@ -330,16 +254,6 @@ private fun staticSerializerRoundTrip(dataFile: String) {
   check(descriptors[0].foryFieldId == 1)
   check(descriptors[0].typeRef.typeExtMeta.typeId() == Types.UINT32)
   check(descriptors[2].typeRef.typeExtMeta.typeId() == Types.VARINT64)
-
-  val swap = KotlinRegisteredSwap(left = "left", right = "right")
-  val swapped = KotlinRegisteredSwap(left = "right", right = "left")
-  check(fory.deserialize(fory.serialize(swap), KotlinRegisteredSwap::class.java) == swapped)
-  check(fory.copy(swap) == swapped)
-  check(
-    fory.getSerializer(KotlinRegisteredSwap::class.java) is StaticGeneratedStructSerializer<*>
-  ) {
-    "KotlinRegisteredSwap did not load a static generated serializer"
-  }
 
   val internalUser = KotlinInternalUser(id = UInt.MAX_VALUE, name = "internal-static")
   check(

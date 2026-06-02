@@ -29,7 +29,6 @@ import java.util.Set;
 import lombok.Data;
 import org.apache.fory.Fory;
 import org.apache.fory.ThreadSafeFory;
-import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.exception.CopyException;
 import org.apache.fory.exception.SerializationException;
 import org.apache.fory.platform.JdkVersion;
@@ -120,7 +119,6 @@ public class ImmutableCollectionSerializersTest {
   public static class Pojo {
     List<List<Object>> data;
 
-    @ForyConstructor("data")
     public Pojo(List<List<Object>> data) {
       this.data = data;
     }

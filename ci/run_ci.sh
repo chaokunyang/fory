@@ -87,7 +87,7 @@ graalvm_test() {
     java_major=$(echo "$java_version" | cut -d. -f1)
   fi
   if [[ "$java_major" -ge 25 ]]; then
-    export JDK_JAVA_OPTIONS="$(jdk25_javac_options)"
+    export JDK_JAVA_OPTIONS="$(jdk25_plus_options "$java_major" "ALL-UNNAMED") $(jdk25_javac_options)"
   else
     unset JDK_JAVA_OPTIONS
   fi

@@ -248,47 +248,6 @@ public abstract class StaticGeneratedStructSerializer<T> extends AbstractObjectS
     return ids;
   }
 
-  protected final int[] buildConstructorFieldIds(List<Descriptor> descriptors) {
-    String[] fieldNames = constructorFieldNames();
-    if (fieldNames.length == 0) {
-      return null;
-    }
-    Class<?>[] declaringClasses = constructorFieldDeclaringClasses();
-    boolean[] finalFields = constructorFieldFinal();
-    int[] ids = new int[fieldNames.length];
-    for (int i = 0; i < fieldNames.length; i++) {
-      Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];
-      ids[i] = constructorFieldId(descriptors, declaringClass, fieldNames[i], !finalFields[i]);
-    }
-    return ids;
-  }
-
-  private int constructorFieldId(
-      List<Descriptor> descriptors,
-      Class<?> declaringClass,
-      String fieldName,
-      boolean allowMissing) {
-    int id = UNKNOWN_FIELD;
-    String declaringClassName = declaringClass == null ? null : declaringClass.getName();
-    for (int i = 0; i < descriptors.size(); i++) {
-      Descriptor descriptor = descriptors.get(i);
-      if (!descriptor.getName().equals(fieldName)
-          || (declaringClassName != null
-              && !descriptor.getDeclaringClass().equals(declaringClassName))) {
-        continue;
-      }
-      if (id != UNKNOWN_FIELD) {
-        throw new ForyException(
-            "Constructor field " + fieldName + " is ambiguous because multiple fields match");
-      }
-      id = i;
-    }
-    if (id == UNKNOWN_FIELD && !allowMissing) {
-      throw new ForyException("Constructor field " + fieldName + " is not serialized");
-    }
-    return id;
-  }
-
   protected final long[] buildConstructorFieldBits(int size, int[] indexes) {
     if (indexes == null) {
       return null;

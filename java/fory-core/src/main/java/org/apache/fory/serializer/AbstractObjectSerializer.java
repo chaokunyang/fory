@@ -70,20 +70,15 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
   private static final Logger LOG = LoggerFactory.getLogger(AbstractObjectSerializer.class);
   private static final Object SELF_REFERENCE = new Object();
   // Constructor-bound objects reserve a ref id before constructor arguments are read, but the
-  // context package must stay a generic ref owner. Track unresolved constructor refs here so
-  // final-field construction does not add context APIs or bind the wrong pending ref id.
+  // object cannot be referenced semantically until the constructor returns. ReadContext calls the
+  // tracker from tryPreserveRefId so nested collection/map/array elements cannot hide an unresolved
+  // self-reference inside a constructor argument.
   private static final Object CONSTRUCTOR_REF_IDS = new Object();
   private static final Object UNRESOLVED_CONSTRUCTOR_REF_IDS = new Object();
   protected final Config config;
   protected final TypeResolver typeResolver;
   protected final boolean isRecord;
   protected final ObjectCreator<T> objectCreator;
-  private final String[] objectCreatorConstructorFieldNames;
-  private final Class<?>[] objectCreatorConstructorFieldDeclaringClasses;
-  private final Class<?>[] objectCreatorConstructorFieldTypes;
-  private final boolean[] objectCreatorConstructorFieldFinal;
-  private volatile int[] copyConstructorFieldIndexes;
-  private volatile boolean[] copyConstructorFieldMask;
   private SerializationFieldInfo[] fieldInfos;
   private RecordInfo copyRecordInfo;
 
@@ -93,10 +88,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.typeResolver = null;
     this.isRecord = false;
     this.objectCreator = null;
-    this.objectCreatorConstructorFieldNames = null;
-    this.objectCreatorConstructorFieldDeclaringClasses = null;
-    this.objectCreatorConstructorFieldTypes = null;
-    this.objectCreatorConstructorFieldFinal = null;
   }
 
   public AbstractObjectSerializer(TypeResolver typeResolver, Class<T> type) {
@@ -110,18 +101,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     this.typeResolver = typeResolver;
     this.isRecord = RecordUtils.isRecord(type);
     this.objectCreator = objectCreator;
-    if (objectCreator.hasConstructorFields()) {
-      this.objectCreatorConstructorFieldNames = objectCreator.getConstructorFieldNames();
-      this.objectCreatorConstructorFieldDeclaringClasses =
-          objectCreator.getConstructorFieldDeclaringClasses();
-      this.objectCreatorConstructorFieldTypes = objectCreator.getConstructorFieldTypes();
-      this.objectCreatorConstructorFieldFinal = objectCreator.getConstructorFieldFinal();
-    } else {
-      this.objectCreatorConstructorFieldNames = null;
-      this.objectCreatorConstructorFieldDeclaringClasses = null;
-      this.objectCreatorConstructorFieldTypes = null;
-      this.objectCreatorConstructorFieldFinal = null;
-    }
   }
 
   static void writeField(
@@ -193,7 +172,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       MemoryBuffer buffer) {
     if (fieldInfo.useDeclaredTypeInfo) {
       if (refMode == RefMode.TRACKING) {
-        trackConstructorRefRead(readContext, buffer);
         return readContext.readRef(fieldInfo.typeInfo);
       }
       if (refMode != RefMode.NULL_ONLY || buffer.readByte() != Fory.NULL_FLAG) {
@@ -203,8 +181,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       return null;
     }
     if (refMode == RefMode.TRACKING) {
-      trackConstructorRefRead(readContext, buffer);
-      int nextReadRefId = refReader.tryPreserveRefId(buffer);
+      int nextReadRefId = readContext.tryPreserveRefId();
       if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
         Object value =
             typeResolver
@@ -530,7 +507,7 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       case TRACKING:
         generics.pushGenericType(fieldInfo.genericType, readContext.getDepth());
         fieldValue =
-            readContainerFieldValueRef(readContext, typeResolver, refReader, fieldInfo, buffer);
+            readContainerFieldValueRef(readContext, typeResolver, refReader, fieldInfo);
         generics.popGenericType(readContext.getDepth());
         break;
       default:
@@ -554,10 +531,8 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       ReadContext readContext,
       TypeResolver typeResolver,
       RefReader refReader,
-      SerializationFieldInfo fieldInfo,
-      MemoryBuffer buffer) {
-    trackConstructorRefRead(readContext, buffer);
-    int nextReadRefId = refReader.tryPreserveRefId(buffer);
+      SerializationFieldInfo fieldInfo) {
+    int nextReadRefId = readContext.tryPreserveRefId();
     if (nextReadRefId >= Fory.NOT_NULL_VALUE_FLAG) {
       Object value;
       if (fieldInfo.containerSerializerOverride != null) {
@@ -900,9 +875,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     if (isRecord) {
       return copyRecord(copyContext, originObj);
     }
-    if (objectCreator.hasConstructorFields()) {
-      return copyConstructorObject(copyContext, originObj);
-    }
     T newObj = newBean();
     copyContext.reference(originObj, newObj);
     copyFields(copyContext, originObj, newObj);
@@ -923,45 +895,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     return originObj;
   }
 
-  private T copyConstructorObject(CopyContext copyContext, T originObj) {
-    SerializationFieldInfo[] fieldInfos = this.fieldInfos;
-    if (fieldInfos == null) {
-      fieldInfos = buildFieldsInfo();
-    }
-    int[] constructorFieldIndexes = copyConstructorFieldIndexes(fieldInfos);
-    boolean[] constructorFieldMask = copyConstructorFieldMask(fieldInfos, constructorFieldIndexes);
-    Object pendingMarker = beginConstructorCopy(copyContext, originObj);
-    Object[] fieldValues =
-        copyFieldValues(copyContext, originObj, fieldInfos, constructorFieldMask, true);
-    checkNoConstructorCopyBackrefs(fieldValues, constructorFieldIndexes, pendingMarker);
-    T newObj =
-        objectCreator.newInstanceWithArguments(
-            constructorArgs(
-                fieldValues, constructorFieldIndexes, objectCreatorConstructorFieldTypes));
-    copyContext.reference(originObj, newObj);
-    copyFields(copyContext, fieldInfos, originObj, newObj, constructorFieldMask, false);
-    return newObj;
-  }
-
-  private int[] copyConstructorFieldIndexes(SerializationFieldInfo[] fieldInfos) {
-    int[] indexes = copyConstructorFieldIndexes;
-    if (indexes == null) {
-      indexes = buildConstructorFieldIndexes(fieldInfos);
-      copyConstructorFieldIndexes = indexes;
-    }
-    return indexes;
-  }
-
-  private boolean[] copyConstructorFieldMask(
-      SerializationFieldInfo[] fieldInfos, int[] constructorFieldIndexes) {
-    boolean[] mask = copyConstructorFieldMask;
-    if (mask == null) {
-      mask = buildConstructorFieldMask(fieldInfos.length, constructorFieldIndexes);
-      copyConstructorFieldMask = mask;
-    }
-    return mask;
-  }
-
   private Object[] copyFieldValues(CopyContext copyContext, T originObj) {
     SerializationFieldInfo[] fieldInfos = this.fieldInfos;
     if (fieldInfos == null) {
@@ -969,29 +902,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
     }
     Object[] fieldValues = new Object[fieldInfos.length];
     for (int i = 0; i < fieldInfos.length; i++) {
-      SerializationFieldInfo fieldInfo = fieldInfos[i];
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldInfo.isPrimitiveField) {
-        fieldValues[i] = copyPrimitiveField(originObj, fieldAccessor, fieldInfo.dispatchId);
-      } else {
-        fieldValues[i] =
-            copyNotPrimitiveField(copyContext, originObj, fieldAccessor, fieldInfo.dispatchId);
-      }
-    }
-    return fieldValues;
-  }
-
-  private Object[] copyFieldValues(
-      CopyContext copyContext,
-      T originObj,
-      SerializationFieldInfo[] fieldInfos,
-      boolean[] constructorFieldMask,
-      boolean constructorFields) {
-    Object[] fieldValues = new Object[fieldInfos.length];
-    for (int i = 0; i < fieldInfos.length; i++) {
-      if (constructorFieldMask[i] != constructorFields) {
-        continue;
-      }
       SerializationFieldInfo fieldInfo = fieldInfos[i];
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldInfo.isPrimitiveField) {
@@ -1018,28 +928,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
       Object originObj,
       Object newObj) {
     for (SerializationFieldInfo fieldInfo : fieldInfos) {
-      FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
-      if (fieldInfo.isPrimitiveField) {
-        copySetPrimitiveField(originObj, newObj, fieldAccessor, fieldInfo.dispatchId);
-      } else {
-        copySetNotPrimitiveField(
-            copyContext, originObj, newObj, fieldAccessor, fieldInfo.dispatchId);
-      }
-    }
-  }
-
-  private static void copyFields(
-      CopyContext copyContext,
-      SerializationFieldInfo[] fieldInfos,
-      Object originObj,
-      Object newObj,
-      boolean[] constructorFieldMask,
-      boolean constructorFields) {
-    for (int i = 0; i < fieldInfos.length; i++) {
-      if (constructorFieldMask[i] != constructorFields) {
-        continue;
-      }
-      SerializationFieldInfo fieldInfo = fieldInfos[i];
       FieldAccessor fieldAccessor = fieldInfo.fieldAccessor;
       if (fieldInfo.isPrimitiveField) {
         copySetPrimitiveField(originObj, newObj, fieldAccessor, fieldInfo.dispatchId);
@@ -1197,106 +1085,6 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
 
   protected T newBean() {
     return objectCreator.newInstance();
-  }
-
-  protected final String[] constructorFieldNames() {
-    return objectCreatorConstructorFieldNames;
-  }
-
-  protected final Class<?>[] constructorFieldDeclaringClasses() {
-    return objectCreatorConstructorFieldDeclaringClasses;
-  }
-
-  protected final Class<?>[] constructorFieldTypes() {
-    return objectCreatorConstructorFieldTypes;
-  }
-
-  protected final boolean[] constructorFieldFinal() {
-    return objectCreatorConstructorFieldFinal;
-  }
-
-  protected final int[] buildConstructorFieldIndexes(SerializationFieldInfo[] fieldInfos) {
-    return buildConstructorFieldIndexes(fieldInfos, true);
-  }
-
-  protected final int[] buildConstructorFieldIndexes(
-      SerializationFieldInfo[] fieldInfos, boolean allowMissingNonFinal) {
-    return buildConstructorFieldIndexes(fieldInfos, allowMissingNonFinal, null);
-  }
-
-  protected final int[] buildConstructorFieldIndexes(
-      SerializationFieldInfo[] fieldInfos, boolean allowMissingNonFinal, String[] defaultFields) {
-    return buildConstructorFieldIndexes(fieldInfos, allowMissingNonFinal, defaultFields, null);
-  }
-
-  protected final int[] buildConstructorFieldIndexes(
-      SerializationFieldInfo[] fieldInfos,
-      boolean allowMissingNonFinal,
-      String[] defaultFields,
-      Class<?>[] defaultDeclaringClasses) {
-    String[] fieldNames = objectCreatorConstructorFieldNames;
-    if (fieldNames.length == 0) {
-      return null;
-    }
-    Class<?>[] declaringClasses = objectCreatorConstructorFieldDeclaringClasses;
-    boolean[] finalFields = objectCreatorConstructorFieldFinal;
-    int[] indexes = new int[fieldNames.length];
-    for (int i = 0; i < fieldNames.length; i++) {
-      Class<?> declaringClass = declaringClasses == null ? null : declaringClasses[i];
-      boolean allowMissing =
-          (allowMissingNonFinal && !finalFields[i])
-              || contains(defaultFields, defaultDeclaringClasses, fieldNames[i], declaringClass);
-      indexes[i] = constructorFieldIndex(fieldInfos, declaringClass, fieldNames[i], allowMissing);
-    }
-    return indexes;
-  }
-
-  private static boolean contains(
-      String[] values, Class<?>[] declaringClasses, String value, Class<?> declaringClass) {
-    if (values == null) {
-      return false;
-    }
-    for (int i = 0; i < values.length; i++) {
-      if (values[i].equals(value)
-          && (declaringClasses == null
-              || i >= declaringClasses.length
-              || declaringClasses[i] == null
-              || declaringClasses[i] == declaringClass)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  protected final boolean[] buildConstructorFieldMask(int size, int[] indexes) {
-    if (indexes == null) {
-      return null;
-    }
-    boolean[] mask = new boolean[size];
-    for (int index : indexes) {
-      if (index >= 0) {
-        mask[index] = true;
-      }
-    }
-    return mask;
-  }
-
-  protected final Object[] constructorArgs(Object[] fieldValues, int[] indexes) {
-    Object[] args = new Object[indexes.length];
-    for (int i = 0; i < indexes.length; i++) {
-      args[i] = fieldValues[indexes[i]];
-    }
-    return args;
-  }
-
-  protected final Object[] constructorArgs(
-      Object[] fieldValues, int[] indexes, Class<?>[] fieldTypes) {
-    Object[] args = new Object[indexes.length];
-    for (int i = 0; i < indexes.length; i++) {
-      int index = indexes[i];
-      args[i] = index < 0 ? defaultConstructorValue(fieldTypes[i]) : fieldValues[index];
-    }
-    return args;
   }
 
   protected final void checkNoUnresolvedReadRef(ReadContext readContext) {
@@ -1551,77 +1339,9 @@ public abstract class AbstractObjectSerializer<T> extends Serializer<T> {
 
   protected static void throwConstructorCycle(Class<?> type) {
     throw new ForyException(
-        "Cyclic references to constructor-bound type "
+        "Cyclic references to constructor-created type "
             + type.getName()
             + " cannot be restored before the object is constructed. Use a no-arg constructor "
-            + "or keep the cycle as a direct non-constructor field.");
-  }
-
-  public static Object defaultConstructorValue(Class<?> type) {
-    if (type == boolean.class) {
-      return false;
-    } else if (type == byte.class) {
-      return (byte) 0;
-    } else if (type == short.class) {
-      return (short) 0;
-    } else if (type == char.class) {
-      return (char) 0;
-    } else if (type == int.class) {
-      return 0;
-    } else if (type == long.class) {
-      return 0L;
-    } else if (type == float.class) {
-      return 0.0f;
-    } else if (type == double.class) {
-      return 0.0d;
-    }
-    return null;
-  }
-
-  protected final void setNonConstructorFields(
-      Object targetObject,
-      Object[] fieldValues,
-      SerializationFieldInfo[] fieldInfos,
-      boolean[] constructorMask) {
-    for (int i = 0; i < fieldInfos.length; i++) {
-      if (!constructorMask[i] && fieldInfos[i].fieldAccessor != null) {
-        fieldInfos[i].fieldAccessor.putObject(targetObject, fieldValues[i]);
-      }
-    }
-  }
-
-  public static Object fieldValue(Object[] fieldValues, int index) {
-    return fieldValues[index];
-  }
-
-  private static int constructorFieldIndex(
-      SerializationFieldInfo[] fieldInfos,
-      Class<?> declaringClass,
-      String fieldName,
-      boolean allowMissing) {
-    int index = -1;
-    for (int i = 0; i < fieldInfos.length; i++) {
-      FieldAccessor fieldAccessor = fieldInfos[i].fieldAccessor;
-      if (fieldAccessor == null) {
-        continue;
-      }
-      Field field = fieldAccessor.getField();
-      if (!field.getName().equals(fieldName)
-          || (declaringClass != null && field.getDeclaringClass() != declaringClass)) {
-        continue;
-      }
-      if (index >= 0) {
-        throw new ForyException(
-            "Constructor field " + fieldName + " is ambiguous because multiple fields match");
-      }
-      index = i;
-    }
-    if (index < 0) {
-      if (allowMissing) {
-        return -1;
-      }
-      throw new ForyException("Constructor field " + fieldName + " is not serialized");
-    }
-    return index;
+            + "or keep the cycle outside constructor parameters.");
   }
 }

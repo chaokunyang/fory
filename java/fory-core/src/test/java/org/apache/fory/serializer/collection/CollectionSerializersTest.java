@@ -70,7 +70,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.exception.DeserializationException;
 import org.apache.fory.exception.SerializationException;
@@ -261,7 +260,6 @@ public class CollectionSerializersTest extends ForyTestBase {
     // Test serialize Comparator
     TreeSet<String> set =
         new TreeSet<>(
-            (Comparator<? super String> & Serializable)
                 (s1, s2) -> {
                   int delta = s1.length() - s2.length();
                   if (delta == 0) {
@@ -963,7 +961,6 @@ public class CollectionSerializersTest extends ForyTestBase {
     Collection<String> collection;
     Set<String> set;
 
-    @ForyConstructor({"collection", "set"})
     public CollectionViewTestStruct(Collection<String> collection, Set<String> set) {
       this.collection = collection;
       this.set = set;
@@ -1458,7 +1455,6 @@ public class CollectionSerializersTest extends ForyTestBase {
       this(new ArrayList<>());
     }
 
-    @ForyConstructor({"data"})
     public TestClassForDefaultCollectionSerializer(List<String> data) {
       this.data = data;
     }

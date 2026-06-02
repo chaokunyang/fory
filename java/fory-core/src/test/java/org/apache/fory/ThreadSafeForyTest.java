@@ -25,7 +25,6 @@ import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertSame;
 import static org.testng.Assert.assertTrue;
 
-import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
@@ -97,71 +96,6 @@ public class ThreadSafeForyTest extends ForyTestBase {
             builder -> builder.withClassLoader(custom).requireClassRegistration(false).build(), 2);
     assertSame(threadLocal.execute(Fory::getClassLoader), custom);
     assertSame(threadPool.execute(Fory::getClassLoader), custom);
-  }
-
-  @Test
-  public void testThreadLocalCtorRegFailure() throws Exception {
-    ThreadLocalFory fory =
-        Fory.builder()
-            .withXlang(false)
-            .withCodegen(false)
-            .requireClassRegistration(false)
-            .buildThreadLocalFory();
-    fory.execute(
-        f -> {
-          f.getSerializer(ThreadSafeCtorBean.class);
-          return null;
-        });
-    Constructor<ThreadSafeCtorBean> constructor =
-        ThreadSafeCtorBean.class.getDeclaredConstructor(int.class, String.class);
-    Assert.assertThrows(
-        ForyException.class,
-        () -> fory.registerConstructor(ThreadSafeCtorBean.class, constructor, "age", "name"));
-    assertFutureThreadCreator(fory, false);
-  }
-
-  @Test
-  public void testThreadLocalCtorRegCopies() throws Exception {
-    ThreadLocalFory fory =
-        Fory.builder()
-            .withXlang(false)
-            .withCodegen(false)
-            .requireClassRegistration(false)
-            .buildThreadLocalFory();
-    Constructor<ThreadSafeCtorBean> constructor =
-        ThreadSafeCtorBean.class.getDeclaredConstructor(int.class, String.class);
-    String[] fieldNames = {"age", "name"};
-    fory.registerConstructor(ThreadSafeCtorBean.class, constructor, fieldNames);
-    fieldNames[0] = "name";
-    fieldNames[1] = "age";
-    assertFutureThreadCreator(fory, true);
-  }
-
-  @Test
-  public void testThreadPoolCtorRegPreflight() throws Exception {
-    ThreadSafeFory fory =
-        Fory.builder()
-            .withXlang(false)
-            .withCodegen(false)
-            .requireClassRegistration(false)
-            .buildThreadSafeForyPool(2);
-    fory.execute(
-        f -> {
-          f.getSerializer(ThreadSafeCtorBean.class);
-          return null;
-        });
-    Constructor<ThreadSafeCtorBean> constructor =
-        ThreadSafeCtorBean.class.getDeclaredConstructor(int.class, String.class);
-    Assert.assertThrows(
-        ForyException.class,
-        () -> fory.registerConstructor(ThreadSafeCtorBean.class, constructor, "age", "name"));
-    assertEquals(
-        fory.execute(
-            f ->
-                f.getTypeResolver()
-                    .getObjectCreator(ThreadSafeCtorBean.class)
-                    .hasConstructorFields()),
-        Boolean.FALSE);
   }
 
   @Test
@@ -489,46 +423,10 @@ public class ThreadSafeForyTest extends ForyTestBase {
     return new ByteBuffer[] {heap, heapReadOnly, direct, directReadOnly};
   }
 
-  private static void assertFutureThreadCreator(ThreadSafeFory fory, boolean constructorFields)
-      throws Exception {
-    AtomicReference<Boolean> result = new AtomicReference<>();
-    AtomicReference<Throwable> error = new AtomicReference<>();
-    Thread thread =
-        new Thread(
-            () -> {
-              try {
-                result.set(
-                    fory.execute(
-                        f ->
-                            f.getTypeResolver()
-                                .getObjectCreator(ThreadSafeCtorBean.class)
-                                .hasConstructorFields()));
-              } catch (Throwable t) {
-                error.set(t);
-              }
-            });
-    thread.start();
-    thread.join();
-    if (error.get() != null) {
-      throw new AssertionError(error.get());
-    }
-    assertEquals(result.get(), Boolean.valueOf(constructorFields));
-  }
-
   private static byte[] wrapWithPadding(byte[] payload) {
     byte[] bytes = new byte[payload.length + 6];
     System.arraycopy(payload, 0, bytes, 3, payload.length);
     return bytes;
-  }
-
-  public static final class ThreadSafeCtorBean {
-    final int age;
-    final String name;
-
-    private ThreadSafeCtorBean(int age, String name) {
-      this.age = age;
-      this.name = name;
-    }
   }
 
   @Data

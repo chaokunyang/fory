@@ -23,7 +23,6 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import org.apache.fory.Fory;
-import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.util.Preconditions;
@@ -51,7 +50,6 @@ public class FeatureTestExample {
   public static class TestInvocationHandler implements InvocationHandler {
     private final String value;
 
-    @ForyConstructor("value")
     public TestInvocationHandler(String value) {
       this.value = value;
     }
@@ -100,7 +98,6 @@ public class FeatureTestExample {
 
     // Test proxy serialization
     TestInterface proxy =
-        (TestInterface)
             Proxy.newProxyInstance(
                 TestInterface.class.getClassLoader(),
                 new Class[] {TestInterface.class},

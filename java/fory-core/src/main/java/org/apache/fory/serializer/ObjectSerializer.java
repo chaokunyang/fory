@@ -64,9 +64,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
 
   private final RecordInfo recordInfo;
   private final SerializationFieldInfo[] allFields;
-  private final int[] constructorFieldIndexes;
-  private final boolean[] constructorFieldMask;
-  private final Class<?>[] constructorFieldTypes;
   private final int classVersionHash;
 
   public ObjectSerializer(TypeResolver typeResolver, Class<T> cls) {
@@ -138,15 +135,6 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
     }
     FieldGroups fieldGroups = FieldGroups.buildFieldInfos(typeResolver, grouper);
     allFields = fieldGroups.allFields;
-    if (!isRecord && objectCreator.hasConstructorFields()) {
-      constructorFieldIndexes = buildConstructorFieldIndexes(allFields);
-      constructorFieldMask = buildConstructorFieldMask(allFields.length, constructorFieldIndexes);
-      constructorFieldTypes = constructorFieldTypes();
-    } else {
-      constructorFieldIndexes = null;
-      constructorFieldMask = null;
-      constructorFieldTypes = null;
-    }
   }
 
   @Override
@@ -228,86 +216,9 @@ public final class ObjectSerializer<T> extends AbstractObjectSerializer<T> {
       Arrays.fill(recordInfo.getRecordComponents(), null);
       return obj;
     }
-    if (objectCreator.hasConstructorFields()) {
-      return readConstructorObject(readContext);
-    }
     T obj = newBean();
     readContext.reference(obj);
     return readAndSetFields(readContext, obj);
-  }
-
-  private T readConstructorObject(ReadContext readContext) {
-    beginConstructorRef(readContext);
-    try {
-      MemoryBuffer buffer = readContext.getBuffer();
-      if (typeResolver.checkClassVersion()) {
-        int hash = buffer.readInt32();
-        checkClassVersion(type, hash, classVersionHash);
-      }
-      Object[] fieldValues = new Object[allFields.length];
-      boolean[] bufferedNonConstructorFields = new boolean[allFields.length];
-      int remainingConstructorFields = countConstructorFields();
-      T obj = null;
-      if (remainingConstructorFields == 0) {
-        obj = createConstructorObject(fieldValues);
-        referenceConstructorRef(readContext, obj);
-      }
-      RefReader refReader = readContext.getRefReader();
-      Generics generics = readContext.getGenerics();
-      for (int i = 0; i < allFields.length; i++) {
-        SerializationFieldInfo fieldInfo = allFields[i];
-        if (constructorFieldMask[i]) {
-          fieldValues[i] =
-              ctorFieldValue(
-                  readContext,
-                  readFieldByCodecCategory(readContext, refReader, generics, fieldInfo, buffer),
-                  type);
-          remainingConstructorFields--;
-          if (remainingConstructorFields == 0) {
-            checkNoUnresolvedReadRef(readContext);
-            obj = createConstructorObject(fieldValues);
-            referenceConstructorRef(readContext, obj);
-            setBufferedNonConstructorFields(obj, fieldValues, bufferedNonConstructorFields);
-          }
-        } else if (obj == null) {
-          fieldValues[i] =
-              bufferFieldValue(
-                  readContext,
-                  readFieldByCodecCategory(readContext, refReader, generics, fieldInfo, buffer),
-                  type);
-          bufferedNonConstructorFields[i] = true;
-        } else {
-          readAndSetFieldByCodecCategory(readContext, refReader, generics, fieldInfo, buffer, obj);
-        }
-      }
-      return obj;
-    } finally {
-      endConstructorRef(readContext);
-    }
-  }
-
-  private int countConstructorFields() {
-    int count = 0;
-    for (boolean constructorField : constructorFieldMask) {
-      if (constructorField) {
-        count++;
-      }
-    }
-    return count;
-  }
-
-  private T createConstructorObject(Object[] fieldValues) {
-    return objectCreator.newInstanceWithArguments(
-        constructorArgs(fieldValues, constructorFieldIndexes, constructorFieldTypes));
-  }
-
-  private void setBufferedNonConstructorFields(
-      T obj, Object[] fieldValues, boolean[] bufferedNonConstructorFields) {
-    for (int i = 0; i < allFields.length; i++) {
-      if (bufferedNonConstructorFields[i]) {
-        allFields[i].fieldAccessor.putObject(obj, resolveBufferedValue(fieldValues[i], obj));
-      }
-    }
   }
 
   public Object[] readFields(ReadContext readContext) {

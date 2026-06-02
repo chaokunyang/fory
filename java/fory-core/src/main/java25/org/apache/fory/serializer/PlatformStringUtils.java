@@ -89,8 +89,11 @@ final class PlatformStringUtils {
             offsetField == null
                 ? null
                 : stringLookup.findVarHandle(String.class, "offset", int.class));
-      } catch (Throwable ignored) {
-        return StringHandles.noAccess();
+      } catch (Throwable e) {
+        throw new IllegalStateException(
+            "JDK25+ string internals require java.base/java.lang.invoke to be open to "
+                + "org.apache.fory.core",
+            e);
       }
     } catch (NoSuchFieldException e) {
       throw new RuntimeException(e);

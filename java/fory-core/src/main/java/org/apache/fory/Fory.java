@@ -21,7 +21,6 @@ package org.apache.fory;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.IdentityHashMap;
 import java.util.function.Consumer;
@@ -210,21 +209,6 @@ public final class Fory implements BaseFory {
       installedModules.remove(module);
       throw e;
     }
-  }
-
-  @Override
-  public <T> void registerConstructor(
-      Class<T> type, Constructor<T> constructor, String... fieldNames) {
-    checkRegisterAllowed();
-    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
-    if (typeInfo != null && typeInfo.getSerializer() != null) {
-      throw new ForyException(
-          "Cannot register constructor for "
-              + type.getName()
-              + " after its serializer has been created. Register constructors before calling "
-              + "`getSerializer`, `serialize`, `deserialize`, or `copy` for that type.");
-    }
-    sharedRegistry.registerConstructor(type, constructor, fieldNames);
   }
 
   @Override

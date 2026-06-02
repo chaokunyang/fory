@@ -29,7 +29,6 @@ Annotate Kotlin schema classes with `@ForyStruct` and constructor properties wit
 `@ForyField(id = N)`:
 
 ```kotlin
-import org.apache.fory.annotation.ForyConstructor
 import org.apache.fory.annotation.ForyField
 import org.apache.fory.annotation.ForyStruct
 import org.apache.fory.kotlin.Fixed
@@ -37,7 +36,6 @@ import org.apache.fory.kotlin.VarInt
 
 @ForyStruct
 data class User
-@ForyConstructor("id", "score", "tags")
 constructor(
   @ForyField(id = 1)
   val id: @Fixed UInt,
@@ -62,7 +60,6 @@ and maps:
 ```kotlin
 @ForyStruct
 data class NullabilityExample
-@ForyConstructor("names", "optionalNames", "nullableList")
 constructor(
   @ForyField(id = 1)
   val names: List<String>,
@@ -87,7 +84,6 @@ import org.apache.fory.annotation.Ref
 
 @ForyStruct
 data class Node
-@ForyConstructor("children", "parent")
 constructor(
   @ForyField(id = 1)
   val children: List<@Ref Node>,

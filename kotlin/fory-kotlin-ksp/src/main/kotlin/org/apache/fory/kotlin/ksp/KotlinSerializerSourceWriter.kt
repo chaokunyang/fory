@@ -97,7 +97,6 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("  private val fieldsById: Array<SerializationFieldInfo?>\n")
     builder.append("  private val constructorFieldIds: IntArray?\n")
     builder.append("  private val constructorFieldBits: LongArray?\n")
-    builder.append("  private val constructorFieldTypes: Array<Class<*>>?\n")
     builder.append("  private val classVersionHash: Int\n")
     builder.append("  private val sameSchemaCompatible: Boolean\n\n")
   }
@@ -148,7 +147,6 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    this.fieldsById = arrayOfNulls(0)\n")
     builder.append("    this.constructorFieldIds = null\n")
     builder.append("    this.constructorFieldBits = null\n")
-    builder.append("    this.constructorFieldTypes = null\n")
     builder.append("    this.classVersionHash = 0\n")
     builder.append("    this.sameSchemaCompatible = false\n")
     builder.append("  }\n\n")
@@ -177,14 +175,20 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    for (i in this.allFields.indices) {\n")
     builder.append("      this.fieldsById[this.allFieldIds[i]] = this.allFields[i]\n")
     builder.append("    }\n")
-    builder.append(
-      "    this.constructorFieldIds = if (objectCreator.hasConstructorFields()) buildConstructorFieldIds(DESCRIPTORS) else null\n"
-    )
+    if (struct.construction == KotlinStructConstruction.CONSTRUCTOR) {
+      builder.append("    this.constructorFieldIds = intArrayOf(")
+      for (i in struct.fields.indices) {
+        if (i > 0) {
+          builder.append(", ")
+        }
+        builder.append(struct.fields[i].id)
+      }
+      builder.append(")\n")
+    } else {
+      builder.append("    this.constructorFieldIds = null\n")
+    }
     builder.append(
       "    this.constructorFieldBits = buildConstructorFieldBits(DESCRIPTORS.size, constructorFieldIds)\n"
-    )
-    builder.append(
-      "    this.constructorFieldTypes = if (constructorFieldIds != null) constructorFieldTypes() else null\n"
     )
     writeScalarBindings()
     builder.append(
@@ -376,10 +380,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       .append("  private fun newConstructorObject(fieldValues: Array<Any?>): ")
       .append(struct.typeName)
       .append(" {\n")
-    builder.append(
-      "    return objectCreator.newInstanceWithArguments(*constructorArgs(fieldValues, constructorFieldIds!!, constructorFieldTypes!!)) as "
-    )
-    builder.append(struct.typeName).append("\n")
+    builder.append("    return ")
+    appendFieldValuesConstructorCall()
+    builder.append("\n")
     builder.append("  }\n\n")
 
     builder.append(
@@ -468,40 +471,12 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    if (typeResolver.checkClassVersion()) {\n")
     builder.append("      checkClassVersion(buffer.readInt32(), classVersionHash)\n")
     builder.append("    }\n")
-    builder.append("    if (constructorFieldIds != null) {\n")
-    builder.append("      return readSchemaConstructor(readContext)\n")
-    builder.append("    }\n")
     if (struct.construction == KotlinStructConstruction.MUTABLE) {
       writeMutableReadBody()
       builder.append("  }\n\n")
-      writeConstructorRead()
       return
     }
-    writeLocalDeclarations()
-    builder.append("    for (i in allFields.indices) {\n")
-    builder.append("      val fieldInfo = allFields[i]\n")
-    builder.append("      when (allFieldIds[i]) {\n")
-    for (field in struct.fields) {
-      builder.append("        ").append(field.id).append(" -> ")
-      val direct = directReadExpression(field)
-      if (direct == null) {
-        builder
-          .append(field.localName)
-          .append(" = ")
-          .append(castReadExpression(field, "readFieldValue(readContext, fieldInfo)"))
-          .append("\n")
-      } else {
-        builder.append(field.localName).append(" = ").append(direct).append("\n")
-      }
-    }
-    builder.append(
-      "        else -> throw IllegalStateException(\"Unknown generated field id \${allFieldIds[i]}\")\n"
-    )
-    builder.append("      }\n")
-    builder.append("    }\n")
-    builder.append("    return ")
-    appendConstructorCall(defaultMask = 0L)
-    builder.append("\n")
+    builder.append("    return readSchemaConstructor(readContext)\n")
     builder.append("  }\n\n")
     writeConstructorRead()
   }
@@ -812,9 +787,9 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       return
     }
     if (struct.construction == KotlinStructConstruction.CONSTRUCTOR) {
-      builder.append("    if (constructorFieldIds != null) {\n")
-      builder.append("      return readCompatibleConstructor(readContext)\n")
-      builder.append("    }\n")
+      builder.append("    return readCompatibleConstructor(readContext)\n")
+      builder.append("  }\n\n")
+      return
     }
     if (struct.construction == KotlinStructConstruction.MUTABLE) {
       writeMutableCompatibleReadBody()
@@ -1010,57 +985,12 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
     builder.append("    if (immutable) {\n")
     builder.append("      return value\n")
     builder.append("    }\n")
-    builder.append("    if (constructorFieldIds != null) {\n")
-    builder.append("      return copyConstructorObject(copyContext, value)\n")
-    builder.append("    }\n")
     if (struct.construction == KotlinStructConstruction.MUTABLE) {
       writeMutableCopyBody()
       builder.append("  }\n")
       return
     }
-    for (field in struct.fields) {
-      if (isDirectCopyValue(field.type)) {
-        builder
-          .append("    val ")
-          .append(field.localName)
-          .append(" = value.")
-          .append(field.name)
-          .append("\n")
-      } else if (isDenseUnsignedArray(field)) {
-        builder.append("    val ").append(field.localName).append(" = value.").append(field.name)
-        if (field.nullable) {
-          builder.append("?.copyOf()\n")
-        } else {
-          builder.append(".copyOf()\n")
-        }
-      } else if (field.type.isCollectionOrMap()) {
-        builder
-          .append("    val ")
-          .append(field.localName)
-          .append(": ")
-          .append(localVariableType(field))
-          .append(" = ")
-          .append(copyContainerExpression(field.type, "value.${field.name}", 0))
-          .append("\n")
-      } else {
-        builder
-          .append("    val ")
-          .append(field.localName)
-          .append(": ")
-          .append(localVariableType(field))
-          .append(" = ")
-          .append(
-            castReadExpression(
-              field,
-              "copyFieldValue(copyContext, value.${field.name}, fieldsById[${field.id}]!!)"
-            )
-          )
-          .append("\n")
-      }
-    }
-    builder.append("    return ")
-    appendConstructorCall(defaultMask = 0L)
-    builder.append("\n")
+    builder.append("    return copyConstructorObject(copyContext, value)\n")
     builder.append("  }\n")
   }
 
@@ -1202,6 +1132,30 @@ internal class KotlinSerializerSourceWriter(private val struct: KotlinSourceStru
       first = false
     }
     builder.append(")")
+  }
+
+  private fun appendFieldValuesConstructorCall() {
+    builder.append(struct.typeName).append("(")
+    var first = true
+    for (field in struct.fields) {
+      if (!first) {
+        builder.append(", ")
+      }
+      builder
+        .append(field.constructorParameterName)
+        .append(" = ")
+        .append(constructorFieldValueExpression(field))
+      first = false
+    }
+    builder.append(")")
+  }
+
+  private fun constructorFieldValueExpression(field: KotlinSourceField): String {
+    val source = "fieldValues[${field.id}]"
+    if (field.type.valueTypeName == "Any?") {
+      return source
+    }
+    return "($source as ${field.type.valueTypeName})"
   }
 
   private fun constructorValueExpression(field: KotlinSourceField): String {

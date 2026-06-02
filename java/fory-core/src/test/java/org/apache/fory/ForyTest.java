@@ -53,7 +53,6 @@ import java.util.WeakHashMap;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.annotation.Expose;
-import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.annotation.Ignore;
 import org.apache.fory.builder.Generated;
 import org.apache.fory.config.ForyBuilder;
@@ -458,7 +457,6 @@ public class ForyTest extends ForyTestBase {
       this.f3 = f3;
     }
 
-    @ForyConstructor({"f3"})
     IgnoreFields(long f3) {
       this.f3 = f3;
     }
@@ -494,7 +492,6 @@ public class ForyTest extends ForyTestBase {
       this.map2 = map2;
     }
 
-    @ForyConstructor({"f1", "f2", "map1"})
     ExposeFields(int f1, long f2, ImmutableMap<String, Integer> map1) {
       this.f1 = f1;
       this.f2 = f2;
@@ -521,7 +518,6 @@ public class ForyTest extends ForyTestBase {
     @Ignore long f2;
     long f3;
 
-    @ForyConstructor({"f1", "f2", "f3"})
     ExposeFields2(int f1, long f2, long f3) {
       this.f1 = f1;
       this.f2 = f2;
@@ -722,7 +718,6 @@ public class ForyTest extends ForyTestBase {
     int f1;
     String f2;
 
-    @ForyConstructor({"f1", "f2"})
     public Struct1(int f1, String f2) {
       this.f1 = f1;
       this.f2 = f2;
@@ -785,7 +780,6 @@ public class ForyTest extends ForyTestBase {
     int f1;
     Object f2;
 
-    @ForyConstructor({"f1", "f2"})
     MaxDepth(int f1, Object f2) {
       this.f1 = f1;
       this.f2 = f2;

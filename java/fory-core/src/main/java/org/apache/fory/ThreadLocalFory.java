@@ -20,7 +20,6 @@
 package org.apache.fory;
 
 import java.io.OutputStream;
-import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Map;
@@ -81,20 +80,6 @@ public class ThreadLocalFory extends AbstractThreadSafeFory {
   public void registerCallback(Consumer<Fory> callback) {
     synchronized (callbackLock) {
       synchronized (allFory) {
-        allFory.keySet().forEach(callback);
-      }
-      factoryCallback = factoryCallback.andThen(callback);
-    }
-  }
-
-  @Override
-  public <T> void registerConstructor(
-      Class<T> type, Constructor<T> constructor, String... fieldNames) {
-    String[] copiedFieldNames = fieldNames.clone();
-    Consumer<Fory> callback = fory -> fory.registerConstructor(type, constructor, copiedFieldNames);
-    synchronized (callbackLock) {
-      synchronized (allFory) {
-        allFory.keySet().forEach(fory -> checkRegisterConstructorAllowed(fory, type));
         allFory.keySet().forEach(callback);
       }
       factoryCallback = factoryCallback.andThen(callback);

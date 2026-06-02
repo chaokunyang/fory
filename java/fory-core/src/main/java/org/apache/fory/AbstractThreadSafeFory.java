@@ -19,11 +19,8 @@
 
 package org.apache.fory;
 
-import java.lang.reflect.Constructor;
 import java.util.function.Function;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.resolver.TypeChecker;
-import org.apache.fory.resolver.TypeInfo;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.SerializerFactory;
@@ -67,31 +64,6 @@ public abstract class AbstractThreadSafeFory implements ThreadSafeFory {
   @Override
   public void register(ForyModule module) {
     registerCallback(fory -> fory.register(module));
-  }
-
-  @Override
-  public <T> void registerConstructor(
-      Class<T> type, Constructor<T> constructor, String... fieldNames) {
-    String[] copiedFieldNames = fieldNames.clone();
-    registerCallback(fory -> fory.registerConstructor(type, constructor, copiedFieldNames));
-  }
-
-  protected static void checkRegisterConstructorAllowed(Fory fory, Class<?> type) {
-    TypeResolver typeResolver = fory.getTypeResolver();
-    if (typeResolver.isRegistrationFinished()) {
-      throw new ForyException(
-          "Cannot register class/serializer after registration has been frozen. Please register "
-              + "all classes before invoking top-level `serialize/deserialize/copy` methods of "
-              + "Fory.");
-    }
-    TypeInfo typeInfo = typeResolver.getTypeInfo(type, false);
-    if (typeInfo != null && typeInfo.getSerializer() != null) {
-      throw new ForyException(
-          "Cannot register constructor for "
-              + type.getName()
-              + " after its serializer has been created. Register constructors before calling "
-              + "`getSerializer`, `serialize`, `deserialize`, or `copy` for that type.");
-    }
   }
 
   public void registerUnion(

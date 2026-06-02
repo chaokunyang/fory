@@ -19,13 +19,10 @@
 
 package org.apache.fory.integration_tests.constructor;
 
-import org.apache.fory.annotation.ForyConstructor;
-
 public final class PrivateConstructorBean {
   private final String name;
   private final int age;
 
-  @ForyConstructor({"name", "age"})
   private PrivateConstructorBean(String name, int age) {
     this.name = name;
     this.age = age;

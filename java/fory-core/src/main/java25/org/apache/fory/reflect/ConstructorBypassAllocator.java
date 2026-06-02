@@ -57,9 +57,7 @@ final class ConstructorBypassAllocator<T> {
         "Cannot create a constructor-bypassing instance for "
             + type
             + " in JDK25+ zero-Unsafe mode. Provide an accessible no-arg constructor, "
-            + "annotate a constructor with @ForyConstructor, register a constructor with "
-            + "BaseFory.registerConstructor, use a record canonical constructor, or register a "
-            + "custom serializer.",
+            + "use a record canonical constructor, or register a custom serializer.",
         cause);
   }
 

@@ -21,21 +21,10 @@ package org.apache.fory.reflect;
 
 import java.io.Serializable;
 import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles.Lookup;
-import java.lang.invoke.MethodType;
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.annotation.Internal;
 import org.apache.fory.collection.ClassValueCache;
 import org.apache.fory.collection.Tuple2;
@@ -43,9 +32,6 @@ import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.platform.JdkVersion;
-import org.apache.fory.platform.internal._JDKAccess;
-import org.apache.fory.type.Descriptor;
-import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.record.RecordUtils;
 
 /**
@@ -68,8 +54,8 @@ import org.apache.fory.util.record.RecordUtils;
  *
  * <p>The static {@link #getObjectCreator(Class)} method keeps the legacy process-global cache.
  * Runtime-owned paths should use {@link
- * org.apache.fory.resolver.TypeResolver#getObjectCreator(Class)} so constructor registrations and
- * ObjectStream-compatible creators stay scoped to the Fory runtime.
+ * org.apache.fory.resolver.TypeResolver#getObjectCreator(Class)} so ObjectStream-compatible
+ * creators stay scoped to the Fory runtime.
  *
  * <p><strong>Thread Safety:</strong> This class and all returned ObjectCreator instances are
  * thread-safe and can be safely used across multiple threads concurrently.
@@ -93,23 +79,14 @@ public class ObjectCreators {
    *     GraalVM native image)
    */
   public static <T> ObjectCreator<T> getObjectCreator(Class<T> type) {
-    return (ObjectCreator<T>) cache.get(type, () -> createObjectCreator(type, null));
+    return (ObjectCreator<T>) cache.get(type, () -> createObjectCreator(type));
   }
 
   /** Creates an uncached object creator for runtime-scoped registries. */
   @Internal
   public static <T> ObjectCreator<T> createObjectCreator(Class<T> type) {
-    return createObjectCreator(type, null);
-  }
-
-  static <T> ObjectCreator<T> createObjectCreator(
-      Class<T> type, ConstructorMatch<T> registeredConstructor) {
     if (RecordUtils.isRecord(type)) {
       return new RecordObjectCreator<>(type);
-    }
-    ConstructorMatch<T> explicitConstructor = explicitConstructor(type, registeredConstructor);
-    if (explicitConstructor != null) {
-      return new ConstructorObjectCreator<>(type, explicitConstructor);
     }
     Constructor<T> noArgConstructor = ReflectionUtils.getNoArgConstructor(type);
     if (AndroidSupport.IS_ANDROID) {
@@ -132,13 +109,6 @@ public class ObjectCreators {
     return new DeclaredNoArgCtrObjectCreator<>(type);
   }
 
-  /** Creates an uncached constructor-bound object creator for runtime-scoped registries. */
-  @Internal
-  public static <T> ObjectCreator<T> createObjectCreator(
-      Class<T> type, Constructor<T> constructor, String[] fieldNames, String source) {
-    return createObjectCreator(type, explicitConstructor(type, constructor, fieldNames, source));
-  }
-
   /** Creates an uncached empty-instance creator for Java ObjectStream-compatible serializers. */
   @Internal
   public static <T> ObjectCreator<T> createObjectStreamCreator(Class<T> type) {
@@ -154,192 +124,6 @@ public class ObjectCreators {
       return new ConstructorBypassObjectCreator<>(type);
     }
     return new ParentNoArgCtrObjectCreator<>(type);
-  }
-
-  static final class ConstructorMatch<T> {
-    private final Constructor<T> constructor;
-    private final String[] fieldNames;
-    private final Class<?>[] declaringClasses;
-    private final Class<?>[] fieldTypes;
-    private final boolean[] finalFields;
-
-    private ConstructorMatch(
-        Constructor<T> constructor,
-        String[] fieldNames,
-        Class<?>[] declaringClasses,
-        Class<?>[] fieldTypes,
-        boolean[] finalFields) {
-      this.constructor = constructor;
-      this.fieldNames = fieldNames;
-      this.declaringClasses = declaringClasses;
-      this.fieldTypes = fieldTypes;
-      this.finalFields = finalFields;
-    }
-  }
-
-  private static <T> ConstructorMatch<T> explicitConstructor(
-      Class<T> type, ConstructorMatch<T> registeredConstructor) {
-    if (registeredConstructor != null) {
-      return registeredConstructor;
-    }
-    Constructor<?> annotatedConstructor = null;
-    ForyConstructor annotation = null;
-    for (Constructor<?> constructor : type.getDeclaredConstructors()) {
-      ForyConstructor currentAnnotation = constructor.getAnnotation(ForyConstructor.class);
-      if (currentAnnotation == null || isCompilerGeneratedConstructor(constructor)) {
-        continue;
-      }
-      if (annotatedConstructor != null) {
-        throw new ForyException(type + " must not declare more than one @ForyConstructor");
-      }
-      annotatedConstructor = constructor;
-      annotation = currentAnnotation;
-    }
-    if (annotatedConstructor == null) {
-      return null;
-    }
-    return explicitConstructor(
-        type, (Constructor<T>) annotatedConstructor, annotation.value(), "@ForyConstructor");
-  }
-
-  static <T> ConstructorMatch<T> explicitConstructor(
-      Class<T> type, Constructor<T> constructor, String[] fieldNames, String source) {
-    if (isJavaPlatformType(type)) {
-      throw new ForyException(
-          source
-              + " constructor binding is not supported for Java platform type "
-              + type.getName());
-    }
-    if (constructor.getDeclaringClass() != type) {
-      throw new ForyException(
-          source + " constructor " + constructor + " does not belong to " + type);
-    }
-    if (fieldNames.length == 0) {
-      throw new ForyException(
-          source
-              + " constructor "
-              + constructor
-              + " must map at least one field. Leave ordinary no-arg constructors unbound.");
-    }
-    if (fieldNames.length != constructor.getParameterCount()) {
-      throw new ForyException(
-          source
-              + " constructor "
-              + constructor
-              + " maps "
-              + fieldNames.length
-              + " fields to "
-              + constructor.getParameterCount()
-              + " parameters");
-    }
-    ConstructorMatch<T> match =
-        matchConstructorFields(
-            constructor, fieldsByExplicitNames(type, constructor, fieldNames, source));
-    if (match == null) {
-      throw new ForyException(
-          source
-              + " constructor "
-              + constructor
-              + " parameter types do not match fields "
-              + Arrays.toString(fieldNames));
-    }
-    return match;
-  }
-
-  private static boolean isCompilerGeneratedConstructor(Constructor<?> constructor) {
-    if (constructor.isSynthetic()) {
-      return true;
-    }
-    Class<?>[] parameterTypes = constructor.getParameterTypes();
-    return parameterTypes.length > 0
-        && "kotlin.jvm.internal.DefaultConstructorMarker"
-            .equals(parameterTypes[parameterTypes.length - 1].getName());
-  }
-
-  private static boolean isJavaPlatformType(Class<?> type) {
-    return type.getName().startsWith("java.");
-  }
-
-  private static Field[] fieldsByExplicitNames(
-      Class<?> type, Constructor<?> constructor, String[] names, String source) {
-    List<Field> fields = new ArrayList<>();
-    fields.addAll(Descriptor.getFields(type));
-    Map<String, Field> fieldsByName = new LinkedHashMap<>();
-    Set<String> duplicateNames = new LinkedHashSet<>();
-    for (Field field : fields) {
-      Field previous = fieldsByName.put(field.getName(), field);
-      if (previous != null) {
-        duplicateNames.add(field.getName());
-      }
-    }
-    Field[] constructorFields = new Field[names.length];
-    Set<String> seenNames = new LinkedHashSet<>();
-    for (int i = 0; i < names.length; i++) {
-      String name = names[i];
-      if (!seenNames.add(name)) {
-        throw new ForyException(
-            source + " constructor " + constructor + " maps " + name + " twice");
-      }
-      if (duplicateNames.contains(name)) {
-        throw new ForyException(
-            source
-                + " constructor "
-                + constructor
-                + " cannot bind duplicate field name "
-                + name
-                + " in "
-                + type);
-      }
-      Field field = fieldsByName.get(name);
-      if (field == null) {
-        throw new ForyException(
-            source + " constructor " + constructor + " maps unknown field " + name);
-      }
-      constructorFields[i] = field;
-    }
-    return constructorFields;
-  }
-
-  private static <T> ConstructorMatch<T> matchConstructorFields(
-      Constructor<T> constructor, Field[] fields) {
-    Class<?>[] parameterTypes = constructor.getParameterTypes();
-    String[] names = new String[fields.length];
-    Class<?>[] declaringClasses = new Class<?>[fields.length];
-    Class<?>[] fieldTypes = new Class<?>[fields.length];
-    boolean[] finalFieldFlags = new boolean[fields.length];
-    for (int i = 0; i < fields.length; i++) {
-      Field field = fields[i];
-      if (!constructorTypeMatches(parameterTypes[i], field)) {
-        return null;
-      }
-      names[i] = field.getName();
-      declaringClasses[i] = field.getDeclaringClass();
-      fieldTypes[i] = field.getType();
-      finalFieldFlags[i] = Modifier.isFinal(field.getModifiers());
-    }
-    return new ConstructorMatch<>(
-        constructor, names, declaringClasses, fieldTypes, finalFieldFlags);
-  }
-
-  private static boolean constructorTypeMatches(Class<?> parameterType, Field field) {
-    Class<?> boxedParameterType = TypeUtils.boxedType(parameterType);
-    Class<?> boxedFieldType = TypeUtils.boxedType(field.getType());
-    return boxedParameterType.isAssignableFrom(boxedFieldType);
-  }
-
-  private static MethodHandle constructorHandle(Class<?> type, Constructor<?> constructor) {
-    Lookup lookup = _JDKAccess._trustedLookup(type);
-    if (lookup == null) {
-      return null;
-    }
-    try {
-      MethodHandle handle =
-          lookup.findConstructor(
-              type, MethodType.methodType(void.class, constructor.getParameterTypes()));
-      return handle.asSpreader(Object[].class, constructor.getParameterCount());
-    } catch (NoSuchMethodException | IllegalAccessException e) {
-      return null;
-    }
   }
 
   private static RuntimeException makeException(Class<?> type, Throwable cause) {
@@ -403,103 +187,6 @@ public class ObjectCreators {
     @Override
     public T newInstanceWithArguments(Object... arguments) {
       throw new ForyException(message);
-    }
-  }
-
-  public static final class ConstructorObjectCreator<T> extends ObjectCreator<T> {
-    private final Constructor<T> constructor;
-    private final MethodHandle handle;
-    private final String[] fieldNames;
-    private final Class<?>[] declaringClasses;
-    private final Class<?>[] fieldTypes;
-    private final boolean[] finalFields;
-
-    private ConstructorObjectCreator(Class<T> type, ConstructorMatch<T> match) {
-      super(type);
-      constructor = match.constructor;
-      handle = constructorHandle(type, constructor);
-      fieldNames = match.fieldNames;
-      declaringClasses = match.declaringClasses;
-      fieldTypes = match.fieldTypes;
-      finalFields = match.finalFields;
-      if (handle == null) {
-        makeConstructorAccessible(type, constructor);
-      }
-    }
-
-    @Override
-    public boolean hasConstructorFields() {
-      return true;
-    }
-
-    @Override
-    public String[] getConstructorFieldNames() {
-      return fieldNames.clone();
-    }
-
-    @Override
-    public Class<?>[] getConstructorFieldDeclaringClasses() {
-      return declaringClasses.clone();
-    }
-
-    @Override
-    public Class<?>[] getConstructorFieldTypes() {
-      return fieldTypes.clone();
-    }
-
-    @Override
-    public boolean[] getConstructorFieldFinal() {
-      return finalFields.clone();
-    }
-
-    @Override
-    public boolean isConstructorPublic() {
-      return Modifier.isPublic(type.getModifiers())
-          && Modifier.isPublic(constructor.getModifiers());
-    }
-
-    @Override
-    public boolean isOnlyPublicConstructor() {
-      if (!isConstructorPublic()) {
-        return false;
-      }
-      for (Constructor<?> declaredConstructor : type.getDeclaredConstructors()) {
-        if (Modifier.isPublic(declaredConstructor.getModifiers())
-            && declaredConstructor != constructor) {
-          return false;
-        }
-      }
-      return true;
-    }
-
-    private static void makeConstructorAccessible(Class<?> type, Constructor<?> constructor) {
-      try {
-        constructor.setAccessible(true);
-      } catch (RuntimeException e) {
-        throw new ForyException("Failed to make constructor accessible for " + type, e);
-      }
-    }
-
-    @Override
-    public T newInstance() {
-      throw constructorArgsRequired(type);
-    }
-
-    @Override
-    public T newInstanceWithArguments(Object... arguments) {
-      try {
-        if (handle == null) {
-          return constructor.newInstance(arguments);
-        }
-        return (T) handle.invoke(arguments);
-      } catch (Throwable e) {
-        throw makeException(type, e);
-      }
-    }
-
-    private static ForyException constructorArgsRequired(Class<?> type) {
-      return new ForyException(
-          "JDK25 zero-Unsafe mode requires constructor field values to create " + type);
     }
   }
 

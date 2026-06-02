@@ -29,7 +29,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.ObjectStreamField;
 import java.io.Serializable;
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.Inet4Address;
@@ -46,7 +45,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import lombok.EqualsAndHashCode;
 import org.apache.fory.Fory;
 import org.apache.fory.ForyTestBase;
-import org.apache.fory.annotation.ForyConstructor;
 import org.apache.fory.config.ForyBuilder;
 import org.apache.fory.context.MetaReadContext;
 import org.apache.fory.context.MetaWriteContext;
@@ -125,7 +123,6 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
     int age;
     transient boolean readObjectCalled;
 
-    @ForyConstructor({"name", "age"})
     public AnnotatedObjectStreamType(String name, int age) {
       this.name = name;
       this.age = age;
@@ -260,11 +257,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "javaFory")
-  public void testConstructorMappingRead(Fory fory) throws NoSuchMethodException {
-    Constructor<RegisteredObjectStreamType> constructor =
-        RegisteredObjectStreamType.class.getDeclaredConstructor(String.class, int.class);
-    fory.registerConstructor(RegisteredObjectStreamType.class, constructor, "name", "age");
-
+  public void testObjectStreamNoArgBypassRead(Fory fory) {
     AnnotatedObjectStreamType annotated =
         serDeCheckSerializer(
             fory, new AnnotatedObjectStreamType("annotated", 1), "ObjectStreamSerializer");
@@ -303,11 +296,7 @@ public class ObjectStreamSerializerTest extends ForyTestBase {
   }
 
   @Test(dataProvider = "foryCopyConfig")
-  public void testConstructorMappingCopy(Fory fory) throws NoSuchMethodException {
-    Constructor<RegisteredObjectStreamType> constructor =
-        RegisteredObjectStreamType.class.getDeclaredConstructor(String.class, int.class);
-    fory.registerConstructor(RegisteredObjectStreamType.class, constructor, "name", "age");
-
+  public void testObjectStreamNoArgBypassCopy(Fory fory) {
     AnnotatedObjectStreamType copy = fory.copy(new AnnotatedObjectStreamType("copy", 3));
     Assert.assertEquals(copy.name, "copy");
     Assert.assertEquals(copy.age, 3);

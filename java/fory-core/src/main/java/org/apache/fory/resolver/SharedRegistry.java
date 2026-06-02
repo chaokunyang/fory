@@ -19,7 +19,6 @@
 
 package org.apache.fory.resolver;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Member;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -149,13 +148,6 @@ public final class SharedRegistry {
   public <T> ObjectCreator<T> getObjectStreamCreator(Class<T> type) {
     return (ObjectCreator<T>)
         objectStreamCreatorCache.computeIfAbsent(type, ObjectCreators::createObjectStreamCreator);
-  }
-
-  public <T> void registerConstructor(
-      Class<T> type, Constructor<T> constructor, String... fieldNames) {
-    objectCreatorCache.put(
-        type,
-        ObjectCreators.createObjectCreator(type, constructor, fieldNames.clone(), "registered"));
   }
 
   TypeInfo cacheRegisteredTypeInfo(Class<?> type, TypeInfo typeInfo) {

@@ -20,7 +20,6 @@
 package org.apache.fory;
 
 import java.io.OutputStream;
-import java.lang.reflect.Constructor;
 import java.nio.ByteBuffer;
 import java.util.function.Function;
 import org.apache.fory.io.ForyInputStream;
@@ -89,20 +88,6 @@ public interface BaseFory {
    * deserialization, or copy operations start.
    */
   void register(ForyModule module);
-
-  /**
-   * Register an explicit constructor-to-field mapping for {@code type}.
-   *
-   * <p>The constructor arguments are populated from {@code fieldNames} in order. This is useful for
-   * third-party classes that cannot annotate a constructor with {@code @ForyConstructor}. {@code
-   * fieldNames} must contain at least one field; ordinary no-argument constructors should not be
-   * registered because they do not need constructor-to-field binding. Java platform classes are
-   * owned by built-in serializers and cannot use explicit constructor binding.
-   *
-   * <p>Call this during setup before serializers for {@code type} are requested and before
-   * top-level serialization, deserialization, or copy operations start.
-   */
-  <T> void registerConstructor(Class<T> type, Constructor<T> constructor, String... fieldNames);
 
   void registerUnion(Class<?> cls, int id, Serializer<?> serializer);
 

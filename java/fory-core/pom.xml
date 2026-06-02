@@ -593,13 +593,18 @@
                     <!-- Shading relocates Janino after module-info is compiled, and multi-release
                          classes are injected after shade. Refresh the descriptor package table
                          from the final jar so JPMS can load concealed shaded codegen packages from
-                         org.apache.fory.core. -->
+                         org.apache.fory.core. JDK11 requires an update input file; re-adding an
+                         unchanged base class avoids validating versioned classes while preserving
+                         the descriptor refresh performed by the jar module-version option. -->
                     <exec executable="${java.home}/bin/jar" failonerror="true">
                       <arg value="--update"/>
                       <arg value="--file"/>
                       <arg value="${project.build.directory}/${project.build.finalName}.jar"/>
                       <arg value="--module-version"/>
                       <arg value="${project.version}"/>
+                      <arg value="-C"/>
+                      <arg value="${project.build.outputDirectory}"/>
+                      <arg value="org/apache/fory/Fory.class"/>
                     </exec>
                   </target>
                 </configuration>

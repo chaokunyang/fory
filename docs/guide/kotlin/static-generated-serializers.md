@@ -54,7 +54,6 @@ Reuse the Java Fory annotations for schema concepts. Use Kotlin type-use
 annotations only when you need to override integer encoding.
 
 ```kotlin
-import org.apache.fory.annotation.ForyConstructor
 import org.apache.fory.annotation.ForyField
 import org.apache.fory.annotation.ForyStruct
 import org.apache.fory.kotlin.Fixed
@@ -62,7 +61,6 @@ import org.apache.fory.kotlin.VarInt
 
 @ForyStruct
 data class User
-@ForyConstructor("id", "score", "tags")
 constructor(
   @ForyField(id = 1)
   val id: @Fixed UInt,
@@ -84,10 +82,10 @@ them.
 
 The processor generates serializers for public or internal, concrete,
 non-generic classes in named packages. A supported class must have a primary
-constructor whose serialized parameters are `val` or `var` properties and whose
-constructor parameters are explicitly mapped with `@ForyConstructor`. `data
-class` is the common case, but it is not required. Mutable no-argument structs
-can instead expose serialized `var` properties with `@ForyField`.
+constructor whose serialized parameters are `val` or `var` properties with the
+same names as the constructor parameters. `data class` is the common case, but it
+is not required. Mutable no-argument structs can instead expose serialized `var`
+properties with `@ForyField`.
 
 Internal Kotlin struct classes are supported when KSP runs in the same Kotlin
 module that owns the struct. The generated Kotlin serializer is also internal,
@@ -121,7 +119,6 @@ inside collections and maps.
 ```kotlin
 @ForyStruct
 data class NullabilityExample
-@ForyConstructor("a", "b", "c", "d")
 constructor(
   @ForyField(id = 1)
   val a: List<String>,

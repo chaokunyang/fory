@@ -77,28 +77,7 @@ class ProcessorValidationTest {
   }
 
   @Test
-  fun validatesConstructorBinding() {
-    assertNull(constructorBindingError(listOf("userName"), listOf("name"), "example.User"))
-    assertEquals(
-      constructorBindingError(listOf("name"), listOf("name", "age"), "example.User"),
-      "@ForyConstructor on example.User must declare one field name for each primary constructor parameter",
-    )
-    assertEquals(
-      constructorBindingError(emptyList(), emptyList(), "example.User"),
-      "@ForyConstructor on example.User must declare at least one field name",
-    )
-    assertEquals(
-      constructorBindingError(listOf("name", "age"), listOf("name", "name"), "example.User"),
-      "@ForyConstructor on example.User declares duplicate field name name",
-    )
-    assertEquals(
-      constructorBindingError(listOf("name"), listOf(""), "example.User"),
-      "@ForyConstructor on example.User must not declare blank field names",
-    )
-  }
-
-  @Test
-  fun constructorBindingNamesArguments() {
+  fun constructorNamesArguments() {
     val stringType =
       KotlinSourceTypeNode(
         rawClassExpression = "String::class.java",
@@ -142,10 +121,9 @@ class ProcessorValidationTest {
         .write()
 
     assertTrue(source.contains("writeContext.writeString(value.name)"))
-    assertTrue(source.contains("return User(userName = field0!!)"))
+    assertTrue(source.contains("this.constructorFieldIds = intArrayOf(0)"))
+    assertTrue(source.contains("return User(userName = (fieldValues[0] as String))"))
     assertTrue(!source.contains("return User(name = field0!!)"))
-    assertTrue(source.contains("constructorFieldIds = if (objectCreator.hasConstructorFields())"))
-    assertTrue(source.contains("objectCreator.newInstanceWithArguments(*constructorArgs"))
     assertTrue(source.contains("fieldValues[0] = value.name"))
     assertFalse(source.contains("copyConstructorFieldValue(copyContext, value, value.name"))
     assertFalse(source.contains("NATURAL_ORDER_COMPARATOR"))
@@ -484,7 +462,7 @@ class ProcessorValidationTest {
 
     assertTrue(
       source.contains(
-        "return User(counts = KotlinCollectionAdapters.toTreeMap(field0!!), names = run { val readSource0 = (field1!! as Collection<*>);"
+        "return User(counts = (fieldValues[0] as kotlin.collections.Map<String, Int>), names = (fieldValues[1] as kotlin.collections.List<java.util.TreeSet<String>>), arrays = (fieldValues[2] as kotlin.collections.List<IntArray>), nestedCounts = (fieldValues[3] as java.util.TreeMap<String, java.util.TreeSet<String>>))"
       )
     )
     assertTrue(
@@ -512,7 +490,7 @@ class ProcessorValidationTest {
     )
     assertTrue(
       source.contains(
-        "nestedCounts = run { val readSource0 = (field3!! as Map<*, *>); val readTarget0 = java.util.TreeMap<Any?, Any?>();"
+        "3 -> run { val readSource0 = ((readCompatibleFieldValue(readContext, remoteField, localField) as java.util.TreeMap<String, java.util.TreeSet<String>>) as Map<*, *>); val readTarget0 = java.util.TreeMap<Any?, Any?>();"
       )
     )
     assertTrue(
@@ -627,6 +605,7 @@ class ProcessorValidationTest {
             qualifiedTypeName = "example.WideStruct",
             serializerName = "WideStruct_ForySerializer",
             serializerVisibility = KotlinSerializerVisibility.PUBLIC,
+            construction = KotlinStructConstruction.MUTABLE,
             fields =
               (0 until 70).map { id ->
                 KotlinSourceField(

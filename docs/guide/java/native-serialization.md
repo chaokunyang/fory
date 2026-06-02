@@ -165,56 +165,19 @@ path is too expensive.
 ## Final Fields And Constructors
 
 Records are deserialized through their canonical constructor. Ordinary classes use Fory's normal
-object-creation path and field setting unless you provide an explicit constructor mapping.
+object-creation path and field setting, including final fields when the runtime supports it. Fory
+does not expose a constructor-mapping annotation or a constructor-registration API for ordinary
+classes, and Java parameter-name metadata such as `-parameters` or `@ConstructorProperties` is not a
+Fory object-creation contract.
 
-Use `@ForyConstructor` when a constructor should receive serialized field values:
-
-```java
-import org.apache.fory.annotation.ForyConstructor;
-
-public final class User {
-  private final String name;
-  private final int age;
-
-  @ForyConstructor({"name", "age"})
-  public User(String name, int age) {
-    this.name = name;
-    this.age = age;
-  }
-}
-```
-
-For third-party classes that cannot be annotated, register the constructor during runtime setup
-before requesting serializers or starting serialization, deserialization, or copy operations:
-
-```java
-import java.lang.reflect.Constructor;
-
-Constructor<User> constructor = User.class.getDeclaredConstructor(String.class, int.class);
-fory.registerConstructor(User.class, constructor, "name", "age");
-```
-
-The field names are the binding contract. For ordinary classes, Fory does not infer constructor
-bindings from Java parameter names, `-parameters`, or `@ConstructorProperties`.
-Explicit constructor mappings must bind at least one field. Leave ordinary no-argument constructors
-unannotated and unregistered. Do not register constructors for Java platform classes; Fory owns
-their built-in serializers.
-
-When no explicit constructor mapping is provided, normal classes with final fields use Fory's normal
-object creation and field setting. On JDK25+ with Unsafe memory access denied, Fory reports an error
-if the class cannot be created by supported Java mechanisms. Use `@ForyConstructor`,
-`registerConstructor(...)`, a record canonical constructor, or a custom serializer for those classes.
-Use the `java.base/java.lang.invoke` open shown in troubleshooting for supported JDK25+ access paths.
-Fory does not require `--enable-final-field-mutation` for ordinary final-field restoration on
+If an ordinary class cannot be created by supported Java mechanisms, use an accessible no-argument
+constructor, model it as a record when canonical-constructor semantics are appropriate, or register a
+custom serializer. On JDK25+ with Unsafe memory access denied, use the
+`java.base/java.lang.invoke` open shown in troubleshooting for supported final-field and JDK access
+paths. Fory does not require `--enable-final-field-mutation` for ordinary final-field restoration on
 JDK26+. See
 [Troubleshooting](troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens) for the required JVM
 flags.
-
-Constructor-bound objects cannot receive a constructor argument that retains a direct or nested
-back-reference to the same object under construction. Field serializers may transform or omit data
-during copy; Fory rejects only back-references that remain in the copied constructor arguments. Model
-those cycles through non-constructor fields or use a custom serializer that removes the constructor
-argument cycle.
 
 ## JDK Serialization Hooks
 

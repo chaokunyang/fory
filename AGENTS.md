@@ -177,3 +177,10 @@ This is the entry point for AI guidance in Apache Fory. Read this file first, th
 - PR titles must follow Conventional Commits; `.github/workflows/pr-lint.yml` enforces this.
 - Performance changes should use the `perf` type and include benchmark data.
 - See `.agents/ci-and-pr.md` for GitHub CLI triage commands and commit message examples.
+
+## Security
+
+Security model: [SECURITY.md](./SECURITY.md)
+
+Agents that scan this repository should consult `SECURITY.md` and the
+threat model it links before reporting issues.

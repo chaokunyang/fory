@@ -19,6 +19,8 @@
 
 package org.apache.fory.platform.internal;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodType;
 import java.lang.invoke.MethodHandles.Lookup;
 import java.lang.reflect.Field;
 
@@ -26,11 +28,18 @@ import java.lang.reflect.Field;
 class _Lookup {
   // CHECKSTYLE.ON:TypeName
   private static volatile Lookup implLookup;
+  private static volatile MethodHandle constructorLookup;
 
   // CHECKSTYLE.OFF:MethodName
   public static Lookup _trustedLookup(Class<?> objectClass) {
     // CHECKSTYLE.ON:MethodName
-    return implLookup().in(objectClass);
+    try {
+      // IMPL_LOOKUP.in(type) drops trusted modes. JDK26 final-field writes under
+      // --illegal-final-field-mutation=deny require a target-class /trusted lookup.
+      return (Lookup) constructorLookup().invoke(objectClass, null, -1);
+    } catch (Throwable e) {
+      throw new IllegalStateException(trustedLookupMessage(), e);
+    }
   }
 
   public static Lookup privateLookupIn(Class<?> targetClass, Lookup caller) {
@@ -55,6 +64,30 @@ class _Lookup {
       Field field = Lookup.class.getDeclaredField("IMPL_LOOKUP");
       field.setAccessible(true);
       return (Lookup) field.get(null);
+    } catch (ReflectiveOperationException | RuntimeException e) {
+      throw new IllegalStateException(trustedLookupMessage(), e);
+    }
+  }
+
+  private static MethodHandle constructorLookup() {
+    MethodHandle constructor = constructorLookup;
+    if (constructor == null) {
+      synchronized (_Lookup.class) {
+        constructor = constructorLookup;
+        if (constructor == null) {
+          constructor = loadConstructorLookup();
+          constructorLookup = constructor;
+        }
+      }
+    }
+    return constructor;
+  }
+
+  private static MethodHandle loadConstructorLookup() {
+    try {
+      return implLookup()
+          .findConstructor(
+              Lookup.class, MethodType.methodType(void.class, Class.class, Class.class, int.class));
     } catch (ReflectiveOperationException | RuntimeException e) {
       throw new IllegalStateException(trustedLookupMessage(), e);
     }

@@ -166,18 +166,10 @@ module:
 
 If this open is missing, Fory reports an error that names `java.base/java.lang.invoke`.
 
-On JDK26 and later, normal classes with final instance fields require final-field mutation to be
-enabled for the module that contains Fory's mutating code when Unsafe allocation is denied. Use the
-Fory module name on the module path:
-
-```bash
---enable-final-field-mutation=org.apache.fory.core
-```
-
-Fory can restore those final fields when final-field mutation is enabled. JDK25 has no
-`--enable-final-field-mutation` option, so no final-field mutation flag is needed on JDK25. Named
-application modules that contain private fields still need to open the application package to
-`org.apache.fory.core`.
+Fory does not require `--enable-final-field-mutation` for normal final-field restoration on JDK26
+and later. With the `java.base/java.lang.invoke` open above, Fory uses trusted lookup field handles
+instead of ordinary reflective final-field mutation. Named application modules that contain private
+fields still need to open the application package to `org.apache.fory.core`.
 
 The vectorized Arrow APIs in `fory-format` depend on Apache Arrow's memory layer. With the current
 Arrow dependency, those APIs are unavailable when `--sun-misc-unsafe-memory-access=deny` is set

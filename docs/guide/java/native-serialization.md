@@ -205,8 +205,8 @@ object creation and field setting. On JDK25+ with Unsafe memory access denied, F
 if the class cannot be created by supported Java mechanisms. Use `@ForyConstructor`,
 `registerConstructor(...)`, a record canonical constructor, or a custom serializer for those classes.
 Use the `java.base/java.lang.invoke` open shown in troubleshooting for supported JDK25+ access paths.
-On JDK26+, enable final-field mutation for the Fory runtime module. JDK25 does not have the final-field
-mutation flag. See
+Fory does not require `--enable-final-field-mutation` for ordinary final-field restoration on
+JDK26+. See
 [Troubleshooting](troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens) for the required JVM
 flags.
 

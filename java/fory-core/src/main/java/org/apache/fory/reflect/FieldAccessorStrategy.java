@@ -182,11 +182,6 @@ final class FieldAccessorStrategy {
     }
   }
 
-  static FieldAccessor createStaticAccessor(Field field) {
-    Preconditions.checkArgument(Modifier.isStatic(field.getModifiers()), field);
-    return new StaticObjectAccessor(field);
-  }
-
   /** Primitive boolean accessor. */
   public static class BooleanAccessor extends InstanceAccessor {
     public BooleanAccessor(Field field) {
@@ -444,28 +439,6 @@ final class FieldAccessorStrategy {
     public void set(Object obj, Object value) {
       checkObj(obj);
       UNSAFE.putObject(obj, fieldOffset, value);
-    }
-  }
-
-  static final class StaticObjectAccessor extends FieldAccessor {
-    private final Object base;
-    private final long offset;
-
-    StaticObjectAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(!TypeUtils.isPrimitive(field.getType()));
-      base = UNSAFE.staticFieldBase(field);
-      offset = UNSAFE.staticFieldOffset(field);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      return UNSAFE.getObject(base, offset);
-    }
-
-    @Override
-    public void set(Object obj, Object value) {
-      UNSAFE.putObject(base, offset, value);
     }
   }
 

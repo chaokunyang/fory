@@ -107,9 +107,8 @@ jdk25_access_options() {
   printf " %s" "--add-opens=java.base/java.lang.invoke=${fory_open_targets}"
 }
 
-jdk26_final_field_options() {
-  local fory_modules="${1:-org.apache.fory.core}"
-  printf "%s" "--enable-final-field-mutation=${fory_modules}"
+jdk26_final_field_policy_options() {
+  printf "%s" "--illegal-final-field-mutation=deny"
 }
 
 jdk25_plus_options() {
@@ -117,7 +116,7 @@ jdk25_plus_options() {
   local fory_targets="${2:-org.apache.fory.core}"
   printf "%s" "$(jdk25_access_options "$fory_targets")"
   if [[ "$java_major" -ge 26 ]]; then
-    printf " %s" "$(jdk26_final_field_options "$fory_targets")"
+    printf " %s" "$(jdk26_final_field_policy_options)"
   fi
 }
 

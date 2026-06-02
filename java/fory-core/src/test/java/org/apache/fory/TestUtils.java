@@ -85,7 +85,7 @@ public class TestUtils {
       if (hasInputArg("--sun-misc-unsafe-memory-access=deny")) {
         args.add("--sun-misc-unsafe-memory-access=deny");
       }
-      finalFieldMutationArg().ifPresent(args::add);
+      finalFieldPolicyArg().ifPresent(args::add);
     }
     return args;
   }
@@ -108,9 +108,9 @@ public class TestUtils {
     return ManagementFactory.getRuntimeMXBean().getInputArguments().contains(arg);
   }
 
-  private static Optional<String> finalFieldMutationArg() {
+  private static Optional<String> finalFieldPolicyArg() {
     return ManagementFactory.getRuntimeMXBean().getInputArguments().stream()
-        .filter(arg -> arg.startsWith("--enable-final-field-mutation="))
+        .filter(arg -> arg.startsWith("--illegal-final-field-mutation="))
         .findFirst();
   }
 

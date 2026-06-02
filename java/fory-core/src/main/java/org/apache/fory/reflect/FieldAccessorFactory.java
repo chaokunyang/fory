@@ -56,15 +56,6 @@ final class FieldAccessorFactory {
     return FieldAccessorStrategy.createAccessor(field);
   }
 
-  static FieldAccessor createStaticAccessor(Field field) {
-    Preconditions.checkArgument(Modifier.isStatic(field.getModifiers()), field);
-    if (AndroidSupport.IS_ANDROID) {
-      field.setAccessible(true);
-      return new ReflectiveStaticFieldAccessor(field);
-    }
-    return FieldAccessorStrategy.createStaticAccessor(field);
-  }
-
   private static FieldAccessor createRecordAccessor(Field field) {
     if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ReflectiveRecordFieldAccessor(field);
@@ -302,30 +293,6 @@ final class FieldAccessorFactory {
     @Override
     public Object get(Object obj) {
       return getter.apply(obj);
-    }
-  }
-
-  static final class ReflectiveStaticFieldAccessor extends FieldAccessor {
-    ReflectiveStaticFieldAccessor(Field field) {
-      super(field);
-    }
-
-    @Override
-    public Object get(Object obj) {
-      try {
-        return field.get(null);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw new ForyException("Failed to read static field reflectively: " + field, e);
-      }
-    }
-
-    @Override
-    public void set(Object obj, Object value) {
-      try {
-        field.set(null, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw new ForyException("Failed to write static field reflectively: " + field, e);
-      }
     }
   }
 }

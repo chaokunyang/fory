@@ -19,7 +19,12 @@
 
 package org.apache.fory.integration_tests;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import org.apache.fory.Fory;
 import org.apache.fory.integration_tests.constructor.PrivateConstructorBean;
 import org.apache.fory.integration_tests.model.PrivateFieldBean;
@@ -30,6 +35,8 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class JpmsFieldAccessorTest {
+  private static final int JDK_MAJOR_VERSION = Runtime.version().feature();
+
   @Test
   public void testPrivateFieldAccess() throws Exception {
     PrivateFieldBean bean = new PrivateFieldBean(7);
@@ -50,6 +57,36 @@ public class JpmsFieldAccessorTest {
   }
 
   @Test
+  public void testTrustedLookupFinalWrite() throws Throwable {
+    PrivateFieldBean bean = new PrivateFieldBean(17);
+    MethodHandles.Lookup lookup = trustedLookup(PrivateFieldBean.class);
+    VarHandle handle = lookup.findVarHandle(PrivateFieldBean.class, "value", int.class);
+    handle.set(bean, 19);
+    Assert.assertEquals(bean.value(), 19);
+
+    MethodHandle setter =
+        lookup.findSetter(PrivateFieldBean.class, "value", int.class).asType(setterType());
+    setter.invokeExact(bean, 23);
+    Assert.assertEquals(bean.value(), 23);
+  }
+
+  @Test
+  public void testReflectionFinalWriteDenied() throws Exception {
+    if (JDK_MAJOR_VERSION < 26) {
+      return;
+    }
+    PrivateFieldBean bean = new PrivateFieldBean(29);
+    Field field = PrivateFieldBean.class.getDeclaredField("value");
+    field.setAccessible(true);
+    try {
+      field.setInt(bean, 31);
+      Assert.fail("JDK26 denial mode should reject ordinary final-field reflection writes");
+    } catch (IllegalAccessException | RuntimeException expected) {
+      Assert.assertEquals(bean.value(), 29);
+    }
+  }
+
+  @Test
   public void testPrivateConstructorBinding() {
     Fory fory =
         Fory.builder().withXlang(false).withCodegen(false).requireClassRegistration(false).build();
@@ -67,5 +104,15 @@ public class JpmsFieldAccessorTest {
     PublicSerializerValue result =
         (PublicSerializerValue) fory.deserialize(fory.serialize(new PublicSerializerValue(11)));
     Assert.assertEquals(result.value, 11);
+  }
+
+  private static MethodHandles.Lookup trustedLookup(Class<?> type) throws Exception {
+    Class<?> jdkAccess = Class.forName("org.apache.fory.platform.internal._JDKAccess");
+    Method method = jdkAccess.getMethod("_trustedLookup", Class.class);
+    return (MethodHandles.Lookup) method.invoke(null, type);
+  }
+
+  private static MethodType setterType() {
+    return MethodType.methodType(void.class, PrivateFieldBean.class, int.class);
   }
 }

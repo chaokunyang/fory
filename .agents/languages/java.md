@@ -60,8 +60,8 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Put latest-JDK or virtual-thread tests in the latest-JDK test modules with the matching compiler/profile floor, and centralize runtime-version probing in existing compatibility utilities.
 - For JDK25+ zero-Unsafe work, preserve serializer-family selection by type and configuration. Do not switch a type from `ObjectStreamSerializer` or another Fory serializer family to `JavaSerializer`, a JDK stream fallback, or any broad `java.* Serializable` fallback by JDK version or no-arg-constructor shape.
 - JDK25+ zero-Unsafe runtime support is a JPMS named-module design. Fory core must run with `--add-opens=java.base/java.lang.invoke=org.apache.fory.core` so it can obtain the trusted lookup; missing this open is an invalid access configuration, not a reason to open per-package JDK internals or switch serializer/object-creation families. Do not use `ALL-UNNAMED` as the zero-Unsafe verification target.
-- Keep JDK25+ unsafe-removal implementation invariants in agent/design docs and tests, not user guides. User guides should document user actions such as `--sun-misc-unsafe-memory-access=deny`, `java.base/java.lang.invoke` opens, JDK26+ `--enable-final-field-mutation`, package opens for user named modules, and public APIs such as `@ForyConstructor` and `BaseFory.registerConstructor(...)`; do not expose internal serializer names, owner-model rationale, or avoided fallback strategies there.
-- For JDK25+ zero-Unsafe final-field behavior, distinguish JDK25 from JDK26+: JDK25 has no final-field mutation flag requirement, while JDK26+ requires `--enable-final-field-mutation` for post-construction final-field writes.
+- Keep JDK25+ unsafe-removal implementation invariants in agent/design docs and tests, not user guides. User guides should document user actions such as `--sun-misc-unsafe-memory-access=deny`, `java.base/java.lang.invoke` opens, package opens for user named modules, and public APIs such as `@ForyConstructor` and `BaseFory.registerConstructor(...)`; do not expose internal serializer names, owner-model rationale, or avoided fallback strategies there.
+- JDK25+ zero-Unsafe final-field writes must use a true target-class trusted lookup from the original `IMPL_LOOKUP`, not `IMPL_LOOKUP.in(type)`. JDK26+ normal Fory final-field restoration must pass with `--illegal-final-field-mutation=deny` and must not require `--enable-final-field-mutation`.
 - For JDK25+ object creation, do not use `sun.reflect.ReflectionFactory` or `jdk.internal.reflect.ReflectionFactory`. The shared `ObjectCreators` facade should route ObjectStream-compatible construction through `ParentNoArgCtrObjectCreator`; the replaceable constructor-bypass allocator owns the JDK8-24 Unsafe allocation path and the JDK25+ `ObjectStreamClass.newInstance` path. Serializable classes without a no-arg constructor may use that trusted-lookup owner; non-Serializable classes without a no-arg constructor require `@ForyConstructor`, `BaseFory.registerConstructor(...)`, record construction, or a custom serializer.
 - In JDK25+ constructor-bypass allocation, the allocator is per type: pass the target class to the allocator constructor, cache `ObjectStreamClass.lookupAny(...)` in that instance, and expose an instance `allocate()` method. Let `ObjectStreamClass.newInstance` validate unsupported classes. Do not add redundant `Serializable` prechecks or per-call descriptor lookups, and keep exception/message construction in cold helper methods.
 - Keep the Java25 `_Lookup` and `DefineClass` overlays unless a future refactor can merge them without exposing Unsafe to the JDK25 class graph or replacing direct hidden-class APIs with reflective wrappers. Root `_Lookup` uses Unsafe for the JDK8-24 trusted-lookup fast path, while Java25 `_Lookup` uses the required `java.lang.invoke` open. Root `DefineClass` targets Java 8 bytecode and cannot directly reference `Lookup#defineHiddenClass` or `Lookup.ClassOption.NESTMATE`; Java25 `DefineClass` owns that direct API use.
@@ -86,8 +86,9 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - Multi-release replacement is class-file exact. Replacing `Foo.class` does not replace
   `Foo$Bar.class`; root nested classes that contain Unsafe descriptors must either be eliminated,
   moved under an exact replaceable owner, or have their direct Unsafe operations moved to the
-  already-overlaid top-level class. JDK25 package checks must run class-level `jdeps` over Fory
-  classes so nested leaks are caught without rejecting shaded third-party benchmark dependencies.
+  already-overlaid top-level class. JDK25 package checks must enumerate packaged Fory class files
+  and inspect forbidden constants so nested leaks are caught without rejecting shaded third-party
+  dependencies.
 - Java 25 multi-release classes never run on Android. Do not keep `AndroidSupport.IS_ANDROID`
   branches or imports under `src/main/java25`; Android compatibility belongs to the root sources.
 - String zero-copy construction is serializer-owned behavior. Keep private `String` constructor
@@ -101,6 +102,16 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - JDK25+ `PlatformStringUtils` getter methods sit behind `StringSerializer` static-final access
   gates. Do not add per-call access checks in those getters; missing module opens should fail at
   trusted-lookup initialization or cold setup, not inside string hot paths.
+- JDK25+ `FieldAccessorStrategy` owns instance field access only. Do not add static-field handling
+  or per-write reflection fallback there, and do not expose public `FieldAccessor` static-field
+  factories. Static special cases such as Scala `MODULE$` belong to the owning serializer and should
+  use a cached `_JDKAccess._trustedLookup(...).findStaticGetter(...)` handle at that call site.
+- JDK25+ final-instance field mutation should use the same trusted-lookup `VarHandle` owner path as
+  non-final field mutation. Do not add a final-field-only `MethodHandle` setter path or ordinary
+  reflective `Field.set*` fallback.
+- Do not call `FieldAccessor.checkObj` in the JDK25+ VarHandle field-access hot path. VarHandle
+  validates null and receiver type itself, while root Unsafe offset access still needs explicit
+  receiver validation because Unsafe does not.
 - JDK25+ collection serializers must fail unsupported `Collections.newSetFromMap` backing maps
   before writing or copying. Do not rewrite them to `HashMap`, because that changes equality
   semantics and can drop entries.

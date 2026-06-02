@@ -119,7 +119,7 @@ KSP-generated `@ForyStruct` serializers that call a primary constructor require 
 `@ForyConstructor` mapping. Mutable no-argument `@ForyStruct` classes can instead expose serialized
 `var` properties with `@ForyField`.
 
-The JVM also needs the module opens and final-field mutation option listed in
+The JVM also needs the module opens listed in
 [Java Troubleshooting](../java/troubleshooting.md#jdk25-zero-unsafe-mode-and-module-opens).
 
 Common options for Kotlin native-mode payloads:

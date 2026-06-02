@@ -19,16 +19,15 @@
 
 package org.apache.fory.serializer.scala;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
 import org.apache.fory.exception.ForyException;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.reflect.FieldAccessor;
+import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.resolver.TypeResolver;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.util.Preconditions;
 
 /**
  * Serializer for <a href="https://docs.scala-lang.org/tour/singleton-objects.html">scala
@@ -37,7 +36,7 @@ import org.apache.fory.util.Preconditions;
 @SuppressWarnings("rawtypes")
 public class SingletonObjectSerializer extends Serializer {
   private final Field field;
-  private FieldAccessor accessor;
+  private MethodHandle accessor;
 
   public SingletonObjectSerializer(TypeResolver typeResolver, Class type) {
     super(typeResolver.getConfig(), type);
@@ -70,11 +69,23 @@ public class SingletonObjectSerializer extends Serializer {
         throw new ForyException("Failed to read Scala singleton field: " + type, e);
       }
     }
-    FieldAccessor accessor = this.accessor;
+    MethodHandle accessor = this.accessor;
     if (accessor == null) {
-      Preconditions.checkArgument(!GraalvmSupport.isGraalBuildTime());
-      accessor = this.accessor = FieldAccessor.createStaticAccessor(field);
+      accessor = this.accessor = staticGetter();
     }
-    return accessor.getObject(null);
+    try {
+      return accessor.invoke();
+    } catch (Throwable e) {
+      throw new ForyException("Failed to read Scala singleton field: " + type, e);
+    }
+  }
+
+  private MethodHandle staticGetter() {
+    try {
+      return _JDKAccess._trustedLookup(field.getDeclaringClass())
+          .findStaticGetter(field.getDeclaringClass(), field.getName(), field.getType());
+    } catch (NoSuchFieldException | IllegalAccessException | RuntimeException e) {
+      throw new ForyException("Failed to access Scala singleton field: " + type, e);
+    }
   }
 }

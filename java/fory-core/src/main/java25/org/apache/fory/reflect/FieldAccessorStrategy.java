@@ -19,12 +19,10 @@
 
 package org.apache.fory.reflect;
 
-import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import org.apache.fory.platform.GraalvmSupport;
-import org.apache.fory.platform.JdkVersion;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.type.TypeUtils;
 import org.apache.fory.util.Preconditions;
@@ -41,11 +39,6 @@ final class FieldAccessorStrategy {
     if (hiddenAccessor != null) {
       return hiddenAccessor;
     }
-    return createVarHandleAccessor(field);
-  }
-
-  static FieldAccessor createStaticAccessor(Field field) {
-    Preconditions.checkArgument(Modifier.isStatic(field.getModifiers()), field);
     return createVarHandleAccessor(field);
   }
 
@@ -73,39 +66,14 @@ final class FieldAccessorStrategy {
 
   private static VarHandle fieldHandle(Field field) {
     try {
-      if (canUsePublicField(field)) {
-        try {
-          return findFieldHandle(MethodHandles.publicLookup(), field);
-        } catch (IllegalAccessException ignored) {
-          // Fall through to the JDK25 trusted lookup. It is enabled by opening
-          // java.base/java.lang.invoke to Fory, not by opening every target package.
-        }
-      }
-      return findFieldHandle(privateLookup(field), field);
+      return _JDKAccess
+          ._trustedLookup(field.getDeclaringClass())
+          .findVarHandle(field.getDeclaringClass(), field.getName(), field.getType());
     } catch (IllegalAccessException e) {
       throw accessFailure(field, e);
     } catch (NoSuchFieldException e) {
       throw new IllegalStateException("Failed to create VarHandle for field " + field, e);
     }
-  }
-
-  private static VarHandle findFieldHandle(MethodHandles.Lookup lookup, Field field)
-      throws IllegalAccessException, NoSuchFieldException {
-    if (Modifier.isStatic(field.getModifiers())) {
-      return lookup.findStaticVarHandle(
-          field.getDeclaringClass(), field.getName(), field.getType());
-    }
-    return lookup.findVarHandle(field.getDeclaringClass(), field.getName(), field.getType());
-  }
-
-  private static MethodHandles.Lookup privateLookup(Field field) {
-    Class<?> declaringClass = field.getDeclaringClass();
-    return _JDKAccess.privateLookupIn(declaringClass, MethodHandles.lookup());
-  }
-
-  private static boolean canUsePublicField(Field field) {
-    return Modifier.isPublic(field.getModifiers())
-        && Modifier.isPublic(field.getDeclaringClass().getModifiers());
   }
 
   private static IllegalStateException accessFailure(Field field, Throwable cause) {
@@ -117,153 +85,16 @@ final class FieldAccessorStrategy {
         cause);
   }
 
-  private static UnsupportedOperationException unsupportedWrite(Field field, Throwable cause) {
-    return new UnsupportedOperationException(
-        "Field cannot be written through supported JDK access APIs: " + field, cause);
-  }
-
-  private static IllegalStateException finalMutationFailure(Field field, Throwable cause) {
-    String versionMessage =
-        JdkVersion.MAJOR_VERSION >= 26
-            ? "On JDK26+, start the JVM with "
-                + "--enable-final-field-mutation=org.apache.fory.core. "
-            : "";
-    return new IllegalStateException(
-        "Cannot write final field "
-            + field
-            + ". "
-            + versionMessage
-            + "The declaring package must be open to org.apache.fory.core when it is in a "
-            + "named module.",
-        cause);
-  }
-
   private static RuntimeException accessorFailure(Field field, Throwable cause) {
     return new RuntimeException("Failed to access field: " + field, cause);
   }
 
   private abstract static class InstanceAccessor extends FieldAccessor {
     protected final VarHandle handle;
-    protected final boolean isStatic;
-    protected final boolean isFinal;
-    protected volatile Field finalField;
 
     InstanceAccessor(Field field) {
       super(field);
       handle = fieldHandle(field);
-      isStatic = Modifier.isStatic(field.getModifiers());
-      isFinal = Modifier.isFinal(field.getModifiers());
-    }
-
-    private static Field createFinalField(Field field) {
-      try {
-        field.setAccessible(true);
-        return field;
-      } catch (RuntimeException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    private Field finalField(Throwable cause) {
-      if (isStatic || !isFinal) {
-        throw unsupportedWrite(field, cause);
-      }
-      Field setter = finalField;
-      if (setter == null) {
-        setter = createFinalField(field);
-        finalField = setter;
-      }
-      return setter;
-    }
-
-    protected void setFinal(Object obj, Object value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.set(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalBoolean(Object obj, boolean value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setBoolean(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalByte(Object obj, byte value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setByte(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalChar(Object obj, char value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setChar(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalShort(Object obj, short value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setShort(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalInt(Object obj, int value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setInt(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalLong(Object obj, long value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setLong(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalFloat(Object obj, float value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setFloat(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
-    }
-
-    protected void setFinalDouble(Object obj, double value, Throwable cause) {
-      Field setter = finalField(cause);
-      checkObj(obj);
-      try {
-        setter.setDouble(obj, value);
-      } catch (IllegalAccessException | IllegalArgumentException e) {
-        throw finalMutationFailure(field, e);
-      }
     }
   }
 
@@ -281,10 +112,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public boolean getBoolean(Object obj) {
-      if (isStatic) {
-        return (boolean) handle.get();
-      }
-      checkObj(obj);
       return (boolean) handle.get(obj);
     }
 
@@ -295,19 +122,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putBoolean(Object obj, boolean value) {
-      if (isFinal) {
-        setFinalBoolean(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalBoolean(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -326,10 +144,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public byte getByte(Object obj) {
-      if (isStatic) {
-        return (byte) handle.get();
-      }
-      checkObj(obj);
       return (byte) handle.get(obj);
     }
 
@@ -340,19 +154,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putByte(Object obj, byte value) {
-      if (isFinal) {
-        setFinalByte(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalByte(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -371,10 +176,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public char getChar(Object obj) {
-      if (isStatic) {
-        return (char) handle.get();
-      }
-      checkObj(obj);
       return (char) handle.get(obj);
     }
 
@@ -385,19 +186,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putChar(Object obj, char value) {
-      if (isFinal) {
-        setFinalChar(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalChar(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -416,10 +208,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public short getShort(Object obj) {
-      if (isStatic) {
-        return (short) handle.get();
-      }
-      checkObj(obj);
       return (short) handle.get(obj);
     }
 
@@ -430,19 +218,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putShort(Object obj, short value) {
-      if (isFinal) {
-        setFinalShort(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalShort(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -461,10 +240,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public int getInt(Object obj) {
-      if (isStatic) {
-        return (int) handle.get();
-      }
-      checkObj(obj);
       return (int) handle.get(obj);
     }
 
@@ -475,19 +250,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putInt(Object obj, int value) {
-      if (isFinal) {
-        setFinalInt(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalInt(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -506,10 +272,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public long getLong(Object obj) {
-      if (isStatic) {
-        return (long) handle.get();
-      }
-      checkObj(obj);
       return (long) handle.get(obj);
     }
 
@@ -520,19 +282,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putLong(Object obj, long value) {
-      if (isFinal) {
-        setFinalLong(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalLong(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -551,10 +304,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public float getFloat(Object obj) {
-      if (isStatic) {
-        return (float) handle.get();
-      }
-      checkObj(obj);
       return (float) handle.get(obj);
     }
 
@@ -565,19 +314,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putFloat(Object obj, float value) {
-      if (isFinal) {
-        setFinalFloat(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalFloat(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -596,10 +336,6 @@ final class FieldAccessorStrategy {
 
     @Override
     public double getDouble(Object obj) {
-      if (isStatic) {
-        return (double) handle.get();
-      }
-      checkObj(obj);
       return (double) handle.get(obj);
     }
 
@@ -610,19 +346,10 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putDouble(Object obj, double value) {
-      if (isFinal) {
-        setFinalDouble(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalDouble(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
     }
   }
@@ -636,36 +363,16 @@ final class FieldAccessorStrategy {
 
     @Override
     public Object get(Object obj) {
-      if (isStatic) {
-        return handle.get();
-      }
-      checkObj(obj);
       return handle.get(obj);
     }
 
     @Override
     public void set(Object obj, Object value) {
-      if (isFinal) {
-        setFinal(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinal(obj, value, e);
+        handle.set(obj, value);
+      } catch (RuntimeException e) {
+        throw accessorFailure(field, e);
       }
-    }
-  }
-
-  static final class StaticObjectAccessor extends ObjectAccessor {
-    StaticObjectAccessor(Field field) {
-      super(field);
-      Preconditions.checkArgument(Modifier.isStatic(field.getModifiers()), field);
     }
   }
 
@@ -677,10 +384,6 @@ final class FieldAccessorStrategy {
     @Override
     public Object get(Object obj) {
       try {
-        if (isStatic) {
-          return handle.get();
-        }
-        checkObj(obj);
         return handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -689,19 +392,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void set(Object obj, Object value) {
-      if (isFinal) {
-        setFinal(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinal(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -710,10 +402,6 @@ final class FieldAccessorStrategy {
     @Override
     public boolean getBoolean(Object obj) {
       try {
-        if (isStatic) {
-          return (boolean) handle.get();
-        }
-        checkObj(obj);
         return (boolean) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -722,19 +410,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putBoolean(Object obj, boolean value) {
-      if (isFinal) {
-        setFinalBoolean(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalBoolean(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -743,10 +420,6 @@ final class FieldAccessorStrategy {
     @Override
     public byte getByte(Object obj) {
       try {
-        if (isStatic) {
-          return (byte) handle.get();
-        }
-        checkObj(obj);
         return (byte) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -755,19 +428,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putByte(Object obj, byte value) {
-      if (isFinal) {
-        setFinalByte(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalByte(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -776,10 +438,6 @@ final class FieldAccessorStrategy {
     @Override
     public char getChar(Object obj) {
       try {
-        if (isStatic) {
-          return (char) handle.get();
-        }
-        checkObj(obj);
         return (char) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -788,19 +446,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putChar(Object obj, char value) {
-      if (isFinal) {
-        setFinalChar(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalChar(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -809,10 +456,6 @@ final class FieldAccessorStrategy {
     @Override
     public short getShort(Object obj) {
       try {
-        if (isStatic) {
-          return (short) handle.get();
-        }
-        checkObj(obj);
         return (short) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -821,19 +464,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putShort(Object obj, short value) {
-      if (isFinal) {
-        setFinalShort(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalShort(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -842,10 +474,6 @@ final class FieldAccessorStrategy {
     @Override
     public int getInt(Object obj) {
       try {
-        if (isStatic) {
-          return (int) handle.get();
-        }
-        checkObj(obj);
         return (int) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -854,19 +482,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putInt(Object obj, int value) {
-      if (isFinal) {
-        setFinalInt(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalInt(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -875,10 +492,6 @@ final class FieldAccessorStrategy {
     @Override
     public long getLong(Object obj) {
       try {
-        if (isStatic) {
-          return (long) handle.get();
-        }
-        checkObj(obj);
         return (long) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -887,19 +500,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putLong(Object obj, long value) {
-      if (isFinal) {
-        setFinalLong(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalLong(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -908,10 +510,6 @@ final class FieldAccessorStrategy {
     @Override
     public float getFloat(Object obj) {
       try {
-        if (isStatic) {
-          return (float) handle.get();
-        }
-        checkObj(obj);
         return (float) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -920,19 +518,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putFloat(Object obj, float value) {
-      if (isFinal) {
-        setFinalFloat(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalFloat(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }
@@ -941,10 +528,6 @@ final class FieldAccessorStrategy {
     @Override
     public double getDouble(Object obj) {
       try {
-        if (isStatic) {
-          return (double) handle.get();
-        }
-        checkObj(obj);
         return (double) handle.get(obj);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
@@ -953,19 +536,8 @@ final class FieldAccessorStrategy {
 
     @Override
     public void putDouble(Object obj, double value) {
-      if (isFinal) {
-        setFinalDouble(obj, value, null);
-        return;
-      }
       try {
-        if (isStatic) {
-          handle.set(value);
-        } else {
-          checkObj(obj);
-          handle.set(obj, value);
-        }
-      } catch (UnsupportedOperationException e) {
-        setFinalDouble(obj, value, e);
+        handle.set(obj, value);
       } catch (RuntimeException e) {
         throw accessorFailure(field, e);
       }

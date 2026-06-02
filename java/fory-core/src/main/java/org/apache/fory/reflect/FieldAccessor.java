@@ -210,8 +210,4 @@ public abstract class FieldAccessor {
   public static FieldAccessor createAccessor(Field field) {
     return FieldAccessorFactory.createAccessor(field);
   }
-
-  public static FieldAccessor createStaticAccessor(Field field) {
-    return FieldAccessorFactory.createStaticAccessor(field);
-  }
 }

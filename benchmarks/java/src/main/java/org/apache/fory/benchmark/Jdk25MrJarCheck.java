@@ -30,7 +30,7 @@ public final class Jdk25MrJarCheck {
     verifyMissing("org.apache.fory.platform.UnsafeOps");
     Class<?> jdkAccess = verifyRootClass("org.apache.fory.platform.internal._JDKAccess");
     Class<?> unsafeUtils = verifyVersionedClass("org.apache.fory.platform.internal._UnsafeUtils");
-    verifyVersionedClass("org.apache.fory.reflect.FieldAccessorStrategy");
+    verifyVersionedClass("org.apache.fory.reflect.InstanceFieldAccessors");
     verifyVersionedClass("org.apache.fory.serializer.PlatformStringUtils");
     verifyNoUnsafeDescriptors(jdkAccess);
     verifyNoUnsafeDescriptors(unsafeUtils);

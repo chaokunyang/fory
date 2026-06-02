@@ -268,7 +268,7 @@
                         <include
                           name="META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"/>
                         <include
-                          name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"/>
+                          name="META-INF/versions/25/org/apache/fory/reflect/InstanceFieldAccessors.class"/>
                         <include
                           name="META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"/>
                       </patternset>
@@ -289,8 +289,8 @@
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.class"
                       property="jdk25.benchmark.unsafeutils.present"/>
                     <available
-                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.class"
-                      property="jdk25.benchmark.fieldaccessorstrategy.present"/>
+                      file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/reflect/InstanceFieldAccessors.class"
+                      property="jdk25.benchmark.instancefieldaccessors.present"/>
                     <available
                       file="${jdk25.benchmark.check.dir}/META-INF/versions/25/org/apache/fory/serializer/PlatformStringUtils.class"
                       property="jdk25.benchmark.platformstring.present"/>
@@ -310,8 +310,8 @@
                       unless="jdk25.benchmark.unsafeutils.present"
                       message="JDK25 benchmark jar is missing the versioned _UnsafeUtils class."/>
                     <fail
-                      unless="jdk25.benchmark.fieldaccessorstrategy.present"
-                      message="JDK25 benchmark jar is missing the versioned FieldAccessorStrategy class."/>
+                      unless="jdk25.benchmark.instancefieldaccessors.present"
+                      message="JDK25 benchmark jar is missing the versioned InstanceFieldAccessors class."/>
                     <fail
                       unless="jdk25.benchmark.platformstring.present"
                       message="JDK25 benchmark jar is missing the versioned PlatformStringUtils class."/>

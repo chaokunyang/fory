@@ -81,6 +81,12 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   Registered constructors should store the resulting `ObjectCreator` directly there, not through a
   soft cache or a separate registry class. Keep ObjectStream-specific creators separate from normal
   constructor-bound object creators.
+- Generated Fory object serializers must initialize object-creator fields through
+  `TypeResolver.getObjectCreator(Class)`, so generated code respects records, `@ForyConstructor`,
+  and `BaseFory.registerConstructor(...)`. Do not emit generated calls to
+  `ObjectCreators.getObjectCreator(TypeResolver, Class)` or bypass the runtime-scoped owner; format
+  builders without a Fory runtime context may use the base `ObjectCreators.getObjectCreator(Class)`
+  construction default.
 - Root codegen and builder classes that still need Unsafe on JDK8-24 must route symbolic Unsafe
   access through a helper with a Java 25 replacement. Do not leave `_JDKAccess.unsafe()` or
   `sun.misc.Unsafe` references in JDK25-visible classes outside matching `java25` replacements.
@@ -107,14 +113,17 @@ Load this file when changing anything under `java/` or when Java drives a cross-
 - JDK25+ `PlatformStringUtils` getter methods sit behind `StringSerializer` static-final access
   gates. Do not add per-call access checks in those getters; missing module opens should fail at
   trusted-lookup initialization or cold setup, not inside string hot paths.
-- JDK25+ `FieldAccessorStrategy` owns instance field access only. Do not add static-field handling
+- `FieldAccessor` owns field-accessor dispatch. `RecordFieldAccessors` owns record field access,
+  and `InstanceFieldAccessors` owns non-record instance field access. Do not reintroduce a
+  `FieldAccessorFactory` layer.
+- JDK25+ `InstanceFieldAccessors` owns instance field access only. Do not add static-field handling
   or per-write reflection fallback there, and do not expose public `FieldAccessor` static-field
   factories. Static special cases such as Scala `MODULE$` belong to the owning serializer and should
   use a cached `_JDKAccess._trustedLookup(...).findStaticGetter(...)` handle at that call site.
 - JDK25+ final-instance field mutation should use the same trusted-lookup `VarHandle` owner path as
   non-final field mutation. Do not add a final-field-only `MethodHandle` setter path or ordinary
   reflective `Field.set*` fallback.
-- JDK25+ `FieldAccessorStrategy` should use one final trusted-lookup `VarHandle` instance accessor
+- JDK25+ `InstanceFieldAccessors` should use one final trusted-lookup `VarHandle` instance accessor
   with dense access-kind switches, not public primitive/object accessor classes or a JDK25
   `GeneratedAccessor` or hidden-class accessor generation. Do not wrap `VarHandle.get/set` in
   hot-path try/catch blocks and do not call `FieldAccessor.checkObj`; VarHandle validates null and

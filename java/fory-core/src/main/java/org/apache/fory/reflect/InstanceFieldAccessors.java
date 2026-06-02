@@ -34,7 +34,7 @@ import org.apache.fory.platform.internal._UnsafeUtils;
 import org.apache.fory.util.Preconditions;
 import sun.misc.Unsafe;
 
-final class FieldAccessorStrategy {
+final class InstanceFieldAccessors {
   private static final Unsafe UNSAFE = AndroidSupport.IS_ANDROID ? null : _UnsafeUtils.UNSAFE;
 
   private static final int BOOLEAN_ACCESS = 1;
@@ -47,7 +47,7 @@ final class FieldAccessorStrategy {
   private static final int DOUBLE_ACCESS = 8;
   private static final int OBJECT_ACCESS = 9;
 
-  private FieldAccessorStrategy() {}
+  private InstanceFieldAccessors() {}
 
   static FieldAccessor createAccessor(Field field) {
     Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);

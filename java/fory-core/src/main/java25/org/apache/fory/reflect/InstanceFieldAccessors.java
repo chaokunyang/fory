@@ -25,7 +25,7 @@ import java.lang.reflect.Modifier;
 import org.apache.fory.platform.internal._JDKAccess;
 import org.apache.fory.util.Preconditions;
 
-final class FieldAccessorStrategy {
+final class InstanceFieldAccessors {
   private static final int BOOLEAN_ACCESS = 1;
   private static final int BYTE_ACCESS = 2;
   private static final int CHAR_ACCESS = 3;
@@ -36,7 +36,7 @@ final class FieldAccessorStrategy {
   private static final int DOUBLE_ACCESS = 8;
   private static final int OBJECT_ACCESS = 9;
 
-  private FieldAccessorStrategy() {}
+  private InstanceFieldAccessors() {}
 
   static FieldAccessor createAccessor(Field field) {
     Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);

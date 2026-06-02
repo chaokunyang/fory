@@ -122,7 +122,6 @@ import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.meta.TypeExtMeta;
 import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.reflect.ObjectCreator;
-import org.apache.fory.reflect.ObjectCreators;
 import org.apache.fory.reflect.ReflectionUtils;
 import org.apache.fory.reflect.TypeRef;
 import org.apache.fory.resolver.ClassResolver;
@@ -289,11 +288,10 @@ public abstract class BaseObjectCodecBuilder extends CodecBuilder {
         ObjectCreator.class,
         ctx.newName("objectCreator_" + type.getSimpleName()),
         () ->
-            new StaticInvoke(
-                ObjectCreators.class,
+            new Invoke(
+                typeResolverRef,
                 "getObjectCreator",
                 TypeRef.of(ObjectCreator.class),
-                typeResolverRef,
                 getClassExpr(type)));
   }
 

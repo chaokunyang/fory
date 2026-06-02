@@ -27,7 +27,7 @@ import java.nio.charset.StandardCharsets;
 import lombok.AllArgsConstructor;
 import org.apache.fory.TestUtils;
 import org.apache.fory.platform.AndroidSupport;
-import org.apache.fory.reflect.FieldAccessorStrategy.GeneratedAccessor;
+import org.apache.fory.reflect.InstanceFieldAccessors.GeneratedAccessor;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 

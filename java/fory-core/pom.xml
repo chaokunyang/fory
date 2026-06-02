@@ -468,7 +468,7 @@
                         <include
                             name="META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.java"/>
                         <include
-                            name="META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.java"/>
+                            name="META-INF/versions/25/org/apache/fory/reflect/InstanceFieldAccessors.java"/>
                         <include
                             name="META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"/>
                         <include name="META-INF/versions/25/module-info.java"/>
@@ -484,8 +484,8 @@
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/platform/internal/_UnsafeUtils.java"
                         property="jdk25.unsafeutils.source.present"/>
                     <available
-                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/FieldAccessorStrategy.java"
-                        property="jdk25.fieldaccessorstrategy.source.present"/>
+                        file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/InstanceFieldAccessors.java"
+                        property="jdk25.instancefieldaccessors.source.present"/>
                     <available
                         file="${jdk25.sources.check.dir}/META-INF/versions/25/org/apache/fory/reflect/ConstructorBypassAllocator.java"
                         property="jdk25.constructorbypassallocator.source.present"/>
@@ -502,8 +502,8 @@
                         unless="jdk25.unsafeutils.source.present"
                         message="JDK25 versioned _UnsafeUtils source is missing from the source jar."/>
                     <fail
-                        unless="jdk25.fieldaccessorstrategy.source.present"
-                        message="JDK25 versioned FieldAccessorStrategy source is missing from the source jar."/>
+                        unless="jdk25.instancefieldaccessors.source.present"
+                        message="JDK25 versioned InstanceFieldAccessors source is missing from the source jar."/>
                     <fail
                         unless="jdk25.constructorbypassallocator.source.present"
                         message="JDK25 versioned ConstructorBypassAllocator source is missing from the source jar."/>

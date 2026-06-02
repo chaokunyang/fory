@@ -22,7 +22,6 @@ package org.apache.fory.reflect;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.function.ToDoubleFunction;
@@ -38,26 +37,15 @@ import org.apache.fory.util.function.ToByteFunction;
 import org.apache.fory.util.function.ToCharFunction;
 import org.apache.fory.util.function.ToFloatFunction;
 import org.apache.fory.util.function.ToShortFunction;
-import org.apache.fory.util.record.RecordUtils;
 
-final class FieldAccessorFactory {
-  private FieldAccessorFactory() {}
+final class RecordFieldAccessors {
+  private RecordFieldAccessors() {}
 
   static FieldAccessor createAccessor(Field field) {
-    Preconditions.checkArgument(!Modifier.isStatic(field.getModifiers()), field);
-    if (RecordUtils.isRecord(field.getDeclaringClass())) {
-      return createRecordAccessor(field);
-    }
     if (AndroidSupport.IS_ANDROID) {
-      // Android field access must stay reflection-owned: no Unsafe offsets, trusted lookups,
-      // generated accessors, or primitive-specific reflection subclasses.
-      return new ReflectionFieldAccessor(field);
+      return new ReflectiveRecordFieldAccessor(field);
     }
-    return FieldAccessorStrategy.createAccessor(field);
-  }
-
-  private static FieldAccessor createRecordAccessor(Field field) {
-    if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+    if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
       return new ReflectiveRecordFieldAccessor(field);
     }
     Object getter;

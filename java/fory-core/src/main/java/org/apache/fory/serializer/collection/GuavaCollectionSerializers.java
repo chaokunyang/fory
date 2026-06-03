@@ -62,16 +62,14 @@ public class GuavaCollectionSerializers {
   private static final String HASH_BASED_TABLE_CLASS_NAME = PKG + ".HashBasedTable";
   private static final String IMMUTABLE_INT_ARRAY_CLASS_NAME =
       "com.google.common.primitives.ImmutableIntArray";
-  private static final int NUM_RESERVED_TYPE_IDS = 17;
+  private static final int NUM_RESERVED_TYPE_IDS = 13;
   private static final boolean GUAVA_AVAILABLE =
       isClassAvailable(IMMUTABLE_BI_MAP_CLASS_NAME)
           && isClassAvailable(IMMUTABLE_LIST_CLASS_NAME)
           && isClassAvailable(IMMUTABLE_MAP_CLASS_NAME)
           && isClassAvailable(IMMUTABLE_SET_CLASS_NAME)
           && isClassAvailable(IMMUTABLE_SORTED_MAP_CLASS_NAME)
-          && isClassAvailable(IMMUTABLE_SORTED_SET_CLASS_NAME)
-          && isClassAvailable(HASH_BASED_TABLE_CLASS_NAME)
-          && isClassAvailable(IMMUTABLE_INT_ARRAY_CLASS_NAME);
+          && isClassAvailable(IMMUTABLE_SORTED_SET_CLASS_NAME);
 
   private interface MapEntryBuilder {
     void put(Object key, Object value);
@@ -370,7 +368,7 @@ public class GuavaCollectionSerializers {
     }
   }
 
-  public static final class GuavaMapFormSerializer extends Serializer {
+  public abstract static class GuavaMapFormSerializer extends Serializer {
     private final Constructor<?> constructor;
     private final Method readResolveMethod;
     private final boolean biMap;
@@ -455,6 +453,18 @@ public class GuavaCollectionSerializers {
         }
       }
       throw new NoSuchMethodException(cls.getName() + ".readResolve()");
+    }
+  }
+
+  public static final class ImmutableMapFormSerializer extends GuavaMapFormSerializer {
+    public ImmutableMapFormSerializer(TypeResolver typeResolver, Class<?> cls) {
+      super(typeResolver, cls, false);
+    }
+  }
+
+  public static final class ImmutableBiMapFormSerializer extends GuavaMapFormSerializer {
+    public ImmutableBiMapFormSerializer(TypeResolver typeResolver, Class<?> cls) {
+      super(typeResolver, cls, true);
     }
   }
 
@@ -589,13 +599,8 @@ public class GuavaCollectionSerializers {
   // TODO guava serializers
   // guava/ArrayListMultimapSerializer - serializer for guava-libraries' ArrayListMultimap
   // guava/ArrayTableSerializer - serializer for guava-libraries' ArrayTable
-  // guava/HashBasedTableSerializer - serializer for guava-libraries' HashBasedTable
   // guava/HashMultimapSerializer -- serializer for guava-libraries' HashMultimap
-  // guava/ImmutableListSerializer - serializer for guava-libraries' ImmutableList
-  // guava/ImmutableSetSerializer - serializer for guava-libraries' ImmutableSet
-  // guava/ImmutableMapSerializer - serializer for guava-libraries' ImmutableMap
   // guava/ImmutableMultimapSerializer - serializer for guava-libraries' ImmutableMultimap
-  // guava/ImmutableSortedSetSerializer - serializer for guava-libraries' ImmutableSortedSet
   // guava/ImmutableTableSerializer - serializer for guava-libraries' ImmutableTable
   // guava/LinkedHashMultimapSerializer - serializer for guava-libraries' LinkedHashMultimap
   // guava/LinkedListMultimapSerializer - serializer for guava-libraries' LinkedListMultimap
@@ -675,21 +680,20 @@ public class GuavaCollectionSerializers {
       cls = GuavaEmptySortedMap.class;
       resolver.registerInternalSerializer(cls, new ImmutableSortedMapSerializer(resolver, cls));
     }
-    cls = ImmutableIntArray.class;
-    resolver.registerInternalSerializer(cls, new ImmutableIntArraySerializer(resolver, cls));
-    cls = loadClass(IMMUTABLE_MAP_FORM_CLASS_NAME);
-    resolver.registerInternalSerializer(cls, new GuavaMapFormSerializer(resolver, cls, false));
-    cls = loadClass(IMMUTABLE_BI_MAP_FORM_CLASS_NAME);
-    resolver.registerInternalSerializer(cls, new GuavaMapFormSerializer(resolver, cls, true));
-    cls = HashBasedTable.class;
-    resolver.registerInternalSerializer(cls, new HashBasedTableSerializer(resolver, cls));
   }
 
-  static Class<?> loadClass(String className) {
-    try {
-      return Class.forName(className, false, GuavaCollectionSerializers.class.getClassLoader());
-    } catch (ClassNotFoundException e) {
-      throw new RuntimeException(e);
+  public static Class<? extends Serializer> getSerializerClass(Class<?> cls) {
+    switch (cls.getName()) {
+      case IMMUTABLE_INT_ARRAY_CLASS_NAME:
+        return ImmutableIntArraySerializer.class;
+      case IMMUTABLE_MAP_FORM_CLASS_NAME:
+        return ImmutableMapFormSerializer.class;
+      case IMMUTABLE_BI_MAP_FORM_CLASS_NAME:
+        return ImmutableBiMapFormSerializer.class;
+      case HASH_BASED_TABLE_CLASS_NAME:
+        return HashBasedTableSerializer.class;
+      default:
+        return null;
     }
   }
 

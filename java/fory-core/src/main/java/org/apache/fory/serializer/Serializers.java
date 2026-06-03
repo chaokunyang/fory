@@ -30,7 +30,6 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.net.URI;
 import java.nio.charset.Charset;
-import java.util.Comparator;
 import java.util.Currency;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -48,7 +47,6 @@ import org.apache.fory.config.Config;
 import org.apache.fory.context.CopyContext;
 import org.apache.fory.context.ReadContext;
 import org.apache.fory.context.WriteContext;
-import org.apache.fory.exception.ForyException;
 import org.apache.fory.memory.MemoryBuffer;
 import org.apache.fory.memory.MemoryUtils;
 import org.apache.fory.meta.TypeDef;
@@ -823,29 +821,6 @@ public class Serializers {
     }
   }
 
-  public static final class ReverseComparatorSerializer extends ImmutableSerializer<Comparator>
-      implements Shareable {
-    private static final byte ORIGINAL_REPLACE_RESOLVE_PAYLOAD = 0;
-
-    public ReverseComparatorSerializer(Config config) {
-      super(config, (Class<Comparator>) Comparator.reverseOrder().getClass());
-    }
-
-    @Override
-    public void write(WriteContext writeContext, Comparator value) {
-      writeContext.getBuffer().writeByte(ORIGINAL_REPLACE_RESOLVE_PAYLOAD);
-    }
-
-    @Override
-    public Comparator read(ReadContext readContext) {
-      byte payload = readContext.getBuffer().readByte();
-      if (payload != ORIGINAL_REPLACE_RESOLVE_PAYLOAD) {
-        throw new ForyException("Unexpected reverse comparator payload flag " + payload);
-      }
-      return Comparator.reverseOrder();
-    }
-  }
-
   public static void registerDefaultSerializers(TypeResolver resolver) {
     Config config = resolver.getConfig();
     resolver.registerInternalSerializer(Class.class, new ClassSerializer(config));
@@ -863,7 +838,5 @@ public class Serializers {
     resolver.registerInternalSerializer(Pattern.class, new RegexSerializer(config));
     resolver.registerInternalSerializer(UUID.class, new UUIDSerializer(config));
     resolver.registerInternalSerializer(Object.class, new EmptyObjectSerializer(config));
-    resolver.registerInternalSerializer(
-        Comparator.reverseOrder().getClass(), new ReverseComparatorSerializer(config));
   }
 }

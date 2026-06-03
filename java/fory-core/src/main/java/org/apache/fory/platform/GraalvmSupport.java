@@ -105,6 +105,18 @@ public class GraalvmSupport {
     registerDefaultSerializerClass(TimeSerializers.TimeZoneSerializer.class);
     registerDefaultSerializerClass(BufferSerializers.ByteBufferSerializer.class);
     registerDefaultSerializerClass(MapSerializers.StringKeyMapSerializer.class);
+    registerDefaultSerializerClassIfPresent(
+        "org.apache.fory.serializer.collection.GuavaCollectionSerializers"
+            + "$ImmutableIntArraySerializer");
+    registerDefaultSerializerClassIfPresent(
+        "org.apache.fory.serializer.collection.GuavaCollectionSerializers"
+            + "$ImmutableMapFormSerializer");
+    registerDefaultSerializerClassIfPresent(
+        "org.apache.fory.serializer.collection.GuavaCollectionSerializers"
+            + "$ImmutableBiMapFormSerializer");
+    registerDefaultSerializerClassIfPresent(
+        "org.apache.fory.serializer.collection.GuavaCollectionSerializers"
+            + "$HashBasedTableSerializer");
     registerDefaultSerializerClass(ChildContainerSerializers.ChildArrayListSerializer.class);
     registerDefaultSerializerClass(ChildContainerSerializers.ChildCollectionSerializer.class);
     registerDefaultSerializerClass(ChildContainerSerializers.ChildMapSerializer.class);
@@ -295,6 +307,16 @@ public class GraalvmSupport {
 
   private static void registerDefaultSerializerClass(Class<? extends Serializer> serializerClass) {
     DEFAULT_SERIALIZER_CLASSES.add(serializerClass);
+  }
+
+  private static void registerDefaultSerializerClassIfPresent(String serializerClassName) {
+    try {
+      Class<?> serializerClass =
+          Class.forName(serializerClassName, false, GraalvmSupport.class.getClassLoader());
+      registerDefaultSerializerClass(serializerClass.asSubclass(Serializer.class));
+    } catch (ClassNotFoundException | LinkageError e) {
+      // Guava is optional at runtime; only available Guava serializers should be registered.
+    }
   }
 
   public static ForyException throwNoArgCtrException(Class<?> type) {

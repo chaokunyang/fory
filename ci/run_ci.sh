@@ -87,7 +87,7 @@ graalvm_test() {
     java_major=$(echo "$java_version" | cut -d. -f1)
   fi
   if [[ "$java_major" -ge 25 ]]; then
-    export JDK_JAVA_OPTIONS="$(jdk25_plus_options "$java_major" "ALL-UNNAMED") $(jdk25_javac_options)"
+    export JDK_JAVA_OPTIONS="$(jdk25_runtime_options "ALL-UNNAMED") $(jdk25_javac_options)"
   else
     unset JDK_JAVA_OPTIONS
   fi
@@ -108,8 +108,8 @@ jdk25_access_options() {
   printf " %s" "--add-opens=java.base/java.lang.invoke=${fory_open_targets}"
 }
 
-jdk25_plus_options() {
-  local fory_targets="${2:-org.apache.fory.core}"
+jdk25_runtime_options() {
+  local fory_targets="${1:-org.apache.fory.core}"
   printf "%s" "$(jdk25_access_options "$fory_targets")"
 }
 
@@ -134,7 +134,7 @@ use_jdk() {
   if [[ "$jdk" =~ zulu([0-9]+) ]]; then
     local java_major="${BASH_REMATCH[1]}"
     if [[ "$java_major" -ge 25 ]]; then
-      export JDK_JAVA_OPTIONS="$(jdk25_plus_options "$java_major") $(jdk25_javac_options)"
+      export JDK_JAVA_OPTIONS="$(jdk25_runtime_options) $(jdk25_javac_options)"
     else
       unset JDK_JAVA_OPTIONS
     fi
@@ -219,17 +219,17 @@ jdk17_plus_tests() {
   fi
   JDK_JAVA_OPTIONS="--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
   if [[ "$java_major" -ge 25 ]]; then
-    JDK_JAVA_OPTIONS="$JDK_JAVA_OPTIONS $(jdk25_javac_options)"
+    JDK_JAVA_OPTIONS="$JDK_JAVA_OPTIONS $(jdk25_runtime_options "ALL-UNNAMED") $(jdk25_javac_options)"
   fi
   export JDK_JAVA_OPTIONS
   echo "Executing fory java tests"
   cd "$ROOT/java"
   set +e
   if [[ "$java_major" -ge 25 ]]; then
-    # JDK25+ must be tested from the packaged multi-release artifact. Raw
-    # reactor test classes bypass META-INF/versions/25 and exercise the
-    # JDK8-24 root implementation instead.
-    mvn -T10 --batch-mode --no-transfer-progress clean install -DskipTests
+    # The JDK25+ profile overlays Surefire's classpath with Java25 replacement
+    # classes while keeping the test run unnamed. Keep JPMS coverage below as a
+    # separate named-module check.
+    mvn -T10 --batch-mode --no-transfer-progress clean install
   else
     mvn -T10 --batch-mode --no-transfer-progress install
   fi

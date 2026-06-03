@@ -103,14 +103,16 @@ public class ObjectInstantiators {
       if (noArgConstructor != null) {
         return new DeclaredNoArgCtrInstantiator<>(type);
       } else if (JdkVersion.MAJOR_VERSION >= 25) {
-        if (Serializable.class.isAssignableFrom(type)) {
-          return new ObjectStreamInstantiator<>(type);
+        if (Serializable.class.isAssignableFrom(type)
+            && serializationConstructorClass(type) == Object.class) {
+          return new GraalvmObjectInstantiator<>(type);
         }
         return new UnsupportedObjectInstantiator<>(
             type,
             "GraalVM native image on JDK25+ cannot create "
                 + type
-                + " without an accessible no-arg constructor or Serializable metadata");
+                + " without an accessible no-arg constructor because ObjectStream construction "
+                + "would change ordinary Fory object-creation semantics");
       } else {
         return new UnsafeObjectInstantiator<>(type);
       }
@@ -279,10 +281,10 @@ public class ObjectInstantiators {
     }
   }
 
-  public static final class ObjectStreamInstantiator<T> extends ObjectInstantiator<T> {
+  private abstract static class ObjectStreamClassInstantiator<T> extends ObjectInstantiator<T> {
     private volatile ObjectStreamClass objectStreamClass;
 
-    public ObjectStreamInstantiator(Class<T> type) {
+    private ObjectStreamClassInstantiator(Class<T> type) {
       super(type);
       if (!GraalvmSupport.isGraalBuildTime()) {
         objectStreamClass = ObjectStreamClass.lookupAny(type);
@@ -313,6 +315,25 @@ public class ObjectInstantiators {
         objectStreamClass = localObjectStreamClass;
       }
       return localObjectStreamClass;
+    }
+  }
+
+  public static final class ObjectStreamInstantiator<T> extends ObjectStreamClassInstantiator<T> {
+    public ObjectStreamInstantiator(Class<T> type) {
+      super(type);
+    }
+  }
+
+  static final class GraalvmObjectInstantiator<T> extends ObjectStreamClassInstantiator<T> {
+    GraalvmObjectInstantiator(Class<T> type) {
+      super(type);
+      if (!Serializable.class.isAssignableFrom(type)
+          || serializationConstructorClass(type) != Object.class) {
+        throw new ForyException(
+            "GraalVM JDK25+ ObjectStreamClass-backed object creation is only valid when "
+                + "the serialization constructor class is java.lang.Object for "
+                + type);
+      }
     }
   }
 
@@ -403,15 +424,7 @@ public class ObjectInstantiators {
       if (!Serializable.class.isAssignableFrom(type)) {
         throw new ForyException("ObjectStream instantiation requires Serializable type " + type);
       }
-      Class<?> current = type.getSuperclass();
-      // Java ObjectStream reconstruction skips every Serializable class constructor and invokes
-      // only the first non-Serializable superclass no-arg constructor.
-      while (current != null && Serializable.class.isAssignableFrom(current)) {
-        current = current.getSuperclass();
-      }
-      if (current == null) {
-        current = Object.class;
-      }
+      Class<?> current = serializationConstructorClass(type);
       Constructor<?> constructor = current.getDeclaredConstructor();
       if (!validSerializationConstructor(type, current, constructor)) {
         throw new ForyException(
@@ -448,6 +461,16 @@ public class ObjectInstantiators {
     public T newInstanceWithArguments(Object... arguments) {
       throw new UnsupportedOperationException();
     }
+  }
+
+  private static Class<?> serializationConstructorClass(Class<?> type) {
+    Class<?> current = type.getSuperclass();
+    // Java ObjectStream reconstruction skips every Serializable class constructor and invokes only
+    // the first non-Serializable superclass no-arg constructor.
+    while (current != null && Serializable.class.isAssignableFrom(current)) {
+      current = current.getSuperclass();
+    }
+    return current == null ? Object.class : current;
   }
 
   private static final class ReflectionFactoryAccess {

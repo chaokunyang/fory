@@ -120,6 +120,8 @@ public class JavaSerializer extends Serializer<Object> {
 
   @Override
   public Object copy(CopyContext copyContext, Object value) {
+    // JavaSerializer copy must run the Java serialization lifecycle because readObject can rebuild
+    // transient state that object-field copy cannot infer.
     try {
       ByteArrayOutputStream bytes = new ByteArrayOutputStream();
       try (ObjectOutputStream output = new ObjectOutputStream(bytes)) {
@@ -127,7 +129,7 @@ public class JavaSerializer extends Serializer<Object> {
       }
       try (ObjectInputStream input =
           new ClassLoaderObjectInputStream(
-              typeResolver.getClassLoader(), new ByteArrayInputStream(bytes.toByteArray()))) {
+              typeResolver, new ByteArrayInputStream(bytes.toByteArray()))) {
         return input.readObject();
       }
     } catch (IOException | ClassNotFoundException e) {

@@ -71,8 +71,8 @@ import org.apache.fory.serializer.ArraySerializersTest;
 import org.apache.fory.serializer.EnumSerializerTest;
 import org.apache.fory.serializer.ExceptionSerializers;
 import org.apache.fory.serializer.ObjectSerializer;
+import org.apache.fory.serializer.ReplaceResolveSerializer;
 import org.apache.fory.serializer.Serializer;
-import org.apache.fory.serializer.Serializers;
 import org.apache.fory.test.bean.BeanA;
 import org.apache.fory.test.bean.Struct;
 import org.apache.fory.type.Descriptor;
@@ -99,13 +99,17 @@ public class ForyTest extends ForyTestBase {
   @Test
   public void testReverseComparatorSerializer() {
     Fory fory = Fory.builder().withXlang(false).requireClassRegistration(false).build();
-    Comparator<?> comparator = Comparator.reverseOrder();
+    Comparator<Integer> comparator = Comparator.reverseOrder();
     Serializer<?> serializer =
         fory.getTypeResolver().getTypeInfo(comparator.getClass()).getSerializer();
-    assertTrue(serializer instanceof Serializers.ReverseComparatorSerializer);
-    Object roundTrip = fory.deserialize(fory.serialize(comparator));
-    Assert.assertSame(roundTrip, Comparator.reverseOrder());
-    Assert.assertSame(fory.copy(comparator), comparator);
+    assertTrue(serializer instanceof ReplaceResolveSerializer);
+    Comparator<Integer> roundTrip =
+        (Comparator<Integer>) fory.deserialize(fory.serialize(comparator));
+    Assert.assertEquals(roundTrip.getClass(), comparator.getClass());
+    Assert.assertEquals(roundTrip.compare(1, 2), comparator.compare(1, 2));
+    Comparator<Integer> copy = fory.copy(comparator);
+    Assert.assertEquals(copy.getClass(), comparator.getClass());
+    Assert.assertEquals(copy.compare(2, 1), comparator.compare(2, 1));
   }
 
   @Test

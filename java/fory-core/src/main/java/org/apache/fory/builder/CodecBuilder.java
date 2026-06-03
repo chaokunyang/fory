@@ -36,6 +36,7 @@ import static org.apache.fory.type.TypeUtils.getRawType;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.HashMap;
 import java.util.Map;
@@ -465,6 +466,8 @@ public abstract class CodecBuilder {
   /** Returns an expression that set field <code>value</code> to <code>bean</code>. */
   protected Expression setFieldValue(Expression bean, Descriptor d, Expression value) {
     String fieldName = d.getName();
+    TypeRef<?> memberType = memberTypeRef(d);
+    Class<?> memberRawType = getRawType(memberType);
     if (value instanceof Inlineable) {
       ((Inlineable) value).inline();
     }
@@ -473,22 +476,22 @@ public abstract class CodecBuilder {
     }
     if (!d.isFinalField()
         && Modifier.isPublic(d.getModifiers())
-        && sourcePublicAccessible(d.getRawType())) {
-      if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
-        value = tryInlineCast(value, d.getTypeRef());
+        && sourcePublicAccessible(memberRawType)) {
+      if (!memberRawType.isAssignableFrom(value.type().getRawType())) {
+        value = tryInlineCast(value, memberType);
       }
       return new Expression.SetField(bean, fieldName, value);
     } else if (d.getWriteMethod() != null && Modifier.isPublic(d.getWriteMethod().getModifiers())) {
-      if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
-        value = tryInlineCast(value, d.getTypeRef());
+      if (!memberRawType.isAssignableFrom(value.type().getRawType())) {
+        value = tryInlineCast(value, memberType);
       }
       return new Invoke(bean, d.getWriteMethod().getName(), value);
     } else {
       if (!d.isFinalField() && !Modifier.isPrivate(d.getModifiers())) {
         if (AccessorHelper.defineSetter(d.getField())) {
           Class<?> accessorClass = AccessorHelper.getAccessorClass(d.getField());
-          if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
-            value = tryInlineCast(value, d.getTypeRef());
+          if (!memberRawType.isAssignableFrom(value.type().getRawType())) {
+            value = tryInlineCast(value, memberType);
           }
           return new StaticInvoke(
               accessorClass, d.getName(), PRIMITIVE_VOID_TYPE, false, bean, value);
@@ -497,8 +500,8 @@ public abstract class CodecBuilder {
       if (d.getWriteMethod() != null && !Modifier.isPrivate(d.getWriteMethod().getModifiers())) {
         if (AccessorHelper.defineSetter(d.getWriteMethod())) {
           Class<?> accessorClass = AccessorHelper.getAccessorClass(d.getWriteMethod());
-          if (!d.getRawType().isAssignableFrom(value.type().getRawType())) {
-            value = tryInlineCast(value, d.getTypeRef());
+          if (!memberRawType.isAssignableFrom(value.type().getRawType())) {
+            value = tryInlineCast(value, memberType);
           }
           return new StaticInvoke(
               accessorClass, d.getWriteMethod().getName(), PRIMITIVE_VOID_TYPE, false, bean, value);
@@ -506,6 +509,18 @@ public abstract class CodecBuilder {
       }
       return unsafeSetField(bean, d, value);
     }
+  }
+
+  private TypeRef<?> memberTypeRef(Descriptor descriptor) {
+    Field field = descriptor.getField();
+    if (field != null) {
+      return TypeRef.of(field.getGenericType());
+    }
+    Method method = descriptor.getWriteMethod();
+    if (method != null) {
+      return TypeRef.of(method.getGenericParameterTypes()[0]);
+    }
+    return descriptor.getTypeRef();
   }
 
   /**

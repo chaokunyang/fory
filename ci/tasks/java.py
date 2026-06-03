@@ -84,7 +84,7 @@ def jdk25_access_options(fory_targets="org.apache.fory.core"):
     ]
 
 
-def jdk25_plus_options(java_version, fory_targets="org.apache.fory.core"):
+def jdk25_runtime_options(fory_targets="org.apache.fory.core"):
     return jdk25_access_options(fory_targets)
 
 
@@ -107,7 +107,7 @@ def jdk25_javac_options():
 def set_jdk_options(java_version):
     if int(java_version) >= 25:
         os.environ["JDK_JAVA_OPTIONS"] = " ".join(
-            jdk25_plus_options(java_version) + jdk25_javac_options()
+            jdk25_runtime_options() + jdk25_javac_options()
         )
     else:
         os.environ.pop("JDK_JAVA_OPTIONS", None)
@@ -252,17 +252,16 @@ def run_jdk17_plus(java_version="17"):
         "--add-opens=java.base/java.nio=org.apache.arrow.memory.core,ALL-UNNAMED"
     ]
     if int(java_version) >= 25:
+        jdk_options.extend(jdk25_runtime_options("ALL-UNNAMED"))
         jdk_options.extend(jdk25_javac_options())
     os.environ["JDK_JAVA_OPTIONS"] = " ".join(jdk_options)
 
     common.cd_project_subdir("java")
     if int(java_version) >= 25:
-        # JDK25+ must be tested from the packaged multi-release artifact. Raw
-        # reactor test classes bypass META-INF/versions/25 and exercise the
-        # JDK8-24 root implementation instead.
-        common.exec_cmd(
-            "mvn -T10 --batch-mode --no-transfer-progress clean install -DskipTests"
-        )
+        # The JDK25+ profile overlays Surefire's classpath with Java25 replacement
+        # classes while keeping the test run unnamed. Keep JPMS coverage below as a
+        # separate named-module check.
+        common.exec_cmd("mvn -T10 --batch-mode --no-transfer-progress clean install")
         os.environ.pop("JDK_JAVA_OPTIONS", None)
         logging.info(f"Executing JDK{java_version} JPMS tests")
         common.cd_project_subdir("integration_tests/jpms_tests")

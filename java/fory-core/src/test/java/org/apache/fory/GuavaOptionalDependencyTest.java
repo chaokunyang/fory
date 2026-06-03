@@ -26,10 +26,16 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.stream.Collectors;
+import org.apache.fory.platform.GraalvmSupport;
 import org.apache.fory.resolver.ClassResolver;
+import org.apache.fory.serializer.Serializer;
 import org.apache.fory.serializer.collection.GuavaCollectionSerializers;
 import org.testng.annotations.Test;
 
@@ -39,6 +45,8 @@ public class GuavaOptionalDependencyTest {
   @Test
   public void testBuildWithoutGuavaAndReserveIds() throws Exception {
     assertTrue(GuavaCollectionSerializers.isGuavaAvailable());
+    assertEquals(GuavaCollectionSerializers.getNumReservedTypeIds(), 13);
+    assertGraalvmGuavaSerializers();
     RegistrationIds inProcessIds = currentProcessIds();
     assertEquals(
         inProcessIds.enabledId - inProcessIds.disabledId,
@@ -48,8 +56,28 @@ public class GuavaOptionalDependencyTest {
     assertEquals(childIds.disabledId, inProcessIds.disabledId);
   }
 
+  @Test
+  public void testPartialGuavaReservesIds() throws Exception {
+    RegistrationIds inProcessIds = currentProcessIds();
+    RegistrationIds childIds = runWithPartialGuava();
+    assertEquals(childIds.enabledId, inProcessIds.enabledId);
+    assertEquals(childIds.disabledId, inProcessIds.disabledId);
+  }
+
   private static RegistrationIds currentProcessIds() {
     return new RegistrationIds(registeredInternalId(true), registeredInternalId(false));
+  }
+
+  private static void assertGraalvmGuavaSerializers() {
+    Set<Class<? extends Serializer>> serializers = GraalvmSupport.getRegisteredSerializerClasses();
+    assertTrue(
+        serializers.contains(GuavaCollectionSerializers.ImmutableIntArraySerializer.class));
+    assertTrue(
+        serializers.contains(GuavaCollectionSerializers.ImmutableMapFormSerializer.class));
+    assertTrue(
+        serializers.contains(GuavaCollectionSerializers.ImmutableBiMapFormSerializer.class));
+    assertTrue(
+        serializers.contains(GuavaCollectionSerializers.HashBasedTableSerializer.class));
   }
 
   private static int registeredInternalId(boolean registerGuavaTypes) {
@@ -76,6 +104,14 @@ public class GuavaOptionalDependencyTest {
     return parseResult(output);
   }
 
+  private static RegistrationIds runWithPartialGuava() throws Exception {
+    try (PartialGuavaClassLoader loader = new PartialGuavaClassLoader(classPathUrls())) {
+      Class<?> main = Class.forName(PartialGuavaMain.class.getName(), true, loader);
+      String output = (String) main.getMethod("run").invoke(null);
+      return parseResult(output);
+    }
+  }
+
   private static RegistrationIds parseResult(String output) {
     for (String line : output.split("\\R")) {
       if (line.startsWith(RESULT_PREFIX)) {
@@ -90,6 +126,20 @@ public class GuavaOptionalDependencyTest {
     return Arrays.stream(classPath.split(java.util.regex.Pattern.quote(File.pathSeparator)))
         .filter(path -> !new File(path).getName().startsWith("guava-"))
         .collect(Collectors.joining(File.pathSeparator));
+  }
+
+  private static URL[] classPathUrls() {
+    return Arrays.stream(System.getProperty("java.class.path").split(File.pathSeparator))
+        .map(GuavaOptionalDependencyTest::toUrl)
+        .toArray(URL[]::new);
+  }
+
+  private static URL toUrl(String path) {
+    try {
+      return new File(path).toURI().toURL();
+    } catch (MalformedURLException e) {
+      throw new IllegalArgumentException(e);
+    }
   }
 
   private static String readFully(InputStream inputStream) throws IOException {
@@ -114,6 +164,7 @@ public class GuavaOptionalDependencyTest {
 
   public static final class NoGuavaMain {
     public static void main(String[] args) {
+      GraalvmSupport.getRegisteredSerializerClasses();
       RegistrationIds ids = currentProcessIds();
       Fory fory =
           Fory.builder()
@@ -128,6 +179,42 @@ public class GuavaOptionalDependencyTest {
         throw new AssertionError("Unexpected round-trip value " + value.value);
       }
       System.out.println(RESULT_PREFIX + ids.enabledId + "," + ids.disabledId);
+    }
+  }
+
+  public static final class PartialGuavaMain {
+    public static String run() {
+      GraalvmSupport.getRegisteredSerializerClasses();
+      RegistrationIds ids = currentProcessIds();
+      Fory fory =
+          Fory.builder()
+              .withXlang(false)
+              .registerGuavaTypes(true)
+              .requireClassRegistration(false)
+              .suppressClassRegistrationWarnings(true)
+              .build();
+      byte[] bytes = fory.serialize(com.google.common.collect.ImmutableList.of("fory"));
+      Object value = fory.deserialize(bytes);
+      if (!com.google.common.collect.ImmutableList.of("fory").equals(value)) {
+        throw new AssertionError("Unexpected round-trip value " + value);
+      }
+      return RESULT_PREFIX + ids.enabledId + "," + ids.disabledId;
+    }
+  }
+
+  private static final class PartialGuavaClassLoader extends URLClassLoader {
+    private static final String FILTERED_CLASS = "com.google.common.primitives.ImmutableIntArray";
+
+    private PartialGuavaClassLoader(URL[] urls) {
+      super(urls, null);
+    }
+
+    @Override
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+      if (name.equals(FILTERED_CLASS)) {
+        throw new ClassNotFoundException(name);
+      }
+      return super.loadClass(name, resolve);
     }
   }
 

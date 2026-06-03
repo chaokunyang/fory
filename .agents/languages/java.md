@@ -90,10 +90,15 @@ Load this file when changing anything under `java/` or when Java drives a cross-
   JDK25+ ReflectionFactory path uses trusted-lookup access to `jdk.internal.reflect.ReflectionFactory`
   in `java.base` and must not require `--add-opens=java.base/jdk.internal.reflect=...`; the only
   JDK25+ platform open remains `java.base/java.lang.invoke=org.apache.fory.core`. GraalVM JDK25+
-  native-image Serializable empty-instance construction is the narrow exception: direct
-  ReflectionFactory serialization constructors can produce `Object` there, so it uses a cached
-  `ObjectStreamClass` and a private `ObjectStreamClass.newInstance` MethodHandle from
-  `_JDKAccess._trustedLookup`. If the instantiator is retained in the native-image heap, the
+  native-image ordinary serializers may use an `ObjectStreamClass.newInstance` MethodHandle only
+  for the exact Serializable case where the serialization constructor class is `Object`; that
+  preserves normal empty-instance semantics because no user superclass constructor can run. For
+  Serializable classes whose first non-Serializable superclass is not `Object`, fail explicitly
+  instead of importing ObjectStream parent-constructor rules into normal Fory object creation.
+  ObjectStream-compatible serializers are the broader stream-specific path: direct ReflectionFactory
+  serialization constructors can produce `Object` there, so they use a cached `ObjectStreamClass`
+  and a private `ObjectStreamClass.newInstance` MethodHandle from `_JDKAccess._trustedLookup`. If
+  the instantiator is retained in the native-image heap, the
   MethodHandle owner may be initialized at build time but the per-type `ObjectStreamClass` descriptor
   must be cached only at image runtime. `ForyGraalVMFeature` must register the matching serialization
   constructor target class for each Serializable hierarchy member so runtime-lazy

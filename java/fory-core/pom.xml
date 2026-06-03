@@ -254,7 +254,7 @@
     <profile>
       <id>jdk25-multi-release</id>
       <activation>
-        <jdk>[25,]</jdk>
+        <jdk>[25,)</jdk>
       </activation>
       <build>
         <plugins>

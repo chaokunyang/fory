@@ -1482,6 +1482,12 @@ public class ClassResolver extends TypeResolver {
       if (serializerClass != null) {
         return serializerClass;
       }
+      if (config.registerGuavaTypes()) {
+        serializerClass = GuavaCollectionSerializers.getSerializerClass(cls);
+        if (serializerClass != null) {
+          return serializerClass;
+        }
+      }
       if (config.checkJdkClassSerializable()) {
         if (cls.getName().startsWith("java") && !(Serializable.class.isAssignableFrom(cls))) {
           throw new UnsupportedOperationException(

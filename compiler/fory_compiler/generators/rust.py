@@ -34,6 +34,7 @@ from fory_compiler.ir.ast import (
     ArrayType,
     MapType,
     Schema,
+    thread_safe_pointer_enabled,
 )
 from fory_compiler.ir.types import PrimitiveKind
 
@@ -43,6 +44,7 @@ class RustGenerator(BaseGenerator):
 
     language_name = "rust"
     file_extension = ".rs"
+    RUST_ANY_TYPE = "::std::sync::Arc<dyn ::std::any::Any + Send + Sync>"
 
     # Mapping from FDL primitive types to Rust types
     PRIMITIVE_MAP = {
@@ -62,7 +64,7 @@ class RustGenerator(BaseGenerator):
         PrimitiveKind.STRING: "::std::string::String",
         PrimitiveKind.BYTES: "::std::vec::Vec<u8>",
         PrimitiveKind.DECIMAL: "::fory::Decimal",
-        PrimitiveKind.ANY: "::std::boxed::Box<dyn ::std::any::Any>",
+        PrimitiveKind.ANY: RUST_ANY_TYPE,
     }
 
     FORY_TEMPORAL_MAP = {
@@ -1012,12 +1014,12 @@ class RustGenerator(BaseGenerator):
         element_optional: bool = False,
         element_ref: bool = False,
         parent_stack: Optional[List[Message]] = None,
-        pointer_type: str = "::std::rc::Rc",
+        pointer_type: str = "::std::sync::Arc",
     ) -> str:
         """Generate Rust type string."""
         if isinstance(field_type, PrimitiveType):
             if field_type.kind == PrimitiveKind.ANY:
-                return "::std::boxed::Box<dyn ::std::any::Any>"
+                return self.RUST_ANY_TYPE
             base_type = self.primitive_type_name(field_type.kind)
             if nullable:
                 return f"::std::option::Option<{base_type}>"
@@ -1152,7 +1154,7 @@ class RustGenerator(BaseGenerator):
 
     def get_pointer_type(self, ref_options: dict, weak_ref: bool = False) -> str:
         """Determine pointer type for ref tracking based on field options."""
-        if ref_options.get("thread_safe_pointer") is True:
+        if thread_safe_pointer_enabled(ref_options):
             return "::fory::ArcWeak" if weak_ref else "::std::sync::Arc"
         return "::fory::RcWeak" if weak_ref else "::std::rc::Rc"
 

@@ -435,7 +435,7 @@ fn test_unsigned_with_smart_pointers() {
     test_rc_any(&fory, usize::MAX);
     test_rc_any(&fory, u128::MAX);
 
-    // Test Arc<dyn Any> with unsigned types
+    // Test Arc<dyn Any + Send + Sync> with unsigned types
     test_arc_any(&fory, u8::MAX);
     test_arc_any(&fory, u16::MAX);
     test_arc_any(&fory, u32::MAX);
@@ -459,7 +459,7 @@ fn test_unsigned_with_smart_pointers() {
     test_rc_any(&fory, vec![0usize, 1000000000000, usize::MAX]);
     test_rc_any(&fory, vec![0u128, 1000000000000, u128::MAX]);
 
-    // Test Arc<dyn Any> with unsigned arrays
+    // Test Arc<dyn Any + Send + Sync> with unsigned arrays
     test_arc_any(&fory, vec![0u8, 127, u8::MAX]);
     test_arc_any(&fory, vec![100u16, 200, 300, u16::MAX]);
     test_arc_any(&fory, vec![999u32, 888, 777, u32::MAX]);

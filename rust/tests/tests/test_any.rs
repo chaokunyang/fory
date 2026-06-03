@@ -77,22 +77,22 @@ fn test_rc_dyn_any() {
 fn test_arc_dyn_any() {
     let fory = Fory::builder().xlang(false).build();
 
-    let value: Arc<dyn Any> = Arc::new("arc test".to_string());
+    let value: Arc<dyn Any + Send + Sync> = Arc::new("arc test".to_string());
     let bytes = fory.serialize(&value).unwrap();
-    let deserialized: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    let deserialized: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes).unwrap();
     assert_eq!(
         deserialized.downcast_ref::<String>().unwrap(),
         &"arc test".to_string()
     );
 
-    let value2: Arc<dyn Any> = Arc::new(123i32);
+    let value2: Arc<dyn Any + Send + Sync> = Arc::new(123i32);
     let bytes2 = fory.serialize(&value2).unwrap();
-    let deserialized2: Arc<dyn Any> = fory.deserialize(&bytes2).unwrap();
+    let deserialized2: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes2).unwrap();
     assert_eq!(deserialized2.downcast_ref::<i32>().unwrap(), &123i32);
 
-    let value3: Arc<dyn Any> = Arc::new(vec![1, 2, 3]);
+    let value3: Arc<dyn Any + Send + Sync> = Arc::new(vec![1, 2, 3]);
     let bytes3 = fory.serialize(&value3).unwrap();
-    let deserialized3: Arc<dyn Any> = fory.deserialize(&bytes3).unwrap();
+    let deserialized3: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes3).unwrap();
     assert_eq!(
         deserialized3.downcast_ref::<Vec<i32>>().unwrap(),
         &vec![1, 2, 3]
@@ -122,12 +122,12 @@ fn test_rc_dyn_any_shared_reference() {
 fn test_arc_dyn_any_shared_reference() {
     let fory = Fory::builder().xlang(false).build();
 
-    let shared_vec: Arc<dyn Any> = Arc::new(vec![1, 2, 3]);
+    let shared_vec: Arc<dyn Any + Send + Sync> = Arc::new(vec![1, 2, 3]);
 
     let data = vec![shared_vec.clone(), shared_vec.clone()];
 
     let bytes = fory.serialize(&data).unwrap();
-    let deserialized: Vec<Arc<dyn Any>> = fory.deserialize(&bytes).unwrap();
+    let deserialized: Vec<Arc<dyn Any + Send + Sync>> = fory.deserialize(&bytes).unwrap();
 
     let first_vec = deserialized[0].downcast_ref::<Vec<i32>>().unwrap();
     let second_vec = deserialized[1].downcast_ref::<Vec<i32>>().unwrap();
@@ -208,6 +208,11 @@ struct Container {
 }
 
 #[derive(ForyStruct)]
+struct ArcAnyHolder {
+    value: Arc<dyn Any + Send + Sync>,
+}
+
+#[derive(ForyStruct)]
 struct AnyMapVarKey {
     #[fory(id = 0)]
     values: HashMap<u32, Rc<dyn Any>>,
@@ -257,17 +262,17 @@ fn test_arc_by_name() {
         items: vec!["a".to_string(), "b".to_string(), "c".to_string()],
     };
 
-    let value: Arc<dyn Any> = Arc::new(container);
+    let value: Arc<dyn Any + Send + Sync> = Arc::new(container);
     let bytes = fory.serialize(&value).unwrap();
-    let deserialized: Arc<dyn Any> = fory.deserialize(&bytes).unwrap();
+    let deserialized: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes).unwrap();
 
     let result = deserialized.downcast_ref::<Container>().unwrap();
     assert_eq!(result.id, 999);
     assert_eq!(result.items, vec!["a", "b", "c"]);
 
-    let container_vec: Vec<Arc<dyn Any>> = vec![value.clone(), value.clone()];
+    let container_vec: Vec<Arc<dyn Any + Send + Sync>> = vec![value.clone(), value.clone()];
     let bytes_vec = fory.serialize(&container_vec).unwrap();
-    let deserialized_vec: Vec<Arc<dyn Any>> = fory.deserialize(&bytes_vec).unwrap();
+    let deserialized_vec: Vec<Arc<dyn Any + Send + Sync>> = fory.deserialize(&bytes_vec).unwrap();
     assert_eq!(deserialized_vec.len(), 2);
     let first = deserialized_vec[0].downcast_ref::<Container>().unwrap();
     let second = deserialized_vec[1].downcast_ref::<Container>().unwrap();
@@ -276,6 +281,28 @@ fn test_arc_by_name() {
         &deserialized_vec[0],
         &deserialized_vec[1]
     ));
+}
+
+#[test]
+fn test_arc_any_field_by_name() {
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register_by_name::<Container>("", "Container").unwrap();
+    fory.register_by_name::<ArcAnyHolder>("", "ArcAnyHolder")
+        .unwrap();
+
+    let holder = ArcAnyHolder {
+        value: Arc::new(Container {
+            id: 777,
+            items: vec!["shared".to_string(), "any".to_string()],
+        }),
+    };
+
+    let bytes = fory.serialize(&holder).unwrap();
+    let decoded: ArcAnyHolder = fory.deserialize(&bytes).unwrap();
+    let container = decoded.value.downcast_ref::<Container>().unwrap();
+
+    assert_eq!(container.id, 777);
+    assert_eq!(container.items, vec!["shared", "any"]);
 }
 
 #[test]

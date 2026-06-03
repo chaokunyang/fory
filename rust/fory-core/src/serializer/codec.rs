@@ -2748,7 +2748,7 @@ macro_rules! any_codec {
 
 any_codec!(AnyBoxCodec, Box<dyn Any>);
 any_codec!(AnyRcCodec, Rc<dyn Any>);
-any_codec!(AnyArcCodec, Arc<dyn Any>);
+any_codec!(AnyArcCodec, Arc<dyn Any + Send + Sync>);
 
 #[cfg(test)]
 mod tests {

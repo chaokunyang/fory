@@ -248,7 +248,7 @@ The examples in this section use native mode because Rust trait objects and `dyn
 - `Box<dyn Trait>` - Owned trait objects
 - `Rc<dyn Trait>` - Reference-counted trait objects
 - `Arc<dyn Trait>` - Thread-safe reference-counted trait objects
-- `Box<dyn Any>`/`Rc<dyn Any>`/`Arc<dyn Any>` - Any trait type objects
+- `Box<dyn Any>`/`Rc<dyn Any>`/`Arc<dyn Any + Send + Sync>` - Any trait type objects
 - `Vec<Box<dyn Trait>>`, `HashMap<K, Box<dyn Trait>>` - Collections of trait objects
 
 **Basic Trait Object Serialization Example:**

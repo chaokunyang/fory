@@ -340,7 +340,7 @@
 //! - `Box<dyn Trait>` - Owned trait objects
 //! - `Rc<dyn Trait>` - Reference-counted trait objects
 //! - `Arc<dyn Trait>` - Thread-safe reference-counted trait objects
-//! - `Rc<dyn Any>` / `Arc<dyn Any>` - Runtime type dispatch without custom traits
+//! - `Rc<dyn Any>` / `Arc<dyn Any + Send + Sync>` - Runtime type dispatch without custom traits
 //! - Collections: `Vec<Box<dyn Trait>>`, `HashMap<K, Box<dyn Trait>>`
 //!
 //! #### Basic Trait Object Serialization
@@ -401,8 +401,9 @@
 //!
 //! #### Serializing `dyn Any` Trait Objects
 //!
-//! **What it does:** Supports serializing `Rc<dyn Any>` and `Arc<dyn Any>` for maximum
-//! runtime type flexibility without defining custom traits.
+//! **What it does:** Supports serializing `Rc<dyn Any>` and
+//! `Arc<dyn Any + Send + Sync>` for maximum runtime type flexibility without
+//! defining custom traits.
 //!
 //! **When to use:** Plugin systems, dynamic type handling, or when you need runtime type
 //! dispatch without compile-time trait definitions.
@@ -440,7 +441,7 @@
 //! # }
 //! ```
 //!
-//! For thread-safe scenarios, use `Arc<dyn Any>`:
+//! For thread-safe scenarios, use `Arc<dyn Any + Send + Sync>`:
 //!
 //! ```rust
 //! use fory::Fory;
@@ -456,12 +457,12 @@
 //! let mut fory = Fory::builder().xlang(false).build();
 //! fory.register::<Cat>(101)?;
 //!
-//! let cat: Arc<dyn Any> = Arc::new(Cat {
+//! let cat: Arc<dyn Any + Send + Sync> = Arc::new(Cat {
 //!     name: "Whiskers".to_string()
 //! });
 //!
 //! let bytes = fory.serialize(&cat)?;
-//! let decoded: Arc<dyn Any> = fory.deserialize(&bytes)?;
+//! let decoded: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes)?;
 //!
 //! let unwrapped = decoded.downcast_ref::<Cat>().unwrap();
 //! assert_eq!(unwrapped.name, "Whiskers");
@@ -536,7 +537,7 @@
 //! the `register_trait_type!` macro generates wrapper types.
 //!
 //! **Note:** If you don't want to use wrapper types, you can serialize as `Rc<dyn Any>`
-//! or `Arc<dyn Any>` instead (see the `dyn Any` section above).
+//! or `Arc<dyn Any + Send + Sync>` instead (see the `dyn Any` section above).
 //!
 //! The `register_trait_type!` macro generates `AnimalRc` and `AnimalArc` wrapper types:
 //!
@@ -1005,7 +1006,7 @@
 //! - `Rc<dyn Trait>` - Reference-counted trait objects
 //! - `Arc<dyn Trait>` - Thread-safe reference-counted trait objects
 //! - `Rc<dyn Any>` - Runtime type dispatch without custom traits
-//! - `Arc<dyn Any>` - Thread-safe runtime type dispatch
+//! - `Arc<dyn Any + Send + Sync>` - Thread-safe runtime type dispatch
 //!
 //! ## Wire Modes And Schema Evolution
 //!

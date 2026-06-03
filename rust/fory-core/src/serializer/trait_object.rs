@@ -49,7 +49,8 @@ macro_rules! downcast_and_serialize {
 /// This macro automatically generates serializers for `Box<dyn Trait>` trait objects.
 /// Due to Rust's orphan rules, only `Box<dyn Trait>` is supported for user-defined traits.
 /// For `Rc<dyn Trait>` and `Arc<dyn Trait>`, wrapper types are generated (e.g., `TraitRc`, `TraitArc`),
-/// either you use the wrapper types or use the `Rc<dyn Any>` or `Arc<dyn Any>` instead if it's not
+/// either you use the wrapper types or use `Rc<dyn Any>` or
+/// `Arc<dyn Any + Send + Sync>` instead if it's not
 /// inside struct fields. For struct fields, you can use the `Rc<dyn Trait>`, `Arc<dyn Trait>` directly,
 /// fory will generate converters for `Rc<dyn Trait>` and `Arc<dyn Trait>` to convert to wrapper for
 ///

@@ -29,6 +29,14 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         true
     }
 
+    #[inline(always)]
+    fn fory_is_threadsafe_type() -> bool
+    where
+        Self: Sized,
+    {
+        true
+    }
+
     fn fory_write(
         &self,
         context: &mut WriteContext,
@@ -118,6 +126,18 @@ impl<T: Serializer + ForyDefault + Send + Sync + 'static> Serializer for Arc<T> 
         }
         let inner = T::fory_read_data(context)?;
         Ok(Arc::new(inner))
+    }
+
+    #[inline]
+    fn fory_read_data_send_sync(
+        context: &mut ReadContext,
+    ) -> Result<Box<dyn std::any::Any + Send + Sync>, Error>
+    where
+        Self: Sized + ForyDefault,
+    {
+        Ok(crate::serializer::box_send_sync(Self::fory_read_data(
+            context,
+        )?))
     }
 
     fn fory_read_type_info(context: &mut ReadContext) -> Result<(), Error> {

@@ -313,6 +313,11 @@ public class GraalvmSupport {
     try {
       Class<?> serializerClass =
           Class.forName(serializerClassName, false, GraalvmSupport.class.getClassLoader());
+      // Loading without initialization does not resolve member signatures. Optional serializers
+      // must prove their dependency types are present before entering the GraalVM metadata set.
+      serializerClass.getDeclaredConstructors();
+      serializerClass.getDeclaredMethods();
+      serializerClass.getDeclaredFields();
       registerDefaultSerializerClass(serializerClass.asSubclass(Serializer.class));
     } catch (ClassNotFoundException | LinkageError e) {
       // Guava is optional at runtime; only available Guava serializers should be registered.

@@ -81,7 +81,9 @@ public class TestUtils {
   private static List<String> forkJvmArgs() {
     List<String> args = new ArrayList<>();
     if (JdkVersion.MAJOR_VERSION >= 25) {
-      args.add("--add-opens=java.base/java.lang.invoke=org.apache.fory.core");
+      // TestUtils.javaCommand launches probes with -cp, so Fory code is in the unnamed module.
+      // Named-module coverage lives in integration_tests/jpms_tests.
+      args.add("--add-opens=java.base/java.lang.invoke=ALL-UNNAMED");
       if (hasInputArg("--sun-misc-unsafe-memory-access=deny")) {
         args.add("--sun-misc-unsafe-memory-access=deny");
       }

@@ -70,14 +70,10 @@ public class GuavaOptionalDependencyTest {
 
   private static void assertGraalvmGuavaSerializers() {
     Set<Class<? extends Serializer>> serializers = GraalvmSupport.getRegisteredSerializerClasses();
-    assertTrue(
-        serializers.contains(GuavaCollectionSerializers.ImmutableIntArraySerializer.class));
-    assertTrue(
-        serializers.contains(GuavaCollectionSerializers.ImmutableMapFormSerializer.class));
-    assertTrue(
-        serializers.contains(GuavaCollectionSerializers.ImmutableBiMapFormSerializer.class));
-    assertTrue(
-        serializers.contains(GuavaCollectionSerializers.HashBasedTableSerializer.class));
+    assertTrue(serializers.contains(GuavaCollectionSerializers.ImmutableIntArraySerializer.class));
+    assertTrue(serializers.contains(GuavaCollectionSerializers.ImmutableMapFormSerializer.class));
+    assertTrue(serializers.contains(GuavaCollectionSerializers.ImmutableBiMapFormSerializer.class));
+    assertTrue(serializers.contains(GuavaCollectionSerializers.HashBasedTableSerializer.class));
   }
 
   private static int registeredInternalId(boolean registerGuavaTypes) {
@@ -164,7 +160,7 @@ public class GuavaOptionalDependencyTest {
 
   public static final class NoGuavaMain {
     public static void main(String[] args) {
-      GraalvmSupport.getRegisteredSerializerClasses();
+      assertSerializerMetadataLinked();
       RegistrationIds ids = currentProcessIds();
       Fory fory =
           Fory.builder()
@@ -184,7 +180,7 @@ public class GuavaOptionalDependencyTest {
 
   public static final class PartialGuavaMain {
     public static String run() {
-      GraalvmSupport.getRegisteredSerializerClasses();
+      assertSerializerMetadataLinked();
       RegistrationIds ids = currentProcessIds();
       Fory fory =
           Fory.builder()
@@ -199,6 +195,15 @@ public class GuavaOptionalDependencyTest {
         throw new AssertionError("Unexpected round-trip value " + value);
       }
       return RESULT_PREFIX + ids.enabledId + "," + ids.disabledId;
+    }
+  }
+
+  private static void assertSerializerMetadataLinked() {
+    for (Class<? extends Serializer> serializerClass :
+        GraalvmSupport.getRegisteredSerializerClasses()) {
+      serializerClass.getDeclaredConstructors();
+      serializerClass.getDeclaredMethods();
+      serializerClass.getDeclaredFields();
     }
   }
 

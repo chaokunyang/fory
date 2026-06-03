@@ -218,7 +218,7 @@ public class GuavaCollectionSerializers {
 
     @Override
     public T copy(CopyContext copyContext, T originCollection) {
-      Comparator comparator = copyContext.copyObject(originCollection.comparator());
+      Comparator comparator = ComparatorCopy.copy(copyContext, originCollection.comparator());
       Object[] elements = new Object[originCollection.size()];
       copyElements(copyContext, originCollection, elements);
       return (T) new ImmutableSortedSet.Builder<>(comparator).add(elements).build();
@@ -576,7 +576,7 @@ public class GuavaCollectionSerializers {
 
     @Override
     public T copy(CopyContext copyContext, T originMap) {
-      Comparator comparator = copyContext.copyObject(originMap.comparator());
+      Comparator comparator = ComparatorCopy.copy(copyContext, originMap.comparator());
       ImmutableSortedMap.Builder builder = new ImmutableSortedMap.Builder(comparator);
       copyEntries(typeResolver, mapTypeCache(), copyContext, originMap, builder::put);
       return (T) builder.build();

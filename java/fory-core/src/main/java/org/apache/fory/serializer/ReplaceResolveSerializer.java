@@ -21,6 +21,7 @@ package org.apache.fory.serializer;
 
 import java.io.Externalizable;
 import java.io.Serializable;
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Method;
 import java.util.HashMap;
@@ -107,32 +108,43 @@ public class ReplaceResolveSerializer extends Serializer {
               : (readResolveMethod != null ? readResolveMethod.getDeclaringClass() : null);
       Function writeReplaceFunc = null, readResolveFunc = null;
       if (declaringClass != null) {
-        if (AndroidSupport.IS_ANDROID || GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+        if (AndroidSupport.IS_ANDROID) {
           makeAccessible(writeReplaceMethod);
           makeAccessible(readResolveMethod);
         } else {
           MethodHandles.Lookup lookup = _JDKAccess._trustedLookup(declaringClass);
-          try {
-            if (writeReplaceMethod != null) {
-              writeReplaceFunc =
-                  _JDKAccess.makeJDKFunction(lookup, lookup.unreflect(writeReplaceMethod));
-            }
-            if (readResolveMethod != null) {
-              readResolveFunc =
-                  _JDKAccess.makeJDKFunction(lookup, lookup.unreflect(readResolveMethod));
-            }
-          } catch (Exception e) {
-            if (writeReplaceMethod != null && !writeReplaceMethod.isAccessible()) {
-              writeReplaceMethod.setAccessible(true);
-            }
-            if (readResolveMethod != null && !readResolveMethod.isAccessible()) {
-              readResolveMethod.setAccessible(true);
-            }
+          if (writeReplaceMethod != null) {
+            writeReplaceFunc = makeHookFunc(lookup, writeReplaceMethod);
+          }
+          if (readResolveMethod != null) {
+            readResolveFunc = makeHookFunc(lookup, readResolveMethod);
           }
         }
       }
       this.writeReplaceFunc = writeReplaceFunc;
       this.readResolveFunc = readResolveFunc;
+    }
+
+    private static Function makeHookFunc(MethodHandles.Lookup lookup, Method method) {
+      MethodHandle handle;
+      try {
+        handle = lookup.unreflect(method);
+      } catch (IllegalAccessException e) {
+        throw new ForyException(
+            "Failed to access Java replacement hook "
+                + method
+                + ". "
+                + _JDKAccess.jdk25AccessMessage(),
+            e);
+      }
+      try {
+        return _JDKAccess.makeJDKFunction(lookup, handle);
+      } catch (Throwable e) {
+        if (GraalvmSupport.IN_GRAALVM_NATIVE_IMAGE) {
+          return new MethodHandleFunction(handle);
+        }
+        throw ExceptionUtils.throwException(e);
+      }
     }
 
     private static void makeAccessible(Method method) {
@@ -143,6 +155,23 @@ public class ReplaceResolveSerializer extends Serializer {
         method.setAccessible(true);
       } catch (RuntimeException e) {
         throw new ForyException("Failed to make Java replacement hook accessible: " + method, e);
+      }
+    }
+
+    private static final class MethodHandleFunction implements Function<Object, Object> {
+      private final MethodHandle handle;
+
+      private MethodHandleFunction(MethodHandle handle) {
+        this.handle = handle;
+      }
+
+      @Override
+      public Object apply(Object value) {
+        try {
+          return handle.invoke(value);
+        } catch (Throwable e) {
+          throw ExceptionUtils.throwException(e);
+        }
       }
     }
 

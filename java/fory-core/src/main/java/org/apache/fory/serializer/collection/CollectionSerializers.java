@@ -305,7 +305,8 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       Collection collection;
-      Comparator comparator = copyContext.copyObject(((SortedSet) originCollection).comparator());
+      Comparator comparator =
+          ComparatorCopy.copy(copyContext, ((SortedSet) originCollection).comparator());
       if (Objects.equals(type, TreeSet.class)) {
         collection = new TreeSet(comparator);
       } else {
@@ -570,7 +571,7 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       Comparator comparator =
-          copyContext.copyObject(((ConcurrentSkipListSet) originCollection).comparator());
+          ComparatorCopy.copy(copyContext, ((ConcurrentSkipListSet) originCollection).comparator());
       return new ConcurrentSkipListSet(comparator);
     }
   }
@@ -869,7 +870,8 @@ public class CollectionSerializers {
     @Override
     public Collection newCollection(CopyContext copyContext, Collection collection) {
       return new PriorityQueue(
-          collection.size(), copyContext.copyObject(((PriorityQueue) collection).comparator()));
+          collection.size(),
+          ComparatorCopy.copy(copyContext, ((PriorityQueue) collection).comparator()));
     }
 
     @Override

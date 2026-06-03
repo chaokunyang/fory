@@ -222,7 +222,8 @@ public class MapSerializers {
 
     @Override
     public Map newMap(CopyContext copyContext, Map originMap) {
-      Comparator comparator = copyContext.copyObject(((SortedMap) originMap).comparator());
+      Comparator comparator =
+          ComparatorCopy.copy(copyContext, ((SortedMap) originMap).comparator());
       Map map;
       if (type == TreeMap.class) {
         map = new TreeMap(comparator);
@@ -369,7 +370,7 @@ public class MapSerializers {
     @Override
     public Map newMap(CopyContext copyContext, Map originMap) {
       Comparator comparator =
-          copyContext.copyObject(((ConcurrentSkipListMap) originMap).comparator());
+          ComparatorCopy.copy(copyContext, ((ConcurrentSkipListMap) originMap).comparator());
       return new ConcurrentSkipListMap(comparator);
     }
   }

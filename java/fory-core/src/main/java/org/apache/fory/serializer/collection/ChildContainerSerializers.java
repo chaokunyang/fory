@@ -263,7 +263,7 @@ public class ChildContainerSerializers {
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       T newCollection =
           subclassFactory.newCollection(
-              copyContext.copyObject(((SortedSet<?>) originCollection).comparator()));
+              ComparatorCopy.copy(copyContext, ((SortedSet<?>) originCollection).comparator()));
       copyChildFields(copyContext, originCollection, newCollection);
       return newCollection;
     }
@@ -309,7 +309,7 @@ public class ChildContainerSerializers {
     public Collection newCollection(CopyContext copyContext, Collection originCollection) {
       T newCollection =
           subclassFactory.newCollection(
-              copyContext.copyObject(((PriorityQueue<?>) originCollection).comparator()),
+              ComparatorCopy.copy(copyContext, ((PriorityQueue<?>) originCollection).comparator()),
               originCollection.size());
       copyChildFields(copyContext, originCollection, newCollection);
       return newCollection;
@@ -417,7 +417,7 @@ public class ChildContainerSerializers {
     public Map newMap(CopyContext copyContext, Map originMap) {
       T newMap =
           subclassFactory.newMap(
-              copyContext.copyObject(((SortedMap<?, ?>) originMap).comparator()));
+              ComparatorCopy.copy(copyContext, ((SortedMap<?, ?>) originMap).comparator()));
       copyChildFields(copyContext, originMap, newMap);
       return newMap;
     }

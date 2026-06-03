@@ -119,7 +119,7 @@ public class UnmodifiableSerializers {
       if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         Collection mutableSource;
         if (object instanceof SortedSet) {
-          Object comparator = copyContext.copyObject(((SortedSet) object).comparator());
+          Object comparator = ComparatorCopy.copy(copyContext, ((SortedSet) object).comparator());
           mutableSource = new TreeSet((java.util.Comparator) comparator);
         } else if (object instanceof Set) {
           mutableSource = new HashSet(object.size());
@@ -168,7 +168,8 @@ public class UnmodifiableSerializers {
       if (!MemoryUtils.JDK_COLLECTION_FIELD_ACCESS) {
         Map mutableSource;
         if (originMap instanceof SortedMap) {
-          Object comparator = copyContext.copyObject(((SortedMap) originMap).comparator());
+          Object comparator =
+              ComparatorCopy.copy(copyContext, ((SortedMap) originMap).comparator());
           mutableSource = new TreeMap((java.util.Comparator) comparator);
         } else {
           mutableSource = new HashMap(originMap.size());

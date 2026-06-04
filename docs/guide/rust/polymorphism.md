@@ -197,9 +197,7 @@ struct LocalEnvelope {
 
 Manual `Serializer` implementations are conservative by default. Override
 `fory_read_data_as_send_sync_any` only when the concrete value read by the
-serializer is `Send + Sync`. Send-sync support is owned by the serializer that
-owns the concrete value; registering a type does not add that capability unless
-the serializer exposes the reader.
+serializer is `Send + Sync`.
 
 ## Rc/Arc-Based Trait Objects in Structs
 

@@ -81,9 +81,7 @@ impl ForyDefault for CustomType {
 
 Manual serializers are conservative by default. If the concrete type is
 `Send + Sync` and should support `Arc<dyn Any + Send + Sync>` dynamic reads or
-`UnknownCase` payload preservation, override the send-sync Any reader. Send-sync
-support is a serializer-owned capability, so registration alone does not make a
-manual serializer eligible for this carrier:
+`UnknownCase` payload preservation, override the send-sync Any reader:
 
 ```rust
 impl Serializer for CustomType {

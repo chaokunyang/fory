@@ -393,6 +393,9 @@ pub(crate) fn gen_read_compatible_with_construction(
                         }
                         field.field_id = sorted_index as i16;
                     }
+                    Some(_) => {
+                        field.field_id = -1;
+                    }
                     None => {
                         field.field_id = -1;
                     }

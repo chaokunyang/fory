@@ -18,10 +18,53 @@
 use fory_core::fory::Fory;
 use fory_derive::ForyStruct;
 use std::any::Any;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, LinkedList};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::vec;
+
+fn assert_erased_container_error(message: String) {
+    assert!(
+        message.contains("top-level erased Any") || message.contains("Erased Any payloads require"),
+        "unexpected error: {message}"
+    );
+}
+
+fn assert_box_any_unsupported<T: 'static>(fory: &Fory, value: T) {
+    let wrapped: Box<dyn Any> = Box::new(value);
+    match fory.serialize(&wrapped) {
+        Ok(bytes) => {
+            let result: Result<Box<dyn Any>, _> = fory.deserialize(&bytes);
+            let err = result.expect_err("expected Box<dyn Any> container read to fail");
+            assert_erased_container_error(err.to_string());
+        }
+        Err(err) => assert_erased_container_error(err.to_string()),
+    }
+}
+
+fn assert_rc_any_unsupported<T: 'static>(fory: &Fory, value: T) {
+    let wrapped: Rc<dyn Any> = Rc::new(value);
+    match fory.serialize(&wrapped) {
+        Ok(bytes) => {
+            let result: Result<Rc<dyn Any>, _> = fory.deserialize(&bytes);
+            let err = result.expect_err("expected Rc<dyn Any> container read to fail");
+            assert_erased_container_error(err.to_string());
+        }
+        Err(err) => assert_erased_container_error(err.to_string()),
+    }
+}
+
+fn assert_arc_any_unsupported<T: 'static + Send + Sync>(fory: &Fory, value: T) {
+    let wrapped: Arc<dyn Any + Send + Sync> = Arc::new(value);
+    match fory.serialize(&wrapped) {
+        Ok(bytes) => {
+            let result: Result<Arc<dyn Any + Send + Sync>, _> = fory.deserialize(&bytes);
+            let err = result.expect_err("expected Arc<dyn Any> container read to fail");
+            assert_erased_container_error(err.to_string());
+        }
+        Err(err) => assert_erased_container_error(err.to_string()),
+    }
+}
 
 #[test]
 fn test_box_dyn_any() {
@@ -204,6 +247,39 @@ struct Container {
     items: Vec<String>,
 }
 
+#[test]
+fn wrapped_container_box_any() {
+    let mut fory = Fory::builder().xlang(false).build();
+    fory.register_by_name::<Container>("", "Container").unwrap();
+
+    let value: Box<dyn Any> = Box::new(Container {
+        id: 321,
+        items: vec!["wrapped".to_string(), "values".to_string()],
+    });
+    let bytes = fory.serialize(&value).unwrap();
+    let decoded: Box<dyn Any> = fory.deserialize(&bytes).unwrap();
+    let result = decoded.downcast_ref::<Container>().unwrap();
+
+    assert_eq!(result.id, 321);
+    assert_eq!(result.items, vec!["wrapped", "values"]);
+}
+
+#[test]
+fn generic_containers_rejected_in_any() {
+    let fory = Fory::builder().xlang(false).build();
+
+    assert_box_any_unsupported(&fory, vec![1_i32, 2, 3]);
+    assert_rc_any_unsupported(&fory, vec![1_i32, 2, 3]);
+    assert_arc_any_unsupported(&fory, vec![1_i32, 2, 3]);
+
+    assert_box_any_unsupported(&fory, LinkedList::from([1_i32, 2, 3]));
+    assert_rc_any_unsupported(&fory, HashSet::from([1_i32, 2, 3]));
+    assert_arc_any_unsupported(
+        &fory,
+        HashMap::from([("one".to_string(), 1_i32), ("two".to_string(), 2)]),
+    );
+}
+
 #[derive(ForyStruct)]
 struct ArcAnyHolder {
     value: Arc<dyn Any + Send + Sync>,
@@ -345,7 +421,7 @@ struct StructB {
     i: i32,
 }
 
-/// Test that serializing different Vec<T> types in Box<dyn Any> returns a clear error.
+/// Test that different Vec<T> types in Box<dyn Any> return a clear error.
 ///
 /// This tests for a known limitation of the xlang serialization protocol:
 /// different generic container types (Vec<StructA>, Vec<StructB>) share the same
@@ -353,28 +429,11 @@ struct StructB {
 ///
 /// Previously this caused non-deterministic failures. Now it returns a clear error message.
 #[test]
-fn test_vec_of_different_struct_types_in_box_any_returns_error() {
+fn generic_vecs_rejected_in_box_any() {
     let mut fory = Fory::builder().xlang(false).build();
-    // Register both struct types
     fory.register_by_name::<StructA>("", "StructA").unwrap();
-    fory.register_generic_trait::<Vec<StructA>>().unwrap();
     fory.register_by_name::<StructB>("", "StructB").unwrap();
-    fory.register_generic_trait::<Vec<StructB>>().unwrap();
 
-    // Create Box<dyn Any> wrappers for Vec<StructA> and Vec<StructB>
-    let a_vec: Box<dyn Any> = Box::new(vec![StructA { a: 11 }; 5]);
-    let b_vec: Box<dyn Any> = Box::new(vec![StructB { i: 1 }; 5]);
-    let any_vec: Vec<Box<dyn Any>> = vec![a_vec, b_vec];
-
-    let bytes = fory.serialize(&any_vec).unwrap();
-
-    // Deserialization should fail with a clear error about generic containers
-    let result: Result<Vec<Box<dyn Any>>, _> = fory.deserialize(&bytes);
-    assert!(result.is_err());
-    let err_msg = result.unwrap_err().to_string();
-    assert!(
-        err_msg.contains("generic container types"),
-        "Expected error about generic containers, got: {}",
-        err_msg
-    );
+    assert_box_any_unsupported(&fory, vec![StructA { a: 11 }; 5]);
+    assert_box_any_unsupported(&fory, vec![StructB { i: 1 }; 5]);
 }

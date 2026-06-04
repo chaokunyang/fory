@@ -954,16 +954,6 @@ impl Fory {
             .register_serializer_by_name::<T>(namespace, type_name)
     }
 
-    /// Registers a generic trait object type for serialization.
-    /// This method should be used to register collection types such as `Vec<T>`, `HashMap<K, V>`, etc.
-    /// Don't register concrete struct types with this method. Use `register()` instead.
-    pub fn register_generic_trait<T: 'static + Serializer + ForyDefault>(
-        &mut self,
-    ) -> Result<(), Error> {
-        self.check_registration_allowed()?;
-        self.type_resolver.register_generic_trait::<T>()
-    }
-
     /// Writes the serialization header to the writer.
     #[inline(always)]
     pub fn write_head<T: Serializer>(&self, writer: &mut Writer) {

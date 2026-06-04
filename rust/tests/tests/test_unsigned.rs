@@ -20,26 +20,62 @@ mod test_helpers;
 use fory_core::fory::Fory;
 use fory_derive::ForyStruct;
 use std::any::Any;
+use std::rc::Rc;
 use std::sync::Arc;
 use test_helpers::{test_arc_any, test_box_any, test_rc_any, test_roundtrip};
+
+fn assert_erased_container_error(message: String) {
+    assert!(
+        message.contains("top-level erased Any")
+            || message.contains("Erased Any payloads require")
+            || message.contains("cannot be represented as Arc<dyn Any + Send + Sync>"),
+        "unexpected error: {message}"
+    );
+}
+
+fn test_box_any_unsupported<T>(fory: &Fory, value: T)
+where
+    T: 'static,
+{
+    let wrapped: Box<dyn Any> = Box::new(value);
+    match fory.serialize(&wrapped) {
+        Ok(bytes) => {
+            let result: Result<Box<dyn Any>, _> = fory.deserialize(&bytes);
+            let err = result.expect_err("expected Box<dyn Any> container read to fail");
+            assert_erased_container_error(err.to_string());
+        }
+        Err(err) => assert_erased_container_error(err.to_string()),
+    }
+}
+
+fn test_rc_any_unsupported<T>(fory: &Fory, value: T)
+where
+    T: 'static,
+{
+    let wrapped: Rc<dyn Any> = Rc::new(value);
+    match fory.serialize(&wrapped) {
+        Ok(bytes) => {
+            let result: Result<Rc<dyn Any>, _> = fory.deserialize(&bytes);
+            let err = result.expect_err("expected Rc<dyn Any> container read to fail");
+            assert_erased_container_error(err.to_string());
+        }
+        Err(err) => assert_erased_container_error(err.to_string()),
+    }
+}
 
 fn test_arc_any_unsupported<T>(fory: &Fory, value: T)
 where
     T: 'static + Send + Sync,
 {
     let wrapped: Arc<dyn Any + Send + Sync> = Arc::new(value);
-    let bytes = fory.serialize(&wrapped).unwrap();
-    let result: Result<Arc<dyn Any + Send + Sync>, _> = fory.deserialize(&bytes);
-    let err = match result {
-        Ok(_) => panic!("expected direct generic container payload to be unsupported"),
-        Err(err) => err,
+    match fory.serialize(&wrapped) {
+        Ok(bytes) => {
+            let result: Result<Arc<dyn Any + Send + Sync>, _> = fory.deserialize(&bytes);
+            let err = result.expect_err("expected Arc<dyn Any> container read to fail");
+            assert_erased_container_error(err.to_string());
+        }
+        Err(err) => assert_erased_container_error(err.to_string()),
     };
-    let message = err.to_string();
-    assert!(
-        message.contains("generic container types")
-            || message.contains("cannot be represented as Arc<dyn Any + Send + Sync>"),
-        "unexpected error: {err}"
-    );
 }
 
 #[test]
@@ -464,23 +500,21 @@ fn test_unsigned_with_smart_pointers() {
     test_arc_any(&fory, usize::MAX);
     test_arc_any(&fory, u128::MAX);
 
-    // Test Box<dyn Any> with unsigned arrays
-    test_box_any(&fory, vec![0u8, 127, u8::MAX]);
-    test_box_any(&fory, vec![0u16, 1000, u16::MAX]);
-    test_box_any(&fory, vec![0u32, 1000000, u32::MAX]);
-    test_box_any(&fory, vec![0u64, 1000000000000, u64::MAX]);
-    test_box_any(&fory, vec![0usize, 1000000000000, usize::MAX]);
-    test_box_any(&fory, vec![0u128, 1000000000000, u128::MAX]);
+    // Direct vectors are not supported as top-level erased Any payloads.
+    test_box_any_unsupported(&fory, vec![0u8, 127, u8::MAX]);
+    test_box_any_unsupported(&fory, vec![0u16, 1000, u16::MAX]);
+    test_box_any_unsupported(&fory, vec![0u32, 1000000, u32::MAX]);
+    test_box_any_unsupported(&fory, vec![0u64, 1000000000000, u64::MAX]);
+    test_box_any_unsupported(&fory, vec![0usize, 1000000000000, usize::MAX]);
+    test_box_any_unsupported(&fory, vec![0u128, 1000000000000, u128::MAX]);
 
-    // Test Rc<dyn Any> with unsigned arrays
-    test_rc_any(&fory, vec![0u8, 127, u8::MAX]);
-    test_rc_any(&fory, vec![100u16, 200, 300, u16::MAX]);
-    test_rc_any(&fory, vec![1000u32, 2000, 3000, u32::MAX]);
-    test_rc_any(&fory, vec![0u64, 1000000000000, u64::MAX]);
-    test_rc_any(&fory, vec![0usize, 1000000000000, usize::MAX]);
-    test_rc_any(&fory, vec![0u128, 1000000000000, u128::MAX]);
+    test_rc_any_unsupported(&fory, vec![0u8, 127, u8::MAX]);
+    test_rc_any_unsupported(&fory, vec![100u16, 200, 300, u16::MAX]);
+    test_rc_any_unsupported(&fory, vec![1000u32, 2000, 3000, u32::MAX]);
+    test_rc_any_unsupported(&fory, vec![0u64, 1000000000000, u64::MAX]);
+    test_rc_any_unsupported(&fory, vec![0usize, 1000000000000, usize::MAX]);
+    test_rc_any_unsupported(&fory, vec![0u128, 1000000000000, u128::MAX]);
 
-    // Direct generic containers are not supported as erased send-sync payloads.
     test_arc_any_unsupported(&fory, vec![0u8, 127, u8::MAX]);
     test_arc_any_unsupported(&fory, vec![100u16, 200, 300, u16::MAX]);
     test_arc_any_unsupported(&fory, vec![999u32, 888, 777, u32::MAX]);

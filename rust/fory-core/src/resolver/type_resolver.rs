@@ -28,7 +28,7 @@ use crate::types::{Date, Duration, Timestamp};
 use crate::TypeId;
 #[cfg(feature = "chrono")]
 use chrono::{Duration as ChronoDuration, NaiveDate, NaiveDateTime};
-use std::collections::{HashSet, LinkedList};
+use std::collections::HashSet;
 use std::rc::Rc;
 use std::vec;
 
@@ -826,16 +826,12 @@ impl TypeResolver {
         self.register_internal_serializer::<Vec<u128>>(TypeId::U128_ARRAY)?;
         self.register_internal_serializer::<Vec<isize>>(TypeId::ISIZE_ARRAY)?;
         self.register_internal_serializer::<Vec<i128>>(TypeId::INT128_ARRAY)?;
-        self.register_generic_trait::<Vec<String>>()?;
-        self.register_generic_trait::<LinkedList<i32>>()?;
-        self.register_generic_trait::<LinkedList<String>>()?;
-        self.register_generic_trait::<HashSet<String>>()?;
-        self.register_generic_trait::<HashSet<i32>>()?;
-        self.register_generic_trait::<HashSet<i64>>()?;
-        self.register_generic_trait::<HashMap<String, String>>()?;
-        self.register_generic_trait::<HashMap<String, i32>>()?;
-        self.register_generic_trait::<HashMap<String, i64>>()?;
 
+        // Representative SET/MAP harnesses are still required for non-Any
+        // trait-object serialization that writes an internal protocol-family
+        // type id. Erased Any payloads reject these type ids in serializer::any.
+        self.register_internal_serializer::<HashSet<i32>>(TypeId::SET)?;
+        self.register_internal_serializer::<HashMap<String, i32>>(TypeId::MAP)?;
         Ok(())
     }
 
@@ -1307,27 +1303,6 @@ impl TypeResolver {
             .insert(rs_type_id, Rc::new(type_info.clone()));
         self.partial_type_infos.insert(rs_type_id, type_info);
         Ok(())
-    }
-
-    /// Register a generic trait type like List, Map, Set
-    pub fn register_generic_trait<T: 'static + Serializer + ForyDefault>(
-        &mut self,
-    ) -> Result<(), Error> {
-        let rs_type_id = std::any::TypeId::of::<T>();
-        if self.type_info_map.contains_key(&rs_type_id) {
-            return Err(Error::type_error(format!(
-                "Type:{:?} already registered",
-                rs_type_id
-            )));
-        }
-        let type_id = T::fory_static_type_id();
-        if type_id != TypeId::LIST && type_id != TypeId::MAP && type_id != TypeId::SET {
-            return Err(Error::not_allowed(format!(
-                "register_generic_trait can only be used for generic trait types: List, Map, Set, but got type {}",
-                type_id as u32
-            )));
-        }
-        self.register_internal_serializer::<T>(type_id)
     }
 
     pub(crate) fn set_compatible(&mut self, compatible: bool) {

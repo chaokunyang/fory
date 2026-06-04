@@ -195,19 +195,6 @@ fn test_register_serializer_by_name_with_namespace_after_serialize_fails() {
     assert!(matches!(err, Error::NotAllowed(_)));
 }
 
-/// Ensures `register_generic_trait()` is forbidden after snapshot init.
-#[test]
-fn test_register_generic_trait_after_serialize_fails() {
-    let mut fory = Fory::builder().xlang(false).build();
-    fory.register::<Point>(100).unwrap();
-    let _bytes = fory.serialize(&Point { x: 0, y: 0 }).unwrap();
-
-    let err = fory
-        .register_generic_trait::<Vec<i32>>()
-        .expect_err("register_generic_trait after serialize should fail");
-    assert!(matches!(err, Error::NotAllowed(_)));
-}
-
 /// Ensures `register_union()` is forbidden after snapshot init.
 #[test]
 fn test_register_union_after_serialize_fails() {

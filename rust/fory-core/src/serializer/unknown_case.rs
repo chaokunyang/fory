@@ -18,7 +18,7 @@
 use crate::context::{ReadContext, WriteContext};
 use crate::error::Error;
 use crate::resolver::{RefFlag, RefMode};
-use crate::serializer::any::check_generic_container_type;
+use crate::serializer::any::check_erased_any_payload_type;
 use crate::serializer::{ForyDefault, Serializer};
 use crate::type_id::{self, TypeId};
 use crate::types::UnknownCase;
@@ -154,7 +154,7 @@ pub fn read_payload(context: &mut ReadContext, case_id: u32) -> Result<UnknownCa
             // boundary by itself, and real nested payload serializers perform their
             // own depth checks.
             let type_info = context.read_any_type_info()?;
-            check_generic_container_type(&type_info)?;
+            check_erased_any_payload_type(&type_info)?;
             let boxed = type_info
                 .get_harness()
                 .read_polymorphic_data_send_sync(context, &type_info)?;

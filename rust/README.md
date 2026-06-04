@@ -262,8 +262,10 @@ intended for `Arc<dyn Any + Send + Sync>`, mark it with
 conservative by default; implement `fory_is_send_sync_type` and
 `fory_read_data_send_sync` when the concrete value is `Send + Sync`.
 Direct generic containers such as `Vec<T>`, `HashMap<K, V>`, `HashSet<T>`, and
-`LinkedList<T>` are not supported as top-level erased send-sync payloads; wrap
-them in a registered derived type when they need to travel behind this carrier.
+`LinkedList<T>` are not supported as top-level erased `Any` payloads behind
+`Box<dyn Any>`, `Rc<dyn Any>`, or `Arc<dyn Any + Send + Sync>`. This also
+includes primitive vector encodings such as `Vec<u8>`. Wrap the container in a
+registered derived type when it needs to travel behind an erased `Any` carrier.
 
 **Basic Trait Object Serialization Example:**
 

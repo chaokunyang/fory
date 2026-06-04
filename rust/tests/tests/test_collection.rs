@@ -15,23 +15,20 @@
 // specific language governing permissions and limitations
 // under the License.
 
-use fory_core::{Fory, Serializer};
+use fory_core::Fory;
 use fory_derive::ForyStruct;
 use std::collections::{BTreeSet, BinaryHeap, HashSet};
 
 #[test]
 fn test_btreeset_roundtrip() {
-    let mut fory: Fory = Fory::builder().xlang(false).build();
-    fory.register_generic_trait::<BTreeSet<i32>>().unwrap();
+    let fory: Fory = Fory::builder().xlang(false).build();
 
     let mut original = BTreeSet::new();
     original.insert(1);
     original.insert(2);
     original.insert(3);
 
-    let trait_obj: Box<dyn Serializer> = Box::new(original.clone());
-    let serialized = fory.serialize(&trait_obj).unwrap();
-
+    let serialized = fory.serialize(&original).unwrap();
     let deserialized_concrete: BTreeSet<i32> = fory.deserialize(&serialized).unwrap();
 
     assert_eq!(deserialized_concrete.len(), 3);

@@ -43,15 +43,20 @@ where
     T: 'static + Send + Sync,
 {
     let wrapped: Arc<dyn Any + Send + Sync> = Arc::new(value);
-    let bytes = fory.serialize(&wrapped).unwrap();
-    let result: Result<Arc<dyn Any + Send + Sync>, _> = fory.deserialize(&bytes);
-    let err = match result {
-        Ok(_) => panic!("expected direct generic container payload to be unsupported"),
+    let err = match fory.serialize(&wrapped) {
+        Ok(bytes) => {
+            let result: Result<Arc<dyn Any + Send + Sync>, _> = fory.deserialize(&bytes);
+            match result {
+                Ok(_) => panic!("expected direct generic container payload to be unsupported"),
+                Err(err) => err,
+            }
+        }
         Err(err) => err,
     };
     let message = err.to_string();
     assert!(
-        message.contains("generic container types")
+        message.contains("top-level erased Any")
+            || message.contains("Erased Any payloads require")
             || message.contains("cannot be represented as Arc<dyn Any + Send + Sync>"),
         "unexpected error: {err}"
     );
@@ -105,7 +110,7 @@ fn test_wrapped_container_send_sync_arc_any_read() {
 }
 
 #[test]
-fn test_direct_generic_containers_not_send_sync_arc_any() {
+fn generic_containers_rejected_arc_any() {
     let fory = Fory::builder().xlang(false).build();
 
     assert_arc_any_unsupported(&fory, vec![1_i32, 2, 3]);

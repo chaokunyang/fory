@@ -85,12 +85,12 @@ assert_eq!(decoded.star_animal.speak(), "Woof!");
 
 ## Serializing dyn Any Trait Objects
 
-Apache Fory™ supports serializing `Rc<dyn Any>` and
+Apache Fory™ supports serializing `Box<dyn Any>`, `Rc<dyn Any>`, and
 `Arc<dyn Any + Send + Sync>` for runtime type dispatch:
 
 **Key points:**
 
-- Works with any type that implements `Serializer`
+- Works with registered concrete non-container types that implement `Serializer`
 - Requires downcasting after deserialization to access the concrete type
 - Type information is preserved during serialization
 - Useful for plugin systems and dynamic type handling
@@ -141,9 +141,13 @@ Rust then checks the final `Self: Send + Sync` bound when compiling the generate
 reader.
 
 Polymorphic erased `Any` payloads do not directly support nested or generic
-containers as the top-level erased value. This includes `Vec<T>`,
-`HashMap<K, V>`, `HashSet<T>`, `LinkedList<T>`, and other generic containers.
-If you need to put a container in `Arc<dyn Any + Send + Sync>`, wrap it in a
+containers as the top-level erased value. This applies to `Box<dyn Any>`,
+`Rc<dyn Any>`, and `Arc<dyn Any + Send + Sync>`. Unsupported top-level payloads
+include `Vec<T>`, primitive vector encodings such as `Vec<u8>`,
+`HashMap<K, V>`, `HashSet<T>`, `LinkedList<T>`, and other `LIST`, `MAP`, or
+`SET` protocol-family containers.
+
+If you need to put a container in an erased `Any` payload, wrap it in a
 registered struct, enum, or union and use that wrapper as the erased payload:
 
 ```rust
@@ -167,7 +171,9 @@ let decoded: Arc<dyn Any + Send + Sync> = fory.deserialize(&bytes)?;
 ```
 
 The wrapper lets the generated serializer own the send-sync dynamic read
-capability while the container remains a normal typed field.
+capability for `Arc<dyn Any + Send + Sync>` while the container remains a normal
+typed field. The same wrapper model is the supported path for `Box<dyn Any>` and
+`Rc<dyn Any>`.
 
 If a nested custom type contains local-only fields and the outer type is not
 intended for `Arc<dyn Any + Send + Sync>`, opt out on the outer type:
@@ -242,7 +248,7 @@ assert_eq!(decoded.animals_arc[0].speak(), "Woof!");
 
 Due to Rust's orphan rule, `Rc<dyn Trait>` and `Arc<dyn Trait>` cannot implement `Serializer` directly. For standalone serialization (not inside struct fields), the `register_trait_type!` macro generates wrapper types.
 
-**Note:** If you don't want to use wrapper types, you can serialize as `Rc<dyn Any>` or `Arc<dyn Any + Send + Sync>` instead (see the dyn Any section above).
+**Note:** If you don't want to use wrapper types for concrete non-container payloads, you can serialize as `Box<dyn Any>`, `Rc<dyn Any>`, or `Arc<dyn Any + Send + Sync>` instead (see the dyn Any section above).
 
 The `register_trait_type!` macro generates `AnimalRc` and `AnimalArc` wrapper types:
 
